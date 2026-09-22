@@ -938,7 +938,7 @@ function Catalog({ businessId }: { businessId: string }) {
 function Cifra({ eticheta, valoare, accent }: { eticheta: string; valoare: number | null; accent?: boolean }) {
   return (
     <div className="rounded-xl border border-border p-3">
-      <p className={`text-lg font-semibold ${accent ? "text-destructive" : "text-foreground"}`}>{valoare ?? "—"}</p>
+      <p className={`text-lg font-semibold ${accent ? "text-destructive" : "text-foreground"}`}>{valoare ?? "-"}</p>
       <p className="text-[11px] text-muted-foreground">{eticheta}</p>
     </div>
   );
@@ -979,7 +979,7 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
             {/* ⚠ „Nicio comandă" e o AFIRMATIE. Cand citirea a picat, nu stim nimic: „—". */}
             {stare.ultimaComanda
               ? cand(stare.ultimaComanda)
-              : stare.citiriPicate.includes(CITIRI_PANOU.ultimaComanda) ? "—" : "Nicio comandă"}
+              : stare.citiriPicate.includes(CITIRI_PANOU.ultimaComanda) ? "-" : "Nicio comandă"}
           </p>
           <p className="text-[11px] text-muted-foreground">Ultima comandă</p>
         </div>

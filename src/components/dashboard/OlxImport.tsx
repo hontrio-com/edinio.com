@@ -214,7 +214,7 @@ export function OlxImport({ businessId, onImportat }: { businessId: string; onIm
               */}
               <p className="text-[11px] text-muted-foreground">
                 „Ignoră” ține minte alegerea: anunțul nu mai apare la scanările următoare. Nu se
-                schimbă nimic pe OLX — anunțul rămâne exact cum e.
+                schimbă nimic pe OLX: anunțul rămâne exact cum e.
               </p>
             </>
           )}

@@ -295,7 +295,18 @@ test("⚠ o citire cazuta nu se mai numara ca zero", () => {
 
 test("⚠ panoul arata necunoscutul ca necunoscut", () => {
   const panou = readFileSync("src/components/dashboard/PepitaClient.tsx", "utf8");
-  assert.match(panou, /valoare \?\? "—"/, "cifra necunoscuta se randeaza tot ca un numar");
+  /*
+    ⚠ REGULA E „NU SE RANDEAZA CA O CIFRA", nu „se randeaza cu semnul lung".
+    Scrisa ca `/valoare \?\? "—"/`, proba a picat pe 22.09.2026 cand semnul lung
+    a fost scos de pe toate ecranele de integrari si inlocuit cu `-`. Nimic nu se
+    stricase: regula era intacta, doar cablarea se schimbase. Vezi memoria
+    `proba-apara-regula-nu-cablarea`.
+  */
+  assert.match(
+    panou,
+    /valoare \?\? "[^0-9"]+"/,
+    "cifra necunoscuta se randeaza tot ca un numar",
+  );
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

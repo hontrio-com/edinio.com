@@ -257,7 +257,7 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
                 : `${intrebare} produse din această categorie au anunțuri active pe OLX.`}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Fără mapare, prețul și stocul nu mai ajung la OLX — anunțurile rămân la vânzare cu
+              Fără mapare, prețul și stocul nu mai ajung la OLX, iar anunțurile rămân la vânzare cu
               valorile de acum. Ce vrei să faci cu ele?
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -498,7 +498,7 @@ function AttributeFields({ attributes, values, onChange }: {
                     value={typeof v === "string" ? v : ""}
                     onChange={(e) => pune(a.code, e.target.value)}
                   >
-                    <option value="">— alege —</option>
+                    <option value="">Alege</option>
                     {a.values.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
                   </select>
                 ) : (

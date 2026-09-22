@@ -20,7 +20,7 @@ export default async function DhlPage() {
     <div className="p-6 max-w-2xl">
       <IntegrationHeader
         id="dhl"
-        description="Colete prin DHL Express: livrari interne in Romania (DHL Express Domestic) si in toata lumea (Express Worldwide, Economy Select, Express 9:00 si 12:00), cu tarifele contractului tau si eticheta in PDF. Fara plata la livrare — DHL Express nu ofera ramburs cu expediere din Romania."
+        description="Colete prin DHL Express: livrari interne in Romania (DHL Express Domestic) si in toata lumea (Express Worldwide, Economy Select, Express 9:00 si 12:00), cu tarifele contractului tau si eticheta in PDF. Fara plata la livrare: DHL Express nu ofera ramburs cu expediere din Romania."
       />
       <DhlConfigClient businessId={business.id} initialConfig={config} />
     </div>

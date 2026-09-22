@@ -4,7 +4,18 @@ import { useEffect, useOptimistic, useState, useTransition } from "react";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, AlertTriangle, Info } from "lucide-react";
+import {
+  AlertTriangle, Check, CheckCircle, ClipboardCheck, Clock, Info, Layers,
+  Loader2, RefreshCw, ThumbsUp, Unplug, XCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
+import { Switch } from "@/components/ui/switch";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
   connectTrendyol, disconnectTrendyol, getTrendyolAddresses,
   pornesteSincronizareaAdoptatelor, saveTrendyolSettings,
@@ -16,11 +27,31 @@ import {
   type TrendyolStoreFront, type TrendyolSupplierAddress,
 } from "@/lib/trendyol/types";
 
-const PREREQUISITES = [
-  "Cont Trendyol de vânzător aprobat, cu procesul de înregistrare finalizat.",
-  "Cele trei credențiale din panoul Trendyol: Seller ID, API Key și API Secret (Informații cont > Detalii integrare).",
-  "Produse cu barcode (EAN) pentru fiecare variantă și brand existent în catalogul Trendyol.",
-  "Categorie leaf (fără subcategorii) + atributele obligatorii ale categoriei.",
+/*
+  ⚠ CELE PATRU CERINTE SUNT ALE LOR, NU ALE NOASTRE, si de-aia se spun de la
+  inceput: fiecare dintre ele respinge listarea la Trendyol, nu in Edinio, unde
+  mesajul e al lor si nu spune intotdeauna care dintre ele lipseste.
+
+  Erau un bloc galben cu buline. Acum au titlu si lamurire, ca sa se poata citi
+  dintr-o privire care lipseste, nu citite rand cu rand.
+*/
+const PREREQUISITES: { titlu: string; text: string }[] = [
+  {
+    titlu: "Cont de vânzător aprobat",
+    text: "Înregistrarea la Trendyol trebuie să fie finalizată, nu doar începută.",
+  },
+  {
+    titlu: "Cele trei credențiale",
+    text: "Seller ID, API Key și API Secret, din panoul Trendyol la Informații cont > Detalii integrare.",
+  },
+  {
+    titlu: "Barcode (EAN) pe fiecare variantă",
+    text: "Și un brand care există deja în catalogul Trendyol.",
+  },
+  {
+    titlu: "Categorie fără subcategorii",
+    text: "Împreună cu atributele pe care categoria aceea le cere obligatoriu.",
+  },
 ];
 
 type Actiune = null | "conectare" | "deconectare" | "setari" | "webhook";
@@ -119,6 +150,32 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
 
   const curieri = curieriVitrina(status.storefront);
   const vitrinaAleasa = infoVitrina(storefront);
+
+  /*
+    ⚠ `preluate` NU E AICI, dinadins. E o EXCEPTIE de la comutatorul de
+    sincronizare, nu o statistica, si se scrie chiar sub comutatorul pe care il
+    contrazice. Pusa intre cifre, ar fi aratat ca inca o numaratoare oarecare,
+    iar intelesul ei („produsele astea nu asculta de bifa") s-ar fi pierdut.
+  */
+  const cifre = [
+    {
+      label: "Listări", value: status.counts.listings, icon: Layers,
+      explicatie: "Câte produse are Edinio trimise sau pregătite pentru Trendyol, în orice stare.",
+    },
+    {
+      label: "Aprobate", value: status.counts.approved, icon: ThumbsUp,
+      explicatie: "Listările pe care Trendyol le-a acceptat. Doar ele se pot vinde.",
+    },
+    {
+      label: "Respinse", value: status.counts.rejected, icon: XCircle,
+      explicatie: "Listările pe care Trendyol le-a refuzat. Motivul lor se vede pe fiecare rând, în lista de mai jos.",
+    },
+    {
+      label: "În coadă", value: status.counts.queued, icon: Clock,
+      explicatie: "Schimbări de produs, stoc sau preț care așteaptă să plece către Trendyol. Coada se golește singură.",
+    },
+  ];
+  const marimeCifre = marimeaRandului(cifre.map((c) => c.value));
 
   const handleConnect = () => {
     if (!supplierId.trim() || !apiKey.trim() || apiSecret.trim().length < 8) {
@@ -273,165 +330,194 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   };
 
   return (
-    <div className="space-y-6">
-      {/* Prerequisites */}
-      <div className="rounded-xl border border-amber-300/60 bg-amber-50 p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
-          <p className="text-sm font-semibold text-amber-900">Înainte de a începe</p>
+    <div className="space-y-4">
+      {/*
+        ═══ ÎNAINTE DE A ÎNCEPE ═══
+
+        ⚠ NU MAI E UN BLOC GALBEN. Galbenul din panou înseamnă „uită-te aici,
+        ceva e în neregulă”, iar aici nu e nimic în neregulă: sunt patru lucruri
+        de bifat o singură dată. Pe o pagină pe care comerciantul intră zilnic,
+        avertismentul care nu avertizează nimic se învață și apoi nu se mai
+        vede, inclusiv atunci când chiar apare unul adevărat dedesubt.
+      */}
+      <Panel className="p-5">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">Înainte de a începe</h2>
         </div>
-        <ul className="space-y-1.5">
+        <p className="mt-1 text-xs text-muted-foreground">
+          Patru lucruri cerute de Trendyol. Fără ele, listarea e respinsă la ei, iar mesajul
+          lor nu spune întotdeauna care dintre ele lipsește.
+        </p>
+        <ul className="mt-4 grid gap-x-10 gap-y-3.5 sm:grid-cols-2">
           {PREREQUISITES.map((p) => (
-            <li key={p} className="text-xs text-amber-900/90 flex gap-2">
-              <span className="text-amber-600">•</span><span>{p}</span>
+            <li key={p.titlu} className="flex gap-2.5">
+              <Check className="mt-[3px] h-3.5 w-3.5 flex-shrink-0 text-primary" />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-foreground">{p.titlu}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{p.text}</span>
+              </span>
             </li>
           ))}
         </ul>
-      </div>
+      </Panel>
 
       {!status.connected ? (
-        /* ── Connect form ── */
-        <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
-          <h2 className="text-base font-semibold text-foreground mb-1">Conectează contul Trendyol</h2>
-          <p className="text-sm text-muted-foreground mb-4">
+        /*
+          ── Formularul de conectare ──
+
+          ⚠ MARGINIT LA `max-w-3xl`, desi pagina e pe tot ecranul. Restul paginii
+          are nevoie de latime (tabelul de listari are opt coloane), dar patru
+          campuri intinse pe 1900px sunt mai greu de citit, nu mai usor.
+        */
+        <Panel step={1} title="Conectează contul Trendyol" className="max-w-3xl">
+          <p className="text-sm text-muted-foreground">
             În panoul Trendyol mergi la <span className="font-medium text-foreground">Informații cont &gt; Detalii integrare</span> (vizibil
             doar utilizatorului principal al contului). Ai nevoie de exact trei valori: Seller ID, API Key și API Secret.
           </p>
-          <div className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground mb-4">
+          <Callout variant="neutral" icon={Info}>
             Vei mai vedea acolo un <span className="font-medium text-foreground">cod de referință al integrării</span> și
             un <span className="font-medium text-foreground">token</span>. Nu îți trebuie aici: codul de referință se folosește doar când
             deschizi un tichet la suportul Trendyol.
-          </div>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Seller ID</label>
-                <input value={supplierId} onChange={(e) => setSupplierId(e.target.value)} placeholder="ex. 123456"
-                  inputMode="numeric" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
-                <p className="text-[11px] text-muted-foreground mt-1">Doar cifre.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Țara magazinului</label>
-                <select value={storefront} onChange={(e) => setStorefront(e.target.value as TrendyolStoreFront)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
-                  {TRENDYOL_STOREFRONTS.map((s) => <option key={s.code} value={s.code}>{s.tara}</option>)}
-                </select>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Prețurile vor fi citite de Trendyol în {vitrinaAleasa.moneda}.
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">API Key</label>
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off"
-                placeholder="Cheia API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">API Secret</label>
-              <input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="off"
-                placeholder="Cheia secretă API" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Mediu</label>
+          </Callout>
+
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+            <Field label="Seller ID" required hint="Doar cifre.">
+              <Input value={supplierId} onChange={(e) => setSupplierId(e.target.value)}
+                placeholder="ex. 123456" inputMode="numeric" />
+            </Field>
+            <Field
+              label="Țara magazinului"
+              required
+              hint={`Prețurile vor fi citite de Trendyol în ${vitrinaAleasa.moneda}.`}
+            >
+              <select value={storefront} onChange={(e) => setStorefront(e.target.value as TrendyolStoreFront)}
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
+                {TRENDYOL_STOREFRONTS.map((s) => <option key={s.code} value={s.code}>{s.tara}</option>)}
+              </select>
+            </Field>
+            <Field label="API Key" required>
+              <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Cheia API" className="font-mono" />
+            </Field>
+            <Field label="API Secret" required>
+              <Input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)}
+                placeholder="Cheia secretă API" className="font-mono" />
+            </Field>
+            <Field label="Mediu" required>
               <select value={environment} onChange={(e) => setEnvironment(e.target.value as "stage" | "production")}
-                className="w-full sm:w-64 rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
                 <option value="production">Producție</option>
                 <option value="stage">Stage (testare)</option>
               </select>
-              {environment === "stage" && (
-                <p className="text-[11px] text-amber-700 mt-1">
-                  Stage-ul are chei separate și cere ca Trendyol să autorizeze IP-ul serverului nostru. Dacă nu ai cerut asta, folosește Producție.
-                </p>
-              )}
-            </div>
-            <button onClick={handleConnect} disabled={pending}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-              {ruleaza("conectare") ? "Se verifică..." : "Conectează și testează"}
-            </button>
+            </Field>
           </div>
-        </div>
+
+          {environment === "stage" && (
+            <Callout variant="warning" icon={AlertTriangle}>
+              Stage-ul are chei separate și cere ca Trendyol să autorizeze IP-ul serverului nostru.
+              Dacă nu ai cerut asta, folosește Producție.
+            </Callout>
+          )}
+
+          <Button onClick={handleConnect} disabled={pending}>
+            {ruleaza("conectare") ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+            {ruleaza("conectare") ? "Se verifică..." : "Conectează și testează"}
+          </Button>
+        </Panel>
       ) : (
-        /* ── Connected ── */
+        /* ── Conectat ── */
         <>
-          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
+          <Panel className="p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CheckCircle className="h-4 w-4 flex-shrink-0 text-success" />
                   <span className="text-sm font-semibold text-foreground">Cont conectat</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
-                    {status.environment === "stage" ? "Stage" : "Producție"}
-                  </span>
+                  {/* Stage nu e o stare buna, e una de proba: galben, nu verde. */}
+                  <EtichetaStare ton={status.environment === "stage" ? "asteptare" : "bun"} marime="mic">
+                    {status.environment === "stage" ? "Stage (testare)" : "Producție"}
+                  </EtichetaStare>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Seller: <span className="font-mono">{status.supplierId}</span> · Cheie: <span className="font-mono">{status.apiKeyMasked}</span> · {status.storefrontLabel} ({status.currency})
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Seller <span className="font-mono text-foreground">{status.supplierId}</span>
+                  {" · "}cheie <span className="font-mono text-foreground">{status.apiKeyMasked}</span>
+                  {" · "}{status.storefrontLabel} ({status.currency})
                 </p>
               </div>
-              <button onClick={handleDisconnect} disabled={ruleaza("deconectare")}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60">
+              <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={ruleaza("deconectare")}>
+                {ruleaza("deconectare") ? <Loader2 className="animate-spin" /> : <Unplug />}
                 Deconectează
-              </button>
+              </Button>
             </div>
+          </Panel>
 
-            {status.needsReconnect && (
-              <div className="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
-                Sesiunea a expirat. Reconectează credențialele.
-              </div>
-            )}
-            {status.readinessError && (
-              <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-                <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                <span>{status.readinessError}</span>
-              </div>
-            )}
-            {status.currency !== "RON" && (
-              <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-                <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
-                <span>
-                  Prețurile din Edinio sunt în lei, dar vitrina {status.storefrontLabel} le citește
-                  ca {status.currency}. Setează manual prețurile de vânzare pe fiecare listare înainte de a trimite produse.
-                </span>
-              </div>
-            )}
+          {/*
+            ═══ CIFRELE ═══
 
-            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { label: "Listări", value: status.counts.listings },
-                { label: "Aprobate", value: status.counts.approved },
-                { label: "Respinse", value: status.counts.rejected },
-                { label: "În coadă", value: status.counts.queued },
-              ].map((c) => (
-                <div key={c.label} className="rounded-lg bg-muted/50 p-3 text-center">
-                  <div className="text-lg font-semibold text-foreground">{c.value}</div>
-                  <div className="text-[11px] text-muted-foreground">{c.label}</div>
-                </div>
-              ))}
-            </div>
+            ⚠ ACELASI `CardStatistica` ca la Panou, Oferte, Statistici, Clienti si
+            Discounturi, cerut de el pe 22.09.2026. Erau patru cutii gri desenate aici,
+            cu cifra la 18px si eticheta dedesubt: semanau cu cardurile casei fara sa
+            fie ele, deci se retusau separat si divergeau.
+
+            ⚠ `marimeaRandului` se socoteste o data, din TOATE cifrele randului. Lasata
+            pe seama fiecarui card, „3" ar fi iesit la 44px langa „1300" la 30px, adica
+            patru cutii care nu mai arata ca un set.
+          */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {cifre.map((c) => (
+              <CardStatistica
+                key={c.label}
+                marime={marimeCifre}
+                icon={c.icon}
+                label={c.label}
+                value={c.value}
+                explicatie={c.explicatie}
+                empty={c.value === 0}
+              />
+            ))}
           </div>
 
-          {/* Settings */}
-          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
-            <h2 className="text-base font-semibold text-foreground mb-4">Setări</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Adresă expediere</label>
+          {/*
+            ⚠ AVERTISMENTELE IES DIN CARTONASUL CONTULUI, pe toata latimea. Inghesuite
+            inauntru, sub randul cu seller si cheie, aratau ca o nota de subsol a
+            contului; aici sunt ce sunt: lucruri care opresc vanzarea.
+          */}
+          {status.needsReconnect && (
+            <Callout variant="danger" icon={AlertTriangle} title="Sesiunea a expirat">
+              Reconectează credențialele Trendyol ca să reia trimiterile.
+            </Callout>
+          )}
+          {status.readinessError && (
+            <Callout variant="warning" icon={Info}>{status.readinessError}</Callout>
+          )}
+          {status.currency !== "RON" && (
+            <Callout variant="warning" icon={Info} title={`Vitrina ${status.storefrontLabel} citește prețurile ca ${status.currency}`}>
+              Prețurile din Edinio sunt în lei. Setează manual prețul de vânzare pe fiecare
+              listare înainte de a trimite produse.
+            </Callout>
+          )}
+
+          {/* Setări */}
+          <Panel title="Setări" className="p-5">
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Adresă expediere">
                 {addresses.length > 0 ? (
                   <select value={shipmentAddressId} onChange={(e) => setShipmentAddressId(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
                     <option value="">Implicită din contul Trendyol</option>
                     {addresses.filter((a) => esteAdresaDe(a, "Shipment")).map((a) => (
                       <option key={a.id} value={a.id}>{a.fullAddress || a.city || `#${a.id}`}</option>
                     ))}
                   </select>
                 ) : (
-                  <input type="number" min="0" inputMode="numeric" value={shipmentAddressId} onChange={(e) => setShipmentAddressId(e.target.value)}
-                    placeholder="ID adresă" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                  <Input type="number" min="0" inputMode="numeric" value={shipmentAddressId}
+                    onChange={(e) => setShipmentAddressId(e.target.value)} placeholder="ID adresă" />
                 )}
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">În câte zile expediezi</label>
+              </Field>
+              <Field label="În câte zile expediezi">
                 <select value={termenExpediere} onChange={(e) => setTermenExpediere(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
                   {/*
                     * ⚠ DOUA OPTIUNI, NU O LISTA DE ZILE, si nu din lene.
                     *
@@ -450,26 +536,24 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   <option value="0">În aceeași zi</option>
                   <option value="1">Cel târziu a doua zi</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Adresă retur</label>
+              </Field>
+              <Field label="Adresă retur">
                 {addresses.length > 0 ? (
                   <select value={returningAddressId} onChange={(e) => setReturningAddressId(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
                     <option value="">Implicită din contul Trendyol</option>
                     {addresses.filter((a) => esteAdresaDe(a, "Returning")).map((a) => (
                       <option key={a.id} value={a.id}>{a.fullAddress || a.city || `#${a.id}`}</option>
                     ))}
                   </select>
                 ) : (
-                  <input type="number" min="0" inputMode="numeric" value={returningAddressId} onChange={(e) => setReturningAddressId(e.target.value)}
-                    placeholder="ID adresă" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm" />
+                  <Input type="number" min="0" inputMode="numeric" value={returningAddressId}
+                    onChange={(e) => setReturningAddressId(e.target.value)} placeholder="ID adresă" />
                 )}
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Curier implicit</label>
+              </Field>
+              <Field label="Curier implicit">
                 <select value={carrierCode} onChange={(e) => setCarrierCode(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
                   <option value="">Fără curier implicit</option>
                   {curieri.map((c) => (
                     <option key={c.code} value={c.code}>
@@ -477,9 +561,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                     </option>
                   ))}
                 </select>
-              </div>
+              </Field>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-2">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               Adresele se încarcă din contul tău Trendyol; lăsate goale, se folosesc cele implicite de acolo. Curierii
               „plătiți de Trendyol” își completează singuri AWB-ul; la cei plătiți de tine, trimiți tu numărul AWB din pagina comenzii.
             </p>
@@ -499,29 +583,34 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               Germania si jucarii facute in China; un „RO" pus de noi peste tot ar fi o
               declaratie falsa despre marfa lui, nu o completare la indemana.
             */}
-            <div className="mt-4">
-              <label className="block text-sm text-foreground">
-                Țara de fabricație implicită
-                <input
-                  value={taraOrigine}
-                  onChange={(e) => setTaraOrigine(e.target.value.toUpperCase().slice(0, 2))}
-                  placeholder="ex. DE"
-                  maxLength={2}
-                  className="mt-1 w-24 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono uppercase"
-                />
-              </label>
-              <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                Codul de țară din două litere unde se fabrică marfa, nu unde ești tu. Se
-                folosește la produsele care n-au una a lor. Trendyol o cere obligatoriu de la
-                23 octombrie 2026; lasă câmpul gol dacă produsele tale vin din țări diferite și
-                completeaz-o pe fiecare listare în parte.
-              </p>
-            </div>
+            {/* ⚠ Campul e ingust (doua litere), lamurirea nu: lasata la `max-w-xl`, se
+                rupea pe trei randuri sub un ecran de 1300px, langa paragraful de deasupra
+                care sta pe unul singur. */}
+            <Field
+              label="Țara de fabricație implicită"
+              hint="Codul de țară din două litere unde se fabrică marfa, nu unde ești tu. Se folosește la produsele care n-au una a lor. Trendyol o cere obligatoriu de la 23 octombrie 2026; lasă câmpul gol dacă produsele tale vin din țări diferite și completeaz-o pe fiecare listare în parte."
+            >
+              <Input
+                value={taraOrigine}
+                onChange={(e) => setTaraOrigine(e.target.value.toUpperCase().slice(0, 2))}
+                placeholder="ex. DE"
+                maxLength={2}
+                className="w-24 font-mono uppercase"
+              />
+            </Field>
 
-            <label className="mt-4 flex items-center gap-2 text-sm text-foreground cursor-pointer">
-              <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} className="rounded" />
-              Sincronizează automat schimbările de produs, stoc și preț
-            </label>
+            {/*
+              ⚠ COMUTATOARE, NU BIFE. Cele trei hotarari de mai jos sunt aceleasi ca la
+              „Mediu de test" de la curieri, iar acolo casa foloseste `Switch`. Trei
+              `<input type="checkbox">` desenate de mana nu se potriveau cu nimic altceva
+              din panou, si se citeau ca un formular de pe alt site.
+            */}
+            <RandDeComutator
+              titlu="Sincronizează automat schimbările de produs, stoc și preț"
+              text="Când schimbi ceva în magazin, pleacă singur către Trendyol."
+              pornit={autoSync}
+              comuta={setAutoSync}
+            />
 
             {/*
               ═══ ⚠ BIFA DE DEASUPRA NU E ÎNTREGUL ADEVĂR (24.08.2026) ═══
@@ -542,27 +631,22 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               Deci excepția se scrie chiar sub comutatorul pe care îl contrazice.
             */}
             {status.counts.preluate > 0 && (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                <p>
-                  <strong>
-                    {status.counts.preluate}{" "}
-                    {status.counts.preluate === 1 ? "produs nu ascultă" : "produse nu ascultă"} de
-                    bifa asta.
-                  </strong>{" "}
-                  {status.counts.preluate === 1 ? "E preluat" : "Sunt preluate"} din contul tău
-                  Trendyol, unde {status.counts.preluate === 1 ? "exista" : "existau"} dinainte cu
-                  prețul pus de tine acolo. Edinio nu-l suprascrie fără să ceri, deci prețul lor de
-                  pe Trendyol rămâne cel vechi oricâte modificări faci în magazin.
-                </p>
-                <button
-                  type="button"
-                  onClick={pornesteAdoptatele}
-                  disabled={pending}
-                  className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 font-medium hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:bg-transparent dark:hover:bg-amber-900/30"
-                >
-                  Preia conducerea prețului și pentru {status.counts.preluate === 1 ? "el" : "ele"}
-                </button>
-              </div>
+              <Callout
+                variant="warning"
+                icon={AlertTriangle}
+                title={`${status.counts.preluate} ${status.counts.preluate === 1 ? "produs nu ascultă" : "produse nu ascultă"} de comutatorul de mai sus`}
+                action={
+                  <Button variant="outline" size="sm" onClick={pornesteAdoptatele} disabled={pending}>
+                    {pending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                    Preia conducerea prețului
+                  </Button>
+                }
+              >
+                {status.counts.preluate === 1 ? "E preluat" : "Sunt preluate"} din contul tău
+                Trendyol, unde {status.counts.preluate === 1 ? "exista" : "existau"} dinainte cu
+                prețul pus de tine acolo. Edinio nu-l suprascrie fără să ceri, deci prețul lor de
+                pe Trendyol rămâne cel vechi oricâte modificări faci în magazin.
+              </Callout>
             )}
 
             {/*
@@ -580,70 +664,44 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
               ⚠ Și se spune că nu se poate desface: ei n-au niciun capăt de corecție sau
               ștergere, iar la a doua trimitere pe același pachet răspund 409.
             */}
-            <label className="mt-4 flex items-start gap-2 text-sm text-foreground cursor-pointer">
-              <input
-                type="checkbox" checked={facturam}
-                onChange={(e) => setFacturam(e.target.checked)}
-                className="rounded mt-0.5"
-              />
-              <span>
-                Emite și trimite facturile către Trendyol
-                <span className="block text-[11px] text-muted-foreground">
-                  La Trendyol tu facturezi clientul final, nu marketplace-ul. Cu bifa asta,
-                  Edinio emite factura prin SmartBill, Oblio sau fGO și îi trimite linkul lui
-                  Trendyol, care o arată clientului.
-                </span>
-                <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
-                  Bifeaz-o doar dacă nu emiți deja facturile astea în altă parte: o factură
-                  trimisă la ei nu se mai poate corecta sau șterge.
-                </span>
-              </span>
-            </label>
+            <RandDeComutator
+              titlu="Emite și trimite facturile către Trendyol"
+              text="La Trendyol tu facturezi clientul final, nu marketplace-ul. Cu comutatorul pornit, Edinio emite factura prin SmartBill, Oblio sau fGO și îi trimite linkul lui Trendyol, care o arată clientului."
+              atentie="Pornește-l doar dacă nu emiți deja facturile astea în altă parte: o factură trimisă la ei nu se mai poate corecta sau șterge."
+              pornit={facturam}
+              comuta={setFacturam}
+            />
 
-            <label className="mt-3 flex items-start gap-2 text-sm text-foreground cursor-pointer">
-              <input
-                type="checkbox" checked={autoPublish}
-                onChange={(e) => setAutoPublish(e.target.checked)}
-                className="rounded mt-0.5"
-              />
-              <span>
-                Publicare automată
-                <span className="block text-[11px] text-muted-foreground">
-                  Fiecare produs nou din magazin pleacă singur pe Trendyol, folosind categoria mapată și brandul ei.
-                  Produsele cu categoria nemapată rămân pe loc și îți apar ca eroare aici.
-                </span>
-                {/*
-                  ⚠ BIFA ASTA MERGE SI FARA CEA DE DEASUPRA, si asta se spune pe fata: pana
-                  azi era stinsa cand sincronizarea era stinsa, desi coada le trata deja
-                  separat. Cine vrea sa listeze produse noi fara sa lase Edinio sa umble la
-                  preturile celor vechi are chiar nevoie de combinatia asta.
-                */}
-                {!autoSync && autoPublish && (
-                  <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
-                    Cu sincronizarea stinsă, produsele noi tot pleacă pe Trendyol, dar
-                    schimbările de preț și stoc de la cele deja publicate nu mai pleacă.
-                  </span>
-                )}
-              </span>
-            </label>
+            {/*
+              ⚠ COMUTATORUL ASTA MERGE SI FARA CEL DE SINCRONIZARE, si asta se spune pe
+              fata: pana azi era stins cand sincronizarea era stinsa, desi coada le trata
+              deja separat. Cine vrea sa listeze produse noi fara sa lase Edinio sa umble
+              la preturile celor vechi are chiar nevoie de combinatia asta.
+            */}
+            <RandDeComutator
+              titlu="Publicare automată"
+              text="Fiecare produs nou din magazin pleacă singur pe Trendyol, folosind categoria mapată și brandul ei. Produsele cu categoria nemapată rămân pe loc și îți apar ca eroare aici."
+              atentie={!autoSync && autoPublish
+                ? "Cu sincronizarea stinsă, produsele noi tot pleacă pe Trendyol, dar schimbările de preț și stoc de la cele deja publicate nu mai pleacă."
+                : undefined}
+              pornit={autoPublish}
+              comuta={setAutoPublish}
+            />
 
-            <div className="mt-4">
-              <button onClick={handleSaveSettings} disabled={pending}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-                {ruleaza("setari") ? "Se salvează..." : "Salvează setările"}
-              </button>
-            </div>
-          </div>
+            <Button onClick={handleSaveSettings} disabled={pending}>
+              {ruleaza("setari") ? <Loader2 className="animate-spin" /> : null}
+              {ruleaza("setari") ? "Se salvează..." : "Salvează setările"}
+            </Button>
+          </Panel>
 
-          {/* Comenzi & webhook */}
-          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-foreground mb-1">Comenzi Trendyol</h2>
+          {/* Comenzi și webhook */}
+          <Panel title="Comenzi Trendyol" className="p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-sm text-muted-foreground">
                   Comenzile intră automat în „Comenzi”. Activează webhook-ul pentru livrare instant; altfel sincronizarea are loc periodic.
                 </p>
-                <p className="text-xs text-muted-foreground mt-2">
+                <p className="mt-2 text-xs text-muted-foreground">
                   {status.counts.orders} comenzi importate
                   {status.ordersSyncedAt ? ` · ultima sincronizare ${new Date(status.ordersSyncedAt).toLocaleString("ro-RO")}` : ""}
                 </p>
@@ -652,22 +710,48 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 {webhookActiv ? "Webhook activ" : "Webhook inactiv"}
               </EtichetaStare>
             </div>
-            <div className="mt-3">
-              {webhookActiv ? (
-                <button onClick={handleUnsubscribeWebhook} disabled={pending}
-                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60">
-                  {ruleaza("webhook") ? "Se procesează..." : "Dezactivează webhook"}
-                </button>
-              ) : (
-                <button onClick={handleSubscribeWebhook} disabled={pending}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60">
-                  {ruleaza("webhook") ? "Se activează..." : "Activează webhook comenzi"}
-                </button>
-              )}
-            </div>
-          </div>
+            {webhookActiv ? (
+              <Button variant="outline" size="sm" onClick={handleUnsubscribeWebhook} disabled={pending}>
+                {ruleaza("webhook") ? <Loader2 className="animate-spin" /> : null}
+                {ruleaza("webhook") ? "Se procesează..." : "Dezactivează webhook"}
+              </Button>
+            ) : (
+              <Button onClick={handleSubscribeWebhook} disabled={pending}>
+                {ruleaza("webhook") ? <Loader2 className="animate-spin" /> : null}
+                {ruleaza("webhook") ? "Se activează..." : "Activează webhook comenzi"}
+              </Button>
+            )}
+          </Panel>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Un rând de setare cu comutator: titlu, lămurire, și o notă de atenție când
+ * alegerea are un cost.
+ *
+ * ⚠ ACELASI DESEN CA LA CURIERI (vezi „Mediu de test" la GLS), ca sa nu fie al
+ * treilea fel de comutator din panou. Scris o data aici fiindca pagina are trei.
+ */
+function RandDeComutator({
+  titlu, text, atentie, pornit, comuta,
+}: {
+  titlu: string;
+  text: string;
+  atentie?: string;
+  pornit: boolean;
+  comuta: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{titlu}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{text}</p>
+        {atentie && <p className="mt-1.5 text-xs leading-relaxed text-warning">{atentie}</p>}
+      </div>
+      <Switch checked={pornit} onCheckedChange={comuta} className="mt-0.5 flex-shrink-0" />
     </div>
   );
 }

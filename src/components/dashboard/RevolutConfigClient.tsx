@@ -5,7 +5,7 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Info, Key } from "lucide-react";
+import { Save, Loader2, CreditCard, Key } from "lucide-react";
 import { saveRevolutConfig, disconnectRevolut } from "@/lib/actions/revolut.actions";
 import type { RevolutConfigInput } from "@/lib/revolut";
 import { Button } from "@/components/ui/button";
@@ -92,19 +92,9 @@ export default function RevolutConfigClient({
 
   return (
     <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="revolut" description="Accepta plati cu cardul prin Revolut — pagina de plata securizata, incasare imediata." />
+      <IntegrationHeader id="revolut" description="Accepta plati cu cardul prin Revolut: pagina de plata securizata, incasare imediata." />
 
       <div className="space-y-5">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Integreaza Revolut Merchant pentru a accepta plati cu cardul (inclusiv Apple Pay, Google Pay si Revolut Pay).
-            Clientii sunt redirectionati catre pagina securizata Revolut, fara a introduce datele cardului pe site-ul tau,
-            iar plata este incasata imediat. Ai nevoie de cheia secreta API (Merchant API) din contul tau Revolut Business
-            &rarr; Merchant &rarr; APIs. Plata se face in RON. Webhook-ul de confirmare se inregistreaza automat la salvare.
-          </p>
-        </div>
 
         {/* Ghid */}
         <Panel className="overflow-hidden">
@@ -148,7 +138,7 @@ export default function RevolutConfigClient({
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
+                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
                 </p>
               </div>
               <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />

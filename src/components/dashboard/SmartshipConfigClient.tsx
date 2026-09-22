@@ -228,16 +228,6 @@ export function SmartshipConfigClient({
         </Callout>
       )}
 
-      {/*
-        * ⚠ Se spune DE LA INCEPUT ce nu se poate: nu exista mediu de proba si nu
-        * exista niciun apel care sa valideze datele fara sa creeze expedierea.
-        */}
-      <Callout variant="warning" icon={AlertTriangle}>
-        <strong>SmartShip nu are mediu de test.</strong> Fiecare AWB emis e real si se scade
-        din creditul contului. Anularea exista si intoarce banii in credit, dar numai pana
-        cand curierul ridica coletul.
-      </Callout>
-
       <Panel step={1} title="Cheia de API">
         <Callout variant="info" icon={Info}>
           O gasesti in platforma SmartShip, la <strong>Contul meu {"->"} Setari {"->"} API</strong>.

@@ -67,7 +67,18 @@ test("amandoua ecranele spun cate NU asculta de comutator", () => {
     const i = sursa.indexOf(`status.${cheie} > 0`);
     assert.notEqual(i, -1, `${fisier} nu arata deloc cate sunt preluate`);
     const bloc = sursa.slice(i, i + 2600);
-    assert.ok(bloc.includes("amber"), `${fisier}: avertismentul e scris ca nota gri`);
+    /*
+      ⚠ REGULA E CULOAREA DE AVERTISMENT, nu cuvantul „amber". Scrisa ca
+      `includes("amber")`, proba a picat pe 22.09.2026 cand cutia desenata de
+      mana la Trendyol a fost inlocuita cu `<Callout variant="warning">`, adica
+      exact cu componenta casei care da aceeasi culoare dintr-un simbol. Nimic
+      nu se stricase. eMAG inca scrie `amber` de mana, deci se primesc amandoua.
+      Vezi memoria `proba-apara-regula-nu-cablarea`.
+    */
+    assert.ok(
+      bloc.includes("amber") || /variant="(warning|danger)"/.test(bloc),
+      `${fisier}: avertismentul e scris ca nota gri`,
+    );
     assert.ok(
       /onClick=\{pornes|onClick=\{porneș/.test(bloc),
       `${fisier}: se spune ca e o problema, dar nu se da nicio cale de reparat`,

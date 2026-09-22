@@ -7,7 +7,7 @@ import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
   Save, Loader2, Wifi, WifiOff,
-  Building2, User, Phone, Mail, MapPin, Home, CreditCard, Info,
+  Building2, User, Phone, Mail, MapPin, Home, CreditCard,
 } from "lucide-react";
 import { saveWootConfig, disconnectWoot, testWootConnection } from "@/lib/actions/woot.actions";
 import type { WootConfig, WootCounty, WootCity } from "@/lib/woot";
@@ -181,13 +181,6 @@ export default function WootConfigClient({
       <IntegrationHeader id="woot" description="Genereaza AWB-uri Woot direct din comenzile magazinului tau." />
 
       <div className="space-y-5">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Woot.ro iti permite sa compari preturi intre toti curierii (Fan Courier, DPD, Cargus, Sameday, GLS si altii) si sa creezi AWB-uri direct din comenzile tale. Ai nevoie de un cont pe woot.ro.
-          </p>
-        </div>
 
         {/* Ghid */}
         <Panel className="overflow-hidden">

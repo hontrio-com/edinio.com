@@ -19,7 +19,22 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
   el, o legatura catre pagina de detalii. Fara ele, cererea unei explicatii ar fi
   dus omul pe alta pagina.
 */
-export function ExplicatieCard({ text, eticheta }: { text: string; eticheta: string }) {
+export function ExplicatieCard({
+  text,
+  eticheta,
+  intrebare = "Cum se calculeaza",
+  marime = "normal",
+}: {
+  text: string;
+  eticheta: string;
+  /**
+   * Inceputul numelui citit de cititorul de ecran. Pe cardurile din cap intrebarea
+   * e „cum se calculeaza"; langa eticheta unui camp de formular e „ce se scrie aici".
+   */
+  intrebare?: string;
+  /** „mic" langa eticheta unui camp, care e de 12px; „normal" pe cardurile din cap. */
+  marime?: "mic" | "normal";
+}) {
   const [deschis, setDeschis] = useState(false);
   /*
     ⚠ `triggerId` E OBLIGATORIU CAT TIMP `open` E CONTROLAT, si lipsa lui nu da
@@ -36,7 +51,7 @@ export function ExplicatieCard({ text, eticheta }: { text: string; eticheta: str
         <TooltipTrigger
           id={idButon}
           closeOnClick={false}
-          aria-label={`Cum se calculeaza: ${eticheta}`}
+          aria-label={`${intrebare}: ${eticheta}`}
           onPointerDown={(e) => { felApasarii.current = e.pointerType; }}
           onClick={(e) => {
             e.preventDefault();
@@ -50,11 +65,22 @@ export function ExplicatieCard({ text, eticheta }: { text: string; eticheta: str
             */
             setDeschis((v) => (felApasarii.current === "touch" ? !v : true));
           }}
-          className="relative z-20 grid h-6 w-6 place-items-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className={`relative z-20 grid place-items-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${marime === "mic" ? "h-5 w-5" : "h-6 w-6"}`}
         >
-          <Info strokeWidth={1.6} className="h-[15px] w-[15px]" />
+          <Info strokeWidth={1.6} className={marime === "mic" ? "h-[13px] w-[13px]" : "h-[15px] w-[15px]"} />
         </TooltipTrigger>
-        <TooltipContent side="top" align="end" className="max-w-[17rem] whitespace-pre-line leading-relaxed">
+        {/*
+          ⚠ Bula se agata de capatul din care creste locul liber. Pe cardurile din
+          cap, semnul sta in coltul din DREAPTA, deci `align="end"` o tine in
+          card. Langa eticheta unui camp, semnul sta in STANGA, iar `align="end"`
+          o trimitea in afara panoului: jumatate din text cadea peste marginea de
+          la stanga. Vazut in browser, nu in cod.
+        */}
+        <TooltipContent
+          side="top"
+          align={marime === "mic" ? "start" : "end"}
+          className="max-w-[17rem] whitespace-pre-line leading-relaxed"
+        >
           {text}
         </TooltipContent>
       </Tooltip>

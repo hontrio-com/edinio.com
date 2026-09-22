@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Info, Loader2, Stethoscope, Unplug } from "lucide-react";
+import { CheckCircle, ChevronRight, Info, Loader2, Stethoscope, Unplug } from "lucide-react";
 import {
   diagnosticPostaAction,
   disconnectPosta,
@@ -301,23 +301,6 @@ export function PostaConfigClient({
         </Callout>
       )}
 
-      {/*
-        ⚠ Trei lucruri pe care comerciantul TREBUIE sa le stie inainte sa emita
-        ceva, si pe care nicio interfata nu le poate ascunde fara sa mintă.
-      */}
-      <Callout variant="warning" icon={AlertTriangle} title="Ce poate si ce nu poate face integrarea">
-        Fiecare AWB emis din panou e o <strong>trimitere reala</strong>: Posta nu are
-        mediu de test.
-        <br />
-        <strong>Eticheta se tipareste din aplicatia Postei</strong>, nu de aici: API-ul
-        lor nu are metoda de tiparire.
-        <br />
-        <strong>Anularea se face tot la ei</strong>, la oficiu sau in aplicatia lor. Din
-        panou poti doar sa scoti numarul de pe comanda, dupa ce ai anulat.
-        <br />
-        Si nu vine nimeni sa ridice: <strong>coletele le duci tu la oficiu</strong>.
-      </Callout>
-
       {/* ── 1. Contul ────────────────────────────────────────────────────── */}
       <Panel className="space-y-4 p-4">
         <div className="mb-1 flex items-center gap-2">
@@ -565,11 +548,9 @@ export function PostaConfigClient({
           </span>
           <h3 className="text-sm font-semibold text-foreground">Servicii</h3>
         </div>
-        <Callout variant="warning" icon={AlertTriangle} title="Aprinde doar ce ai in contract">
-          Documentatia Postei spune ca aceste optiuni sunt valide „doar dacă în contract
-          vor fi permise”. Una aprinsa fara acoperire in contract face ca Posta sa
-          respinga trimiterea, si mesajul de refuz nu spune intotdeauna care bifa e de vina.
-        </Callout>
+        <p className="text-xs text-muted-foreground">
+          Selecteaza doar serviciile pe care le ai specificate in contractul cu Posta.
+        </p>
 
         {SERVICII.map((s) => (
           <div key={s.cheie} className="flex items-center justify-between gap-4">

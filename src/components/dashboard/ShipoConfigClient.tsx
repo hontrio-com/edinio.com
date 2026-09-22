@@ -392,10 +392,6 @@ export function ShipoConfigClient({
             Fara o adresa de ridicare aleasa, Shipo nu poate cota nimic, clientii vor vedea tariful fix.
           </Callout>
         )}
-        <Callout variant="info" icon={Info}>
-          Shipo n-are mediu de proba: fiecare AWB emis e real si facturat. Inainte de emiterile in masa, datele se
-          verifica automat prin validarea lor, care nu creeaza nimic.
-        </Callout>
         <Button type="button" onClick={salvare} disabled={salveaza}>
           {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
         </Button>

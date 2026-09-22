@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, Unplug, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle, Loader2, Unplug, ChevronRight } from "lucide-react";
 import {
   saveCargusConfig,
   disconnectCargus,
@@ -297,25 +297,6 @@ export function CargusConfigClient({
         </Panel>
       )}
 
-      {/* How to get credentials */}
-      <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
-        <p className="mb-2 text-sm font-semibold text-foreground">Cum obtii credentialele Cargus?</p>
-        <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
-          <li>Creaza un cont pe portalul Azure API Cargus si asteapta aprobarea</li>
-          <li>Mergi la <span className="font-semibold text-foreground">PRODUCTS → StandardUrgentOnlineAPI</span> si copiaza <span className="font-semibold text-foreground">Primary Key</span></li>
-          <li>Foloseste credentialele contului tau Webexpress Cargus (username + parola)</li>
-          <li>Apasa &quot;Conecteaza&quot; si selecteaza punctul de ridicare si tarifele</li>
-        </ol>
-        <a
-          href="https://urgentcargus.portal.azure-api.net/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Deschide portalul Azure API Cargus
-        </a>
-      </div>
     </div>
   );
 }

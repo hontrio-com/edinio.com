@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 function Field({
   label,
   required,
+  ajutor,
   hint,
   error,
   htmlFor,
@@ -22,6 +23,12 @@ function Field({
 }: {
   label?: React.ReactNode
   required?: boolean
+  /**
+   * Semnul de intrebare de langa eticheta, pentru explicatiile prea lungi ca sa
+   * stea sub camp. Se primeste gata facut (de obicei un `<ExplicatieCard>`), ca
+   * `Field` sa ramana fara hookuri si sa mearga si in componente de server.
+   */
+  ajutor?: React.ReactNode
   hint?: React.ReactNode
   error?: React.ReactNode
   htmlFor?: string
@@ -31,13 +38,26 @@ function Field({
   return (
     <div className={cn("space-y-1.5", className)}>
       {label && (
-        <label
-          htmlFor={htmlFor}
-          className="block text-xs font-medium text-muted-foreground"
-        >
-          {label}
-          {required && <span className="text-destructive"> *</span>}
-        </label>
+        (() => {
+          const eticheta = (
+            <label
+              htmlFor={htmlFor}
+              className="block text-xs font-medium text-muted-foreground"
+            >
+              {label}
+              {required && <span className="text-destructive"> *</span>}
+            </label>
+          )
+          /* Fara ajutor, randul ramane EXACT cum era: sute de formulare il folosesc. */
+          return ajutor ? (
+            <div className="flex items-center gap-0.5">
+              {eticheta}
+              {ajutor}
+            </div>
+          ) : (
+            eticheta
+          )
+        })()
       )}
       {children}
       {error ? (

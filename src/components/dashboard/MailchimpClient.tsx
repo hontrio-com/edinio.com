@@ -185,11 +185,6 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
         </div>
       </div>
 
-      <div className="mt-6 p-4 rounded-xl bg-primary/5 border border-primary/15 text-xs text-muted-foreground leading-relaxed">
-        Conectezi <span className="font-medium text-foreground">contul tau</span> de Mailchimp. Abonatii stransi din magazin ajung in audienta ta,
-        iar campaniile de email le compui si le trimiti direct in Mailchimp (pe contul si costul tau). Edinio nu trimite emailurile in locul tau.
-      </div>
-
       {/* Connection */}
       {config.connected ? (
         <div className="mt-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
@@ -210,7 +205,7 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
           <div>
             <label className="block text-xs font-semibold text-foreground mb-1.5">Cheie API Mailchimp</label>
             <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ex: 0123abcd...-us21" className={inputCls} autoComplete="off" />
+              placeholder="ex: 0123abcd...-us21" className={inputCls} autoComplete="new-password" />
             <p className="text-[11px] text-muted-foreground mt-1.5 inline-flex items-center gap-1">
               O gasesti in Mailchimp la Account &gt; Extras &gt; API keys.
               <a href="https://us1.admin.mailchimp.com/account/api/" target="_blank" rel="noopener noreferrer"

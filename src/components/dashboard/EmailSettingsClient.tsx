@@ -352,7 +352,7 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
           </div>
           <div className="sm:col-span-2">
             <label className="text-sm font-medium text-foreground mb-1.5 block">Parola</label>
-            <input type="password" value={form.pass} onChange={(e) => set("pass", e.target.value)}
+            <input autoComplete="new-password" type="password" value={form.pass} onChange={(e) => set("pass", e.target.value)}
               placeholder={initial.hasPassword ? "•••••••• (lasa gol ca sa pastrezi parola actuala)" : "Parola SMTP / App Password"} className={inputCls} disabled={!businessId} />
           </div>
           <div>

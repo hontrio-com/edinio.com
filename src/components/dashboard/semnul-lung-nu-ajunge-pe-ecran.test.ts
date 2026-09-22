@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -163,6 +163,107 @@ test("niciun semn lung in textele vazute de comerciant, in panourile de curier",
     "Un semn lung a ajuns inapoi intr-un text pe care il vede comerciantul."
       + " Pune virgula cand tine loc de apozitie, `·` cand imbina doua bucati"
       + " de date, si `-` cand e semn de valoare lipsa.",
+  );
+});
+
+/*
+ * ═══ ZONA INTEGRARI, ADAUGATA PE 22.09.2026 ═══
+ *
+ * Cerinta „fara semn lung" nu se opreste la curieri; el a cerut-o pentru TOT ce
+ * citeste un comerciant. Masurat in ziua aia, ecranele de integrari aveau 33 de
+ * semne pe ecran: descrierile paginilor de DHL si FedEx, cele patru randuri de
+ * evenimente de la Google Ads si de la Meta, comutatorul „Platile nu sunt reale"
+ * repetat la Netopia, iPay, Klarna si Revolut, si noua la SmartBill.
+ *
+ * ⚠ POPULATIA SE INTREABA DE LA DOSAR, nu se scrie ca lista. Un ecran de
+ * integrare nou se recunoaste singur dupa doua semne pe care le are prin
+ * constructie: ori sta pe ruta `/dashboard/features`, ori e un `*ConfigClient`,
+ * ori poarta legatura de intoarcere catre `/dashboard/features`. Asa intra in
+ * plasa si Mailchimp, Brevo si Klaviyo, care isi scriu antetul de mana si n-ar
+ * fi fost prinse de niciun sufix. Aceeasi lectie ca la `EmagAwbModal` mai jos:
+ * o lista nu stie ce NU e in ea.
+ */
+
+const RUTA_INTEGRARI = "src/app/(dashboard)/dashboard/features";
+
+/** `@/x` sau `./x` -> fisierul de pe disc, sau `null` daca e un pachet din `node_modules`. */
+function fisierulImportat(spec: string, dinFisier: string): string | null {
+  let baza: string;
+  if (spec.startsWith("@/")) baza = join("src", spec.slice(2));
+  else if (spec.startsWith(".")) baza = join(dirname(dinFisier), spec);
+  else return null;
+  for (const capat of [".tsx", ".ts", "/index.tsx", "/index.ts"]) {
+    if (existsSync(baza + capat)) return baza + capat;
+  }
+  return null;
+}
+
+/**
+ * Ecranele de integrari: rutele de sub `/dashboard/features` PLUS tot ce
+ * importa ele, de-a lungul intregului lant.
+ *
+ * ⚠ SE INTREABA IMPORTURILE, NU NUMELE FISIERELOR. Prima scriere culegea
+ * `*ConfigClient.tsx` plus fisierele care poarta legatura de intoarcere catre
+ * `/dashboard/features`. Aratau ca o populatie buna si nu erau: `TrendyolClient`,
+ * `OlxClient`, `PepitaClient`, `AboutYouCategoryMapping` si inca zece nu au
+ * sufixul si nu scriu ei legatura (o scrie `IntegrationHeader`). Treizeci si trei
+ * de semne lungi stateau chiar acolo, pe ecrane de integrari, si proba trecea.
+ *
+ * Un fisier la care ajunge o ruta de integrari E un ecran de integrari. Asta nu
+ * se poate uita la scrierea urmatorului.
+ */
+function ecraneDeIntegrare(): string[] {
+  const start: string[] = [];
+  const subDosare = (dir: string) => {
+    for (const intrare of readdirSync(dir, { withFileTypes: true })) {
+      const cale = join(dir, intrare.name);
+      if (intrare.isDirectory()) subDosare(cale);
+      else if (intrare.name.endsWith(".tsx")) start.push(cale);
+    }
+  };
+  subDosare(RUTA_INTEGRARI);
+
+  const vazute = new Set(start);
+  const coada = [...start];
+  while (coada.length) {
+    const cale = coada.pop()!;
+    let text: string;
+    try { text = readFileSync(cale, "utf8"); } catch { continue; }
+    for (const m of text.matchAll(/from\s+"([^"]+)"/g)) {
+      const tinta = fisierulImportat(m[1], cale);
+      if (tinta && !vazute.has(tinta)) { vazute.add(tinta); coada.push(tinta); }
+    }
+  }
+  /* Doar `.tsx`: semnele din `.ts` care ajung pe ecran vin oricum prin ele. */
+  return [...vazute].filter((c) => c.endsWith(".tsx")).sort();
+}
+
+test("niciun semn lung in textele vazute de comerciant, pe ecranele de INTEGRARI", () => {
+  const ecrane = ecraneDeIntegrare();
+
+  /*
+    Fara asta, un dosar mutat ar face proba sa treaca peste o multime goala.
+    Pragul e pus sub masuratoarea din 22.09.2026 (155 de fisiere), ca sa nu pice
+    la fiecare componenta scoasa, dar destul de sus cat sa prinda lantul rupt.
+  */
+  assert.ok(ecrane.length > 100, `am gasit doar ${ecrane.length} ecrane de integrare; ruta s-a mutat?`);
+
+  const harta: Record<string, string[]> = {};
+  for (const cale of ecrane) {
+    const text = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
+    if (!text.includes(SEMN)) continue;
+    const peEcran = stari(text)
+      .filter(([, st]) => st === COD || st === SIR)
+      .map(([poz]) => `:${nrRand(text, poz)}`);
+    if (peEcran.length > 0) harta[cale.split("\\").join("/")] = peEcran;
+  }
+
+  assert.deepEqual(
+    harta,
+    {},
+    "Un semn lung a ajuns inapoi intr-un text de pe ecranele de integrari."
+      + " Pune doua puncte cand ce urmeaza lamureste ce a fost inainte, virgula"
+      + " cand tine loc de apozitie, si `·` cand imbina doua bucati de date.",
   );
 });
 

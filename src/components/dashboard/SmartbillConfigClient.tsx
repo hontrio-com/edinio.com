@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
-  Save, Loader2, FileText, ExternalLink,
+  Save, Loader2, ExternalLink,
   CheckCircle, RefreshCw, Mail, Building2, Key, Layers,
   ReceiptText, Zap, ChevronDown, ChevronUp, AlertTriangle,
 } from "lucide-react";
@@ -158,14 +158,6 @@ export function SmartbillConfigClient({
       <IntegrationHeader id="smartbill" description="Genereaza automat facturi SmartBill pentru comenzile din magazinul tau." />
 
       <div className="space-y-5">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Integreaza contul tau SmartBill pentru a genera facturi si proforma direct din comenzile magazinului.
-            Documentele sunt emise in contul tau SmartBill si pot fi trimise automat pe email clientilor.
-          </p>
-        </div>
 
         {/* Ghid */}
         <Panel className="overflow-hidden">
@@ -195,7 +187,7 @@ export function SmartbillConfigClient({
               {
                 step: "4",
                 title: "Testeaza si salveaza",
-                desc: "Completeaza campurile, apasa Testeaza conexiunea — seriile si TVA-ul disponibil vor aparea automat — apoi salveaza.",
+                desc: "Completeaza campurile, apasa Testeaza conexiunea, seriile si TVA-ul disponibil vor aparea automat, apoi salveaza.",
                 link: null,
               },
             ].map(({ step, title, desc, link }) => (
@@ -294,13 +286,13 @@ export function SmartbillConfigClient({
                         onChange={e => set("tax_name", e.target.value)}
                         className={selectCls}
                       >
-                        <option value="">— Nu sunt platitor de TVA (fara TVA) —</option>
+                        <option value="">Nu sunt platitor de TVA (fara TVA)</option>
                         {taxes.map(t => (
                           <option key={t.name} value={t.name}>{t.name} ({t.percentage}%)</option>
                         ))}
                         {showCustom && (
                           <option value={cfg.tax_name}>
-                            {cfg.tax_name}{isUnknownAfterLoad ? " — necunoscut in SmartBill" : ""}
+                            {cfg.tax_name}{isUnknownAfterLoad ? " (necunoscut in SmartBill)" : ""}
                           </option>
                         )}
                       </select>
@@ -312,7 +304,7 @@ export function SmartbillConfigClient({
                     {isUnknownAfterLoad && (
                       <div className="mt-1.5 flex items-start gap-1.5 text-xs text-warning">
                         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                        <span>Cota „{cfg.tax_name}” nu exista in contul tau SmartBill. Alege una din lista — SmartBill cere <strong>numele</strong> cotei (ex. „Normala”), nu procentul.</span>
+                        <span>Cota „{cfg.tax_name}” nu exista in contul tau SmartBill. Alege una din lista, fiindca SmartBill cere <strong>numele</strong> cotei (ex. „Normala”), nu procentul.</span>
                       </div>
                     )}
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -365,7 +357,7 @@ export function SmartbillConfigClient({
                   </label>
                   <Input type="text" value={cfg.estimate_series_name}
                     onChange={e => set("estimate_series_name", e.target.value)}
-                    placeholder="ex: PFACT — lasa gol daca nu emiti proforma" />
+                    placeholder="ex: PFACT, lasa gol daca nu emiti proforma" />
                   <p className="mt-1 text-xs text-muted-foreground">
                     Daca este completata, vei putea genera proforma din detaliul comenzii.
                   </p>

@@ -142,10 +142,10 @@ export function GoogleAdsConfigClient({
       <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
         <p className="mb-2 text-sm font-semibold text-foreground">Evenimente urmarite automat</p>
         <ul className="space-y-1 text-xs text-muted-foreground">
-          <li><span className="font-mono text-foreground">page_view</span> — la fiecare vizita (configurat automat)</li>
-          <li><span className="font-mono text-foreground">add_to_cart</span> — cand un produs este adaugat in cos</li>
-          <li><span className="font-mono text-foreground">begin_checkout</span> — la deschiderea formularului de comanda</li>
-          <li><span className="font-mono text-foreground">purchase</span> — la confirmarea comenzii (valoare + RON)</li>
+          <li><span className="font-mono text-foreground">page_view</span>: la fiecare vizita (configurat automat)</li>
+          <li><span className="font-mono text-foreground">add_to_cart</span>: cand un produs este adaugat in cos</li>
+          <li><span className="font-mono text-foreground">begin_checkout</span>: la deschiderea formularului de comanda</li>
+          <li><span className="font-mono text-foreground">purchase</span>: la confirmarea comenzii (valoare + RON)</li>
           <li><span className="font-mono text-foreground">conversion</span>: conversia din Google Ads, cu ID-ul si eticheta de mai sus</li>
         </ul>
         <p className="mt-2 text-[11px] text-muted-foreground">

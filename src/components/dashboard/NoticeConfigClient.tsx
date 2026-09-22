@@ -240,16 +240,6 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
       <IntegrationHeader id="notice" description="Trimite notificari automate clientilor (SMS, WhatsApp si apel vocal) la fiecare schimbare de status, prin notice.ro." />
 
       <div className="space-y-6">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <MessageSquare className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Conecteaza contul tau <strong>notice.ro</strong> ca sa trimiti automat notificari clientilor (SMS, WhatsApp
-            si apel vocal) cand schimbi statusul comenzii sau al platii. Mesajele folosesc sabloanele create de tine in
-            notice.ro. Raspunsurile clientilor se citesc automat din ora in ora, iar cine raspunde STOP nu mai
-            primeste mesaje de marketing.
-          </p>
-        </div>
 
         {/* Step guide */}
         <Panel className="overflow-hidden">

@@ -95,7 +95,7 @@ export function GpsrSettings({ businessId }: { businessId: string }) {
           <p className="text-xs text-muted-foreground">
             Regulamentul european cere ca fiecare produs vândut în UE să arate cine e producătorul și
             cine răspunde pentru el în Uniune. Valorile de aici se folosesc pe{" "}
-            <strong>toate marketplace-urile</strong> — OLX, eMAG, About You. Un produs anume le poate
+            <strong>toate marketplace-urile</strong>: OLX, eMAG, About You. Un produs anume le poate
             înlocui din pagina lui.
           </p>
         </div>

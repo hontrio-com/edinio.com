@@ -230,14 +230,14 @@ export function OffersClient({
               icon={Sparkles}
               label="Oferte care merg acum"
               value={scrieCifra(totaluri.active)}
-              explicatie="Ofertele pe care un cumpărător le poate vedea chiar în clipa asta: pornite, neexpirate și ajunse la data de pornire."
+              explicatie="Ofertele pe care un cumpărător le poate vedea acum: pornite, cu data de început trecută și cu data de sfârșit neatinsă."
               empty={totaluri.active === 0}
             />
             <CardStatistica marime={marimeCifre}
               icon={Eye}
               label="Afișări"
               value={scrieCifra(totaluri.afisari)}
-              explicatie="De câte ori o ofertă a ajuns pe un ecran, o dată pe vizită. ⚠ Afișările de la checkout și din coș se numără de pe 22.09.2026; înainte se numărau doar cele de pe pagina produsului, deci pe ofertele mai vechi cifra e mai mică decât a fost în realitate."
+              explicatie="De câte ori o ofertă a ajuns pe ecranul unui cumpărător. Se numără o singură dată pe vizită, pe pagina produsului, în coș și la checkout."
               empty={totaluri.afisari === 0}
             />
             <CardStatistica marime={marimeCifre}
@@ -245,7 +245,7 @@ export function OffersClient({
               label="Acceptate"
               value={scrieCifra(totaluri.acceptari)}
               subsol={rataPeTot === null ? undefined : `${scrieRata(rataPeTot)} din afișări`}
-              explicatie="De câte ori un cumpărător a luat ce i-a propus oferta. Se numără în clipa comenzii. ⚠ NU scade dacă acea comandă se anulează mai târziu: nicăieri nu se păstrează care ofertă a fost pe care comandă."
+              explicatie="De câte ori un cumpărător a luat ce i-a propus oferta. Se numără în clipa în care se plasează comanda și nu scade dacă acea comandă se anulează după aceea."
               empty={totaluri.acceptari === 0}
             />
             <CardStatistica marime={marimeCifre}
@@ -253,7 +253,7 @@ export function OffersClient({
               label="Vânzări în plus"
               value={formatPriceValue(totaluri.venit)}
               unit="lei"
-              explicatie="Valoarea produselor luate din oferte. Se adună în clipa comenzii, la fel ca acceptările, și ⚠ NU scade dacă acea comandă se anulează."
+              explicatie="Valoarea produselor luate din oferte. Se adună în clipa în care se plasează comanda și nu scade dacă acea comandă se anulează după aceea."
               empty={totaluri.venit === 0}
             />
           </div>
@@ -309,8 +309,7 @@ export function OffersClient({
             <p className="mb-4 rounded-xl bg-warning/10 p-3 text-xs text-foreground">
               <span className="font-semibold">De știut:</span> {totaluri.comenziCazute}{" "}
               {totaluri.comenziCazute === 1 ? "comandă cu reducere din ofertă a fost anulată" : "de comenzi cu reducere din ofertă au fost anulate"}
-              {" "}({formatPrice(totaluri.baniDatiCazuti)} reducere). „Acceptate” și „Vânzări în plus” nu scad
-              cu ele: nicăieri nu se păstrează care ofertă a fost pe care comandă.
+              {" "}({formatPrice(totaluri.baniDatiCazuti)} reducere). „Acceptate” și „Vânzări în plus” nu scad cu ele.
             </p>
           )}
 
@@ -582,7 +581,7 @@ export function OffersClient({
                       <button
                         type="button"
                         onClick={() => setDeschisa(o)}
-                        className="truncate text-left font-semibold text-foreground hover:underline"
+                        className="block w-full truncate text-left font-semibold text-foreground hover:underline"
                       >
                         {o.name}
                       </button>

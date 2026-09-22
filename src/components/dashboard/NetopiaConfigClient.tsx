@@ -99,14 +99,6 @@ export default function NetopiaConfigClient({
       <IntegrationHeader id="netopia" description="Accepta plati cu cardul prin Netopia Payments." />
 
       <div className="space-y-5">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Integreaza Netopia Payments pentru a accepta plati cu cardul. Clientii sunt redirectionati catre pagina securizata Netopia, fara a introduce datele cardului pe site-ul tau.
-            Ai nevoie de un cont de comerciant Netopia si de API Key-ul generat din panoul Netopia.
-          </p>
-        </div>
 
         {/* Ghid */}
         <Panel className="overflow-hidden">
@@ -173,7 +165,7 @@ export default function NetopiaConfigClient({
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
+                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
                 </p>
               </div>
               <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />

@@ -2795,7 +2795,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Parola noua</label>
-                    <input
+                    <input autoComplete="new-password"
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
@@ -2805,7 +2805,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1.5">Confirma parola noua</label>
-                    <input
+                    <input autoComplete="new-password"
                       type="password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}

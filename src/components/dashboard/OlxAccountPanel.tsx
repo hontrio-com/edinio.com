@@ -253,10 +253,10 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
           )}
           <div className="flex flex-col gap-2 sm:flex-row">
             <select aria-label="Pachet" value={selected} onChange={(e) => setSelected(e.target.value)} className={cn(selectCls, "flex-1")}>
-              <option value="">— alege pachet —</option>
+              <option value="">Alege pachetul</option>
               {options.map((o) => (
                 <option key={o.key} value={o.key}>
-                  {(o.p.name ?? `${o.p.size} anunțuri`)}{o.p.price != null ? ` — ${o.p.price} RON` : ""}{o.p.is_premium ? " (premium)" : ""}
+                  {(o.p.name ?? `${o.p.size} anunțuri`)}{o.p.price != null ? ` · ${o.p.price} RON` : ""}{o.p.is_premium ? " (premium)" : ""}
                 </option>
               ))}
             </select>
@@ -378,12 +378,12 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumpa
       <SectionLabel icon={Megaphone}>Promovează un anunț</SectionLabel>
       <div className="flex flex-col gap-2">
         <select aria-label="Anunț" value={advertId} onChange={(e) => setAdvertId(e.target.value)} className={selectCls}>
-          <option value="">— alege anunțul —</option>
+          <option value="">Alege anunțul</option>
           {adverts.map((a) => <option key={a.offer_id} value={String(a.olx_advert_id)}>{a.name}</option>)}
         </select>
         <div className="flex flex-col gap-2 sm:flex-row">
           <select aria-label="Promovare" value={code} onChange={(e) => setCode(e.target.value)} className={cn(selectCls, "flex-1")}>
-            <option value="">— alege promovarea —</option>
+            <option value="">Alege promovarea</option>
             {features.map((f) => <option key={f.code} value={f.code}>{f.name ?? f.code}{f.duration ? ` (${f.duration} zile)` : ""}</option>)}
           </select>
           {methods.length > 1 && (

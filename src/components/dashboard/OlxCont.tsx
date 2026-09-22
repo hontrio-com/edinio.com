@@ -245,7 +245,7 @@ function PromovariAnunt({ businessId, adverts }: { businessId: string; adverts: 
         Verifică aici înainte să cumperi: OLX acceptă o a doua promovare peste una care încă ține și o încasează din nou.
       </p>
       <select aria-label="Anunț" value={advertId} onChange={(e) => setAdvertId(e.target.value)} className={selectCls}>
-        <option value="">— alege anunțul —</option>
+        <option value="">Alege anunțul</option>
         {adverts.map((a) => <option key={a.offer_id} value={String(a.olx_advert_id)}>{a.name}</option>)}
       </select>
 

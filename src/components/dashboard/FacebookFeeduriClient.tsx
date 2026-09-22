@@ -105,7 +105,7 @@ export function FacebookFeeduriClient({
         Daca vrei doar sa faci reclama la o parte din produse, creeaza in Commerce Manager un{" "}
         <strong>Product Set</strong> si filtreaza dupa <code className="rounded bg-muted px-1">product_type</code>:
         trimitem deja categoria fiecarui produs. Se actualizeaza singur si nu ai nimic de intretinut.
-        Feedurile de mai jos sunt pentru cand ai nevoie de un <strong>catalog separat</strong> — alta agentie,
+        Feedurile de mai jos sunt pentru cand ai nevoie de un <strong>catalog separat</strong>: alta agentie,
         alt brand, sau o selectie de campanie.
       </Callout>
 

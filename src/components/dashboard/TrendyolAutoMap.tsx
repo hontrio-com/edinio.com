@@ -170,7 +170,7 @@ export function TrendyolAutoMap({
         </label>
         {fara > 0 && (
           <span className="text-muted-foreground">
-            {fara} {fara === 1 ? "categorie fără potrivire" : "categorii fără potrivire"} — mapează-le manual mai jos.
+            {fara} {fara === 1 ? "categorie fără potrivire" : "categorii fără potrivire"}, mapează-le manual mai jos.
           </span>
         )}
       </div>
@@ -207,12 +207,12 @@ export function TrendyolAutoMap({
                       className="mt-1.5 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
                       {s.optiuni.map((o, i) => (
                         <option key={o.categoryId} value={i}>
-                          {o.label} — {Math.round(o.scor * 100)}%
+                          {o.label} · {Math.round(o.scor * 100)}%
                         </option>
                       ))}
                     </select>
                   ) : (
-                    <p className="text-xs text-foreground mt-1.5">{optiune.label} <span className="text-muted-foreground">— {Math.round(optiune.scor * 100)}%</span></p>
+                    <p className="text-xs text-foreground mt-1.5">{optiune.label} <span className="text-muted-foreground">· {Math.round(optiune.scor * 100)}%</span></p>
                   )
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">Nicio potrivire găsită. Caut-o manual mai jos.</p>

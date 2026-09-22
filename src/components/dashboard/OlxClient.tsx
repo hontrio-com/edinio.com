@@ -236,7 +236,7 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
       {c.limited > 0 && (
         <Callout variant="warning" icon={ShoppingBag}>
           {c.limited} {c.limited === 1 ? "anunț a atins" : "anunțuri au atins"} limita de anunțuri gratuite în categoria lor.
-          Cumpără un pachet din secțiunea „Cont OLX” de mai jos ca să le activezi — sau închide-le
+          Cumpără un pachet din secțiunea „Cont OLX” de mai jos ca să le activezi, sau închide-le
           din lista de mai jos, dacă nu vrei să plătești acum. {/*
             ⚠ „Limited" era un fund de sac: îi spuneam doar să cumpere. Dacă nu voia, anunțul rămânea
             acolo, numărat, pentru totdeauna. `finish` îl mută în „încheiate" la ei — nu e o ștergere,
@@ -249,7 +249,7 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
           <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Se publică {c.queued} {c.queued === 1 ? "produs" : "produse"} pe OLX…</p>
-            <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină — statusul se actualizează singur.</p>
+            <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină: statusul se actualizează singur.</p>
           </div>
         </div>
       )}
@@ -278,7 +278,7 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
               {c.conflicte === 1
                 ? "Un produs are două anunțuri pe OLX."
                 : `${c.conflicte} produse au câte două anunțuri pe OLX.`}{" "}
-              Publicarea lor e oprită până alegi pe care îl păstrezi — celălalt se retrage.
+              Publicarea lor e oprită până alegi pe care îl păstrezi; celălalt se retrage.
             </span>
             <Button variant="outline" size="sm" onClick={() => setShowConflicte((v) => !v)}>
               {showConflicte ? "Ascunde" : "Alege"}
@@ -567,7 +567,7 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
         {districts.length > 0 && (
           <SettingField label="Cartier (opțional)">
             <select aria-label="Cartier" value={districtId ?? ""} onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : undefined)} className={selectCls}>
-              <option value="">— fără cartier —</option>
+              <option value="">Fără cartier</option>
               {districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </SettingField>
@@ -751,7 +751,7 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
                       )}
                       {isLimited && a.olx_advert_id && (
                         <IconBtn title="Închide anunțul (fără să cumperi)" onClick={() => {
-                          if (!window.confirm(`Închizi anunțul „${a.name}” pe OLX? Nu se șterge — îl poți reactiva mai târziu cumpărând un pachet.`)) return;
+                          if (!window.confirm(`Închizi anunțul „${a.name}” pe OLX? Nu se șterge, îl poți reactiva mai târziu cumpărând un pachet.`)) return;
                           act(a.offer_id, () => finishOlxAdvert(businessId, a.olx_advert_id!), "Anunț închis pe OLX.");
                         }}><Archive className="h-3.5 w-3.5" /></IconBtn>
                       )}

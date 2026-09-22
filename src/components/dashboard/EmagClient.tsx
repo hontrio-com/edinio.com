@@ -205,7 +205,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="off"
+                autoComplete="new-password"
                 placeholder={status.parolaMascata ? "•••••••• (salvată)" : ""}
               />
             </div>

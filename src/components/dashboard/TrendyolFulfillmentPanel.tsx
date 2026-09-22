@@ -26,7 +26,7 @@ function statusLabel(status: string): string {
   const s = (status || "").toLowerCase();
   if (SHIPPED.includes(s)) return "Expediat de Trendyol";
   if (TERMINAL.includes(s)) return "Anulat / retur";
-  if (s === "invoiced") return "Facturat — se predă curierului Trendyol";
+  if (s === "invoiced") return "Facturat, se predă curierului Trendyol";
   if (s === "picking") return "În pregătire (Picking)";
   return "Comandă nouă";
 }
@@ -163,7 +163,7 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
               1. Marchează „În pregătire”
             </button>
             <button type="button" disabled={pending || !canInvoiced}
-              onClick={() => advance(() => markTrendyolInvoiced(businessId, orderId), "Pachet marcat „Facturat” — Trendyol preia expedierea.")}
+              onClick={() => advance(() => markTrendyolInvoiced(businessId, orderId), "Pachet marcat „Facturat”. Trendyol preia expedierea.")}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
               2. Marchează „Facturat” (predă curierului)
@@ -184,7 +184,7 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
               <option value="">Alege curierul</option>
               {curieriProprii.map((c) => (
-                <option key={c.code} value={c.code}>{c.name}{c.nota ? ` — ${c.nota}` : ""}</option>
+                <option key={c.code} value={c.code}>{c.name}{c.nota ? ` · ${c.nota}` : ""}</option>
               ))}
             </select>
             <input value={awb} onChange={(e) => setAwb(e.target.value)} placeholder="Număr AWB"

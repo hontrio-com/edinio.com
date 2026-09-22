@@ -210,7 +210,18 @@ export function GlsConfigClient({
           Client Number-ul apare in contract si pe facturile GLS.
         </p>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/*
+          ⚠ ORDINEA CAMPURILOR E ALEASA, NU INTAMPLATOARE. Cinci campuri intr-o
+          grila de doua coloane lasa mereu o celula goala. Cu „Cod postal
+          ridicare" pe randul din mijloc, explicatia lui de doua randuri inalta
+          randul si sapa o gaura sub „Client Number", chiar in mijlocul cartonasului.
+          Aratat de el pe captura, 22.09.2026.
+
+          Mutat la urma, golul cade in coltul de jos, langa singurul camp cu
+          explicatie, si randul nu mai e scobit pe dinauntru. `items-start` opreste
+          si intinderea celulelor scunde pe inaltimea celei inalte.
+        */}
+        <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
           <Field label="Utilizator" required>
             <Input
               type="text"
@@ -240,26 +251,6 @@ export function GlsConfigClient({
               placeholder="ex. 100123456"
             />
           </Field>
-          <Field label="Cod postal ridicare" required>
-            <Input
-              type="text"
-              inputMode="numeric"
-              value={codPostal}
-              onChange={(e) => setCodPostal(e.target.value.replace(/\D/g, "").slice(0, 9))}
-              placeholder="ex. 011857"
-            />
-            {/*
-              * ⚠ Nu e un camp decorativ: GLS cere codul postal in adresa de
-              * ridicare, iar in `businesses` nu exista niciunul — nici pentru
-              * magazin, nici pentru firma. Ceilalti curieri nu-l cer fiindca
-              * ridica de la un punct inregistrat la ei; GLS primeste adresa
-              * intreaga la fiecare colet.
-              */}
-            <p className="mt-1 text-xs text-muted-foreground">
-              Codul postal al adresei de unde ridica GLS coletele. Restul adresei se ia
-              din setarile magazinului.
-            </p>
-          </Field>
           <Field label="Tara contractului" required>
             <select
               value={tara}
@@ -270,6 +261,26 @@ export function GlsConfigClient({
                 <option key={t} value={t}>{NUME_TARA[t]}</option>
               ))}
             </select>
+          </Field>
+          {/*
+            * ⚠ Nu e un camp decorativ: GLS cere codul postal in adresa de
+            * ridicare, iar in `businesses` nu exista niciunul — nici pentru
+            * magazin, nici pentru firma. Ceilalti curieri nu-l cer fiindca
+            * ridica de la un punct inregistrat la ei; GLS primeste adresa
+            * intreaga la fiecare colet.
+            */}
+          <Field
+            label="Cod postal ridicare"
+            required
+            hint="Codul postal al adresei de unde ridica GLS coletele. Restul adresei se ia din setarile magazinului."
+          >
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={codPostal}
+              onChange={(e) => setCodPostal(e.target.value.replace(/\D/g, "").slice(0, 9))}
+              placeholder="ex. 011857"
+            />
           </Field>
         </div>
 

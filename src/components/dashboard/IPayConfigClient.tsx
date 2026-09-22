@@ -5,7 +5,7 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Info, Key, User } from "lucide-react";
+import { Save, Loader2, CreditCard, Key, User } from "lucide-react";
 import { saveIpayConfig, disconnectIpay } from "@/lib/actions/ipay.actions";
 import type { IPayConfig } from "@/lib/ipay";
 import { Button } from "@/components/ui/button";
@@ -90,15 +90,6 @@ export default function IPayConfigClient({
       <IntegrationHeader id="ipay" description="Accepta plati cu cardul prin BT iPay (Banca Transilvania)." />
 
       <div className="space-y-5">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Integreaza BT iPay pentru a accepta plati cu cardul. Clientii sunt redirectionati catre pagina securizata
-            a Bancii Transilvania (cu 3D Secure), fara a introduce datele cardului pe site-ul tau. Ai nevoie de
-            credentialele API (utilizator si parola) primite de la Banca Transilvania la crearea comerciantului iPay.
-          </p>
-        </div>
 
         {/* Ghid */}
         <Panel className="overflow-hidden">
@@ -142,7 +133,7 @@ export default function IPayConfigClient({
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
+                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
                 </p>
               </div>
               <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />

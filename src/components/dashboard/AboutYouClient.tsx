@@ -291,7 +291,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="Lipește cheia API About You"
-                autoComplete="off"
+                autoComplete="new-password"
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono"
               />
             </div>
@@ -489,7 +489,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
               <div>
                 <p className="text-sm font-medium text-foreground">Notificări About You (stoc)</p>
                 <p className="text-xs text-muted-foreground">
-                  {notificariActive ? "Active — stocul se sincronizează în ambele sensuri." : "Inactive."}
+                  {notificariActive ? "Active: stocul se sincronizează în ambele sensuri." : "Inactive."}
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">

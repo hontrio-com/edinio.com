@@ -1070,7 +1070,7 @@ export function DiscountsClient({
                       <button
                         type="button"
                         onClick={() => setDeschis(d)}
-                        className="truncate font-mono font-bold tracking-wider text-foreground hover:underline"
+                        className="block w-full truncate font-mono font-bold tracking-wider text-foreground hover:underline"
                       >
                         {d.code}
                       </button>

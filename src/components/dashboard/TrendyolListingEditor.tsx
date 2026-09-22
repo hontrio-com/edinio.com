@@ -434,7 +434,7 @@ export function TrendyolListingEditor({
      * de atribute pe care n-a apucat s-o incarce: ar sterge exact ce e salvat.
      */
     if (!atributeIncarcate && eroareAtribute) {
-      toast.error("Atributele categoriei nu s-au încărcat. Reîncarcă pagina — altfel salvarea ar șterge ce ai completat.");
+      toast.error("Atributele categoriei nu s-au încărcat. Reîncarcă pagina, altfel salvarea ar șterge ce ai completat.");
       return;
     }
     /*
@@ -572,7 +572,7 @@ export function TrendyolListingEditor({
       )}
       {eroareAtribute && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
-          Nu am putut încărca atributele categoriei: {eroareAtribute} Reîncarcă pagina înainte să salvezi — altfel
+          Nu am putut încărca atributele categoriei: {eroareAtribute} Reîncarcă pagina înainte să salvezi, altfel
           salvarea ar șterge atributele deja completate.
         </div>
       )}
@@ -670,7 +670,7 @@ export function TrendyolListingEditor({
           </div>
           <p className="text-[11px] text-muted-foreground mb-2">
             Datele de conformitate (producător, importatori) se iau din datele firmei tale, din Setări. Restul se
-            deduc din produs, doar când sunt fără dubiu — verifică-le înainte de trimitere.
+            deduc din produs, doar când sunt fără dubiu. Verifică-le înainte de trimitere.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {productAttrs.map((g) => {

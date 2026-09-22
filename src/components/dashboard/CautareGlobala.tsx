@@ -147,6 +147,14 @@ export function CautareGlobala({ businessId }: { businessId: string | null }) {
       <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       <input
         type="text"
+        /*
+          ⚠ Cealalta jumatate a defectului din `input.tsx`: managerul de parole
+          lua bara asta drept campul de utilizator al paginii, fiindca e primul
+          camp de text de dinaintea oricarui camp de parola din panou, si scria
+          emailul contului in ea. Numele nu seamana cu „user" tot dinadins.
+        */
+        autoComplete="off"
+        name="cautare-in-panou"
         value={termen}
         onChange={(e) => { setTermen(e.target.value); setDeschis(true); }}
         onFocus={() => setDeschis(true)}

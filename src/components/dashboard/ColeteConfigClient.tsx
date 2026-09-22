@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle, Loader2, Plug, PlugZap, RefreshCw, Info } from "lucide-react";
+import { CheckCircle, Loader2, Plug, PlugZap, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveCOConfig, disconnectCO, testCOConnection } from "@/lib/actions/colete.actions";
@@ -145,29 +145,6 @@ export default function ColeteConfigClient({
       <IntegrationHeader id="colete" description="Genereaza AWB-uri Colete Online direct din comenzile magazinului tau." />
 
       <div className="space-y-4">
-        {/* Info */}
-        <Panel className="p-4">
-          <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-            <div>
-              <p className="mb-1 text-sm font-medium text-foreground">Despre Colete Online</p>
-              <p className="text-xs text-muted-foreground">
-                Colete Online este o platforma agregator de curierat care ofera acces la DPD, Cargus, SameDay, TNT si altii
-                printr-un singur API. Credentialele API (Client ID si Client Secret) sunt furnizate de echipa Colete Online
-                la cerere.
-              </p>
-              <a
-                href="https://www.colete-online.ro"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 inline-block text-xs text-primary hover:underline"
-              >
-                Solicita acces API
-              </a>
-            </div>
-          </div>
-        </Panel>
-
         {/* Main config */}
         <Panel className="space-y-5 p-5">
           <p className="text-sm font-semibold text-foreground">Configurare integrare</p>

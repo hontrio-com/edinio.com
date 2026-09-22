@@ -180,10 +180,10 @@ export function MarketingConfigClient({
       <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
         <p className="mb-2 text-sm font-semibold text-foreground">Evenimente urmarite automat</p>
         <ul className="space-y-1 text-xs text-muted-foreground">
-          <li><span className="font-mono text-foreground">PageView</span> — la fiecare vizita pe pagina magazinului</li>
-          <li><span className="font-mono text-foreground">AddToCart</span> — cand un produs este adaugat in cos</li>
-          <li><span className="font-mono text-foreground">InitiateCheckout</span> — la deschiderea formularului de comanda</li>
-          <li><span className="font-mono text-foreground">Purchase / CompletePayment / purchase</span> — la confirmarea comenzii (cu valoare + RON)</li>
+          <li><span className="font-mono text-foreground">PageView</span>: la fiecare vizita pe pagina magazinului</li>
+          <li><span className="font-mono text-foreground">AddToCart</span>: cand un produs este adaugat in cos</li>
+          <li><span className="font-mono text-foreground">InitiateCheckout</span>: la deschiderea formularului de comanda</li>
+          <li><span className="font-mono text-foreground">Purchase / CompletePayment / purchase</span>: la confirmarea comenzii (cu valoare + RON)</li>
         </ul>
       </div>
     </div>

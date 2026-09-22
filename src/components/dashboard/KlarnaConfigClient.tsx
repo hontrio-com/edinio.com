@@ -5,7 +5,7 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Info, Key, User } from "lucide-react";
+import { Save, Loader2, CreditCard, Key, User } from "lucide-react";
 import { saveKlarnaConfig, disconnectKlarna } from "@/lib/actions/klarna.actions";
 import type { KlarnaConfig } from "@/lib/klarna";
 import { Button } from "@/components/ui/button";
@@ -92,19 +92,9 @@ export default function KlarnaConfigClient({
 
   return (
     <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="klarna" description="Accepta plati Klarna — «Cumpara acum, plateste mai tarziu» si plata in rate." />
+      <IntegrationHeader id="klarna" description="Accepta plati Klarna: «Cumpara acum, plateste mai tarziu» si plata in rate." />
 
       <div className="space-y-5">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Integreaza Klarna pentru a accepta plati «Cumpara acum, plateste mai tarziu» si plata in rate. Clientii sunt
-            redirectionati catre pagina securizata Klarna, fara a introduce datele de plata pe site-ul tau. Ai nevoie de
-            credentialele API (utilizator si parola) din Klarna Merchant Portal (Setari &rarr; API credentials). Plata se
-            face in RON, pentru clienti din Romania.
-          </p>
-        </div>
 
         {/* Ghid */}
         <Panel className="overflow-hidden">
@@ -148,7 +138,7 @@ export default function KlarnaConfigClient({
               <div>
                 <p className="text-sm font-medium text-foreground">Mod Playground (testare)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale — foloseste pentru testare" : "Mod Live — platile sunt reale"}
+                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
                 </p>
               </div>
               <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />

@@ -181,11 +181,6 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
         </div>
       </div>
 
-      <div className="mt-6 p-4 rounded-xl bg-primary/5 border border-primary/15 text-xs text-muted-foreground leading-relaxed">
-        Conectezi <span className="font-medium text-foreground">contul tau</span> de Klaviyo. Contactele stranse din magazin ajung in lista ta cu acordul lor,
-        iar campaniile de email le compui si le trimiti direct in Klaviyo (pe contul si costul tau). Edinio nu trimite emailurile in locul tau.
-      </div>
-
       {/* Connection */}
       {config.connected ? (
         <div className="mt-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
@@ -206,7 +201,7 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
           <div>
             <label className="block text-xs font-semibold text-foreground mb-1.5">Cheie API privata Klaviyo</label>
             <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ex: pk_..." className={inputCls} autoComplete="off" />
+              placeholder="ex: pk_..." className={inputCls} autoComplete="new-password" />
             <p className="text-[11px] text-muted-foreground mt-1.5 inline-flex items-center gap-1">
               O creezi in Klaviyo la Settings &gt; API keys (cheie privata, cu acces complet).
               <a href="https://www.klaviyo.com/settings/account/api-keys" target="_blank" rel="noopener noreferrer"

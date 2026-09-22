@@ -28,7 +28,7 @@ export default async function FedexPage() {
     <div className="p-6 max-w-2xl">
       <IntegrationHeader
         id="fedex"
-        description="Colete prin FedEx: livrari interne in Romania (FedEx First, Priority Express, Priority) si international, cu tarifele contului tau. ⚠ FedEx NU ofera plata la livrare — serviciul a fost retras de ei in 2023."
+        description="Colete prin FedEx: livrari interne in Romania (FedEx First, Priority Express, Priority) si international, cu tarifele contului tau. FedEx nu ofera plata la livrare: serviciul a fost retras de ei in 2023."
       />
       <FedexConfigClient businessId={business.id} initialConfig={config} />
     </div>

@@ -228,11 +228,11 @@ export function TikTokPixelConfigClient({
         <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
           <li>Instaleaza extensia <span className="font-medium text-foreground">TikTok Pixel Helper</span> in Chrome.</li>
           <li>Deschide magazinul intr-o fereastra <span className="font-medium text-foreground">incognito</span>.</li>
-          <li>Daca ai bannerul de cookie-uri activ, apasa <span className="font-medium text-foreground">Accepta</span> — pixelii se incarca doar dupa consimtamant (GDPR). Fara acest pas, Pixel Helper nu vede nimic.</li>
+          <li>Daca ai bannerul de cookie-uri activ, apasa <span className="font-medium text-foreground">Accepta</span>: pixelii se incarca doar dupa consimtamant (GDPR). Fara acest pas, Pixel Helper nu vede nimic.</li>
           <li>Pixel Helper ar trebui sa arate pixelul si evenimentul <span className="font-mono text-foreground">PageView</span>.</li>
         </ol>
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Poti dezactiva bannerul din <span className="font-medium text-foreground">Setari &gt; Banner Cookies</span> (pixelii se vor incarca fara consimtamant — raspunderea GDPR iti apartine).
+          Poti dezactiva bannerul din <span className="font-medium text-foreground">Setari &gt; Banner Cookies</span> (pixelii se vor incarca fara consimtamant, raspunderea GDPR iti apartine).
         </p>
       </div>
     </div>

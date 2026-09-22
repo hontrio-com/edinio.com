@@ -86,14 +86,6 @@ export function SmsoConfigClient({
       <IntegrationHeader id="smso" description="Trimite SMS-uri tranzactionale si de marketing prin Smso.ro." />
 
       <div className="space-y-6">
-        {/* Info */}
-        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <MessageSquare className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Integreaza contul tau SMSO pentru a trimite campanii SMS catre clientii magazinului.
-            Dupa activare, sectiunea <strong>SMS Marketing</strong> va aparea in meniu.
-          </p>
-        </div>
 
         {/* Ghid pas cu pas */}
         <Panel className="overflow-hidden">

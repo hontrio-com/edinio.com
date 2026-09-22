@@ -117,7 +117,7 @@ export function AboutYouCarrierMapping({
           ) : (
             <>About You acceptă pentru România {romanesti.length === 1 ? "un singur carrier" : `${romanesti.length} carriere`}:{" "}
             <span className="font-semibold">{romanesti.map((o) => o.carrier_name || o.key).join(", ")}</span>.
-            Dacă expediezi cu alt curier, nu există corespondent — alege-l totuși pe cel românesc, ca About You
+            Dacă expediezi cu alt curier, nu există corespondent, alege-l totuși pe cel românesc, ca About You
             să primească un AWB pe care îl poate urmări, sau cere-le să adauge curierul tău.</>
           )}
         </div>

@@ -202,7 +202,7 @@ function ConnectCard({ businessId, oauthAvailable }: { businessId: string; oauth
 
       {!oauthAvailable && (
         <p className="mx-auto mt-4 max-w-sm text-xs text-muted-foreground">
-          Conectarea cu contul Google — cu rapoarte și vizitatori în timp real direct aici, în dashboard — se activează în curând.
+          Conectarea cu contul Google, cu rapoarte și vizitatori în timp real direct aici, în dashboard, se activează în curând.
         </p>
       )}
     </EmptyState>

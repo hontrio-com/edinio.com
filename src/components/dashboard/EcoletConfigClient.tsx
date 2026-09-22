@@ -178,14 +178,6 @@ export function EcoletConfigClient({
         </Callout>
       )}
 
-      <Callout variant="warning" icon={AlertTriangle} title="Fiecare expediere e reala">
-        eColet nu are mediu de test: orice expediere trimisa din panou e un transport
-        adevarat, care intra pe factura.
-        <br />
-        Emiterea nu e instantanee, eColet prelucreaza expedierea si abia apoi apare
-        AWB-ul. Fereastra din comanda iti arata cand e gata; nu trimite de doua ori.
-      </Callout>
-
       <Panel className="space-y-4 p-4">
         <div className="mb-1 flex items-center gap-2">
           <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">

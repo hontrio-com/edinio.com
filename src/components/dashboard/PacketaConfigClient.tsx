@@ -161,19 +161,6 @@ export function PacketaConfigClient({
         </Callout>
       )}
 
-      {/*
-        * ⚠ Se spune DE LA INCEPUT ce nu se poate.
-        *
-        * Anularea lipseste din API-ul lor, iar asta schimba felul in care omul
-        * lucreaza: la ceilalti curieri o greseala se repara cu un buton, aici se
-        * repara intrand in contul Packeta.
-        */}
-      <Callout variant="warning" icon={AlertTriangle}>
-        <strong>Packeta nu permite anularea coletelor prin API.</strong> Un colet creat gresit
-        ramane la ei si trebuie anulat de mana din contul Packeta. De aceea verificam datele
-        inainte de fiecare emitere, dar merita sa te uiti peste adresa inainte sa apesi.
-      </Callout>
-
       <Panel step={1} title="Credentiale">
         <Callout variant="info" icon={Info}>
           Packeta are <strong>doua</strong> credentiale, si sunt lucruri diferite. Le gasesti in

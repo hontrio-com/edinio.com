@@ -109,7 +109,7 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
             </>
           ) : isAwaiting ? (
             <>
-              <p className="text-sm font-semibold text-foreground">Cont conectat — in curs de verificare</p>
+              <p className="text-sm font-semibold text-foreground">Cont conectat, in curs de verificare</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Ai finalizat conectarea. Stripe iti verifica contul inainte de a activa platile cu cardul.
                 Poate dura de la cateva minute pana la 1-2 zile lucratoare. Apasa &laquo;Verifica din nou&raquo; sau
@@ -143,7 +143,7 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
           {[
             { title: "Plati cu cardul", desc: "Accepta Visa, Mastercard si toate cardurile majore." },
             { title: "Bani direct la tine", desc: "Fondurile ajung direct in contul tau Stripe, fara intermediari." },
-            { title: "Securitate maxima", desc: "Stripe este certificat PCI DSS Level 1 — cel mai inalt standard." },
+            { title: "Securitate maxima", desc: "Stripe este certificat PCI DSS Level 1, cel mai inalt standard." },
           ].map(({ title, desc }) => (
             <Panel key={title} className="p-4">
               <p className="mb-1 text-xs font-semibold text-foreground">{title}</p>

@@ -695,7 +695,7 @@ function CategoryMapping({ businessId, categories, initialMap }: {
             <span className="w-2/5 truncate text-sm text-foreground" title={cat}>{cat}</span>
             <select aria-label={`Categorie Google pentru ${cat}`} value={map[cat] ?? ""} onChange={(e) => setMap((m) => ({ ...m, [cat]: e.target.value }))}
               className={cn(selectCls, "flex-1")}>
-              <option value="">— alege categoria Google —</option>
+              <option value="">Alege categoria Google</option>
               {GOOGLE_CATEGORIES.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>

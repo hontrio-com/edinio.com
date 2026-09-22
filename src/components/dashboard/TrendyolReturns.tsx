@@ -216,7 +216,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                 {r.orderNumber ?? "Comandă necunoscută"}
               </span>
               <span className="text-[11px] rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
-                {STARI[r.status ?? ""] ?? r.status ?? "—"}
+                {STARI[r.status ?? ""] ?? r.status ?? "-"}
               </span>
             </div>
 
@@ -381,7 +381,7 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
                             ? "am trimis acceptarea; așteptăm confirmarea Trendyol, apoi poți pune marfa înapoi"
                             : l.deCeNuSeRepune === "nehotarat"
                               ? "returul nu e încă hotărât; poți pune marfa înapoi după ce îl accepți"
-                              : "returul nu s-a acceptat, deci nu punem marfa înapoi automat — dacă totuși o păstrezi, corectează stocul din fișa produsului"}
+                              : "returul nu s-a acceptat, deci nu punem marfa înapoi automat. Dacă totuși o păstrezi, corectează stocul din fișa produsului"}
                     </span>
                   ) : (
                     <button

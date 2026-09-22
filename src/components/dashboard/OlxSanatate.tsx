@@ -106,7 +106,7 @@ export default function OlxSanatatePanel({ businessId }: { businessId: string })
         <Cifra eticheta="În coadă" valoare={String(s.inCoada)} />
         <Cifra
           eticheta="Cea mai veche"
-          valoare={s.celMaiVechiMinute == null ? "—" : `${s.celMaiVechiMinute} min`}
+          valoare={s.celMaiVechiMinute == null ? "-" : `${s.celMaiVechiMinute} min`}
           rau={intarziat}
         />
         <Cifra eticheta="Oprite" valoare={String(s.oprite)} rau={s.oprite > 0} />
@@ -117,7 +117,7 @@ export default function OlxSanatatePanel({ businessId }: { businessId: string })
       {intarziat && (
         <p className="text-xs text-destructive">
           O lucrare așteaptă de {s.celMaiVechiMinute} de minute. Cronul pornește din minut în minut,
-          deci ceva o oprește — verifică dacă sesiunea OLX mai e validă.
+          deci ceva o oprește. Verifică dacă sesiunea OLX mai e validă.
         </p>
       )}
       {s.cereReconectare && (

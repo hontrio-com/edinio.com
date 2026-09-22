@@ -209,11 +209,6 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
         </div>
       </div>
 
-      <div className="mt-6 p-4 rounded-xl bg-primary/5 border border-primary/15 text-xs text-muted-foreground leading-relaxed">
-        Conectezi <span className="font-medium text-foreground">contul tau</span> de Brevo. Contactele stranse din magazin ajung in lista ta,
-        iar campaniile de email le compui si le trimiti direct in Brevo (pe contul si costul tau). Edinio nu trimite emailurile in locul tau.
-      </div>
-
       {/* Connection */}
       {config.connected ? (
         <div className="mt-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
@@ -234,7 +229,7 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
           <div>
             <label className="block text-xs font-semibold text-foreground mb-1.5">Cheie API Brevo</label>
             <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ex: xkeysib-..." className={inputCls} autoComplete="off" />
+              placeholder="ex: xkeysib-..." className={inputCls} autoComplete="new-password" />
             <p className="text-[11px] text-muted-foreground mt-1.5 inline-flex items-center gap-1">
               O gasesti in Brevo la SMTP &amp; API &gt; API Keys.
               <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noopener noreferrer"

@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
@@ -272,7 +273,18 @@ export function DhlConfigClient({
       <Panel step={1} title="Conectare">
         <Field
           label="Utilizator MyDHL API"
-          hint="⚠ NU e „API Key” din aplicatia de pe developer.dhl.com. E utilizatorul MyDHL API, dat de consultantul tau DHL Express, adesea dupa certificarea integrarii. Nu e mascat: iti spune ce cont ai legat."
+          ajutor={
+            <ExplicatieCard
+              marime="mic"
+              intrebare="Ce se scrie aici"
+              eticheta="Utilizator MyDHL API"
+              text={`Nu e „API Key” din aplicatia de pe developer.dhl.com.
+
+E utilizatorul MyDHL API, primit de la consultantul tau DHL Express, de obicei dupa certificarea integrarii.
+
+Nu se ascunde: iti arata ce cont ai legat.`}
+            />
+          }
         >
           <Input
             value={config.username}
@@ -282,7 +294,18 @@ export function DhlConfigClient({
 
         <Field
           label="Parola MyDHL API"
-          hint="⚠ Perechea utilizatorului de mai sus, tot de la consultantul DHL Express, NU „API Secret” de pe portalul lor pentru dezvoltatori. Cheia de portal e respinsa cu 401 fara nicio explicatie. Se cripteaza in baza si nu se mai afiseaza."
+          ajutor={
+            <ExplicatieCard
+              marime="mic"
+              intrebare="Ce se scrie aici"
+              eticheta="Parola MyDHL API"
+              text={`Perechea utilizatorului de mai sus, tot de la consultantul DHL Express.
+
+Nu e „API Secret” de pe portalul lor pentru dezvoltatori: cheia de portal e respinsa cu 401, fara nicio explicatie.
+
+Se cripteaza in baza si nu se mai afiseaza.`}
+            />
+          }
         >
           <Input
             type="password"
@@ -294,7 +317,16 @@ export function DhlConfigClient({
 
         <Field
           label="Numar de cont DHL Express"
-          hint="Cel de pe factura DHL, noua cifre in Romania. Nu e o credentiala, dar fara el cotarea intoarce tarifele PUBLICATE in loc de ale tale: pret gresit, nu eroare."
+          ajutor={
+            <ExplicatieCard
+              marime="mic"
+              intrebare="Ce se scrie aici"
+              eticheta="Numar de cont DHL Express"
+              text={`Cel de pe factura DHL, noua cifre in Romania.
+
+Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de ale tale. Pretul iese gresit, si nu apare nicio eroare.`}
+            />
+          }
         >
           <Input
             value={config.account_number}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, Plug, PlugZap, RefreshCw, Info, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, Plug, PlugZap, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
@@ -341,32 +341,15 @@ export default function OblioConfigClient({
           */
           <Callout variant="warning" icon={AlertTriangle} title="Mai lipseste gestiunea">
             Contul tau Oblio are stocuri, deci fiecare factura trebuie sa spuna din ce gestiune iese
-            marfa. Alege <strong>Gestiune</strong> mai jos si salveaza — pana atunci Oblio refuza
+            marfa. Alege <strong>Gestiune</strong> mai jos si salveaza, fiindca pana atunci Oblio refuza
             documentele, chiar daca restul e configurat.
           </Callout>
         ) : complet ? (
           <Callout variant="warning" icon={AlertTriangle} title="Oblio configurat, dar OPRIT">
-            Datele contului sunt salvate, dar comutatorul <strong>Activat</strong> de mai jos e stins — de aceea
+            Datele contului sunt salvate, dar comutatorul <strong>Activat</strong> de mai jos e stins, de aceea
             integrarea apare neconectata la Integrari si nu apare butonul de factura in Comenzi.
           </Callout>
         ) : null}
-        {/* Info */}
-        <Panel className="p-4">
-          <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Despre Oblio</p>
-              <p className="text-xs text-muted-foreground">
-                Oblio este o platforma romaneasca de facturare online. Integrarea permite generarea automata de facturi si proforme
-                direct din comenzile magazinului tau.
-              </p>
-              <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
-                <li><strong>client_id</strong> = email-ul cu care te autentifici in Oblio</li>
-                <li><strong>client_secret</strong> = token-ul din <strong>Setari &gt; Date Cont</strong></li>
-              </ul>
-            </div>
-          </div>
-        </Panel>
 
         {/* Enable toggle */}
         <Panel className="flex items-center justify-between p-4">
@@ -522,7 +505,7 @@ export default function OblioConfigClient({
                   className={selectCls}
                 >
                   {accountData.vatRates.map(v => (
-                    <option key={v.name} value={v.name}>{v.name} ({v.percent}%){v.default ? " — implicita" : ""}</option>
+                    <option key={v.name} value={v.name}>{v.name} ({v.percent}%){v.default ? ", implicita" : ""}</option>
                   ))}
                 </select>
               ) : (
@@ -606,7 +589,7 @@ export default function OblioConfigClient({
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Porneste-l doar daca <strong>NU</strong> tii stocul in Oblio. Facturile nu vor
                     mai scadea cantitatile din gestiune. Poate rezolva refuzul{" "}
-                    <em>produsul nu are stoc suficient</em> — dar schimba felul in care Oblio
+                    <em>produsul nu are stoc suficient</em>, dar schimba felul in care Oblio
                     iti tine stocul, deci nu-l porni daca il folosesti acolo.
                   </p>
                 </div>

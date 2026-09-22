@@ -234,4 +234,4 @@ export function secretulEsteSalvat(config: unknown, camp: string): boolean {
 }
 
 /** Text pentru campul de formular: arata ca exista o valoare, fara sa o dezvaluie. */
-export const PLACEHOLDER_SECRET_SALVAT = "••••••••  (salvat — completeaza doar ca sa schimbi)";
+export const PLACEHOLDER_SECRET_SALVAT = "••••••••  (salvat, completeaza doar ca sa schimbi)";

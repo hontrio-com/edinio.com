@@ -182,7 +182,7 @@ export function AboutYouCategoryMapping({
       </div>
       <p className="text-sm text-muted-foreground mb-4">
         Leagă fiecare categorie din magazin de o categorie About You. Produsele preiau automat maparea.
-        Categoriile About You sunt în engleză — „Potrivește automat” traduce și caută în locul tău.
+        Categoriile About You sunt în engleză, iar „Potrivește automat” traduce și caută în locul tău.
       </p>
 
       <div className="divide-y divide-border">
@@ -223,7 +223,7 @@ export function AboutYouCategoryMapping({
               {propuneri.length > 0 && (
                 <div className="mt-2 rounded-lg border border-border bg-muted/40 p-2">
                   <p className="text-[11px] font-medium text-muted-foreground mb-1.5">
-                    {s?.sigura ? "Potrivire găsită" : "Propuneri — verifică înainte de a alege"}
+                    {s?.sigura ? "Potrivire găsită" : "Propuneri: verifică înainte de a alege"}
                   </p>
                   <div className="space-y-1">
                     {propuneri.map((o, i) => (

@@ -51,7 +51,9 @@ async function ContinutMerchant({ businessId, userId }: { businessId: string; us
   const available = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";
 
   const status = await getMerchantStatus(businessId);
-  const products = "error" in status ? [] : await getMerchantProducts(businessId);
+  /* ⚠ Prima pagina, plus numaratoarea cinstita. Ecranul cere singur paginile
+     urmatoare si schimbarea filtrului; vezi `getMerchantProducts`. */
+  const produse = "error" in status ? null : await getMerchantProducts(businessId);
 
   // Windowed peste cap-ul de 1000 PostgREST — altfel lipsesc categorii din maparea GMC.
   const catRows: { category: string | null }[] = [];
@@ -65,6 +67,6 @@ async function ContinutMerchant({ businessId, userId }: { businessId: string; us
   const categories = [...new Set(catRows.map((r) => r.category as string).filter(Boolean))].sort();
 
   return (
-    <GoogleMerchantClient businessId={businessId} status={"error" in status ? null : status} products={products} categories={categories} available={available} />
+    <GoogleMerchantClient businessId={businessId} status={"error" in status ? null : status} produse={produse} categories={categories} available={available} />
   );
 }

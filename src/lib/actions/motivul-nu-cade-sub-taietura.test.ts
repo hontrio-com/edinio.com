@@ -182,14 +182,31 @@ const baza = http.createServer((req, res) => {
 
       randuri = sorteaza(randuri, url.searchParams.get("order"));
       const total = randuri.length;
-      const limita = Number(url.searchParams.get("limit") ?? 0);
-      if (limita > 0) randuri = randuri.slice(0, limita);
 
       /* ⚠ Numaratoarea trece pe acelasi drum ca in productie: `HEAD` + `content-range`. */
       if (req.method === "HEAD") {
         res.writeHead(200, { "content-range": `*/${total}`, "content-type": "application/json" });
         return res.end();
       }
+
+      /*
+       * ═══ ⚠⚠ `offset`, ADAUGAT PE 23.09.2026 ═══
+       *
+       * Baza de proba aplica `limit`, dar arunca `offset`. Prima scriere a probei de rasfoire a
+       * primit de doua ori aceeasi pagina si a iesit cu 100 de randuri acolo unde sunt 85, adica
+       * proba ar fi trecut si peste o paginare care nu pagineaza nimic.
+       *
+       * ⚠ SI NU E UN ANTET `Range`, desi asa scrie in multe locuri: masurat pe cererile chiar ale
+       * clientului nostru, `.range(a, b)` pleaca drept `offset=a&limit=b-a+1` in adresa. O proba
+       * scrisa pe antet ar fi ramas verde fara sa taie nimic.
+       */
+      /* ⚠ INTAI `offset`, APOI `limit`. Invers, pagina a doua iese goala: `slice(0,50)` taie
+         lista la 50, iar `slice(50)` de dupa nu mai are ce lua. Prima scriere a probei a facut
+         exact asta si a iesit cu 50 de randuri acolo unde sunt 85. */
+      const saritura = Number(url.searchParams.get("offset") ?? 0);
+      if (saritura > 0) randuri = randuri.slice(saritura);
+      const limita = Number(url.searchParams.get("limit") ?? 0);
+      if (limita > 0) randuri = randuri.slice(0, limita);
 
       /* Legatura incorporata `products(name)` din `select`. */
       const cuLegatura = select.includes("products(name)");
@@ -218,10 +235,21 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
    }`,
 )}`;
 
-let getMerchantProducts: (businessId: string) => Promise<{
-  product_id: string; offer_id: string; status: string; error: string | null; name: string;
-  issues: { code?: string }[]; last_synced_at: string | null;
-}[]>;
+/**
+ * ⚠ Semnatura se scrie AICI, de mana, fiindca importul se face la rulare, prin cârlig, ca sa
+ * apuce clientul catre baza de proba. Din 23.09.2026 actiunea intoarce o PAGINA, nu o lista:
+ * randurile plus numaratorile. Ramasa pe forma veche, proba n-ar mai fi compilat.
+ */
+let getMerchantProducts: (
+  businessId: string,
+  optiuni?: { pagina?: number; filtru?: "toate" | "de-reparat" },
+) => Promise<{
+  randuri: {
+    product_id: string; offer_id: string; status: string; error: string | null; name: string;
+    issues: { code?: string }[]; last_synced_at: string | null;
+  }[];
+  total: number; deReparat: number; pagina: number; pePagina: number; filtru: "toate" | "de-reparat";
+}>;
 let getMerchantStatus: (businessId: string) => Promise<{ counts: { total: number; synced: number; active: number; pending: number; disapproved: number; queued: number } }>;
 
 before(async () => {
@@ -324,8 +352,52 @@ test("⚠ randul retras se vede si pe un magazin cu peste 200 de randuri deja ve
   gmcProduse.push(rand({ offer_id: "strain", business_id: "biz-2", status: "exclus", last_status_at: null, updated_at: clipa(0), error: "pretul minte" }));
   numeste("strain", "Produsul altui magazin");
 
-  const lista = await getMerchantProducts(BIZ);
+  /*
+   * ⚠⚠ DIN 23.09.2026 NU MAI SUNT DOUA FELII, CI UN FILTRU.
+   *
+   * Feliile incercau sa tina randurile cu motiv deasupra unei taieturi la 200. Masurat pe
+   * productie in aceeasi zi, pe `okxi`: 1.304 randuri, dintre care 1.303 `disapproved` — iar
+   * `disapproved` nici nu era in filtrul „cu motiv". Deci felia nu aducea NICIUNUL dintre
+   * produsele refuzate, ecranul arata 200 si scria „(200)" ca si cum ar fi fost totalul.
+   *
+   * Acum „de reparat" e un filtru paginat: se numara in baza si se poate rasfoi, deci nu mai
+   * exista „sub taietura". Regula pe care o apara proba e neatinsa, si se cere mai mult decat
+   * inainte: nu doar ca randul se vede, ci ca TOATE se pot ajunge, si ca sunt numarate cinstit.
+   */
+  const pagina = await getMerchantProducts(BIZ, { filtru: "de-reparat" });
+
+  /*
+   * ⚠ ASTEPTAREA SE SOCOTESTE DIN CHIAR DATELE PROBEI, nu se scrie ca numar. Filtrul cuprinde
+   * acum si `disapproved` — reparatia din 23.09 — iar mostra de mai sus are 80 de randuri
+   * `disapproved` printre cele 240. Scrisa ca „5", proba ar fi cerut vechiul filtru inapoi.
+   */
+  const DE_REPARAT = gmcProduse
+    .filter((r) => r.business_id === BIZ)
+    .filter((r) => ["exclus", "error", "disapproved"].includes(r.status) || r.error !== null)
+    .map((r) => r.offer_id);
+
+  assert.equal(
+    pagina.deReparat, DE_REPARAT.length,
+    "numaratoarea „de reparat” nu mai spune cate sunt cu adevarat, deci fila minte",
+  );
+  assert.ok(DE_REPARAT.length > pagina.pePagina, "mostra nu mai trece de o pagina, deci nu se mai probeaza rasfoirea");
+
+  /*
+   * ⚠ SE STRANG TOATE PAGINILE FILTRULUI. Uitandu-ne doar la prima, un rand cu motiv impins pe
+   * pagina a doua ar fi trecut drept „se vede", si tocmai asta e intrebarea probei: se poate
+   * AJUNGE la el, oriunde ar fi.
+   */
+  const lista: Awaited<ReturnType<typeof getMerchantProducts>>["randuri"] = [];
+  for (let p = 1; p <= Math.ceil(pagina.deReparat / pagina.pePagina); p++) {
+    const q = await getMerchantProducts(BIZ, { filtru: "de-reparat", pagina: p });
+    lista.push(...q.randuri);
+  }
   const dupaOferta = new Map(lista.map((p) => [p.offer_id, p]));
+
+  assert.equal(
+    lista.length, DE_REPARAT.length,
+    "rasfoirea filtrului nu ajunge la toate randurile de reparat: unele nu se pot vedea deloc",
+  );
 
   /* ⚠ SEMNUL PENTRU COMERCIANT. Fara el, produsul dispare de la vanzare fara o vorba. */
   const retras = dupaOferta.get("fototapet");
@@ -356,18 +428,34 @@ test("⚠ randul retras se vede si pe un magazin cu peste 200 de randuri deja ve
   /* ⚠ Nimic din alt magazin. */
   assert.equal(dupaOferta.has("strain"), false, "felia cu motive a adus randul altui magazin in panou");
 
-  /* ⚠ Sortarea feliei obisnuite ramane NEATINSA: cele 200 de randuri proaspete vin in aceeasi
-     ordine ca inainte, doar in urma celor care au ceva de spus. */
-  const obisnuite = lista.filter((p) => !CU_MOTIV.includes(p.offer_id));
-  assert.equal(obisnuite.length, 200, "felia obisnuita nu mai e taiata la 200");
+  /* ⚠ FILTRUL ADUCE NUMAI randurile cu motiv: un rand linistit strecurat printre ele ar
+     umple pagina si ar impinge afara tocmai ce venise omul sa vada. */
   assert.deepEqual(
-    obisnuite.slice(0, 3).map((p) => p.offer_id), ["n-0", "n-1", "n-2"],
-    "randurile obisnuite nu mai vin de la cel mai proaspat la cel mai vechi",
+    lista.map((p) => p.offer_id).sort(), [...DE_REPARAT].sort(),
+    "filtrul „de reparat” aduce si randuri care n-au nimic de reparat",
   );
-  assert.deepEqual(
-    lista.slice(0, CU_MOTIV.length).map((p) => p.offer_id).sort(), [...CU_MOTIV].sort(),
-    "randurile cu motiv nu stau in capul listei, adica tot nu se vad primele",
+
+  /* ⚠ SI CELELALTE SE POT VEDEA, pe filtrul „toate", numarate cinstit. Fara asta, filtrul
+     ar fi putut deveni o a doua taietura: vezi problemele, nu mai vezi restul. */
+  const toate = await getMerchantProducts(BIZ, { filtru: "toate" });
+  assert.equal(
+    toate.total, gmcProduse.filter((r) => r.business_id === BIZ).length,
+    "„Toate” nu mai numara toate randurile magazinului",
   );
+  assert.equal(toate.randuri.length, toate.pePagina, "pagina nu mai e plina, deci taierea s-a mutat in alta parte");
+
+  /* ⚠ SI SE POATE AJUNGE LA CAPAT. Cu 245 de randuri si 50 pe pagina, ultima pagina exista si
+     are randuri: asta e chiar lucrul care lipsea inainte. */
+  const ultima = Math.ceil(toate.total / toate.pePagina);
+  const capat = await getMerchantProducts(BIZ, { filtru: "toate", pagina: ultima });
+  assert.equal(capat.pagina, ultima, "pagina ceruta nu s-a respectat");
+  assert.ok(capat.randuri.length > 0, "ultima pagina e goala: rasfoirea nu ajunge la capatul listei");
+
+  /* ⚠ Si o pagina scrisa de mana, peste capat, se STRANGE la ultima. Un `range` peste capat
+     intoarce 416 cu PGRST103, adica o eroare, nu o lista goala cinstita. */
+  const pesteCapat = await getMerchantProducts(BIZ, { filtru: "toate", pagina: 9999 });
+  assert.equal(pesteCapat.pagina, ultima, "o pagina scrisa de mana peste capat nu se mai strange");
+  assert.ok(pesteCapat.randuri.length > 0, "pagina de peste capat iese goala in loc sa se stranga la ultima");
 });
 
 test("⚠ un rand cu motiv care e SI proaspat apare o singura data, iar variantele nu se inghit intre ele", async () => {
@@ -394,10 +482,27 @@ test("⚠ un rand cu motiv care e SI proaspat apare o singura data, iar variante
     { id: "linistit", business_id: BIZ, is_active: true, name: "Linistit" },
   ];
 
-  const lista = await getMerchantProducts(BIZ);
+  /*
+   * ⚠ De cand e o singura interogare, dublarea nu se mai poate intampla prin lipirea a doua
+   * felii. Ce ramane de aparat e CHEIA: randurile se numara si se deseneaza pe `offer_id`, nu
+   * pe produs. Un produs cu variante are cate un rand pe FIECARE oferta, iar `p1-rosu` in
+   * eroare si `p1-albastru` la vanzare sunt doua randuri cu acelasi `product_id`. Stranse dupa
+   * produs, unul l-ar inghiti pe celalalt, iar comerciantul ar crede ca sora lui nici n-a
+   * plecat la Google.
+   */
+  const toate = await getMerchantProducts(BIZ, { filtru: "toate" });
   assert.deepEqual(
-    lista.map((p) => p.offer_id), ["proaspat", "p1-rosu", "p1-albastru", "linistit"],
-    "ori randul din amandoua feliile s-a dublat, ori o varianta a fost inghitita de sora ei (dezduplicare dupa produs, nu dupa `offer_id`)",
+    toate.randuri.map((p) => p.offer_id).sort(),
+    ["linistit", "p1-albastru", "p1-rosu", "proaspat"],
+    "un rand s-a dublat, ori o varianta a fost inghitita de sora ei (strangere dupa produs, nu dupa `offer_id`)",
+  );
+  assert.equal(toate.total, 4, "numaratoarea din antet nu mai numara randuri, ci produse");
+
+  /* ⚠ Si pe „de reparat" tot pe oferta se numara: varianta stricata trece, sora ei sanatoasa nu. */
+  const deReparat = await getMerchantProducts(BIZ, { filtru: "de-reparat" });
+  assert.deepEqual(
+    deReparat.randuri.map((p) => p.offer_id).sort(), ["p1-rosu", "proaspat"],
+    "filtrul „de reparat” nu mai lucreaza pe oferta, ci pe produs",
   );
 });
 
@@ -449,12 +554,23 @@ test("⚠ felia cu motive cazuta lasa panoul in picioare si tipa in jurnal", asy
   cai.length = 0;
   cadeFeliaCuMotive = true;
   try {
-    const lista = await getMerchantProducts(BIZ);
+    /*
+     * ⚠ FILTRUL „DE REPARAT" E SINGURUL CU `or`, deci e singurul care poate fi refuzat de
+     * PostgREST daca filtrul se scrie gresit. Cand cade, doua lucruri se cer deodata, si
+     * fiecare fara celalalt e mai rau decat defectul reparat:
+     *  - ecranul ramane in picioare, cu „Toate" (un ecran GOL tocmai la omul venit sa afle de
+     *    ce nu mai vinde ar fi cea mai proasta minciuna cu putinta);
+     *  - caderea se scrie in jurnal, altfel „nu se vede nimic in panou" n-are unde fi cautat.
+     */
+    const deReparat = await getMerchantProducts(BIZ, { filtru: "de-reparat" });
+    assert.equal(deReparat.randuri.length, 0, "filtrul a cazut, dar a intors randuri de nicaieri");
+
+    const toate = await getMerchantProducts(BIZ, { filtru: "toate" });
     assert.deepEqual(
-      lista.map((p) => p.offer_id), ["linistit", "stricat"],
-      "felia cu motive a cazut si a luat cu ea si lista obisnuita",
+      toate.randuri.map((p) => p.offer_id), ["linistit", "stricat"],
+      "caderea filtrului „de reparat” a luat cu ea si lista obisnuita",
     );
-    await asteapta(() => cai.includes("error_logs"), "felia cu motive a cazut in tacere: nimic in jurnal");
+    await asteapta(() => cai.includes("error_logs"), "caderea filtrului a trecut in tacere: nimic in jurnal");
   } finally {
     cadeFeliaCuMotive = false;
   }

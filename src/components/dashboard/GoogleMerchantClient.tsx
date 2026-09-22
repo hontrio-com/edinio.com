@@ -11,10 +11,12 @@ import {
 } from "lucide-react";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import {
+  getMerchantProducts,
   startGoogleMerchantOAuth, listMerchantAccounts, selectMerchantAccount,
   disconnectMerchant, setMerchantSettings, queueSyncAll, setCategoryMap, getMerchantAccountIssues,
   getMerchantPrograms, enableMerchantFreeListings,
   type MerchantStatus, type MerchantProductRow, type MerchantAccountIssueRow,
+  type PaginaMerchant, type FiltruMerchant,
 } from "@/lib/actions/google-merchant.actions";
 import { problemeDeAfisat, numeleSuprafetei } from "@/lib/google-merchant/probleme";
 import { GOOGLE_CATEGORIES, caleaDeAfisat } from "@/lib/google-merchant/taxonomy";
@@ -24,11 +26,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import { selectCls } from "@/lib/ui";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 
-export function GoogleMerchantClient({ businessId, status, products, categories, available = true }: {
+export function GoogleMerchantClient({ businessId, status, produse, categories, available = true }: {
   businessId: string;
   status: MerchantStatus | null;
-  products: MerchantProductRow[];
+  /** Prima pagina a tabelului, cu numaratoarea din baza. `null` cand starea n-a putut fi citita. */
+  produse: PaginaMerchant | null;
   categories: string[];
   available?: boolean;
 }) {
@@ -119,7 +123,7 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
       </EmptyState>
     );
   } else {
-    body = <ConnectedDashboard businessId={businessId} status={status} products={products} categories={categories} />;
+    body = <ConnectedDashboard businessId={businessId} status={status} produse={produse} categories={categories} />;
   }
 
   return <div className="space-y-4">{domainWarning}{body}</div>;
@@ -364,8 +368,8 @@ function ProgramePanel({ businessId, faraDestinatie }: { businessId: string; far
   );
 }
 
-function ConnectedDashboard({ businessId, status, products, categories }: {
-  businessId: string; status: MerchantStatus; products: MerchantProductRow[]; categories: string[];
+function ConnectedDashboard({ businessId, status, produse, categories }: {
+  businessId: string; status: MerchantStatus; produse: PaginaMerchant | null; categories: string[];
 }) {
   const router = useRouter();
   const [syncing, startSync] = useTransition();
@@ -518,43 +522,8 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
       {/* Category mapping */}
       <CategoryMapping businessId={businessId} categories={categories} initialMap={status.categoryMap} />
 
-      {/* Product status table */}
-      <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
-        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-          <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-semibold text-foreground">Produse în Google</h3>
-          <span className="text-xs text-muted-foreground">({products.length})</span>
-        </div>
-        {products.length === 0 ? (
-          <div className="px-4 py-12 text-center">
-            <p className="text-sm text-muted-foreground">Încă niciun produs sincronizat. Apasă pe „Sincronizează acum” ca să trimiți produsele în Google.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {/* ⚠ Cheia randului e `offer_id`, nu produsul: un produs cu variante are cate un rand
-                pe FIECARE oferta, iar de cand randul cu motiv e adus in capul listei el ajunge sa
-                stea langa suratele lui. Cu doua chei la fel, React scoate unul dintre randuri la
-                reimprospatare — si cel scos poate fi chiar randul retras, adica exact ce venise
-                omul sa vada. `offer_id` e unic pe magazin (indexul `gmc_products_business_offer_uidx`)
-                si e cheia dupa care actiunea dezduplica lista. */}
-            {products.map((p) => (
-              <div key={p.offer_id} className="flex items-start gap-3 px-5 py-3">
-                <StatusBadge status={p.status} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
-                  {p.issues.length > 0 ? (
-                    <IssueList issues={p.issues} />
-                  ) : p.error ? (
-                    <p className="truncate text-xs text-destructive">{p.error}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">{p.last_synced_at ? "Sincronizat" : "În coadă"}</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Produsele din Google */}
+      <TabelProduseMerchant businessId={businessId} initial={produse} />
 
       {/* Disconnect */}
       <div className="flex justify-end">
@@ -648,6 +617,146 @@ function StatusBadge({ status }: { status: string }) {
 
 /* ⚠ Problemele trec prin `problemeDeAfisat`: Google trimite aceeasi problema o data pe fiecare suprafata,
    iar panoul le arata de sase ori. Tot acolo se citeste linkul din `documentation`. */
+/* ═══════════════════════════════════════════════════════════════════════════
+   TABELUL „PRODUSE IN GOOGLE"                                    (23.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠⚠ SEMNALAT DE EL: „la Merchant vad ca nu e paginatie".
+
+   Ce era: se citeau doua felii taiate fiecare la 200 de randuri, se lipeau, si
+   antetul scria `products.length`, adica numarul randurilor ADUSE, ca si cum ar
+   fi fost totalul. Nicio cale mai departe.
+
+   Masurat pe productie, 23.09.2026, pe `okxi`: 1.304 randuri, dintre care 1.303
+   refuzate de Google. Ecranul arata 200 si scria „(200)". Adica 1.103 produse nu
+   se vindeau, si nu se puteau nici macar vedea, iar cifra din antet spunea ca aia
+   e tot. Cel mai rau fel de taiere: lista minte si nimic nu o contrazice.
+
+   ⚠ FILA SE DESCHIDE PE „DE REPARAT" cand exista ceva de reparat. Vechea felie
+   incerca sa tina randurile cu motiv deasupra taieturii; fila le face pe TOATE
+   ajungibile, si se numara cinstit. */
+function TabelProduseMerchant({ businessId, initial }: {
+  businessId: string;
+  initial: PaginaMerchant | null;
+}) {
+  /* Filtrul de pornire se alege din ce a numarat serverul: daca e ceva stricat,
+     acolo se uita omul intai. */
+  const [filtru, setFiltru] = useState<FiltruMerchant>(
+    (initial?.deReparat ?? 0) > 0 ? "de-reparat" : "toate",
+  );
+  const [date, setDate] = useState<PaginaMerchant | null>(initial);
+  const [seIncarca, startIncarcare] = useTransition();
+
+  /* ⚠ Serverul a trimis pagina 1 din „toate". Daca pornim pe „de reparat", se cere
+     pagina potrivita imediat; fara asta, filele ar arata amandoua aceleasi randuri. */
+  useEffect(() => {
+    if (!initial || filtru === initial.filtru) return;
+    startIncarcare(async () => {
+      try {
+        setDate(await getMerchantProducts(businessId, { pagina: 1, filtru }));
+      } catch {
+        /* ⚠ Un callback de tranzitie care asteapta TREBUIE sa prinda caderea: fara
+           `catch`, React n-o duce la nicio margine si butoanele raman stinse pentru
+           totdeauna, fara niciun cuvant. Vezi `callbackul-de-tranzitie-prinde-caderea`. */
+        setFiltru(initial.filtru);
+        toast.error("Nu am putut încărca lista de produse. Reîncarcă pagina.");
+      }
+    });
+    /* O singura data, la deschidere: mai departe filele se schimba din `cere`. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function cere(p: number, f: FiltruMerchant) {
+    setFiltru(f);
+    startIncarcare(async () => {
+      try {
+        setDate(await getMerchantProducts(businessId, { pagina: p, filtru: f }));
+      } catch {
+        /* ⚠ Aceeasi regula ca mai sus. Si fila se da inapoi la cea care chiar se vede,
+           ca sa nu ramana aprinsa una peste randurile celeilalte. */
+        setFiltru(date?.filtru ?? "toate");
+        toast.error("Nu am putut încărca pagina. Încearcă din nou.");
+      }
+    });
+  }
+
+  const randuri = date?.randuri ?? [];
+  const total = date?.total ?? 0;
+  const deReparat = date?.deReparat ?? initial?.deReparat ?? 0;
+  const pePagina = date?.pePagina ?? 50;
+  const pagina = date?.pagina ?? 1;
+  const pagini = Math.max(1, Math.ceil(total / Math.max(1, pePagina)));
+
+  const FILA = "rounded-lg px-2.5 py-1 text-xs font-medium transition-colors";
+
+  return (
+    <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-4">
+        <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold text-foreground">Produse în Google</h3>
+        {/* ⚠ Cifra e `total`, numarata in baza, NU cate randuri au venit. Asta era defectul. */}
+        <span className="text-xs text-muted-foreground tabular-nums">({total})</span>
+
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" disabled={seIncarca} onClick={() => cere(1, "de-reparat")}
+            className={filtru === "de-reparat" ? `${FILA} bg-primary text-primary-foreground` : `${FILA} text-muted-foreground hover:bg-muted`}>
+            De reparat{deReparat > 0 ? ` (${deReparat})` : ""}
+          </button>
+          <button type="button" disabled={seIncarca} onClick={() => cere(1, "toate")}
+            className={filtru === "toate" ? `${FILA} bg-primary text-primary-foreground` : `${FILA} text-muted-foreground hover:bg-muted`}>
+            Toate
+          </button>
+        </div>
+      </div>
+
+      {randuri.length === 0 ? (
+        <div className="px-4 py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            {filtru === "de-reparat"
+              ? "Niciun produs refuzat de Google. Apasă pe „Toate” ca să le vezi pe celelalte."
+              : "Încă niciun produs sincronizat. Apasă pe „Sincronizează acum” ca să trimiți produsele în Google."}
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {/* ⚠ Cheia randului e `offer_id`, nu produsul: un produs cu variante are cate un rand
+              pe FIECARE oferta, iar randurile cu motiv ajung sa stea langa suratele lor. Cu doua
+              chei la fel, React scoate unul dintre randuri la reimprospatare, si cel scos poate
+              fi chiar cel pe care venise omul sa-l vada. `offer_id` e unic pe magazin (indexul
+              `gmc_products_business_offer_uidx`). */}
+          {randuri.map((p) => (
+            <div key={p.offer_id} className="flex items-start gap-3 px-5 py-3">
+              <StatusBadge status={p.status} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
+                {p.issues.length > 0 ? (
+                  <IssueList issues={p.issues} />
+                ) : p.error ? (
+                  <p className="truncate text-xs text-destructive">{p.error}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{p.last_synced_at ? "Sincronizat" : "În coadă"}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pagini > 1 && (
+        <div className="border-t border-border px-5 py-3">
+          <Paginatie
+            pagina={pagina}
+            pagini={pagini}
+            laSchimbare={(p) => cere(p, filtru)}
+            seIncarca={seIncarca}
+            rezumat={`${(pagina - 1) * pePagina + 1}\u2013${Math.min(pagina * pePagina, total)} din ${total}`}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function IssueList({ issues }: { issues: MerchantProductRow["issues"] }) {
   return (
     <ul className="mt-0.5 space-y-1">

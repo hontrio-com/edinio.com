@@ -444,7 +444,20 @@ describe("problemele unui produs, cum le arata panoul", () => {
     assert.equal(p.length, 1);
     assert.equal(p[0].link, "https://support.google.com/merchants/answer/10009686");
     assert.equal(p[0].suprafete.length, 6);
-    assert.equal(p[0].titlu, "Missing unit pricing measure");
+    /*
+     * ⚠ TITLUL E IN ROMANA DIN 23.09.2026, si poarta si numele atributului.
+     *
+     * Era chiar textul lui Google, „Missing unit pricing measure". El a semnalat ca
+     * fisa unui produs respins era pe jumatate in engleza si pe jumatate in romana,
+     * asa ca problemele de produs se traduc acum dupa `code`; problemele de CONT se
+     * cereau deja in romana de la ei (`languageCode=ro`).
+     *
+     * ⚠ SI NUMELE ATRIBUTULUI RAMANE AL LOR. Acelasi cod
+     * `missing_potentially_required_attribute` vine si ca „certificare", si ca „unit
+     * pricing measure": fara atribut lipit de titlu, doua probleme deosebite ar fi
+     * scris acelasi rand. Numele e un camp din feed, asa il gaseste omul la ei.
+     */
+    assert.equal(p[0].titlu, "Lipsește un atribut cerut: unit pricing measure");
   });
 
   test("se pastreaza severitatea cea mai grava, si cele care resping vin primele", () => {

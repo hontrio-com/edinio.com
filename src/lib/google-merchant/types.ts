@@ -46,3 +46,13 @@ export const DEFAULT_FEED_LABEL = "RO";
 export const DEFAULT_CONTENT_LANGUAGE = "ro";
 export const DEFAULT_COUNTRY = "RO";
 export const CURRENCY = "RON";
+
+/**
+ * Cate randuri se arata pe o pagina a tabelului „Produse in Google".
+ *
+ * ⚠ STA AICI, NU IN `google-merchant.actions.ts`. Acela e un fisier `"use server"`,
+ * iar acolo fiecare export devine un capat pe care browserul il poate chema; casa
+ * cere ca singurele exporturi sa fie functii async. Vezi
+ * `use-server-exporta-doar-functii-async.test.ts`.
+ */
+export const GMC_PE_PAGINA = 50;

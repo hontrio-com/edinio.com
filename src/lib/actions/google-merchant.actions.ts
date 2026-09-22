@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { fereastraPaginii } from "@/lib/paginare";
 import { buildAuthUrl, signState, googleMerchantConfigured, obtineTokenul, type EroareToken } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, deleteNotificationSubscription, listAccountIssues, listPrograms, enableProgram } from "@/lib/google-merchant/client";
 import type { ProblemaStocata } from "@/lib/google-merchant/probleme";
+import { GMC_PE_PAGINA } from "@/lib/google-merchant/types";
 import { asiguraAbonarea } from "@/lib/google-merchant/abonare";
 import { asiguraTarileSursei } from "@/lib/google-merchant/tari-sursa";
 import {
@@ -489,73 +491,122 @@ export interface MerchantProductRow {
   error: string | null;
 }
 
-/** Cate randuri intra intr-o felie a tabelului „Produse in Google". Sunt DOUA felii, vezi jos. */
-const LIMITA_LISTA = 200;
-
-/** Aceleasi coloane in amandoua feliile: randurile lor ajung intr-o singura lista. */
+/** Aceleasi coloane pe amandoua filtrele. */
 const COLOANE_LISTA = "product_id, offer_id, status, issues, last_synced_at, error, products(name)";
 
-export async function getMerchantProducts(businessId: string): Promise<MerchantProductRow[]> {
+/**
+ * Randurile la care comerciantul chiar are ceva de facut.
+ *
+ * ⚠⚠ `disapproved` LIPSEA DIN LISTA ASTA, si aia era jumatate din defect.
+ *
+ * Filtrul vechi era `status.eq.exclus, status.eq.error, error.not.is.null`. Masurat pe
+ * productie la 23.09.2026, magazinul `okxi` avea 1.303 randuri `disapproved`, fiecare cu
+ * probleme scrise de Google, si ZERO randuri `exclus` sau `error`. Adica felia care
+ * trebuia sa aduca in capul listei tocmai randurile cu motiv nu aducea niciunul dintre
+ * cele 1.303 produse pe care Google le refuzase.
+ */
+const STARI_DE_REPARAT = [STARE_EXCLUS, "error", "disapproved"] as const;
+
+export type FiltruMerchant = "toate" | "de-reparat";
+
+export interface PaginaMerchant {
+  randuri: MerchantProductRow[];
+  /** Cate randuri are filtrul ales, numarate in baza. */
+  total: number;
+  /** Cate randuri sunt de reparat, oricare ar fi filtrul ales. Pentru eticheta de pe fila. */
+  deReparat: number;
+  pagina: number;
+  pePagina: number;
+  filtru: FiltruMerchant;
+}
+
+const PAGINA_GOALA: PaginaMerchant = {
+  randuri: [], total: 0, deReparat: 0, pagina: 1, pePagina: GMC_PE_PAGINA, filtru: "toate",
+};
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * TABELUL „PRODUSE IN GOOGLE", PAGINAT                          (23.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠⚠ CE ERA INAINTE, SI CE A COSTAT. Se citeau DOUA felii taiate fiecare la 200 de
+ * randuri, se lipeau si se dezduplicau, iar ecranul scria in antet `products.length`,
+ * adica numarul randurilor ADUSE, ca si cum ar fi fost totalul. Nicio bara de rasfoire.
+ *
+ * Masurat pe productie, 23.09.2026, pe `okxi`: 1.304 randuri in `gmc_products`, dintre
+ * care 1.303 refuzate de Google. Ecranul arata 200 si scria „(200)". Restul de 1.103
+ * produse erau refuzate la vanzare si nu se puteau vedea in niciun fel, iar cifra din
+ * antet spunea ca aia e tot. Semnalat de el.
+ *
+ * ⚠ CELE DOUA FELII AU FOST INLOCUITE CU UN FILTRU, si nu din lene. Felia „cu motiv"
+ * incerca sa tina randurile importante deasupra taieturii; un filtru le face pe TOATE
+ * ajungibile, nu doar primele 200, si se poate numara si rasfoi cinstit. Ecranul se
+ * deschide pe „De reparat" cand exista ceva de reparat, deci ce voia felia sa asigure se
+ * intampla acum in intregime.
+ *
+ * ⚠ Numaratoarea „de reparat" se face MEREU, si cand te uiti la „Toate": altfel fila
+ * n-ar putea spune cate sunt, iar comerciantul n-ar avea de unde sa stie ca merita apasata.
+ */
+export async function getMerchantProducts(
+  businessId: string,
+  optiuni?: { pagina?: number; filtru?: FiltruMerchant },
+): Promise<PaginaMerchant> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  if (!(await ownedBusiness(supabase, businessId, user.id))) return [];
+  if (!user) return PAGINA_GOALA;
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return PAGINA_GOALA;
+
+  const filtru: FiltruMerchant = optiuni?.filtru === "de-reparat" ? "de-reparat" : "toate";
+  const deReparatFiltru = `status.in.(${STARI_DE_REPARAT.join(",")}),error.not.is.null`;
+
+  const deBaza = () => supabase.from("gmc_products").select(COLOANE_LISTA, { count: "exact", head: true }).eq("business_id", businessId);
+
+  const [numarTot, numarDeReparat] = await Promise.all([
+    deBaza(),
+    deBaza().or(deReparatFiltru),
+  ]);
+
+  const deReparat = numarDeReparat.count ?? 0;
+  const total = filtru === "de-reparat" ? deReparat : (numarTot.count ?? 0);
 
   /*
-   * ═══ ⚠ RANDUL CARE ARE CEVA DE SPUS NU ARE VOIE SA CADA SUB TAIETURA ═══
-   *
-   * Felia obisnuita e sortata dupa `last_status_at` si taiata la 200. Randul retras de noi are
-   * `last_status_at` GOL dinadins — asa prima verificare de status vine imediat ce comerciantul
-   * repara pretul, nu peste pana la o jumatate de ora — deci sortarea il aseaza ultimul. Pe un
-   * magazin cu peste 200 de randuri care au deja o data, motivul retragerii nu se vedea
-   * NICIODATA: produsul disparea de la vanzare fara o vorba, adica exact tacerea pe care randul
-   * acela a fost scris ca s-o rupa. Aceeasi soarta o aveau randurile `error` mai vechi.
-   *
-   * ⚠ SE REPARA LA CITIRE, nu punand o data pe randul retras. O data pusa acolo l-ar face sa
-   * arate proaspat, dar ar amana cu pana la 30 de minute prima verificare de status de dupa
-   * reparatia pretului — adica am fi platit vizibilitatea cu intarziere la revenire.
-   *
-   * ⚠ CE COSTA: o a doua interogare la fiecare deschidere a panoului, si o lista care poate
-   * ajunge la 400 de randuri in loc de 200. Sortarea feliei obisnuite ramane neatinsa; randurile
-   * cu motiv trec doar inaintea ei, fiindca ele sunt cele la care comerciantul are de facut ceva.
-   */
-  const [cuMotiv, recente] = await Promise.all([
-    supabase
-      .from("gmc_products")
-      .select(COLOANE_LISTA)
-      .eq("business_id", businessId)
-      .or(`status.eq.${STARE_EXCLUS},status.eq.error,error.not.is.null`)
-      .order("updated_at", { ascending: false })
-      .limit(LIMITA_LISTA),
-    supabase
-      .from("gmc_products")
-      .select(COLOANE_LISTA)
-      .eq("business_id", businessId)
-      .order("last_status_at", { ascending: false, nullsFirst: false })
-      .limit(LIMITA_LISTA),
-  ]);
-  /*
-   * ⚠ O cadere a feliei cu motive nu are voie sa treaca drept „n-are nimic de spus": panoul ar
-   * arata linistit exact acolo unde omul vine sa afle de ce nu mai vinde. Lista obisnuita se
-   * arata mai departe (mai bine ceva decat un ecran gol), dar caderea se scrie in jurnal.
-   */
-  if (cuMotiv.error) {
+    ⚠ Pagina se STRANGE la cate exista. Numarul cerut poate fi orice: scris de mana, ramas de
+    pe un filtru mai lung, sau pur si simplu vechi. Fara strangere, ecranul ar arata o lista
+    goala si bara ar spune „pagina 9 din 2", adica o pagina care nu exista.
+
+    ⚠ Masurat pe cererile chiar ale clientului nostru: `.range(a, b)` pleaca drept
+    `offset=a&limit=b-a+1` in adresa, NU ca antet `Range`. Peste capat, PostgREST raspunde
+    200 cu lista goala, nu 416 — deci nimic nu s-ar fi plans, si golul ar fi trecut drept
+    adevar. Vezi `motivul-nu-cade-sub-taietura.test.ts`, unde se probeaza chiar rasfoirea.
+  */
+  const { pagina, deLa, panaLa } = fereastraPaginii(optiuni?.pagina ?? 1, total, GMC_PE_PAGINA);
+
+  let cerere = supabase
+    .from("gmc_products")
+    .select(COLOANE_LISTA)
+    .eq("business_id", businessId);
+  if (filtru === "de-reparat") cerere = cerere.or(deReparatFiltru);
+
+  const { data, error } = await cerere
+    /*
+      ⚠ `nullsFirst: false` PLUS o a doua cheie. Randul retras de noi are `last_status_at`
+      gol dinadins (asa prima verificare vine imediat dupa ce comerciantul repara pretul),
+      deci fara a doua cheie ordinea randurilor fara data era nestatornica intre pagini, si
+      acelasi rand putea aparea pe doua pagini sau pe niciuna.
+    */
+    .order("last_status_at", { ascending: false, nullsFirst: false })
+    .order("offer_id", { ascending: true })
+    .range(deLa, panaLa);
+
+  if (error) {
     logError({
-      action: "gmc.getMerchantProducts", message: `felia cu motive nu s-a putut citi: ${cuMotiv.error.message}`,
-      details: { businessId }, userId: user.id,
+      action: "gmc.getMerchantProducts", message: error.message,
+      details: { businessId, filtru, pagina }, userId: user.id,
     });
+    return { ...PAGINA_GOALA, total, deReparat, pagina, filtru };
   }
 
-  /* Acelasi rand poate fi in amandoua feliile: cheia lui e `offer_id`, nu produsul (variantele
-     au cate un rand fiecare, pe acelasi `product_id`). */
-  const vazute = new Set<string>();
-  const data = [...(cuMotiv.data ?? []), ...(recente.data ?? [])].filter((r) => {
-    if (vazute.has(r.offer_id)) return false;
-    vazute.add(r.offer_id);
-    return true;
-  });
-
-  return data.map((r) => {
+  const randuri = (data ?? []).map((r) => {
     const prod = r.products as { name?: string } | { name?: string }[] | null;
     const name = Array.isArray(prod) ? prod[0]?.name : prod?.name;
     return {
@@ -568,6 +619,8 @@ export async function getMerchantProducts(businessId: string): Promise<MerchantP
       error: r.error,
     };
   });
+
+  return { randuri, total, deReparat, pagina, pePagina: GMC_PE_PAGINA, filtru };
 }
 
 // ── Account-level issues (surfaces WHY products may be disapproved: shipping/tax

@@ -68,8 +68,8 @@ export function IntegrationHeader({ id, description }: { id: string; description
       {/*
         ⚠ Sageata de intoarcere e chiar drumul pe care l-a aratat el ca „se misca
         greu": masurat pe productie, 498 ms in care nu se schimba nimic pe ecran.
-        `LegaturaDePanou` aduce pagina la trecerea cu mausul si aprinde o bara
-        subtire la apasare. Vezi componenta pentru cifre si pentru cauza.
+        `LegaturaDePanou` aprinde o bara subtire la apasare; dupa reparatie, 67 ms.
+        Vezi componenta pentru cifre si pentru cauza.
       */}
       <LegaturaDePanou
         href="/dashboard/features"

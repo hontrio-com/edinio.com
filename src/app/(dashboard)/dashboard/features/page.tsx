@@ -528,12 +528,11 @@ export default async function IntegrationsPage() {
                 if (isUnlocked) {
                   return (
                     /*
-                      ⚠ `LegaturaDePanou`, NU `Link` gol. Cardul raspunde pe loc la
-                      apasare si isi aduce pagina la trecerea cu mausul. Motivul si
-                      cifrele masurate stau in componenta; pe scurt: raspunsurile
-                      panoului vin cu `no-store`, deci routerul nu preia nimic
-                      dinainte, si clicul statea 312 pana la 498 ms fara sa se
-                      miste nimic pe ecran.
+                      ⚠ `LegaturaDePanou`, NU `Link` gol: cardul aprinde o bara la
+                      apasare, deci clicul se vede pe loc. Fara ea, ecranul statea
+                      nemiscat 312 pana la 498 ms, fiindca raspunsurile panoului vin
+                      cu `no-store` si routerul nu preia nimic dinainte. Cifrele si
+                      ce am incercat si am scos stau in componenta.
                     */
                     <LegaturaDePanou
                       key={integration.name}

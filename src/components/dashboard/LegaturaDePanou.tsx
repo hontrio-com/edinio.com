@@ -1,22 +1,20 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
-import { useRouter } from "next/navigation";
-import { useRef } from "react";
 import { cn } from "@/lib/utils/cn";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
- * LEGATURA CARE RASPUNDE PE LOC SI ISI ADUCE PAGINA DINAINTE   (22.09.2026)
+ * LEGATURA CARE RASPUNDE PE LOC LA APASARE                      (22.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Semnalat de el: „cand dau de la o integrare la alta sau daca dau de pe o
  * integrare pe sageata aia de inapoi se blocheaza putin, se misca greu".
  *
- * ═══ ⚠⚠ CE AM MASURAT PE PRODUCTIE, PE VETDEPO ═══
+ * ═══ ⚠⚠ CE S-A MASURAT PE PRODUCTIE, PE VETDEPO ═══
  *
  * Nu e reincarcare de pagina: navigarea chiar e pe client (martorul pus in
- * `window` supravietuieste clicului). Dar ecranul sta NEMISCAT:
+ * `window` supravietuieste clicului). Dar ecranul statea NEMISCAT:
  *
  *   Integrari -> GLS ............... 312 ms
  *   Integrari -> Cargus ............ 411 ms
@@ -37,24 +35,32 @@ import { cn } from "@/lib/utils/cn";
  * fel: fara o preluare, clientul nici nu stie ca exista o schita acolo, deci
  * asteapta oricum primii octeti.
  *
- * ═══ CE FACE COMPONENTA ASTA ═══
+ * ═══ ⚠⚠ CE AM INCERCAT SI AM SCOS: PRELUAREA LA HOVER ═══
  *
- * 1. `useLinkStatus` da starea „in curs" a chiar acestei legaturi, iar cardul o
- *    poarta prin `data-pending`. Apasarea se vede INSTANT, fara niciun drum la
- *    server.
- * 2. `router.prefetch` la `mouseenter` si la `focus`, o singura data pe card.
- *    Drumul la server se face cat muti mana spre clic, deci la apasare pagina e
- *    deja calda.
+ * Prima scriere chema `router.prefetch(href)` pe `mouseenter`, ca drumul la server
+ * sa se faca in timp ce muti mana spre clic. Parea evident ca ajuta. Masurat pe
+ * productie, DUPA ce a urcat: hover pe un card, sase secunde de asteptare, ZERO
+ * cereri. Nici pe o ruta cu `loading.tsx` (Cargus), nici pe una fara (GLS).
  *
- * ⚠ PRELUAREA E DOAR LA HOVER, NU LA INTRAREA IN ECRAN. Lista are 41 de carduri;
- * preluate toate deodata ar fi 41 de randari de server la fiecare deschidere a
- * paginii, ca sa se foloseasca una. `<Link prefetch>` nu are „doar la hover"
- * (`false` inseamna „niciodata, nici la hover"), de-aia se cheama `router.prefetch`
- * de mana.
+ * `router.prefetch` se supune aceleiasi reguli ca preluarea automata: pe un
+ * raspuns `no-store` nu are ce sa tina, deci nu cere nimic. Ramasa in cod, ar fi
+ * fost un apel care nu face nimic, cu un comentariu care spune ca face ceva —
+ * adica fix genul de minciuna care se descopera peste un an. Scoasa.
  *
- * ⚠ SE CHEAMA O SINGURA DATA PE CARD. Fara steagul asta, fiecare intrare a
- * mausului ar fi o cerere noua: pe un card peste care treci de trei ori cautand,
- * trei randari de server degeaba.
+ * ⚠ CE RAMANE, SI CHIAR SE VEDE IN CIFRE. `useLinkStatus` da starea „in curs" a
+ * chiar acestei legaturi, iar bara de deasupra ei se aprinde imediat. Masurat pe
+ * productie, pe acelasi drum ca mai sus:
+ *
+ *   Integrari -> GLS ............... bara la  79 ms (inainte: nimic pana la 312)
+ *   GLS -> Integrari (sageata) ..... bara la  67 ms (inainte: nimic pana la 498)
+ *
+ * Drumul la server ramane cat era; ce dispare e senzatia ca apasarea n-a fost
+ * auzita. Pentru scurtarea lui chiar trebuie umblat la ce face pagina pe server,
+ * nu la legatura.
+ *
+ * ⚠ Daca ruta a fost totusi preluata cumva, starea „in curs" e SARITA de Next
+ * (scrie in documentatia lor). Bara care nu se aprinde inseamna „a fost instant",
+ * nu „s-a stricat".
  */
 export function LegaturaDePanou({
   href,
@@ -62,29 +68,13 @@ export function LegaturaDePanou({
   clasaInAsteptare,
   children,
   ...props
-}: Omit<React.ComponentProps<typeof Link>, "href" | "prefetch"> & {
+}: Omit<React.ComponentProps<typeof Link>, "href"> & {
   href: string;
-  /** Ce se schimba cat timp navigarea e in curs. */
+  /** Cum se deseneaza bara, unde asezarea implicita nu se potriveste. */
   clasaInAsteptare?: string;
 }) {
-  const router = useRouter();
-  const preluat = useRef(false);
-
-  const preia = () => {
-    if (preluat.current) return;
-    preluat.current = true;
-    router.prefetch(href);
-  };
-
   return (
-    <Link
-      href={href}
-      onMouseEnter={preia}
-      onFocus={preia}
-      onTouchStart={preia}
-      className={className}
-      {...props}
-    >
+    <Link href={href} className={className} {...props}>
       <StareaLegaturii clasa={clasaInAsteptare} />
       {children}
     </Link>
@@ -92,11 +82,15 @@ export function LegaturaDePanou({
 }
 
 /**
- * Pune `data-pending` pe legatura parinte cat timp navigarea e in curs.
+ * Bara care se umple cat timp navigarea e in curs.
  *
  * ⚠ TREBUIE SA FIE COPIL AL LUI `<Link>`: `useLinkStatus` citeste contextul pe
  * care il deschide legatura. Chemat in aceeasi componenta cu `<Link>`, intoarce
  * mereu `pending: false` si nu se plange nimeni.
+ *
+ * ⚠ SI NU SE VERIFICA CU `setInterval`. Cu sondare la 8 ms parea ca nu se aprinde
+ * niciodata: in timpul tranzitiei firul e ocupat si cronometrele nu apuca sa
+ * ruleze. Un `MutationObserver` pe atribute a prins `data-pending` din prima.
  */
 function StareaLegaturii({ clasa }: { clasa?: string }) {
   const { pending } = useLinkStatus();
@@ -106,9 +100,9 @@ function StareaLegaturii({ clasa }: { clasa?: string }) {
       data-pending={pending ? "" : undefined}
       className={cn(
         /*
-          Bara subtire care se umple peste card, in verdele casei. Nu e un
-          spinner: la 300 ms un spinner abia apuca sa se invarta o data, iar
-          o miscare care incepe imediat spune „te-am auzit" mai bine.
+          Bara subtire in verdele casei, nu un spinner: la 300 ms un spinner abia
+          apuca sa se invarta o data, iar o miscare care incepe imediat spune
+          „te-am auzit" mai bine decat una care se termina inainte sa fie vazuta.
         */
         "pointer-events-none absolute inset-x-0 top-0 h-[2px] origin-left scale-x-0 rounded-t-xl bg-primary transition-transform duration-[400ms] ease-out",
         pending && "scale-x-100",

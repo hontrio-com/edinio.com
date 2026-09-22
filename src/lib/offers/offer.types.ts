@@ -19,11 +19,39 @@ export type OfferType =
   | "frequently_bought" // FBT: anchor product + companions, combined discount (PDP)
   | "cross_sell"        // "Merge bine cu": recommended products (PDP + cart)
   | "order_bump"        // single discounted product added at checkout
+  | "upgrade"           // „treci la varianta mai buna": alt produs, la pret de schimb
   | "post_purchase"     // 1-click add on the confirmation page — Faza 2
   | "volume"            // buy X units, get %/amount off — Faza 3
-  | "bogo"              // buy X get Y free/discounted — Faza 3
-  | "gift"              // free gift at a spend threshold — Faza 3
+  | "bogo"              // „cumperi X, primesti Y"
+  | "gift"              // cadou la comanda, cand trec portile
   | "spend_reward";     // spend & save ladder — Faza 3
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * OFERTELE CARE SE ACCEPTĂ ÎN FORMULARUL DE COMANDĂ             (22.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Patru tipuri, o singură mecanică: cumpărătorul bifează, browserul trimite
+ * produsul ca LINIE (`additional_items`) plus id-ul ofertei, iar serverul
+ * re-judecă totul și rescrie prețul liniei. Nimic din ce spune browserul despre
+ * bani nu se crede.
+ *
+ * ⚠⚠ DE CE TOATE PATRU AICI, ȘI NU PE PAGINA DE PRODUS. O ofertă nu poate
+ * ieftini decât o LINIE de comandă. Produsul din formularul de comandă directă
+ * („Cumpără acum") NU e linie: prețul lui se socotește separat, înainte, iar
+ * `offer_discount_amount` doar consemnează. Deci o ofertă care ar vrea să
+ * schimbe prețul produsului de pe pagină n-are unde să scrie. Măsurat citind
+ * `placeOrder`: subtotalul liniei principale se face la rândul 1519, iar
+ * ofertele ating numai `cartItems`.
+ *
+ * ⚠ Coșul, în schimb, e numai linii — de-aia toate patru lucrează acolo.
+ */
+export const TIPURI_DIN_FORMULAR: OfferType[] = ["order_bump", "upgrade", "bogo", "gift"];
+
+/** Se acceptă bifând în formularul de comandă? */
+export function seAcceptaInFormular(type: OfferType): boolean {
+  return TIPURI_DIN_FORMULAR.includes(type);
+}
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +97,21 @@ export interface DespreTipulOfertei {
   sePoateAsezaLangaPret?: boolean;
   /** Se poate cere o CANTITATE pentru fiecare produs din set. */
   cuCantitatiPeProdus?: boolean;
+  /** Oferta SCHIMBA produsul din cos cu cel oferit (upgrade). */
+  cuSchimb?: boolean;
+  /** „Cumperi X bucati, primesti Y bucati" — cele doua numere ale lui BOGO. */
+  cuBucatiXY?: boolean;
+  /** Cumparatorul poate ALEGE cadoul dintre mai multe produse. */
+  cuCadouLaAlegere?: boolean;
+  /**
+   * Beneficiul poate fi „Gratuit".
+   *
+   * ⚠ NU e un mod de reducere nou: „gratuit" se scrie ca `fixed_price` cu zero.
+   * Un al cincilea mod ar fi cerut un rand nou in `VALID_DISCOUNT_MODES`, in
+   * `modBundle` si in fiecare loc care ramifica pe mod — pentru o valoare pe
+   * care cele patru de acum o exprima deja exact.
+   */
+  cuGratuit?: boolean;
 }
 
 export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
@@ -94,6 +137,13 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     sePoateFace: true, seVedeInVitrina: true,
     areReducere: true, reducereImplicita: "percent", unProdus: true,
   },
+  upgrade: {
+    eticheta: "Upgrade produs",
+    explicatie: "„Treci la varianta de 100 ml pentru +30 lei.” Produsul mare intră în locul celui din coș.",
+    numeleProduselorOferite: "Produsul în schimb",
+    sePoateFace: true, seVedeInVitrina: true,
+    areReducere: true, reducereImplicita: "fixed_price", unProdus: true, cuSchimb: true,
+  },
   volume: {
     eticheta: "Reducere cantitate",
     explicatie: "De la o cantitate în sus, prețul scade cu un procent. Se vede ca tabel pe pagina produsului.",
@@ -115,18 +165,20 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     areReducere: true, reducereImplicita: "percent", unProdus: true,
   },
   bogo: {
-    eticheta: "Cumpără X, primești Y",
-    explicatie: "La cumpărarea unui produs, altul vine gratuit sau redus. Încă nefăcut.",
+    eticheta: "Cumperi X, primești Y",
+    explicatie: "„Cumperi 2, primești 1 gratis.” Se numără bucățile din coș, iar produsul primit intră cu o bifă.",
     numeleProduselorOferite: "Produsul primit",
-    sePoateFace: false, seVedeInVitrina: false,
-    areReducere: true, reducereImplicita: "percent",
+    sePoateFace: true, seVedeInVitrina: true,
+    areReducere: true, reducereImplicita: "fixed_price", unProdus: true,
+    cuBucatiXY: true, cuGratuit: true,
   },
   gift: {
-    eticheta: "Cadou",
-    explicatie: "Peste o valoare a coșului, un produs intră gratuit. Încă nefăcut.",
-    numeleProduselorOferite: "Cadoul",
-    sePoateFace: false, seVedeInVitrina: false,
-    areReducere: true, reducereImplicita: "fixed_price", unProdus: true,
+    eticheta: "Cadou la comandă",
+    explicatie: "Peste o valoare a coșului, sau dintr-o categorie, un produs intră drept cadou.",
+    numeleProduselorOferite: "Cadoul (sau cadourile dintre care alege)",
+    sePoateFace: true, seVedeInVitrina: true,
+    areReducere: true, reducereImplicita: "fixed_price",
+    cuCadouLaAlegere: true, cuGratuit: true,
   },
   spend_reward: {
     eticheta: "Cheltuie și economisește",
@@ -274,6 +326,37 @@ export interface OfferConfig {
    * ruleaza. Bifa il lasa pe comerciant sa aleaga, si scrie pe ecran ce face.
    */
   excludeFaraStoc?: boolean;
+  /**
+   * `upgrade`: produsul de pe care se face schimbul IESE din comandă.
+   *
+   * ⚠⚠ SE SCRIE MEREU, și `true`, și `false`, spre deosebire de celelalte
+   * steaguri de aici. Regula „scrie doar ce nu e implicit” apără rândurile care
+   * EXISTĂ DEJA în bază, ca ele să nu capete un câmp la prima salvare. `upgrade`
+   * e un tip nou: n-are niciun rând vechi de apărat, iar o ofertă de schimb în
+   * care nu se vede din jsonb dacă schimbă sau adaugă e o ofertă pe care nu o
+   * poți citi din bază fără să știi implicita pe de rost.
+   */
+  inlocuieste?: boolean;
+  /**
+   * `bogo`: câte bucăți trebuie să fie în coș din produsele declanșatoare.
+   *
+   * ⚠ Se numără DOAR produsele pe care se aprinde oferta, și fără produsul
+   * primit — vezi `bucatileDeclansatorului`. Numărat pe tot coșul, un „cumperi
+   * 2” s-ar fi împlinit din chiar bucata dăruită, la un declanșator „toate
+   * produsele”.
+   */
+  cumperiBucati?: number;
+  /** `bogo`: câte bucăți din produsul oferit intră la beneficiu. */
+  primestiBucati?: number;
+  /**
+   * `gift`: cumpărătorul ALEGE cadoul dintre produsele din listă.
+   *
+   * ⚠ Nebifat, cadoul e primul produs care se poate lua — exact ca la bump.
+   * Bifat, se arată toate, iar serverul acceptă oricare UNUL dintre ele. De-aia
+   * reconstituirea are o ramură proprie: regula bump-ului („primul care se poate
+   * lua”) ar fi refuzat în tăcere orice cadou în afară de primul.
+   */
+  cadouLaAlegere?: boolean;
 }
 
 /* ─── Display (surfaces + style) ──────────────────────────────────────────── */
@@ -307,6 +390,14 @@ export function defaultSurfacesFor(type: OfferType): OfferSurface[] {
     case "frequently_bought": return ["product_page"];
     case "cross_sell":        return ["product_page", "cart"];
     case "order_bump":        return ["checkout"];
+    /*
+      ⚠ Toate trei se bifează în formularul de comandă, deci suprafața lor e
+      „checkout" — nu „cart". Vezi `TIPURI_DIN_FORMULAR`: o ofertă nu poate
+      ieftini decât o linie, iar liniile se văd abia în formular.
+    */
+    case "upgrade":           return ["checkout"];
+    case "bogo":              return ["checkout"];
+    case "gift":              return ["checkout"];
     case "post_purchase":     return ["confirmation"];
     default:                  return ["cart"]; // rules apply at cart level
   }
@@ -318,6 +409,8 @@ export function defaultTitleFor(type: OfferType): string {
     case "frequently_bought": return "Cumparate frecvent impreuna";
     case "cross_sell":        return "Merge bine cu";
     case "order_bump":        return "Adauga la comanda";
+    case "upgrade":           return "Treci la varianta mai buna";
+    case "bogo":              return "Cumperi si primesti";
     case "post_purchase":     return "Completeaza comanda";
     case "gift":              return "Cadou pentru tine";
     default:                  return "Oferta speciala";
@@ -415,6 +508,30 @@ export function parseOfferConfig(raw: unknown): OfferConfig {
   /* ⚠ Se scrie doar cand e ADEVARAT: `false` ar fi un camp in plus pe fiecare
      rand, care nu spune nimic peste lipsa lui. */
   if (r.excludeFaraStoc === true) cfg.excludeFaraStoc = true;
+  if (r.cadouLaAlegere === true) cfg.cadouLaAlegere = true;
+
+  /*
+    ⚠⚠ SE SCRIE DOAR REFUZUL, si lipsa campului inseamna DA.
+
+    Era cat pe ce sa-l scriu mereu, „ca sa se vada din jsonb". Ar fi pus un camp
+    nou pe TOATE ofertele magazinelor la prima lor salvare — inclusiv pe cele 13
+    de pe productie, care n-au nimic de-a face cu schimbul. Aceeasi regula ca la
+    cantitati: un rand care nu cere nimic deosebit produce jsonb-ul de ieri.
+
+    ⚠ Se parseaza pentru ORICE tip, fiindca `parseOfferConfig` nu primeste tipul.
+    Cititorul intreaba intai tipul — vezi `inlocuiesteProdusul`.
+  */
+  if (r.inlocuieste === false) cfg.inlocuieste = false;
+
+  /*
+    ⚠ Cele doua numere ale lui BOGO. Se scriu doar cand sunt CERUTE si trec de
+    unu-si-unu: un „cumperi 1, primesti 1" e un bump cu alt nume, iar campurile
+    scrise degeaba ar fi aparut pe randurile tuturor celorlalte tipuri.
+  */
+  const cumperi = Math.floor(Number(r.cumperiBucati));
+  if (Number.isFinite(cumperi) && cumperi > 0) cfg.cumperiBucati = Math.min(cumperi, OFFER_MAX_CANTITATE);
+  const primesti = Math.floor(Number(r.primestiBucati));
+  if (Number.isFinite(primesti) && primesti > 0) cfg.primestiBucati = Math.min(primesti, OFFER_MAX_CANTITATE);
 
   if (r.cantitati && typeof r.cantitati === "object" && !Array.isArray(r.cantitati)) {
     const brute = r.cantitati as Record<string, unknown>;
@@ -457,6 +574,54 @@ export function cantitateaCeruta(type: OfferType, config: OfferConfig, productId
   const n = config.cantitati?.[productId];
   if (!Number.isFinite(n)) return 1;
   return Math.min(Math.max(1, Math.floor(n as number)), OFFER_MAX_CANTITATE);
+}
+
+/**
+ * Oferta SCOATE din comandă produsul de pe care se face schimbul?
+ *
+ * ⚠⚠ SINGURUL DRUM către `config.inlocuieste`, și întreabă ÎNTÂI tipul, exact
+ * ca `cantitateaCeruta`. Fără poarta pe tip, un `inlocuieste: false` rătăcit pe
+ * un `order_bump` ar fi fost citit, iar acolo n-are niciun înțeles.
+ *
+ * ⚠ Lipsa câmpului înseamnă DA: un „upgrade" care adaugă în loc să schimbe e
+ * chiar un bump, și nimeni nu alege tipul ăsta pentru asta.
+ */
+export function inlocuiesteProdusul(type: OfferType, config: OfferConfig): boolean {
+  if (!DESPRE_TIPUL_OFERTEI[type]?.cuSchimb) return false;
+  return config.inlocuieste !== false;
+}
+
+/**
+ * Câte bucăți din produsul oferit intră în comandă.
+ *
+ * ⚠ Unu peste tot, în afară de BOGO: bump-ul, upgrade-ul și cadoul dau o
+ * singură bucată. Vezi `aplicaOfertaPeLinii`, unde numărul ăsta ajunge în
+ * `aplicaPretPeBucati`.
+ */
+export function bucatiDeOferit(type: OfferType, config: OfferConfig): number {
+  if (!DESPRE_TIPUL_OFERTEI[type]?.cuBucatiXY) return 1;
+  const n = Math.floor(Number(config.primestiBucati));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, OFFER_MAX_CANTITATE);
+}
+
+/**
+ * Câte bucăți din produsele declanșatoare cere oferta. Zero = nu cere nimic.
+ *
+ * ⚠ Zero, nu unu, la tipurile fără X: „cel puțin o bucată" ar fi o verificare în
+ * plus pe un drum pe care declanșatorul a răspuns deja la aceeași întrebare.
+ */
+export function bucatiDeCumparat(type: OfferType, config: OfferConfig): number {
+  if (!DESPRE_TIPUL_OFERTEI[type]?.cuBucatiXY) return 0;
+  const n = Math.floor(Number(config.cumperiBucati));
+  if (!Number.isFinite(n) || n < 1) return 0;
+  return Math.min(n, OFFER_MAX_CANTITATE);
+}
+
+/** Cumpărătorul alege cadoul dintre mai multe produse? */
+export function cadoulSeAlege(type: OfferType, config: OfferConfig): boolean {
+  if (!DESPRE_TIPUL_OFERTEI[type]?.cuCadouLaAlegere) return false;
+  return config.cadouLaAlegere === true;
 }
 
 export function parseOfferDisplay(raw: unknown, type: OfferType): OfferDisplay {
@@ -513,6 +678,20 @@ export interface OfferProduct {
    * cantitati, ca sa nu se arate un set pe care stocul nu-l poate da.
    */
   stocDisponibil?: number | null;
+  /**
+   * Prețul pe care îl are produsul ăsta PRIN OFERTĂ, pe bucată.
+   *
+   * ⚠⚠ EXISTĂ FIINDCĂ UN CADOU LA ALEGERE ARE PREȚURI DEOSEBITE. `pricing` e un
+   * singur obiect pe ofertă: bun cât timp oferta arată un produs (bump, upgrade,
+   * BOGO), dar la „alege unul dintre trei" cele trei au fiecare prețul lui
+   * redus. Ținut tot în `pricing`, ecranul ar fi scris același preț pe toate
+   * trei, iar două din trei ar fi mințit.
+   *
+   * ⚠ E DOAR PENTRU ECRAN. Prețul chiar încasat se socotește din nou pe server,
+   * din `config`, la plasarea comenzii (`aplicaOfertaPeLinii`). Absent la
+   * tipurile care nu ieftinesc nimic.
+   */
+  pretOferta?: number;
 }
 
 // One offer, resolved with real product data + computed pricing, ready to render.
@@ -527,6 +706,32 @@ export interface ResolvedOffer {
   products: OfferProduct[];
   /** Combined pricing for FBT / order_bump (absent for pure cross_sell). */
   pricing?: { price: number; compareAt: number; savings: number };
+  /**
+   * Regulile pe care le are de desenat formularul de comandă.
+   *
+   * ⚠ UN SINGUR CÂMP, nu trei: browserul primește `ResolvedOffer` pe o acțiune
+   * publică, iar trei câmpuri opționale scrise alături ar fi cerut trei
+   * verificări de existență în fiecare din cele două formulare. Absent la toate
+   * tipurile de azi, deci nimic nu se schimbă pentru ele.
+   */
+  reguli?: {
+    /** `upgrade`: produsul de schimb îl SCOATE pe cel din coș. */
+    inlocuieste?: boolean;
+    /** `bogo`: câte bucăți trebuie cumpărate. */
+    cumperi?: number;
+    /** `bogo`: câte bucăți se primesc. */
+    primesti?: number;
+    /** `gift`: cumpărătorul alege unul dintre produsele din listă. */
+    laAlegere?: boolean;
+    /**
+     * `upgrade`: produsele din coș pe care oferta le poate schimba.
+     *
+     * ⚠ Le socotește SERVERUL, din declanșator, fiindcă el știe categoriile
+     * liniilor din coș. Browserul are doar id-uri și nume, deci ar fi putut
+     * numi drept „produsul schimbat" o linie pe care oferta n-o atinge.
+     */
+    deSchimbat?: string[];
+  };
 }
 
 /**

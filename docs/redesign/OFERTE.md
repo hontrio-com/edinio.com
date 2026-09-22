@@ -414,6 +414,128 @@ reducere din oferta, apare un rand care spune cate si cat.
 ⚠ **Nu s-a verificat pe telefon adevarat.** Asezarea de sub `sm` e oglinda celei de la
 Discounturi, care a fost vazuta pe telefon; dar ecranul asta nu. De cerut o privire.
 
-⚠ **`post_purchase`, `bogo`, `gift` si `spend_reward` raman nefacute.** Sunt in schema si in
-tabel, cu `sePoateFace: false` si cu explicatia care spune pe fata ca nu se pot face inca —
-o proba cere ca fiecare din ele s-o spuna.
+⚠ **`post_purchase` si `spend_reward` raman nefacute.** Sunt in schema si in tabel, cu
+`sePoateFace: false` si cu explicatia care spune pe fata ca nu se pot face inca — o proba
+cere ca fiecare din ele s-o spuna. (`bogo` si `gift` s-au facut pe 24.09, vezi mai jos.)
+
+---
+
+# Trei tipuri noi: upgrade, „cumperi X primesti Y", cadou     (24.09.2026)
+
+Cerute de el. Toate trei se bifeaza in FORMULARUL DE COMANDA, ca bump-ul, si merg prin
+aceeasi cale probata: produsul intra ca LINIE (`additional_items`) plus id-ul ofertei, iar
+serverul re-judeca tot si rescrie pretul liniei.
+
+## De ce toate trei in formular, si nu pe pagina de produs
+
+⚠⚠ **O oferta nu poate ieftini decat o LINIE.** Produsul din formularul de comanda directa
+NU e linie: pretul lui se socoteste separat, inainte de oferte (`placeOrder`, rd. ~1519), iar
+`offer_discount_amount` doar consemneaza. Deci o oferta care ar vrea sa schimbe pretul
+produsului de pe pagina n-are unde sa scrie. Cosul, in schimb, e numai linii.
+
+## Ce s-a facut
+
+**UPGRADE** — „Treci la varianta de 100 ml pentru +30 lei." Randul arata DIFERENTA fata de
+ce iese din cos, nu pretul: cumparatorul compara cu ce are deja. Bifat, produsul mic iese din
+comanda si cel mare intra la pretul de schimb.
+
+⚠⚠ **Ce costa schimbul, spus pe fata si in formular**: la schimb, produsul care aprinde
+oferta nu mai e in comanda — chiar oferta l-a scos — deci declansatorul nu se mai poate cere
+la plasare. Pretul de schimb il poate lua oricine trimite id-ul ofertei cu produsul mare in
+comanda. Expunerea e MARGINITA: o bucata pe comanda. Se strange cu portile.
+
+**CUMPERI X, PRIMESTI Y** — se numara BUCATILE din cos, din produsele declansatoare, si se
+dau Y bucati din produsul oferit la beneficiu (Gratuit / −% / −suma / pret fix, pe bucata).
+
+⚠⚠ **Produsul primit trebuie sa fie ALTUL.** Oferta adauga o linie, iar produsul deja in cos
+nu se mai poate oferi. Pentru „2 la pretul de 1" din ACELASI produs exista deja „Reducere
+cantitate", si e mai buna: scade pretul pe bucata si se aplica pe toate caile. Scris in
+formular si refuzat la salvare.
+
+⚠⚠ **Bucatile daruite NU se numara in X**, altfel oferta s-ar hrani singura: la un
+declansator „toate produsele", un „cumperi 2" s-ar fi implinit din chiar bucata primita
+gratis.
+
+**CADOU LA COMANDA** — portile sunt CHIAR oferta („coșul trece de 300 lei"). Cu „clientul
+alege cadoul", se arata toate cadourile si cumparatorul apasa pe unul.
+
+⚠⚠ **Reconstituirea cadoului la alegere are ramura ei.** Regula bump-ului („primul care se
+poate da") ar fi refuzat in tacere orice cadou in afara de primul: omul bifa al treilea si
+primea factura fara el. Fereastra `maxProducts` ramane, ca un magazin cu zece cadouri si trei
+aratate sa nu-l lase pe client sa-l ceara pe al zecelea.
+
+## Doua defecte adevarate, prinse pe ruta adevarata
+
+⚠⚠ **Cosul trimis pentru porti era socotit pe PRETUL DE CATALOG.** `checkout-core.ts` trimitea
+`i.price` — instantaneul din localStorage — in loc de pretul chiar incasat. Masurat in
+magazinul demo: cos cu o lumanare de 49, doua becuri de 39 (treapta la 2 buc: 70,20) si o vaza
+de 175. Subtotalul adevarat: 294,20. Cel trimis: 302. Un cadou cu poarta la 300 se ARATA, se
+bifa, si la trimitere comanda era OPRITA. Checkout mort, cu un mesaj care nu spune de ce.
+⚠ `lineUnit` NU e raspunsul, desi asa pare dupa nume: el tine varianta si personalizarea, dar
+NU treptele. Raspunsul e `lineTotal / cantitate`, exact ce facea deja `OrderModal`.
+
+⚠⚠ **Lista de oferte se recerea pe cosul DEJA SCHIMBAT.** Un upgrade bifat scoate produsul
+din comanda; cerute pe cosul de dupa scoatere, ofertele se recereau fara chiar produsul care
+le aprinde, serverul nu mai gasea declansatorul, si oferta DISPAREA in clipa bifarii — cosul
+scadea cu 49 si nu crestea cu 69. Ce se OFERA se hotaraste pe cosul pe care il are omul; ce
+se SCOATE e urmarea bifei.
+
+## Probat pe ruta adevarata
+
+Comanda **#1356** in magazinul demo: bec 2 x 35,10, vaza 175, **lumanare mare 69** (pretul de
+schimb), **set suporturi 0** (gratis). `subtotal` 314,20, `offer_discount_amount` 55
+(10 + 45), total 324,19 — exact ce scria pe ecran. Contoarele: upgrade 1 acceptare / 69 lei
+venit, bogo 1 acceptare / 0 lei (e gratis, deci nu aduce venit, dar bucata e in comanda).
+Amandoua caile probate: si din cos, si din „Comanda acum" de pe pagina de produs.
+
+## Auditul final: pe toate sabloanele, si doua lucruri gasite pe drum
+
+**Toate ecranele, verificate pe rand.** Ofertele se deseneaza intr-un singur loc
+(`OferteDinFormular`), iar el e randat de `CheckoutForm` — pe care il folosesc AMANDOUA
+modelele de checkout (`classic`, adica fereastra, si `page_two_col`, pagina cu rezumat
+lateral) — plus `OrderModal` de pe pagina de produs. Probat cu toate cele patru modele de
+cos (`classic` sertar, `page_split`, `page_wide`, `page_compact`): din fiecare, drumul catre
+formular arata cele trei oferte.
+
+⚠⚠ **LA 390px NUMELE PRODUSULUI RAMANEA CU 46 DE PIXELI.** Cardul are 253px, din care bifa,
+miniatura si distantele iau 116; cu pretul tinut in dreapta, numelui ii ramanea „Lumâna…" —
+adica exact produsul pe care oferta il vinde nu se putea citi. Pretul COBOARA acum sub nume
+pana la `sm`, si sta in dreapta de la `sm` in sus. **Acelasi bloc, desenat in doua locuri**,
+nu doua forme scrise separat. Verificat la 320, 360, 390, 430, 640, 700 si pe desktop.
+
+⚠⚠ **DOUA COMENTARII CARE SPUNEAU PE DOS.** Amandoua sustineau ca `lineUnit` /
+`pretBucataCos` „are treptele de cantitate". Nu are, si nici nu trebuie: `CartProvider` il
+defineste dinadins ca „o bucata INAINTE de trepte", fiindca eticheta „N buc x P" trebuie sa
+se inmulteasca la totalul liniei. Afirmatia asta m-a trimis pe drum gresit chiar in ziua
+aia, la repararea portilor. Cele doua comentarii sunt indreptate, iar **instantaneul cosului
+abandonat** — care le credea — salveaza acum pretul chiar incasat (`lineTotal / cantitate`)
+in amandoua formularele. Conteaza: din numerele alea se face „Valoare cosuri abandonate" si
+pragul „trimite doar peste 300 de lei". ⚠ Plasa care pinuia `price: lineUnit(i)` a cazut la
+o schimbare care facea numarul MAI BUN — semn ca apara forma, nu regula; e rescrisa pe sursa
+numarului.
+
+⚠ **Si instantaneul ia cosul INTREG**, nu pe cel de dupa scoaterea facuta de un upgrade: aia
+e o proiectie a formularului, iar recuperarea i-ar fi trimis clientului inapoi un cos fara
+produsul pe care tocmai il avea.
+
+## Ce NU s-a facut
+
+⚠⚠ **O linie de 0 lei n-a fost niciodata facturata din platforma asta.** Formularul refuza
+pana acum pretul fix zero, deci cadourile sunt primele linii gratuite care pot ajunge la o
+casa de facturare. `docs/facturare/SMARTBILL.md` o spune limpede: din 241 de documente,
+**zero reduceri promotionale**. Nu stim daca SmartBill accepta `price: 0` pe o linie de
+produs. ⚠ Ce se intampla daca NU: facturarea automata e „fire-and-forget", pornita pe
+schimbarea de stare, NU pe drumul comenzii (`order.actions.ts`, rd. ~2810). Deci comanda
+intra oricum; ce cade e emiterea facturii, si se vede prin lipsa numarului. De probat cu o
+proforma inainte de a porni un cadou intr-un magazin care factureaza automat.
+
+⚠ **Liniile pentru CUPON si cele pentru PIXELI folosesc tot `lineUnit`** (pretul dinainte de
+trepte). E purtarea de dinainte si n-am atins-o: sunt alte cai de bani, fiecare cu auditul
+ei. De trecut prin ele separat.
+
+⚠ **Upgrade-ul nu apare pe pagina de produs** cand produsul de schimbat nu e o linie de cos.
+Vezi mai sus de ce: produsul principal al unei comenzi directe nu se poate ieftini.
+
+⚠ **Cadoul cu poarta pe lei nu se arata daca pragul se atinge DOAR cu ce aduc alte oferte
+bifate.** Poarta se judeca pe cosul de dinainte de bifari. E directia sigura (se arata mai
+putin, nu mai mult), dar e o ocazie pierduta.

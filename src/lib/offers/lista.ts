@@ -1,3 +1,4 @@
+import { bucatiDeCumparat, bucatiDeOferit, cadoulSeAlege, inlocuiesteProdusul } from "./offer.types";
 import type { OfferType, OfferTrigger, OfferConfig, OfferDisplay } from "./offer.types";
 import type { StareOferta } from "./stare";
 
@@ -153,5 +154,23 @@ export function ceOfera(o: Pick<OfertaDinLista, "type" | "config">): string {
   }
   if (o.config.autoByCategory) return "produse alese automat din categorie";
   const n = o.config.productIds.length;
+  /*
+    ⚠ CELE TREI TIPURI NOI SPUN REGULA, nu doar numărul. „oferă un produs” e
+    adevărat și la un bump, și la un „cumperi 2 primești 1” — dar la al doilea
+    numărul care contează nu e câte produse sunt în listă, ci câte bucăți cere
+    și câte dă. Rândul din listă e singurul loc din care se poate afla asta fără
+    să deschizi editarea.
+  */
+  if (o.type === "bogo") {
+    const x = bucatiDeCumparat(o.type, o.config);
+    const y = bucatiDeOferit(o.type, o.config);
+    return x > 0 ? `la ${x} buc, ${y} buc din un produs` : "un produs";
+  }
+  if (o.type === "upgrade") {
+    return inlocuiesteProdusul(o.type, o.config) ? "un produs, în schimb" : "un produs, pe lângă";
+  }
+  if (o.type === "gift" && cadoulSeAlege(o.type, o.config)) {
+    return n === 1 ? "un cadou" : `${n} cadouri, la alegere`;
+  }
   return n === 1 ? "un produs" : `${n} produse`;
 }

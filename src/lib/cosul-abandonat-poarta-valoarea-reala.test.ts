@@ -73,7 +73,16 @@ function instantaneul(cod: string): string {
 test("⚠ finalizarea salveaza pretul LINIEI, nu pe cel din catalog", () => {
   const snap = instantaneul(sursa(CHECKOUT));
 
-  assert.match(snap, /price: lineUnit\(i\)/, "cosul abandonat se salveaza iar cu pretul de catalog");
+  /*
+   * ⚠⚠ PLASA E PE SURSA NUMARULUI, nu pe expresia exacta. Era `price: lineUnit(i)`, si a cazut
+   * pe 24.09.2026 la o schimbare care facea numarul MAI BUN — semn ca pinuia forma, nu regula.
+   *
+   * ⚠ Si `lineUnit` NU era raspunsul, desi asa parea dupa nume: el inseamna dinadins „o bucata
+   * INAINTE de trepte" (vezi `CartProvider`), fiindca eticheta „N buc x P" trebuie sa se
+   * inmulteasca la totalul liniei. Pretul chiar incasat pe bucata e `lineTotal / cantitate`.
+   */
+  assert.match(snap, /price: [^,]*lineTotal\(i\)/, "cosul abandonat nu se mai salveaza cu pretul LINIEI");
+  assert.doesNotMatch(snap, /price: lineUnit\(i\)[,\n]/, "`lineUnit` singur e pretul DINAINTE de trepte");
   /*
    * ⚠ SI PERECHEA, care e jumatatea care conteaza: `i.price` n-are voie sa se intoarca. Lasat
    * alaturi, ar fi o a doua sursa pentru acelasi numar, si prima „simplificare" l-ar alege pe el.
@@ -92,8 +101,12 @@ test("⚠ «Comanda acum» salveaza si liniile din cos, cu pretul lor efectiv", 
    * „Comanda acum": recuperarea ii dadea clientului mai putin decat avea, si definitiv, fiindca
    * `restoreCart` suprascrie.
    */
-  assert.match(snap, /\.\.\.cart\.map\(/, "liniile din cos lipsesc iar din instantaneu");
-  assert.match(snap, /price: pretBucataCos\(i\)/, "liniile din cos se salveaza cu pretul de catalog");
+  /* ⚠ `cartLines`, cosul INTREG — vezi nota de la dependinte, mai jos. */
+  assert.match(snap, /\.\.\.cartLines\.map\(/, "liniile din cos lipsesc iar din instantaneu");
+  /* ⚠ Aceeasi regula ca la finalizare: pretul vine din TOTALUL liniei, nu din `lineUnit`
+     (care e `pretBucataCos` aici) — acela e pretul de dinainte de trepte, bun doar pe ecran. */
+  assert.match(snap, /price: [^,]*totalLinieCos\(i\)/, "liniile din cos nu se mai salveaza cu pretul LINIEI");
+  assert.doesNotMatch(snap, /price: pretBucataCos\(i\)[,\n]/, "`pretBucataCos` singur e pretul DINAINTE de trepte");
   assert.match(snap, /customization: i\.customization/, "personalizarea liniilor din cos nu se salveaza");
   assert.match(snap, /variant_title: i\.variantTitle/, "varianta liniilor din cos nu se salveaza");
 });
@@ -109,7 +122,10 @@ test("⚠ si cosul e in dependintele capturii, altfel o linie scoasa nu se vede 
   const dupa = cod.slice(i);
   const dep = dupa.slice(dupa.indexOf("}, 1500);"));
   const lista = dep.slice(0, dep.indexOf("]);") + 3);
-  assert.match(lista, /\bcart\]/, "`cart` nu e in dependintele capturii");
+  /* ⚠ `cartLines`, adica cosul INTREG: `cart` e cel de dupa ce un upgrade bifat a scos o linie,
+     iar aia e o proiectie a formularului, nu cosul omului. Salvat asa, recuperarea i-ar fi
+     trimis inapoi un cos fara produsul pe care tocmai il avea. */
+  assert.match(lista, /\bcartLines\]/, "cosul nu e in dependintele capturii");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

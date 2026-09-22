@@ -14,6 +14,11 @@ import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
+import {
+  cheileScoase, liniileAcceptate, linieDeSchimbat, ofertePeCareLePoateArata, subtotalulOfertelor,
+} from "@/lib/offers/linii-acceptate";
+import type { OfertaDeAratat } from "@/components/ministore/OrderBump";
+import { lineKey } from "@/lib/storefront/cart/normalize";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
@@ -63,9 +68,32 @@ export function useCheckoutOrder({
   suprafata = "modal",
 }: CheckoutOrderInput) {
   const {
-    items, total, clear, sessionId, hydrated, lineUnit, lineNeedsReview,
+    items: toateLiniileCosului, total: totalIntregAlCosului, clear, sessionId, hydrated,
+    lineTotal, lineUnit, lineNeedsReview,
     linePretNesigur, pricingStare, reincearcaPreturile,
   } = useCart();
+  /*
+    ⚠⚠ LINIILE PE CARE UN UPGRADE LE-A SCOS DIN COMANDĂ.
+
+    Se ține aici, în formular, și NU se atinge coșul adevărat: cumpărătorul poate
+    debifa upgrade-ul, iar atunci linia trebuie să fie tot acolo. Coșul se golește
+    oricum la comandă reușită (`clear`), deci nu rămâne nimic în urmă.
+  */
+  const [inlocuite, setInlocuite] = useState<Record<string, string>>({});
+  const cheiScoase = cheileScoase(inlocuite);
+  /*
+    ⚠ `items` și `total` se REDEFINESC aici, ca tot ce vine dedesubt — subtotal,
+    TVA, reducere de card, transport gratuit, liniile trimise serverului,
+    cotarea coletului, pixelii — să vadă aceeași comandă. Filtrate doar într-unul
+    dintre ele, celelalte ar fi rămas cu produsul schimbat înăuntru, iar unul
+    dintre „celelalte" e chiar ce se încasează.
+  */
+  const items = cheiScoase.size === 0
+    ? toateLiniileCosului
+    : toateLiniileCosului.filter((i) => !cheiScoase.has(lineKey(i)));
+  const total = cheiScoase.size === 0
+    ? totalIntregAlCosului
+    : Math.round(items.reduce((s, i) => s + lineTotal(i), 0) * 100) / 100;
   const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
     preview ? preview.checkoutConfig : ({ email_field: emailFieldConfig } as StorePageContent["checkout_config"])
   );
@@ -116,6 +144,8 @@ export function useCheckoutOrder({
     : emailFieldBrut;
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
+  /** Cadoul la alegere: ce a ales cumparatorul, pe oferta. */
+  const [alegeriCadou, setAlegeriCadou] = useState<Record<string, string>>({});
   // Comanda minima a comerciantului (Setari > Livrare). Vine din aceeasi
   // configuratie publica citita mai jos, deci nu costa niciun apel in plus.
   // Fara ea, pe pagina de finalizare — adresa publica, in care se intra si
@@ -132,8 +162,31 @@ export function useCheckoutOrder({
   // Accepted order bumps add their discounted product to the goods value. `goodsTotal`
   // mirrors the server's bump-inclusive subtotal and drives every money computation
   // below (VAT, card discount, free shipping, grand total).
-  const acceptedBumpOffers = bumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
-  const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
+  /*
+    ⚠⚠ REGULA STĂ ÎN `lib/offers/linii-acceptate.ts`, aceeași pe care o cheamă și
+    `OrderModal`. Era scrisă în amândouă, iar cele două se potriveau doar fiindcă
+    niciuna nu se atinsese de la scriere.
+  */
+  const produseInComanda = new Set(items.map((i) => i.productId));
+  /* ⚠ COSUL INTREG, nu `items`: oferta care a scos o linie trebuie s-o gaseasca
+     mai departe, altfel iese chiar ea de pe ecran si pretul ei nu mai intra. */
+  const liniiDeSchimb = toateLiniileCosului.map((i) => ({ key: lineKey(i), productId: i.productId, quantity: i.quantity }));
+  const bumpsVizibile = ofertePeCareLePoateArata(bumps, liniiDeSchimb, produseInComanda, inlocuite);
+  const liniiOferte = liniileAcceptate(bumpsVizibile, acceptedBumps, produseInComanda, alegeriCadou);
+  const bumpSubtotal = subtotalulOfertelor(liniiOferte);
+  /* Ce desenează rândurile: linia care intră și, la schimb, cea care iese. */
+  const ofertePeEcran: OfertaDeAratat[] = bumpsVizibile.flatMap((o) => {
+    const linie = liniiOferte.find((l) => l.offerId === o.id)
+      ?? liniileAcceptate([o], new Set([o.id]), produseInComanda, alegeriCadou)[0];
+    if (!linie) return [];
+    const deSchimbat = linieDeSchimbat(o, liniiDeSchimb, inlocuite);
+    const dinCos = deSchimbat ? toateLiniileCosului.find((i) => lineKey(i) === deSchimbat.key) : undefined;
+    return [{
+      oferta: o,
+      linie,
+      schimba: dinCos ? { nume: dinCos.name, pretPeBucata: lineUnit(dinCos) } : undefined,
+    }];
+  });
   const goodsTotal = Math.round((total + bumpSubtotal) * 100) / 100;
   // Pragul se masoara pe aceeasi valoare ca la server (`subtotal`, cu bump-urile
   // acceptate incluse), ca butonul sa nu ramana blocat pe o comanda pe care
@@ -344,6 +397,29 @@ export function useCheckoutOrder({
       if (checked) next.add(offer.id); else next.delete(offer.id);
       return next;
     });
+    /*
+      ⚠⚠ UPGRADE-UL SCOATE LINIA ODATA CU BIFA, si o pune la loc la debifare.
+      Se cauta in cosul INTREG, nu in `items`: la debifare linia e deja scoasa
+      din `items`, deci n-ar mai fi fost gasita si ar fi ramas ascunsa.
+    */
+    if (!offer.reguli?.inlocuieste) return;
+    setInlocuite((prev) => {
+      /* ⚠ Se sterge dupa ID-UL OFERTEI, nu cautand dupa produs: doua upgrade-uri
+         pe acelasi produs si-ar fi sters linia unul altuia. */
+      if (!checked) { const next = { ...prev }; delete next[offer.id]; return next; }
+      const linie = linieDeSchimbat(
+        offer,
+        toateLiniileCosului.map((l) => ({ key: lineKey(l), productId: l.productId, quantity: l.quantity })),
+        prev,
+      );
+      if (!linie) return prev;
+      return { ...prev, [offer.id]: linie.key };
+    });
+  }
+
+  /** Cadoul la alegere: cumparatorul a apasat pe alt produs din lista. */
+  function alegeCadoul(offerId: string, productId: string) {
+    setAlegeriCadou((prev) => ({ ...prev, [offerId]: productId }));
   }
 
   // Escape si blocarea derularii sunt purtari de MODAL. Pe pagina, blocarea ar
@@ -402,13 +478,51 @@ export function useCheckoutOrder({
     */
     getCheckoutBumps(
       businessId,
-      items.map((i) => i.productId),
-      items.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.price })),
+      /*
+        ⚠⚠ COȘUL ÎNTREG, NU `items`. Un upgrade bifat SCOATE din comandă produsul
+        pe care îl schimbă — iar `items` e coșul DUPĂ scoatere. Cerute pe el,
+        ofertele se recereau fără chiar produsul care le aprinde, serverul nu mai
+        găsea declanșatorul și oferta DISPĂREA de pe ecran în clipa bifării: coșul
+        scădea cu prețul produsului mic și nu creștea cu al celui mare. Văzut pe
+        ecran, în magazinul demo: 294,20 → 245,20 lei.
+
+        Ce se OFERĂ se hotărăște pe coșul pe care îl are omul; ce se SCOATE e
+        urmarea bifei, nu o schimbare de coș.
+      */
+      toateLiniileCosului.map((i) => i.productId),
+      /*
+        ⚠⚠ `lineTotal / cantitate`, NU `i.price` ȘI NICI `lineUnit`. Defect
+        adevărat, prins pe ruta adevărată (24.09.2026).
+
+        `i.price` e instantaneul salvat în localStorage la adăugare, adică prețul
+        de CATALOG.
+
+        ⚠ `lineUnit` NU e răspunsul, deși așa pare după nume: `pretulBucatii`
+        ține varianta și personalizarea, dar NU treptele de cantitate — acelea
+        trăiesc numai în `pretulLiniei`. Am pus întâi `lineUnit` și numărul n-a
+        mișcat; se vede doar punând suma pe ecran lângă cea a serverului.
+
+        Măsurat în magazinul demo: coș cu o lumânare de 49, două becuri de 39 și
+        o vază de 175. Becul are treaptă la 2 bucăți (70,20 lei în loc de 78),
+        deci subtotalul adevărat e 294,20. Cu prețul de catalog ieșeau 302 — iar
+        un cadou cu poarta „coșul trece de 300" se ARĂTA, se bifa, și abia la
+        trimitere serverul îl refuza. Orice refuz în afară de „lipsă din comandă"
+        OPREȘTE comanda (vezi `opresteComanda`): checkout mort, cu un mesaj care
+        nu spune de ce.
+
+        ⚠ `OrderModal` făcea deja bine (`totalLinieCos(c) / c.quantity`). Erau
+        două copii ale aceleiași idei, și numai una era corectă.
+      */
+      toateLiniileCosului.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+        unitPrice: i.quantity > 0 ? lineTotal(i) / i.quantity : lineUnit(i),
+      })),
     )
       .then((b) => { if (!cancelled) setBumps(b ?? []); })
       .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };
-  }, [preview, open, businessId, items]);
+  }, [preview, open, businessId, toateLiniileCosului]);
 
   // Abandoned-cart capture: debounced, fire-and-forget. The server ignores it
   // unless the store opted in. Only fires once a contact channel is present.
@@ -451,10 +565,18 @@ export function useCheckoutOrder({
            * rau, automatizarea are un prag „trimite doar peste 300 de lei": un cos de 910 lei
            * salvat ca 89 nu primea NICIODATA mesajul, si comerciantul nu avea cum sa afle de ce.
            *
-           * ⚠ `lineUnit` E CHIAR PRETUL PE BUCATA AL LINIEI, treptele de cantitate si
-           * personalizarea cu tot. Acelasi pe care il vede clientul pe ecran.
+           * ⚠⚠ SI AICI SCRIA GRESIT, PANA PE 24.09.2026: comentariul spunea ca `lineUnit` are
+           * „treptele de cantitate si personalizarea cu tot". Are personalizarea si varianta, dar
+           * NU treptele — `pretulBucatii` nu trece prin `pretPeTrepte`. Deci un bec de 39 de lei
+           * cu treapta la 2 bucati (70,20, adica 35,10 bucata) se salva la 39, iar subtotalul
+           * cosului abandonat iesea mai mare decat cosul adevarat. Exact numarul pe care pragul
+           * „trimite doar peste 300 de lei" il citeste.
+           *
+           * ⚠ Afirmatia asta m-a trimis pe drum gresit chiar azi, la repararea portilor: am pus
+           * `lineUnit` si numarul n-a miscat. Pretul chiar incasat pe bucata e
+           * `lineTotal / cantitate`.
            */
-          price: lineUnit(i),
+          price: i.quantity > 0 ? Math.round((lineTotal(i) / i.quantity) * 100) / 100 : lineUnit(i),
           quantity: i.quantity,
           image_url: i.imageUrl,
           ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
@@ -572,13 +694,13 @@ export function useCheckoutOrder({
          * ⚠ Bump-urile NU pot purta personalizare, si de-aia serverul le si refuza: ele se
          * accepta cu o bifa, fara niciun formular in care sa se completeze ceva.
          */
-        ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, price: o.pricing!.price, quantity: 1 })),
+        ...liniiOferte.map((l) => ({ product_id: l.product.id, name: l.product.name, price: l.pret, quantity: l.bucati })),
       ];
       const payload = {
         business_id: businessId,
         cart_session_id: sessionId || undefined,
         items: allItems,
-        accepted_offer_ids: acceptedBumpOffers.length > 0 ? acceptedBumpOffers.map((o) => o.id) : undefined,
+        accepted_offer_ids: liniiOferte.length > 0 ? liniiOferte.map((l) => l.offerId) : undefined,
         shipping_cost: shipping,
         shipping_token: courierSelection?.token,
         // Vezi `placeCartOrder`: doar pentru masurare, nu pentru decizie.
@@ -784,7 +906,9 @@ export function useCheckoutOrder({
 
 
   return {
-    acceptedBumpOffers,
+    liniiOferte,
+    ofertePeEcran,
+    alegeCadoul,
     acceptedBumps,
     appliedDiscount,
     availablePaymentMethods,

@@ -10,7 +10,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { CourierSelector } from "@/components/ministore/CourierSelector";
 import { CompanyFields } from "@/components/ministore/CompanyFields";
-import { OrderBump } from "@/components/ministore/OrderBump";
+import { OferteDinFormular } from "@/components/ministore/OrderBump";
 import { JUDETE } from "@/lib/ro/judete";
 import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import type { CheckoutEngine } from "./checkout-core";
@@ -66,8 +66,9 @@ export function CheckoutForm({
     liniiNevalidate,
     pricingStare,
     reincearcaPreturile,
-    bumps,
-    acceptedBumpOffers,
+    liniiOferte,
+    ofertePeEcran,
+    alegeCadoul,
     companyBilling,
     companyEnabled,
     customFields,
@@ -287,7 +288,7 @@ export function CheckoutForm({
                  * de 910 lei asigurat pe 89 costa diferenta chiar comerciantul.
                  */
                 ...items.map((i) => ({ productId: i.productId, quantity: i.quantity, personalizare: i.customization })),
-                ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
+                ...liniiOferte.map((l) => ({ productId: l.product.id, quantity: l.bucati })),
               ]}
               subtotal={Math.max(0, goodsTotal - discountAmount)}
               onSelect={setCourierSelection}
@@ -346,8 +347,9 @@ export function CheckoutForm({
             </div>
           ))}
 
-          {/* Order bumps — a real discounted product added with one tap */}
-          <OrderBump businessId={businessId} bumps={bumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
+          {/* Ofertele din formular: bump, upgrade, „cumperi X primesti Y" si cadoul. */}
+          <OferteDinFormular businessId={businessId} oferte={ofertePeEcran} color={color}
+            acceptedIds={acceptedBumps} onToggle={toggleBump} onAlege={alegeCadoul} />
 
           {/* Extras */}
           {extras.length > 0 && (

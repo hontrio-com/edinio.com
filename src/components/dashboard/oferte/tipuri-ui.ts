@@ -1,4 +1,4 @@
-import { Layers, Package, ShoppingCart, Sparkles, Gift, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
+import { CircleArrowUp, Layers, Package, ShoppingCart, Sparkles, Gift, Repeat, TrendingUp, type LucideIcon } from "lucide-react";
 import { DESPRE_TIPUL_OFERTEI, TIPURI_CARE_SE_POT_FACE, type OfferType } from "@/lib/offers/offer.types";
 
 /**
@@ -24,6 +24,7 @@ export const ICOANA_TIPULUI: Record<OfferType, LucideIcon> = {
   frequently_bought: Layers,
   cross_sell: Package,
   order_bump: ShoppingCart,
+  upgrade: CircleArrowUp,
   volume: TrendingUp,
   post_purchase: Repeat,
   bogo: Repeat,

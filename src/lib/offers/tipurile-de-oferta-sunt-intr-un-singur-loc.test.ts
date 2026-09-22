@@ -73,7 +73,11 @@ test("`volume` se poate face, dar NU se rezolvă în vitrină", () => {
    */
   assert.ok(TIPURI_CARE_SE_POT_FACE.includes("volume"));
   assert.ok(!PHASE1_OFFER_TYPES.includes("volume"));
-  assert.deepEqual(PHASE1_OFFER_TYPES, ["frequently_bought", "cross_sell", "order_bump"]);
+  /* ⚠ Lista se DERIVA din `seVedeInVitrina`, deci aici se scrie ce inseamna ea
+     azi. Cele trei tipuri noi (upgrade, bogo, gift) se rezolva si ele in
+     vitrina: se bifeaza in formularul de comanda. */
+  assert.deepEqual(PHASE1_OFFER_TYPES,
+    ["frequently_bought", "cross_sell", "order_bump", "upgrade", "bogo", "gift"]);
 });
 
 test("⚠⚠ eticheta fiecărui tip e scrisă ÎNTR-UN SINGUR fișier", () => {
@@ -119,7 +123,15 @@ test("⚠ tipurile nefăcute spun pe față că sunt nefăcute", () => {
     if (d.sePoateFace) continue;
     assert.match(d.explicatie, /nefăcut/, `„${d.eticheta}” nu spune că nu se poate face încă`);
   }
-  assert.equal(TIPURI_CARE_SE_POT_FACE.length, 4);
+  /*
+    ⚠ SE SPUNE CARE AU RAMAS, nu cate sunt. Un numar se actualizeaza mecanic la
+    fiecare tip nou si nu mai apara nimic; lista spune CHIAR ce a ramas de
+    facut, si cade daca cineva sterge un tip din schema fara sa-l faca.
+  */
+  assert.deepEqual(
+    OFFER_TYPES.filter((t) => !DESPRE_TIPUL_OFERTEI[t].sePoateFace),
+    ["post_purchase", "spend_reward"],
+  );
 });
 
 test("⚠ un tip care oferă produse are și un nume pentru ele", () => {

@@ -437,6 +437,32 @@ export function OffersClient({
                             Apare la {undeApare(o.trigger)}
                             {o.type === "volume" ? ` · ${ceOfera(o)}` : ` · oferă ${ceOfera(o)}`}
                           </p>
+                          {/*
+                            ═══ ⚠⚠ CIFRELE, CÂND COLOANELE LOR NU ÎNCAP ═══
+
+                            Tabelul pornește de la `sm` (640px), dar „Văzută" și
+                            „Acceptată" sunt `hidden md:table-cell` (768px), iar
+                            cardurile de telefon sunt `sm:hidden`. Între cele
+                            două praguri nu se vedea NICIUN număr: nici coloane,
+                            nici carduri. Ecranul vechi arăta perechea ochi/click
+                            pe rând, la orice lățime — deci pe o fereastră de
+                            vreo 700px cifrele chiar au DISPĂRUT la refacere.
+                            Spus de el, verificat în cod.
+
+                            ⚠ Se ascunde de la `md` în sus, unde coloanele își
+                            iau locul: altfel aceleași două numere ar fi scrise
+                            de două ori pe același rând.
+                          */}
+                          <p className="mt-1 flex items-center gap-2.5 text-[11px] text-muted-foreground md:hidden">
+                            <span className="inline-flex items-center gap-1 tabular-nums">
+                              <Eye className="h-3 w-3" /> {scrieCifra(o.impressions)}
+                            </span>
+                            <span className="inline-flex items-center gap-1 tabular-nums">
+                              <MousePointerClick className="h-3 w-3" /> {scrieCifra(o.conversions)}
+                              {rata !== null ? ` · ${scrieRata(rata)}` : ""}
+                            </span>
+                            {o.revenue_added > 0 && <span className="tabular-nums">{formatPrice(o.revenue_added)}</span>}
+                          </p>
                         </td>
                         <td className="px-5 py-3.5">
                           <span className="inline-flex items-center gap-1.5 whitespace-nowrap px-2 py-1 rounded-lg border border-border text-xs font-medium text-foreground">

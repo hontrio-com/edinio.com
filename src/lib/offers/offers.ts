@@ -15,6 +15,7 @@ import { type BumpItem } from "@/lib/offers/bump-pricing";
 import { pretulSetului, type LinieDeSet } from "@/lib/offers/fbt-pricing";
 import { cosulDinLinii, poartaTrece, type CosulDeJudecat } from "@/lib/offers/porti";
 import {
+  bucatileDeclansatorului,
   cereArboreleDeCategorii, expandarePeOferta, normalizeazaIds,
   opresteComanda, pretuiesteOfertele,
   triggerMatchesCart, triggerMatchesProduct, withinWindow,
@@ -23,7 +24,8 @@ import {
 } from "@/lib/offers/offer-pricing";
 import {
   parseOfferTrigger, parseOfferConfig, parseOfferDisplay, cantitateaCeruta, metodaRecomandarii,
-  defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES,
+  bucatiDeCumparat, bucatiDeOferit, cadoulSeAlege, inlocuiesteProdusul, seAcceptaInFormular,
+  defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES, TIPURI_DIN_FORMULAR,
   type OfferType, type OfferConfig, type OfferTrigger, type OfferDisplay,
   type OfferProduct, type ResolvedOffer,
 } from "./offer.types";
@@ -335,6 +337,25 @@ export async function resolveProductOffers(
 }
 
 /**
+ * Trece coșul de „cumperi X bucăți"? Tipurile fără X trec mereu.
+ *
+ * ⚠ ACEEAȘI FUNCȚIE ca la plasarea comenzii (`bucatileDeclansatorului`), nu o
+ * copie: scrise de două ori, afișarea și încasarea s-ar fi despărțit, iar atunci
+ * ori clientul vede un cadou pe care serverul îl refuză, ori ia unul la care
+ * n-avea dreptul.
+ */
+function treceCantitateaCeruta(
+  o: LoadedOffer,
+  cos: CosulDeJudecat,
+  produse: { id: string; category: string | null }[],
+  categoriiExtinse?: Set<string>,
+): boolean {
+  const cerute = bucatiDeCumparat(o.type, o.config);
+  if (cerute <= 0) return true;
+  return bucatileDeclansatorului(o.trigger, cos, produse, o.config.productIds, categoriiExtinse) >= cerute;
+}
+
+/**
  * Offers for the cart / checkout surfaces: order bumps (checkout) and cart
  * cross-sell (cart) that target anything already in the cart. Products already in
  * the cart are excluded. Bump offers carry per-product discounted pricing.
@@ -366,7 +387,12 @@ export async function resolveCartOffers(
     offers.some(cereArboreleDeCategorii) ? (await incarcaArborele(admin, businessId)).randuri : [],
   );
 
-  const wantType: OfferType = surface === "checkout" ? "order_bump" : "cross_sell";
+  /*
+    ⚠⚠ PATRU TIPURI PE SUPRAFAȚA DE CHECKOUT, nu unul. Era `wantType`, un singur
+    tip, fiindcă atât exista. Scris tot ca un singur tip și pentru cele trei noi,
+    fiecare ar fi cerut încă o citire din bază și încă o listă de filtrat.
+  */
+  const tipuriCerute: OfferType[] = surface === "checkout" ? TIPURI_DIN_FORMULAR : ["cross_sell"];
   /*
     ⚠⚠ PORȚILE SE JUDECĂ CU ACEEAȘI FUNCȚIE ca la plasarea comenzii
     (`refuzaOferta` din `offer-pricing.ts`), nu cu o copie scrisă aici. Două
@@ -380,9 +406,19 @@ export async function resolveCartOffers(
   */
   const cosDePoarta = cosSpusDeBrowser ?? cosulDinLinii([]);
   const applicable = offers.filter(
-    (o) => o.type === wantType && o.display.surfaces.includes(surface)
+    (o) => tipuriCerute.includes(o.type) && o.display.surfaces.includes(surface)
       && triggerMatchesCart(o.trigger, cartProducts, extinsele(o))
-      && poartaTrece(o.trigger.conditions, cosDePoarta, o.config.productIds),
+      && poartaTrece(o.trigger.conditions, cosDePoarta, o.config.productIds)
+      /*
+        ⚠⚠ „CUMPERI 2" SE NUMĂRĂ ȘI LA AFIȘARE, cu aceeași funcție ca la comandă
+        (`bucatileDeclansatorului`). Nenumărat aici, clientul ar fi văzut „primești
+        1 gratis" cu o singură bucată în coș, l-ar fi bifat, iar la trimitere
+        comanda s-ar fi OPRIT cu un motiv pe care ecranul nu i-l spusese.
+
+        ⚠ Coșul e cel spus de browser, deci larg: dacă minte, vede oferta și i se
+        refuză comanda. Aceeași alegere ca la porți, din același motiv.
+      */
+      && treceCantitateaCeruta(o, cosDePoarta, cartProducts, extinsele(o)),
   );
   if (applicable.length === 0) return [];
 
@@ -432,18 +468,56 @@ export async function resolveCartOffers(
       amplasare: o.display.amplasare,
       products,
     };
-    // Order bump: a single product with its own discounted price.
-    //
-    // Nu primul produs din lista, ci primul care poate fi luat dintr-o apasare:
-    // unul epuizat trecea de afisare si abia la ultimul clic serverul respingea
-    // TOATA comanda, iar unul cu variante intra fara varianta, la pretul de
-    // baza. Bump-ul n-are cum sa intrebe nimic — de aceea alege doar ce e gata
-    // de adaugat.
-    if (o.type === "order_bump") {
-      const p = products.find((x) => !x.outOfStock && !x.needsChoice);
-      if (!p) continue;
-      base.products = [p];
-      base.pricing = computeSetPricing([{ pret: p.price }], o.config);
+    /*
+      Ofertele care se bifează în formular: bump, upgrade, „cumperi X primești Y"
+      și cadoul. Toate patru oferă produse care intră în comandă cu o apăsare.
+      //
+      Nu primul produs din lista, ci primul care poate fi luat dintr-o apasare:
+      unul epuizat trecea de afisare si abia la ultimul clic serverul respingea
+      TOATA comanda, iar unul cu variante intra fara varianta, la pretul de
+      baza. Bump-ul n-are cum sa intrebe nimic — de aceea alege doar ce e gata
+      de adaugat.
+    */
+    if (seAcceptaInFormular(o.type)) {
+      /* ⚠ ACEEAȘI condiție de vandabilitate ca `setulOfertei` pe server. */
+      const gata = products.filter((x) => !x.outOfStock && !x.needsChoice);
+      if (gata.length === 0) continue;
+      /*
+        ⚠⚠ CADOUL LA ALEGERE ARATĂ TOATE PRODUSELE, celelalte trei doar unul.
+        Și fiecare cadou își poartă PROPRIUL preț redus (`pretOferta`): prețurile
+        lor de catalog sunt deosebite, iar un singur `pricing` pe ofertă ar fi
+        scris același număr pe toate trei.
+      */
+      const laAlegere = cadoulSeAlege(o.type, o.config);
+      const alese = laAlegere ? gata : [gata[0]];
+      base.products = alese.map((p) => ({
+        ...p,
+        pretOferta: computeSetPricing([{ pret: p.price }], o.config)!.price,
+      }));
+      /* ⚠ `pricing` rămâne al PRIMULUI, ca până azi: îl citesc bump-ul și
+         rezumatul. La cadoul la alegere ecranul citește `pretOferta`. */
+      base.pricing = computeSetPricing([{ pret: alese[0].price }], o.config);
+
+      /*
+        Regulile de desenat. Se scriu doar cele care au ce spune: un câmp gol pe
+        fiecare bump ar fi pus browserului o verificare în plus degeaba.
+      */
+      const reguli: NonNullable<ResolvedOffer["reguli"]> = {};
+      if (inlocuiesteProdusul(o.type, o.config)) {
+        reguli.inlocuieste = true;
+        /*
+          ⚠ CINE SE SCHIMBĂ SE HOTĂRĂȘTE PE SERVER. Browserul are doar id-uri de
+          produs, fără categorii, deci pe un declanșator pe categorie ar fi
+          numit „produsul schimbat" o linie pe care oferta n-o atinge.
+        */
+        reguli.deSchimbat = cartProducts
+          .filter((p) => triggerMatchesProduct(o.trigger, p, extinsele(o)))
+          .map((p) => p.id);
+      }
+      const cumperi = bucatiDeCumparat(o.type, o.config);
+      if (cumperi > 0) { reguli.cumperi = cumperi; reguli.primesti = bucatiDeOferit(o.type, o.config); }
+      if (laAlegere) reguli.laAlegere = true;
+      if (Object.keys(reguli).length > 0) base.reguli = reguli;
     }
     resolved.push(base);
   }

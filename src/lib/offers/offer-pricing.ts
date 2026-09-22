@@ -18,15 +18,26 @@ import { aplicaPretPeBucati, type BumpItem } from "./bump-pricing";
 import { imparteEconomiaCompanionilor, pretulSetului, type LinieDeSet } from "./fbt-pricing";
 import { deCeNuTrece, type CosulDeJudecat } from "./porti";
 import { esteUuid } from "@/lib/supabase/ids";
-import { cantitateaCeruta } from "./offer.types";
+import {
+  bucatiDeCumparat, bucatiDeOferit, cadoulSeAlege, cantitateaCeruta,
+  inlocuiesteProdusul, seAcceptaInFormular, TIPURI_DIN_FORMULAR,
+} from "./offer.types";
 import type { OfferConfig, OfferDisplay, OfferProduct, OfferTrigger, OfferType } from "./offer.types";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
-/** Tipurile care chiar schimba un pret la plasarea comenzii. Restul se refuza. */
-export const TIPURI_CU_PRET: OfferType[] = ["order_bump", "frequently_bought"];
+/**
+ * Tipurile care chiar schimba un pret la plasarea comenzii. Restul se refuza.
+ *
+ * ⚠ SE DERIVA din `TIPURI_DIN_FORMULAR`, nu se mai insira de mana: cele patru
+ * oferte care se bifeaza in formular schimba, toate, pretul unei linii. Scrise
+ * separat, un tip nou adaugat acolo si uitat aici ar fi fost aratat pe ecran,
+ * bifat de client, si refuzat cu „tip" la plasare — adica o comanda oprita
+ * pentru un defect de lista.
+ */
+export const TIPURI_CU_PRET: OfferType[] = [...TIPURI_DIN_FORMULAR, "frequently_bought"];
 
 /**
  * Cate oferte poate purta o comanda: sapte bump-uri plus un singur set „cumpara
@@ -57,6 +68,7 @@ export type MotivRefuz =
   | "prea_multe"         // mai multe oferte decat poate arata magazinul
   | "fara_ancora"        // FBT revendicat pe o cale fara produs-ancora (cosul)
   | "poarta"             // portile ofertei nu trec pe cosul asta — vezi `porti.ts`
+  | "prea_putine"        // BOGO: in comanda nu sunt cele X bucati cerute
   | "lipsa_din_comanda"; // produsul oferit nu e in comanda — nu s-a promis nimic
 
 /**
@@ -208,6 +220,76 @@ export function triggerMatchesCart(
 }
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * CÂTE BUCĂȚI DIN CE APRINDE OFERTA SUNT ÎN COȘ                 (22.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Numărul din „cumperi 2, primești 1”. Se socotește DOAR pe produsele pe care
+ * se aprinde declanșatorul, și e altceva decât poarta `minQty`, care numără tot
+ * coșul.
+ *
+ * ⚠⚠ PRODUSUL DĂRUIT IESE DIN SOCOTEALĂ, și fără asta oferta s-ar hrăni singură:
+ * la un declanșator „toate produsele”, un „cumperi 2” s-ar fi împlinit din chiar
+ * bucățile primite gratis, iar clientul ar fi luat trei produse pentru unul. La
+ * afișare produsul oferit nu e în coș (`resolveCartOffers` îl exclude anume), la
+ * comandă E — deci fără excludere cele două căi ar fi răspuns și diferit.
+ *
+ * ⚠ Se întreabă pe COȘ, nu pe linii: același produs poate avea două linii (două
+ * variante), iar `CosulDeJudecat` le-a adunat deja pe produs.
+ *
+ * ⚠ Categoriile vin din `produse`, care le poartă: coșul ține doar id-uri și
+ * sume. De-aia funcția primește amândouă.
+ */
+export function bucatileDeclansatorului(
+  trigger: OfferTrigger,
+  cos: CosulDeJudecat,
+  produse: { id: string; category: string | null }[],
+  produseleOfertei: readonly string[] = [],
+  categoriiExtinse?: Set<string>,
+): number {
+  const fara = new Set(produseleOfertei);
+  let bucati = 0;
+  for (const p of produse) {
+    if (fara.has(p.id)) continue;
+    if (!triggerMatchesProduct(trigger, p, categoriiExtinse)) continue;
+    bucati += cos.perProdus.get(p.id)?.bucati ?? 0;
+  }
+  return bucati;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * DECLANȘATORUL, LA PLASAREA COMENZII                           (22.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Pentru trei din cele patru oferte din formular e chiar `triggerMatchesCart`:
+ * produsul care aprinde oferta e în comandă, fiindcă de-aia s-a arătat oferta.
+ *
+ * ⚠⚠ LA `upgrade` CU SCHIMB NU MAI E, ȘI ASTA E O HOTĂRÂRE, NU O SCĂPARE.
+ * Oferta ia din coș crema de 50 ml și o pune pe cea de 100. Comanda ajunge deci
+ * pe server FĂRĂ produsul care a aprins oferta — chiar oferta l-a scos. Cerut
+ * aici, declanșatorul ar fi căzut pe FIECARE upgrade dus până la capăt, iar
+ * comanda s-ar fi oprit (orice refuz în afară de „lipsă din comandă" oprește).
+ *
+ * ⚠⚠ CE COSTĂ ASTA, SPUS PE FAȚĂ: la un upgrade cu schimb, prețul de schimb îl
+ * poate lua oricine trimite id-ul ofertei cu produsul mare în comandă, fără să
+ * fi avut vreodată produsul mic. Id-ul ajunge în browser, deci e public.
+ * Expunerea e MĂRGINITĂ și se poate socoti: o bucată pe comandă (vezi
+ * `bucatiDeOferit`), adică diferența dintre prețul de catalog al produsului mare
+ * și prețul de schimb. Comerciantul o poate strânge cu porțile („coșul trece
+ * de…", „în coș se află…"), care se judecă oricum mai sus.
+ *
+ * ⚠ Fără schimb, `upgrade` cere declanșatorul ca oricare altul: produsul de pe
+ * care se face schimbul rămâne în comandă, deci n-are de ce să lipsească.
+ */
+function declansatorulSePotriveste(o: OfertaCuReguli, ctx: ContextComanda): boolean {
+  if (triggerMatchesCart(o.trigger, ctx.produse, ctx.categoriiExtinse)) return true;
+  if (!inlocuiesteProdusul(o.type, o.config)) return false;
+  const inComanda = new Set(ctx.produse.map((p) => p.id));
+  return o.config.productIds.some((id) => inComanda.has(id));
+}
+
+/**
  * Se aplica oferta asta pe comanda asta? `null` inseamna da.
  *
  * Aceleasi trei porti ca la afisare, in aceeasi ordine: tipul, fereastra,
@@ -237,11 +319,23 @@ export function refuzaOferta(o: OfertaCuReguli, ctx: ContextComanda, nowMs: numb
   */
   if (deCeNuTrece(o.trigger.conditions, ctx.cos, o.config.productIds) !== null) return "poarta";
 
-  if (o.type === "order_bump") {
-    // Bump-ul se cere cu suprafata „checkout" pe AMBELE cai: si formularul de pe
-    // pagina de produs, si pagina de finalizare trec prin `getCheckoutBumps`.
+  if (seAcceptaInFormular(o.type)) {
+    // Toate patru se cer cu suprafata „checkout" pe AMBELE cai: si formularul de
+    // pe pagina de produs, si pagina de finalizare trec prin `getCheckoutBumps`.
     if (!o.display.surfaces.includes("checkout")) return "suprafata";
-    if (!triggerMatchesCart(o.trigger, ctx.produse, ctx.categoriiExtinse)) return "declansator";
+    if (!declansatorulSePotriveste(o, ctx)) return "declansator";
+    /*
+      ⚠⚠ CELE X BUCATI SE NUMARA AICI, pe liniile adevarate, nu pe ce a spus
+      browserul. La afisare aceeasi socoteala se face pe cosul spus de el
+      (`resolveCartOffers`), fiindca a ARATA nu costa niciun ban — dar a DA
+      gratis o bucata costa, si de-aia numarul se pune din nou aici.
+    */
+    const cerute = bucatiDeCumparat(o.type, o.config);
+    if (cerute > 0) {
+      const are = bucatileDeclansatorului(
+        o.trigger, ctx.cos, ctx.produse, o.config.productIds, ctx.categoriiExtinse);
+      if (are < cerute) return "prea_putine";
+    }
     return null;
   }
   // „Cumparate frecvent impreuna" se vinde numai din pagina produsului-ancora.
@@ -311,6 +405,20 @@ export function setulOfertei(
     return { set };
   }
 
+  /*
+    ⚠⚠ CADOUL LA ALEGERE NU SE OPREȘTE LA PRIMUL. Magazinul arată toată
+    fereastra („alege unul dintre trei”), iar clientul pune în comandă exact
+    unul — dar poate fi al treilea. Cu regula bump-ului, care se oprește la
+    primul produs pe care coșul nu-l putea ascunde, reconstituirea ar fi întors
+    doar cadoul #1, `aplicaOfertaPeLinii` n-ar fi găsit linia lui și cadoul ar fi
+    picat tăcut cu „lipsă din comandă” — adică omul bifa un cadou și primea
+    factura fără el.
+
+    ⚠ Fereastra rămâne aceeași (`maxProducts`, cu alunecarea după cele deja în
+    coș): fără ea, un magazin cu zece cadouri în configurație și trei arătate
+    l-ar fi lăsat pe client să-l ceară pe al zecelea.
+  */
+  const laAlegere = cadoulSeAlege(o.type, o.config);
   const acceptabile: OfferProduct[] = [];
   // Cati candidati fara linie in comanda au ocupat locuri in fereastra afisata:
   // taierea la `maxProducts` se face DUPA excluderea celor din cos, deci
@@ -323,7 +431,7 @@ export function setulOfertei(
       acceptabile.push(p);
       // Primul vandabil pe care cosul nu-l putea ascunde: dincolo de el,
       // magazinul n-avea ce arata.
-      if (!areLinie) break;
+      if (!areLinie && !laAlegere) break;
     }
     if (!areLinie) ocupate++;
   }
@@ -354,7 +462,7 @@ export function aplicaOfertaPeLinii(
   ancora: PretAncora,
   atinse: Set<BumpItem>,
 ): { savings: number; venit: number } | { motiv: MotivRefuz } {
-  if (o.type === "order_bump") {
+  if (seAcceptaInFormular(o.type)) {
     const produse = new Map(set.map((p) => [p.id, p]));
     // De la coada catre inceput: liniile de bump se adauga DUPA cele din cos,
     // deci cand acelasi produs e si in cos si oferit ca bump, cautarea de la
@@ -367,12 +475,25 @@ export function aplicaOfertaPeLinii(
       if (!atinse.has(l) && l.quantity >= 1 && produse.has(l.product_id)) { linie = l; break; }
     }
     if (!linie) return { motiv: "lipsa_din_comanda" };
-    /* ⚠ Bump-ul ramane o bucata: cantitatile sunt doar la set. */
+    /*
+      ⚠⚠ PRETUL SE SOCOTESTE PE O BUCATA, si asta e intelesul beneficiului la
+      toate patru tipurile: „-50%" inseamna jumatate din pretul bucatii, iar
+      „pret fix 10 lei" inseamna zece lei bucata. Socotit pe tot pachetul de Y
+      bucati, „gratuit" ar fi iesit la fel, dar „10 lei" ar fi insemnat zece lei
+      pentru trei bucati — adica alt pret decat cel scris in formular.
+    */
     const pret = pretulSetului([{ pret: produse.get(linie.product_id)!.price }], o.config).price;
-    // Si cand bump-ul nu ieftineste nimic, bucata lui e in comanda si se
+    /*
+      ⚠ CATE BUCATI. Unu la bump, la upgrade si la cadou; la „cumperi X, primesti
+      Y" chiar Y. Se ia MINIMUL cu ce are linia, exact ca `aplicaPretPeBucati`:
+      aici nu se refuza nimic, reconstituirea a hotarat deja.
+    */
+    const bucati = bucatiDeOferit(o.type, o.config);
+    const luate = Math.min(bucati, linie.quantity);
+    // Si cand oferta nu ieftineste nimic, bucatile ei sunt in comanda si se
     // incaseaza: venitul e pretul chiar platit, nu zero.
-    if (pret >= linie.price) return { savings: 0, venit: round2(linie.price) };
-    return { savings: aplicaSiMarcheaza(linii, linie, pret, atinse), venit: round2(pret) };
+    if (pret >= linie.price) return { savings: 0, venit: round2(linie.price * luate) };
+    return { savings: aplicaSiMarcheaza(linii, linie, pret, atinse, bucati), venit: round2(pret * luate) };
   }
 
   // FBT: setul se cumpara intreg sau deloc. Cand lipseste un companion, pretul de

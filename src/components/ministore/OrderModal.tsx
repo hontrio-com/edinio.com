@@ -28,9 +28,12 @@ import { CompanyFields, useCompanyBilling } from "./CompanyFields";
 import { JUDETE } from "@/lib/ro/judete";
 import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
-import { OrderBump } from "./OrderBump";
+import { OferteDinFormular, type OfertaDeAratat } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import { fbtInCos } from "@/lib/offers/fbt-in-cos";
+import {
+  cheileScoase, liniileAcceptate, linieDeSchimbat, ofertePeCareLePoateArata, subtotalulOfertelor,
+} from "@/lib/offers/linii-acceptate";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { ESEC_CUPON } from "@/lib/discounts/mesaj";
@@ -283,6 +286,24 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [hasCouriers, setHasCouriers] = useState(false);
   const [bumps, setBumps] = useState<ResolvedOffer[]>([]);
   const [acceptedBumps, setAcceptedBumps] = useState<Set<string>>(new Set());
+  /** Cadoul la alegere: ce a ales cumpărătorul, pe ofertă. */
+  const [alegeriCadou, setAlegeriCadou] = useState<Record<string, string>>({});
+  /*
+    ⚠⚠ LINIILE DIN COȘ PE CARE UN UPGRADE LE-A SCOS DIN COMANDĂ.
+
+    Se ține aici, în formular, și NU se atinge coșul adevărat: cumpărătorul poate
+    debifa upgrade-ul, iar atunci linia trebuie să se întoarcă. Scoasă direct din
+    coș (prin `onCartLineChange`), debifarea ar fi trebuit s-o pună la loc — și
+    orice închidere a formularului între cele două apăsări ar fi lăsat omul fără
+    produsul lui, fără ca nimic să spună de ce.
+
+    ⚠ La comandă reușită ele pleacă ODATĂ cu liniile comandate către
+    `onCartConsumed`: altfel crema de 50 ml, schimbată cu cea de 100, ar fi rămas
+    în coș după comandă și s-ar fi comandat a doua oară.
+  */
+  const [inlocuite, setInlocuite] = useState<Record<string, string>>({});
+  /* Cheile scoase, derivate o singura data: le cer si filtrul de cos, si lista de golit. */
+  const cheiScoase = cheileScoase(inlocuite);
   const [intlEnabled, setIntlEnabled] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
   // In afara tarii, blocul de firma nu se arata: cifra de control a CUI-ului e
@@ -353,7 +374,23 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
-  const cart = cartLines;
+  /*
+    ⚠⚠ LINIILE SCHIMBATE DE UN UPGRADE IES DINTR-UN SINGUR LOC, chiar de aici.
+    `cart` e sursa pentru subtotal, pentru liniile trimise serverului, pentru
+    cupon, pentru cotarea transportului și pentru ce scrie pe ecran. Scoase
+    numai din unul dintre ele, celelalte ar fi rămas cu produsul înăuntru — iar
+    unul dintre „celelalte” e chiar ce se încasează.
+  */
+  const cart = cheiScoase.size === 0 ? cartLines : cartLines.filter((l) => !cheiScoase.has(lineKey(l)));
+  /*
+    ⚠⚠ CE SE SCOATE DIN COȘUL MAGAZINULUI după o comandă reușită: liniile chiar
+    comandate PLUS cele pe care un upgrade le-a scos. Fără cele din urmă, crema
+    de 50 ml schimbată cu cea de 100 ar fi rămas în coș după comandă și s-ar fi
+    comandat a doua oară, la următoarea finalizare.
+  */
+  const liniiDeGolit = cheiScoase.size === 0
+    ? cart
+    : [...cart, ...cartLines.filter((l) => cheiScoase.has(lineKey(l)))];
   /*
    * ⚠ ACEEASI cheie ca in cos, nu o a doua copie.
    *
@@ -419,19 +456,54 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const esteCompanionFbt = (i: { productId: string }) =>
     (fbtOffer?.items ?? []).some((c) => c.product_id === i.productId);
   const cartSubtotal = cart.reduce((s, i) => s + totalLinieCos(i), 0) - fbt.economieTotala;
-  // Accepted order bumps add their discounted product to the goods subtotal, so it
-  // flows through discount, free-shipping, card-discount and total automatically.
-  // Hide a bump when its product is already in the order (carried cart or FBT set) — it
-  // is already being bought, so offering it again would stack a second discount on it.
-  const visibleBumps = bumps.filter((o) => {
-    const pid = o.products[0]?.id;
-    if (!pid) return false;
-    if (cart.some((c) => c.productId === pid)) return false;
-    if (fbtOffer?.items.some((i) => i.product_id === pid)) return false;
-    return true;
+  /*
+    Ofertele bifabile adaugă produsul lor la subtotalul de marfă, deci el curge
+    singur mai departe în reducere, în transportul gratuit, în reducerea de card
+    și în total.
+
+    ⚠⚠ REGULA STĂ ÎN `lib/offers/linii-acceptate.ts`, nu aici. Era scrisă și
+    aici, și în `checkout-core.ts`, iar cele două se potriveau doar fiindcă
+    niciuna nu se atinsese de la scriere. Cu patru tipuri de ofertă — dintre care
+    unul scoate o linie din coș și altul aduce mai multe bucăți — două copii s-ar
+    fi despărțit la prima retușare, iar despărțirea se vede în bani.
+  */
+  const produseInComanda = new Set<string>([
+    ...cart.map((c) => c.productId),
+    ...(fbtOffer?.items ?? []).map((i) => i.product_id),
+  ]);
+  /* ⚠ COSUL INTREG, nu `cart`: oferta care a scos o linie trebuie s-o gaseasca
+     mai departe, altfel iese chiar ea de pe ecran si pretul ei nu mai intra. */
+  const liniiDeSchimb = cartLines.map((c) => ({ key: lineKey(c), productId: c.productId, quantity: c.quantity }));
+  const visibleBumps = ofertePeCareLePoateArata(bumps, liniiDeSchimb, produseInComanda, inlocuite);
+  const liniiOferte = liniileAcceptate(visibleBumps, acceptedBumps, produseInComanda, alegeriCadou);
+  const bumpSubtotal = subtotalulOfertelor(liniiOferte);
+  /*
+    Ce desenează rândurile de ofertă: linia care intră și, la schimb, cea care
+    iese. Numele și prețul liniei scoase se iau din coșul de ACUM, nu din ce a
+    spus serverul: cumpărătorul poate schimba cantitatea între timp.
+  */
+  const ofertePeEcran: OfertaDeAratat[] = visibleBumps.flatMap((o) => {
+    const linie = liniiOferte.find((l) => l.offerId === o.id)
+      ?? liniileAcceptate([o], new Set([o.id]), produseInComanda, alegeriCadou)[0];
+    if (!linie) return [];
+    const deSchimbat = linieDeSchimbat(o, liniiDeSchimb, inlocuite);
+    /* ⚠ Din cosul INTREG: dupa bifare linia e scoasa din `cart`, iar cautata
+       acolo n-ar mai fi fost gasita — randul ar fi scris pretul intreg in loc
+       de diferenta, si n-ar mai fi spus ce iese din comanda. */
+    const dinCos = deSchimbat ? cartLines.find((c) => lineKey(c) === deSchimbat.key) : undefined;
+    return [{
+      oferta: o,
+      linie,
+      schimba: dinCos
+        ? {
+            nume: dinCos.name,
+            /* ⚠ Prin coș, ca să poarte treptele de cantitate: același număr ca
+               în sertar, pe pagina de coș, aici și la server. */
+            pretPeBucata: dinCos.quantity > 0 ? totalLinieCos(dinCos) / dinCos.quantity : dinCos.price,
+          }
+        : undefined,
+    }];
   });
-  const acceptedBumpOffers = visibleBumps.filter((o) => acceptedBumps.has(o.id) && o.pricing && o.products[0]);
-  const bumpSubtotal = acceptedBumpOffers.reduce((s, o) => s + o.pricing!.price, 0);
   const fbtSubtotal = fbt.companioniNoi.reduce((s, i) => s + i.price * i.quantity, 0);
   const subtotal = Math.round((productSubtotal + cartSubtotal + bumpSubtotal + fbtSubtotal) * 100) / 100;
   // Editarea scrie in DOUA locuri: starea locala, ca formularul sa se actualizeze
@@ -459,7 +531,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const liniiPentruCupon = [
     { productId: product.id, categorie: null, valoare: Math.round(productSubtotal * 100) / 100 },
     ...cart.map((l) => ({ productId: l.productId, categorie: null, valoare: Math.round(l.price * l.quantity * 100) / 100 })),
-    ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, categorie: null, valoare: Math.round(o.pricing!.price * 100) / 100 })),
+    ...liniiOferte.map((l) => ({ productId: l.product.id, categorie: null, valoare: Math.round(l.pret * l.bucati * 100) / 100 })),
     ...fbt.companioniNoi.map((i) => ({ productId: i.product_id, categorie: null, valoare: Math.round(i.price * i.quantity * 100) / 100 })),
   ].filter((l) => l.valoare > 0);
 
@@ -547,9 +619,18 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
          *
          * ⚠ Personalizarea si varianta pleaca pentru fiecare linie, ca linia sa se poata reface.
          *
-         * ⚠ PRETUL E CEL EFECTIV, prin `pretBucataCos`: acolo intra treptele de cantitate si
-         * personalizarea. `i.price` e instantaneul de catalog din localStorage, adica 89 in loc de
-         * 910 pentru un fototapet, si pe numerele astea se judeca pragul automatizarii.
+         * ⚠⚠ PRETUL E CEL CHIAR INCASAT PE BUCATA: `totalLinieCos(i) / i.quantity`.
+         *
+         * Aici scria „prin `pretBucataCos`: acolo intra treptele de cantitate", si NU e adevarat.
+         * `pretBucataCos` e `lineUnit`, iar `lineUnit` inseamna dinadins „o bucata INAINTE de
+         * trepte" — exista ca eticheta „N buc x P" sa se inmulteasca la totalul liniei (vezi
+         * `CartProvider`). Bun pentru ECRAN, gresit pentru INSTANTANEU: un bec de 39 de lei cu
+         * treapta la 2 bucati (70,20, adica 35,10 bucata) se salva la 39, iar subtotalul cosului
+         * abandonat iesea mai mare decat cosul adevarat — chiar numarul pe care pragul „trimite
+         * doar peste 300 de lei" il citeste.
+         *
+         * ⚠ `i.price` ramane oricum exclus: e instantaneul de catalog din localStorage, adica 89
+         * in loc de 910 pentru un fototapet.
          */
         items: [
           {
@@ -561,10 +642,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
             ...(product.variantTitle ? { variant_title: product.variantTitle } : {}),
             ...(customizationPayload ? { customization: customizationPayload } : {}),
           },
-          ...cart.map((i) => ({
+          ...cartLines.map((i) => ({
             product_id: i.productId,
             name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name,
-            price: pretBucataCos(i),
+            price: i.quantity > 0 ? Math.round((totalLinieCos(i) / i.quantity) * 100) / 100 : pretBucataCos(i),
             quantity: i.quantity,
             image_url: i.imageUrl ?? null,
             ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
@@ -575,12 +656,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
     /*
-     * ⚠ `cart` E IN DEPENDINTE. Fara el, o linie scoasa din cos in timp ce formularul e deschis nu
-     * s-ar fi vazut niciodata in instantaneu. `pretBucataCos` nu intra: e refacut la fiecare
-     * randare, deci ar reporni cronometrul fara oprire, iar ce se schimba cu adevarat e `cart`.
+     * ⚠ `cartLines` E IN DEPENDINTE. Fara el, o linie scoasa din cos in timp ce formularul e
+     * deschis nu s-ar fi vazut niciodata in instantaneu. `pretBucataCos` nu intra: e refacut la
+     * fiecare randare, deci ar reporni cronometrul fara oprire.
+     *
+     * ⚠⚠ `cartLines`, NU `cart`: `cart` e cosul DUPA ce un upgrade bifat a scos o linie, iar aia
+     * e o proiectie a formularului, nu cosul omului. Salvat asa, recuperarea i-ar fi trimis inapoi
+     * un cos fara produsul pe care tocmai il avea.
      */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, quantity, product.id, product.name, product.price, product.images, cart]);
+  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, quantity, product.id, product.name, product.price, product.images, cartLines]);
 
   // Funnel event: opening the order form = InitiateCheckout / begin_checkout.
   // The single-product buy-now flow has no cart step, so this is where the
@@ -645,6 +730,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     setCourierSelection(null);
     setHasCouriers(false);
     setAcceptedBumps(new Set());
+    setAlegeriCadou({});
+    /* ⚠ Si liniile scoase de un upgrade: altfel o deschidere noua a formularului
+       ar fi pornit cu o linie ascunsa pentru o oferta nemaibifata. */
+    setInlocuite({});
     // Re-sync the carried cart from the latest prop on open, so products added from the
     // page's cross-sell after this modal first mounted are included in the order.
     //
@@ -714,7 +803,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // de un produs pe care clientul tocmai l-a scos din formular ar fi ramas bifat
   // si ar fi oprit comanda. Lista reincarcata il scoate singura, fiindca
   // `acceptedBumpOffers` se filtreaza pe ofertele inca aplicabile.
-  const idProduseComanda = [product.id, ...cart.map((c) => c.productId)].join(",");
+  /*
+    ⚠⚠ COSUL INTREG (`cartLines`), NU `cart`. Un upgrade bifat SCOATE din
+    comanda produsul pe care il schimba, iar `cart` e cosul DUPA scoatere.
+    Cerute pe el, ofertele se recereau fara chiar produsul care le aprinde,
+    serverul nu mai gasea declansatorul si oferta DISPAREA de pe ecran in
+    clipa bifarii — iar pretul ei nu mai intra in comanda.
+  */
+  const idProduseComanda = [product.id, ...cartLines.map((c) => c.productId)].join(",");
   /*
     ⚠⚠ SI COSUL, pentru PORTILE ofertei („se arata doar daca trece de 200 de
     lei"). Se trimite CE VEDE OMUL: produsul din formular, cu cantitatea si
@@ -731,7 +827,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     /* ⚠ `productSubtotal` e totalul liniei principale, cu trepte cu tot, deci
        impartit la cantitate da chiar pretul pe bucata care se incaseaza. */
     { productId: product.id, quantity, unitPrice: productSubtotal / Math.max(1, quantity) },
-    ...cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: totalLinieCos(c) / Math.max(1, c.quantity) })),
+    ...cartLines.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: totalLinieCos(c) / Math.max(1, c.quantity) })),
   ]);
   useEffect(() => {
     if (!open) return;
@@ -812,6 +908,34 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       if (checked) next.add(offer.id); else next.delete(offer.id);
       return next;
     });
+    /*
+      ⚠⚠ UPGRADE-UL SCOATE LINIA ODATĂ CU BIFA, și o pune la loc la debifare.
+      Linia iese doar din COMANDĂ (vezi `inlocuite`), nu din coșul magazinului:
+      dacă omul se răzgândește, ea trebuie să fie tot acolo. Scoasă din coșul
+      adevărat, o închidere a formularului între bifare și răzgândire i-ar fi
+      șters produsul fără ca nimic să spună de ce.
+
+      ⚠ Se caută linia din coșul ÎNTREG, nu din `cart`: la debifare, linia e deja
+      scoasă din `cart`, deci n-ar mai fi fost găsită și ar fi rămas ascunsă.
+    */
+    if (!offer.reguli?.inlocuieste) return;
+    setInlocuite((prev) => {
+      /* ⚠ Se sterge dupa ID-UL OFERTEI, nu cautand dupa produs: doua upgrade-uri
+         pe acelasi produs si-ar fi sters linia unul altuia. */
+      if (!checked) { const next = { ...prev }; delete next[offer.id]; return next; }
+      const linie = linieDeSchimbat(
+        offer,
+        cartLines.map((l) => ({ key: lineKey(l), productId: l.productId, quantity: l.quantity })),
+        prev,
+      );
+      if (!linie) return prev;
+      return { ...prev, [offer.id]: linie.key };
+    });
+  }
+
+  /** Cadoul la alegere: cumpărătorul a apăsat pe alt produs din listă. */
+  function alegeCadoul(offerId: string, productId: string) {
+    setAlegeriCadou((prev) => ({ ...prev, [offerId]: productId }));
   }
 
   function validate() {
@@ -901,14 +1025,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
          * nicaieri.
          */
         ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle, customization: i.customization })),
-        ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
+        ...liniiOferte.map((l) => ({ product_id: l.product.id, name: l.product.name, quantity: l.bucati })),
         // Doar companionii FARA linie in cos: ceilalti au plecat deja mai sus, cu
         // cantitatea lor reala. Trimisi si aici, serverul ar fi vazut DOUA linii
         // ale aceluiasi produs, ar fi redus-o pe prima (cea din cos) si ar fi
         // incasat-o pe a doua intreaga — companionul platit inca o data.
         ...fbt.companioniNoi.map((i) => ({ product_id: i.product_id, name: i.name, quantity: i.quantity })),
       ];
-      const acceptedOfferIds = [...acceptedBumpOffers.map((o) => o.id), ...(fbtOffer ? [fbtOffer.id] : [])];
+      const acceptedOfferIds = [...liniiOferte.map((l) => l.offerId), ...(fbtOffer ? [fbtOffer.id] : [])];
       const payload = {
         business_id: business.id,
         cart_session_id: sessionId || undefined,
@@ -1102,7 +1226,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           // Order created with the cart folded in — clear it so it isn't re-ordered.
           // Deferred to here so a failed payment start keeps the form (and payloadKey)
           // intact for the retry above.
-          if (cart.length > 0) onCartConsumed?.(cart);
+          if (liniiDeGolit.length > 0) onCartConsumed?.(liniiDeGolit);
           window.location.href = redirect;
           return;
         }
@@ -1110,7 +1234,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         return;
       }
 
-      if (cart.length > 0) onCartConsumed?.(cart);
+      if (liniiDeGolit.length > 0) onCartConsumed?.(liniiDeGolit);
       onClose();
       window.location.href = `${business.basePath}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
     });
@@ -1524,7 +1648,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     // numarat o data, cu toate bucatile lui. Pana acum coletul se
                     // cota pe 1 bucata acolo unde clientul comanda 3.
                     ...fbt.companioniNoi.map((i) => ({ productId: i.product_id, quantity: i.quantity })),
-                    ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
+                    ...liniiOferte.map((l) => ({ productId: l.product.id, quantity: l.bucati })),
                   ]}
                   subtotal={Math.max(0, discountedSubtotal)}
                   onSelect={setCourierSelection}
@@ -1576,7 +1700,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               ))}
 
               {/* Order bumps — a real discounted product added with one tap */}
-              <OrderBump businessId={business.id} bumps={visibleBumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
+              <OferteDinFormular businessId={business.id} oferte={ofertePeEcran} color={color}
+                acceptedIds={acceptedBumps} onToggle={toggleBump} onAlege={alegeCadoul} />
 
               {/* Extras */}
               {extras.length > 0 && (
@@ -1710,10 +1835,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     )}
                   </div>
                 ))}
-                {acceptedBumpOffers.map((o) => (
-                  <div key={o.id} className="flex justify-between" style={{ color }}>
-                    <span className="truncate pr-2">+ {o.products[0]!.name}</span>
-                    <span className="font-medium whitespace-nowrap">{formatPrice(o.pricing!.price)}</span>
+                {liniiOferte.map((l) => (
+                  <div key={l.offerId} className="flex justify-between" style={{ color }}>
+                    <span className="truncate pr-2">
+                      + {l.bucati > 1 ? `${l.bucati} buc ` : ""}{l.product.name}
+                    </span>
+                    <span className="font-medium whitespace-nowrap">
+                      {l.pret <= 0 ? "Gratuit" : formatPrice(Math.round(l.pret * l.bucati * 100) / 100)}
+                    </span>
                   </div>
                 ))}
                 {/* Doar companionii care intra ca linie noua. Cei aflati deja in

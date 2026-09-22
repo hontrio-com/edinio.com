@@ -5424,25 +5424,37 @@ CREATE OR REPLACE FUNCTION public.offer_stoc(bid uuid)
  SET search_path TO ''
 AS $function$
   with baza as (
-    select o.id, o.type,
+    select
+      o.id,
+      o.type,
       coalesce((o.config->>'autoByCategory')::boolean, false) as automat,
       coalesce(o.config->'productIds', '[]'::jsonb) as ids,
-      coalesce(o.config->'cantitati', '{}'::jsonb) as cant
+      coalesce(o.config->'cantitati', '{}'::jsonb) as cant,
+      case when o.type = 'bogo'
+        then greatest(1, coalesce((o.config->>'primestiBucati')::integer, 1))
+        else 1
+      end as bucati_oferite
     from public.offers o
     where o.business_id = bid
-      and o.type in ('frequently_bought', 'cross_sell', 'order_bump')
+      and o.type in ('frequently_bought', 'cross_sell', 'order_bump', 'upgrade', 'bogo', 'gift')
   ),
   linii as (
-    select b.id as offer_id, e.pid,
-      greatest(1, coalesce((b.cant->>e.pid)::integer, 1)) as cerute
+    select
+      b.id as offer_id,
+      e.pid,
+      greatest(1, coalesce((b.cant->>e.pid)::integer, b.bucati_oferite)) as cerute
     from baza b
     cross join lateral jsonb_array_elements_text(b.ids) as e(pid)
     where not b.automat
       and e.pid ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
   )
-  select l.offer_id, count(*)::integer,
+  select
+    l.offer_id,
+    count(*)::integer,
     count(*) filter (
-      where p.id is not null and p.is_active and not p.is_bundle
+      where p.id is not null
+        and p.is_active
+        and not p.is_bundle
         and (not p.track_inventory or p.stock_quantity is null or p.stock_quantity >= l.cerute)
     )::integer
   from linii l
@@ -13650,12 +13662,12 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
-grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(text) to authenticated;
+grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
-grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;

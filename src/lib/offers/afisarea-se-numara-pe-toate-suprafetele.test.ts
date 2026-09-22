@@ -115,7 +115,11 @@ test("orice ecran care ține oferte ori le numără, ori e desenat de unul care 
     ajunge sub ochii unui cumpărător. Cine le atinge într-o componentă de browser
     desenează oferte.
   */
-  const DESENATORI = ["<OrderBump", "<CartRecommendations", "<ProductOffers"];
+  /* ⚠ `<OferteDinFormular` e fostul `<OrderBump`, redenumit cand a ajuns sa
+     deseneze toate patru ofertele din formular, nu doar bump-ul. Plasa a si
+     prins redenumirea: cele doua formulare au iesit din lista in clipa in care
+     componenta si-a schimbat numele. */
+  const DESENATORI = ["<OferteDinFormular", "<CartRecommendations", "<ProductOffers"];
   const vinovate = fisiere(/\.tsx$/)
     .filter((f) => f.s.startsWith('"use client"'))
     .filter((f) => /\b(ResolvedOffer|OfferProduct)\b/.test(f.s))

@@ -182,10 +182,20 @@ test("⚠⚠ AFIȘAREA și COMANDA cheamă aceeași funcție, nu două copii", (
     );
   }
 
-  /* ⚠ Și niciuna nu-și scrie propria comparație pe praguri. */
+  /*
+    ⚠ Și niciuna nu CITEȘTE ea însăși câmpurile porții.
+
+    ⚠⚠ PE CITIREA DE CÂMP (`.minQty`), NU PE NUMELE GOL. Plasa era pe numele
+    simplu și a căzut pe propriul meu comentariu: `bucatileDeclansatorului` spune
+    în proză că „e altceva decât poarta `minQty`”, iar plasa a citit asta ca pe o
+    a doua socoteală. E a cincea oară când un comentariu îmi declanșează propria
+    plasă. O proză care numește o regulă nu e o a doua implementare a ei; ce
+    trebuie oprit e CITIREA câmpului, fiindcă doar de acolo poate porni o
+    comparație scrisă a doua oară.
+  */
   for (const [nume, sursa] of [["offers.ts", afisare], ["offer-pricing.ts", comanda]] as const) {
-    assert.ok(!/minValue/.test(sursa), `${nume} judecă singur pragul pe lei`);
-    assert.ok(!/minQty/.test(sursa), `${nume} judecă singur pragul pe bucăți`);
+    assert.ok(!/\.minValue\b/.test(sursa), `${nume} judecă singur pragul pe lei`);
+    assert.ok(!/\.minQty\b/.test(sursa), `${nume} judecă singur pragul pe bucăți`);
   }
 });
 

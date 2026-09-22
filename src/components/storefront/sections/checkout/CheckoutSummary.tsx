@@ -103,7 +103,7 @@ export function CheckoutTotals({
   freeShippingThreshold: number | null;
 }) {
   const {
-    acceptedBumpOffers, appliedDiscount, cardDiscountAmount, codDiscountAmount, codFeeAmount, discountAmount,
+    liniiOferte, appliedDiscount, cardDiscountAmount, codDiscountAmount, codFeeAmount, discountAmount,
     extrasTotal, goodsTotal, grandTotal, isFreeShippingDiscount, shipping,
     total, vatAmount, vatConfig, liniiNevalidate,
   } = motor;
@@ -126,10 +126,14 @@ export function CheckoutTotals({
           <span>Produse</span>
           <span className="font-medium text-foreground">{suma(total)}</span>
         </div>
-        {acceptedBumpOffers.map((o) => (
-          <div key={o.id} className="flex justify-between" style={{ color }}>
-            <span className="truncate pr-2">+ {o.products[0]!.name}</span>
-            <span className="font-medium whitespace-nowrap">{formatPrice(o.pricing!.price)}</span>
+        {liniiOferte.map((l) => (
+          <div key={l.offerId} className="flex justify-between" style={{ color }}>
+            <span className="truncate pr-2">
+              + {l.bucati > 1 ? `${l.bucati} buc ` : ""}{l.product.name}
+            </span>
+            <span className="font-medium whitespace-nowrap">
+              {l.pret <= 0 ? "Gratuit" : formatPrice(Math.round(l.pret * l.bucati * 100) / 100)}
+            </span>
           </div>
         ))}
         {extrasTotal > 0 && (

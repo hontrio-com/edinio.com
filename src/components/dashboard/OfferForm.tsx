@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { createOffer, updateOffer, type OfferFormData, type OfferRow } from "@/lib/actions/offer.actions";
 import {
   OFFER_DEFAULT_MAX_PRODUCTS, OFFER_MAX_CANTITATE, OFFER_MAX_PRODUCTS,
-  METODE_RECOMANDARE, DESPRE_METODA, metodaRecomandarii,
+  METODE_RECOMANDARE, DESPRE_METODA, metodaRecomandarii, seAcceptaInFormular,
   type OfferType, type OfferScope, type OfferDiscountMode, type MetodaRecomandare,
 } from "@/lib/offers/offer.types";
 import { descriePerioada, perioadaOfertei, ziuaClipei } from "@/lib/zi-romaneasca";
@@ -158,7 +158,13 @@ export function OfferForm({ businessId, products, categories, offer }: {
     din `porti.ts` se judecă însă pentru ORICE tip — un rând care ar avea porți
     puse de mână trebuie să le și primească, nu să le vadă ignorate în tăcere.
   */
-  const arataPorti = type === "order_bump";
+  /*
+    ⚠ PORȚILE SE ARATĂ LA TOATE CELE PATRU OFERTE DIN FORMULAR, nu doar la bump.
+    Erau numai acolo fiindcă doar bump-ul exista; regula din `porti.ts` le-a
+    judecat dintotdeauna pentru orice tip. Iar la cadou ele sunt CHIAR oferta:
+    „peste 300 de lei, primești produsul X” se scrie ca o poartă pe lei.
+  */
+  const arataPorti = seAcceptaInFormular(type);
 
   /*
     ⚠ ASEZAREA SETULUI, ceruta de el. Implicita ramane cea de azi
@@ -178,12 +184,34 @@ export function OfferForm({ businessId, products, categories, offer }: {
   const [cantitati, setCantitati] = useState<Record<string, number>>(offer?.config.cantitati ?? {});
   const arataCantitati = !!meta.cuCantitatiPeProdus;
 
+  /*
+    ═══ CELE TREI TIPURI NOI ═══
+
+    ⚠ Toate trei se bifează în formularul de comandă, ca bump-ul, deci toate
+    primesc și porțile. Erau arătate doar la bump fiindcă doar el exista; regula
+    din `porti.ts` le-a judecat dintotdeauna pentru orice tip.
+  */
+  /** `upgrade`: produsul de pe care se face schimbul iese din comandă. */
+  const [inlocuieste, setInlocuite] = useState(offer ? offer.config.inlocuieste !== false : true);
+  /** `bogo`: câte bucăți se cumpără și câte se primesc. Text cât timp omul scrie. */
+  const [cumperiBucati, setCumperiBucati] = useState(String(offer?.config.cumperiBucati ?? 2));
+  const [primestiBucati, setPrimestiBucati] = useState(String(offer?.config.primestiBucati ?? 1));
+  /** `gift`: cumpărătorul alege cadoul dintre produsele din listă. */
+  const [cadouLaAlegere, setCadouLaAlegere] = useState(offer?.config.cadouLaAlegere === true);
+
   // Switch type (create mode only): reset the discount to the new type's default.
   function chooseType(t: OfferType) {
+    const m = metaFor(t);
     setType(t);
-    setDiscountMode(metaFor(t).reducereImplicita);
-    if (metaFor(t).unProdus) setOfferedIds((prev) => prev.slice(0, 1));
-    if (!metaFor(t).automatDinCategorie) setMetoda("manual");
+    setDiscountMode(m.reducereImplicita);
+    /*
+      ⚠ „Gratuit" e preț fix ZERO, iar câmpul pornește gol. Fără rândul ăsta, un
+      cadou nou se deschidea pe „Preț fix" cu câmpul necompletat, iar salvarea
+      cădea cu „Seteaza un pret fix valid" pentru chiar implicita tipului.
+    */
+    if (m.cuGratuit && m.reducereImplicita === "fixed_price") setFixedPrice("0");
+    if (m.unProdus) setOfferedIds((prev) => prev.slice(0, 1));
+    if (!m.automatDinCategorie) setMetoda("manual");
   }
 
   function addOffered(id: string) {
@@ -202,6 +230,29 @@ export function OfferForm({ businessId, products, categories, offer }: {
     return { was: p.price, now: Math.max(0, Math.round(price * 100) / 100) };
   }, [meta.unProdus, offeredIds, byId, discountMode, discountPercent, discountAmount, fixedPrice]);
 
+  /*
+    ═══ BENEFICIUL, CA PATRU BUTOANE ═══
+
+    ⚠ „Gratuit" e o SCURTĂTURĂ către preț fix zero, nu un al cincilea mod. Cele
+    patru moduri din schemă îl exprimă deja exact, iar unul nou ar fi cerut un
+    rând în parser, în `modBundle` și în fiecare loc care ramifică pe mod.
+  */
+  const beneficii = [
+    ...(meta.cuGratuit ? [{ cheie: "gratuit" as const, label: "Gratuit" }] : []),
+    { cheie: "percent" as const, label: "Reducere %" },
+    { cheie: "amount" as const, label: "Reducere sumă" },
+    { cheie: "fixed_price" as const, label: meta.unProdus ? "Preț fix" : "Preț fix set" },
+  ];
+  const beneficiuAles: "gratuit" | OfferDiscountMode =
+    meta.cuGratuit && discountMode === "fixed_price" && Number(fixedPrice) === 0 ? "gratuit" : discountMode;
+  function alegeBeneficiul(c: (typeof beneficii)[number]["cheie"]) {
+    if (c === "gratuit") { setDiscountMode("fixed_price"); setFixedPrice("0"); return; }
+    /* ⚠ Se golește zeroul lăsat de „Gratuit", altfel „Preț fix" s-ar fi deschis
+       pe un câmp care arată 0 și pare completat. */
+    if (c === "fixed_price" && Number(fixedPrice) === 0) setFixedPrice("");
+    setDiscountMode(c);
+  }
+
   function save() {
     if (!name.trim()) { toast.error("Oferta are nevoie de un nume."); return; }
     if (scope === "products" && triggerIds.length === 0) { toast.error("Alege cel putin un produs pe care sa apara oferta."); return; }
@@ -214,7 +265,44 @@ export function OfferForm({ businessId, products, categories, offer }: {
       const usesAuto = meta.automatDinCategorie && autoByCategory;
       if (!usesAuto && offeredIds.length === 0) { toast.error("Alege cel putin un produs de oferit."); return; }
     }
-    if (meta.areReducere && discountMode === "fixed_price" && !(Number(fixedPrice) > 0)) { toast.error("Seteaza un pret fix valid."); return; }
+    /*
+      ⚠ ZERO E UN PREȚ VALID la ofertele care pot da gratuit. „Gratuit" se scrie
+      chiar ca preț fix zero (vezi `cuGratuit`), iar verificarea de dinainte,
+      scrisă pe vremea când doar bump-ul avea preț fix, ar fi refuzat salvarea
+      fiecărui cadou din platformă cu „Seteaza un pret fix valid".
+    */
+    if (meta.areReducere && discountMode === "fixed_price"
+        && !(meta.cuGratuit ? Number(fixedPrice) >= 0 : Number(fixedPrice) > 0)) {
+      toast.error("Seteaza un pret fix valid."); return;
+    }
+    if (meta.cuBucatiXY) {
+      const x = Math.floor(Number(cumperiBucati) || 0);
+      const y = Math.floor(Number(primestiBucati) || 0);
+      if (x < 1 || y < 1) { toast.error("Scrie câte bucăți se cumpără și câte se primesc."); return; }
+      if (x > OFFER_MAX_CANTITATE || y > OFFER_MAX_CANTITATE) {
+        toast.error(`Cel mult ${OFFER_MAX_CANTITATE} bucăți de fiecare parte.`); return;
+      }
+      /*
+        ⚠⚠ ACELAȘI PRODUS DE AMÂNDOUĂ PĂRȚILE NU POATE MERGE, și se spune aici,
+        nu se lasă să se salveze o ofertă care n-ar apărea niciodată.
+
+        Oferta ADAUGĂ produsul primit ca linie nouă, iar produsul care e deja în
+        coș nu se mai poate oferi (s-ar fi redus de două ori aceeași linie). Deci
+        „cumperi 2 becuri, primești 1 bec" n-ar avea ce să arate.
+
+        ⚠ Pentru chiar cazul ăsta există „Reducere cantitate": „de la 3 bucăți,
+        −33%" e același lucru, și e scris pe produs, deci merge pe toate căile —
+        și în coș, și în comanda directă, și la marketplace.
+      */
+      if (scope === "products" && offeredIds.some((id) => triggerIds.includes(id))) {
+        toast.error(
+          "Produsul primit e chiar unul dintre cele cumpărate. Pentru „cumperi 2, primești 1” din "
+          + "ACELAȘI produs, folosește „Reducere cantitate”: acolo prețul scade pe bucată și merge peste tot.",
+          { duration: 12000 },
+        );
+        return;
+      }
+    }
 
     /*
       ⚠ ACEEASI REGULA CA PE SERVER, chemata — nu scrisa a doua oara. Serverul
@@ -272,6 +360,16 @@ export function OfferForm({ businessId, products, categories, offer }: {
               .map((x) => ({ min_qty: Math.floor(Number(x.min_qty) || 0), percent: Number(x.percent) || 0 }))
               .filter((x) => x.min_qty >= 2 && x.percent > 0 && x.percent < 100)
           : undefined,
+        /*
+          ⚠ Cele trei câmpuri noi pleacă DOAR de la tipul care le folosește.
+          Trimise de peste tot, parserul le-ar fi scris pe rândurile tuturor
+          ofertelor, iar cele 13 de pe producție ar fi căpătat câmpuri noi la
+          prima salvare — fără ca nimic să se schimbe pentru ele.
+        */
+        inlocuieste: meta.cuSchimb ? inlocuieste : undefined,
+        cumperiBucati: meta.cuBucatiXY ? Math.max(1, Math.floor(Number(cumperiBucati) || 1)) : undefined,
+        primestiBucati: meta.cuBucatiXY ? Math.max(1, Math.floor(Number(primestiBucati) || 1)) : undefined,
+        cadouLaAlegere: meta.cuCadouLaAlegere ? cadouLaAlegere : undefined,
       },
       /* ⚠ `display` nu mai pleaca gol: poarta asezarea. Restul campurilor lui
          (suprafete, stil) se completeaza tot pe server, ca pana acum. */
@@ -353,8 +451,20 @@ export function OfferForm({ businessId, products, categories, offer }: {
       <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Tag className="h-4 w-4 text-primary" /> Când apare</h2>
+          {/*
+            ⚠ Textul spune CE ÎNSEAMNĂ declanșatorul la tipul ales. Era scris
+            după `unProdus`, care acum e adevărat și la upgrade, și fals la
+            cadou — deci cadoul ar fi scris „apare pe pagina produsului”, unde
+            nu apare niciodată.
+          */}
           <p className="text-xs text-muted-foreground mt-0.5">
-            {meta.unProdus ? "Oferta apare la checkout când coșul conține:" : "Oferta apare pe pagina produsului pentru:"}
+            {type === "bogo"
+              ? "Se numără bucățile din coș din:"
+              : type === "upgrade"
+                ? "Oferta apare în formularul de comandă, pentru produsul de schimbat:"
+                : seAcceptaInFormular(type)
+                  ? "Oferta apare în formularul de comandă când coșul conține:"
+                  : "Oferta apare pe pagina produsului pentru:"}
           </p>
         </div>
         <div className="grid sm:grid-cols-3 gap-2">
@@ -525,6 +635,122 @@ export function OfferForm({ businessId, products, categories, offer }: {
       </div>
       )}
 
+      {/*
+        ═══ REGULILE CELOR TREI TIPURI NOI ═══
+
+        ⚠ O SINGURĂ CASETĂ, cu bucăți care se aprind după tip. Trei casete
+        separate ar fi arătat la fel și ar fi cerut trei locuri de ținut minte;
+        aici se vede dintr-o privire că e „regula ofertei”, oricare ar fi ea.
+      */}
+      {(meta.cuBucatiXY || meta.cuSchimb || meta.cuCadouLaAlegere) && (
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-primary" /> Regula ofertei
+          </h2>
+
+          {meta.cuBucatiXY && (
+            <>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                <span>Cumpără</span>
+                <input value={cumperiBucati} inputMode="numeric"
+                  onChange={(e) => setCumperiBucati(e.target.value)}
+                  className={inputCls + " max-w-[80px]"} placeholder="2" />
+                <span>bucăți &rarr; primește</span>
+                <input value={primestiBucati} inputMode="numeric"
+                  onChange={(e) => setPrimestiBucati(e.target.value)}
+                  className={inputCls + " max-w-[80px]"} placeholder="1" />
+                <span>bucăți din produsul de mai sus.</span>
+              </div>
+              {/*
+                ⚠⚠ SE SPUNE CE SE NUMĂRĂ ȘI CE NU. Fără rândul ăsta, un
+                comerciant cu declanșator „toate produsele” ar fi crezut că
+                „cumperi 2” înseamnă „două produse deosebite”, când înseamnă
+                două BUCĂȚI — iar produsul dăruit nu intră în numărătoare, ca
+                oferta să nu se hrănească singură.
+              */}
+              <p className="rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
+                Se adună BUCĂȚILE din coș, din produsele alese la „Când apare”. Produsul primit
+                NU se numără. Numărul se pune din nou la trimiterea comenzii, pe liniile adevărate.
+              </p>
+              {/*
+                ⚠⚠ SE SPUNE ÎNAINTE SĂ ÎNCERCE. Oferta adaugă produsul primit ca
+                linie nouă, deci produsul primit trebuie să fie ALTUL decât cel
+                cumpărat. Pentru „2 la preț de 1” din același produs unealta
+                potrivită există deja și merge pe toate căile.
+              */}
+              <p className="rounded-lg border border-border p-2.5 text-xs text-muted-foreground">
+                Produsul primit trebuie să fie <strong className="text-foreground">altul</strong> decât cel
+                cumpărat. Pentru „2 la preț de 1” din <strong className="text-foreground">același</strong> produs,
+                folosește „Reducere cantitate”: acolo prețul scade pe bucată și se aplică peste tot,
+                nu doar în formularul de comandă.
+              </p>
+            </>
+          )}
+
+          {meta.cuSchimb && (
+            <>
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                <span className="min-w-0">
+                  <span className="block text-sm text-foreground">Scoate din comandă produsul schimbat</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    Așa înseamnă „treci la”: produsul mic iese, cel mare îi ia locul. Oprit, oferta
+                    devine o simplă adăugare, ca oferta de checkout.
+                  </span>
+                </span>
+                <Switch checked={inlocuieste} onCheckedChange={setInlocuite} />
+              </label>
+              {/*
+                ⚠⚠ SE SPUNE PE FAȚĂ CE COSTĂ SCHIMBUL. La schimb, produsul care
+                aprinde oferta nu mai e în comandă — chiar oferta l-a scos — deci
+                declanșatorul nu se mai poate cere la plasare. Nescris aici,
+                comerciantul ar fi crezut că prețul de schimb e păzit de
+                declanșator, când el e păzit doar de porți.
+              */}
+              {inlocuieste && (
+                <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs text-foreground">
+                  ⚠ La schimb, produsul mic iese din comandă, deci la trimitere nu se mai poate
+                  verifica că a fost vreodată acolo. Prețul de schimb îl poate primi orice comandă
+                  care conține produsul mare, o singură bucată. Dacă vrei să-l strângi, folosește
+                  porțile de mai jos („în coș se află…”).
+                </p>
+              )}
+            </>
+          )}
+
+          {meta.cuCadouLaAlegere && (
+            <>
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                <span className="min-w-0">
+                  <span className="block text-sm text-foreground">Clientul alege cadoul</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    Se arată toate produsele de mai sus, iar cumpărătorul apasă pe unul. Oprit, se
+                    dă primul care se poate da.
+                  </span>
+                </span>
+                <Switch checked={cadouLaAlegere} onCheckedChange={setCadouLaAlegere} />
+              </label>
+              {cadouLaAlegere && (
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                  <span className="min-w-0">
+                    <span className="block text-sm text-foreground">Arată cel mult</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                      Câte cadouri intră în rând. Trei încap fără derulare pe telefon.
+                    </span>
+                  </span>
+                  <input type="number" min={1} max={OFFER_MAX_PRODUCTS} value={maxProduse}
+                    onChange={(e) => setMaxProduse(Math.min(OFFER_MAX_PRODUCTS, Math.max(1, Math.floor(Number(e.target.value) || 1))))}
+                    className="w-20 shrink-0 rounded-lg border border-input bg-transparent px-2 py-1.5 text-sm text-foreground outline-none focus-visible:border-ring" />
+                </label>
+              )}
+              <p className="rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
+                Cadoul se dă când trec porțile de mai jos. Fără nicio poartă, îl primește oricine
+                comandă — de obicei se pune „Coșul trece de …”.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       {/* CÂT REDUC — discount (hidden for cross_sell) */}
       {meta.areReducere && (
         <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
@@ -534,26 +760,34 @@ export function OfferForm({ businessId, products, categories, offer }: {
               {meta.unProdus ? "Reducerea aplicată produsului oferit." : "Reducerea aplicată setului cumpărat împreună."}
             </p>
           </div>
-          <div className="grid sm:grid-cols-3 gap-2">
-            {([
-              { mode: "percent", label: "Reducere %" },
-              { mode: "amount", label: "Reducere sumă" },
-              { mode: "fixed_price", label: meta.unProdus ? "Preț fix" : "Preț fix set" },
-            ] as const).map((o) => (
-              <button key={o.mode} type="button" onClick={() => setDiscountMode(o.mode)}
-                className={`px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors ${discountMode === o.mode ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
+          {/*
+            ⚠ „GRATUIT" NU E UN MOD NOU DE REDUCERE, ci preț fix ZERO. Un al
+            cincilea mod ar fi cerut un rând nou în parser, în `modBundle` și în
+            fiecare loc care ramifică pe mod — pentru o valoare pe care cele
+            patru de acum o exprimă deja exact. Butonul e doar o scurtătură care
+            scrie același lucru.
+          */}
+          <div className={`grid gap-2 ${meta.cuGratuit ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+            {beneficii.map((o) => (
+              <button key={o.cheie} type="button" onClick={() => alegeBeneficiul(o.cheie)}
+                className={`px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors ${beneficiuAles === o.cheie ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
                 {o.label}
               </button>
             ))}
           </div>
           <div className="flex items-center gap-2">
+            {beneficiuAles === "gratuit" && (
+              <p className="text-sm text-muted-foreground">
+                Produsul intră în comandă la 0 lei. Se vede scris „Gratuit”, nu „0,00 lei”.
+              </p>
+            )}
             {discountMode === "percent" && (
               <><input type="number" min="0" max="100" step="1" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} placeholder="ex: 10" className={`${inputCls} w-40`} /><span className="text-sm text-muted-foreground">% reducere</span></>
             )}
             {discountMode === "amount" && (
               <><input type="number" min="0" step="1" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="ex: 50" className={`${inputCls} w-40`} /><span className="text-sm text-muted-foreground">lei reducere</span></>
             )}
-            {discountMode === "fixed_price" && (
+            {discountMode === "fixed_price" && beneficiuAles !== "gratuit" && (
               <><input type="number" min="0" step="0.01" value={fixedPrice} onChange={(e) => setFixedPrice(e.target.value)} placeholder="ex: 99" className={`${inputCls} w-40`} /><span className="text-sm text-muted-foreground">lei</span></>
             )}
           </div>

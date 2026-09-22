@@ -8,7 +8,7 @@ import {
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
 import {
-  BarChart3, Loader2, Plug, Check, CircleCheck, Clock, X, RefreshCw,
+  BarChart3, Loader2, Plug, Check, CircleCheck, Clock, RefreshCw,
   Link2, ExternalLink, Users, MousePointerClick, Eye, Zap, Timer,
   Target, ShoppingCart, BadgeDollarSign, Radio, Globe, FileText,
   Layers, Share2, Monitor, Smartphone, Tablet, Package, ArrowUpRight,
@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import { Switch } from "@/components/ui/switch";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 
 /* ─── Romanian labels for GA-reported values ──────────────────────────────── */
 
@@ -469,8 +470,15 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
 
       {/* Disconnect */}
       <div className="flex justify-end">
-        <button
-          onClick={() => startDisconnect(async () => {
+        {/* ⚠ Aici legatura e facuta MANUAL: nu exista token de la Google, doar ID-ul de
+            masurare si secretul server-side. De aceea textul spune ce se sterge chiar
+            in acest caz, nu ce se sterge la conectarea prin cont. */}
+        <ButonDeconectare
+          nume="Google Analytics"
+          cePierzi="Setările Google Analytics se șterg din Edinio: ID-ul de măsurare și secretul pentru măsurarea server-side. Tag-ul GA4 nu se mai încarcă pe magazin, iar datele strânse până acum rămân în contul tău Google Analytics."
+          eticheta="Deconectează Google Analytics"
+          pending={disconnecting}
+          onConfirma={() => startDisconnect(async () => {
             let res: Awaited<ReturnType<typeof disconnectGoogleAnalytics>>;
             try {
               res = await disconnectGoogleAnalytics(businessId);
@@ -490,10 +498,7 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
             toast.success("Google Analytics deconectat.");
             router.refresh();
           })}
-          disabled={disconnecting}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50">
-          {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Deconectează Google Analytics
-        </button>
+        />
       </div>
     </div>
   );
@@ -813,8 +818,12 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
 
       {/* Disconnect */}
       <div className="flex justify-end">
-        <button
-          onClick={() => startDisconnect(async () => {
+        <ButonDeconectare
+          nume="Google Analytics"
+          cePierzi="Cheia de acces la contul Google, proprietatea legată și ID-ul de măsurare se șterg din Edinio, iar tag-ul GA4 nu se mai încarcă pe magazin. Ca să te întorci, conectezi din nou contul Google. Datele strânse până acum rămân în Google Analytics."
+          eticheta="Deconectează Google Analytics"
+          pending={disconnecting}
+          onConfirma={() => startDisconnect(async () => {
             let res: Awaited<ReturnType<typeof disconnectGoogleAnalytics>>;
             try {
               res = await disconnectGoogleAnalytics(businessId);
@@ -834,10 +843,7 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
             toast.success("Google Analytics deconectat.");
             router.refresh();
           })}
-          disabled={disconnecting}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50">
-          {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Deconectează Google Analytics
-        </button>
+        />
       </div>
     </div>
   );

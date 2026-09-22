@@ -9,6 +9,7 @@ import {
   saveBrevoSettings, syncExistingCustomers, syncBrevoCatalog,
 } from "@/lib/actions/brevo.actions";
 import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import type { BrevoPublicConfig, BrevoList, BrevoTemplate } from "@/lib/brevo";
 
 const inputCls =
@@ -219,10 +220,15 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
               <p className="text-xs text-muted-foreground truncate">{config.account_name || config.account_email || "Cont Brevo"}</p>
             </div>
           </div>
-          <button type="button" onClick={disconnect} disabled={saving}
-            className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50 flex-shrink-0">
-            Deconecteaza
-          </button>
+          {/* ⚠ `cePierzi` e citit din `disconnectBrevo`: sterge webhookul de la ei, apoi pune
+              `brevo_config` pe null, adica cheia SI toate setarile din Edinio. */}
+          <ButonDeconectare
+            nume="Brevo"
+            cePierzi="Cheia API și setările se șterg din Edinio, iar webhookul pus de noi în contul tău Brevo se șterge și el. Contactele trimise deja rămân în Brevo, dar ca să te întorci ceri o cheie nouă de acolo."
+            pending={saving}
+            onConfirma={disconnect}
+            className="flex-shrink-0"
+          />
         </div>
       ) : (
         <div className="mt-6 space-y-3">

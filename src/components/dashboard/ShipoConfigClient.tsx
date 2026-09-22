@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react";
 import {
   disconnectShipo, getShipoServiciiAction, saveShipoConfig, testShipoConnectionAction,
 } from "@/lib/actions/shipo.actions";
 import type { AdresaExpeditor, CurierShipo, FormatEticheta, ServiciuShipo, ShipoConfig } from "@/lib/shipo/client";
 import { VALOARE_DECLARATA } from "@/lib/shipo/expediere";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -208,9 +209,12 @@ export function ShipoConfigClient({
             Testeaza conexiunea
           </Button>
           {areCheie && (
-            <Button type="button" variant="ghost" onClick={deconecteaza}>
-              <Unplug className="h-4 w-4" /> Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Shipo"
+              cePierzi="Cheia de API se șterge din Edinio, împreună cu adresa de ridicare și serviciile alese. Ca să te întorci, generezi din nou o cheie din contul Shipo. Expedierile deja emise rămân la ei."
+              marime="default"
+              onConfirma={deconecteaza}
+            />
           )}
         </div>
 

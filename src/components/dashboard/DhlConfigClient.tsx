@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Ban, CheckCircle, Info, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, Info, Loader2 } from "lucide-react";
 import {
   disconnectDhl, getDhlProduseAction, saveDhlConfig, testDhlConnectionAction,
 } from "@/lib/actions/dhl.actions";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
@@ -360,9 +361,12 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
             Testeaza conexiunea
           </Button>
           {areChei && (
-            <Button type="button" variant="ghost" onClick={deconecteaza}>
-              <Unplug className="h-4 w-4" /> Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="DHL Express"
+              cePierzi="Se șterge toată configurarea DHL din Edinio: utilizatorul MyDHL API, parola, numărul de cont, adresa de expediție și setările de etichetă. Ca să te întorci, le ceri din nou de la consultantul tău DHL Express. Expedierile deja emise rămân emise la DHL: ei nu au anulare de expediere."
+              marime="default"
+              onConfirma={deconecteaza}
+            />
           )}
         </div>
         {!areExpeditor && (

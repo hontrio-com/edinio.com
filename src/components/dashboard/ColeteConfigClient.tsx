@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle, Loader2, Plug, PlugZap, RefreshCw } from "lucide-react";
+import { CheckCircle, Loader2, PlugZap, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { saveCOConfig, disconnectCO, testCOConnection } from "@/lib/actions/colete.actions";
 import type { COConfig, COSender } from "@/lib/colete";
 import { cn } from "@/lib/utils/cn";
@@ -317,10 +318,13 @@ export default function ColeteConfigClient({
           </Button>
 
           {isConnected && (
-            <Button variant="destructive" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Plug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Colete Online"
+              cePierzi="Se șterge toată configurarea Colete Online din Edinio: Client ID, Client Secret, adresa expeditorului și opțiunile de expediere. La Colete Online nu se atinge nimic, iar AWB-urile deja emise rămân pe comenzi."
+              pending={disconnecting}
+              marime="default"
+              onConfirma={handleDisconnect}
+            />
           )}
         </div>
       </div>

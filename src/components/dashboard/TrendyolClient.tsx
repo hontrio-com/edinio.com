@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   AlertTriangle, Check, CheckCircle, ClipboardCheck, Clock, Info, Layers,
-  Loader2, RefreshCw, ThumbsUp, Unplug, XCircle,
+  Loader2, RefreshCw, ThumbsUp, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
@@ -207,7 +208,8 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   };
 
   const handleDisconnect = () => {
-    if (!window.confirm("Sigur deconectezi Trendyol? Listările locale se șterg (produsele rămân pe Trendyol).")) return;
+    /* ⚠ Fara `window.confirm`: intrebarea o pune `ButonDeconectare`, in fereastra
+       casei. Doua intrebari una peste alta se invata sa se apese fara citire. */
     setActiune("deconectare");
     startTransition(async () => {
       let res: Awaited<ReturnType<typeof disconnectTrendyol>>;
@@ -352,7 +354,17 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
         <ul className="mt-4 grid gap-x-10 gap-y-3.5 sm:grid-cols-2">
           {PREREQUISITES.map((p) => (
             <li key={p.titlu} className="flex gap-2.5">
-              <Check className="mt-[3px] h-3.5 w-3.5 flex-shrink-0 text-primary" />
+              {/*
+                ⚠ CHIAR BIFA DE PE CARDURILE DE PRET ale site-ului de prezentare,
+                cerută de el pe 22.09.2026: `h-4 w-4`, `strokeWidth={2.5}`, verde.
+                Vezi `PricingSection.tsx`. Verdele e acelasi simbol in amandoua
+                locurile: site-ul scrie `VERDE_CITIBIL`, care e `var(--primary)`,
+                adica exact ce da `text-primary` aici.
+
+                ⚠ Cea dinainte era `h-3.5` cu grosimea implicita (2), adica o bifa
+                mai subtire si mai mica decat a lui. Se vedea alaturi.
+              */}
+              <Check className="mt-[3px] h-4 w-4 flex-shrink-0 text-primary" strokeWidth={2.5} />
               <span className="min-w-0">
                 <span className="block text-[13px] font-medium text-foreground">{p.titlu}</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{p.text}</span>
@@ -445,10 +457,12 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   {" · "}{status.storefrontLabel} ({status.currency})
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={ruleaza("deconectare")}>
-                {ruleaza("deconectare") ? <Loader2 className="animate-spin" /> : <Unplug />}
-                Deconectează
-              </Button>
+              <ButonDeconectare
+                nume="Trendyol"
+                cePierzi="Cheile se șterg din Edinio, iar listările locale se pierd. Produsele rămân pe Trendyol, dar Edinio nu le mai poate trimite prețul și stocul."
+                pending={ruleaza("deconectare")}
+                onConfirma={handleDisconnect}
+              />
             </div>
           </Panel>
 

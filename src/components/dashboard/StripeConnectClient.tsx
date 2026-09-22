@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, AlertCircle, Loader2, Link2, Link2Off, ExternalLink, RefreshCw } from "lucide-react";
+import { CheckCircle, AlertCircle, Loader2, Link2, ExternalLink, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 
 export interface StripeConfig {
   account_id?: string;
@@ -56,7 +57,10 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
   }
 
   async function handleDisconnect() {
-    if (!confirm("Esti sigur ca vrei sa deconectezi Stripe? Platile cu cardul vor fi dezactivate.")) return;
+    /* ⚠ Fara `confirm` aici: intrebarea o pune `ButonDeconectare`, in fereastra casei.
+       Doua intrebari una peste alta se invata sa se apese fara citire.
+       ⚠ `loading` e steagul comun al ecranului, si tot el tinea butonul de deconectare
+       stins. Il dam mai departe ca `pending`, ca sa nu pierdem stingerea aia. */
     setLoading(true);
     setError("");
     try {
@@ -165,10 +169,13 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
               {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
               Acceseaza dashboard Stripe
             </Button>
-            <Button variant="destructive" onClick={handleDisconnect} disabled={loading}>
-              <Link2Off />
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Stripe"
+              cePierzi="Legătura cu contul tău Stripe se șterge din Edinio și cumpărătorii nu mai pot plăti cu cardul. Banii și plățile rămân în contul tău Stripe. Ca să te întorci, reiei conectarea de la capăt: Edinio deschide un cont Connect nou, iar Stripe îl verifică din nou."
+              pending={loading}
+              marime="default"
+              onConfirma={handleDisconnect}
+            />
           </>
         ) : isAwaiting ? (
           <>
@@ -180,10 +187,13 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
               {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
               Continua pe Stripe
             </Button>
-            <Button variant="destructive" onClick={handleDisconnect} disabled={loading}>
-              <Link2Off />
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Stripe"
+              cePierzi="Legătura cu contul tău Stripe se șterge din Edinio și cumpărătorii nu mai pot plăti cu cardul. Banii și plățile rămân în contul tău Stripe. Ca să te întorci, reiei conectarea de la capăt: Edinio deschide un cont Connect nou, iar Stripe îl verifică din nou."
+              pending={loading}
+              marime="default"
+              onConfirma={handleDisconnect}
+            />
           </>
         ) : isPending ? (
           <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>

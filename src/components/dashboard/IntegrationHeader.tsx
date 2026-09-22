@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { LegaturaDePanou } from "@/components/dashboard/LegaturaDePanou";
 
 // Single source of truth for integration logos, so every integration page shows
 // the same header: a "← Integrari" back link + the brand logo (no redundant name).
@@ -65,13 +65,20 @@ export function IntegrationHeader({ id, description }: { id: string; description
   const logo = LOGOS[id];
   return (
     <div className="mb-6">
-      <Link
+      {/*
+        ⚠ Sageata de intoarcere e chiar drumul pe care l-a aratat el ca „se misca
+        greu": masurat pe productie, 498 ms in care nu se schimba nimic pe ecran.
+        `LegaturaDePanou` aduce pagina la trecerea cu mausul si aprinde o bara
+        subtire la apasare. Vezi componenta pentru cifre si pentru cauza.
+      */}
+      <LegaturaDePanou
         href="/dashboard/features"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+        className="relative inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+        clasaInAsteptare="-bottom-0.5 top-auto rounded-none"
       >
         <ArrowLeft className="h-4 w-4" />
         Integrari
-      </Link>
+      </LegaturaDePanou>
       <div className="flex items-center gap-3">
         {logo && (
           // eslint-disable-next-line @next/next/no-img-element

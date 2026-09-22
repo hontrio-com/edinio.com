@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, Unplug, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle, Loader2, ChevronRight, ExternalLink } from "lucide-react";
 import {
   saveFanCourierConfig,
   disconnectFanCourier,
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -156,10 +157,12 @@ export function FanCourierConfigClient({
           icon={CheckCircle}
           title="FAN Courier activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="FAN Courier"
+              cePierzi="Cheile selfAWB se sterg din Edinio, cu tot cu branch-ul si coletul implicit. Ca sa te intorci, le ceri din nou de la FAN Courier."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           {initialConfig?.client_name} · Client ID {initialConfig?.client_id}

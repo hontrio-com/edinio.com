@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { GOOGLE_MERCHANT_LIVE } from "@/lib/google-merchant/types";
 import { Lock, ArrowRight } from "lucide-react";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { LegaturaDePanou } from "@/components/dashboard/LegaturaDePanou";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { StripeConfig } from "@/components/dashboard/StripeConnectClient";
@@ -236,18 +236,43 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
   },
 ];
 
+/**
+ * Citeste rolul, si o face doar cand chiar e nevoie.
+ *
+ * ⚠ Se cheama din a doua ramura a lui `||`, deci cat timp `GOOGLE_MERCHANT_LIVE`
+ * e aprins nu se executa deloc: niciun drum catre baza. Scoasa afara ca functie
+ * tocmai ca sa nu se poata strecura inapoi in corpul paginii, unde ar rula mereu.
+ */
+async function esteAdmin(userId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("users_profile").select("role").eq("id", userId).single();
+  return data?.role === "admin";
+}
+
 export default async function IntegrationsPage() {
   const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const { business, settings: preloadedSettings } = await getCachedBusinessWithSettings(user.id);
 
-  // Google Merchant is live for everyone (OAuth verification approved 2026-07-21).
-  // GOOGLE_MERCHANT_LIVE stays as a kill-switch: flip to false to hide it from
-  // non-admins again.
-  const supabase = await createClient();
-  const { data: profile } = await supabase.from("users_profile").select("role").eq("id", user.id).single();
-  const gmcAvailable = GOOGLE_MERCHANT_LIVE || profile?.role === "admin";
+  /*
+    Google Merchant e deschis tuturor (verificarea OAuth aprobata pe 21.07.2026).
+    `GOOGLE_MERCHANT_LIVE` a ramas intrerupatorul de avarie: stins, cardul se vede
+    doar de catre admini.
+
+    ⚠⚠ INTEROGAREA SE FACE DOAR CAND CHIAR SE FOLOSESTE RASPUNSUL (22.09.2026).
+
+    Era `GOOGLE_MERCHANT_LIVE || profile?.role === "admin"`, cu citirea rolului
+    facuta INAINTE, neconditionat. Cat timp intrerupatorul e aprins, `||` se opreste
+    la primul operand si rolul nu se citeste niciodata — dar drumul pana la baza se
+    facea oricum, la FIECARE deschidere a paginii.
+
+    ⚠ Si e chiar pagina la care comerciantul se intoarce dupa fiecare integrare, cu
+    sageata din antet. Masurat pe productie, raspunsul RSC al paginii asta lua intre
+    378 si 631 ms, cu un prag de retea de 65 ms: restul sunt drumuri catre server si
+    catre baza, iar asta era unul dintre ele, pe degeaba.
+  */
+  const gmcAvailable = GOOGLE_MERCHANT_LIVE || await esteAdmin(user.id);
   const aboutyouAvailable = aboutyouGloballyEnabled();
   const trendyolAvailable = trendyolGloballyEnabled();
   /*
@@ -502,10 +527,18 @@ export default async function IntegrationsPage() {
 
                 if (isUnlocked) {
                   return (
-                    <Link
+                    /*
+                      ⚠ `LegaturaDePanou`, NU `Link` gol. Cardul raspunde pe loc la
+                      apasare si isi aduce pagina la trecerea cu mausul. Motivul si
+                      cifrele masurate stau in componenta; pe scurt: raspunsurile
+                      panoului vin cu `no-store`, deci routerul nu preia nimic
+                      dinainte, si clicul statea 312 pana la 498 ms fara sa se
+                      miste nimic pe ecran.
+                    */
+                    <LegaturaDePanou
                       key={integration.name}
                       href={href}
-                      className="relative flex items-center gap-3.5 p-4 rounded-xl border border-primary/30 bg-surface hover:border-primary hover:shadow-sm transition-all group"
+                      className="relative overflow-hidden flex items-center gap-3.5 p-4 rounded-xl border border-primary/30 bg-surface hover:border-primary hover:shadow-sm transition-all group"
                     >
                       <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
                         <img
@@ -555,7 +588,7 @@ export default async function IntegrationsPage() {
                       <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                         <ArrowRight className="h-3.5 w-3.5 text-primary" />
                       </div>
-                    </Link>
+                    </LegaturaDePanou>
                   );
                 }
 

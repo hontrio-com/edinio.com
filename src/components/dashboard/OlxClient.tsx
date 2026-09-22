@@ -27,6 +27,12 @@ import { cePachetAnunt, incheieIntentia, intentiaPentru } from "@/lib/olx/intent
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
+import { Field } from "@/components/ui/field";
+import { Panel } from "@/components/ui/panel";
+import { Switch } from "@/components/ui/switch";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import OlxConflicte from "./OlxConflicte";
 import OlxSanatatePanel from "./OlxSanatate";
 import { selectCls } from "@/lib/ui";
@@ -34,6 +40,29 @@ import { OlxCategoryMapper } from "./OlxCategoryMapper";
 import { OlxAccountPanel } from "./OlxAccountPanel";
 import { OlxMessenger } from "./OlxMessenger";
 import { OlxImport } from "./OlxImport";
+
+/*
+  ⚠ NU E UN BLOC DE CERINTE, SI DE-AIA NU E GALBEN. OLX nu cere nicio cheie de la
+  comerciant: conectarea e o autorizare la ei, dintr-o apasare. Cele trei randuri
+  spun ce capata dupa ea, iar galbenul ar fi insemnat „ceva e in neregula" pe un
+  ecran unde nu e nimic in neregula.
+
+  Erau trei buline cu bifa desenata subtire, intr-o coloana ingusta si centrata.
+*/
+const CE_PRIMESTI: { titlu: string; text: string }[] = [
+  {
+    titlu: "Produsele pleacă pe OLX ca anunțuri",
+    text: "Fiecare produs dintr-o categorie mapată își capătă anunțul lui pe OLX.ro.",
+  },
+  {
+    titlu: "Stocul și prețul se actualizează singure",
+    text: "Când le schimbi în magazin, schimbarea pleacă mai departe către anunț.",
+  },
+  {
+    titlu: "Pachete și promovări direct din panou",
+    text: "Se plătesc din creditul contului tău OLX, fără să mai treci pe olx.ro.",
+  },
+];
 
 export function OlxClient({ businessId, status, adverts, advertsError, categories }: {
   businessId: string;
@@ -64,7 +93,11 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
   }, []);
 
   if (!status) {
-    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return (
+      <Callout variant="danger" icon={AlertTriangle} className="max-w-3xl">
+        Nu am putut încărca starea. Reîncarcă pagina.
+      </Callout>
+    );
   }
 
   if (!status.configured) {
@@ -77,17 +110,38 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
 
   if (!status.connected) {
     return (
-      <EmptyState icon={Tag} title="Conectează contul OLX">
-        Publică-ți produsele ca anunțuri pe OLX.ro direct din Edinio. Sincronizăm automat produsele, stocul și prețurile,
-        iar tu urmărești statusul fiecărui anunț dintr-un singur loc.
-        <ul className="mx-auto mt-4 max-w-sm space-y-1.5 text-left text-sm text-muted-foreground">
-          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Publicare produse ca anunțuri OLX</li>
-          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Sincronizare automată stoc și preț</li>
-          <li className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" /> Pachete și promovări direct din panou</li>
+      /*
+        ⚠ MARGINIT LA `max-w-3xl`, desi pagina e pe tot ecranul. Restul paginii are
+        nevoie de latime (lista de anunturi si maparea categoriilor), dar un singur
+        buton intins pe 1900px nu e mai usor de gasit, ci mai greu.
+      */
+      <Panel step={1} title="Conectează contul OLX" className="max-w-3xl p-5">
+        <p className="text-sm text-muted-foreground">
+          Te trimitem pe OLX.ro ca să autorizezi Edinio. N-ai de completat nicio cheie: legătura se
+          face cu chiar contul tău de acolo, iar tu urmărești apoi fiecare anunț dintr-un singur loc.
+        </p>
+        <ul className="grid gap-x-10 gap-y-3.5 sm:grid-cols-2">
+          {CE_PRIMESTI.map((p) => (
+            <li key={p.titlu} className="flex gap-2.5">
+              {/*
+                ⚠ CHIAR BIFA DE PE CARDURILE DE PRET ale site-ului de prezentare,
+                cerută de el pe 22.09.2026: `h-4 w-4`, `strokeWidth={2.5}`, verde.
+                Vezi `PricingSection.tsx`. Verdele e acelasi simbol in amandoua
+                locurile: site-ul scrie `VERDE_CITIBIL`, care e `var(--primary)`,
+                adica exact ce da `text-primary` aici.
+
+                ⚠ Cea dinainte era `h-4` cu grosimea implicita (2), adica o bifa mai
+                subtire decat a lui. Se vedea alaturi.
+              */}
+              <Check className="mt-[3px] h-4 w-4 flex-shrink-0 text-primary" strokeWidth={2.5} />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-foreground">{p.titlu}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{p.text}</span>
+              </span>
+            </li>
+          ))}
         </ul>
         <Button
-          size="lg"
-          className="mt-6"
           onClick={() => startBusy(async () => {
             let res: Awaited<ReturnType<typeof startOlxOAuth>>;
             try {
@@ -108,7 +162,7 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
         >
           {busy ? <><Loader2 className="animate-spin" /> Se deschide OLX...</> : <><Plug /> Conectează OLX</>}
         </Button>
-      </EmptyState>
+      </Panel>
     );
   }
 
@@ -117,11 +171,11 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center">
+    <Panel className="max-w-3xl p-8 text-center">
       <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-6 w-6" /></div>
       <h2 className="mb-2 text-lg font-bold text-foreground">{title}</h2>
       <div className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{children}</div>
-    </div>
+    </Panel>
   );
 }
 
@@ -143,8 +197,75 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
     return () => clearInterval(t);
   }, [c.queued, router]);
 
+  /*
+    ═══ CIFRELE ═══
+
+    ⚠ ACELASI `CardStatistica` ca la Panou, Oferte, Statistici si Trendyol, cerut
+    de el pe 22.09.2026. Erau patru cutii desenate aici, cu bulina colorata si
+    cifra la 24px: semanau cu cardurile casei fara sa fie ele, deci se retusau
+    separat si divergeau.
+
+    ⚠ `limited` NU E AICI, dinadins. E o EXCEPTIE („anunturile astea exista, dar
+    nu se vad"), nu o statistica, si ramane un `Callout` sub cifre, langa cele
+    doua iesiri din ea. Pusa intre carduri, ar fi aratat ca inca o numaratoare.
+
+    ⚠ Explicatiile sunt scrise din interogarile din `getOlxStatus`, nu din ce pare.
+  */
+  const cifre = [
+    {
+      label: "Anunțuri", value: c.published, icon: Tag,
+      explicatie: "Câte anunțuri ține Edinio pentru magazinul tău, în orice stare: și cele active, și cele în moderare, respinse sau expirate.",
+    },
+    {
+      label: "Active", value: c.active, icon: CircleCheck,
+      explicatie: "Anunțurile pe care OLX le arată acum cumpărătorilor.",
+    },
+    {
+      label: "În așteptare", value: c.pending, icon: Clock,
+      explicatie: "Anunțurile trimise la OLX care așteaptă moderarea sau plata lor. Până trec, nu se văd.",
+    },
+    {
+      label: "Respinse", value: c.rejected, icon: CircleX,
+      explicatie: "Anunțurile refuzate, blocate sau șterse de OLX, plus cele la care trimiterea a dat eroare. Motivul se vede pe fiecare rând, în lista de mai jos.",
+    },
+  ];
+  const marimeCifre = marimeaRandului(cifre.map((x) => x.value));
+
+  /*
+    ⚠ FARA CASUTA CENUSIE A BROWSERULUI: intrebarea o pune `ButonDeconectare`, in
+    fereastra casei. Doua intrebari una peste alta se invata sa se apese fara citire.
+  */
+  const deconecteaza = () => startDisconnect(async () => {
+    let res: Awaited<ReturnType<typeof disconnectOlx>>;
+    try {
+      res = await disconnectOlx(businessId);
+    } catch {
+      /*
+       * ⚠ AICI REINCERCAREA CHIAR E SIGURA, si se spune, tocmai fiindca la
+       * celelalte deconectari nu e.
+       *
+       * `disconnectOlx` nu vorbeste deloc cu OLX: anunturile raman la ei, cum
+       * scrie si in fereastra de confirmare. Iar ordinea ei e aleasa anume: intai
+       * SCRIE ca e deconectat, si abia daca asta intra sterge coada si anunturile.
+       * Cel mai rau caz ramane deci un cont ramas conectat, nu unul pe jumatate.
+       */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a "
+        + "salvat. Reimprospateaza pagina: daca inca arata conectat, poti apasa "
+        + "din nou fara grija, iar la OLX nu s-a atins nimic.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
+    if ("error" in res) { toast.error(res.error); return; }
+    toast.success("OLX deconectat.");
+    router.refresh();
+  });
+
   return (
-    <div className="space-y-6">
+    /* ⚠ `space-y-4`, ca la Trendyol: acelasi ritm pe toate ecranele de marketplace. */
+    <div className="space-y-4">
       {status.needsReconnect && (
         <Callout variant="warning" icon={AlertTriangle}>
           Sesiunea OLX a expirat. <button className="font-medium underline" onClick={() => startSync(async () => {
@@ -167,7 +288,7 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
       )}
 
       {/* Connection banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
+      <Panel className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -175,7 +296,17 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
             <p className="truncate text-xs text-muted-foreground">{status.olxUserName ?? "Cont OLX"} · {status.advertiserType === "business" ? "Firmă" : "Persoană fizică"}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            ⚠ DECONECTAREA STA IN CARTONASUL CONTULUI, nu intr-un rand marunt la
+            capatul paginii — iar acum intreaba inainte. Vezi `ButonDeconectare`.
+          */}
+          <ButonDeconectare
+            nume="OLX"
+            cePierzi="Legătura cu contul tău OLX se șterge din Edinio, împreună cu rândurile locale ale anunțurilor și cu tot ce aștepta în coada de sincronizare. Anunțurile rămân pe OLX, neatinse, dar Edinio nu le mai poate trimite prețul și stocul."
+            pending={disconnecting}
+            onConfirma={deconecteaza}
+          />
           <Button variant="outline" size="sm" onClick={() => setShowSettings((s) => !s)}>
             <SettingsIcon /> Setări
           </Button>
@@ -214,7 +345,7 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
             {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Publică tot
           </Button>
         </div>
-      </div>
+      </Panel>
 
       {!status.ready && status.readinessError && (
         <Callout variant="warning" icon={AlertTriangle}>{status.readinessError} Completează în „Setări”.</Callout>
@@ -226,12 +357,23 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
       */}
       <OlxSanatatePanel businessId={businessId} />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi label="Anunțuri" value={c.published} icon={Tag} />
-        <Kpi label="Active" value={c.active} tone="success" icon={CircleCheck} />
-        <Kpi label="În așteptare" value={c.pending} tone="warning" icon={Clock} />
-        <Kpi label="Respinse" value={c.rejected} tone="danger" icon={CircleX} />
+      {/*
+        ⚠ `marimeaRandului` se socoteste O DATA, din toate cifrele randului. Lasata
+        pe seama fiecarui card, „3" ar fi iesit la 44px langa „1300" la 30px, adica
+        patru cutii care nu mai arata ca un set.
+      */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {cifre.map((x) => (
+          <CardStatistica
+            key={x.label}
+            marime={marimeCifre}
+            icon={x.icon}
+            label={x.label}
+            value={x.value}
+            explicatie={x.explicatie}
+            empty={x.value === 0}
+          />
+        ))}
       </div>
       {c.limited > 0 && (
         <Callout variant="warning" icon={ShoppingBag}>
@@ -245,13 +387,20 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
         </Callout>
       )}
       {c.queued > 0 && (
-        <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 p-4">
-          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">Se publică {c.queued} {c.queued === 1 ? "produs" : "produse"} pe OLX…</p>
-            <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină: statusul se actualizează singur.</p>
+        /*
+          ⚠ ROTITA RAMANE ROTITA. `Callout` isi deseneaza iconita cu clase fixe, deci
+          nu o poate invarti; pusa aici, in corp, spune mai departe ca lucrarea chiar
+          se misca — singurul lucru pe care blocul asta il are de spus.
+        */
+        <Callout variant="info">
+          <div className="flex items-start gap-3">
+            <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-info" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">Se publică {c.queued} {c.queued === 1 ? "produs" : "produse"} pe OLX…</p>
+              <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină: statusul se actualizează singur.</p>
+            </div>
           </div>
-        </div>
+        </Callout>
       )}
       {/*
         ⚠ „ÎN COADĂ" ȘI „OPRITĂ" NU SUNT ACELAȘI LUCRU (31.08.2026).
@@ -352,48 +501,11 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
 
       {/* Advert table */}
       {advertsError && (
-        <p className="rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <Callout variant="danger" icon={AlertTriangle}>
           {advertsError} Tabelul de mai jos e gol fiindcă n-am putut citi, nu fiindcă n-ai anunțuri.
-        </p>
+        </Callout>
       )}
       <AdvertTable businessId={businessId} adverts={adverts} ready={status.ready} />
-
-      {/* Disconnect */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => startDisconnect(async () => {
-            if (!window.confirm("Sigur deconectezi OLX? Anunțurile rămân pe OLX, dar Edinio nu le mai gestionează.")) return;
-            let res: Awaited<ReturnType<typeof disconnectOlx>>;
-            try {
-              res = await disconnectOlx(businessId);
-            } catch {
-              /*
-               * ⚠ AICI REINCERCAREA CHIAR E SIGURA, si se spune, tocmai fiindca la
-               * celelalte deconectari nu e.
-               *
-               * `disconnectOlx` nu vorbeste deloc cu OLX: anunturile raman la ei, cum
-               * scrie si in confirmarea de mai sus. Iar ordinea ei e aleasa anume: intai
-               * SCRIE ca e deconectat, si abia daca asta intra sterge coada si anunturile.
-               * Cel mai rau caz ramane deci un cont ramas conectat, nu unul pe jumatate.
-               */
-              toast.error(
-                "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a "
-                + "salvat. Reimprospateaza pagina: daca inca arata conectat, poti apasa "
-                + "din nou fara grija, iar la OLX nu s-a atins nimic.",
-                { duration: 12000 },
-              );
-              router.refresh();
-              return;
-            }
-            if ("error" in res) { toast.error(res.error); return; }
-            toast.success("OLX deconectat.");
-            router.refresh();
-          })}
-          disabled={disconnecting}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50">
-          {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Deconectează OLX
-        </button>
-      </div>
     </div>
   );
 }
@@ -501,18 +613,16 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
   }
 
   return (
-    <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
-      <h3 className="text-sm font-semibold text-foreground">Setări anunțuri OLX</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SettingField label="Tip vânzător">
+    <Panel title="Setări anunțuri OLX" className="p-5">
+      <div className="grid items-start gap-4 sm:grid-cols-2">
+        <Field label="Tip vânzător">
           <select aria-label="Tip vânzător" value={advertiserType} onChange={(e) => setAdvertiserType(e.target.value as "private" | "business")} className={selectCls}>
             <option value="private">Persoană fizică</option>
             <option value="business">Firmă</option>
           </select>
-        </SettingField>
+        </Field>
 
-        <div className="relative">
-          <label className="mb-1 block text-xs font-medium text-foreground">Localitate</label>
+        <Field label="Localitate" required className="relative">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -562,26 +672,50 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
               ))}
             </div>
           )}
-        </div>
+        </Field>
 
         {districts.length > 0 && (
-          <SettingField label="Cartier (opțional)">
+          <Field label="Cartier (opțional)">
             <select aria-label="Cartier" value={districtId ?? ""} onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : undefined)} className={selectCls}>
               <option value="">Fără cartier</option>
               {districts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
-          </SettingField>
+          </Field>
         )}
 
-        <SettingField label="Nume de contact" required><Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="numele afișat pe anunț" /></SettingField>
-        <SettingField label="Telefon de contact" required><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="07xxxxxxxx" /></SettingField>
+        <Field label="Nume de contact" required><Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="numele afișat pe anunț" /></Field>
+        <Field label="Telefon de contact" required><Input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="07xxxxxxxx" /></Field>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Toggle checked={courier} onChange={setCourier} label="Livrare prin OLX" />
-        <Toggle checked={autoSync} onChange={setAutoSync} label="Sincronizare automată" />
-        <Toggle checked={autoExtend} onChange={setAutoExtend} label="Reînnoire automată" />
-      </div>
+      {/*
+        ⚠ COMUTATOARE, NU BIFE. Cele trei hotarari de mai jos sunt aceleasi ca la
+        „Mediu de test" de la curieri si ca la Trendyol, iar acolo casa foloseste
+        `Switch`. Trei `<input type="checkbox">` desenate de mana, cu eticheta lor
+        de doua cuvinte, nu se potriveau cu nimic altceva din panou — si niciunul
+        nu spunea CE face, pe un ecran unde fiecare dintre ele umbla la anunturi
+        care se vad public.
+      */}
+      <RandDeComutator
+        titlu="Livrare prin OLX"
+        text="Anunțurile pleacă marcate cu OLX Livrare, deci cumpărătorul poate comanda cu livrare prin ei."
+        pornit={courier}
+        comuta={setCourier}
+      />
+      <RandDeComutator
+        titlu="Sincronizare automată"
+        text="Când schimbi prețul sau stocul unui produs în magazin, schimbarea pleacă singură către anunțul lui de pe OLX."
+        atentie={!autoSync
+          ? "Cu ea stinsă, modificările nu mai intră în coadă. Retragerea de la ștergerea unui produs pleacă oricum."
+          : undefined}
+        pornit={autoSync}
+        comuta={setAutoSync}
+      />
+      <RandDeComutator
+        titlu="Reînnoire automată"
+        text="Anunțurile aproape de expirare se prelungesc singure, ca să nu cadă din listă fără să afli."
+        pornit={autoExtend}
+        comuta={setAutoExtend}
+      />
 
       <div className="flex justify-end">
         <Button
@@ -617,7 +751,7 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
           {saving ? <><Loader2 className="animate-spin" /> Se salvează...</> : "Salvează setările"}
         </Button>
       </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -643,7 +777,7 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
+    <Panel className="overflow-hidden">
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
         <Tag className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">Anunțuri pe OLX</h3>
@@ -773,7 +907,7 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
           onClose={() => setLogoPentru(null)}
         />
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -903,25 +1037,6 @@ function IconBtn({ title, onClick, children, danger }: { title: string; onClick:
   );
 }
 
-function Kpi({ label, value, tone, icon: Icon }: { label: string; value: number; tone?: "success" | "warning" | "danger"; icon?: React.ElementType }) {
-  const toneCls =
-    tone === "success" ? "bg-success/10 text-success"
-    : tone === "warning" ? "bg-warning/10 text-warning"
-    : tone === "danger" ? "bg-destructive/10 text-destructive"
-    : "bg-muted text-muted-foreground";
-  return (
-    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
-      <div className="mb-2 flex items-center gap-2">
-        <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", toneCls)}>
-          {Icon ? <Icon className="h-4 w-4" /> : <Tag className="h-4 w-4" />}
-        </span>
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      </div>
-      <p className="text-2xl font-bold tabular-nums text-foreground">{value}</p>
-    </div>
-  );
-}
-
 export function AdvertStatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; ton: TonEticheta }> = {
     active: { label: "Activ", ton: "bun" },
@@ -944,15 +1059,31 @@ export function AdvertStatusBadge({ status }: { status: string }) {
   return <EtichetaStare ton={s.ton} marime="mic">{s.label}</EtichetaStare>;
 }
 
-function SettingField({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
-  return <div><label className="mb-1 block text-xs font-medium text-foreground">{label}{required && <span className="text-destructive"> *</span>}</label>{children}</div>;
-}
-
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+/**
+ * Un rând de setare cu comutator: titlu, lămurire, și o notă de atenție când
+ * alegerea are un cost.
+ *
+ * ⚠ ACELASI DESEN CA LA TRENDYOL SI LA CURIERI („Mediu de test" la GLS), ca sa nu
+ * fie al treilea fel de comutator din panou. Scris o data aici fiindca ecranul
+ * are trei.
+ */
+function RandDeComutator({
+  titlu, text, atentie, pornit, comuta,
+}: {
+  titlu: string;
+  text: string;
+  atentie?: string;
+  pornit: boolean;
+  comuta: (v: boolean) => void;
+}) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border px-3 py-2.5">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 accent-primary" />
-      <span className="text-sm text-foreground">{label}</span>
-    </label>
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{titlu}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{text}</p>
+        {atentie && <p className="mt-1.5 text-xs leading-relaxed text-warning">{atentie}</p>}
+      </div>
+      <Switch checked={pornit} onCheckedChange={comuta} className="mt-0.5 flex-shrink-0" />
+    </div>
   );
 }

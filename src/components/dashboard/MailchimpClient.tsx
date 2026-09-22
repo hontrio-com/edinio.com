@@ -9,6 +9,7 @@ import {
   saveMailchimpSettings, syncExistingCustomers, syncMailchimpCatalog,
 } from "@/lib/actions/mailchimp.actions";
 import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import type { MailchimpPublicConfig, MailchimpAudience } from "@/lib/mailchimp";
 
 const inputCls =
@@ -195,10 +196,15 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
               <p className="text-xs text-muted-foreground truncate">{config.account_name || "Cont Mailchimp"}</p>
             </div>
           </div>
-          <button type="button" onClick={disconnect} disabled={saving}
-            className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50 flex-shrink-0">
-            Deconecteaza
-          </button>
+          {/* ⚠ `cePierzi` e citit din `disconnectMailchimp`: scoate webhookurile noastre de pe
+              audienta, apoi pune `mailchimp_config` pe null, adica cheia SI toate setarile. */}
+          <ButonDeconectare
+            nume="Mailchimp"
+            cePierzi="Cheia API și setările se șterg din Edinio, iar webhookurile puse de noi pe audiență se scot din Mailchimp. Abonații trimiși deja rămân acolo, dar ca să te întorci ceri o cheie nouă de acolo."
+            pending={saving}
+            onConfirma={disconnect}
+            className="flex-shrink-0"
+          />
         </div>
       ) : (
         <div className="mt-6 space-y-3">

@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 
 const DEFAULT_CONFIG: NetopiaConfig = {
   enabled: false,
@@ -252,10 +253,13 @@ export default function NetopiaConfigClient({
               Salveaza
             </Button>
             {isConfigured && (
-              <Button variant="outline" onClick={disconnect} disabled={disconnecting}>
-                {disconnecting ? <Loader2 className="animate-spin" /> : null}
-                Deconecteaza
-              </Button>
+              <ButonDeconectare
+                nume="Netopia"
+                cePierzi="Semnătura POS și cheia API se șterg din Edinio, iar cumpărătorii nu mai pot plăti cu cardul prin Netopia. Plățile deja încasate rămân neatinse. Ca să te întorci, le ceri din nou din contul tău Netopia."
+                pending={disconnecting}
+                marime="default"
+                onConfirma={disconnect}
+              />
             )}
           </div>
         </Panel>

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Building2, Loader2, Plus, ReceiptText, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Building2, Loader2, Plus, ReceiptText, Sparkles, X } from "lucide-react";
 import { puneOlxLogoFirma, puneOlxBannerFirma, getOlxImaginiFirma, stergeOlxImagineFirma,
   inlocuiesteOlxImagineFirma,
   getOlxFacturare, getOlxProfilFirma, getOlxPromovariAnunt, salveazaOlxProfilFirma,
@@ -13,6 +13,7 @@ import { puneOlxLogoFirma, puneOlxBannerFirma, getOlxImaginiFirma, stergeOlxImag
 import type { OlxAdvertRow } from "@/lib/actions/olx.actions";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { selectCls } from "@/lib/ui";
@@ -72,11 +73,14 @@ export function OlxCont({ businessId, adverts }: { businessId: string; adverts: 
       <div>
         <Titlu icon={ReceiptText}>Istoric de facturare</Titlu>
         {eroareFacturare ? (
-          <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">{eroareFacturare}</p>
+          /* ⚠ O citire picata nu se arata ca „n-ai miscari": e o intrebare fara raspuns, nu un zero. */
+          <Callout variant="warning" icon={AlertTriangle}>
+            <span className="text-xs">{eroareFacturare}</span>
+          </Callout>
         ) : linii.length === 0 ? (
-          <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-            Nu sunt mișcări pe contul OLX.
-          </p>
+          <Callout variant="neutral">
+            <span className="text-xs">Nu sunt mișcări pe contul OLX.</span>
+          </Callout>
         ) : (
           <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {linii.map((l) => (
@@ -96,7 +100,9 @@ export function OlxCont({ businessId, adverts }: { businessId: string; adverts: 
 
       {/* Profil de firma — numai pe conturile de firma */}
       {eroareProfil && (
-        <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">{eroareProfil}</p>
+        <Callout variant="warning" icon={AlertTriangle}>
+          <span className="text-xs">{eroareProfil}</span>
+        </Callout>
       )}
       {esteFirma && profil && (
         <FormularProfil businessId={businessId} initial={profil} onSalvat={setProfil} />
@@ -282,15 +288,19 @@ function ListaPromovari({ businessId, advertId }: { businessId: string; advertId
     return <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
   }
   if (stare.fel === "eroare") {
-    return <p className="mt-2 rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">{stare.mesaj}</p>;
+    return (
+      <Callout variant="warning" icon={AlertTriangle} className="mt-2">
+        <span className="text-xs">{stare.mesaj}</span>
+      </Callout>
+    );
   }
   /* Cele expirate nu se numara ca active: pe ele omul CHIAR poate cumpara din nou. */
   const active = stare.promovari.filter((p) => !p.expirata);
   if (active.length === 0) {
     return (
-      <p className="mt-2 rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-        Anunțul nu are nicio promovare activă.
-      </p>
+      <Callout variant="neutral" className="mt-2">
+        <span className="text-xs">Anunțul nu are nicio promovare activă.</span>
+      </Callout>
     );
   }
   return (
@@ -419,7 +429,9 @@ function ImaginiFirma({ businessId }: { businessId: string }) {
   if (eroare) {
     return (
       <div className="border-t border-border pt-3">
-        <p className="text-xs text-destructive">Logo și banner: {eroare}</p>
+        <Callout variant="danger" icon={AlertTriangle}>
+          <span className="text-xs">Logo și banner: {eroare}</span>
+        </Callout>
       </div>
     );
   }
@@ -460,10 +472,12 @@ function ImaginiFirma({ businessId }: { businessId: string }) {
             </Button>
           </div>
           {lista.length > 1 && (
-            <p className="text-[11px] text-warning">
-              Sunt {lista.length} imagini pe {fel === "logo" ? "logo" : "banner"}. OLX o folosește pe una
-              singură; scoate-le pe cele care nu îți trebuie.
-            </p>
+            <Callout variant="warning" icon={AlertTriangle}>
+              <span className="text-xs">
+                Sunt {lista.length} imagini pe {fel === "logo" ? "logo" : "banner"}. OLX o folosește pe una
+                singură; scoate-le pe cele care nu îți trebuie.
+              </span>
+            </Callout>
           )}
         </div>
       ))}

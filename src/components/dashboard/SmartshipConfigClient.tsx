@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2, Unplug, Wallet } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, Loader2, Wallet } from "lucide-react";
 import {
   diagnosticSmartshipAction, disconnectSmartship, getSmartshipCurieriAction,
   getSmartshipDeconturiAction, getSmartshipFacturiAction, saveSmartshipConfig,
@@ -12,6 +12,7 @@ import {
 import type { DecontSmartship, ExpeditorSalvat, FacturaSmartship, FormatEticheta, SmartshipConfig, SoldSmartship } from "@/lib/smartship/client";
 import { ibanValid } from "@/lib/smartship/expediere";
 import { suprapuneri, textSuprapunere } from "@/lib/smartship/suprapunere";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -208,8 +209,9 @@ export function SmartshipConfigClient({
     );
   }
 
+  /* ⚠ Fara `window.confirm`: intrebarea o pune `ButonDeconectare`, in fereastra
+     casei. Doua intrebari una peste alta se invata sa se apese fara citire. */
   async function handleDisconnect() {
-    if (!confirm("Sigur deconectezi SmartShip? Expedierile deja emise raman la ei.")) return;
     const r = await disconnectSmartship(businessId);
     if ("error" in r) return toast.error(r.error);
     toast.success("SmartShip a fost deconectat");
@@ -581,9 +583,13 @@ export function SmartshipConfigClient({
       )}
 
       {isActive && (
-        <Button variant="outline" onClick={handleDisconnect} className="text-red-600">
-          <Unplug className="h-4 w-4 mr-2" /> Deconecteaza SmartShip
-        </Button>
+        <ButonDeconectare
+          nume="SmartShip"
+          cePierzi="Cheia de API se șterge din Edinio, împreună cu expeditorul, curierii permiși și IBAN-ul de ramburs. Ca să te întorci, ceri din nou cheia din contul tău SmartShip. Expedierile deja emise rămân la ei."
+          eticheta="Deconectează SmartShip"
+          marime="default"
+          onConfirma={handleDisconnect}
+        />
       )}
     </div>
   );

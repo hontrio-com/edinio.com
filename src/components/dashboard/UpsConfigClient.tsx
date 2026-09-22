@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react";
 import {
   disconnectUps, getUpsServiciiAction, saveUpsConfig, testUpsConnectionAction,
 } from "@/lib/actions/ups.actions";
@@ -16,6 +16,7 @@ import {
   AVERTISMENT_ACEEASI_LOCALITATE, GREUTATE_MAXIMA_KG, GREUTATE_MAXIMA_PUNCT_KG,
   LUNGIME_MAXIMA_PUNCT_CM, PRAG_COLET_GREU_KG,
 } from "@/lib/ups/expediere";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -258,9 +259,12 @@ export function UpsConfigClient({
             Testeaza conexiunea
           </Button>
           {areChei && (
-            <Button type="button" variant="ghost" onClick={deconecteaza}>
-              <Unplug className="h-4 w-4" /> Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="UPS"
+              cePierzi="Client ID-ul, secretul, numărul de cont și adresa de expediere se șterg din Edinio. Ca să te întorci, le iei din nou din aplicația ta din portalul UPS. Expedierile deja emise rămân la ei."
+              marime="default"
+              onConfirma={deconecteaza}
+            />
           )}
         </div>
         {!areExpeditor && (

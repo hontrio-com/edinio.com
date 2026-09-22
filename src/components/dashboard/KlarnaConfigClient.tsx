@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 
 const DEFAULT_CONFIG: KlarnaConfig = {
   enabled: false,
@@ -183,10 +184,13 @@ export default function KlarnaConfigClient({
               Salveaza
             </Button>
             {isConfigured && (
-              <Button variant="outline" onClick={disconnect} disabled={disconnecting}>
-                {disconnecting ? <Loader2 className="animate-spin" /> : null}
-                Deconecteaza
-              </Button>
+              <ButonDeconectare
+                nume="Klarna"
+                cePierzi="Cheile se șterg din Edinio și cumpărătorii nu mai pot plăti prin Klarna. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou utilizatorul și parola din contul tău Klarna."
+                pending={disconnecting}
+                marime="default"
+                onConfirma={disconnect}
+              />
             )}
           </div>
         </Panel>

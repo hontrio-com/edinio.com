@@ -5,13 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, CheckCircle2, Copy, Eye, Info, Loader2, Mail, Plug, RefreshCw, Unplug,
+  AlertTriangle, Boxes, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Eye,
+  Info, Layers, Loader2, Mail, Package, PackageCheck, Plug, RefreshCw, ShoppingCart, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
   activeazaPepita, deconecteazaPepita, dezvaluieAdresele, getComenziProblemaPepita,
   includeToateProdusePepita, listaProdusePepita, marcheazaTrimis, reproceseazaComandaPepita,
@@ -40,6 +45,33 @@ import { PietelePepita } from "./pepita/PietelePepita";
  * („Configurat în Edinio”) si, cel mult, ca ei au citit un feed. Atat se scrie.
  */
 
+/*
+  ⚠ CELE PATRU LUCRURI NU SUNT PASI DE-AI NOSTRI, ci felul in care merge legatura
+  cu ei, si de-aia se spun de la inceput: fiecare dintre ele explica ceva ce
+  comerciantul nu poate face din Edinio, oricat ar cauta butonul.
+
+  Erau un bloc albastru cu un singur paragraf. Acum au titlu si lamurire, ca sa se
+  poata citi dintr-o privire, nu rand cu rand.
+*/
+const INAINTE_DE_A_INCEPE: { titlu: string; text: string }[] = [
+  {
+    titlu: "Două adrese de feed și una de comenzi",
+    text: "Edinio le pregătește singur: una cu produsele și prețurile, una doar cu stocul, iar pe a treia Pepita îți trimite comenzile.",
+  },
+  {
+    titlu: "Activarea o fac ei",
+    text: "Adresele se trimit la contactul tău din Pepita Seller Center. Noi nu avem cum să aflăm singuri că au acceptat legătura.",
+  },
+  {
+    titlu: "Feedul nu conține produse cu variații",
+    text: "Fiecare combinație activă pleacă drept produs de sine stătător, cu codul ei.",
+  },
+  {
+    titlu: "Confirmarea și statusul comenzilor se operează în Pepita Admin",
+    text: "Pepita nu are, deocamdată, o cale prin care Edinio să i le trimită înapoi. Termenul lor de confirmare e de o zi.",
+  },
+];
+
 export function PepitaClient({ businessId, stare }: { businessId: string; stare: StarePepita }) {
   const router = useRouter();
   const [lucrez, setLucrez] = useState<string | null>(null);
@@ -63,22 +95,96 @@ export function PepitaClient({ businessId, stare }: { businessId: string; stare:
     }
   };
 
+  /* ⚠ „Nicio comandă" e o AFIRMATIE. Cand citirea a picat, nu stim nimic: „-". */
+  const ultimaComanda = stare.ultimaComanda
+    ? cand(stare.ultimaComanda)
+    : stare.citiriPicate.includes(CITIRI_PANOU.ultimaComanda) ? "-" : "Nicio comandă";
+
+  /*
+    ═══ CIFRELE ═══
+
+    ⚠ ACELASI `CardStatistica` ca la Panou, Oferte, Statistici si Trendyol, cerut de el
+    pe 22.09.2026. Erau cutiute gri desenate aici, cu cifra la 18px si eticheta dedesubt:
+    semanau cu cardurile casei fara sa fie ele, deci se retusau separat si divergeau.
+
+    ⚠ CIFRA SE ARATA SI CAND E BUNA, nu doar cand e zero. Un numar care apare numai la
+    necaz nu se citeste ca o masuratoare, ci ca o alarma, si atunci nimeni nu-l foloseste
+    ca sa vada ca a scazut de la 1.024 la 12 dupa un import. De-aia „Produse în feed" a
+    urcat aici, din randul de text de sub starea conexiunii.
+
+    ⚠ `marimeaRandului` se socoteste O DATA, din toate cifrele randului: altfel „3" ar
+    iesi la 44px langa o data intreaga la 28px, si cele patru cutii n-ar mai arata ca un set.
+  */
+  const cifre = [
+    {
+      label: "Produse în feed", value: cifraSauNecunoscut(stare.produseAlese), icon: Package,
+      explicatie: "Câte produse active pleacă spre Pepita chiar acum. Pe „toate produsele active” sunt toate cele active minus cele scoase de tine; pe „doar produsele alese de mine” sunt doar cele bifate, și numai cât timp produsul e activ.",
+      /* ⚠ Si necunoscutul se scrie stins: „-" nu e o cifra, deci nu se poarta ca una. */
+      gol: (stare.produseAlese ?? 0) === 0,
+    },
+    {
+      label: "Comenzi primite", value: cifraSauNecunoscut(stare.comenziTotal), icon: ShoppingCart,
+      explicatie: "Toate comenzile pe care Pepita ni le-a trimis până acum, din toate țările.",
+      gol: (stare.comenziTotal ?? 0) === 0,
+    },
+    {
+      label: "Cu probleme", value: cifraSauNecunoscut(stare.comenziCarantina), icon: AlertTriangle,
+      explicatie: "Comenzile Pepita care nu au intrat întregi în Edinio și au nevoie de verificare înainte de expediere. Le vezi mai jos, la „Comenzi”.",
+      gol: (stare.comenziCarantina ?? 0) === 0,
+    },
+    {
+      label: "Ultima comandă", value: ultimaComanda, icon: CalendarClock,
+      explicatie: "Când a sosit ultima comandă de la Pepita. „-” înseamnă că nu am putut citi, nu că n-a venit niciuna.",
+      gol: stare.ultimaComanda === null,
+    },
+  ];
+  const marimeCifre = marimeaRandului(cifre.map((c) => c.value));
+
+  /*
+    ⚠ NUMAI CITIRILE CIFRELOR DE DEASUPRA. Lista vine intreaga de la server, iar „ultima
+    citire a feedului" tine de panoul Conexiune, unde e si tratata. Numarata aici,
+    avertismentul ar fi pus la indoiala cifre care erau bune.
+  */
+  const picateAici = stare.citiriPicate.filter((c) => c !== CITIRI_PANOU.feed);
+
   return (
-    <div className="space-y-6">
-      <Callout variant="info" icon={Info}>
-        <div className="space-y-1">
-          <p className="font-medium text-foreground">Cum funcționează Pepita</p>
-          <p className="text-xs text-muted-foreground">
-            Edinio pregătește două adrese pe care Pepita le citește singură: una cu produsele și
-            prețurile, una doar cu stocul. Comenzile sosesc automat în Edinio.
-            {" "}
-            <strong className="text-foreground">
-              Confirmarea și statusul comenzilor se operează în Pepita Admin
-            </strong>
-            , pentru că Pepita nu are, deocamdată, o cale prin care Edinio să i le trimită înapoi.
-          </p>
+    <div className="space-y-4">
+      {/*
+        ═══ ÎNAINTE DE A ÎNCEPE ═══
+
+        ⚠ NU E UN BLOC COLORAT. O casetă colorată înseamnă „uită-te aici, ceva e
+        de făcut acum”, iar aici nu e nimic de făcut: sunt patru lucruri de știut
+        o singură dată. Pe o pagină pe care comerciantul intră des, caseta care nu
+        anunță nimic se învață și apoi nu se mai vede, inclusiv atunci când chiar
+        apare una adevărată dedesubt.
+      */}
+      <Panel className="p-5">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">Înainte de a începe</h2>
         </div>
-      </Callout>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Cum merge legătura cu Pepita, în patru rânduri. Două dintre ele nu se pot face din
+          Edinio, oricât ai căuta butonul: activarea și confirmarea comenzilor.
+        </p>
+        <ul className="mt-4 grid gap-x-10 gap-y-3.5 sm:grid-cols-2">
+          {INAINTE_DE_A_INCEPE.map((p) => (
+            <li key={p.titlu} className="flex gap-2.5">
+              {/*
+                ⚠ CHIAR BIFA DE PE CARDURILE DE PRET ale site-ului de prezentare,
+                cerută de el pe 22.09.2026: `h-4 w-4`, `strokeWidth={2.5}`, verde.
+                Vezi `PricingSection.tsx`, unde verdele se scrie `VERDE_CITIBIL`,
+                adică `var(--primary)`, adică exact ce dă `text-primary` aici.
+              */}
+              <Check className="mt-[3px] h-4 w-4 flex-shrink-0 text-primary" strokeWidth={2.5} />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-foreground">{p.titlu}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{p.text}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Panel>
 
       <Conexiune
         stare={stare}
@@ -89,6 +195,27 @@ export function PepitaClient({ businessId, stare }: { businessId: string; stare:
 
       {config.activ && (
         <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {cifre.map((c) => (
+              <CardStatistica
+                key={c.label}
+                marime={marimeCifre}
+                icon={c.icon}
+                label={c.label}
+                value={c.value}
+                explicatie={c.explicatie}
+                empty={c.gol}
+              />
+            ))}
+          </div>
+
+          {picateAici.length > 0 && (
+            <Callout variant="warning" icon={AlertTriangle}>
+              Nu am putut citi {picateAici.join(", ")}. Cifrele de mai sus pot fi incomplete.
+              Reîncarcă pagina peste câteva minute.
+            </Callout>
+          )}
+
           <Adrese
             businessId={businessId}
             trimisLa={config.trimis_la}
@@ -201,23 +328,23 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
                     ? "Adresele sunt gata. Nu am putut afla dacă Pepita a citit deja feedul."
                     : "Pornește integrarea ca să genereze adresele pe care le trimiți la Pepita."}
           </p>
-          {/*
-            ⚠ CIFRA SE ARATA SI CAND E BUNA, nu doar cand e zero. Un numar care apare numai la
-            necaz nu se citeste ca o masuratoare, ci ca o alarma, si atunci nimeni nu-l foloseste
-            ca sa vada ca a scazut de la 1.024 la 12 dupa un import.
-          */}
-          {gata && stare.produseAlese !== null && !feedGol && (
-            <p className="text-xs text-muted-foreground">
-              {stare.produseAlese === 1 ? "Un produs este ales" : `${stare.produseAlese} produse sunt alese`} pentru feed.
-            </p>
-          )}
+          {/* ⚠ Cifra produselor alese sta acum intre carduri, deasupra: vezi nota de acolo.
+              Regula ei nu s-a schimbat, se arata SI cand e buna, nu doar cand e zero. */}
         </div>
 
         {c.activ ? (
-          <Button variant="outline" size="sm" onClick={opreste} disabled={lucrez !== null}>
-            {lucrez === "opreste" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unplug className="h-4 w-4" />}
-            Oprește integrarea
-          </Button>
+          /*
+            ⚠ INTREBAREA O PUNE FEREASTRA CASEI, ca la toate integrarile: oprirea sterge
+            cheile, iar la repornire adresele sunt altele si trebuie trimise din nou la
+            Pepita. Ce se pierde se scrie pe fata, nu „Ești sigur?".
+          */
+          <ButonDeconectare
+            nume="Pepita"
+            eticheta="Oprește integrarea"
+            cePierzi="Adresele se închid imediat: feedul nu mai răspunde, iar comenzile noi sunt refuzate. Cheile se șterg, deci la repornire primești adrese noi, pe care trebuie să le trimiți din nou la Pepita. Comenzile deja primite, facturile și AWB-urile rămân neatinse. Anunță și Pepita, altfel vor continua să încerce."
+            pending={lucrez === "opreste"}
+            onConfirma={opreste}
+          />
         ) : (
           <Button size="sm" onClick={porneste} disabled={lucrez !== null}>
             {lucrez === "porneste" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
@@ -225,14 +352,6 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
           </Button>
         )}
       </div>
-
-      {c.activ && (
-        <p className="text-[11px] text-muted-foreground">
-          Oprirea închide imediat adresele: feedul nu mai răspunde, iar comenzile noi sunt refuzate.
-          Comenzile deja primite, facturile și AWB-urile rămân neatinse. Anunță și Pepita, altfel
-          vor continua să încerce.
-        </p>
-      )}
     </Panel>
   );
 }
@@ -365,9 +484,8 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-        <p className="font-medium text-foreground">Ce trebuie trimis la Pepita</p>
-        <ul className="mt-1.5 list-inside list-disc space-y-1">
+      <Callout variant="neutral" icon={Info} title="Ce trebuie trimis la Pepita">
+        <ul className="list-inside list-disc space-y-1 text-xs">
           <li>adresa feedului de produse și a celui de stoc;</li>
           <li>adresa de comenzi, ca să îți trimită comenzile automat;</li>
           <li>
@@ -376,21 +494,20 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
           </li>
           <li>dacă folosesc costul de transport și termenul de livrare din feed sau pe cele implicite.</li>
         </ul>
-        <p className="mt-2">
+        <p className="mt-2 text-xs">
           Trimite-le la contactul tău dedicat sau la adresa de suport pentru vânzători din
           Pepita Seller Center. Activarea conexiunii se face de ei, nu din Edinio.
         </p>
-      </div>
+      </Callout>
 
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-input"
-          checked={!!trimisLa}
-          onChange={(e) => marcheaza(e.target.checked)}
-        />
-        Am trimis adresele către Pepita{trimisLa ? ` (${cand(trimisLa)})` : ""}
-      </label>
+      <RandDeComutator
+        titlu="Am trimis adresele către Pepita"
+        text={trimisLa
+          ? `Pornit pe ${cand(trimisLa)}. Activarea o fac ei, după ce le primesc.`
+          : "Pornește-l după ce le-ai trimis, ca să știi unde ai rămas. Comutatorul nu trimite nimic la ei, doar ține minte."}
+        pornit={!!trimisLa}
+        comuta={marcheaza}
+      />
     </Panel>
   );
 }
@@ -400,9 +517,10 @@ function Rand({ eticheta, valoare, onCopy }: { eticheta: string; valoare: string
     <div className="space-y-1">
       <p className="text-xs font-medium text-foreground">{eticheta}</p>
       <div className="flex items-center gap-2">
-        <input
+        <Input
           readOnly value={valoare} onFocus={(e) => e.target.select()}
-          className="min-w-0 flex-1 rounded-lg border border-input bg-transparent px-3 py-2 font-mono text-[11px] text-foreground"
+          aria-label={eticheta}
+          className="min-w-0 flex-1 font-mono text-[11px] text-foreground"
         />
         <Button type="button" variant="outline" size="sm" onClick={() => onCopy(valoare)}>
           <Copy className="h-3.5 w-3.5" /> Copiază
@@ -456,7 +574,7 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Ce produse pleacă">
           <select
-            className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
             value={f.mod_includere}
             onChange={(e) => setF({ ...f, mod_includere: e.target.value as SetariPepita["mod_includere"] })}
           >
@@ -468,7 +586,7 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
         <Field label="Preț pe Pepita">
           <div className="flex gap-2">
             <select
-              className="h-9 flex-1 rounded-lg border border-input bg-transparent px-3 text-sm"
+              className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
               value={f.strategie_fel}
               onChange={(e) => setF({ ...f, strategie_fel: e.target.value as SetariPepita["strategie_fel"] })}
             >
@@ -529,7 +647,7 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
         <Field label="Garanție">
           <div className="flex gap-2">
             <select
-              className="h-9 flex-1 rounded-lg border border-input bg-transparent px-3 text-sm"
+              className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
               value={f.garantie_tip}
               onChange={(e) => setF({ ...f, garantie_tip: e.target.value as TipGarantie | "" })}
             >
@@ -559,27 +677,19 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
         start fiindcă o factură emisă degeaba nu se retrage, se stornează, iar Pepita nu ne poate
         spune ce document a ieșit în altă parte.
       */}
-      <label className="flex items-start gap-2 rounded-xl border border-border bg-muted/40 p-3">
-        <input
-          type="checkbox" className="mt-0.5 h-4 w-4 rounded border-input"
-          checked={f.factureaza_clientul}
-          onChange={(e) => setF({ ...f, factureaza_clientul: e.target.checked })}
-        />
-        <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Include comenzile Pepita în facturarea automată</span>
-          <br />
-          {/*
-            ⚠ NUMELE SPUNE CE FACE COMUTATORUL, nu pune o întrebare la care nu putem răspunde.
-            Forma veche — „Emit eu factura către client" — suna ca și cum n-ar fi limpede cine
-            facturează, iar asta e o chestiune între comerciant și Pepita, nu una pe care s-o
-            hotărască un comutator din Edinio.
-          */}
-          Factura către client o emiți tu, ca partener Pepita. Pornit, comenzile Pepita intră în
-          facturarea automată Edinio, ca oricare altă comandă. Lasă-l stins dacă facturezi din alt
-          sistem: Pepita nu ne poate spune ce document a ieșit acolo, iar două facturi pentru
-          aceeași marfă se repară mai greu decât una lipsă.
-        </span>
-      </label>
+      {/*
+        ⚠ NUMELE SPUNE CE FACE COMUTATORUL, nu pune o întrebare la care nu putem răspunde.
+        Forma veche — „Emit eu factura către client" — suna ca și cum n-ar fi limpede cine
+        facturează, iar asta e o chestiune între comerciant și Pepita, nu una pe care s-o
+        hotărască un comutator din Edinio.
+      */}
+      <RandDeComutator
+        titlu="Include comenzile Pepita în facturarea automată"
+        text="Factura către client o emiți tu, ca partener Pepita. Pornit, comenzile Pepita intră în facturarea automată Edinio, ca oricare altă comandă."
+        atentie="Lasă-l stins dacă facturezi din alt sistem: Pepita nu ne poate spune ce document a ieșit acolo, iar două facturi pentru aceeași marfă se repară mai greu decât una lipsă."
+        pornit={f.factureaza_clientul}
+        comuta={(v) => setF({ ...f, factureaza_clientul: v })}
+      />
 
       <div className="flex justify-end">
         <Button size="sm" onClick={salveaza} disabled={salvez}>
@@ -751,14 +861,18 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
                   <p className="truncate text-xs text-foreground">{p.nume}</p>
                   {p.sku && <p className="truncate text-[11px] text-muted-foreground">{p.sku}</p>}
                 </div>
-                <label className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
-                  <input
-                    type="checkbox" className="h-4 w-4 rounded border-input"
+                <span className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
+                  {/* ⚠ Comutator, nu bifa: la fel ca setarile de mai sus si ca restul panoului.
+                      Numele citit de cititorul de ecran poarta si produsul, fiindca randul nu
+                      mai e un `<label>` care sa-l imprumute. */}
+                  <Switch
+                    size="sm"
+                    aria-label={`În feed: ${p.nume}`}
                     checked={p.inclus} disabled={lucrez}
-                    onChange={(e) => void comuta(p.id, e.target.checked)}
+                    onCheckedChange={(v) => void comuta(p.id, v)}
                   />
                   În feed
-                </label>
+                </span>
               </li>
             ))}
           </ul>
@@ -784,6 +898,14 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
 function Catalog({ businessId }: { businessId: string }) {
   const [r, setR] = useState<RezumatProduse | null>(null);
   const [incarc, setIncarc] = useState(false);
+
+  /*
+    Cifrele verificarii, si marimea lor socotita O DATA, din tot randul: lasata pe seama
+    fiecarui card, „6" ar iesi la 44px langa „1.353" la 36px, iar cele patru cutii n-ar
+    mai arata ca un set.
+  */
+  const cifre = r ? cifreleCatalogului(r) : [];
+  const marimeCifre = marimeaRandului(cifre.map((c) => c.value));
 
   const verifica = async () => {
     setIncarc(true);
@@ -812,19 +934,38 @@ function Catalog({ businessId }: { businessId: string }) {
 
       {r && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Cifra eticheta="Produse active" valoare={r.active} />
-            <Cifra eticheta="Incluse în feed" valoare={r.incluse} />
-            <Cifra eticheta="Cu erori" valoare={r.cuErori} accent={r.cuErori > 0} />
-            <Cifra eticheta="Articole trimise" valoare={r.articole} />
-            {/*
-              ⚠ NU E O EROARE, si de aceea nu e rosu. Specificatia XML a Pepita numeste
-              GTIN-ul „recomandat", dar in unele categorii il cere — vezi nota din
-              `articole.ts`, cu cele trei documente ale lor care nu spun acelasi lucru.
-              Cifra exista ca sa se poata VEDEA expunerea, nu ca sa opreasca feedul.
-            */}
-            <Cifra eticheta="Fără cod EAN" valoare={r.faraEan} />
+          {/*
+            ⚠ PATRU CIFRE, NU CINCI. „Fără cod EAN" a coborât sub grilă, ca rând de text:
+            a cincea cutie ar fi stat singură pe al doilea rând, lângă trei celule goale.
+          */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {cifre.map((c) => (
+              <CardStatistica
+                key={c.label}
+                marime={marimeCifre}
+                icon={c.icon}
+                label={c.label}
+                value={c.value}
+                explicatie={c.explicatie}
+                empty={c.value === 0}
+              />
+            ))}
           </div>
+
+          {/*
+            ⚠ NU E O EROARE, si de aceea nu e rosu si nu e o caseta de avertizare.
+            Specificatia XML a Pepita numeste GTIN-ul „recomandat", dar in unele categorii
+            il cere: vezi nota din `articole.ts`, cu cele trei documente ale lor care nu
+            spun acelasi lucru. Cifra exista ca sa se poata VEDEA expunerea, nu ca sa
+            opreasca feedul, si de-aia se scrie si cand e zero.
+          */}
+          {r.incluse > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              {r.faraEan === 0
+                ? "Toate produsele incluse pleacă cu cod EAN."
+                : `${r.faraEan} ${r.faraEan === 1 ? "produs inclus pleacă" : "produse incluse pleacă"} fără cod EAN. Feedul nu se oprește, dar în categoriile unde Pepita cere GTIN produsul poate fi refuzat la ei.`}
+            </p>
+          )}
 
           {/*
             ⚠ „Articole” ≠ „produse”: o combinație aplatizată e un articol de sine stătător.
@@ -888,10 +1029,10 @@ function Catalog({ businessId }: { businessId: string }) {
           )}
 
           {r.incluse === 0 && (
-            <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <Callout variant="neutral" icon={Info}>
               Niciun produs nu este inclus încă în feedul Pepita. Alege produsele din lista de
               produse, sau treci setarea de mai sus pe „Toate produsele active”.
-            </p>
+            </Callout>
           )}
 
           {r.produse.length > 0 && (
@@ -919,9 +1060,9 @@ function Catalog({ businessId }: { businessId: string }) {
           )}
 
           {r.cuErori === 0 && r.produse.length === 0 && r.incluse > 0 && (
-            <p className="flex items-center gap-2 text-xs text-success">
-              <CheckCircle2 className="h-4 w-4" /> Toate produsele incluse pot pleca la Pepita.
-            </p>
+            <Callout variant="success" icon={CheckCircle2}>
+              Toate produsele incluse pot pleca la Pepita.
+            </Callout>
           )}
         </div>
       )}
@@ -930,16 +1071,69 @@ function Catalog({ businessId }: { businessId: string }) {
 }
 
 /**
- * O cifra din panou.
+ * Cele patru cifre ale verificarii, cu explicatia fiecareia.
+ *
+ * ⚠ EXPLICATIILE SUNT SCRISE DIN CE FACE CODUL, nu din ce pare: „active” se numara in
+ * plimbarea pe catalog, „incluse” trece prin chiar hotararea feedului (`inclus()`), iar
+ * „cu erori” numara PRODUSE, nu probleme, fiindca un produs cu variante poate raporta
+ * aceeasi lipsa de zece ori. Vezi `verificaProdusePepita`.
+ */
+function cifreleCatalogului(r: RezumatProduse) {
+  return [
+    {
+      label: "Produse active", value: r.active, icon: Boxes,
+      explicatie: "Câte produse active are magazinul, numărate la verificare. Peste 10.000, verificarea se oprește și ți-o spune.",
+    },
+    {
+      label: "Incluse în feed", value: r.incluse, icon: PackageCheck,
+      explicatie: "Câte dintre ele ar pleca la Pepita, după aceeași regulă pe care o folosește feedul: setarea de includere plus bifele tale.",
+    },
+    {
+      label: "Articole trimise", value: r.articole, icon: Layers,
+      explicatie: "Câte articole ar avea feedul. O combinație activă a unui produs cu variante e un articol de sine stătător, cu codul ei.",
+    },
+    {
+      label: "Cu erori", value: r.cuErori, icon: XCircle,
+      explicatie: "Câte produse incluse au cel puțin o eroare care le oprește din feed. Se numără produsul, nu problemele lui, și îl vezi în lista de mai jos.",
+    },
+  ];
+}
+
+/**
+ * Cifra asa cum se scrie pe card.
  *
  * ⚠ `null` NU E ZERO. O interogare cazuta nu arunca, deci un `?? 0` pe raspunsul ei ar fi
- * aratat exact ca un magazin fara nicio comanda. Necunoscutul se arata ca necunoscut.
+ * aratat exact ca un magazin fara nicio comanda. Necunoscutul se arata ca necunoscut, iar
+ * cardul ramane stins.
  */
-function Cifra({ eticheta, valoare, accent }: { eticheta: string; valoare: number | null; accent?: boolean }) {
+function cifraSauNecunoscut(valoare: number | null): string | number {
+  return valoare ?? "-";
+}
+
+/**
+ * Un rând de setare cu comutator: titlu, lămurire, și o notă de atenție când
+ * alegerea are un cost.
+ *
+ * ⚠ ACELASI DESEN CA LA TRENDYOL SI LA CURIERI, ca sa nu fie al treilea fel de comutator
+ * din panou. Scris o data aici fiindca ecranul are doua.
+ */
+function RandDeComutator({
+  titlu, text, atentie, pornit, comuta,
+}: {
+  titlu: string;
+  text: string;
+  atentie?: string;
+  pornit: boolean;
+  comuta: (v: boolean) => void;
+}) {
   return (
-    <div className="rounded-xl border border-border p-3">
-      <p className={`text-lg font-semibold ${accent ? "text-destructive" : "text-foreground"}`}>{valoare ?? "-"}</p>
-      <p className="text-[11px] text-muted-foreground">{eticheta}</p>
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-foreground">{titlu}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{text}</p>
+        {atentie && <p className="mt-1.5 text-xs leading-relaxed text-warning">{atentie}</p>}
+      </div>
+      <Switch checked={pornit} onCheckedChange={comuta} className="mt-0.5 flex-shrink-0" />
     </div>
   );
 }
@@ -953,8 +1147,6 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
   const [incarc, setIncarc] = useState(false);
   /** Comanda pe care o reincercam acum. Butonul se blocheaza doar pe randul ei. */
   const [reincerc, setReincerc] = useState<string | null>(null);
-  /* Citirile care hranesc CHIAR acest panou. Cea a feedului tine de Conexiune. */
-  const picateAici = stare.citiriPicate.filter((c) => c !== CITIRI_PANOU.feed);
 
   const incarca = async () => {
     setIncarc(true);
@@ -971,20 +1163,11 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
 
   return (
     <Panel title="Comenzi">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Cifra eticheta="Comenzi primite" valoare={stare.comenziTotal} />
-        <Cifra eticheta="Cu probleme" valoare={stare.comenziCarantina} accent={(stare.comenziCarantina ?? 0) > 0} />
-        <div className="rounded-xl border border-border p-3">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {/* ⚠ „Nicio comandă" e o AFIRMATIE. Cand citirea a picat, nu stim nimic: „—". */}
-            {stare.ultimaComanda
-              ? cand(stare.ultimaComanda)
-              : stare.citiriPicate.includes(CITIRI_PANOU.ultimaComanda) ? "-" : "Nicio comandă"}
-          </p>
-          <p className="text-[11px] text-muted-foreground">Ultima comandă</p>
-        </div>
-      </div>
-
+      {/*
+        ⚠ CIFRELE COMENZILOR STAU SUS, INTRE CARDURI, nu aici. Erau trei cutiute desenate
+        de mana chiar in panoul asta; acum sunt carduri ca la Panou si la Trendyol, iar
+        avertismentul despre citirile picate le insoteste acolo, nu aici.
+      */}
       <p className="text-xs text-muted-foreground">
         {/*
           ⚠ „AWB ca la orice altă comandă" era ADEVĂRAT DOAR PE JUMĂTATE: la Pepita Delivery
@@ -1001,18 +1184,6 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
         <strong className="text-foreground">Statusul lor nu pleacă înapoi la Pepita</strong>: după
         ce expediezi, treci comanda pe „trimisă” și în Pepita Admin.
       </p>
-
-      {/*
-        ⚠ NUMAI CITIRILE ACESTUI PANOU. Lista vine intreaga de la server, iar „ultima citire a
-        feedului" tine de panoul Conexiune, unde e si tratata. Aratat aici, avertismentul punea
-        la indoiala trei cifre care erau bune.
-      */}
-      {picateAici.length > 0 && (
-        <Callout variant="warning" icon={AlertTriangle}>
-          Nu am putut citi {picateAici.join(", ")}. Cifrele de mai sus pot fi incomplete.
-          Reîncarcă pagina peste câteva minute.
-        </Callout>
-      )}
 
       {(stare.comenziCarantina ?? 0) > 0 && (
         <div className="space-y-2">
@@ -1050,9 +1221,13 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
                       n-avem cum să le trimitem nimic înapoi. „Reprocesează” lucrează numai
                       în Edinio: leagă din nou liniile de catalog și duce stocul la capăt.
                     */}
-                    <button
+                    <Button
                       type="button"
-                      className="text-primary underline underline-offset-2 disabled:opacity-50"
+                      variant="link"
+                      size="xs"
+                      /* Subliniat ca vecinul lui, „Deschide comanda": doua actiuni de acelasi
+                         fel pe acelasi rand nu au voie sa arate diferit. */
+                      className="h-auto p-0 text-[11px] underline underline-offset-2"
                       /* Se blochează doar rândul pe care se lucrează: celelalte rămân apăsabile. */
                       disabled={reincerc === c.externalId}
                       onClick={async () => {
@@ -1077,7 +1252,7 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
                       }}
                     >
                       {reincerc === c.externalId ? "Reprocesez…" : "Reprocesează"}
-                    </button>
+                    </Button>
                   </span>
                 </li>
               ))}

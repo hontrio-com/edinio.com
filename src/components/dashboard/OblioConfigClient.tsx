@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, Plug, PlugZap, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, PlugZap, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Panel } from "@/components/ui/panel";
 import { Callout } from "@/components/ui/callout";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { alegeGestiunea, gestiuneaECeruta, stareOblio, type ListaGestiuni } from "@/lib/oblio-stare";
@@ -633,10 +634,13 @@ export default function OblioConfigClient({
           </Button>
 
           {isConnected && (
-            <Button variant="destructive" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Plug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Oblio"
+              cePierzi="Cheile se șterg din Edinio și facturile nu se mai emit automat. Facturile deja emise rămân în contul tău Oblio. Ca să te întorci, ceri din nou Client ID și Client Secret din contul tău Oblio."
+              pending={disconnecting}
+              marime="default"
+              onConfirma={handleDisconnect}
+            />
           )}
         </div>
       </div>

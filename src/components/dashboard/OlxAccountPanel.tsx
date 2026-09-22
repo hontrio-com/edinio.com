@@ -7,7 +7,7 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Wallet, Loader2, ChevronDown, Package, Megaphone, ShoppingCart,
+  AlertTriangle, Wallet, Loader2, ChevronDown, Package, Megaphone, ShoppingCart,
 } from "lucide-react";
 import {
   getOlxAccountInfo, getOlxPackets, buyOlxCategoryPacket,
@@ -18,6 +18,8 @@ import type { OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
 import { OlxCont } from "./OlxCont";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { Panel } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
 
 /**
@@ -92,7 +94,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   const activeAdverts = adverts.filter((a) => a.olx_advert_id && ["active", "limited"].includes(a.status));
 
   return (
-    <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
+    <Panel className="overflow-hidden">
       <button onClick={toggle} className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left">
         <span className="flex items-center gap-2">
           <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -118,13 +120,18 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
                   <BalanceTile label="Bonus" value={money(account.balance.bonus, account.balance.currency)} />
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Nu am putut încărca soldul contului OLX.</p>
+                /* ⚠ „N-am putut citi" nu se scrie ca „n-ai sold". Vezi nota de la `loadAll`. */
+                <Callout variant="warning" icon={AlertTriangle}>
+                  <span className="text-xs">Nu am putut încărca soldul contului OLX.</span>
+                </Callout>
               )}
-              <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                Plățile se fac din creditul contului tău OLX. Alimentarea portofelului cu cardul se face pe olx.ro (nu prin API);
-                cumpărarea pachetelor și a promovărilor de mai jos se face direct de aici.
-                {methods.includes("postpaid") && " Ai activată și plata pe factură (postpaid)."}
-              </p>
+              <Callout variant="neutral">
+                <span className="text-xs">
+                  Plățile se fac din creditul contului tău OLX. Alimentarea portofelului cu cardul se face pe olx.ro (nu prin API);
+                  cumpărarea pachetelor și a promovărilor de mai jos se face direct de aici.
+                  {methods.includes("postpaid") && " Ai activată și plata pe factură (postpaid)."}
+                </span>
+              </Callout>
 
               {/* Bought packets */}
               {packets && packets.bought.length > 0 && (
@@ -137,9 +144,9 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
                     ce are deja.
                   */}
                   {packets && !packets.boughtIntreg && (
-                    <p className="text-[11px] text-warning">
-                      Lista de mai jos poate fi incompletă: OLX n-a răspuns la toate paginile.
-                    </p>
+                    <Callout variant="warning" icon={AlertTriangle} className="mb-2">
+                      <span className="text-xs">Lista de mai jos poate fi incompletă: OLX n-a răspuns la toate paginile.</span>
+                    </Callout>
                   )}
                   <div className="space-y-1.5">
                     {packets.bought.map((p) => (
@@ -175,7 +182,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
           )}
         </div>
       )}
-    </div>
+    </Panel>
   );
 }
 
@@ -219,30 +226,38 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
       <SectionLabel icon={ShoppingCart}>Cumpără pachet de anunțuri</SectionLabel>
       {metodaGhicita && (
         /* ⚠ Prețurile de mai jos sunt ale unei metode GHICITE: lista adevărată n-a putut fi citită. */
-        <p className="mb-2 text-[11px] text-warning">
-          N-am putut citi metodele de plată din contul tău OLX, deci prețurile de mai jos sunt
-          orientative. Cumpărarea nu pleacă până nu le putem citi.
-        </p>
+        <Callout variant="warning" icon={AlertTriangle} className="mb-2">
+          <span className="text-xs">
+            N-am putut citi metodele de plată din contul tău OLX, deci prețurile de mai jos sunt
+            orientative. Cumpărarea nu pleacă până nu le putem citi.
+          </span>
+        </Callout>
       )}
       {nereusite && nereusite.length > 0 && (
         /* ⚠ O categorie a cărei citire a picat NU e o categorie fără pachete. */
-        <p className="mb-2 text-[11px] text-warning">
-          N-am putut întreba OLX pentru: {nereusite.join(", ")}. Lipsa lor de mai jos nu înseamnă că
-          n-au pachete.
-        </p>
+        <Callout variant="warning" icon={AlertTriangle} className="mb-2">
+          <span className="text-xs">
+            N-am putut întreba OLX pentru: {nereusite.join(", ")}. Lipsa lor de mai jos nu înseamnă că
+            n-au pachete.
+          </span>
+        </Callout>
       )}
       {eroare ? (
         /* ⚠ „N-am putut citi" nu se scrie ca „nu există". Vezi nota de la `loadAll`. */
-        <p className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-          Nu am putut citi pachetele de la OLX: {eroare} Lista de mai jos e goală fiindcă n-am putut
-          întreba, nu fiindcă OLX nu are ce să-ți ofere.
-        </p>
+        <Callout variant="danger" icon={AlertTriangle}>
+          <span className="text-xs">
+            Nu am putut citi pachetele de la OLX: {eroare} Lista de mai jos e goală fiindcă n-am putut
+            întreba, nu fiindcă OLX nu are ce să-ți ofere.
+          </span>
+        </Callout>
       ) : groups.length === 0 ? (
-        <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-          {hasMappedCategories
-            ? "Nu sunt pachete disponibile pentru categoriile tale în acest moment."
-            : "Mapează întâi o categorie la OLX ca să vezi pachetele de anunțuri (pachetele sunt per categorie)."}
-        </p>
+        <Callout variant="neutral">
+          <span className="text-xs">
+            {hasMappedCategories
+              ? "Nu sunt pachete disponibile pentru categoriile tale în acest moment."
+              : "Mapează întâi o categorie la OLX ca să vezi pachetele de anunțuri (pachetele sunt per categorie)."}
+          </span>
+        </Callout>
       ) : (
         <div className="space-y-2">
           {groups.length > 1 && (
@@ -365,9 +380,9 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumpa
     return (
       <div>
         <SectionLabel icon={Megaphone}>Promovează un anunț</SectionLabel>
-        <p className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-          Nu am putut citi promovările de la OLX: {eroare}
-        </p>
+        <Callout variant="danger" icon={AlertTriangle}>
+          <span className="text-xs">Nu am putut citi promovările de la OLX: {eroare}</span>
+        </Callout>
       </div>
     );
   }

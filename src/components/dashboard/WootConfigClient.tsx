@@ -10,6 +10,7 @@ import {
   Building2, User, Phone, Mail, MapPin, Home, CreditCard,
 } from "lucide-react";
 import { saveWootConfig, disconnectWoot, testWootConnection } from "@/lib/actions/woot.actions";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import type { WootConfig, WootCounty, WootCity } from "@/lib/woot";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
@@ -425,10 +426,13 @@ export default function WootConfigClient({
             Salveaza
           </Button>
           {isConnected && (
-            <Button variant="outline" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting && <Loader2 className="animate-spin" />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Woot"
+              cePierzi="Cheile se șterg din Edinio, împreună cu datele expeditorului. Ca să te întorci, le ceri din nou din contul tău Woot. La Woot nu se atinge nimic: AWB-urile deja emise rămân valabile."
+              pending={disconnecting}
+              marime="default"
+              onConfirma={handleDisconnect}
+            />
           )}
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
 import {
   disconnectPallex,
   savePallexConfig,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/pallex.actions";
 import { NUME_TIP_PARTIDA, TIPURI_PARTIDA, type PallExConfig, type TipPartida } from "@/lib/pallex/client";
 import { JUDETE } from "@/lib/ro/judete";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -141,10 +142,12 @@ export function PallexConfigClient({
           icon={CheckCircle}
           title="Pall-Ex activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Pall-Ex"
+              cePierzi="Cheile ClientPlus se șterg din Edinio, împreună cu județul de ridicare și tipul de partidă ales. Ca să te întorci, ceri din nou utilizatorul și parola de la Pall-Ex. Partidele deja trimise rămân la ei."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           {initialConfig?.username}

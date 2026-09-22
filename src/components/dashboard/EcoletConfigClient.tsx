@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
 import {
   disconnectEcolet,
   saveEcoletConfig,
@@ -18,6 +18,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -159,10 +160,12 @@ export function EcoletConfigClient({
           icon={CheckCircle}
           title="eColet activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="eColet"
+              cePierzi="Se șterge toată configurarea eColet din Edinio: tokenul, adresa de ridicare și serviciile bifate. Tokenul nu se mai poate citi din Edinio, deci ca să te întorci pui din nou unul din panel.ecolet.ro; expedierile deja emise rămân pe comenzi."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           Ridicare din {initialConfig?.expeditor?.locality}

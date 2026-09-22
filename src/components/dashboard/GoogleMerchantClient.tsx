@@ -6,9 +6,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ShoppingBag, Globe, Loader2, RefreshCw, Link2, Check, AlertTriangle, X,
+  ShoppingBag, Globe, Loader2, RefreshCw, Link2, Check, AlertTriangle,
   CircleCheck, Clock, CircleX, Settings as SettingsIcon, Plug,
 } from "lucide-react";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import {
   startGoogleMerchantOAuth, listMerchantAccounts, selectMerchantAccount,
   disconnectMerchant, setMerchantSettings, queueSyncAll, setCategoryMap, getMerchantAccountIssues,
@@ -557,8 +558,12 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
 
       {/* Disconnect */}
       <div className="flex justify-end">
-        <button
-          onClick={() => startDisconnect(async () => {
+        <ButonDeconectare
+          nume="Google Merchant"
+          cePierzi="Cheia de acces și contul Merchant legat se șterg din Edinio, împreună cu tot ce știe Edinio despre sincronizare: ce produs a fost trimis, ce probleme avea, ce aștepta la rând. Ofertele deja urcate rămân în contul tău Google Merchant, dar nu mai sunt actualizate."
+          eticheta="Deconectează Google Merchant"
+          pending={disconnecting}
+          onConfirma={() => startDisconnect(async () => {
             let res: Awaited<ReturnType<typeof disconnectMerchant>>;
             try {
               res = await disconnectMerchant(businessId);
@@ -593,10 +598,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
             toast.success("Google Merchant deconectat.");
             router.refresh();
           })}
-          disabled={disconnecting}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50">
-          {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />} Deconectează Google Merchant
-        </button>
+        />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2, Smartphone, CheckCircle2, XCircle, Link2, RefreshCw, KeyRound } from "lucide-react";
+import { Loader2, Smartphone, CheckCircle2, Link2, RefreshCw, KeyRound } from "lucide-react";
 import {
   connectNoticeWhatsapp, refreshNoticeWhatsappQr, requestNoticeWhatsappPairing,
   checkNoticeWhatsappStatus, disconnectNoticeWhatsapp,
@@ -10,6 +10,7 @@ import {
 import type { NoticeWhatsappConfig } from "@/lib/notice";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "In asteptare conectare",
@@ -121,9 +122,16 @@ export function NoticeWhatsappPanel({
               <p className="text-xs text-muted-foreground">{whatsapp?.device_name || "Dispozitiv"} · activ</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={disconnect} disabled={busy}>
-            {busy ? <Loader2 className="animate-spin" /> : <XCircle />} Deconecteaza
-          </Button>
+          {/* ⚠ `cePierzi` e citit din `disconnectNoticeWhatsapp`: sterge dispozitivul la
+              notice.ro, pune `whatsapp` pe `{ enabled: false }` si stinge steagul `whatsapp`
+              pe FIECARE declansator. Bifele alea nu se intorc singure la reconectare. */}
+          <ButonDeconectare
+            nume="WhatsApp"
+            cePierzi="Dispozitivul se scoate din contul tău notice.ro și trebuie legat din nou, cu un cod nou. Bifa de WhatsApp se stinge la toate scenariile, iar tokenul API și SMS-urile rămân neatinse."
+            pending={busy}
+            onConfirma={disconnect}
+            className="flex-shrink-0"
+          />
         </div>
       </Panel>
     );
@@ -202,6 +210,15 @@ export function NoticeWhatsappPanel({
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Astept conectarea...
             </p>
+            {/*
+              ⚠ ASTA NU E butonul de deconectare, desi cheama aceeasi actiune: e iesirea din
+              arcul de imperechere, cand inca astepti codul. N-am pus fereastra casei peste el
+              fiindca intrebarea ar avea doua iesiri numite amandoua „Anulează”, adica exact
+              apasarea din reflex de care fugim.
+              ⚠ RAMASA PE MASA: cand contul cere RECONECTARE (`device_id` vechi, stare
+              `disconnected` / `banned`) tot aici ajunge omul, iar apasarea stinge bifa de
+              WhatsApp de pe toate scenariile. Aia cere text propriu, nu eticheta de aici.
+            */}
             <Button variant="ghost" size="sm" onClick={disconnect} disabled={busy}>Anuleaza</Button>
           </div>
         </div>

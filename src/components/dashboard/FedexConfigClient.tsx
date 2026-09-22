@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Ban, CheckCircle, Info, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, Info, Loader2 } from "lucide-react";
 import {
   disconnectFedex, getFedexServiciiAction, saveFedexConfig, testFedexConnectionAction,
 } from "@/lib/actions/fedex.actions";
@@ -19,6 +19,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -257,9 +258,12 @@ export function FedexConfigClient({
             Testeaza conexiunea
           </Button>
           {areChei && (
-            <Button type="button" variant="ghost" onClick={deconecteaza}>
-              <Unplug className="h-4 w-4" /> Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="FedEx"
+              cePierzi="Cheile FedEx, numarul de cont si adresa de expeditie se sterg din Edinio. Ca sa te intorci, le iei din nou din portalul FedEx pentru dezvoltatori, iar expedierile deja emise raman la FedEx."
+              marime="default"
+              onConfirma={deconecteaza}
+            />
           )}
         </div>
         {!areExpeditor && (

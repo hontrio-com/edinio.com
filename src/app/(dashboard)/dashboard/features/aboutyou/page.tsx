@@ -17,6 +17,15 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
+ * About You Marketplace.
+ *
+ * ⚠ PE TOT ECRANUL, ca la Trendyol si eMAG, si din acelasi motiv. Cerut de el pe
+ * 22.09.2026. Pagina asta nu e un formular de curier cu trei campuri: are zece
+ * panouri (cont, cifre, setari, notificari, pre-verificare, maparea categoriilor,
+ * maparea curierilor, listarile, comenzile si retururile), iar listele de jos au
+ * cate o duzina de coloane. Stransa la `max-w-3xl`, se ingusta pe stanga cu
+ * jumatate de ecran gol la dreapta, iar randurile se rupeau pe doua linii.
+ *
  * Antetul integrarii pleaca imediat; starea conexiunii curge dupa el.
  *
  * `getAboutYouStatus` inseamna un drum pana la SCAYLE, iar cand magazinul e legat
@@ -34,7 +43,7 @@ export default async function AboutYouPage() {
   if (!biz) redirect("/dashboard");
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       <IntegrationHeader id="aboutyou" description="Listează-ți produsele pe About You Marketplace și primești comenzile direct în Edinio." />
       <Suspense fallback={<ScheletAboutYou />}>
         <ContinutAboutYou businessId={biz.id} />
@@ -43,11 +52,15 @@ export default async function AboutYouPage() {
   );
 }
 
+/* Schelet dupa forma reala a paginii: panoul de cerinte, randul de cifre, apoi setarile. */
 function ScheletAboutYou() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-56 rounded-xl" />
+    <div className="space-y-4">
       <Skeleton className="h-40 rounded-xl" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[116px] rounded-xl sm:h-[168px]" />)}
+      </div>
+      <Skeleton className="h-72 rounded-xl" />
     </div>
   );
 }
@@ -88,7 +101,7 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
     <>
       <AboutYouClient businessId={businessId} status={st} />
       {connected && st && (
-        <div className="mt-6 space-y-6">
+        <div className="mt-4 space-y-4">
           {/* Inainte de mapari si de editor: ce lipseste, numarat pe datele reale. */}
           {preVerificare && <AboutYouPreVerificare date={preVerificare} />}
           <AboutYouCategoryMapping businessId={businessId} edinioCategories={categories} mapped={st.categoryMap} />

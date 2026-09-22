@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, Unplug, ChevronRight } from "lucide-react";
+import { CheckCircle, Loader2, ChevronRight } from "lucide-react";
 import {
   saveCargusConfig,
   disconnectCargus,
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -137,10 +138,12 @@ export function CargusConfigClient({
           icon={CheckCircle}
           title="Cargus activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Cargus"
+              cePierzi="Se șterge toată configurarea Cargus din Edinio: username, parolă, Subscription Key, punctul de ridicare și tariful ales. Ca să te întorci, le ceri din nou din contul tău Cargus; AWB-urile deja emise rămân pe comenzi."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           {initialConfig?.location_name} · {initialConfig?.price_table_name}

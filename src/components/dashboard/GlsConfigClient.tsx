@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
 import { saveGlsConfig, disconnectGls, testGlsConnectionAction } from "@/lib/actions/gls.actions";
 import {
   TARI_MYGLS,
@@ -18,6 +18,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 const NUME_TARA: Record<TaraMyGls, string> = {
@@ -173,10 +174,12 @@ export function GlsConfigClient({
           icon={CheckCircle}
           title="GLS activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="GLS"
+              cePierzi="Datele de acces MyGLS se sterg din Edinio, cu tot cu Client Number, codul postal de ridicare si setarile de tiparire. Coletele deja create raman la GLS si raman pe factura lor."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           {initialConfig?.username} · Client {initialConfig?.client_number} ·{" "}

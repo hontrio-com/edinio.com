@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Check, Loader2 } from "lucide-react";
 
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { salveazaPiataPepita } from "@/lib/actions/pepita.actions";
 import {
   ORDINEA_PIETELOR, PIETE,
@@ -89,15 +91,19 @@ export function PietelePepita({
             }`}
           >
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={activa}
-                  onChange={(e) => salveaza(piata, { activa: e.target.checked, curs: s?.curs ?? null })}
-                  className="h-4 w-4 accent-[var(--primary)]"
-                />
-                <span className="text-sm font-medium text-foreground">{p.eticheta}</span>
-              </label>
+              {/*
+                ⚠ COMUTATOR, NU BIFA, ca peste tot in panou: o piata pornita e o
+                hotarare de tipul da/nu, iar bifa desenata de mana era singura din
+                ecran. Numele citit de cititorul de ecran sta pe comutator, fiindca
+                randul nu mai e un `<label>` de la care sa-l imprumute.
+              */}
+              <Switch
+                size="sm"
+                aria-label={`Trimit produsele către ${p.eticheta}`}
+                checked={activa}
+                onCheckedChange={(v) => salveaza(piata, { activa: v, curs: s?.curs ?? null })}
+              />
+              <span className="text-sm font-medium text-foreground">{p.eticheta}</span>
               <span className="text-xs text-muted-foreground">{p.adresa} · {p.moneda}</span>
               {piata === piataDeBaza && (
                 /*
@@ -164,7 +170,7 @@ function CampCurs({
     <div className="mt-2 space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground">1 {moneda} =</span>
-        <input
+        <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={() => {
@@ -174,7 +180,7 @@ function CampCurs({
           inputMode="decimal"
           placeholder="curs"
           aria-label={`Curs către ${p.eticheta}`}
-          className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="h-8 w-24 text-xs"
         />
         <span className="text-xs text-muted-foreground">{p.moneda}</span>
 

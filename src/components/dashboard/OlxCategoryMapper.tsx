@@ -14,6 +14,7 @@ import { legatoriDeAtribute, type OlxMaparecAtribut, type OlxLegaturaAtribut } f
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Panel } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
 
 export function OlxCategoryMapper({ businessId, categories, initialMap }: {
@@ -24,24 +25,20 @@ export function OlxCategoryMapper({ businessId, categories, initialMap }: {
 
   if (categories.length === 0) {
     return (
-      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
-        <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">Adaugă categorii produselor tale ca să le poți mapa la categoriile OLX.</p>
-      </div>
+      <Panel title="Mapare categorii" className="p-5">
+        <p className="text-xs text-muted-foreground">Adaugă categorii produselor tale ca să le poți mapa la categoriile OLX.</p>
+      </Panel>
     );
   }
 
   const mapped = categories.filter((c) => map[c]).length;
 
   return (
-    <div className="space-y-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
-      <div>
-        <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Asociază fiecare categorie a ta cu o categorie OLX și completează atributele cerute ({mapped}/{categories.length} mapate).
-          Produsele din categoriile nemapate nu se publică.
-        </p>
-      </div>
+    <Panel title="Mapare categorii" className="space-y-3 p-5">
+      <p className="text-xs text-muted-foreground">
+        Asociază fiecare categorie a ta cu o categorie OLX și completează atributele cerute ({mapped}/{categories.length} mapate).
+        Produsele din categoriile nemapate nu se publică.
+      </p>
       <div className="max-h-96 space-y-2 overflow-y-auto">
         {categories.map((cat) => {
           const entry = map[cat];
@@ -82,7 +79,7 @@ export function OlxCategoryMapper({ businessId, categories, initialMap }: {
           }}
         />
       )}
-    </div>
+    </Panel>
   );
 }
 

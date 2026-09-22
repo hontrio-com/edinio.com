@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Activity, AlertTriangle, CheckCircle2, Loader2, Wallet } from "lucide-react";
+import {
+  Activity, AlertTriangle, Ban, CheckCircle2, Clock, Layers, Loader2, Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import {
   getOlxPlatiNelamurite, getOlxSanatate, lamuresteOlxPlata, renuntaLaOlxPlata,
   type OlxSanatate,
@@ -14,6 +17,9 @@ import {
 */
 import type { OlxPlataNelamurita } from "@/lib/olx/plati";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 
 /*
   ⚠ TĂCEREA ARATĂ EXACT CA FUNCȚIONAREA (01.09.2026)
@@ -43,16 +49,15 @@ import { Button } from "@/components/ui/button";
 /** Peste atâtea minute, cea mai veche lucrare din coadă nu mai e o întârziere, e o problemă. */
 const PRAG_MINUTE = 15;
 
-function Cifra({ eticheta, valoare, rau }: { eticheta: string; valoare: string; rau?: boolean }) {
-  return (
-    <div className="rounded-xl ring-1 ring-foreground/10 bg-card px-3 py-2">
-      <p className="text-[11px] text-muted-foreground">{eticheta}</p>
-      <p className={`text-sm font-semibold tabular-nums ${rau ? "text-destructive" : "text-foreground"}`}>
-        {valoare}
-      </p>
-    </div>
-  );
-}
+/** O cifră a panoului de sănătate, gata de pus într-un `CardStatistica`. */
+type CifraSanatate = {
+  label: string;
+  value: string | number;
+  /** Scrisă mic, lângă cifră. Lipsa ei la „-" e dinadins: „- min" n-ar însemna nimic. */
+  unit?: string;
+  icon: LucideIcon;
+  explicatie: string;
+};
 
 export default function OlxSanatatePanel({ businessId }: { businessId: string }) {
   const [s, setS] = useState<OlxSanatate | null>(null);
@@ -78,11 +83,7 @@ export default function OlxSanatatePanel({ businessId }: { businessId: string })
     putut întreba e mai rău decât unul care lipsește.
   */
   if (eroare) {
-    return (
-      <p className="flex items-center gap-2 text-xs text-destructive">
-        <AlertTriangle className="h-3.5 w-3.5" /> {eroare}
-      </p>
-    );
+    return <Callout variant="danger" icon={AlertTriangle}>{eroare}</Callout>;
   }
   if (!s) return null;
 
@@ -95,35 +96,90 @@ export default function OlxSanatatePanel({ businessId }: { businessId: string })
   const totBine = !intarziat && s.oprite === 0 && s.conflicte === 0
     && s.platiNelamurite === 0 && !s.cereReconectare;
 
+  /*
+    ═══ CIFRELE ═══
+
+    ⚠ ACELASI `CardStatistica` ca la Panou, Oferte, Statistici si Trendyol, cerut de
+    el pe 22.09.2026. Erau sase cutii desenate aici, cu cifra la 14px: semanau cu
+    cardurile casei fara sa fie ele.
+
+    ⚠ SASE AU DEVENIT PATRU, si nu s-a pierdut nimic. „Conflicte" e chiar numarul pe
+    care `OlxClient` il arata mai jos intr-un `Callout` cu buton de rezolvare (aceeasi
+    interogare: `conflict_la` nescris), deci aici era a doua oara. „Respinse de OLX"
+    a coborat sub grila, ca rand de atentionare, fiindca acolo chiar are ce sa spuna:
+    unde se vede motivul.
+
+    ⚠ ROSUL DE PE CIFRA A IESIT, fiindca `CardStatistica` n-are asa ceva — si nici nu
+    trebuie: fiecare dintre cele patru cifre are, cand e rea, un rand scris dedesubt
+    sau un panou intreg („Plăți de verificat"). Culoarea spunea „e o problema"; textul
+    spune CARE.
+  */
+  const vechimea = s.celMaiVechiMinute;
+  const cifre: CifraSanatate[] = [
+    {
+      label: "În coadă", value: s.inCoada, icon: Layers,
+      explicatie: "Lucrările vii din coada OLX: schimbări de preț, stoc sau publicări care așteaptă să plece. Cronul o golește din minut în minut.",
+    },
+    {
+      label: "Cea mai veche",
+      value: vechimea == null ? "-" : vechimea,
+      unit: vechimea == null ? undefined : "min",
+      icon: Clock,
+      explicatie: `De câte minute așteaptă cea mai veche lucrare din coadă. Peste ${PRAG_MINUTE} de minute nu mai e o întârziere, e un semn că ceva s-a oprit. Liniuța înseamnă că nu e nimic în coadă.`,
+    },
+    {
+      label: "Oprite", value: s.oprite, icon: Ban,
+      explicatie: "Lucrările abandonate după mai multe încercări eșuate. Nimic nu le mai atinge de la sine: pleacă doar dacă apeși pe „Reîncearcă”.",
+    },
+    {
+      label: "Plăți de verificat", value: s.platiNelamurite, icon: Wallet,
+      explicatie: "Cumpărături trimise la OLX al căror răspuns nu a ajuns la noi. Până se lămuresc, aceeași cumpărare nu se mai poate face din Edinio, ca să nu se plătească de două ori.",
+    },
+  ];
+  const marimeCifre = marimeaRandului(cifre.map((x) => ({ valoare: x.value, unitate: x.unit })));
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
         {totBine
           ? <><CheckCircle2 className="h-4 w-4 text-success" /> Sincronizarea OLX merge</>
           : <><Activity className="h-4 w-4 text-warning" /> Sincronizarea OLX are nevoie de atenție</>}
       </p>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <Cifra eticheta="În coadă" valoare={String(s.inCoada)} />
-        <Cifra
-          eticheta="Cea mai veche"
-          valoare={s.celMaiVechiMinute == null ? "-" : `${s.celMaiVechiMinute} min`}
-          rau={intarziat}
-        />
-        <Cifra eticheta="Oprite" valoare={String(s.oprite)} rau={s.oprite > 0} />
-        <Cifra eticheta="Conflicte" valoare={String(s.conflicte)} rau={s.conflicte > 0} />
-        <Cifra eticheta="Respinse de OLX" valoare={String(s.respinse)} rau={s.respinse > 0} />
-        <Cifra eticheta="Plăți de verificat" valoare={String(s.platiNelamurite)} rau={s.platiNelamurite > 0} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {cifre.map((x) => (
+          <CardStatistica
+            key={x.label}
+            marime={marimeCifre}
+            icon={x.icon}
+            label={x.label}
+            value={x.value}
+            unit={x.unit}
+            explicatie={x.explicatie}
+            empty={x.value === 0 || x.value === "-"}
+          />
+        ))}
       </div>
       {intarziat && (
-        <p className="text-xs text-destructive">
+        <Callout variant="danger" icon={AlertTriangle}>
           O lucrare așteaptă de {s.celMaiVechiMinute} de minute. Cronul pornește din minut în minut,
           deci ceva o oprește. Verifică dacă sesiunea OLX mai e validă.
-        </p>
+        </Callout>
       )}
       {s.cereReconectare && (
-        <p className="text-xs text-destructive">
+        <Callout variant="danger" icon={AlertTriangle}>
           Sesiunea OLX a expirat. Până la reconectare nu pleacă nimic, iar lucrările se adună.
-        </p>
+        </Callout>
+      )}
+      {/*
+        ⚠ Numarul asta nu se pierde odata cu cutia lui: e altceva decat cardul
+        „Respinse" de mai jos, care numara STARILE anuntului. Aici sunt cele care
+        poarta un motiv scris de ei, iar randul spune unde se citeste.
+      */}
+      {s.respinse > 0 && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          {s.respinse === 1 ? "Un anunț poartă" : `${s.respinse} anunțuri poartă`} un motiv de
+          respingere scris de OLX. Îl vezi cuvânt cu cuvânt pe rândul fiecăruia, în lista de anunțuri.
+        </Callout>
       )}
       {s.platiNelamurite > 0 && <PlatiDeVerificat businessId={businessId} />}
     </div>
@@ -157,20 +213,20 @@ function PlatiDeVerificat({ businessId }: { businessId: string }) {
   }, [businessId]);
   useEffect(reincarca, [reincarca]);
 
-  if (eroare) return <p className="text-xs text-destructive">{eroare}</p>;
+  if (eroare) return <Callout variant="danger" icon={AlertTriangle}>{eroare}</Callout>;
   if (!plati || plati.length === 0) return null;
 
   return (
-    <div className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3">
-      <p className="flex items-center gap-2 text-xs font-semibold text-destructive">
-        <Wallet className="h-3.5 w-3.5" />
-        {plati.length === 1 ? "O plată nu a fost confirmată" : `${plati.length} plăți nu au fost confirmate`}
-      </p>
-      <p className="text-[11px] text-muted-foreground">
+    <Callout
+      variant="danger"
+      icon={Wallet}
+      title={plati.length === 1 ? "O plată nu a fost confirmată" : `${plati.length} plăți nu au fost confirmate`}
+    >
+      <p className="text-xs">
         Am trimis cererea la OLX, dar răspunsul nu a ajuns. Până se lămurește, aceeași cumpărare nu
         se mai poate face din Edinio, tocmai ca să nu se plătească de două ori.
       </p>
-      <ul className="space-y-2">
+      <ul className="mt-2 space-y-2">
         {plati.map((p) => (
           <li key={p.id} className="flex flex-wrap items-center gap-2 border-t border-destructive/20 pt-2">
             <span className="flex-1 text-xs text-foreground">
@@ -236,6 +292,6 @@ function PlatiDeVerificat({ businessId }: { businessId: string }) {
           </li>
         ))}
       </ul>
-    </div>
+    </Callout>
   );
 }

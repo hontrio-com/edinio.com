@@ -73,10 +73,18 @@ export default async function EmagPage() {
   );
 }
 
+/**
+ * ⚠ FORMA SCHELETULUI E CHIAR FORMA PAGINII: cartonasul contului, randul de patru
+ * cifre, apoi panourile. Un dreptunghi de 128px urmat de unul de 288px tinea locul
+ * unei pagini care nu mai arata deloc asa, iar la asezare continutul sarea.
+ */
 function ScheletEmag() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-32 rounded-xl" />
+      <Skeleton className="h-28 rounded-xl" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[116px] rounded-xl sm:h-[168px]" />)}
+      </div>
       <Skeleton className="h-72 rounded-xl" />
     </div>
   );

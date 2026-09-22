@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, Unplug, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle, Loader2, ChevronRight, ExternalLink } from "lucide-react";
 import {
   saveDpdConfig,
   disconnectDpd,
@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 export function DpdConfigClient({
@@ -112,10 +113,12 @@ export function DpdConfigClient({
           icon={CheckCircle}
           title="DPD activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="DPD"
+              cePierzi="Se șterge toată configurarea DPD din Edinio: username, parolă, Client ID-ul, contul bancar pentru ramburs și opțiunile de expediere. Ca să te întorci, le ceri din nou din contul tău DPD; AWB-urile deja emise rămân pe comenzi."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           {initialConfig?.username} · Client ID {initialConfig?.client_id}

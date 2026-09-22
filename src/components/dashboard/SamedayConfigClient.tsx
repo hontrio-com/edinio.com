@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, Unplug, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle, Loader2, ChevronRight, ExternalLink } from "lucide-react";
 import {
   saveSamedayConfig,
   disconnectSameday,
   loadSamedayAccountAction,
 } from "@/lib/actions/sameday.actions";
 import type { SamedayConfig, SamedayPickupPoint, SamedayService } from "@/lib/sameday/client";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -158,15 +159,12 @@ export function SamedayConfigClient({
           icon={CheckCircle}
           title="Sameday activ"
           action={
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-            >
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Sameday"
+              cePierzi="Cheile se șterg din Edinio, împreună cu punctul de ridicare și serviciul ales. Ca să te întorci, ceri din nou utilizatorul și parola din contul tău Sameday. AWB-urile deja emise rămân valabile la curier."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           {initialConfig?.service_name} · Pickup ID {initialConfig?.pickup_point_id}

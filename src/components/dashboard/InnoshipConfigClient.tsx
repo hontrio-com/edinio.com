@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Copy, Info, Loader2, Stethoscope, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, Copy, Info, Loader2, Stethoscope } from "lucide-react";
 import {
   diagnosticInnoshipAction,
   disconnectInnoship,
@@ -18,6 +18,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -149,7 +150,6 @@ export function InnoshipConfigClient({
   }
 
   async function handleDisconnect() {
-    if (!confirm("Sigur deconectezi Innoship? Comenzile cu AWB emis isi pastreaza numarul.")) return;
     setDisconnecting(true);
     const r = await disconnectInnoship(businessId);
     setDisconnecting(false);
@@ -170,10 +170,17 @@ export function InnoshipConfigClient({
           icon={CheckCircle}
           title="Innoship activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            /*
+              ⚠ Adresa de urmarire se naste din `webhook_secret`, care traieste chiar in
+              configul sters aici: la reconectare se genereaza alta, deci cea lipita in
+              portalul Innoship ramane moarta pana o inlocuieste omul.
+            */
+            <ButonDeconectare
+              nume="Innoship"
+              cePierzi="Cheia de API si adresa de urmarire se sterg din Edinio: la reconectare se face alta adresa, pe care o lipesti din nou in portalul Innoship. Comenzile cu AWB emis isi pastreaza numarul."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           Depozit {initialConfig?.external_client_location}

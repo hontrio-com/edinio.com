@@ -9,6 +9,7 @@ import {
   saveKlaviyoSettings, syncExistingCustomers, syncKlaviyoCatalog,
 } from "@/lib/actions/klaviyo.actions";
 import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import type { KlaviyoPublicConfig, KlaviyoList } from "@/lib/klaviyo";
 
 const inputCls =
@@ -191,10 +192,15 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
               <p className="text-xs text-muted-foreground truncate">{config.account_name || "Cont Klaviyo"}</p>
             </div>
           </div>
-          <button type="button" onClick={disconnect} disabled={saving}
-            className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50 flex-shrink-0">
-            Deconecteaza
-          </button>
+          {/* ⚠ `cePierzi` e citit din `disconnectKlaviyo`: pune `klaviyo_config` pe null, deci
+              cheia privata SI setarile. La ei nu atinge nimic, nici macar un webhook. */}
+          <ButonDeconectare
+            nume="Klaviyo"
+            cePierzi="Cheia API privată și setările se șterg din Edinio. Contactele trimise deja rămân în contul tău Klaviyo, dar ca să te întorci ceri o cheie nouă de acolo."
+            pending={saving}
+            onConfirma={disconnect}
+            className="flex-shrink-0"
+          />
         </div>
       ) : (
         <div className="mt-6 space-y-3">

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Loader2, Unplug, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2, ExternalLink } from "lucide-react";
 import { saveFgoConfig, disconnectFgo, testFgoConfig } from "@/lib/actions/fgo.actions";
 import type { FgoConfig } from "@/lib/fgo";
 import { AUTO_INVOICE_TRIGGERS, type AutoInvoiceTrigger } from "@/lib/invoicing";
@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { selectCls } from "@/lib/ui";
 
 export function FgoConfigClient({
@@ -110,10 +111,12 @@ export function FgoConfigClient({
           icon={CheckCircle}
           title="fGO activ"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="fGO"
+              cePierzi="Cheile se șterg din Edinio și facturile nu se mai emit automat. Facturile deja emise rămân în contul tău fGO. Ca să te întorci, ceri din nou codul unic și cheia privată din contul tău fGO."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           CUI: {initialConfig?.cod_unic} · Serie: {initialConfig?.serie}

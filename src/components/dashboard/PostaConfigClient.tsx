@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, ChevronRight, Info, Loader2, Stethoscope, Unplug } from "lucide-react";
+import { CheckCircle, ChevronRight, Info, Loader2, Stethoscope } from "lucide-react";
 import {
   diagnosticPostaAction,
   disconnectPosta,
@@ -15,6 +15,7 @@ import {
 import type { PostaConfig, ServiciiPosta } from "@/lib/posta/client";
 import { problemePlaja, type PlajaConfig } from "@/lib/posta/plaja";
 import { JUDETE } from "@/lib/ro/judete";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -264,8 +265,9 @@ export function PostaConfigClient({
     router.refresh();
   }
 
+  /* ⚠ Fara `window.confirm`: intrebarea o pune `ButonDeconectare`, in fereastra
+     casei. Doua intrebari una peste alta se invata sa se apese fara citire. */
   async function handleDisconnect() {
-    if (!confirm("Sigur deconectezi Posta Romana? Comenzile cu AWB emis isi pastreaza numarul.")) return;
     setDisconnecting(true);
     const r = await disconnectPosta(businessId);
     setDisconnecting(false);
@@ -290,10 +292,12 @@ export function PostaConfigClient({
           icon={CheckCircle}
           title="Poșta Română activa"
           action={
-            <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-              {disconnecting ? <Loader2 className="animate-spin" /> : <Unplug />}
-              Deconecteaza
-            </Button>
+            <ButonDeconectare
+              nume="Poșta Română"
+              cePierzi="Utilizatorul și parola se șterg din Edinio, împreună cu serviciile bifate. Plaja de coduri rămâne salvată cu tot cu cursorul ei, iar AWB-urile deja emise își păstrează numărul."
+              pending={disconnecting}
+              onConfirma={handleDisconnect}
+            />
           }
         >
           Cont {initialConfig?.username}

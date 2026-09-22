@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2, Unplug } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react";
 import {
   disconnectPacketa, getPacketaCurieriAction, savePacketaConfig, testPacketaConnectionAction,
 } from "@/lib/actions/packeta.actions";
@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { suprapuneri, textSuprapunere } from "@/lib/packeta/suprapunere";
 
@@ -146,7 +147,6 @@ export function PacketaConfigClient({
   }
 
   async function handleDisconnect() {
-    if (!confirm("Sigur deconectezi Packeta? Coletele deja create raman la ei.")) return;
     const r = await disconnectPacketa(businessId);
     if ("error" in r) return toast.error(r.error);
     toast.success("Packeta a fost deconectata");
@@ -382,9 +382,13 @@ export function PacketaConfigClient({
       </Panel>
 
       {isActive && (
-        <Button variant="outline" onClick={handleDisconnect} className="text-red-600">
-          <Unplug className="h-4 w-4 mr-2" /> Deconecteaza Packeta
-        </Button>
+        <ButonDeconectare
+          nume="Packeta"
+          cePierzi="Cele doua credentiale si eticheta de expeditor se sterg din Edinio, deci ca sa te intorci le iei din nou din contul Packeta. Coletele deja create raman la ei si se anuleaza doar de mana, din contul lor."
+          eticheta="Deconectează Packeta"
+          marime="default"
+          onConfirma={handleDisconnect}
+        />
       )}
     </div>
   );

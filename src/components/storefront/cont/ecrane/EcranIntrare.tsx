@@ -8,6 +8,10 @@ import { CARD, TITLU } from "../ui/clase";
  *
  * ⚠ Textele din stanga stau DIRECT pe fundalul magazinului, deci folosesc
  * `--st-on-bg`; cardul formularului sta pe `--st-surface`.
+ *
+ * ⚠ Titlul, textul si lista de avantaje se aleg din Setari. Textul comerciantului
+ * se arata ca atare (poate avea diacritice: e al lui, nu al nostru); sirul gol
+ * inseamna textul implicit de mai jos.
  */
 
 function Avantaj({ icon: Icon, titlu, text }: { icon: LucideIcon; titlu: string; text: string }) {
@@ -24,7 +28,19 @@ function Avantaj({ icon: Icon, titlu, text }: { icon: LucideIcon; titlu: string;
   );
 }
 
-export function EcranIntrare({ numeMagazin, greutateTitlu }: { numeMagazin: string; greutateTitlu: "font-normal" | "font-semibold" }) {
+export function EcranIntrare({
+  numeMagazin,
+  greutateTitlu,
+  titlu = "",
+  text = "",
+  avantaje = true,
+}: {
+  numeMagazin: string;
+  greutateTitlu: "font-normal" | "font-semibold";
+  titlu?: string;
+  text?: string;
+  avantaje?: boolean;
+}) {
   return (
     <main className="flex-1" style={{ fontFamily: "var(--st-font-body)" }}>
       <div className="mx-auto w-full px-4 py-10 sm:px-6 lg:py-16" style={{ maxWidth: "min(var(--st-container), 68rem)" }}>
@@ -32,17 +48,17 @@ export function EcranIntrare({ numeMagazin, greutateTitlu }: { numeMagazin: stri
           <div className="order-2 text-[var(--st-on-bg)] lg:order-1">
             <p className="text-[11px] font-semibold uppercase tracking-widest opacity-70">Contul meu</p>
             <h1 className={`mt-2 text-3xl tracking-tight lg:text-4xl ${greutateTitlu}`} style={TITLU}>
-              Comenzile tale de la {numeMagazin}, intr-un singur loc
+              {titlu || `Comenzile tale de la ${numeMagazin}, intr-un singur loc`}
             </h1>
             <p className="mt-3 max-w-md text-sm leading-relaxed opacity-75 lg:text-base">
-              Intri cu adresa de email cu care ai comandat. Nu ai nevoie de parola si nici de inregistrare.
+              {text || "Intri cu adresa de email cu care ai comandat. Nu ai nevoie de parola si nici de inregistrare."}
             </p>
-            <ul className="mt-8 space-y-5">
+            {avantaje && <ul className="mt-8 space-y-5">
               <Avantaj icon={Package} titlu="Istoricul comenzilor" text="Fiecare comanda, cu produsele, plata si livrarea ei." />
               <Avantaj icon={Truck} titlu="Urmarirea coletului" text="Unde e coletul si cand a plecat, fara sa cauti emailuri." />
               <Avantaj icon={ReceiptText} titlu="Facturile, gata de descarcat" text="Documentele emise de magazin, in PDF." />
               <Avantaj icon={ShieldCheck} titlu="Datele tale, sub control" text="Alegi ce mesaje primesti si iti poti sterge contul oricand." />
-            </ul>
+            </ul>}
           </div>
 
           <div className={`order-1 lg:order-2 ${CARD} p-6 sm:p-8`}>

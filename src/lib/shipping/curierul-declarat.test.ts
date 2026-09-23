@@ -210,7 +210,12 @@ test("⚠⚠ SI COLOANA CHIAR SE CERE DIN BAZA, altfel paza sterge curierul de p
    * publica, si tipata `boolean` in tipurile generate.
    */
   const cod = fisier(COMANDA);
-  const cerute = cod.match(/shipping_zones, shipping_enabled"/g) ?? [];
+  /*
+   * ⚠ Coloana se cauta IN LISTA `select`-ului, oriunde ar sta in ea. Prima forma cauta sirul
+   * `shipping_zones, shipping_enabled"`, adica coloana pusa ULTIMA, si a cazut pe 24.09.2026 cand
+   * s-a adaugat `cont_client_config` dupa ea, desi coloana era ceruta mai departe in ambele locuri.
+   */
+  const cerute = cod.match(/\.select\("[^"]*\bshipping_enabled\b[^"]*"\)/g) ?? [];
   assert.equal(cerute.length, 2, `coloana se cere in ${cerute.length} interogari; trebuie in doua`);
 });
 

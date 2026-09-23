@@ -26,7 +26,7 @@ export const incarcaAntetMagazin = cache(async (slug: string) => {
     // Reuniunea antetului CU `COLOANE_BUSINESS_PUBLIC`: acelasi rand era cerut inca
     // o data de fiecare pagina de magazin, cu clientul vizitatorului. Doua
     // dus-intorsuri pe vizita pentru un rand deja adus. Vezi `incarcaMagazinul`.
-    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config)")
+    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config, cont_client_config)")
     .eq("slug", slug)
     .maybeSingle();
   return data;

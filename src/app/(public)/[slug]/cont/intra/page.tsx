@@ -22,7 +22,13 @@ export default async function IntraInCont({ params }: Props) {
   return (
     <StorefrontThemeScope style={p.resolved.style}>
       <StorePageShell chrome={p.chrome} design={p.resolved.design} className="flex min-h-screen flex-col">
-        <EcranIntrare numeMagazin={p.storeName} greutateTitlu={p.greutateTitlu} />
+        <EcranIntrare
+          numeMagazin={p.storeName}
+          greutateTitlu={p.greutateTitlu}
+          titlu={p.intrare.titlu}
+          text={p.intrare.text}
+          avantaje={p.intrare.avantaje}
+        />
       </StorePageShell>
     </StorefrontThemeScope>
   );

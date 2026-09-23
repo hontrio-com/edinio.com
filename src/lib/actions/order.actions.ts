@@ -87,6 +87,8 @@ import { raporteazaCumparareaMeta } from "@/lib/orders/meta-comanda";
 import { raporteazaCumparareaTikTok } from "@/lib/orders/tiktok-comanda";
 import { isIP } from "node:net";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
+import { leagaComandaPlasata, poartaContuluiLaComanda } from "@/lib/cont/poarta-comenzii";
+import { adresaContului } from "@/lib/cont/origine";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
 const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
@@ -1208,7 +1210,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones, shipping_enabled")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones, shipping_enabled, cont_client_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1241,6 +1243,17 @@ export async function placeOrder(data: {
    * `error_logs` mai jos), si nu corecteaza in tacere: comanda se opreste, iar
    * formularul isi reface lista de metode la reincarcare, deci refuzul se repara.
    */
+  /*
+   * ⚠⚠ POARTA CONTULUI, INAINTEA ORICAREI SCRIERI (jurnalul ofertelor, ANAF, numarul
+   * comenzii, cuponul, stocul). Comerciantul poate face contul OBLIGATORIU la comanda
+   * (hotararea proprietarului, 23.09.2026); regula si caderile ei deschise sunt in
+   * `src/lib/cont/poarta-comenzii.ts`. Cand omul e logat, comanda se leaga de contul lui
+   * imediat dupa insert.
+   */
+  const poartaCont = await poartaContuluiLaComanda({ businessId: data.business_id, config: cfgRow?.cont_client_config });
+  if (!poartaCont.ok) {
+    return { error: poartaCont.mesaj, contNecesar: poartaCont.contNecesar };
+  }
   const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
   if ("error" in metoda) {
     logError({ action: "placeOrder.paymentMethodRejected", message: "Payment method not offered by the store", details: { businessId: data.business_id, cerut: String(data.payment_method ?? "").slice(0, 40) }, severity: "warning" });
@@ -2261,6 +2274,10 @@ export async function placeOrder(data: {
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
+  /* Comanda omului logat intra in contul lui ACUM, nu la urmatoarea intrare. Nu poate
+     rupe comanda: e best-effort, cu avertisment (vezi `leagaComandaPlasata`). */
+  await leagaComandaPlasata(data.business_id, poartaCont.contId, order.id);
+
   /*
    * Acceptarile de oferta intra in contor ABIA ACUM, cand comanda chiar exista.
    *
@@ -2360,14 +2377,14 @@ export async function placeOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
+      .select("notifications_config, cont_client_config, businesses(business_name, store_name, user_id, slug, custom_domain, custom_domain_healthy)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null; custom_domain: string | null; custom_domain_healthy: boolean | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -2440,6 +2457,7 @@ export async function placeOrder(data: {
         payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        cont_url: adresaContului(settings.cont_client_config, biz),
         order_id: order.id,
         address: data.customer_address,
         city: data.customer_city,
@@ -4445,7 +4463,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones, shipping_enabled")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones, shipping_enabled, cont_client_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -4468,6 +4486,17 @@ export async function placeCartOrder(data: {
 
   // Aceeasi garda ca la comanda directa: metoda de plata se verifica fata de ce
   // ofera magazinul, nu doar fata de tabelul de coduri. Vezi `verificaMetodaPlata`.
+  /*
+   * ⚠⚠ POARTA CONTULUI, INAINTEA ORICAREI SCRIERI (jurnalul ofertelor, ANAF, numarul
+   * comenzii, cuponul, stocul). Comerciantul poate face contul OBLIGATORIU la comanda
+   * (hotararea proprietarului, 23.09.2026); regula si caderile ei deschise sunt in
+   * `src/lib/cont/poarta-comenzii.ts`. Cand omul e logat, comanda se leaga de contul lui
+   * imediat dupa insert.
+   */
+  const poartaCont = await poartaContuluiLaComanda({ businessId: data.business_id, config: cfgRow?.cont_client_config });
+  if (!poartaCont.ok) {
+    return { error: poartaCont.mesaj, contNecesar: poartaCont.contNecesar };
+  }
   const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
   if ("error" in metoda) {
     logError({ action: "placeCartOrder.paymentMethodRejected", message: "Payment method not offered by the store", details: { businessId: data.business_id, cerut: String(data.payment_method ?? "").slice(0, 40) }, severity: "warning" });
@@ -5256,6 +5285,10 @@ export async function placeCartOrder(data: {
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
 
+  /* Comanda omului logat intra in contul lui ACUM, nu la urmatoarea intrare. Nu poate
+     rupe comanda: e best-effort, cu avertisment (vezi `leagaComandaPlasata`). */
+  await leagaComandaPlasata(data.business_id, poartaCont.contId, order.id);
+
   // Acelasi motiv ca pe calea directa: contorul se misca abia dupa ce comanda a
   // intrat cu adevarat.
   if (oferte.applied.length > 0) {
@@ -5313,14 +5346,14 @@ export async function placeCartOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
+      .select("notifications_config, cont_client_config, businesses(business_name, store_name, user_id, slug, custom_domain, custom_domain_healthy)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null; custom_domain: string | null; custom_domain_healthy: boolean | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -5397,6 +5430,7 @@ export async function placeCartOrder(data: {
         payment_method: metodaPlata,
         business_name: businessName,
         store_url: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        cont_url: adresaContului(settings.cont_client_config, biz),
         order_id: order.id,
         address: data.customer_address,
         city: data.customer_city,

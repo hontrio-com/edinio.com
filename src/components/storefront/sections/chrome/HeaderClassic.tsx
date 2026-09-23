@@ -8,6 +8,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { CartControl, useCartTarget } from "@/components/storefront/sections/_shared/CartControl";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 /**
  * Header-ul magazinului, varianta classic: hamburger + logo la stanga, meniu la
@@ -91,6 +92,8 @@ export function HeaderClassic() {
               </svg>
             </a>
           )}
+          {/* Contul meu: aprins numai din Setari, pe domeniul propriu (ActiuneCont). */}
+          <ActiuneCont clasa="relative flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-surface text-foreground hover:bg-muted transition-colors" marime={16} stroke={2} />
           <CosClassic count={count} color={color} />
         </div>
       </div>

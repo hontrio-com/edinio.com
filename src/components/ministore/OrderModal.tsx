@@ -37,6 +37,9 @@ import {
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { ESEC_CUPON } from "@/lib/discounts/mesaj";
+import { useContulLaComanda } from "@/components/storefront/cont/contul-la-comanda";
+import { IntrareLaComanda } from "@/components/storefront/sections/checkout/IntrareLaComanda";
+import { MESAJ_CONT_NECESAR } from "@/lib/cont/config";
 
 
 export type { QuantityTier };
@@ -306,6 +309,20 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const cheiScoase = cheileScoase(inlocuite);
   const [intlEnabled, setIntlEnabled] = useState(false);
   const isIntl = intlEnabled && form.country !== "RO";
+  /* ⚠ Contul la comanda: aceeasi regula ca in `checkout-core.ts`, a doua copie a
+     aceluiasi formular. Adresa verificata intra numai intr-un camp de email VIZIBIL. */
+  const contLaComanda = useContulLaComanda({
+    activ: open,
+    laAdresa: (email) => {
+      if (emailField.enabled || isIntl) setForm((f) => (f.email.trim() ? f : { ...f, email }));
+      setErrors((e) => {
+        if (e._ !== MESAJ_CONT_NECESAR) return e;
+        const rest = { ...e };
+        delete rest._;
+        return rest;
+      });
+    },
+  });
   // In afara tarii, blocul de firma nu se arata: cifra de control a CUI-ului e
   // romaneasca, deci un cod de TVA european ar fi respins si ar bloca comanda.
   const companyEnabled = companyFieldsOn && !isIntl;
@@ -1011,6 +1028,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!validate()) return;
     const unitPrice = treapta.unitPrice;
     startTransition(async () => {
+      /* ⚠ Ca in `checkout-core.ts`: pasul de intrare deschis opreste trimiterea AICI,
+         inaintea evenimentelor de plata catre pixeli si a serverului. */
+      if (contLaComanda.necesar && (await contLaComanda.maiECerut())) {
+        setErrors({ _: MESAJ_CONT_NECESAR });
+        contLaComanda.duLaBloc();
+        return;
+      }
       const allAdditional = [
         /*
          * ⚠ SI PERSONALIZAREA, nu doar produsul si cantitatea.
@@ -1191,6 +1215,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
             handleRemoveDiscount();
             setShowDiscountField(true);
           }
+          if ("contNecesar" in result && result.contNecesar === true) contLaComanda.ceruDeServer();
           setErrors({ _: result.error ?? "Eroare la plasarea comenzii." });
           return;
         }
@@ -1277,6 +1302,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               </button>
             </div>
 
+            {/* Pasul de intrare, cand magazinul cere cont. ⚠ INAINTEA `<form>`-ului, nu in
+                el: are formularele lui (vezi `IntrareLaComanda`). */}
+            <IntrareLaComanda cont={contLaComanda} color={color} />
             <form onSubmit={handleSubmit} className="px-5 pt-4 pb-6 space-y-4">
 
               {/* Quantity tiers OR simple product summary */}

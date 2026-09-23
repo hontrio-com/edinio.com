@@ -16,6 +16,7 @@ import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import type { CheckoutEngine } from "./checkout-core";
 import type { CheckoutPreview } from "./checkout-preview";
 import { CheckoutCartLines, CheckoutTotals } from "./CheckoutSummary";
+import { IntrareLaComanda } from "./IntrareLaComanda";
 
 /**
  * Campurile finalizarii comenzii — exact aceleasi in modal si pe pagina.
@@ -150,6 +151,13 @@ export function CheckoutForm({
   };
 
   return (
+    <>
+      {/*
+        Pasul de intrare, cand magazinul cere cont la comanda. ⚠ INAINTEA
+        `<form>`-ului, nu in el: are formularele lui, iar un formular in alt
+        formular nu e HTML valid (Enter in campul de cod ar fi trimis comanda).
+      */}
+      {!preview && <IntrareLaComanda cont={motor.contLaComanda} color={color} />}
         <form onSubmit={preview ? (e) => e.preventDefault() : handleSubmit} className="px-5 pt-4 pb-6 space-y-4">
           {/* Pe pagina, rezumatul comenzii si totalurile stau in coloana din
               dreapta; aici ar aparea a doua oara, cu aceleasi numere. */}
@@ -549,5 +557,6 @@ export function CheckoutForm({
               : "Vei fi redirectionat pentru plata securizata"}
           </p>
         </form>
+    </>
   );
 }

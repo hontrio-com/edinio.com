@@ -13,8 +13,15 @@ se face, in [`REGISTRU.md`](REGISTRU.md), ca orice altceva din redesign.
 
 ## 0. Hotararile proprietarului, luate inainte de plan
 
-**H1. Contul e OPTIONAL.** Isi face cont cine vrea. Comanda ca musafir ramane exact cum e azi,
-nicaieri nu se cere cont ca sa poti cumpara.
+**H1. Contul e OPTIONAL, sau OBLIGATORIU la comanda, dupa alegerea comerciantului.** Implicit
+e optional: isi face cont cine vrea, iar comanda ca musafir ramane exact cum e azi.
+
+⚠ **Schimbata de proprietar pe 23.09.2026, seara.** Prima forma spunea „nicaieri nu se cere cont
+ca sa poti cumpara". Cuvintele lui: „vreau ca din Setari utilizatorul sa poata activa optiunea de
+a lasa utilizatorul sa faca cont, daca este obligatoriu sau nu sa aiba cont ca sa comande, sa faca
+diferite setari de design". Plus butonul „Contul meu" din antetul vitrinei, reglabil (text sau
+iconita, iconita aleasa), numai cu optiunea aprinsa, si: „specifici ca nu poate activa optiunea
+asta de Cont daca nu are domeniu". Cum s-a facut: capitolul 9, „Contul obligatoriu la comanda".
 
 **H2. Comerciantul aprinde functia din Setari.** E o setare pe magazin, stinsa implicit.
 
@@ -35,9 +42,11 @@ comenzile de marketplace, care oricum nu intra in cont.
 
 Din ele ies doua reguli care taie mult din plan:
 
-- **Valul 1 nu atinge fluxul de comanda.** Nici `order.actions.ts`, nici `checkout-core.ts`,
-  nici `OrderModal.tsx`. Checkout-ul e drumul banilor si exista in doua copii care s-au departat
-  deja una de alta. Precompletarea adresei dintr-un cont e un val separat.
+- **Fluxul de comanda se atinge NUMAI cat cere contul obligatoriu** (H1, forma din 23.09.2026):
+  poarta din cele doua actiuni, legarea comenzii de cont dupa insert, pasul de intrare din cele
+  doua formulare. Checkout-ul e drumul banilor si exista in doua copii care s-au departat deja
+  una de alta; nimic altceva din el nu se schimba. Precompletarea adresei dintr-un cont ramane
+  un val separat.
 - **Cumparatorul anonim nu plateste nimic in plus.** Nicio cerere noua, niciun cookie, nicio
   citire. Asta e o proba, nu o intentie.
 
@@ -505,9 +514,14 @@ raspunde „salvat". Cate magazine n-au rand acolo nu s-a masurat niciodata: se 
 Comutatorul e stins implicit si nu se poate aprinde cand magazinul nu are domeniu propriu
 sanatos, cand nu are nici email, nici SMS, sau cand e suspendat.
 
-**Iconita „Cont" din antetul vitrinei nu are voie sa se aprinda singura.** `resolveActions` pune
-actiunile aparute dupa salvare la coada listei si le socoteste PORNITE. Poarta sta in `areDate`
-din `useHeaderSettings`, nu in lista de actiuni.
+**Butonul „Contul meu" din antetul vitrinei nu are voie sa se aprinda singur.** `resolveActions`
+pune actiunile aparute dupa salvare la coada listei si le socoteste PORNITE, iar 61 din 71 de
+magazine au antetul „classic", care n-are deloc lista. De aceea butonul NU e o actiune din lista:
+sta fix in fiecare din cele 8 variante de antet (si in sertarul de pe telefon), ca
+`ActiuneCont`, si se aprinde numai din Setari. Starea vine din layoutul magazinului, din randul
+citit deja si din gazda cererii (`contulMagazinului`), fara cookie si fara cerere noua. Se
+regleaza: iconita, text sau amandoua; opt iconite; textul lui (24 de caractere, iar pe telefon
+modul „text" arata iconita).
 
 **Garda de suspendare.** `/cos` si `/checkout` citesc fiecare `businesses.suspended_until` si
 `users_profile.plan_expires_at` al proprietarului si redirecteaza. Fara aceeasi garda pe cont,
@@ -520,6 +534,35 @@ cele 296 de capcane gasite de cei 14 exploratori.
 stergere), rutele raspund 404, nimic nu se sterge. Reaprinsa, oamenii intra inapoi in conturile
 lor. Setarile spun cati oameni au cont chiar langa comutator, ca cifra sa se vada INAINTE de
 apasare, nu dupa.
+
+⚠ **`suspended_until` e un termen de GRATIE**, nu „suspendat pana la": magazinul se opreste cand
+data a TRECUT, exact ca la `/cos`, `/checkout` si `magazinulEOprit`. Prima scriere a butonului
+din antet il citea invers.
+
+### Contul obligatoriu la comanda
+
+- **Poarta e pe server**, in `placeOrder` si `placeCartOrder` (`poartaContuluiLaComanda`), INAINTEA
+  oricarei scrieri: numarul comenzii, cuponul, stocul, insertul. Pusa dupa, o comanda refuzata ar
+  fi lasat cupon si stoc blocate; pusa numai in formular, s-ar fi ocolit (actiunile sunt
+  endpointuri publice). Magazinele fara conturi pornite ies pe primul rand, fara nicio cerere.
+- **Cade DESCHIS, cu avertisment in `error_logs`**, in doua cazuri in care un „nu" ar opri
+  vanzarile fara vina cumparatorului: domeniul masurat cazut (vitrina merge atunci pe
+  `www.edinio.com`, unde contul nu exista) si plafonul zilnic de coduri epuizat (un strain l-ar
+  putea arde de pe cateva IP-uri).
+- **Comanda omului logat intra in cont PE LOC**, dupa insert (`cont_leaga_comanda_plasata`, temei
+  `plasata-in-cont`), nu la urmatoarea intrare. Nu poate rupe comanda.
+- **Formularul afla de la deschidere** daca trebuie sa intri (`/api/cont/stare`, numai la
+  magazinele cu cont obligatoriu), din ACEEASI poarta, fara a doua copie a regulii. Pasul de
+  intrare sta IN AFARA `<form>`-ului comenzii, trimiterea se opreste inaintea pixelilor, iar
+  cosul, campurile si cuponul raman pe loc. Emailul verificat intra in campul de email numai
+  cand acela se vede si e gol.
+- **Se porneste numai dupa o intrare reala in cont** pe magazinul asta, in ultimele 30 de zile
+  (dovada ca domeniul si emailul cu cod merg), si numai cu un plafon zilnic de coduri de minim 50.
+- **Drumul spre cont** apare si pe pagina de confirmare, si in emailul de confirmare, numai unde
+  `/cont` exista (aceeasi regula de domeniu ca in Setari).
+- ⚠ **SMS-ul NU se face in valul asta.** Cheia SMSO e impartita de trei magazine cu trei
+  proprietari, codurile prin SMS atrag „SMS pumping" pe creditul comerciantului, iar codul ar
+  ajunge in jurnalele furnizorului. Ramane o hotarare de luat.
 
 ---
 
@@ -578,6 +621,9 @@ si apoi grantul. Un `revoke from anon` singur e o operatie NULA pe o functie far
 `create or replace` reface granturile implicite.
 
 Fiecare migratie intra in [`REGISTRU.md`](REGISTRU.md) in clipa in care e scrisa.
+
+⚠ Tabelul de mai sus e PLANUL. Ce s-a scris efectiv sunt douasprezece migratii, **38-49** in
+`REGISTRU.md`, in ordinea in care se aplica in productie, TOATE inaintea codului.
 
 ---
 

@@ -173,6 +173,11 @@ export async function sendOrderConfirmationToCustomer(
     business_name: string;
     payment_method?: string;
     store_url?: string;
+    /**
+     * Adresa zonei de cont (`https://<domeniul propriu>/cont`), numai cand magazinul
+     * are conturile pornite si domeniul nu e masurat cazut. Vezi `adresaContului`.
+     */
+    cont_url?: string;
   },
   sender?: StoreEmailSender,
 ) {
@@ -258,6 +263,9 @@ export async function sendOrderConfirmationToCustomer(
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
       <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
     </div>
+    ${order.cont_url ? `<div style="border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
+      <p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.6;">Urmaresti comanda, livrarea si factura din <a href="${escapeUrl(order.cont_url)}" style="color:#18181b;font-weight:600;text-decoration:underline;">contul tau</a>. Intri cu adresa asta de email, fara parola.</p>
+    </div>` : ""}
     ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 

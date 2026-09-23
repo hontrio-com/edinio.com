@@ -5,6 +5,7 @@ import { vineDePeMagazin } from "@/lib/cont/cerere";
 import { clientIp } from "@/lib/utils/rate-limit";
 import { cereCod, verificaCod, mesajulRefuzului, MESAJ_SMS_INCA_NU } from "@/lib/cont/cod";
 import { scoateContact } from "@/lib/cont/date";
+import { leagaComenzile } from "@/lib/cont/comenzi";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -48,6 +49,22 @@ export async function POST(req: NextRequest) {
       if (!/^\d{6}$/.test(cod)) return NextResponse.json({ eroare: "Codul are sase cifre." }, { status: 400 });
       const r = await verificaCod(magazin, fel, valoare, cod, ip, "adaugare-contact", s.contId);
       if (!r.ok) return NextResponse.json({ eroare: mesajulRefuzului(r.motiv) }, { status: 400 });
+      /*
+        ⚠ Comenzile de pe adresa abia confirmata intra in cont ACUM, nu la
+        urmatoarea intrare: omul a adaugat-o tocmai ca sa le vada. Legarea nu
+        are voie sa strice confirmarea, care s-a facut deja; se reia oricum la
+        fiecare intrare.
+      */
+      try {
+        await leagaComenzile(magazin.id, s.contId);
+      } catch (e) {
+        await logError({
+          action: "cont/contact",
+          message: `legarea comenzilor dupa confirmarea contactului a esuat: ${String(e)}`,
+          businessId: magazin.id,
+          severity: "warning",
+        });
+      }
       return NextResponse.json({ ok: true }, { status: 200 });
     }
 

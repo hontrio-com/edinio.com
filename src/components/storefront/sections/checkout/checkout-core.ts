@@ -25,6 +25,8 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { useCompanyBilling } from "@/components/ministore/CompanyFields";
 import { type CheckoutPreview } from "./checkout-preview";
 import { ESEC_CUPON } from "@/lib/discounts/mesaj";
+import { useContulLaComanda } from "@/components/storefront/cont/contul-la-comanda";
+import { MESAJ_CONT_NECESAR } from "@/lib/cont/config";
 
 /**
  * Motorul finalizarii comenzii: toata starea, toate apelurile catre server si
@@ -293,6 +295,24 @@ export function useCheckoutOrder({
   const placedRef = useRef<{ payloadKey: string; orderId: string } | null>(null);
   const [intlEnabled, setIntlEnabled] = useState(preview?.intlEnabled ?? false);
   const isIntl = intlEnabled && form.country !== "RO";
+  /*
+   * ⚠ Contul, cand magazinul il cere la comanda (Setari > Conturi de client). Poarta
+   * adevarata e pe server; aici pasul de intrare apare de la deschidere, si adresa
+   * verificata intra in campul de email cand acela se vede si e gol. Cand campul e
+   * ascuns, NU se completeaza: ar fi plecat cu comanda o adresa pe care omul n-o vede.
+   */
+  const contLaComanda = useContulLaComanda({
+    activ: open && !preview,
+    laAdresa: (email) => {
+      if (emailField.enabled || isIntl) setForm((f) => (f.email.trim() ? f : { ...f, email }));
+      setErrors((e) => {
+        if (e._ !== MESAJ_CONT_NECESAR) return e;
+        const rest = { ...e };
+        delete rest._;
+        return rest;
+      });
+    },
+  });
   // Comenzile din afara tarii NU primesc blocul de firma: cifra de control a
   // CUI-ului e un algoritm strict romanesc, deci orice cod de TVA european ar fi
   // respins ca „invalid" si ar bloca trimiterea formularului. Facturarea B2B
@@ -683,6 +703,17 @@ export function useCheckoutOrder({
       return;
     }
     startTransition(async () => {
+      /*
+       * ⚠ Pasul de intrare e deschis: trimiterea se opreste AICI, inaintea
+       * evenimentelor de plata catre pixeli si a serverului. `maiECerut` intreaba
+       * serverul inca o data: omul poate fi intrat intre timp din alt tab, sau
+       * serverul primeste acum comanda ca vizitator (plafonul de coduri epuizat).
+       */
+      if (contLaComanda.necesar && (await contLaComanda.maiECerut())) {
+        setErrors({ _: MESAJ_CONT_NECESAR });
+        contLaComanda.duLaBloc();
+        return;
+      }
       const allItems = [
         /*
          * ⚠ PERSONALIZAREA PLEACA CU LINIA, si numai VALORILE — `price` ramane cel de CATALOG.
@@ -868,6 +899,9 @@ export function useCheckoutOrder({
             handleRemoveDiscount();
             setShowDiscountField(true);
           }
+          if ("contNecesar" in result && result.contNecesar === true) {
+            contLaComanda.ceruDeServer();
+          }
           setErrors({ _: result.error as string });
           return;
         }
@@ -923,6 +957,7 @@ export function useCheckoutOrder({
     codFeeAmount,
     companyBilling,
     companyEnabled,
+    contLaComanda,
     customFields,
     customValues,
     discountAmount,

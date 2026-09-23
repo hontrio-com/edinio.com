@@ -106,6 +106,16 @@ export function totaluriComanda(p: {
   codFee: unknown;
   vatAmount: unknown;
   vatRate: unknown;
+  /**
+   * `orders.prices_include_vat`: regimul INGHETAT pe comanda (`null` la comenzile
+   * de dinainte de coloana). ⚠ OBLIGATORIU, ca orice apelant nou sa fie numarat de
+   * compilator: pana pe 24.09.2026 lipsea, iar pagina comenzii din panou eticheta TVA-ul
+   * dupa setarea de AZI a magazinului, desi facturarea (`invoiceVat`) il citea pe cel
+   * inghetat. Un magazin trecut intre timp pe alt regim ar fi vazut „inclus" pe o
+   * comanda la care TVA-ul fusese adunat peste pret, iar caseta i-ar fi scris o
+   * diferenta nejustificata de exact cat TVA-ul.
+   */
+  regimInghetat: unknown;
   total: unknown;
   setariTva: SetariTvaMagazin;
 }): TotaluriCaseta {
@@ -146,7 +156,10 @@ export function totaluriComanda(p: {
    * i-ar spune comerciantului sa adune TVA peste un total pe care factura il
    * trateaza ca inclusiv — si tot nota noua il trimite sa compare cu factura.
    */
-  const regim = invoiceVat({ vat_rate: p.vatRate }, p.setariTva);
+  const regim = invoiceVat(
+    { vat_rate: p.vatRate, prices_include_vat: typeof p.regimInghetat === "boolean" ? p.regimInghetat : null },
+    p.setariTva,
+  );
   const tvaInTotal = arataTva && !regim.taxIncluded;
   /*
    * Aceeasi formulare ca in cos si la finalizare (`CheckoutSummary`, `OrderModal`)

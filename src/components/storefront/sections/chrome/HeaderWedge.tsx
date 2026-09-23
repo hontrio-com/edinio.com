@@ -14,6 +14,7 @@ import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { stilSigla } from "@/lib/storefront/logo-box";
+import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.7;
 
@@ -123,6 +124,8 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
                 pana la 20rem din marginea ecranului, iar meniul se opreste unde
                 incepe zona iconitelor. */}
             <div className="flex items-center justify-end gap-3 lg:gap-5 shrink-0 ml-auto lg:min-w-[18rem]" style={{ color: "var(--st-primary-contrast)" }}>
+              {/* Contul meu: aprins numai din Setari, pe domeniul propriu (ActiuneCont). */}
+              <ActiuneCont clasa="hidden lg:flex items-center gap-2 hover:opacity-70 transition-opacity" marime={21} stroke={STROKE} />
               {actiuni.map((a) => (
                 <Fragment key={a}>
                   {a === "cautare" && (

@@ -12,6 +12,8 @@ const GOL = {
   cardDiscount: 0,
   codDiscount: 0,
   codFee: 0,
+  /* Comenzile de dinainte de coloana: regimul cade pe setarea magazinului. */
+  regimInghetat: null,
 };
 
 test("comanda #0073: extraoptiunea de 5 lei nu era nicaieri in caseta", () => {
@@ -95,6 +97,7 @@ test("comanda #0064: reducerea de card se scade, TVA-ul inclus tot nu se aduna",
     codFee: 0,
     vatAmount: "20.48",
     vatRate: "21.00",
+    regimInghetat: null,
     total: "126.20",
     setariTva: { vat_enabled: true, prices_include_vat: true },
   });
@@ -133,6 +136,7 @@ test("taxa de ramburs se aduna, reducerea de ramburs se scade", () => {
     codFee: 7,
     vatAmount: 0,
     vatRate: 0,
+    regimInghetat: null,
     total: 112,
     setariTva: { vat_enabled: false, prices_include_vat: true },
   });
@@ -209,4 +213,34 @@ test("mai multe extraoptiuni, cu cantitate, se aduna toate", () => {
   });
   assert.equal(t.extras, 19.99);
   assert.equal(t.diferenta, 0);
+});
+
+test("regimul INGHETAT pe comanda bate setarea de azi a magazinului", () => {
+  /*
+    Comanda plasata pe preturi NETE (100 + TVA 21 = 121), citita dupa ce magazinul
+    a trecut pe preturi cu TVA inclus. Cu setarea de azi, caseta scria „TVA (21%)
+    inclus" si o diferenta nejustificata de 21, adica exact TVA-ul adunat.
+  */
+  const baza = {
+    items: [{ product_id: "9f0c-uuid", price: 100, quantity: 1 }],
+    subtotal: 100,
+    shippingCost: 0,
+    ...GOL,
+    vatAmount: 21,
+    vatRate: 21,
+    total: 121,
+    setariTva: { vat_enabled: true, prices_include_vat: true },
+  };
+  const inghetat = totaluriComanda({ ...baza, regimInghetat: false });
+  assert.equal(inghetat.tvaEticheta, "TVA (21%)");
+  assert.equal(inghetat.tvaInTotal, true);
+  assert.equal(inghetat.diferenta, 0);
+
+  /* Fara regim pe comanda (comenzile vechi): setarea de azi, bit cu bit ca inainte. */
+  const vechi = totaluriComanda({ ...baza, regimInghetat: null });
+  assert.equal(vechi.tvaEticheta, "TVA (21%) inclus");
+  assert.equal(vechi.diferenta, -21);
+
+  /* ⚠ `false` e un raspuns, nu o lipsa: nici sirul, nici alt tip nu-l inlocuiesc. */
+  assert.equal(totaluriComanda({ ...baza, regimInghetat: "false" }).tvaEticheta, "TVA (21%) inclus");
 });

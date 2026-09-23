@@ -112,6 +112,7 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
     "migrations/2026-09-23-conturi-clienti-reparatii.sql",
     "migrations/2026-09-23-conturi-clienti-banii-comenzii.sql",
     "migrations/2026-09-23-conturi-clienti-comanda-completa.sql",
+    "migrations/2026-09-23-conturi-clienti-obligatoriu-si-curier.sql",
   ];
   const definesteFunctia = /create\s+(or\s+replace\s+)?function\s+public\.cont_comanda_mea\s*\(/;
   const gasite = fisiereDin("migrations", [".sql"]).filter((p) => definesteFunctia.test(citeste(p)));
@@ -144,7 +145,7 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
     "o.payment_method", "o.subtotal", "o.shipping_cost", "o.discount_amount", "o.cod_fee_amount",
     "o.card_discount_amount", "o.cod_discount_amount", "o.discount_code", "o.vat_amount", "o.vat_rate",
     "o.prices_include_vat", "o.offer_discount_amount", "o.notes",
-    "awb.curier", "awb.awb", "awb.url", "awb.emis_la",
+    "awb.curier", "awb.awb", "awb.url", "awb.emis_la", "awb.curier_real",
     "privat.cont_documentul_comenzii", "privat.cont_personalizarea_liniei", "privat.cont_defalcarea_liniei",
   ]) {
     const nume = camp.replace(".", "\\.");

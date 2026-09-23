@@ -1,106 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle, Mail } from "lucide-react";
 import { BUTON_PRIMAR, CAMP, ETICHETA_CAMP, LEGATURA, STIL_PRIMAR } from "./ui/clase";
+import { useIntrareCuCod } from "./intrare-cu-cod";
 
 /**
- * Intrarea in contul de cumparator: doi pasi, fara parola.
+ * Intrarea in contul de cumparator: doi pasi, fara parola. Cererile si regulile
+ * lor (acelasi raspuns pentru orice adresa, asteptarea la retrimitere) sunt in
+ * `useIntrareCuCod`, impartite cu pasul de intrare din formularul de comanda.
  *
  * ⚠ H6: ecranele noi se scriu FARA diacritice, ca restul vitrinei
- * („Finalizeaza comanda"), nu ca panoul.
- *
- * ⚠ Raspunsul serverului la pasul unu e ACELASI si cand adresa e cunoscuta, si
- * cand nu e. Formularul nu incearca sa ghiceasca nimic si nu arata alt text: ar
- * fi transformat ecranul intr-un oracol prin care oricine afla ce adrese cunoaste
- * magazinul.
- *
- * ⚠ „Retrimite codul" asteapta un minut, iar plafoanele adevarate stau in baza
- * (cinci coduri in 15 minute pe destinatie, si pe IP). Numaratoarea de aici doar
- * nu-l lasa pe om sa loveasca plafonul din nerabdare.
+ * („Finalizeaza comanda”), nu ca panoul.
  */
-
-const ASTEPTARE_RETRIMITERE = 60;
-
 export function FormularIntrare() {
   const router = useRouter();
-  const [pas, setPas] = useState<"contact" | "cod">("contact");
-  const [email, setEmail] = useState("");
-  const [cod, setCod] = useState("");
-  const [mesaj, setMesaj] = useState("");
-  const [eroare, setEroare] = useState("");
-  const [asteapta, setAsteapta] = useState(false);
-  const [ramas, setRamas] = useState(0);
-
-  useEffect(() => {
-    if (ramas <= 0) return;
-    const t = setTimeout(() => setRamas((r) => r - 1), 1000);
-    return () => clearTimeout(t);
-  }, [ramas]);
-
-  async function cere(): Promise<boolean> {
-    setAsteapta(true);
-    setEroare("");
-    try {
-      const r = await fetch("/api/cont/cod", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fel: "email", destinatie: email }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setEroare(j.eroare ?? "Nu am putut trimite codul. Incearca din nou.");
-        return false;
-      }
-      setMesaj(j.mesaj ?? "");
-      setRamas(ASTEPTARE_RETRIMITERE);
-      return true;
-    } catch {
-      setEroare("Nu am putut trimite codul. Verifica legatura la internet.");
-      return false;
-    } finally {
-      setAsteapta(false);
-    }
-  }
-
-  async function cereCodul(e: React.FormEvent) {
-    e.preventDefault();
-    if (asteapta) return;
-    if (await cere()) setPas("cod");
-  }
-
-  async function trimiteCodul(e: React.FormEvent) {
-    e.preventDefault();
-    if (asteapta) return;
-    setAsteapta(true);
-    setEroare("");
-    try {
-      const r = await fetch("/api/cont/intra", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fel: "email", destinatie: email, cod }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setEroare(j.eroare ?? "Nu am putut deschide contul.");
-      } else {
-        /*
-          ⚠ `refresh()` INAINTE de `push()`, si ordinea conteaza.
-          Cookie-ul tocmai a fost scris de ruta, dar Router Cache-ul clientului
-          tine payloadul RSC 30 de secunde (`next.config.ts`, `staleTimes.dynamic`).
-          Fara `refresh()`, omul ar fi ajuns pe o pagina randata ca si cum n-ar fi
-          logat, si ar fi fost trimis inapoi la intrare.
-        */
-        router.refresh();
-        router.push("/cont");
-      }
-    } catch {
-      setEroare("Nu am putut deschide contul. Verifica legatura la internet.");
-    } finally {
-      setAsteapta(false);
-    }
-  }
+  const {
+    pas, email, setEmail, cod, scrieCod, mesaj, eroare, asteapta, ramas,
+    cereCodul, trimiteCodul, retrimite, schimbaAdresa,
+  } = useIntrareCuCod(() => {
+    /*
+      ⚠ `refresh()` INAINTE de `push()`, si ordinea conteaza.
+      Cookie-ul tocmai a fost scris de ruta, dar Router Cache-ul clientului
+      tine payloadul RSC 30 de secunde (`next.config.ts`, `staleTimes.dynamic`).
+      Fara `refresh()`, omul ar fi ajuns pe o pagina randata ca si cum n-ar fi
+      logat, si ar fi fost trimis inapoi la intrare.
+    */
+    router.refresh();
+    router.push("/cont");
+  });
 
   if (pas === "cod") {
     return (
@@ -123,7 +51,7 @@ export function FormularIntrare() {
             autoComplete="one-time-code"
             maxLength={6}
             value={cod}
-            onChange={(ev) => setCod(ev.target.value.replace(/\D/g, ""))}
+            onChange={(ev) => scrieCod(ev.target.value)}
             className={`${CAMP} py-3 text-center text-xl tracking-[0.5em] sm:text-xl`}
             placeholder="000000"
             required
@@ -137,7 +65,7 @@ export function FormularIntrare() {
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
           <button
             type="button"
-            onClick={() => { setPas("contact"); setCod(""); setEroare(""); }}
+            onClick={schimbaAdresa}
             className={LEGATURA}
           >
             Schimba adresa
@@ -145,7 +73,7 @@ export function FormularIntrare() {
           {ramas > 0 ? (
             <span className="text-[var(--st-muted)]" aria-live="polite">Poti cere alt cod in {ramas} s</span>
           ) : (
-            <button type="button" onClick={() => void cere()} disabled={asteapta} className={LEGATURA}>
+            <button type="button" onClick={retrimite} disabled={asteapta} className={LEGATURA}>
               Retrimite codul
             </button>
           )}

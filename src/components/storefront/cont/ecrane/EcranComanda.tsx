@@ -14,7 +14,7 @@ import { CopiazaText } from "../CopiazaText";
 import { AjutorMagazin, type ContactMagazin } from "../ui/CadruCont";
 import { BlocDocument } from "./BlocDocument";
 import { EtichetaStareCont, ListaDate, Mesaj, Miniatura, PasiComanda, RandDate, Sectiune } from "../ui/piese";
-import { BUTON_PRIMAR, BUTON_SECUNDAR, FOCUS, STIL_PRIMAR } from "../ui/clase";
+import { BUTON_PRIMAR, BUTON_SECUNDAR, FOCUS, LEGATURA, STIL_PRIMAR } from "../ui/clase";
 
 /**
  * O comanda, cu toate detaliile.
@@ -182,7 +182,7 @@ export function EcranComanda({
                         <CopiazaText text={c.awb} eticheta="Copiaza numarul AWB" />
                       </span>
                     </RandDate>
-                    {c.awbEmisLa && <RandDate eticheta="Predat curierului">{formatDate(c.awbEmisLa)}</RandDate>}
+                    {c.awbEmisLa && <RandDate eticheta="AWB emis pe">{formatDate(c.awbEmisLa)}</RandDate>}
                   </>
                 ) : !cron.capat && c.stare !== "delivered" ? (
                   <RandDate eticheta="Urmarire">
@@ -190,11 +190,22 @@ export function EcranComanda({
                   </RandDate>
                 ) : null}
               </ListaDate>
-              {c.urmarire && (
-                <a href={c.urmarire} target="_blank" rel="noopener noreferrer" className={`${BUTON_PRIMAR} mt-5`} style={STIL_PRIMAR}>
+              {c.urmarire?.fel === "direct" && (
+                <a href={c.urmarire.href} target="_blank" rel="noopener noreferrer" className={`${BUTON_PRIMAR} mt-5`} style={STIL_PRIMAR}>
                   Urmareste coletul
                   <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
+              )}
+              {/* ⚠ La Posta si Pall-Ex numarul nu se poate pune in adresa (captcha, cod
+                  postal): se deschide pagina lor de cautare, iar omul lipeste numarul. */}
+              {c.urmarire?.fel === "cautare" && (
+                <p className="mt-4 text-sm text-[var(--st-muted)]">
+                  Copiaza numarul AWB si cauta-l pe{" "}
+                  <a href={c.urmarire.href} target="_blank" rel="noopener noreferrer" className={LEGATURA}>
+                    pagina de urmarire a curierului
+                  </a>
+                  .
+                </p>
               )}
             </Sectiune>
           )}

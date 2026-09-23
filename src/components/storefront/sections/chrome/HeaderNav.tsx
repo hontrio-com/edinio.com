@@ -16,6 +16,7 @@ import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { stilSigla } from "@/lib/storefront/logo-box";
+import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 /** Iconitele acestei variante au contur subtire, nu gros. */
 const STROKE = 1.6;
@@ -106,6 +107,8 @@ export function HeaderNav({ settings }: { settings: Record<string, unknown> }) {
             />
 
             <div className="flex items-center gap-1 shrink-0 ml-auto">
+              {/* Contul meu: aprins numai din Setari, pe domeniul propriu (ActiuneCont). */}
+              <ActiuneCont clasa="inline-flex items-center justify-center gap-2 h-10 min-w-10 px-2.5 rounded-full text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors" marime={18} stroke={STROKE} />
               {actiuni.map((a) => (
                 <Fragment key={a}>
                   {a === "cautare" && (

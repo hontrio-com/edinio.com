@@ -14,6 +14,7 @@ import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { stilSigla } from "@/lib/storefront/logo-box";
+import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.5;
 
@@ -100,6 +101,8 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
           </a>
 
           <div className="flex items-center justify-end gap-4 lg:gap-5 text-[var(--st-text)]">
+            {/* Contul meu: aprins numai din Setari, pe domeniul propriu (ActiuneCont). */}
+            <ActiuneCont clasa="flex items-center gap-2.5 hover:opacity-60 transition-opacity" marime={22} stroke={STROKE} clasaText="text-[13px] font-semibold" />
             {actiuni.map((a) => (
               <Fragment key={a}>
                 {a === "cautare" && (

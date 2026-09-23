@@ -368,7 +368,11 @@ async function ContinutSetari({
     conturilor n-are de ce sa rupa restul Setarilor, unde stau livrarea, taxele
     si platile. Fila ramane goala si atat.
   */
-  const stareConturi = business?.id ? await incarcaStareaConturilor(business.id) : null;
+  /* ⚠ `try`: citirea foloseste `randCitit`, care ARUNCA la o pana de baza. Fara el,
+     comentariul de mai sus mintea, iar o pana la conturi dadea jos toate Setarile. */
+  const stareConturi = business?.id
+    ? await incarcaStareaConturilor(business.id).catch(() => null)
+    : null;
   const stareaConturilor = stareConturi && !("error" in stareConturi) ? stareConturi : undefined;
 
   return (

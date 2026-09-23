@@ -7300,6 +7300,7 @@ export type Database = {
           cota_tva: number | null
           creata_la: string
           curier: string | null
+          curier_real: string | null
           detalii: string | null
           economie_oferte: number | null
           factura: Json | null
@@ -7378,6 +7379,18 @@ export type Database = {
       cont_iesi_de_peste_tot: {
         Args: { p_business: string; p_cont: string }
         Returns: undefined
+      }
+      cont_buget_email_epuizat: {
+        Args: { p_business: string }
+        Returns: boolean
+      }
+      cont_intrari_recente: {
+        Args: { p_business: string }
+        Returns: number
+      }
+      cont_leaga_comanda_plasata: {
+        Args: { p_business: string; p_cont: string; p_order: string }
+        Returns: boolean
       }
       cont_maturare: {
         Args: { p_business: string; p_cont: string }

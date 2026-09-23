@@ -106,6 +106,9 @@ export function randuriDeBani(order: BaniComanda): RandDeBani[] {
     codFee: order.cod_fee_amount,
     vatAmount: order.vat_amount,
     vatRate: order.vat_rate,
+    /* Aici `prices_include_vat` e deja regimul comenzii: cel de la plasare (emailurile)
+       sau cel inghetat (contul de client). */
+    regimInghetat: order.prices_include_vat,
     total: order.total,
     setariTva: { vat_enabled: order.vat_enabled, prices_include_vat: order.prices_include_vat },
   });

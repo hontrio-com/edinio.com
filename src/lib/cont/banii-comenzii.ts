@@ -66,9 +66,8 @@ export function randurileDeBani(c: BaniDinCont, magazin: SetariTvaMagazin): Rand
       vat_rate: c.cotaTva ?? 0,
       vat_enabled: magazin.vat_enabled,
       /*
-        ⚠⚠ REGIMUL INGHETAT BATE SETAREA DE AZI, ca in `invoiceVat`. `totaluriComanda`
-        ii da lui `invoiceVat` numai cota, deci regimul comenzii trebuie sa ajunga
-        prin setare. Fara asta, un magazin trecut intre timp pe „preturi cu TVA”
+        ⚠⚠ REGIMUL INGHETAT BATE SETAREA DE AZI, ca in `invoiceVat`. `randuriDeBani`
+        il trece mai departe si ca regim inghetat, si ca setare. Fara asta, un magazin trecut intre timp pe „preturi cu TVA”
         si-ar fi vazut comenzile vechi cu TVA-ul scris „inclus”, desi fusese
         adunat peste pret.
       */

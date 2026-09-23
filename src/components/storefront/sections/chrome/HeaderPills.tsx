@@ -17,6 +17,7 @@ import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCatalog, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { stilSigla } from "@/lib/storefront/logo-box";
+import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.7;
 
@@ -136,6 +137,8 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
           )}
 
           <div className="flex items-center gap-1.5 shrink-0 ml-auto lg:ml-0">
+            {/* Contul meu: aprins numai din Setari, pe domeniul propriu (ActiuneCont). */}
+            <ActiuneCont clasa="flex h-10 min-w-10 items-center justify-center gap-2 rounded-full bg-[var(--st-surface)] px-2.5 text-[var(--st-text)] shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:opacity-80 transition-opacity" marime={18} stroke={STROKE} />
             {actiuni.map((a) => (
               <Fragment key={a}>
                 {a === "telefon" && (

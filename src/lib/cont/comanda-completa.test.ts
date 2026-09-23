@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adresaDeUrmarire, numeleCurierului } from "./urmarire";
+import { curierulReal, numeleCurierului, urmareste } from "./urmarire";
 import { numeleMetodei, stareaPlatii } from "./plata";
 import { cronologia } from "./cronologie";
 import { livrarea } from "./livrare";
@@ -18,32 +18,72 @@ import { documentulFiscal, numarulDocumentului, stareaDocumentului } from "./doc
 
 /* ═══ Urmarirea coletului ═══ */
 
-test("urmarire: tiparele din panou, si numai ele", () => {
-  assert.equal(adresaDeUrmarire("fancourier", "2270499882526", null), "https://www.fancourier.ro/awb-tracking/?tracking=2270499882526");
-  assert.equal(adresaDeUrmarire("cargus", "123", null), "https://www.cargus.ro/personal/urmareste-coletul/?tracking_number=123");
-  assert.equal(adresaDeUrmarire("sameday", "1SD", null), "https://sameday.ro/#awb=1SD");
-  /* Curier fara link public folosit deja: nimic, nu o adresa ghicita. */
-  assert.equal(adresaDeUrmarire("woot", "999", null), null);
-  assert.equal(adresaDeUrmarire("gls", "999", null), null);
-  assert.equal(adresaDeUrmarire("fancourier", "  ", null), null);
+const href = (p: Parameters<typeof urmareste>[0]) => urmareste(p)?.href ?? null;
+/* Separatorii din `woot_service_name`, construiti din cod: sursa nu poarta semnul lung. */
+const LUNG = String.fromCharCode(0x2014);
+const PUNCT = String.fromCharCode(0xb7);
+
+test("urmarire: curierii directi, cu tiparele lor", () => {
+  assert.equal(href({ curier: "fancourier", awb: "2270499882526" }), "https://www.fancourier.ro/awb-tracking/?tracking=2270499882526");
+  assert.equal(href({ curier: "cargus", awb: "123" }), "https://www.cargus.ro/personal/urmareste-coletul/?tracking_number=123");
+  assert.equal(href({ curier: "sameday", awb: "1SD" }), "https://sameday.ro/#awb=1SD");
+  assert.equal(href({ curier: "dpd", awb: "81000000001" }), "https://tracking.dpd.ro/?shipmentNumber=81000000001");
+  assert.equal(href({ curier: "gls", awb: "999" }), "https://gls-group.com/RO/ro/urmarire-colet?match=999");
+  assert.equal(href({ curier: "packeta", awb: "Z123" }), "https://tracking.packeta.com/ro/?id=Z123");
+  assert.equal(href({ curier: "ecolet", awb: "E1" }), "https://panel.ecolet.ro/track/E1");
+  assert.equal(href({ curier: "shipo", awb: "S1" }), "https://shipo.ro/servicii-curierat/urmarire-colet?awb_track=S1");
+  assert.equal(href({ curier: "fancourier", awb: "  " }), null);
+  /* Colete Online: ruta lor nu e documentata si n-a fost probata pe o expediere reala. */
+  assert.equal(urmareste({ curier: "colete", awb: "C1" }), null);
+});
+
+test("⚠⚠ urmarire: Woot trimite la pagina LOR, pe curierul real, pe ambele separatoare masurate", () => {
+  /* Productie: „DPD <semn lung> locatie - adresa" (218) si „DPD <punct median> locatie - adresa" (55); demo: „DPD Classic". */
+  for (const serviciu of [`DPD ${LUNG} locatie - adresa`, `DPD ${PUNCT} locatie - adresa`, "DPD Classic", "DPD"]) {
+    assert.equal(href({ curier: "woot", curierReal: serviciu, awb: "81234567890" }), "https://awb.woot.ro/urmarire-colet-dpd/81234567890", serviciu);
+  }
+  assert.equal(href({ curier: "woot", curierReal: `Fan Courier ${LUNG} fanbox - adresa`, awb: "41" }), "https://awb.woot.ro/urmarire-colet-fancourier/41");
+  /* Un serviciu necunoscut: nimic, nu o adresa ghicita. */
+  assert.equal(urmareste({ curier: "woot", curierReal: "Curier Nou SRL", awb: "1" }), null);
+  assert.equal(urmareste({ curier: "woot", curierReal: null, awb: "1" }), null);
+});
+
+test("urmarire: Posta si Pall-Ex dau numai pagina de cautare, marcata ca atare", () => {
+  assert.deepEqual(urmareste({ curier: "posta", awb: "RR1" }), { href: "https://www.posta-romana.ro/track-trace.html", fel: "cautare" });
+  assert.equal(urmareste({ curier: "pallex", awb: "P1" })?.fel, "cautare");
+  assert.equal(urmareste({ curier: "fancourier", awb: "1" })?.fel, "direct");
 });
 
 test("⚠⚠ urmarire: adresa salvata de curier trece NUMAI daca e https", () => {
-  assert.equal(adresaDeUrmarire("ups", "1Z", "https://www.ups.com/track?tracknum=1Z"), "https://www.ups.com/track?tracknum=1Z");
-  assert.equal(adresaDeUrmarire("ups", "1Z", "javascript:alert(1)"), null);
-  assert.equal(adresaDeUrmarire("ups", "1Z", "http://ups.com/x"), null);
-  assert.equal(adresaDeUrmarire("ups", "1Z", "nu e adresa"), null);
+  assert.equal(href({ curier: "ups", awb: "1Z", urlSalvat: "https://www.ups.com/track?tracknum=1Z" }), "https://www.ups.com/track?tracknum=1Z");
+  assert.equal(href({ curier: "ups", awb: "1Z", urlSalvat: "javascript:alert(1)" }), null);
+  assert.equal(href({ curier: "ups", awb: "1Z", urlSalvat: "http://ups.com/x" }), null);
+  assert.equal(href({ curier: "ups", awb: "1Z", urlSalvat: "nu e adresa" }), null);
   /* Si cand adresa salvata e rea, tiparul tot se poate folosi. */
-  assert.equal(adresaDeUrmarire("fancourier", "7", "javascript:x"), "https://www.fancourier.ro/awb-tracking/?tracking=7");
+  assert.equal(href({ curier: "fancourier", awb: "7", urlSalvat: "javascript:x" }), "https://www.fancourier.ro/awb-tracking/?tracking=7");
 });
 
 test("urmarire: AWB-ul se codifica, nu se lipeste", () => {
-  assert.equal(adresaDeUrmarire("cargus", "1&x=2", null), "https://www.cargus.ro/personal/urmareste-coletul/?tracking_number=1%26x%3D2");
+  assert.equal(href({ curier: "cargus", awb: "1&x=2" }), "https://www.cargus.ro/personal/urmareste-coletul/?tracking_number=1%26x%3D2");
+  assert.equal(href({ curier: "woot", curierReal: "DPD", awb: "1/../x" }), "https://awb.woot.ro/urmarire-colet-dpd/1%2F..%2Fx");
 });
 
-test("numele curierului e fara diacritice (H6)", () => {
+test("curierul real se recunoaste dupa PRIMUL cuvant, pe o harta explicita", () => {
+  assert.equal(curierulReal("Fan Courier"), "fancourier");
+  assert.equal(curierulReal("fancourier"), "fancourier");
+  assert.equal(curierulReal("fan"), "fancourier");
+  assert.equal(curierulReal("Urgent Cargus"), "cargus");
+  assert.equal(curierulReal("Poșta Română"), "posta");
+  /* „Curier DPD" nu incepe cu DPD: nu se ghiceste pe subsir. */
+  assert.equal(curierulReal("Curier DPD"), null);
+  assert.equal(curierulReal(""), null);
+});
+
+test("numele curierului e fara diacritice (H6), iar la brokeri e curierul REAL", () => {
   assert.equal(numeleCurierului("posta"), "Posta Romana");
   assert.equal(numeleCurierului("fancourier"), "FAN Courier");
+  assert.equal(numeleCurierului("woot", `DPD ${LUNG} locatie - adresa`), "DPD");
+  assert.equal(numeleCurierului("woot", null), "Woot", "fara curier real ramane numele brokerului");
   assert.equal(numeleCurierului(null), null);
 });
 

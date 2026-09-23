@@ -16,6 +16,8 @@ import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-c
 import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo, robotsVitrinaPeGazda, verificareGooglePentru } from "@/lib/seo";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import type { Metadata } from "next";
+import { contulMagazinului as contulMagazinuluiPeCerere } from "@/lib/cont/config";
+import { ContulMagazinuluiProvider } from "@/components/storefront/cont/ContulMagazinului";
 
 interface Props {
   children: React.ReactNode;
@@ -168,12 +170,14 @@ export default async function StoreLayout({ children, params }: Props) {
   let gaMeasurementId: string | null = null;
   let mc: MarketingConfig | null = null;
   let cookieRaw: unknown = null;
+  let contRaw: unknown = null;
 
   if (business) {
-    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown } | { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown }[] | null }).store_settings;
+    const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown; cont_client_config?: unknown } | { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown; cont_client_config?: unknown }[] | null }).store_settings;
     const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
     mc = (settings?.marketing_config ?? null) as MarketingConfig | null;
     cookieRaw = settings?.cookie_banner_config ?? null;
+    contRaw = settings?.cont_client_config ?? null;
     fbPixelId = mc?.facebook_pixel_id?.trim() || null;
     ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
     googleTagId = mc?.google_tag_id?.trim() || null;
@@ -201,6 +205,20 @@ export default async function StoreLayout({ children, params }: Props) {
   const host = (await headers()).get("host");
   const customDomain = (business?.custom_domain as string | null) ?? null;
   const basePath = esteDomeniulPropriu(host, customDomain) ? "" : `/${slug}`;
+
+  /*
+   * Conturile de client, pe cererea asta: butonul „Contul meu" din antet si daca o
+   * comanda cere cont. ⚠ Din randul citit deja si din gazda, fara cookie si fara
+   * cerere noua. Totul se stinge in afara domeniului propriu (acolo zona de cont
+   * nu exista) si la un magazin oprit, al carui termen de gratie a trecut (acolo
+   * /cont da 404). Valoarea din baza
+   * trece prin curatare: comerciantul isi poate scrie randul direct.
+   */
+  const contulMagazinului = contulMagazinuluiPeCerere({
+    config: contRaw,
+    peOrigineaMagazinului: esteDomeniulPropriu(host, customDomain),
+    suspendatPana: (business?.suspended_until as string | null) ?? null,
+  });
 
   // Trackers inject AFTER the visitor consents to the matching category
   // (GDPR opt-in). marketing = FB/TikTok pixels, analytics = Google Tag.
@@ -242,7 +260,7 @@ export default async function StoreLayout({ children, params }: Props) {
           )}
         </DoarInMagazinReal>
       </DoarInAfaraContului>
-      {children}
+      <ContulMagazinuluiProvider valoare={contulMagazinului}>{children}</ContulMagazinuluiProvider>
       {cookieConfig.enabled && (
         <DoarInMagazinReal>
           <CookieConsent

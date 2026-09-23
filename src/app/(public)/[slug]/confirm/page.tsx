@@ -25,6 +25,7 @@ import { potrivireaPentruPixelTikTok, dateDinAdresaTikTok } from "@/lib/tiktok/d
 import { continutTikTokComanda, type ContinutTikTok } from "@/lib/tiktok/continut";
 import { utilizatorulPentruGoogle, type UtilizatorGoogle } from "@/lib/google-ads/date-client";
 import { randurileInstantaneului } from "@/lib/customization/comanda";
+import { ContulDupaComanda } from "@/components/storefront/cont/ContulDupaComanda";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -520,6 +521,9 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                 )}
               </div>
             </div>
+
+            {/* Drumul spre contul de client, numai unde contul exista (vezi componenta). */}
+            {vanzareConfirmata && <ContulDupaComanda areEmail={!!customerEmail} />}
 
             <a href={catreProduse}
               className="mt-6 flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90"

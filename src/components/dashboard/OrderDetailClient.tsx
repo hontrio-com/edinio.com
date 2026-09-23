@@ -462,6 +462,7 @@ export function OrderDetailClient({
     codFee: order.cod_fee_amount,
     vatAmount: order.vat_amount,
     vatRate: order.vat_rate,
+    regimInghetat: order.prices_include_vat,
     total: order.total,
     setariTva,
   });

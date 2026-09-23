@@ -59,8 +59,8 @@ export default async function ComandaMea({ params }: Props) {
         </span>
       }
       actiuni={
-        c.urmarire ? (
-          <a href={c.urmarire} target="_blank" rel="noopener noreferrer" className={BUTON_PRIMAR} style={STIL_PRIMAR}>
+        c.urmarire?.fel === "direct" ? (
+          <a href={c.urmarire.href} target="_blank" rel="noopener noreferrer" className={BUTON_PRIMAR} style={STIL_PRIMAR}>
             Urmareste coletul
             <ExternalLink className="h-4 w-4" aria-hidden="true" />
           </a>

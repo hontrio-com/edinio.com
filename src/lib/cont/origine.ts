@@ -84,3 +84,20 @@ export function poateAprindeConturi(business: {
   }
   return { poate: true };
 }
+
+/**
+ * Adresa zonei de cont, pentru emailul de confirmare a comenzii.
+ *
+ * ⚠ Aceeasi regula de domeniu ca in Setari (`poateAprindeConturi`): fara domeniu
+ * propriu, sau cu el masurat cazut, `/cont` nu exista, iar un link acolo ar duce
+ * la 404. Comutatorul se judeca strict (`conturilePornite`, `=== true`), fiindca
+ * comerciantul isi poate scrie randul direct.
+ */
+export function adresaContului(
+  config: unknown,
+  biz: { custom_domain: string | null; custom_domain_healthy: boolean | null } | null,
+): string | undefined {
+  if (!biz?.custom_domain || !conturilePornite(config)) return undefined;
+  if (!poateAprindeConturi(biz).poate) return undefined;
+  return `https://${biz.custom_domain}/cont`;
+}

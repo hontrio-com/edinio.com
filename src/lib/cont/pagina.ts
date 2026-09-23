@@ -8,6 +8,7 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { originaEsteNumaiAMagazinului, conturilePornite } from "./origine";
 import { magazinulEOprit, type MagazinDeCont } from "./magazinul-cererii";
 import { sesiuneCurenta, type SesiuneCont } from "./sesiune";
+import { curataContClientConfig } from "./config";
 import type { SetariTvaMagazin } from "@/lib/orders/totals-box";
 
 /**
@@ -58,6 +59,11 @@ export type PaginaDeCont = {
    */
   greutateTitlu: "font-normal" | "font-semibold";
   sesiune: SesiuneCont | null;
+  /**
+   * Textele paginii de intrare, din Setari. Sirul gol inseamna textul implicit al
+   * ecranului. ⚠ Trec prin curatare: comerciantul isi poate scrie randul direct.
+   */
+  intrare: { titlu: string; text: string; avantaje: boolean };
 };
 
 export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
@@ -168,5 +174,9 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
     campuriCheckout,
     greutateTitlu: resolved.style.fontHeading === "instrument" ? "font-normal" : "font-semibold",
     sesiune,
+    intrare: (() => {
+      const c = curataContClientConfig(storeSettings?.cont_client_config);
+      return { titlu: c.intrare_titlu, text: c.intrare_text, avantaje: c.intrare_avantaje };
+    })(),
   };
 }

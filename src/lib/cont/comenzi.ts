@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { documentulFiscal, type DocumentFiscal } from "./documente";
-import { adresaDeUrmarire, numeleCurierului } from "./urmarire";
+import { numeleCurierului, urmareste, type Urmarire } from "./urmarire";
 import type { LivrareBruta } from "./livrare";
 
 export type MiniaturaComenzii = { nume: string; imagine: string | null };
@@ -86,7 +86,9 @@ export type DetaliuComanda = {
   numeCurier: string | null;
   awb: string | null;
   awbEmisLa: string | null;
-  urmarire: string | null;
+  /** Curierul REAL la brokeri (Woot, Innoship, Shipo, SmartShip), cum il da brokerul. */
+  curierReal: string | null;
+  urmarire: Urmarire | null;
   vedere: "redusa" | "intreaga";
 };
 
@@ -161,10 +163,10 @@ function miniaturile(v: unknown): MiniaturaComenzii[] {
 /**
  * Leaga de cont comenzile care se potrivesc pe contactele lui verificate.
  *
- * ⚠ Se cheama dupa fiecare intrare reusita, nu la fiecare deschidere de pagina:
- * e o scriere, si nu are ce sa gaseasca nou intre doua clicuri. Un om care
- * comanda dupa ce s-a logat isi vede comanda la urmatoarea intrare, si tocmai
- * de-aia ecranul principal arata si un indiciu catre revendicare.
+ * ⚠ Se cheama dupa fiecare intrare reusita si dupa confirmarea unui contact nou,
+ * nu la fiecare deschidere de pagina: e o scriere, si nu are ce sa gaseasca nou
+ * intre doua clicuri. Comanda trimisa de un om deja logat NU asteapta aici: se
+ * leaga pe loc, dupa insert (`leagaComandaPlasata`).
  */
 export async function leagaComenzile(businessId: string, contId: string): Promise<number> {
   const { data, error } = await createAdminClient().rpc("cont_maturare", {
@@ -256,11 +258,12 @@ export async function comandaMea(
       ⚠ Numele curierului vine din `NUME_CURIER`, harta care e deja adevarul in
       panou, trecuta prin `stripDiacritics` (H6). Vezi `urmarire.ts`.
     */
-    numeCurier: numeleCurierului(r.curier),
+    numeCurier: numeleCurierului(r.curier, r.curier_real),
     awb: r.awb,
     awbEmisLa: r.awb_emis_la,
-    /* ⚠ Adresa salvata numai daca e `https:`, altfel tiparul folosit deja in panou. */
-    urmarire: adresaDeUrmarire(r.curier, r.awb, r.urmarire),
+    curierReal: r.curier_real,
+    /* ⚠ Adresa salvata numai daca e `https:`, altfel tiparele din `urmarire.ts`. */
+    urmarire: urmareste({ curier: r.curier, curierReal: r.curier_real, awb: r.awb, urlSalvat: r.urmarire }),
     vedere: r.vedere === "redusa" ? "redusa" : "intreaga",
   };
 }

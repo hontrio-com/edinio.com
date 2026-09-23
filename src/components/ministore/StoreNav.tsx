@@ -8,6 +8,7 @@ import { useStoreChromeOptional, useStorefrontOptional } from "@/components/stor
 import { hrefCategorie } from "@/lib/storefront/category-href";
 import { radaciniCategorii, subcategorii } from "@/lib/storefront/categories-chrome";
 import { cdnImage } from "@/lib/cdn-image";
+import { RandContInSertar } from "@/components/storefront/cont/ActiuneCont";
 
 /** Desktop inline navigation links (hidden on mobile). */
 export function StoreNavLinks({ items, basePath, color, currentSlug, className }: {
@@ -260,6 +261,13 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                 Fara ele, meniul arata patru linkuri de pagini si atat.
               */}
               <CategoriiInMeniu categoriiRoot={categoriiRoot} pePagina={categoriiPePagina} color={color} tema={t} onNaviga={() => setOpen(false)} />
+
+              {/* Contul meu, pe telefon: aprins numai din Setari, pe domeniul propriu. */}
+              <RandContInSertar
+                clasaInvelis="mt-2 border-t border-current/10 pt-2"
+                clasa={`flex items-center gap-2.5 px-3 py-3 text-base font-medium transition-colors ${t.link}`}
+                laClic={() => setOpen(false)}
+              />
             </nav>
           </div>
         </>,

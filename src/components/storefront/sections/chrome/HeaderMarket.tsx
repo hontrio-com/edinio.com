@@ -17,6 +17,7 @@ import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { stilSigla } from "@/lib/storefront/logo-box";
+import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.6;
 
@@ -124,6 +125,8 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
           </div>
 
           <div className="flex items-center gap-4 sm:gap-5 shrink-0 ml-auto lg:ml-0">
+            {/* Contul meu: aprins numai din Setari, pe domeniul propriu (ActiuneCont). */}
+            <ActiuneCont clasa="flex items-center gap-2 text-[var(--st-text)] hover:opacity-70 transition-opacity" marime={26} stroke={STROKE} clasaText="text-sm font-semibold" />
             {actiuni.map((a) => (
               <Fragment key={a}>
                 {a === "whatsapp" && (

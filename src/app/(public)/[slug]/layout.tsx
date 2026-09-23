@@ -9,6 +9,7 @@ import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import { AttributionCapture } from "@/components/public/AttributionCapture";
 import { DoarInMagazinReal } from "@/components/public/DoarInMagazinReal";
+import { DoarInAfaraContului } from "@/components/public/DoarInAfaraContului";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
@@ -217,18 +218,30 @@ export default async function StoreLayout({ children, params }: Props) {
    */
   return (
     <>
-      <DoarInMagazinReal>
-        <AttributionCapture basePath={basePath} />
-        {fbPixelId && (
-          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} magazin={slug} capi={mc?.facebook_capi_activ === true} /></ConsentGate>
-        )}
-        {ttPixelId && (
-          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} magazin={slug} capi={mc?.tiktok_capi_activ === true} /></ConsentGate>
-        )}
-        {googleTagIds.length > 0 && (
-          <ConsentGate slug={slug} category={["analytics", "marketing"]} bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} adsId={adsConversionId} /></ConsentGate>
-        )}
-      </DoarInMagazinReal>
+      {/*
+        ⚠⚠ SI NU IN ZONA DE CONT. Paginile de sub `/{slug}/cont` sunt copiii
+        layoutului asta, deci pana pe 23.09.2026 mosteneau pixelii alesi de
+        comerciant: adresa paginii, care poarta identificatorul comenzii, pleaca
+        din oficiu la Meta, TikTok si Google, iar pe ecranul de intrare exista un
+        camp `type="email"` pe care potrivirea avansata AUTOMATA a lui Meta il
+        culege. Zona de cont e personala; acolo nu au ce cauta scripturi alese de
+        altcineva. Vezi `DoarInAfaraContului` pentru ce s-a incercat si de ce nu
+        merge un `layout.tsx` sub `cont/`.
+      */}
+      <DoarInAfaraContului>
+        <DoarInMagazinReal>
+          <AttributionCapture basePath={basePath} />
+          {fbPixelId && (
+            <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} magazin={slug} capi={mc?.facebook_capi_activ === true} /></ConsentGate>
+          )}
+          {ttPixelId && (
+            <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} magazin={slug} capi={mc?.tiktok_capi_activ === true} /></ConsentGate>
+          )}
+          {googleTagIds.length > 0 && (
+            <ConsentGate slug={slug} category={["analytics", "marketing"]} bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} adsId={adsConversionId} /></ConsentGate>
+          )}
+        </DoarInMagazinReal>
+      </DoarInAfaraContului>
       {children}
       {cookieConfig.enabled && (
         <DoarInMagazinReal>

@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { formatPrice } from "@/lib/utils/format";
+import { formatPrice, pluralRo } from "@/lib/utils/format";
 import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
@@ -1535,7 +1535,7 @@ export async function sendCodCont(
       <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#18181b;">${data.cod}</p>
     </div>
 
-    <p style="margin:0 0 8px 0;font-size:13px;color:#71717a;line-height:1.6;">Codul e valabil ${data.minute} de minute si se poate folosi o singura data.</p>
+    <p style="margin:0 0 8px 0;font-size:13px;color:#71717a;line-height:1.6;">Codul e valabil ${pluralRo(data.minute, "minut", "minute")} si se poate folosi o singura data.</p>
     <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.6;">Daca nu ai cerut tu codul, nu trebuie sa faci nimic: fara el nimeni nu poate intra.</p>
   `;
 

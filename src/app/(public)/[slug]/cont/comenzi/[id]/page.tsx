@@ -40,6 +40,11 @@ export default async function ComandaMea({ params }: Props) {
   const st = orderStatus(c.stare);
   const redusa = c.vedere === "redusa";
 
+  /* Suma liniilor CHIAR ARATATE, si restul pana la total, ca sa se adune. */
+  const produse = c.linii.reduce((s, l) => s + l.pret * l.cantitate, 0);
+  const altele =
+    c.total - (produse + (c.transport ?? 0) - (c.reducere ?? 0) + (c.taxaRamburs ?? 0));
+
   return (
     <StorefrontThemeScope style={pag.resolved.style}>
       <StorePageShell chrome={pag.chrome} design={pag.resolved.design} className="min-h-screen flex flex-col">
@@ -74,10 +79,23 @@ export default async function ComandaMea({ params }: Props) {
           </section>
 
           <section className="rounded-xl ring-1 ring-foreground/10 p-4 mb-4">
-            <Rand eticheta="Produse" valoare={formatPrice(c.subtotal)} />
-            {c.transport > 0 && <Rand eticheta="Transport" valoare={formatPrice(c.transport)} />}
-            {c.reducere > 0 && <Rand eticheta="Reducere" valoare={`- ${formatPrice(c.reducere)}`} />}
-            {c.taxaRamburs > 0 && <Rand eticheta="Taxa ramburs" valoare={formatPrice(c.taxaRamburs)} />}
+            {/*
+              ⚠⚠ RANDUL „PRODUSE" E SUMA LINIILOR ARATATE, nu `orders.subtotal`.
+              Masurat pe demo: din 498 de comenzi de vitrina, 19 au
+              `sum(pret x cantitate) <> subtotal`, pana la 15 lei diferenta. Adica
+              omul aduna in cap cele patru randuri de deasupra si obtine alt numar
+              decat scria dedesubt. Bani care nu se explica sunt cel mai urat fel
+              de defect pe un ecran de comanda.
+              ⚠ Si ce nu se explica din diferenta primeste randul lui, in loc sa
+              fie ascuns: coloana trebuie sa se adune pana la total.
+            */}
+            <Rand eticheta="Produse" valoare={formatPrice(produse)} />
+            {c.transport !== null && c.transport > 0 && <Rand eticheta="Transport" valoare={formatPrice(c.transport)} />}
+            {c.reducere !== null && c.reducere > 0 && <Rand eticheta="Reducere" valoare={`- ${formatPrice(c.reducere)}`} />}
+            {c.taxaRamburs !== null && c.taxaRamburs > 0 && <Rand eticheta="Taxa ramburs" valoare={formatPrice(c.taxaRamburs)} />}
+            {Math.abs(altele) >= 0.01 && (
+              <Rand eticheta="Alte ajustari" valoare={`${altele > 0 ? "" : "- "}${formatPrice(Math.abs(altele))}`} />
+            )}
             <div className="flex items-baseline justify-between gap-4 pt-2 mt-1 border-t border-foreground/10">
               <span className="font-semibold text-foreground">Total</span>
               <span className="font-bold text-foreground">{formatPrice(c.total)}</span>
@@ -101,8 +119,8 @@ export default async function ComandaMea({ params }: Props) {
               nu se arata.
             */
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Ca sa vezi adresa de livrare, factura si urmarirea coletului, confirma un contact de pe
-              aceasta comanda din pagina de date a contului.
+              Comanda asta a fost legata de cont doar pe numarul ei, deci arata putin. Adresa de livrare,
+              factura si urmarirea coletului se deschid dupa ce confirmi, printr-un cod, un contact de pe ea.
             </p>
           ) : (
             <>

@@ -44,22 +44,31 @@ export type PaginaDeCont = {
 
 export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
   const supabase = await createClient();
-  const { data: business } = await supabase
+  /*
+    ⚠⚠ O PANA DE BAZA NU E UN 404. Prima scriere lua doar `data` si arunca
+    `error`, deci o clipa in care baza nu raspunde se prefacea in „magazinul nu
+    exista", adica intr-un raspuns pe care si omul, si Google il cred. Restul
+    casei raspunde 503 la acelasi lucru (vezi `serviciuIndisponibil()` din
+    `src/proxy.ts`). Aruncam, si `error.tsx` al vitrinei spune „reveniti".
+  */
+  const { data: business, error: eBusiness } = await supabase
     .from("businesses")
     .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, custom_domain_healthy, suspended_until, social, gallery, features")
     .eq("slug", slug)
     .single();
+  if (eBusiness && eBusiness.code !== "PGRST116") throw eBusiness;
   if (!business || business.is_published !== true) notFound();
 
   const host = (await headers()).get("host");
   if (!originaEsteNumaiAMagazinului(host, business)) notFound();
 
-  const { data: storeSettings } = await createAdminClient()
+  const { data: storeSettings, error: eSetari } = await createAdminClient()
     .from("store_settings")
     .select("page_content, storefront_design, cont_client_config, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
     .eq("business_id", business.id)
     .single();
 
+  if (eSetari && eSetari.code !== "PGRST116") throw eSetari;
   if (!conturilePornite(storeSettings?.cont_client_config)) notFound();
 
   const magazin: MagazinDeCont = {
@@ -78,10 +87,13 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
   const storeName = business.store_name ?? business.business_name ?? "magazin";
 
   /*
-    ⚠ Pe domeniul propriu calea vazuta de om e `/cont`, nu `/{slug}/cont`, si
-    zona de cont TRAIESTE numai acolo. `basePath` ramane totusi calculat la fel
-    ca pe restul vitrinei, fiindca antetul si subsolul il folosesc pentru toate
-    celelalte linkuri ale magazinului.
+    ⚠ SIRUL GOL, si nu e o scurtatura: zona de cont traieste NUMAI pe domeniul
+    propriu (poarta de origine de mai sus), iar acolo proxy-ul rescrie totul sub
+    `/{slug}`, deci calea pe care o vede omul e `/cont`, nu `/{slug}/cont`.
+    Antetul si subsolul compun restul linkurilor magazinului din chiar valoarea
+    asta, si tot fara slug trebuie sa iasa.
+    ⚠ Cand va aparea `<slug>.edinio.com` (valul 3), tot asa ramane: si acolo
+    originea e numai a magazinului, deci calea e fara slug.
   */
   const basePath = "";
 

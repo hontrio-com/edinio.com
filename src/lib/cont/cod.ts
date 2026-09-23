@@ -26,6 +26,13 @@ export type FelContact = "email" | "telefon";
 export const MESAJ_UNIC = "Daca adresa e cunoscuta de magazin, codul a plecat. Verifica-ti casuta.";
 
 /**
+ * ⚠ Intrarea pe TELEFON nu e pornita inca: niciun drum de SMS nu e legat de
+ * zona de cont. Se spune limpede, si NU prin `MESAJ_UNIC`: acolo textul spune
+ * ca a plecat ceva, si n-ar fi adevarat.
+ */
+export const MESAJ_SMS_INCA_NU = "Intrarea cu numarul de telefon nu e pornita inca. Foloseste adresa de email.";
+
+/**
  * Cere un cod. Intoarce mereu acelasi mesaj catre om; `trimis` e numai pentru
  * jurnal si pentru probe, nu pentru ecran.
  */
@@ -39,14 +46,26 @@ export async function cereCod(
 ): Promise<{ mesaj: string; trimis: boolean; motiv: string }> {
   /*
     ⚠ TREI PLASE, IN ORDINEA COSTULUI.
-      1. `rateLimit` — in memorie, fara niciun cost, taie rafalele. ⚠ Starea e
+      1. `rateLimit`, in memorie, fara niciun cost, taie rafalele. ⚠ Starea e
          PER INSTANTA serverless, deci nu e o limita adevarata.
-      2. `consumaLimita` — durabila, in Postgres. Cade DESCHIS la eroare de baza
+      2. `consumaLimita`, durabila, in Postgres. Cade DESCHIS la eroare de baza
          (`limita-durabila.ts:111-117`), de-aia nu poate fi singura.
       3. Plafonul din `cont_cere_cod`, scris in chiar instructiunea care
          insereaza. Acela nu poate cadea deschis: daca baza nu raspunde, nu se
          scrie nici codul.
   */
+  /*
+    ⚠⚠ SMS-UL SE REFUZA INAINTE SA SE SCRIE CEVA.
+    Prima scriere chema `cont_cere_cod` si abia DUPA aceea se oprea, cu
+    comentariul „se spune pe fata". Nu se spunea: randul era deja scris in
+    `cont_cod`, consuma bugetul zilnic de SMS, iar omul primea „codul a plecat,
+    verifica-ti casuta" pentru un mesaj care nu plecase nicaieri. Acum nu se
+    scrie nimic si raspunsul e cinstit.
+  */
+  if (fel === "telefon") {
+    return { mesaj: MESAJ_SMS_INCA_NU, trimis: false, motiv: "sms-neimplementat" };
+  }
+
   if (!rateLimit(`contCod:ip:${ip}`, 10, 60_000)) {
     return { mesaj: MESAJ_UNIC, trimis: false, motiv: "rafala" };
   }
@@ -65,22 +84,16 @@ export async function cereCod(
     p_cod_hash: amprenta,
     p_cont: contId,
     p_minute: MINUTE_COD,
+    /* ⚠ IP-ul merge si in baza: plafonul de acolo e singurul care nu poate cadea
+       deschis, iar unul cheiat numai pe destinatie se intoarce impotriva omului
+       caruia ii apartine adresa. */
+    p_ip: ip === "necunoscut" ? null : ip,
   });
   if (error) throw error;
 
   const r = Array.isArray(data) ? data[0] : data;
   if (!r?.ok) {
     return { mesaj: MESAJ_UNIC, trimis: false, motiv: r?.motiv ?? "necunoscut" };
-  }
-
-  /*
-    ⚠ SMS-ul nu e pornit in valul 1, si asta se spune pe fata, nu se ascunde.
-    Codul e deja scris in baza, deci nu se pierde nimic; doar nu are cum sa
-    ajunga la om. Pe ecran, campul de telefon nici nu se arata cat timp
-    magazinul nu are furnizor, deci drumul asta e o plasa, nu o cale obisnuita.
-  */
-  if (fel === "telefon") {
-    return { mesaj: MESAJ_UNIC, trimis: false, motiv: "sms-neimplementat" };
   }
 
   const admin = createAdminClient();

@@ -51,13 +51,24 @@ export async function sesiuneCurenta(businessId: string): Promise<SesiuneCont | 
  */
 export async function deschideSesiune(businessId: string, contId: string, ip: string | null): Promise<void> {
   const { jeton, amprenta } = jetonNou();
-  const { error } = await createAdminClient().rpc("cont_sesiune_creeaza", {
+  const { data, error } = await createAdminClient().rpc("cont_sesiune_creeaza", {
     p_business: businessId,
     p_cont: contId,
     p_jeton_hash: amprenta,
     p_ip: ip,
   });
   if (error) throw error;
+
+  /*
+    ⚠⚠ `error` NU E DE AJUNS. `cont_sesiune_creeaza` iese cu ZERO randuri, fara
+    nicio eroare, cand contul nu exista, e sters, sau e al altui magazin. Prima
+    scriere se uita doar la `error` si scria cookie-ul oricum: omul ar fi plecat
+    cu un jeton care nu deschide nimic, iar ecranul l-ar fi trimis la nesfarsit
+    inapoi la intrare, fara sa spuna de ce.
+  */
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r?.sesiune_id) throw new Error("cont_sesiune_creeaza nu a creat nicio sesiune");
+
   (await cookies()).set(COOKIE_CONT, jeton, optiuniCookie());
 }
 
@@ -87,10 +98,21 @@ export async function roteste(businessId: string): Promise<boolean> {
 }
 
 /**
- * Iesirea din cont.
+ * Sterge cookie-ul, orice s-ar intampla mai departe.
  *
- * ⚠ Cookie-ul se sterge chiar daca inchiderea in baza esueaza: altfel omul ar
- * apasa „Iesi", ar vedea o eroare si ar ramane logat.
+ * ⚠⚠ E DESPARTITA DE INCHIDEREA DIN BAZA, si asta e miezul.
+ * Prima scriere inchidea cookie-ul numai daca gasea magazinul. Dar magazinul se
+ * cauta dupa gazda, si cautarea poate sa nu gaseasca nimic: magazin nepublicat,
+ * domeniu tocmai schimbat, baza cazuta. Atunci omul apasa „Iesi", pagina se
+ * reincarca, si el e tot logat, fara nicio cale sa iasa. Cookie-ul se sterge
+ * INTOTDEAUNA; inchiderea randului din baza e ce se poate face pe deasupra.
+ */
+export async function stergeCookieContului(): Promise<void> {
+  (await cookies()).delete(COOKIE_CONT);
+}
+
+/**
+ * Iesirea din cont: inchide randul din baza SI sterge cookie-ul.
  */
 export async function inchideSesiune(businessId: string): Promise<void> {
   const cos = await cookies();
@@ -98,11 +120,13 @@ export async function inchideSesiune(businessId: string): Promise<void> {
   cos.delete(COOKIE_CONT);
   if (!jeton) return;
 
-  await createAdminClient()
-    .rpc("cont_sesiune_incheie", { p_business: businessId, p_jeton_hash: amprentaJetonului(jeton) })
-    .throwOnError()
-    .then(
-      () => undefined,
-      () => undefined,
-    );
+  /* ⚠ Esecul nu se ridica mai sus: cookie-ul e deja sters, deci omul a iesit.
+     Randul ramas deschis moare oricum la expirare si la curatenie. */
+  const { error } = await createAdminClient().rpc("cont_sesiune_incheie", {
+    p_business: businessId,
+    p_jeton_hash: amprentaJetonului(jeton),
+  });
+  if (error) {
+    console.error("[cont] inchiderea sesiunii in baza a esuat", error.message);
+  }
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { cereCod, MESAJ_UNIC, type FelContact } from "@/lib/cont/cod";
 import { logError } from "@/lib/error-logger";
+import { clientIp } from "@/lib/utils/rate-limit";
+import { vineDePeMagazin } from "@/lib/cont/cerere";
 
 /**
  * „Trimite-mi un cod."
@@ -16,6 +18,13 @@ import { logError } from "@/lib/error-logger";
  * alege al cui credit de SMS se consuma.
  */
 export async function POST(req: NextRequest) {
+  /*
+    ⚠ Poarta de origine, inaintea oricarei citiri: `req.json()` nu se uita la
+    `Content-Type`, deci un formular de pe alt site putea trimite corpul asta cu
+    cookie-ul omului. Raspunsul e 403 sec, fara sa spuna de ce.
+  */
+  if (!vineDePeMagazin(req)) return new NextResponse("Forbidden", { status: 403 });
+
   let magazin;
   try {
     magazin = await magazinulCereriiDeCont(req.headers.get("host"));
@@ -37,7 +46,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ mesaj: MESAJ_UNIC }, { status: 200 });
   }
 
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "necunoscut";
+  /* ⚠ Acelasi ajutor ca in tot restul casei: doua citiri de mana ale aceluiasi
+     antet se despart cu timpul, iar plafoanele ar fi cheiate pe siruri deosebite. */
+  const ip = clientIp(req);
 
   try {
     const r = await cereCod(magazin, fel as FelContact, destinatie, ip);

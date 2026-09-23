@@ -5,9 +5,10 @@ import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
+import { RotesteJetonul } from "@/components/storefront/cont/RotesteJetonul";
 import { comenzileMele } from "@/lib/cont/comenzi";
 import { orderStatus } from "@/lib/orders/status";
-import { formatPrice, formatDate } from "@/lib/utils/format";
+import { formatPrice, formatDate, pluralRo } from "@/lib/utils/format";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -28,6 +29,10 @@ export default async function AcasaInCont({ params }: Props) {
     <StorefrontThemeScope style={p.resolved.style}>
       <StorePageShell chrome={p.chrome} design={p.resolved.design} className="min-h-screen flex flex-col">
         <main className="max-w-2xl w-full mx-auto px-4 py-10 flex-1">
+          {/* ⚠ Singurul loc de unde se poate roti jetonul: o pagina nu poate scrie
+              cookie-uri, deci fara chemarea asta toata plasa de rotire si de
+              detectie a refolosirii ar fi ramas cod mort. */}
+          <RotesteJetonul trebuie={p.sesiune.trebuieRotit} />
           <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">
             {p.sesiune.nume ? `Salut, ${p.sesiune.nume}` : "Contul meu"}
           </h1>
@@ -35,8 +40,8 @@ export default async function AcasaInCont({ params }: Props) {
 
           {ultimele.length === 0 ? (
             <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-              Nu am gasit inca nicio comanda legata de contul tau. Daca ai comandat cu alt email sau cu
-              alt numar de telefon, adauga-l la datele contului si comenzile apar aici.
+              Nu am gasit inca nicio comanda legata de contul tau. Comenzile se leaga singure de adresa
+              cu care ai intrat aici. Daca ai comandat cu alta adresa, intra in cont cu ea.
             </p>
           ) : (
             <section className="mb-8">
@@ -69,7 +74,7 @@ export default async function AcasaInCont({ params }: Props) {
               </ul>
               {total > ultimele.length && (
                 <Link href="/cont/comenzi" className="inline-block mt-3 text-sm underline" style={{ color: p.color }}>
-                  Vezi toate cele {total} de comenzi
+                  Vezi toate comenzile ({pluralRo(total, "comanda", "comenzi")})
                 </Link>
               )}
             </section>

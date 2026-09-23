@@ -4,6 +4,8 @@ import { verificaCod, mesajulRefuzului, type FelContact } from "@/lib/cont/cod";
 import { deschideSesiune } from "@/lib/cont/sesiune";
 import { leagaComenzile } from "@/lib/cont/comenzi";
 import { logError } from "@/lib/error-logger";
+import { clientIp } from "@/lib/utils/rate-limit";
+import { vineDePeMagazin } from "@/lib/cont/cerere";
 
 /**
  * „Am codul, lasa-ma inauntru."
@@ -19,6 +21,13 @@ import { logError } from "@/lib/error-logger";
  *      contului lui de panou. Pe o ruta, lucrurile raman despartite.
  */
 export async function POST(req: NextRequest) {
+  /*
+    ⚠ Poarta de origine, inaintea oricarei citiri: `req.json()` nu se uita la
+    `Content-Type`, deci un formular de pe alt site putea trimite corpul asta cu
+    cookie-ul omului. Raspunsul e 403 sec, fara sa spuna de ce.
+  */
+  if (!vineDePeMagazin(req)) return new NextResponse("Forbidden", { status: 403 });
+
   let magazin;
   try {
     magazin = await magazinulCereriiDeCont(req.headers.get("host"));
@@ -38,7 +47,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ eroare: "Codul are sase cifre." }, { status: 400 });
   }
 
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "necunoscut";
+  /* ⚠ Acelasi ajutor ca in tot restul casei: doua citiri de mana ale aceluiasi
+     antet se despart cu timpul, iar plafoanele ar fi cheiate pe siruri deosebite. */
+  const ip = clientIp(req);
 
   try {
     const r = await verificaCod(magazin, fel, destinatie, cod, ip);

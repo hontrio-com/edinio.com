@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NUME_CURIER, type CurierPropriu } from "@/lib/orders/awb-propriu";
+import { stripDiacritics } from "@/lib/utils/ro-address";
 
 export type ComandaDinCont = {
   orderId: string;
@@ -19,10 +20,11 @@ export type DetaliuComanda = {
   stare: string;
   incasata: boolean;
   metodaPlata: string | null;
-  subtotal: number;
-  transport: number;
-  reducere: number;
-  taxaRamburs: number;
+  /* ⚠ Nule la vederea REDUSA: poarta e in baza, iar tipul o spune. */
+  subtotal: number | null;
+  transport: number | null;
+  reducere: number | null;
+  taxaRamburs: number | null;
   total: number;
   linii: { nume: string; cantitate: number; pret: number; produsId: string | null }[];
   livrare: Record<string, string | null> | null;
@@ -110,10 +112,10 @@ export async function comandaMea(
     stare: r.stare,
     incasata: r.incasata,
     metodaPlata: r.metoda_plata,
-    subtotal: Number(r.subtotal ?? 0),
-    transport: Number(r.transport ?? 0),
-    reducere: Number(r.reducere ?? 0),
-    taxaRamburs: Number(r.taxa_ramburs ?? 0),
+    subtotal: r.subtotal === null ? null : Number(r.subtotal),
+    transport: r.transport === null ? null : Number(r.transport),
+    reducere: r.reducere === null ? null : Number(r.reducere),
+    taxaRamburs: r.taxa_ramburs === null ? null : Number(r.taxa_ramburs),
     total: Number(r.total ?? 0),
     linii: linii.map((l) => ({
       nume: l.nume ?? "",
@@ -129,9 +131,15 @@ export async function comandaMea(
       ? { casa: factura.casa ?? "", serie: factura.serie ?? null, numar: factura.numar }
       : null,
     curier: r.curier,
-    /* ⚠ Numele curierului vine din `NUME_CURIER`, harta care e deja adevarul in
-       panou. O a doua lista ar fi inceput sa se desparta de prima. */
-    numeCurier: r.curier ? (NUME_CURIER[r.curier as CurierPropriu] ?? r.curier) : null,
+    /*
+      ⚠ Numele curierului vine din `NUME_CURIER`, harta care e deja adevarul in
+      panou. O a doua lista ar fi inceput sa se desparta de prima.
+      ⚠ Dar trece prin `stripDiacritics`: harta aceea e scrisa pentru PANOU, unde
+      se scrie cu diacritice („Posta Romana"), iar ecranele noi se scriu fara
+      (H6), ca restul vitrinei. Fara asta, un singur curier din saptesprezece ar
+      fi adus diacritice pe o pagina care nu le are nicaieri altundeva.
+    */
+    numeCurier: r.curier ? stripDiacritics(NUME_CURIER[r.curier as CurierPropriu] ?? r.curier) : null,
     awb: r.awb,
     urmarire: r.urmarire,
     vedere: r.vedere === "redusa" ? "redusa" : "intreaga",

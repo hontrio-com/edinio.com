@@ -7249,12 +7249,12 @@ export type Database = {
           metoda_plata: string | null
           numar: string
           order_id: string
-          reducere: number
+          reducere: number | null
           stare: string
-          subtotal: number
-          taxa_ramburs: number
+          subtotal: number | null
+          taxa_ramburs: number | null
           total: number
-          transport: number
+          transport: number | null
           urmarire: string | null
           vedere: string
         }[]

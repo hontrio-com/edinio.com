@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 /**
  * Intrarea in contul de cumparator: doi pasi, fara parola.
@@ -14,6 +15,7 @@ import { useState } from "react";
  * magazinul.
  */
 export function FormularIntrare({ color }: { color: string }) {
+  const router = useRouter();
   const [pas, setPas] = useState<"contact" | "cod">("contact");
   const [email, setEmail] = useState("");
   const [cod, setCod] = useState("");
@@ -61,11 +63,15 @@ export function FormularIntrare({ color }: { color: string }) {
       if (!r.ok) {
         setEroare(j.eroare ?? "Nu am putut deschide contul.");
       } else {
-        /* ⚠ Navigare de DOCUMENT, nu `router.push`: cookie-ul tocmai a fost scris
-           de ruta, iar Router Cache-ul clientului tine payloadul RSC 30 de
-           secunde (`next.config.ts`, `staleTimes.dynamic`). Cu o navigare de
-           client, omul ar fi ajuns pe o pagina randata ca si cum n-ar fi logat. */
-        window.location.assign("/cont");
+        /*
+          ⚠ `refresh()` INAINTE de `push()`, si ordinea conteaza.
+          Cookie-ul tocmai a fost scris de ruta, dar Router Cache-ul clientului
+          tine payloadul RSC 30 de secunde (`next.config.ts`, `staleTimes.dynamic`).
+          Fara `refresh()`, omul ar fi ajuns pe o pagina randata ca si cum n-ar fi
+          logat, si ar fi fost trimis inapoi la intrare.
+        */
+        router.refresh();
+        router.push("/cont");
       }
     } catch {
       setEroare("Nu am putut deschide contul. Verifica legatura la internet.");

@@ -6,7 +6,7 @@ import crypto from "node:crypto";
  * ⚠⚠ NUMELE COOKIE-ULUI NU E O ALEGERE LIBERA. Doua bucati de cod existente se
  * uita la numele cookie-urilor si ar inghiti unul ales prost:
  *
- *   1. `src/lib/auth/poarta-mfa.ts:32` — `/^sb-.*-auth-token(\.\d+)?$/`. Poarta
+ *   1. `src/lib/auth/poarta-mfa.ts:32`, `/^sb-.*-auth-token(\.\d+)?$/`. Poarta
  *      MFA iese pe prima linie cand NU gaseste un cookie care se potriveste.
  *      Chiar de aceea un cumparator logat costa zero: nu are niciun cookie `sb-`.
  *      Un nume care s-ar potrivi ar trimite fiecare cerere a lui in poarta, iar

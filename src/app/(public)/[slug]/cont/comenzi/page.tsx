@@ -48,8 +48,8 @@ export default async function ComenzileMele({ params, searchParams }: Props) {
               verificat, iar o comanda pusa cu alt email nu se potriveste.
             */
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Nu am gasit nicio comanda legata de contul tau. Daca ai comandat cu alt email sau cu alt
-              numar de telefon, adauga-l la datele contului si comenzile apar aici.
+              Nu am gasit nicio comanda legata de contul tau. Comenzile se leaga singure de adresa cu
+              care ai intrat aici. Daca ai comandat cu alta adresa, intra in cont cu ea si le vei vedea.
             </p>
           ) : (
             <>

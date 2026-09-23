@@ -554,7 +554,13 @@ export async function getEstimateInvoices(
 
 export async function fetchMerchantPdf(
   config: Pick<SmartbillConfig, "email" | "token">,
-  url: string
+  url: string,
+  /**
+   * Optional: cine are un om care asteapta (contul cumparatorului) pune o limita
+   * de timp. Fara ea, un SmartBill care nu raspunde tine functia agatata pana la
+   * plafonul Vercel. Panoul o cheama fara, ca inainte.
+   */
+  semnal?: AbortSignal,
 ): Promise<ArrayBuffer | { error: string }> {
   try {
     const res = await fetch(url, {
@@ -563,6 +569,7 @@ export async function fetchMerchantPdf(
         Accept: "application/octet-stream",
       },
       cache: "no-store",
+      signal: semnal,
     });
     if (!res.ok) return { error: `Eroare SmartBill (${res.status})` };
     return await res.arrayBuffer();

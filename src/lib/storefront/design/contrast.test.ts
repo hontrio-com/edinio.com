@@ -66,3 +66,27 @@ test("orice culoare aleasa da un text peste pragul AA", () => {
 test("scurtatura de trei caractere se citeste la fel", () => {
   assert.equal(contrastul("#000"), contrastul("#000000"));
 });
+
+/* ═══ Textul scris direct pe fundalul magazinului ═══ */
+
+const peFundal = (colors: Record<string, string>) =>
+  styleToCssVars(resolveStyle({ colors }, ctx))["--st-on-bg"];
+
+test("⚠ fundalul inchis masurat pe productie (#5b2067) primeste text deschis", () => {
+  /* Textul implicit (#111827) pe #5b2067 da 1,56:1: titlul contului ar fi fost ilizibil. */
+  const t = peFundal({ background: "#5b2067" });
+  assert.equal(t, "#FFFFFF");
+  assert.ok(raport(t, "#5b2067") >= 4.5);
+});
+
+test("la un fundal obisnuit ramane chiar textul temei, deci nu se schimba nimic", () => {
+  assert.equal(peFundal({}), "var(--st-text)", "fundalul implicit nu e hex");
+  assert.equal(peFundal({ background: "#FBF8F3", text: "#2A2420" }), "var(--st-text)", "Casa Lumen");
+  assert.equal(peFundal({ background: "#ffffff" }), "var(--st-text)");
+});
+
+test("un text de tema ales prost pe un fundal deschis e inlocuit, nu pastrat", () => {
+  const t = peFundal({ background: "#FFFFFF", text: "#EEEEEE" });
+  assert.notEqual(t, "var(--st-text)");
+  assert.ok(raport(t, "#FFFFFF") >= 4.5);
+});

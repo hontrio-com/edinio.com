@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CircleX } from "lucide-react";
+import { BUTON_SECUNDAR } from "./ui/clase";
 
 /**
  * Anularea unei comenzi care inca nu a intrat in lucru (H5).
@@ -11,7 +13,11 @@ import { useRouter } from "next/navigation";
  * promite ce nu se poate.
  *
  * ⚠ Se cere o confirmare, fiindca nu se poate desface: comanda anulata isi
- * elibereaza stocul si isi desface cuponul.
+ * elibereaza stocul si isi desface cuponul. Si nu e un buton rosu plin: rosul
+ * ramane pe iconita si pe cuvinte, ca pe orice tema sa se citeasca.
+ *
+ * ⚠ Dupa anulare, `router.refresh()`: ecranul trebuie sa arate starea NOUA, nu
+ * un mesaj care dispare.
  */
 export function AnuleazaComanda({ orderId }: { orderId: string }) {
   const router = useRouter();
@@ -21,19 +27,25 @@ export function AnuleazaComanda({ orderId }: { orderId: string }) {
 
   if (!sigur) {
     return (
-      <button type="button" onClick={() => setSigur(true)} className="text-sm text-muted-foreground underline">
+      <button type="button" onClick={() => setSigur(true)} className={BUTON_SECUNDAR}>
+        <CircleX className="h-4 w-4 text-destructive" aria-hidden="true" />
         Anuleaza comanda
       </button>
     );
   }
 
   return (
-    <div className="rounded-xl ring-1 ring-foreground/10 p-4">
-      <p className="text-sm text-foreground mb-3">
-        Anulezi comanda? Nu se mai poate desface, iar produsele se intorc pe stoc.
+    <div className="w-full rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] p-4" role="group" aria-label="Confirma anularea">
+      <p className="text-sm font-semibold text-[var(--st-text)]">Anulezi comanda?</p>
+      <p className="mt-1 text-sm leading-relaxed text-[var(--st-muted)]">
+        Nu se mai poate desface. Daca ai platit deja online, rambursarea o face magazinul.
       </p>
-      {eroare && <p className="text-sm text-red-600 mb-2">{eroare}</p>}
-      <div className="flex gap-3">
+      {eroare && (
+        <p role="alert" className="mt-3 text-sm text-[var(--st-text)]">
+          {eroare}
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
           disabled={asteapta}
@@ -58,12 +70,13 @@ export function AnuleazaComanda({ orderId }: { orderId: string }) {
               setAsteapta(false);
             }
           }}
-          className="rounded-lg px-4 py-2 text-sm font-semibold text-white bg-red-600 disabled:opacity-60"
+          className={BUTON_SECUNDAR}
         >
-          {asteapta ? "Se anuleaza..." : "Da, anuleaza"}
+          <CircleX className="h-4 w-4 text-destructive" aria-hidden="true" />
+          {asteapta ? "Se anuleaza..." : "Da, anuleaza comanda"}
         </button>
-        <button type="button" onClick={() => setSigur(false)} className="text-sm text-muted-foreground underline">
-          Renunta
+        <button type="button" onClick={() => setSigur(false)} className={BUTON_SECUNDAR} disabled={asteapta}>
+          Nu, pastreaz-o
         </button>
       </div>
     </div>

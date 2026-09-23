@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
+import { pluralRo } from "@/lib/utils/format";
+import { BUTON_SECUNDAR, CAMP, ETICHETA_CAMP } from "./ui/clase";
 
 /**
  * Stergerea contului.
@@ -10,6 +13,7 @@ import { useRouter } from "next/navigation";
  * ⚠ Si se spune pe fata CE RAMANE, nu doar ce dispare. Omul care sterge contul
  * crede de obicei ca sterge si comenzile; ele raman, fiindca in spatele lor stau
  * documente fiscale, iar el are dreptul sa stie asta INAINTE.
+ * ⚠ Nu e buton rosu plin: rosul ramane pe iconita, ca pe orice tema sa se citeasca.
  */
 export function StergeContul({ comenzi }: { comenzi: number }) {
   const router = useRouter();
@@ -20,44 +24,41 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
 
   if (!deschis) {
     return (
-      <button
-        type="button"
-        onClick={() => setDeschis(true)}
-        className="text-sm text-red-600 underline"
-      >
+      <button type="button" onClick={() => setDeschis(true)} className={BUTON_SECUNDAR}>
+        <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
         Sterge contul
       </button>
     );
   }
 
   return (
-    <div className="rounded-xl ring-1 ring-red-200 p-4">
-      <h2 className="font-semibold text-foreground mb-2">Stergi contul?</h2>
-      <p className="text-sm text-muted-foreground leading-relaxed mb-2">
-        Se sterg datele contului si legatura lui cu comenzile. Poti deschide oricand alt cont, cu
-        aceeasi adresa.
-      </p>
-      <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-        {comenzi > 0
-          ? `Cele ${comenzi} de comenzi ale tale RAMAN la magazin, fiindca in spatele lor stau documente fiscale. Daca vrei sa fie sterse si datele din ele, scrie magazinului.`
-          : "Comenzile plasate raman la magazin, fiindca in spatele lor stau documente fiscale."}
-      </p>
-      <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-        Daca ai cerut sa nu mai primesti mesaje, alegerea aceea ramane si dupa stergere.
-      </p>
+    <div className="rounded-[var(--st-radius)] border border-[var(--st-border)] p-4" role="group" aria-label="Confirma stergerea contului">
+      <p className="text-sm font-semibold text-[var(--st-text)]">Stergi contul?</p>
+      <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--st-muted)]">
+        <li>Se sterg datele contului si legatura lui cu comenzile. Poti deschide oricand alt cont, cu aceeasi adresa.</li>
+        <li>
+          {comenzi === 1
+            ? "Comanda ta RAMANE la magazin, fiindca in spatele ei stau documente fiscale. Daca vrei sa fie sterse si datele din ea, scrie magazinului."
+            : comenzi > 1
+              ? `Cele ${pluralRo(comenzi, "comanda", "comenzi")} ale tale RAMAN la magazin, fiindca in spatele lor stau documente fiscale. Daca vrei sa fie sterse si datele din ele, scrie magazinului.`
+              : "Comenzile plasate raman la magazin, fiindca in spatele lor stau documente fiscale."}
+        </li>
+        <li>Daca ai cerut sa nu mai primesti mesaje, alegerea aceea ramane si dupa stergere.</li>
+      </ul>
 
-      <label htmlFor="confirmare" className="block text-sm font-medium text-foreground mb-1.5">
+      <label htmlFor="confirmare" className={`${ETICHETA_CAMP} mt-4`}>
         Scrie STERGE ca sa confirmi
       </label>
       <input
         id="confirmare"
         value={cuvant}
+        autoComplete="off"
         onChange={(e) => setCuvant(e.target.value)}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 mb-3"
+        className={CAMP}
       />
-      {eroare && <p className="text-sm text-red-600 mb-2">{eroare}</p>}
+      {eroare && <p role="alert" className="mt-2 text-sm text-[var(--st-text)]">{eroare}</p>}
 
-      <div className="flex gap-3">
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
           disabled={asteapta || cuvant !== "STERGE"}
@@ -83,11 +84,12 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
               setAsteapta(false);
             }
           }}
-          className="rounded-lg px-4 py-2 text-sm font-semibold text-white bg-red-600 disabled:opacity-60"
+          className={BUTON_SECUNDAR}
         >
+          <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
           {asteapta ? "Se sterge..." : "Sterge definitiv"}
         </button>
-        <button type="button" onClick={() => setDeschis(false)} className="text-sm text-muted-foreground underline">
+        <button type="button" onClick={() => setDeschis(false)} className={BUTON_SECUNDAR}>
           Renunta
         </button>
       </div>

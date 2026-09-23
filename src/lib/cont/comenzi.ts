@@ -1,6 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { NUME_CURIER, type CurierPropriu } from "@/lib/orders/awb-propriu";
-import { stripDiacritics } from "@/lib/utils/ro-address";
+import { documentulFiscal, type DocumentFiscal } from "./documente";
+import { adresaDeUrmarire, numeleCurierului } from "./urmarire";
+import type { LivrareBruta } from "./livrare";
+
+export type MiniaturaComenzii = { nume: string; imagine: string | null };
 
 export type ComandaDinCont = {
   orderId: string;
@@ -9,8 +12,44 @@ export type ComandaDinCont = {
   stare: string;
   incasata: boolean;
   total: number;
+  /** Bucatile de marfa, fara extraoptiuni (suma cantitatilor). */
   bucati: number;
+  /** Liniile de marfa, fara extraoptiuni. */
+  produse: number;
+  /** Primele patru linii de marfa, cu imaginea din catalogul de azi (sau NULL). */
+  miniaturi: MiniaturaComenzii[];
+  /** Are un document fiscal viu. `false` mereu la vederea redusa. */
+  areFactura: boolean;
   vedere: "redusa" | "intreaga";
+};
+
+export type RandPersonalizare = { eticheta: string; valoare: string | null; fisiere: number | null };
+export type ParteDefalcare = { eticheta: string | null; detaliu: string | null; suma: number | null };
+
+export type LinieComanda = {
+  nume: string;
+  cantitate: number;
+  pret: number;
+  produsId: string | null;
+  /** Extraoptiune (ambalaj cadou si altele), nu produs din catalog. */
+  extra: boolean;
+  /** Din catalogul de AZI: produsul poate fi sters sau schimbat intre timp. */
+  imagine: string | null;
+  /** Numai cand produsul e inca activ. */
+  slug: string | null;
+  /** NULL la vederea redusa, poarta e in baza. */
+  personalizare: RandPersonalizare[] | null;
+  defalcare: ParteDefalcare[] | null;
+};
+
+export type FirmaComenzii = {
+  denumire: string;
+  cui: string | null;
+  regCom: string | null;
+  adresa: string | null;
+  oras: string | null;
+  judet: string | null;
+  platitorTva: boolean | null;
 };
 
 export type DetaliuComanda = {
@@ -32,17 +71,92 @@ export type DetaliuComanda = {
   cotaTva: number | null;
   /* Regimul de pret INGHETAT pe comanda; `null` la comenzile de dinaintea lui. */
   regimTva: boolean | null;
+  /** `orders.payment_status` brut; se citeste numai prin `stareaPlatii`. */
+  starePlata: string | null;
+  /** Cat a economisit din oferte. INFORMATIV: e deja in pretul liniilor. */
+  economieOferte: number | null;
+  /** `orders.notes`, text; se citeste prin `detaliileDeLaCheckout`. */
+  detalii: string | null;
   total: number;
-  linii: { nume: string; cantitate: number; pret: number; produsId: string | null }[];
-  livrare: Record<string, string | null> | null;
-  firma: { denumire: string | null; cui: string | null; regCom: string | null } | null;
-  factura: { casa: string; serie: string | null; numar: string } | null;
+  linii: LinieComanda[];
+  livrare: LivrareBruta | null;
+  firma: FirmaComenzii | null;
+  factura: DocumentFiscal | null;
   curier: string | null;
   numeCurier: string | null;
   awb: string | null;
+  awbEmisLa: string | null;
   urmarire: string | null;
   vedere: "redusa" | "intreaga";
 };
+
+/* ═══ Cititori defensivi pentru campurile jsonb ═══ */
+
+const sir = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+const numar = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+const obiect = (v: unknown): Record<string, unknown> | null =>
+  v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+const lista = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+function personalizarea(v: unknown): RandPersonalizare[] | null {
+  if (!Array.isArray(v)) return null;
+  return v
+    .map(obiect)
+    .filter((x): x is Record<string, unknown> => x !== null)
+    .map((x) => ({ eticheta: sir(x.eticheta) ?? "Personalizare", valoare: sir(x.valoare), fisiere: numar(x.fisiere) }))
+    .filter((x) => x.valoare !== null || (x.fisiere !== null && x.fisiere > 0));
+}
+
+function defalcarea(v: unknown): ParteDefalcare[] | null {
+  if (!Array.isArray(v)) return null;
+  return v
+    .map(obiect)
+    .filter((x): x is Record<string, unknown> => x !== null)
+    .map((x) => ({ eticheta: sir(x.eticheta), detaliu: sir(x.detaliu), suma: numar(x.suma) }));
+}
+
+function linia(v: unknown): LinieComanda | null {
+  const l = obiect(v);
+  if (!l) return null;
+  return {
+    nume: sir(l.nume) ?? "",
+    cantitate: numar(l.cantitate) ?? 0,
+    pret: numar(l.pret) ?? 0,
+    produsId: sir(l.produs_id),
+    extra: l.extra === true,
+    imagine: sir(l.imagine),
+    slug: sir(l.slug),
+    personalizare: personalizarea(l.personalizare),
+    defalcare: defalcarea(l.defalcare),
+  };
+}
+
+function firma(v: unknown): FirmaComenzii | null {
+  const f = obiect(v);
+  const denumire = f ? sir(f.denumire) : null;
+  /* ⚠ Baza intoarce un obiect cu toate valorile nule cand comanda nu e pe firma. */
+  if (!f || !denumire) return null;
+  return {
+    denumire,
+    cui: sir(f.cui),
+    regCom: sir(f.reg_com),
+    adresa: sir(f.adresa),
+    oras: sir(f.oras),
+    judet: sir(f.judet),
+    platitorTva: typeof f.platitor_tva === "boolean" ? f.platitor_tva : null,
+  };
+}
+
+function miniaturile(v: unknown): MiniaturaComenzii[] {
+  return lista(v)
+    .map(obiect)
+    .filter((x): x is Record<string, unknown> => x !== null)
+    .map((x) => ({ nume: sir(x.nume) ?? "", imagine: sir(x.imagine) }));
+}
 
 /**
  * Leaga de cont comenzile care se potrivesc pe contactele lui verificate.
@@ -85,6 +199,9 @@ export async function comenzileMele(
       incasata: r.incasata,
       total: Number(r.total),
       bucati: Number(r.bucati),
+      produse: Number(r.produse ?? 0),
+      miniaturi: miniaturile(r.miniaturi),
+      areFactura: r.are_factura === true,
       vedere: r.vedere === "redusa" ? "redusa" : "intreaga",
     })),
     /* ⚠ Totalul vine din baza, pe acelasi rand cu comenzile: numarat separat, ar
@@ -108,10 +225,6 @@ export async function comandaMea(
   const r = (data ?? [])[0];
   if (!r) return null;
 
-  const linii = Array.isArray(r.linii) ? (r.linii as Record<string, string | null>[]) : [];
-  const firma = (r.firma ?? null) as Record<string, string | null> | null;
-  const factura = (r.factura ?? null) as Record<string, string | null> | null;
-
   return {
     orderId: r.order_id,
     numar: r.numar,
@@ -130,32 +243,24 @@ export async function comandaMea(
     cotaTva: r.cota_tva === null ? null : Number(r.cota_tva),
     /* ⚠ `typeof`, nu adevar: `false` e un raspuns (preturi FARA TVA), nu o lipsa. */
     regimTva: typeof r.regim_tva === "boolean" ? r.regim_tva : null,
+    starePlata: r.stare_plata,
+    economieOferte: numar(r.economie_oferte),
+    detalii: r.detalii,
     total: Number(r.total ?? 0),
-    linii: linii.map((l) => ({
-      nume: l.nume ?? "",
-      cantitate: Number(l.cantitate ?? 0),
-      pret: Number(l.pret ?? 0),
-      produsId: l.produs_id ?? null,
-    })),
-    livrare: (r.livrare ?? null) as Record<string, string | null> | null,
-    firma: firma?.denumire
-      ? { denumire: firma.denumire, cui: firma.cui ?? null, regCom: firma.reg_com ?? null }
-      : null,
-    factura: factura?.numar
-      ? { casa: factura.casa ?? "", serie: factura.serie ?? null, numar: factura.numar }
-      : null,
+    linii: lista(r.linii).map(linia).filter((x): x is LinieComanda => x !== null),
+    livrare: obiect(r.livrare) as LivrareBruta | null,
+    firma: firma(r.firma),
+    factura: documentulFiscal(r.factura),
     curier: r.curier,
     /*
       ⚠ Numele curierului vine din `NUME_CURIER`, harta care e deja adevarul in
-      panou. O a doua lista ar fi inceput sa se desparta de prima.
-      ⚠ Dar trece prin `stripDiacritics`: harta aceea e scrisa pentru PANOU, unde
-      se scrie cu diacritice („Posta Romana"), iar ecranele noi se scriu fara
-      (H6), ca restul vitrinei. Fara asta, un singur curier din saptesprezece ar
-      fi adus diacritice pe o pagina care nu le are nicaieri altundeva.
+      panou, trecuta prin `stripDiacritics` (H6). Vezi `urmarire.ts`.
     */
-    numeCurier: r.curier ? stripDiacritics(NUME_CURIER[r.curier as CurierPropriu] ?? r.curier) : null,
+    numeCurier: numeleCurierului(r.curier),
     awb: r.awb,
-    urmarire: r.urmarire,
+    awbEmisLa: r.awb_emis_la,
+    /* ⚠ Adresa salvata numai daca e `https:`, altfel tiparul folosit deja in panou. */
+    urmarire: adresaDeUrmarire(r.curier, r.awb, r.urmarire),
     vedere: r.vedere === "redusa" ? "redusa" : "intreaga",
   };
 }

@@ -3,10 +3,10 @@ import { redirect } from "next/navigation";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
-import { FormularIntrare } from "@/components/storefront/cont/FormularIntrare";
+import { EcranIntrare } from "@/components/storefront/cont/ecrane/EcranIntrare";
 
 /* ⚠ Pagina personala: `noindex`, ca si `/retur`. */
-export const metadata: Metadata = { robots: { index: false } };
+export const metadata: Metadata = { title: "Intra in cont", robots: { index: false } };
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -21,15 +21,8 @@ export default async function IntraInCont({ params }: Props) {
 
   return (
     <StorefrontThemeScope style={p.resolved.style}>
-      <StorePageShell chrome={p.chrome} design={p.resolved.design} className="min-h-screen flex flex-col">
-        <main className="max-w-md w-full mx-auto px-4 py-10 flex-1">
-          <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-2">Contul meu</h1>
-          <div className="w-12 h-1 rounded-full mb-5" style={{ backgroundColor: p.color }} />
-          <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-            Intra in cont ca sa vezi comenzile si facturile tale de la {p.storeName}.
-          </p>
-          <FormularIntrare color={p.color} />
-        </main>
+      <StorePageShell chrome={p.chrome} design={p.resolved.design} className="flex min-h-screen flex-col">
+        <EcranIntrare numeMagazin={p.storeName} greutateTitlu={p.greutateTitlu} />
       </StorePageShell>
     </StorefrontThemeScope>
   );

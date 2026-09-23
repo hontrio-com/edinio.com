@@ -7260,6 +7260,8 @@ export type Database = {
           iban_mascat: string | null
           motiv: string | null
           numar_comanda: string
+          order_id: string | null
+          produse: Json
           retur_id: string
           stare: string
         }[]
@@ -7293,10 +7295,13 @@ export type Database = {
         Args: { p_business: string; p_cont: string; p_order: string }
         Returns: {
           awb: string | null
+          awb_emis_la: string | null
           cod_reducere: string | null
           cota_tva: number | null
           creata_la: string
           curier: string | null
+          detalii: string | null
+          economie_oferte: number | null
           factura: Json | null
           firma: Json | null
           incasata: boolean
@@ -7310,6 +7315,7 @@ export type Database = {
           reducere_ramburs: number | null
           regim_tva: boolean | null
           stare: string
+          stare_plata: string | null
           subtotal: number | null
           taxa_ramburs: number | null
           total: number
@@ -7327,15 +7333,46 @@ export type Database = {
           p_limita?: number
         }
         Returns: {
+          are_factura: boolean
           bucati: number
           creata_la: string
           incasata: boolean
+          miniaturi: Json
           numar: string
           order_id: string
+          produse: number
           stare: string
           total: number
           total_randuri: number
           vedere: string
+        }[]
+      }
+      cont_facturile_mele: {
+        Args: {
+          p_business: string
+          p_cont: string
+          p_decalaj?: number
+          p_limita?: number
+        }
+        Returns: {
+          comanda_la: string
+          document: Json
+          firma_cui: string | null
+          firma_denumire: string | null
+          numar_comanda: string
+          order_id: string
+          stare_comanda: string
+          total_comanda: number
+          total_randuri: number
+        }[]
+      }
+      cont_rezumat: {
+        Args: { p_business: string; p_cont: string }
+        Returns: {
+          comenzi: number
+          facturi: number
+          in_curs: number
+          retururi: number
         }[]
       }
       cont_iesi_de_peste_tot: {

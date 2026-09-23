@@ -102,7 +102,7 @@ export const NU_E_PDF =
  * acolo intorc linkuri pe `testuat.fgo.ro`. SmartBill si Oblio n-au comutator de sandbox in
  * configurarea noastra, deci n-au ce cauta aici; puse pe ghicite, ar taia documente bune.
  */
-const GAZDE_DE_TEST = ["testuat.fgo.ro"];
+export const GAZDE_DE_TEST = ["testuat.fgo.ro"];
 
 /**
  * Documentul vine din mediul de TEST al casei de facturare?

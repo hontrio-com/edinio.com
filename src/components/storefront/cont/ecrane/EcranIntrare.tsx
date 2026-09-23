@@ -1,0 +1,57 @@
+import { Package, ReceiptText, ShieldCheck, Truck } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { FormularIntrare } from "../FormularIntrare";
+import { CARD, TITLU } from "../ui/clase";
+
+/**
+ * Intrarea in cont. Fara meniul contului: omul inca n-a intrat.
+ *
+ * ⚠ Textele din stanga stau DIRECT pe fundalul magazinului, deci folosesc
+ * `--st-on-bg`; cardul formularului sta pe `--st-surface`.
+ */
+
+function Avantaj({ icon: Icon, titlu, text }: { icon: LucideIcon; titlu: string; text: string }) {
+  return (
+    <li className="flex items-start gap-3">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)]">
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{titlu}</span>
+        <span className="mt-0.5 block text-sm opacity-75">{text}</span>
+      </span>
+    </li>
+  );
+}
+
+export function EcranIntrare({ numeMagazin, greutateTitlu }: { numeMagazin: string; greutateTitlu: "font-normal" | "font-semibold" }) {
+  return (
+    <main className="flex-1" style={{ fontFamily: "var(--st-font-body)" }}>
+      <div className="mx-auto w-full px-4 py-10 sm:px-6 lg:py-16" style={{ maxWidth: "min(var(--st-container), 68rem)" }}>
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-16">
+          <div className="order-2 text-[var(--st-on-bg)] lg:order-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest opacity-70">Contul meu</p>
+            <h1 className={`mt-2 text-3xl tracking-tight lg:text-4xl ${greutateTitlu}`} style={TITLU}>
+              Comenzile tale de la {numeMagazin}, intr-un singur loc
+            </h1>
+            <p className="mt-3 max-w-md text-sm leading-relaxed opacity-75 lg:text-base">
+              Intri cu adresa de email cu care ai comandat. Nu ai nevoie de parola si nici de inregistrare.
+            </p>
+            <ul className="mt-8 space-y-5">
+              <Avantaj icon={Package} titlu="Istoricul comenzilor" text="Fiecare comanda, cu produsele, plata si livrarea ei." />
+              <Avantaj icon={Truck} titlu="Urmarirea coletului" text="Unde e coletul si cand a plecat, fara sa cauti emailuri." />
+              <Avantaj icon={ReceiptText} titlu="Facturile, gata de descarcat" text="Documentele emise de magazin, in PDF." />
+              <Avantaj icon={ShieldCheck} titlu="Datele tale, sub control" text="Alegi ce mesaje primesti si iti poti sterge contul oricand." />
+            </ul>
+          </div>
+
+          <div className={`order-1 lg:order-2 ${CARD} p-6 sm:p-8`}>
+            <h2 className="text-xl font-semibold text-[var(--st-text)]" style={TITLU}>Intra in cont</h2>
+            <p className="mb-6 mt-1 text-sm text-[var(--st-muted)]">Iti trimitem un cod pe email.</p>
+            <FormularIntrare />
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}

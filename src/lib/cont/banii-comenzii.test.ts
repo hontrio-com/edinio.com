@@ -31,7 +31,10 @@ function comanda(p: Partial<BaniDinCont> & Pick<BaniDinCont, "linii" | "total">)
 }
 
 const linie = (pret: number, cantitate = 1, produsId: string | null = "de000000-0101-4000-8000-000000000001") =>
-  ({ nume: "Produs", pret, cantitate, produsId });
+  ({
+    nume: "Produs", pret, cantitate, produsId,
+    extra: (produsId ?? "").startsWith("extra_"), imagine: null, slug: null, personalizare: null, defalcare: null,
+  });
 
 const etichete = (r: { eticheta: string }[]) => r.map((x) => x.eticheta);
 const valoare = (r: { eticheta: string; valoare: string }[], eticheta: string) =>

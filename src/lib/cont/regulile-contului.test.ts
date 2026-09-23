@@ -29,12 +29,16 @@ function fisiereDin(dir: string, ext: string[]): string[] {
 /** Tot ce se vede sau se scrie in zona de cont. */
 const ACEST_FISIER = "src/lib/cont/regulile-contului.test.ts";
 
+/*
+  ⚠ TOATE componentele contului, nu o lista numita: pana pe 23.09.2026 aici
+  stateau doua fisiere din sase, deci probele H6 si ale semnului lung treceau
+  verzi peste componente pe care nu le citeau.
+*/
 const ZONA_CONT = [
   ...fisiereDin("src/lib/cont", [".ts"]).filter((p) => p !== ACEST_FISIER),
   ...fisiereDin("src/app/api/cont", [".ts"]),
   ...fisiereDin("src/app/(public)/[slug]/cont", [".tsx"]),
-  "src/components/storefront/cont/FormularIntrare.tsx",
-  "src/components/storefront/cont/RotesteJetonul.tsx",
+  ...fisiereDin("src/components/storefront/cont", [".ts", ".tsx"]),
   "src/components/public/DoarInAfaraContului.tsx",
 ];
 
@@ -107,6 +111,7 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
     "migrations/2026-09-23-conturi-clienti-citirile.sql",
     "migrations/2026-09-23-conturi-clienti-reparatii.sql",
     "migrations/2026-09-23-conturi-clienti-banii-comenzii.sql",
+    "migrations/2026-09-23-conturi-clienti-comanda-completa.sql",
   ];
   const definesteFunctia = /create\s+(or\s+replace\s+)?function\s+public\.cont_comanda_mea\s*\(/;
   const gasite = fisiereDin("migrations", [".sql"]).filter((p) => definesteFunctia.test(citeste(p)));
@@ -138,7 +143,9 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
   for (const camp of [
     "o.payment_method", "o.subtotal", "o.shipping_cost", "o.discount_amount", "o.cod_fee_amount",
     "o.card_discount_amount", "o.cod_discount_amount", "o.discount_code", "o.vat_amount", "o.vat_rate",
-    "o.prices_include_vat", "awb.curier", "awb.awb", "awb.url",
+    "o.prices_include_vat", "o.offer_discount_amount", "o.notes",
+    "awb.curier", "awb.awb", "awb.url", "awb.emis_la",
+    "privat.cont_documentul_comenzii", "privat.cont_personalizarea_liniei", "privat.cont_defalcarea_liniei",
   ]) {
     const nume = camp.replace(".", "\\.");
     const imbracate = corp.match(new RegExp(`case when l\\.vedere = 'intreaga' then ${nume}\\b`, "g")) ?? [];
@@ -151,6 +158,78 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
   for (const camp of ingaduite) {
     assert.ok(corp.includes(camp), `${camp} a disparut din vederea redusa`);
   }
+  /*
+    ⚠⚠ PERSONALIZAREA NU SE CITESTE IN CORPUL FUNCTIEI. Liniile ies si pe vederea
+    redusa, deci o cheie citita direct aici (`li->'customization'`) ar scapa pe
+    langa poarta. Se citeste NUMAI prin ajutoarele de mai sus, imbracate in `case`.
+  */
+  for (const rau of ["->'customization'", "->'personalizare'", "->>'customization'"]) {
+    assert.equal(corp.includes(rau), false, `corpul citeste direct ${rau}`);
+  }
+});
+
+test("⚠⚠ si celelalte citiri tin poarta vederii", () => {
+  const s = citeste("migrations/2026-09-23-conturi-clienti-comanda-completa.sql");
+  const corpul = (antet: string) => {
+    const i = s.indexOf(antet);
+    assert.ok(i > 0, `nu am gasit ${antet}`);
+    return s.slice(i, s.indexOf("$fn$;", i));
+  };
+
+  /* Lista: `are_factura` spune ca exista un document, deci e fals la vederea redusa. */
+  const lista = corpul("create function public.cont_comenzile_mele");
+  assert.ok(
+    lista.includes("case when l.vedere = 'intreaga' then privat.cont_documentul_comenzii(o) is not null else false end"),
+    "`are_factura` iese pe langa poarta vederii",
+  );
+
+  /* Facturile si retururile: vederea redusa nu produce DELOC rand. */
+  for (const antet of ["create or replace function public.cont_facturile_mele", "create function public.cont_retururile_mele"]) {
+    assert.ok(corpul(antet).includes("and l.vedere = 'intreaga'"), `${antet} n-are poarta vederii in WHERE`);
+  }
+
+  /* Rezumatul numara cu ACELEASI predicate ca listele. */
+  const rezumat = corpul("create or replace function public.cont_rezumat");
+  assert.equal(rezumat.split("l.vedere = 'intreaga'").length - 1, 2, "facturile si retururile din rezumat trebuie sa ceara vederea intreaga");
+  assert.ok(rezumat.includes("not coalesce(o.order_source ? 'marketplace', false)"), "rezumatul numara si facturi de marketplace");
+
+  /*
+    Nicio adresa de furnizor nu iese din documentul comenzii: coloanele `*_url` si
+    `*_link` au voie sa apara NUMAI ca intrare pentru garda de test sau pentru
+    „exista link?", niciodata ca valoare intoarsa.
+  */
+  const doc = corpul("create or replace function privat.cont_documentul_comenzii");
+  const randuri = doc.split("\n").filter((r) => r.includes("_url") || r.includes("_link"));
+  assert.ok(randuri.length > 0, "nu am gasit ce masor");
+  for (const r of randuri) {
+    assert.ok(
+      r.includes("cont_e_document_de_test(") || r.includes("nullif(btrim(coalesce("),
+      `documentul poate scoate o adresa de furnizor: ${r.trim()}`,
+    );
+  }
+});
+
+/* ═══ Tema magazinului, nu a panoului ═══ */
+
+test("⚠⚠ zona de cont nu foloseste tokenii panoului si nici culoarea bruta a magazinului", () => {
+  /*
+    Paginile de cont foloseau `text-foreground`, `ring-foreground/10` si
+    `businesses.primary_color` cu `text-white` peste: pe Casa Lumen iesea verdele
+    Edinio, iar la 55 din 71 de magazine albul pe culoarea primara e sub 4,5:1.
+  */
+  const ecrane = ZONA_CONT.filter((p) => p.endsWith(".tsx"));
+  assert.ok(ecrane.length >= 20, "nu am gasit ecranele de cont");
+  const interzise = [
+    "text-foreground", "text-muted-foreground", "ring-foreground/", "bg-primary ", 'bg-primary"',
+    "text-white", "bg-red-600", "text-red-600", "p.color", "pag.color",
+  ];
+  for (const p of ecrane) {
+    const t = citeste(p);
+    for (const rau of interzise) {
+      assert.equal(t.includes(rau), false, `${p} foloseste ${rau}`);
+    }
+  }
+
 });
 
 test("presetarea lui `vedere` e cea saraca", () => {

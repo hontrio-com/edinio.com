@@ -78,6 +78,32 @@ function contrastOn(color: string): string {
   return contrast(lum, luminanta("000000")) >= contrast(lum, 1) ? TEXT_NEGRU : TEXT_ALB;
 }
 
+/**
+ * Textul care se citeste DIRECT pe fundalul magazinului (titlul unei pagini, file).
+ *
+ * ⚠ Exista pentru un caz masurat: un magazin de pe productie are fundalul #5b2067,
+ * iar textul implicit (#111827) scris direct pe el iese la 1,56:1. Cardurile stau
+ * pe `--st-surface` si nu au problema; titlurile scrise pe fundal, da.
+ *
+ * ⚠ Numai pentru fundaluri HEX: `contrastOn` intoarce alb pentru orice altceva, iar
+ * fundalul implicit e `var(--color-background)` (deschis). Cand textul temei trece
+ * deja pragul, ramane EL (`var(--st-text)`), deci la un magazin obisnuit nu se
+ * schimba nimic. Il citeste deocamdata numai zona de cont.
+ */
+function textPeFundal(fundal: string, text: string): string {
+  const hex = (v: string) => {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+    return m ? (m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1]) : null;
+  };
+  const f = hex(fundal);
+  if (!f) return "var(--st-text)";
+  const t = hex(text);
+  /* Textul implicit al temei e un `var(...)` care inseamna #111827. */
+  const lumText = t ? luminanta(t) : LUM_INCHIS;
+  if (contrast(luminanta(f), lumText) >= PRAG_AA) return "var(--st-text)";
+  return contrastOn(`#${f}`);
+}
+
 const CARD_SHADOW = {
   plain: { rest: "none", hover: "none" },
   // Cardul de azi: fara umbra in repaus, `hover:shadow-xl` la trecerea mouse-ului.
@@ -138,6 +164,7 @@ export function styleToCssVars(style: ResolvedStyle): Record<string, string> {
     "--st-accent": c.accent,
     "--st-accent-contrast": contrastOn(c.accent),
     "--st-bg": c.background,
+    "--st-on-bg": textPeFundal(c.background, c.text),
     "--st-surface": c.surface,
     "--st-text": c.text,
     "--st-muted": c.muted,

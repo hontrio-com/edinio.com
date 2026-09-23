@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
-import { comenzileMele } from "@/lib/cont/comenzi";
+import { facturileMele } from "@/lib/cont/facturi";
 import { rezumatulContului } from "@/lib/cont/rezumat";
-import { pluralRo } from "@/lib/utils/format";
 import { PaginaCont } from "@/components/storefront/cont/ui/PaginaCont";
-import { EcranComenzi } from "@/components/storefront/cont/ecrane/EcranComenzi";
+import { EcranFacturi } from "@/components/storefront/cont/ecrane/EcranFacturi";
 
-export const metadata: Metadata = { title: "Comenzile mele", robots: { index: false } };
+export const metadata: Metadata = { title: "Facturi", robots: { index: false } };
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -16,7 +15,7 @@ interface Props {
 
 const PE_PAGINA = 20;
 
-export default async function ComenzileMele({ params, searchParams }: Props) {
+export default async function FacturileMele({ params, searchParams }: Props) {
   const { slug } = await params;
   const { p } = await searchParams;
   const pagina = Math.max(1, Number.parseInt(p ?? "1", 10) || 1);
@@ -24,20 +23,25 @@ export default async function ComenzileMele({ params, searchParams }: Props) {
   const pag = await incarcaPaginaDeCont(slug);
   if (!pag.sesiune) redirect("/cont/intra");
 
-  const [rezumat, { comenzi, total }] = await Promise.all([
+  const [rezumat, { facturi, total }] = await Promise.all([
     rezumatulContului(pag.magazin.id, pag.sesiune.contId),
-    comenzileMele(pag.magazin.id, pag.sesiune.contId, PE_PAGINA, (pagina - 1) * PE_PAGINA),
+    facturileMele(pag.magazin.id, pag.sesiune.contId, PE_PAGINA, (pagina - 1) * PE_PAGINA),
   ]);
 
   return (
     <PaginaCont
       pag={pag}
       rezumat={rezumat}
-      activ="comenzi"
-      titlu="Comenzile mele"
-      subtitlu={total > 0 ? `${pluralRo(total, "comanda", "comenzi")}, de la cea mai noua.` : undefined}
+      activ="facturi"
+      titlu="Facturi"
+      subtitlu={`Documentele emise de ${pag.storeName} pentru comenzile tale.`}
     >
-      <EcranComenzi comenzi={comenzi} pagina={pagina} pagini={Math.max(1, Math.ceil(total / PE_PAGINA))} />
+      <EcranFacturi
+        facturi={facturi}
+        pagina={pagina}
+        pagini={Math.max(1, Math.ceil(total / PE_PAGINA))}
+        emailMagazin={pag.contact.email}
+      />
     </PaginaCont>
   );
 }

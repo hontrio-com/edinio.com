@@ -45,6 +45,18 @@ export type PaginaDeCont = {
    * regimul inghetat pe ea; asta e doar rezerva, pentru comenzile de dinainte.
    */
   setariTva: SetariTvaMagazin;
+  /** Cum se ajunge la magazin, pentru cardul „Ai nevoie de ajutor?". */
+  contact: { telefon: string | null; email: string | null; whatsapp: string | null };
+  /** Adresa magazinului de AZI, pentru ridicarea personala. */
+  adresaMagazin: string | null;
+  /** Etichetele campurilor proprii de la checkout, dupa id. */
+  campuriCheckout: { id: string; label: string }[];
+  /**
+   * ⚠ Greutatea titlurilor, aleasa pe server: Instrument Serif exista NUMAI in
+   * greutatea 400, iar un `font-semibold` peste el face browserul sa deseneze un
+   * aldin fals.
+   */
+  greutateTitlu: "font-normal" | "font-semibold";
   sesiune: SesiuneCont | null;
 };
 
@@ -111,7 +123,11 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
-  const searchCategories = await loadSearchCategories(business.id, resolved.design);
+  /* Doua citiri independente, dupa ce toate portile au trecut: in paralel. */
+  const [searchCategories, sesiune] = await Promise.all([
+    loadSearchCategories(business.id, resolved.design),
+    sesiuneCurenta(business.id),
+  ]);
   const chrome = buildChromeData({
     searchCategories,
     business: business as never,
@@ -131,8 +147,6 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
     },
   });
 
-  const sesiune = await sesiuneCurenta(business.id);
-
   /* Aceleasi implicite ca pagina de comanda din panou: un magazin fara rand de
      setari nu incepe sa adune TVA peste total. */
   const setariTva: SetariTvaMagazin = {
@@ -140,5 +154,19 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
     prices_include_vat: storeSettings?.prices_include_vat ?? true,
   };
 
-  return { magazin, basePath, color, storeName, chrome, resolved, setariTva, sesiune };
+  const curat = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+  const adresaMagazin = [curat(business.store_address), curat(business.store_city), curat(business.store_county)]
+    .filter(Boolean).join(", ") || null;
+  const campuriCheckout = (pageContent.checkout_config?.custom_fields ?? [])
+    .filter((c) => c && typeof c.id === "string" && typeof c.label === "string")
+    .map((c) => ({ id: c.id, label: c.label }));
+
+  return {
+    magazin, basePath, color, storeName, chrome, resolved, setariTva,
+    contact: { telefon: curat(business.phone), email: curat(business.email), whatsapp: curat(business.whatsapp) },
+    adresaMagazin,
+    campuriCheckout,
+    greutateTitlu: resolved.style.fontHeading === "instrument" ? "font-normal" : "font-semibold",
+    sesiune,
+  };
 }

@@ -10,6 +10,8 @@ export type ContactulMeu = {
 
 export type ReturulMeu = {
   returId: string;
+  /** Comanda returului, ca sa se poata deschide; NULL cand comerciantul a sters-o. */
+  orderId: string | null;
   numarComanda: string;
   creatLa: string;
   stare: string;
@@ -17,6 +19,7 @@ export type ReturulMeu = {
   felRestituire: string | null;
   ibanMascat: string | null;
   bucati: number;
+  produse: { nume: string; cantitate: number }[];
 };
 
 export async function contacteleMele(businessId: string, contId: string): Promise<ContactulMeu[]> {
@@ -64,6 +67,7 @@ export async function retururileMele(businessId: string, contId: string): Promis
   if (error) throw error;
   return (data ?? []).map((r) => ({
     returId: r.retur_id,
+    orderId: r.order_id,
     numarComanda: r.numar_comanda,
     creatLa: r.creat_la,
     stare: r.stare,
@@ -72,6 +76,10 @@ export async function retururileMele(businessId: string, contId: string): Promis
     /* ⚠ Deja mascat IN BAZA. Aici nu se mai poate demasca nimic. */
     ibanMascat: r.iban_mascat,
     bucati: Number(r.bucati ?? 0),
+    produse: (Array.isArray(r.produse) ? (r.produse as unknown[]) : [])
+      .filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x))
+      .map((x) => ({ nume: typeof x.nume === "string" ? x.nume : "", cantitate: Number(x.cantitate) || 0 }))
+      .filter((x) => x.nume !== ""),
   }));
 }
 

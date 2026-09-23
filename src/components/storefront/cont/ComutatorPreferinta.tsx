@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FOCUS } from "./ui/clase";
 
 /**
  * Un comutator de preferinta, care salveaza pe loc.
@@ -9,21 +10,23 @@ import { useRouter } from "next/navigation";
  * ⚠ Starea de pe ecran se misca DUPA ce serverul a raspuns, nu inainte. O
  * mutare optimista ar fi aratat „dezabonat" unui om care nu e, iar la mesaje de
  * marketing diferenta aia e chiar lucrul care se reclama.
+ *
+ * ⚠ `role="switch"` + `aria-checked` + nume legat de eticheta: inainte era un
+ * buton fara nume, citit de un cititor de ecran ca „buton, apasat".
  */
 export function ComutatorPreferinta({
   canal,
   pornit,
   eticheta,
   explicatie,
-  color,
 }: {
   canal: "email" | "sms";
   pornit: boolean;
   eticheta: string;
   explicatie: string;
-  color: string;
 }) {
   const router = useRouter();
+  const id = useId();
   const [stare, setStare] = useState(pornit);
   const [asteapta, setAsteapta] = useState(false);
   const [eroare, setEroare] = useState("");
@@ -53,23 +56,30 @@ export function ComutatorPreferinta({
   }
 
   return (
-    <div className="flex items-start justify-between gap-4 py-3">
-      <div>
-        <p className="text-sm font-medium text-foreground">{eticheta}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{explicatie}</p>
-        {eroare && <p className="text-xs text-red-600 mt-1">{eroare}</p>}
+    <div className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <p id={`${id}-e`} className="text-sm font-semibold text-[var(--st-text)]">{eticheta}</p>
+        <p id={`${id}-d`} className="mt-0.5 text-sm leading-relaxed text-[var(--st-muted)]">{explicatie}</p>
+        {eroare && <p role="alert" className="mt-1.5 text-sm text-[var(--st-text)]">{eroare}</p>}
       </div>
       <button
         type="button"
+        role="switch"
+        aria-checked={stare}
+        aria-labelledby={`${id}-e`}
+        aria-describedby={`${id}-d`}
         onClick={schimba}
         disabled={asteapta}
-        aria-pressed={stare}
-        className="shrink-0 rounded-full w-11 h-6 transition relative disabled:opacity-60"
-        style={{ backgroundColor: stare ? color : "var(--color-muted, #d4d4d8)" }}
+        className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition-colors disabled:opacity-60 ${FOCUS} ${
+          stare ? "border-transparent" : "border-[var(--st-border)] bg-[var(--st-border)]"
+        }`}
+        style={stare ? { backgroundColor: "var(--st-primary)" } : undefined}
       >
+        <span className="sr-only">{stare ? "Pornit" : "Oprit"}</span>
         <span
-          className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
-          style={{ left: stare ? "1.375rem" : "0.125rem" }}
+          aria-hidden="true"
+          className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[var(--st-surface)] shadow-sm transition-[left]"
+          style={{ left: stare ? "1.5rem" : "0.1875rem" }}
         />
       </button>
     </div>

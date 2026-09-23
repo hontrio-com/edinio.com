@@ -381,6 +381,23 @@ ramura, pe Preview + Production, iar acelea sunt ale productiei si NU se ating.
 ⚠ **Nu se sterg cat timp se mai lucreaza local**: dezvoltarea locala merge pe baza demo
 prin `.env.development.local`. Sterse acum, lucrul local ar ajunge pe productie.
 
+## D4. ⚠⚠ Ramura `conturi-clienti` are nevoie de ACELEASI 8 chei, si lista de la final devine 16
+
+Pornita pe 23.09.2026 din `main`, pentru sistemul de conturi de cumparator
+([`CONTURI-CLIENTI.md`](CONTURI-CLIENTI.md)).
+
+Masurat in aceeasi zi cu `filter_project_envs`, `gitBranch: conturi-clienti`: **lista e GOALA**.
+Cele 8 chei de mai sus sunt legate de `redesign-dashboard`, si o variabila de ramura nu se
+mosteneste. Deci un preview al ramurii noi cade inapoi pe valorile de Preview **fara** ramura,
+care sunt **ALE PRODUCTIEI**: Supabase de productie, Resend adevarat, Stripe adevarat,
+SmartBill adevarat, token Vercel adevarat.
+
+**Inainte de prima desfasurare a ramurii**, cele 8 se copiaza pe `gitBranch: conturi-clienti`.
+`SUPABASE_SERVICE_ROLE_KEY` o pune proprietarul; MCP-ul nu o da.
+
+⚠ **Lista de curatenie de la final creste de la 8 la 16 chei**, toate sterse dupa id. Id-urile
+celor noi se scriu aici in clipa in care sunt create.
+
 ---
 
 ## E. Ce s-a schimbat in cod, pe scurt
@@ -446,6 +463,13 @@ oricine cu cont ajunge la ea scriind adresa.
   lor. Fila Vanzari nu mai asaza cifrele ca pe o adunare si spune de ce, dar defectul de
   fond ramane in datele de la ingest. De hotarat daca se indreapta la ingest sau se lasa asa
   si se scrie peste tot ca `subtotal` e o fotografie, nu o componenta a totalului.
+- ⚠⚠ **`order_source` e NULL la 64 de comenzi**, la 15 magazine, de la 31.05.2026 pana la
+  16.09.2026, deci nu e doar istorie veche. Urmarea, masurata pe productie pe 23.09.2026:
+  regula scrisa firesc `not (order_source ? 'marketplace')` intoarce NULL pentru ele si le
+  ARUNCA in tacere, adica 279 de comenzi in loc de 343. Forma buna e
+  `not coalesce(order_source ? 'marketplace', false)`. Panoul de comenzi NU are defectul
+  (filtreaza cu `.is("order_source->>marketplace", null)`, care prinde si NULL), dar orice cod
+  nou care desparte vitrina de marketplace intra direct in el.
 - `orders_daily_revenue` (grupare pe ziua **UTC**) nu mai e chemat din niciun loc de cod:
   verificat cu `git grep`, ramane doar in `migrations/`, in tipuri si in doua comentarii.
   De hotarat daca il stergem din baza sau il lasam. Cat timp exista, e o capcana: urmatorul

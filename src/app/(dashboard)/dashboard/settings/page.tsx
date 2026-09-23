@@ -7,6 +7,7 @@ import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
+import { incarcaStareaConturilor } from "@/lib/actions/cont-client.actions";
 import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
@@ -362,6 +363,14 @@ async function ContinutSetari({
   const paymentReadiness = processorReadiness(storeSettings);
   const paymentMethods = resolvePaymentMethods(storeSettings?.payment_methods, paymentReadiness);
 
+  /*
+    ⚠ Se incarca separat si se INGHITE eroarea: o pana la citirea starii
+    conturilor n-are de ce sa rupa restul Setarilor, unde stau livrarea, taxele
+    si platile. Fila ramane goala si atat.
+  */
+  const stareConturi = business?.id ? await incarcaStareaConturilor(business.id) : null;
+  const stareaConturilor = stareConturi && !("error" in stareConturi) ? stareConturi : undefined;
+
   return (
     <SettingsClient
       sectiuneCeruta={sectiuneCeruta}
@@ -400,6 +409,7 @@ async function ContinutSetari({
       codDiscount={parseCardDiscountConfig(storeSettings?.cod_discount_config)}
       codFee={parseCodFeeConfig(storeSettings?.cod_fee_config)}
       cookieBanner={parseCookieBannerConfig(storeSettings?.cookie_banner_config)}
+      stareaConturilor={stareaConturilor}
       cookieCategories={detectConsentCategories(storeSettings?.marketing_config as MarketingConfig | null)}
       storeSeo={storeSeo}
       seoDefaults={seoDefaults}

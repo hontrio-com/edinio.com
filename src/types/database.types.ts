@@ -7237,6 +7237,16 @@ export type Database = {
           verificat: boolean
         }[]
       }
+      cont_curatenie: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          blocate: number
+          coduri: number
+          instiintari: number
+          jurnal: number
+          sesiuni: number
+        }[]
+      }
       cont_export: {
         Args: { p_business: string; p_cont: string }
         Returns: Json
@@ -7261,6 +7271,10 @@ export type Database = {
       cont_sterge_contact: {
         Args: { p_business: string; p_cont: string; p_fel: string; p_valoare: string }
         Returns: { motiv: string; ok: boolean }[]
+      }
+      cont_cate_conturi: {
+        Args: { p_business: string }
+        Returns: number
       }
       cont_cere_cod: {
         Args: {

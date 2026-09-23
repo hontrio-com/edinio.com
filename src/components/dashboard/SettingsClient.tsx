@@ -11,13 +11,15 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
-  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package,
+  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package, UserRound,
   AlertTriangle, Infinity as InfinityIcon,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
 import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
+import { ContClientiSetari } from "@/components/dashboard/setari/ContClientiSetari";
+import type { StareaConturilor } from "@/lib/actions/cont-client.actions";
 import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
@@ -51,7 +53,8 @@ type UserProfile = Pick<
 
 type SectionId =
   | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
-  | "taxe" | "plati" | "domeniu" | "seo" | "email" | "notificari" | "politici" | "cookies" | "securitate";
+  | "taxe" | "plati" | "domeniu" | "seo" | "email" | "notificari" | "politici" | "cookies"
+  | "conturi-clienti" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -67,6 +70,7 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "notificari", label: "Notificari",  icon: Bell      },
   { id: "politici",   label: "Politici",    icon: FileText  },
   { id: "cookies",    label: "Banner Cookies", icon: Cookie },
+  { id: "conturi-clienti", label: "Conturi clienti", icon: UserRound },
   { id: "securitate", label: "Securitate",  icon: Lock      },
 ];
 
@@ -330,6 +334,8 @@ interface Props {
   codDiscount: CardDiscountConfig;
   codFee: CodFeeConfig;
   cookieBanner: CookieBannerConfig;
+  /* ⚠ Poate lipsi: pagina o incarca separat, iar o pana la citirea ei nu are de ce sa rupa restul Setarilor. */
+  stareaConturilor?: StareaConturilor;
   cookieCategories: ConsentCategory[];
   storeSeo: StoreSeo;
   seoDefaults: { title: string; description: string; ogImage: string | null };
@@ -358,7 +364,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -2770,6 +2776,20 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 {savingPolicies ? <Loader2 className="animate-spin" /> : <Save />}
                 {savingPolicies ? "Se salveaza..." : "Salveaza politicile"}
               </Button>
+            </div>
+          )}
+
+          {/* ── Conturi clienti ── */}
+          {/*
+            ⚠ Corpul filei sta intr-un fisier al ei, `setari/ContClientiSetari.tsx`,
+            nu aici: fisierul asta are deja peste trei mii de randuri, iar nota
+            paginii spune raspicat ca nu se poate livra fila cu fila fara sa fie
+            rupt in bucati. O sectiune noua scrisa inauntru l-ar fi facut si mai
+            greu de atins pentru urmatorul.
+          */}
+          {activeSection === "conturi-clienti" && stareaConturilor && businessId && (
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
+              <ContClientiSetari businessId={businessId} initial={stareaConturilor} />
             </div>
           )}
 

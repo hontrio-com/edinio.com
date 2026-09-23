@@ -7293,6 +7293,8 @@ export type Database = {
         Args: { p_business: string; p_cont: string; p_order: string }
         Returns: {
           awb: string | null
+          cod_reducere: string | null
+          cota_tva: number | null
           creata_la: string
           curier: string | null
           factura: Json | null
@@ -7304,11 +7306,15 @@ export type Database = {
           numar: string
           order_id: string
           reducere: number | null
+          reducere_card: number | null
+          reducere_ramburs: number | null
+          regim_tva: boolean | null
           stare: string
           subtotal: number | null
           taxa_ramburs: number | null
           total: number
           transport: number | null
+          tva: number | null
           urmarire: string | null
           vedere: string
         }[]

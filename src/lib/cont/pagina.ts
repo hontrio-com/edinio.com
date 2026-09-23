@@ -8,6 +8,7 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { originaEsteNumaiAMagazinului, conturilePornite } from "./origine";
 import { magazinulEOprit, type MagazinDeCont } from "./magazinul-cererii";
 import { sesiuneCurenta, type SesiuneCont } from "./sesiune";
+import type { SetariTvaMagazin } from "@/lib/orders/totals-box";
 
 /**
  * Tot ce-i trebuie unei pagini din zona de cont, intr-un singur loc.
@@ -39,6 +40,11 @@ export type PaginaDeCont = {
   storeName: string;
   chrome: ReturnType<typeof buildChromeData>;
   resolved: ReturnType<typeof resolveDesign>;
+  /**
+   * Regimul de TVA de AZI al magazinului. ⚠ Pentru banii unei comenzi castiga
+   * regimul inghetat pe ea; asta e doar rezerva, pentru comenzile de dinainte.
+   */
+  setariTva: SetariTvaMagazin;
   sesiune: SesiuneCont | null;
 };
 
@@ -127,5 +133,12 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
 
   const sesiune = await sesiuneCurenta(business.id);
 
-  return { magazin, basePath, color, storeName, chrome, resolved, sesiune };
+  /* Aceleasi implicite ca pagina de comanda din panou: un magazin fara rand de
+     setari nu incepe sa adune TVA peste total. */
+  const setariTva: SetariTvaMagazin = {
+    vat_enabled: storeSettings?.vat_enabled ?? false,
+    prices_include_vat: storeSettings?.prices_include_vat ?? true,
+  };
+
+  return { magazin, basePath, color, storeName, chrome, resolved, setariTva, sesiune };
 }

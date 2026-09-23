@@ -6,6 +6,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
 import { comandaMea } from "@/lib/cont/comenzi";
+import { randurileDeBani } from "@/lib/cont/banii-comenzii";
 import { orderStatus } from "@/lib/orders/status";
 import { AnuleazaComanda } from "@/components/storefront/cont/AnuleazaComanda";
 import { formatPrice, formatDateTime, pluralRo } from "@/lib/utils/format";
@@ -41,10 +42,8 @@ export default async function ComandaMea({ params }: Props) {
   const st = orderStatus(c.stare);
   const redusa = c.vedere === "redusa";
 
-  /* Suma liniilor CHIAR ARATATE, si restul pana la total, ca sa se adune. */
-  const produse = c.linii.reduce((s, l) => s + l.pret * l.cantitate, 0);
-  const altele =
-    c.total - (produse + (c.transport ?? 0) - (c.reducere ?? 0) + (c.taxaRamburs ?? 0));
+  /* ⚠ Aceleasi randuri ca in emailul de confirmare; vezi `banii-comenzii.ts`. */
+  const bani = randurileDeBani(c, pag.setariTva);
 
   return (
     <StorefrontThemeScope style={pag.resolved.style}>
@@ -81,22 +80,14 @@ export default async function ComandaMea({ params }: Props) {
 
           <section className="rounded-xl ring-1 ring-foreground/10 p-4 mb-4">
             {/*
-              ⚠⚠ RANDUL „PRODUSE" E SUMA LINIILOR ARATATE, nu `orders.subtotal`.
-              Masurat pe demo: din 498 de comenzi de vitrina, 19 au
-              `sum(pret x cantitate) <> subtotal`, pana la 15 lei diferenta. Adica
-              omul aduna in cap cele patru randuri de deasupra si obtine alt numar
-              decat scria dedesubt. Bani care nu se explica sunt cel mai urat fel
-              de defect pe un ecran de comanda.
-              ⚠ Si ce nu se explica din diferenta primeste randul lui, in loc sa
-              fie ascuns: coloana trebuie sa se adune pana la total.
+              ⚠⚠ RANDUL „PRODUSE” E SUMA LINIILOR ARATATE, nu `orders.subtotal`,
+              si coloana se aduna pana la total: ce nu se explica primeste randul
+              lui, in loc sa fie ascuns. Regula si masuratorile stau in
+              `banii-comenzii.ts`, unde se pot proba.
             */}
-            <Rand eticheta="Produse" valoare={formatPrice(produse)} />
-            {c.transport !== null && c.transport > 0 && <Rand eticheta="Transport" valoare={formatPrice(c.transport)} />}
-            {c.reducere !== null && c.reducere > 0 && <Rand eticheta="Reducere" valoare={`- ${formatPrice(c.reducere)}`} />}
-            {c.taxaRamburs !== null && c.taxaRamburs > 0 && <Rand eticheta="Taxa ramburs" valoare={formatPrice(c.taxaRamburs)} />}
-            {Math.abs(altele) >= 0.01 && (
-              <Rand eticheta="Alte ajustari" valoare={`${altele > 0 ? "" : "- "}${formatPrice(Math.abs(altele))}`} />
-            )}
+            {bani.map((r) => (
+              <Rand key={r.eticheta} eticheta={r.eticheta} valoare={r.valoare} />
+            ))}
             <div className="flex items-baseline justify-between gap-4 pt-2 mt-1 border-t border-foreground/10">
               <span className="font-semibold text-foreground">Total</span>
               <span className="font-bold text-foreground">{formatPrice(c.total)}</span>

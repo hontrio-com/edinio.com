@@ -95,19 +95,58 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
     statea chiar intre doua randuri imbracate in `case`. Proba masoara SURSA
     functiei, nu un apel: un camp adaugat maine fara `case` cade aici.
   */
-  const s = citeste("migrations/2026-09-23-conturi-clienti-reparatii.sql");
-  const inceput = s.indexOf("create function public.cont_comanda_mea");
-  assert.ok(inceput > 0, "nu am gasit cont_comanda_mea in migratia de reparatii");
-  const corp = s.slice(inceput, s.indexOf("$fn$;", inceput));
+  /*
+    ⚠⚠ SE CITESTE DEFINITIA CARE TINE, adica ULTIMA APLICATA. Proba citea migratia
+    43, iar migratia 47 a refacut functia cu sase campuri de bani in plus: verde pe
+    definitia veche, n-ar fi pazit niciunul. Si numele fisierelor NU dau ordinea
+    (au toate aceeasi data, iar „banii-comenzii” iese alfabetic primul), deci
+    ordinea e scrisa aici, iar o definitie noua pe care proba n-o cunoaste o
+    face sa cada, nu sa ramana in urma.
+  */
+  const DEFINITII_IN_ORDINEA_APLICARII = [
+    "migrations/2026-09-23-conturi-clienti-citirile.sql",
+    "migrations/2026-09-23-conturi-clienti-reparatii.sql",
+    "migrations/2026-09-23-conturi-clienti-banii-comenzii.sql",
+  ];
+  const definesteFunctia = /create\s+(or\s+replace\s+)?function\s+public\.cont_comanda_mea\s*\(/;
+  const gasite = fisiereDin("migrations", [".sql"]).filter((p) => definesteFunctia.test(citeste(p)));
+  assert.deepEqual(
+    [...gasite].sort(),
+    [...DEFINITII_IN_ORDINEA_APLICARII].sort(),
+    "cont_comanda_mea e definita intr-o migratie pe care proba n-o stie; pune-o la coada listei, e cea care tine",
+  );
+
+  const s = citeste(DEFINITII_IN_ORDINEA_APLICARII[DEFINITII_IN_ORDINEA_APLICARII.length - 1]);
+  const m = definesteFunctia.exec(s);
+  assert.ok(m, "nu am gasit cont_comanda_mea in ultima ei migratie");
+  const corp = s.slice(m.index, s.indexOf("$fn$;", m.index));
+
+  /*
+    ⚠ `comanda_incasata` primeste metoda de plata ca sa intoarca UN BIT, „incasat”,
+    pe care vederea redusa il arata. Metoda nu iese de acolo, deci apelul se scoate
+    din numaratoarea de mai jos, pe nume, si numai el.
+  */
+  const apelIncasata = /public\.comanda_incasata\([^)]*\)/g;
+  assert.equal((corp.match(apelIncasata) ?? []).length, 1, "apelul lui comanda_incasata s-a schimbat; reciteste proba");
+  const faraIncasata = corp.replace(apelIncasata, "");
 
   /* Ce are voie sa iasa neimbracat, fiindca vederea redusa chiar le arata. */
   const ingaduite = [
     "o.id", "o.order_number", "o.created_at", "o.status", "o.total",
     "public.comanda_incasata", "l.vedere",
   ];
-  for (const camp of ["o.payment_method", "o.subtotal", "o.shipping_cost", "o.discount_amount", "o.cod_fee_amount", "awb.curier", "awb.awb", "awb.url"]) {
-    const tipar = new RegExp(`case when l\\.vedere = 'intreaga' then ${camp.replace(".", "\\.")}`);
-    assert.ok(tipar.test(corp), `${camp} iese pe langa poarta vederii`);
+  for (const camp of [
+    "o.payment_method", "o.subtotal", "o.shipping_cost", "o.discount_amount", "o.cod_fee_amount",
+    "o.card_discount_amount", "o.cod_discount_amount", "o.discount_code", "o.vat_amount", "o.vat_rate",
+    "o.prices_include_vat", "awb.curier", "awb.awb", "awb.url",
+  ]) {
+    const nume = camp.replace(".", "\\.");
+    const imbracate = corp.match(new RegExp(`case when l\\.vedere = 'intreaga' then ${nume}\\b`, "g")) ?? [];
+    /* ⚠ TOATE aparitiile, nu macar una: un camp scris o data imbracat si o data
+       liber ar fi trecut de o proba care cere doar sa existe forma buna. */
+    const toate = faraIncasata.match(new RegExp(`(?<![\\w.])${nume}\\b`, "g")) ?? [];
+    assert.ok(imbracate.length > 0, `${camp} iese pe langa poarta vederii`);
+    assert.equal(toate.length, imbracate.length, `${camp} apare si NEIMBRACAT in functie`);
   }
   for (const camp of ingaduite) {
     assert.ok(corp.includes(camp), `${camp} a disparut din vederea redusa`);

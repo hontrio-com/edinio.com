@@ -25,6 +25,13 @@ export type DetaliuComanda = {
   transport: number | null;
   reducere: number | null;
   taxaRamburs: number | null;
+  reducereCard: number | null;
+  reducereRamburs: number | null;
+  codReducere: string | null;
+  tva: number | null;
+  cotaTva: number | null;
+  /* Regimul de pret INGHETAT pe comanda; `null` la comenzile de dinaintea lui. */
+  regimTva: boolean | null;
   total: number;
   linii: { nume: string; cantitate: number; pret: number; produsId: string | null }[];
   livrare: Record<string, string | null> | null;
@@ -116,6 +123,13 @@ export async function comandaMea(
     transport: r.transport === null ? null : Number(r.transport),
     reducere: r.reducere === null ? null : Number(r.reducere),
     taxaRamburs: r.taxa_ramburs === null ? null : Number(r.taxa_ramburs),
+    reducereCard: r.reducere_card === null ? null : Number(r.reducere_card),
+    reducereRamburs: r.reducere_ramburs === null ? null : Number(r.reducere_ramburs),
+    codReducere: r.cod_reducere,
+    tva: r.tva === null ? null : Number(r.tva),
+    cotaTva: r.cota_tva === null ? null : Number(r.cota_tva),
+    /* ⚠ `typeof`, nu adevar: `false` e un raspuns (preturi FARA TVA), nu o lipsa. */
+    regimTva: typeof r.regim_tva === "boolean" ? r.regim_tva : null,
     total: Number(r.total ?? 0),
     linii: linii.map((l) => ({
       nume: l.nume ?? "",

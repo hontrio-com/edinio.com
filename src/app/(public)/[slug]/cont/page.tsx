@@ -80,6 +80,11 @@ export default async function AcasaInCont({ params }: Props) {
             </section>
           )}
 
+          <nav className="flex flex-wrap gap-4 mb-6 text-sm">
+            <Link href="/cont/comenzi" className="underline text-muted-foreground">Comenzile mele</Link>
+            <Link href="/cont/preferinte" className="underline text-muted-foreground">Preferinte de comunicare</Link>
+          </nav>
+
           <form method="post" action="/api/cont/iesire">
             <button type="submit" className="text-sm text-muted-foreground underline">
               Iesi din cont

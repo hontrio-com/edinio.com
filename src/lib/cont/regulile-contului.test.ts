@@ -175,8 +175,19 @@ test("rutele care scriu cer originea magazinului", () => {
     o cerere straina care te DEconecteaza e o suparare, nu o bresa, iar o poarta
     aici ar fi inchis singura usa de iesire.
   */
-  for (const p of fisiereDin("src/app/api/cont", [".ts"])) {
-    if (p.includes("/iesire/")) continue;
+  /*
+    ⚠ POPULATIA E „CE EXPORTA `POST`", nu „toate rutele". Regula apara scrierile:
+    o cerere straina care declanseaza o SCRIERE cu cookie-ul omului e o bresa, pe
+    cand una care doar cere o citire nu castiga nimic (raspunsul nu se poate citi
+    cross-origin). Prima scriere a probei cerea poarta de la toate, si a cazut pe
+    ruta de factura, care e un GET. Slabirea ar fi fost sa scot ruta pe nume;
+    corect e sa numesc regula adevarata.
+  */
+  const cuScriere = fisiereDin("src/app/api/cont", [".ts"])
+    .filter((p) => /export async function POST/.test(citeste(p)))
+    .filter((p) => !p.includes("/iesire/"));
+  assert.ok(cuScriere.length >= 3, "nu am gasit rutele care scriu");
+  for (const p of cuScriere) {
     assert.ok(citeste(p).includes("vineDePeMagazin(req)"), `${p} nu verifica originea`);
   }
 });

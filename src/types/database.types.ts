@@ -7286,6 +7286,24 @@ export type Database = {
         Args: { p_business: string; p_cont: string }
         Returns: number
       }
+      cont_preferinte: {
+        Args: { p_business: string; p_cont: string }
+        Returns: {
+          are_email: boolean
+          are_telefon: boolean
+          primeste_email: boolean
+          primeste_sms: boolean
+        }[]
+      }
+      cont_preferinte_schimba: {
+        Args: {
+          p_business: string
+          p_canal: string
+          p_cont: string
+          p_vrea: boolean
+        }
+        Returns: undefined
+      }
       cont_sesiune_creeaza: {
         Args: {
           p_business: string

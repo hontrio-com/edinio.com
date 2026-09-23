@@ -162,12 +162,21 @@ export default async function ComandaMea({ params }: Props) {
                     valoare={[c.factura.serie, c.factura.numar].filter(Boolean).join(" ")}
                   />
                   {/*
-                    ⚠ Descarcarea vine in Etapa D: PDF-ul nu e la noi, se aduce viu
-                    de la casa de facturare cu tokenul comerciantului, pe server, si
-                    are nevoie de verificarea octetilor `%PDF-` si de refuzul
-                    documentelor de test. Pana atunci se arata numarul, nu un buton
-                    care nu face nimic.
+                    ⚠ Butonul duce la o ruta a NOASTRA, niciodata la adresa casei
+                    de facturare. PDF-ul se aduce viu, pe server, cu acreditarile
+                    comerciantului, si trece prin trei garzi: octetii chiar incep
+                    cu `%PDF-` (o adresa care cere autentificare raspunde 200 cu o
+                    pagina de login), documentul nu e de pe o gazda de TEST (un PDF
+                    de sandbox e valid si trece de prima garda), si comanda nu e
+                    una legata doar pe numarul ei.
                   */}
+                  <a
+                    href={`/api/cont/factura/${c.orderId}`}
+                    className="inline-block mt-2 text-sm underline"
+                    style={{ color: pag.color }}
+                  >
+                    Descarca factura
+                  </a>
                 </section>
               )}
 

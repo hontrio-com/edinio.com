@@ -82,6 +82,8 @@ export default async function AcasaInCont({ params }: Props) {
 
           <nav className="flex flex-wrap gap-4 mb-6 text-sm">
             <Link href="/cont/comenzi" className="underline text-muted-foreground">Comenzile mele</Link>
+            <Link href="/cont/retururi" className="underline text-muted-foreground">Retururile mele</Link>
+            <Link href="/cont/date" className="underline text-muted-foreground">Datele mele</Link>
             <Link href="/cont/preferinte" className="underline text-muted-foreground">Preferinte de comunicare</Link>
           </nav>
 

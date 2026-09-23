@@ -7,6 +7,7 @@ import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
 import { comandaMea } from "@/lib/cont/comenzi";
 import { orderStatus } from "@/lib/orders/status";
+import { AnuleazaComanda } from "@/components/storefront/cont/AnuleazaComanda";
 import { formatPrice, formatDateTime, pluralRo } from "@/lib/utils/format";
 
 export const metadata: Metadata = { robots: { index: false } };
@@ -190,9 +191,14 @@ export default async function ComandaMea({ params }: Props) {
             </>
           )}
 
-          <Link href={`/retur?order=${encodeURIComponent(c.numar)}`} className="text-sm underline text-muted-foreground">
-            Vreau sa returnez produse din aceasta comanda
-          </Link>
+          <div className="space-y-4">
+            {/* ⚠ Butonul apare numai la `pending`, dar apararea e in baza, nu aici. */}
+            {c.stare === "pending" && !redusa && <AnuleazaComanda orderId={c.orderId} />}
+
+            <Link href={`/retur?order=${encodeURIComponent(c.numar)}`} className="block text-sm underline text-muted-foreground">
+              Vreau sa returnez produse din aceasta comanda
+            </Link>
+          </div>
         </main>
       </StorePageShell>
     </StorefrontThemeScope>

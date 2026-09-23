@@ -7223,6 +7223,45 @@ export type Database = {
         }
         Returns: boolean
       }
+      cont_anuleaza_comanda: {
+        Args: { p_business: string; p_cont: string; p_order: string }
+        Returns: { motiv: string; ok: boolean }[]
+      }
+      cont_contactele_mele: {
+        Args: { p_business: string; p_cont: string }
+        Returns: {
+          creat_la: string
+          fel: string
+          valoare: string
+          valoare_bruta: string
+          verificat: boolean
+        }[]
+      }
+      cont_export: {
+        Args: { p_business: string; p_cont: string }
+        Returns: Json
+      }
+      cont_retururile_mele: {
+        Args: { p_business: string; p_cont: string }
+        Returns: {
+          bucati: number
+          creat_la: string
+          fel_restituire: string | null
+          iban_mascat: string | null
+          motiv: string | null
+          numar_comanda: string
+          retur_id: string
+          stare: string
+        }[]
+      }
+      cont_sterge: {
+        Args: { p_business: string; p_cont: string }
+        Returns: { comenzi_ramase: number; ok: boolean }[]
+      }
+      cont_sterge_contact: {
+        Args: { p_business: string; p_cont: string; p_fel: string; p_valoare: string }
+        Returns: { motiv: string; ok: boolean }[]
+      }
       cont_cere_cod: {
         Args: {
           p_business: string
@@ -7230,6 +7269,7 @@ export type Database = {
           p_cont?: string | null
           p_destinatie_bruta: string
           p_fel: string
+          p_ip?: string | null
           p_minute?: number
           p_scop: string
         }

@@ -211,3 +211,47 @@ test("fara logo apare tot numele magazinului, fara nicio imagine", () => {
   assert.equal(html.includes("<img"), false);
   assert.ok(html.includes("BricoSmart"));
 });
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ADRESE PE CARE CLIENTUL DE EMAIL NU LE ARATA
+   ════════════════════════════════════════════════════════════════════════════ */
+
+test("⚠⚠ un logo `data:` NU pleaca in email; ramane numele magazinului", () => {
+  /*
+   * Gasit pe 23.09.2026, la primul email de intrare in cont trimis pe bune: magazinul
+   * avea logoul ca SVG inline, si in casuta n-a aparut nimic in locul lui.
+   *
+   * ⚠ `new URL("data:…")` REUSESTE, deci adresa trecea prin toate gardurile de mai
+   * sus si ajungea neatinsa in `<img src>`. Proba se uita la HTML-ul invelisului,
+   * nu la functia care compune adresa: acolo se vede ce primeste omul.
+   */
+  const html = email("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=");
+  assert.equal(html.includes("<img"), false, "emailul poarta o poza pe care clientul o blocheaza");
+  assert.ok(html.includes("BricoSmart"), "in locul logoului n-a ramas nici numele magazinului");
+});
+
+test("⚠ si SVG-ul gazduit, si orice adresa care nu e http(s)", () => {
+  /* MASURAT pe productie pe 23.09.2026: din 71 de magazine publicate, ZERO au logo
+     `.svg` sau `data:` (42 n-au logo deloc, 29 au `.webp`). Deci plasa asta nu muta
+     nimic azi pentru niciun comerciant; inchide doar drumul. */
+  for (const adresa of [
+    `${CDN}/logos/545924b8-70f7-4963-bd79-e44b89eca1c5/logo.svg`,
+    `${R2}/logos/545924b8-70f7-4963-bd79-e44b89eca1c5/logo.SVG`,
+    "//exemplu.ro/logo.png",
+    "logo.png",
+    "javascript:alert(1)",
+  ]) {
+    assert.equal(email(adresa).includes("<img"), false, adresa);
+  }
+});
+
+test("adresele bune raman neatinse de plasa noua", () => {
+  /*
+   * ⚠ O plasa prea larga ar fi stins logoul TUTUROR: 29 de magazine au azi logo, si
+   * fiecare email al lor il poarta. De-aia proba cere raspicat ca drumurile bune sa
+   * treaca mai departe, nu doar ca cele rele sa cada.
+   */
+  assert.ok(email(`${CDN}/${CHEIE}`).includes("<img"), "logoul WebP a fost stins din greseala");
+  const png = `${CDN}/logos/545924b8-70f7-4963-bd79-e44b89eca1c5/logo.png`;
+  assert.equal(srcLogo(email(png)), png, "logoul PNG a fost stins din greseala");
+});

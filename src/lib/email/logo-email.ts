@@ -35,6 +35,34 @@ function cheiePentruPng(adresa: string): string | null {
 }
 
 /**
+ * Adrese pe care niciun client de email nu le arata, oricat le-am trimite.
+ *
+ * ⚠⚠ MAI BINE NICIUN LOGO DECAT UNUL RUPT. Cand functia asta intoarce `null`,
+ * `storeEmailShell` scrie NUMELE magazinului in locul pozei, si arata curat. Un
+ * `<img>` pe care clientul il blocheaza lasa in schimb o cutie goala sau o
+ * pictograma de imagine lipsa, in chiar antetul mesajului.
+ *
+ * ⚠ `data:` a fost gasit pe 23.09.2026, la prima probare adevarata a emailului de
+ * intrare in cont: magazinul demo avea logoul ca SVG inline, iar `new URL()` il
+ * primeste fara sa se planga (`data:` E o schema valida), deci trecea neatins
+ * pana in `<img src>`. Clientii de email blocheaza `data:` in imagini.
+ *
+ * ⚠ `.svg` intra si el, desi MASURAT pe productie nu schimba nimic azi: din cele
+ * 71 de magazine publicate, ZERO au logo `.svg` sau `data:` (42 n-au logo deloc,
+ * 29 au `.webp`). E o plasa pentru maine, nu o reparatie de azi, si o spun ca
+ * atare: Gmail nu afiseaza SVG in email.
+ */
+function nuSePoateArataInEmail(adresa: string): boolean {
+  const a = adresa.trim().toLowerCase();
+  if (!a.startsWith("http://") && !a.startsWith("https://")) return true;
+  try {
+    return new URL(a).pathname.endsWith(".svg");
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Adresa logoului, asa cum trebuie sa plece intr-un email.
  *
  * ═══ ⚠ DE CE NU PLEACA ADRESA DIN BAZA ═══
@@ -66,6 +94,7 @@ function cheiePentruPng(adresa: string): string | null {
  */
 export function logoPentruEmail(adresa: string | null | undefined): string | null {
   if (!adresa) return null;
+  if (nuSePoateArataInEmail(adresa)) return null;
   const cheie = cheiePentruPng(adresa);
   if (!cheie) return adresa;
   return `${PLATFORM_ORIGIN}/api/img?p=${encodeURIComponent(cheie)}&w=${LATIME_PNG}&f=png`;

@@ -29,6 +29,20 @@ export const SEGMENT_MAGAZIN = "magazin";
  */
 export const SEGMENT_CAUTARE = "cautare";
 
+/**
+ * Segmentul zonei de cont a cumparatorului.
+ *
+ * ⚠ Rezervarea intra IN ACELASI COMMIT cu ruta, ca la catalog si la cautare: in
+ * App Router segmentul static bate `[pageSlug]`, deci o pagina proprie numita
+ * „cont” ar fi devenit brusc invizibila, fara 404 si fara nicio eroare. Iar
+ * rezervarea NU repara retroactiv, blocheaza doar crearile noi.
+ *
+ * ⚠ Verificat pe PRODUCTIE inainte, nu presupus: niciuna dintre cele 33 de
+ * pagini proprii ale celor 13 magazine care au asa ceva nu poarta vreunul din
+ * numele rezervate mai jos. Exista „contact”, dar acela e alt segment.
+ */
+export const SEGMENT_CONT = "cont";
+
 export const RESERVED_PAGE_SLUGS = new Set<string>([
   // existing public store sub-routes
   "product", "politici", "confirm", "retur",
@@ -49,6 +63,14 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   // engleza intra si ea — „search" ar fi un nume plauzibil de pagina proprie, iar
   // o pagina cu numele asta ar fi fost umbrita fara sa inteleaga nimeni de ce.
   SEGMENT_CAUTARE, "search",
+  // zona de cont a cumparatorului: ruta exista pentru magazinele care aprind
+  // functia, dar slugul se rezerva pentru TOATE, fiindca un comerciant care o
+  // aprinde maine nu trebuie sa afle atunci ca pagina lui „cont” a disparut.
+  //
+  // Numele apropiate intra si ele, dupa aceeasi judecata ca la „cos”: ca sa nu
+  // apara o pagina proprie pe care comerciantul o crede legata de cont si care
+  // nu e. „contact” NU e in lista si nu are de ce sa fie: e alt segment.
+  SEGMENT_CONT, "account", "contul-meu", "comenzile-mele", "profil",
   // platform / framework
   "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path

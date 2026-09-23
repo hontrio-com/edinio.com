@@ -40,7 +40,12 @@ const MIGRATII = readdirSync(DOSAR)
   .filter((f) => f.endsWith(".sql") && !f.startsWith("000-")).sort()
   .map((f) => ({ f, text: readFileSync(join(DOSAR, f), "utf8") }));
 
-const M = MIGRATII.find((m) => m.text.includes("create or replace function public.customer_anonymize"));
+/*
+  ⚠ ULTIMA definitie, nu prima: functia se rescrie (24.09.2026, anonimizarea care
+  ajunge si in conturi). Citind-o pe prima, probele de aici ar fi ramas verzi pe
+  o versiune care nu mai ruleaza nicaieri.
+*/
+const M = MIGRATII.filter((m) => m.text.includes("create or replace function public.customer_anonymize")).at(-1);
 
 const CORP = M
   ? M.text.slice(
@@ -210,4 +215,50 @@ test("⚠ un raspuns ciudat al bazei nu ajunge „NaN” pe ecran", () => {
 test("⚠ numele anonim e acelasi in cod si in SQL", () => {
   /* Doua nume deosebite ar fi facut ca lista si comenzile sa arate altfel. */
   assert.ok(CORP.includes(`'${NUMELE_ANONIM}'`), `SQL nu mai scrie „${NUMELE_ANONIM}”`);
+});
+
+test("⚠⚠ fiecare cheie de urmarire scrisa la checkout e stearsa, sau lasata ANUME sa ramana", () => {
+  /*
+   * Lista din SQL e NEAGRA (cheile de bani ale marketplace-urilor trebuie sa
+   * treaca neatinse), deci o cheie noua de urmarire adaugata la checkout ar fi
+   * supravietuit anonimizarii fara nicio eroare. Asa s-a intamplat cu `client_ip`
+   * (lista stergea `ip`), cu `fbc`, `ttp`, `mc_tc`, `ga_sesiuni` si acorduri.
+   * Proba leaga lista de SURSA ei: `CHEI_ATRIBUIRE` din `order.actions.ts`.
+   */
+  const actiuni = readFileSync(join("src", "lib", "actions", "order.actions.ts"), "utf8");
+  const bloc = actiuni.slice(actiuni.indexOf("const CHEI_ATRIBUIRE = ["), actiuni.indexOf("] as const;", actiuni.indexOf("const CHEI_ATRIBUIRE = [")));
+  const chei = [...bloc.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.ok(chei.length >= 15, `am gasit doar ${chei.length} chei de atribuire`);
+  /* Scrise de server, nu din browser, dar tot pe comanda. */
+  chei.push("user_agent", "client_ip", "direct");
+
+  /* Canalul la nivel de CAMPANIE ramane: rapoartele pe canale n-au voie sa se strice. */
+  const RAMAN = new Set(["utm_source", "utm_medium", "utm_campaign", "mc_cid", "captured_at", "direct"]);
+  const sursa = CORP.slice(CORP.indexOf("order_source = case"), CORP.indexOf("where o.id = any(v_ids)"));
+  for (const cheie of chei) {
+    const stearsa = sursa.includes(`- '${cheie}'`);
+    if (RAMAN.has(cheie)) {
+      assert.equal(stearsa, false, `\`${cheie}\` e pe lista celor care raman, dar e stearsa`);
+    } else {
+      assert.ok(stearsa, `\`${cheie}\` se scrie la checkout si supravietuieste anonimizarii`);
+    }
+  }
+});
+
+test("⚠⚠ IBAN-ul se goleste NUMAI pe retururile incheiate", () => {
+  /*
+   * Pe un retur `nou` sau `aprobat` comerciantul inca trebuie sa ramburseze, iar
+   * fara IBAN n-ar mai avea unde. Golit pe toate, anonimizarea ar fi incalcat
+   * chiar obligatia de rambursare.
+   */
+  const retur = CORP.slice(CORP.indexOf("update public.return_requests"), CORP.indexOf("where r.order_id"));
+  assert.match(retur, /refund_iban = case when r\.status in \('rambursat', 'respins'\) then null else r\.refund_iban end/);
+  assert.match(retur, /reason = case when r\.status in \('rambursat', 'respins'\) then null else r\.reason end/);
+});
+
+test("⚠⚠ contul omului se goleste INAINTE ca datele din comenzi sa dispara", () => {
+  /* Conturile se gasesc dupa emailul si telefonul de pe comenzi: dupa anonimizare n-ar mai fi nimic de potrivit. */
+  const conturi = CORP.indexOf("perform public.cont_rupe_legaturile(bid, v_chei)");
+  assert.ok(conturi > 0, "anonimizarea nu mai ajunge in conturile de client");
+  assert.ok(conturi < CORP.indexOf("update public."), "conturile se golesc DUPA ce comenzile si-au pierdut contactele");
 });

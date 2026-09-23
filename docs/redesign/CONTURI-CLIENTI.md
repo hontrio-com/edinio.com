@@ -40,6 +40,14 @@ comenzile de marketplace, care oricum nu intra in cont.
 
 **H6. Ecranele noi se scriu FARA diacritice**, ca vitrina de azi („Finalizeaza comanda").
 
+**H7. Intrarea e cu EMAIL SI PAROLA (hotarat pe 24.09.2026).** Cuvintele lui: „Vreau ca
+utilizatorul sa se conecteze cu Email si Parola iar un utilizator care isi face cont la magazinul
+unui comerciant sa trebuiasca sa isi verifice contul cu 2FA prin eMail”. Deci: contul nou se
+creeaza abia dupa un cod pe email; la intrare, pe un dispozitiv necunoscut se cere si codul (al
+doilea pas), iar comerciantul poate cere codul la FIECARE intrare; parola uitata = cod + parola
+noua. Intrarea NUMAI cu cod (capitolul 6, forma dintai) s-a inchis, si in baza. Migratiile 50 si
+51, randurile lor din `REGISTRU.md`.
+
 Din ele ies doua reguli care taie mult din plan:
 
 - **Fluxul de comanda se atinge NUMAI cat cere contul obligatoriu** (H1, forma din 23.09.2026):
@@ -383,6 +391,13 @@ facuta in randare se poate ocoli la a doua randare.
 
 ### Intrarea: cod de sase cifre, fara parola
 
+⚠⚠ **INLOCUITA pe 24.09.2026 de H7 (email si parola, cu codul ca al doilea pas).** Ce urmeaza
+e forma dintai, pastrata pentru ca plafoanele si raspunsul unic au ramas aceleasi. Ce s-a
+schimbat: fiecare cod (cont nou, resetare, pas doi) e legat de o PROVOCARE, adica de un jeton din
+cookie-ul `httpOnly` `ec_cont_pas` al browserului care l-a cerut; parola se pastreaza numai ca
+amprenta scrypt; dispozitivele de incredere (60 de zile) stau in `privat.cont_dispozitiv`; la
+intrare, adresa fara cont si contul blocat raspund ca o parola gresita, cu aceeasi munca de calcul.
+
 Un singur camp: telefon sau email. Se refoloseste mecanismul scris deja pentru MFA
 (`src/lib/auth/flux-mfa.ts`): generare, trimitere, verificare, plafon in baza plus plasa in
 memorie dedesubt.
@@ -578,6 +593,13 @@ din antet il citea invers.
   pe disc.
 
 ### Trei reparatii pe care le aduce valul asta, la cod care exista azi
+
+✅ **FACUTE pe 24.09.2026, migratia 51** (vezi `REGISTRU.md`). O singura abatere de la textul de
+mai jos, si dinadins: lista din `order_source` a ramas NEAGRA, nu ALBA. O proba din 21.09.2026
+apara hotararea de atunci (cheile de BANI se inmultesc cu fiecare marketplace, iar o lista alba
+le-ar fi aruncat tacut). Lista neagra e acum completa, iar o proba noua o leaga de
+`CHEI_ATRIBUIRE`: o cheie noua de urmarire scrisa la checkout pica proba pana e tratata aici.
+In plus: stergerea contului poate trimite comerciantului o CERERE de anonimizare a comenzilor.
 
 1. **`customer_anonymize` nu sterge adresa IP.** Sterge cheia `ip`, dar codul scrie cheia
    `client_ip`. Supravietuiesc si `fbc`, `ttp`, `mc_tc`, toti `utm_*` si `ga_sesiuni`. Lista

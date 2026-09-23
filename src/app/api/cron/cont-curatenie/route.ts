@@ -13,13 +13,15 @@ import { logError } from "@/lib/error-logger";
  * tine singura.
  *
  * Ce sterge, si de ce atat:
- *   - sesiuni incheiate de peste 30 de zile (jurnalul lor nu mai spune nimic);
+ *   - sesiuni incheiate, sau expirate, de peste 30 de zile (poarta IP-uri; pana pe
+ *     24.09.2026 cele expirate de care nu se mai atingea nimeni ramaneau pe veci);
  *   - coduri expirate de peste o zi (o zi ca sa se poata vedea, la nevoie, ca a
  *     fost cerut unul);
  *   - `cont_jurnal` mai vechi de 12 luni, fiindca poarta IP-uri;
  *   - contacte blocate al caror termen a trecut: un blocaj care nu se scurge nu
  *     e retentie, e o pedeapsa pe viata pusa pe o data personala;
- *   - instiintari deja trimise, mai vechi de 30 de zile.
+ *   - instiintari deja trimise, mai vechi de 30 de zile;
+ *   - dispozitivele de incredere expirate.
  *
  * ⚠ NU atinge conturile sterse: acelea raman doua ani, ca sa se poata raspunde
  * la „de ce nu mai pot intra", si fiindca randul e deja golit de date.
@@ -40,6 +42,7 @@ export async function GET(req: NextRequest) {
       jurnal: Number(r?.jurnal ?? 0),
       blocate: Number(r?.blocate ?? 0),
       instiintari: Number(r?.instiintari ?? 0),
+      dispozitive: Number(r?.dispozitive ?? 0),
     };
     console.log("[cron] cont-curatenie", sters);
     return NextResponse.json({ ok: true, sters });

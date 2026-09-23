@@ -18,6 +18,10 @@
  * comanda, dupa alegerea comerciantului; butonul „Contul meu" din antet se
  * regleaza (text, iconita sau amandoua, iconita aleasa dintr-o lista); nimic din
  * toate astea nu se poate porni fara domeniu propriu.
+ *
+ * ⚠ Si din 24.09.2026: intrarea e cu EMAIL SI PAROLA, contul nou se confirma cu
+ * un cod pe email, iar comerciantul alege cand se mai cere codul la intrare
+ * (`verificare_intrare`): numai pe un dispozitiv nou, sau la fiecare intrare.
  */
 
 export const ICONITE_CONT = [
@@ -35,6 +39,14 @@ export type IconitaCont = (typeof ICONITE_CONT)[number];
 export const AFISARI_BUTON = ["iconita", "text", "iconita_text"] as const;
 export type AfisareButon = (typeof AFISARI_BUTON)[number];
 
+/**
+ * Cand se cere codul de pe email DUPA parola (al doilea pas).
+ * `dispozitiv_nou`: pe un browser pe care omul n-a mai confirmat un cod in ultimele
+ * 60 de zile (si pe care n-a bifat „Tine minte"). `mereu`: la fiecare intrare.
+ */
+export const VERIFICARI_INTRARE = ["dispozitiv_nou", "mereu"] as const;
+export type VerificareIntrare = (typeof VERIFICARI_INTRARE)[number];
+
 export const LIMITE = {
   buton_text: 24,
   intrare_titlu: 80,
@@ -51,6 +63,8 @@ export type ContClientConfig = {
   enabled: boolean;
   /** Contul e cerut ca sa poti trimite o comanda. Numai cu `enabled`. */
   obligatoriu: boolean;
+  /** Cand se cere codul de pe email dupa parola. */
+  verificare_intrare: VerificareIntrare;
   buget_email_zilnic: number;
   buget_sms_zilnic: number;
   /** Butonul din antetul vitrinei. */
@@ -67,6 +81,7 @@ export type ContClientConfig = {
 export const IMPLICIT: ContClientConfig = {
   enabled: false,
   obligatoriu: false,
+  verificare_intrare: "dispozitiv_nou",
   buget_email_zilnic: 300,
   buget_sms_zilnic: 100,
   buton_antet: true,
@@ -113,6 +128,7 @@ export function curataContClientConfig(brut: unknown): ContClientConfig {
     /* ⚠ Obligatoriu fara conturi pornite nu inseamna nimic si nu are voie sa
        ramana scris: la reaprindere s-ar fi activat tacut. */
     obligatoriu: enabled && o.obligatoriu === true,
+    verificare_intrare: unaDin(o.verificare_intrare, VERIFICARI_INTRARE, IMPLICIT.verificare_intrare),
     buget_email_zilnic: numar(o.buget_email_zilnic, IMPLICIT.buget_email_zilnic),
     buget_sms_zilnic: numar(o.buget_sms_zilnic, IMPLICIT.buget_sms_zilnic),
     buton_antet: o.buton_antet !== false,

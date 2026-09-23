@@ -22,7 +22,8 @@ export function ContulDupaComanda({ areEmail }: { areEmail: boolean }) {
   if (!aprins || !(areEmail || obligatoriu)) return null;
   return (
     <Link
-      href="/cont"
+      /* Cine a comandat ca vizitator n-are de obicei cont: ajunge direct pe „Cont nou”. Cel logat e trimis de /cont/intra mai departe, in cont. */
+      href={obligatoriu ? "/cont" : "/cont/intra?mod=inregistrare"}
       className={`mt-6 flex items-center gap-4 ${CARD} p-4 text-left text-[var(--st-text)] transition-colors hover:bg-[var(--st-primary-soft)] ${FOCUS}`}
     >
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--st-primary-soft)]">
@@ -33,7 +34,7 @@ export function ContulDupaComanda({ areEmail }: { areEmail: boolean }) {
         <span className="mt-0.5 block text-xs leading-relaxed text-[var(--st-muted)]">
           {obligatoriu
             ? "Livrarea, plata si factura, cand e emisa, sunt toate acolo."
-            : "Intra cu adresa de email din comanda: vezi livrarea, plata si factura, cand e emisa."}
+            : "Fa-ti un cont (sau intra) cu adresa de email din comanda: vezi livrarea, plata si factura, cand e emisa."}
         </span>
       </span>
       <ArrowRight className="h-4 w-4 shrink-0 text-[var(--st-muted)]" aria-hidden="true" />

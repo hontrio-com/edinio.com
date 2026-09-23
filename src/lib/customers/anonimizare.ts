@@ -52,10 +52,11 @@ export const NUMELE_ANONIM = "Client șters";
  */
 export const CE_SE_STERGE = [
   "numele, telefonul, emailul și adresa, din toate comenzile lui",
-  "coșurile lui abandonate",
+  "contul lui de client de pe magazin, dacă are unul: contactele, parola, sesiunile",
+  "coșurile lui abandonate, găsite după telefon și după e-mail",
   "numărul de telefon din jurnalul de SMS-uri",
-  "datele lui din cererile de retur",
-  "identificatorii de urmărire (Google, Meta, TikTok) de pe comenzi",
+  "datele lui din cererile de retur; IBAN-ul și motivul, doar din retururile încheiate",
+  "identificatorii de urmărire (Google, Meta, TikTok), adresa IP și paginile vizitate, de pe comenzi",
 ] as const;
 
 /**
@@ -71,6 +72,8 @@ export const CE_RAMANE = [
   "facturile și AWB-urile, care oricum au plecat deja la client",
   "județul de pe comenzi, ca să nu se strice rapoartele pe județe",
   "dezabonarea lui de la emailuri și SMS-uri, ca să nu ajungă din nou pe listă",
+  "IBAN-ul din retururile încă deschise, ca să poți face rambursarea",
+  "sursa comenzii la nivel de campanie (de exemplu „Facebook”), ca rapoartele pe canale să rămână corecte",
 ] as const;
 
 /** Ce NU putem face, si trebuie spus inainte, nu dupa. */

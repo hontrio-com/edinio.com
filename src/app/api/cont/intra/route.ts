@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
-import { verificaCod, mesajulRefuzului, type FelContact } from "@/lib/cont/cod";
-import { deschideSesiune } from "@/lib/cont/sesiune";
-import { leagaComenzile } from "@/lib/cont/comenzi";
+import { incheieIntrarea, intraCuParola, MESAJ_INTRARE_GRESITA } from "@/lib/cont/autentificare";
+import { LUNGIME_MAXIMA } from "@/lib/cont/parola";
 import { logError } from "@/lib/error-logger";
 import { clientIp } from "@/lib/utils/rate-limit";
 import { vineDePeMagazin } from "@/lib/cont/cerere";
 
 /**
- * „Am codul, lasa-ma inauntru."
+ * „Intru cu emailul si parola."
+ *
+ * Raspunde `{ ok: true }` cand omul a intrat (dispozitiv cunoscut), `{ pas: "cod" }`
+ * cand trebuie si codul de pe email, si 400 cu ACELASI text pentru parola
+ * gresita, adresa fara cont si contul blocat (vezi `intraCuParola`).
  *
  * ⚠ E RUTA, nu actiune de server, si din doua motive:
  *   1. numai o ruta (sau o actiune) poate SCRIE un cookie; o componenta de
@@ -19,6 +22,8 @@ import { vineDePeMagazin } from "@/lib/cont/cerere";
  *      cookie `sb-`), dar un COMERCIANT care isi rasfoieste propriul magazin
  *      are, si atunci intrarea lui ca si cumparator ar depinde de starea MFA a
  *      contului lui de panou. Pe o ruta, lucrurile raman despartite.
+ *
+ * ⚠ Nici emailul, nici parola nu ajung in `logError`.
  */
 export async function POST(req: NextRequest) {
   /*
@@ -39,43 +44,30 @@ export async function POST(req: NextRequest) {
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
 
   const corp = await req.json().catch(() => null);
-  const fel: FelContact = corp?.fel === "telefon" ? "telefon" : "email";
-  const destinatie = typeof corp?.destinatie === "string" ? corp.destinatie : "";
-  const cod = typeof corp?.cod === "string" ? corp.cod.trim() : "";
-
-  if (!destinatie.trim() || !/^\d{6}$/.test(cod)) {
-    return NextResponse.json({ eroare: "Codul are sase cifre." }, { status: 400 });
+  const email = typeof corp?.email === "string" ? corp.email.trim() : "";
+  const parola = typeof corp?.parola === "string" ? corp.parola : "";
+  if (!email || !parola) {
+    return NextResponse.json({ eroare: "Scrie adresa de email si parola." }, { status: 400 });
+  }
+  /* O parola mai lunga decat se poate alege nu e a nimanui: refuzata fara calcul. */
+  if ([...parola].length > LUNGIME_MAXIMA) {
+    return NextResponse.json({ eroare: MESAJ_INTRARE_GRESITA }, { status: 400 });
   }
 
-  /* ⚠ Acelasi ajutor ca in tot restul casei: doua citiri de mana ale aceluiasi
-     antet se despart cu timpul, iar plafoanele ar fi cheiate pe siruri deosebite. */
   const ip = clientIp(req);
-
   try {
-    const r = await verificaCod(magazin, fel, destinatie, cod, ip);
-    if (!r.ok || !r.contId) {
-      return NextResponse.json({ eroare: mesajulRefuzului(r.motiv) }, { status: 400 });
+    const r = await intraCuParola({ magazin, email, parola, ip });
+    if (r.rezultat === "intrat") {
+      await incheieIntrarea(magazin.id, r.contId, ip);
+      return NextResponse.json({ ok: true }, { status: 200 });
     }
-    await deschideSesiune(magazin.id, r.contId, ip === "necunoscut" ? null : ip);
-
-    /*
-      ⚠ Legarea comenzilor se face AICI, dupa ce sesiunea exista, si nu are voie
-      sa rupa intrarea: omul a dovedit ca e el, deci intra chiar daca legarea
-      esueaza. Se reia la urmatoarea intrare, si ecranul principal are oricum un
-      drum catre revendicare.
-    */
-    try {
-      await leagaComenzile(magazin.id, r.contId);
-    } catch (e) {
-      await logError({
-        action: "cont/intra",
-        message: `legarea comenzilor a esuat: ${String(e)}`,
-        businessId: magazin.id,
-        severity: "warning",
-      });
+    if (r.rezultat === "cod") {
+      return NextResponse.json(
+        { pas: "cod", mesaj: "Ti-am trimis un cod pe email, ca sa confirmam ca esti tu." },
+        { status: 200 },
+      );
     }
-
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ eroare: r.mesaj }, { status: 400 });
   } catch (e) {
     await logError({
       action: "cont/intra",

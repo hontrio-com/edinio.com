@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { codNou, amprentaCodului } from "./jeton";
 import type { MagazinDeCont } from "./magazinul-cererii";
+import { ipPentruBaza } from "./cerere";
 
 /** Cat traieste un cod. Acelasi numar ajunge si in baza, si in textul emailului. */
 export const MINUTE_COD = 10;
@@ -33,16 +34,21 @@ export const MESAJ_UNIC = "Daca adresa e cunoscuta de magazin, codul a plecat. V
 export const MESAJ_SMS_INCA_NU = "Intrarea cu numarul de telefon nu e pornita inca. Foloseste adresa de email.";
 
 /**
- * Cere un cod. Intoarce mereu acelasi mesaj catre om; `trimis` e numai pentru
- * jurnal si pentru probe, nu pentru ecran.
+ * Cere un cod pentru o ADRESA NOUA adaugata din cont. Intoarce mereu acelasi mesaj
+ * catre om; `trimis` e numai pentru jurnal si pentru probe, nu pentru ecran.
+ *
+ * ⚠⚠ Din 24.09.2026 intrarea NUMAI cu cod nu mai exista (intrarea e cu email si
+ * parola, iar codurile de intrare, de cont nou si de resetare trec prin
+ * `autentificare.ts`, legate de o provocare). `cont_cere_cod` refuza scopul vechi
+ * `intrare`, iar tipul de aici nu-l mai poate cere.
  */
 export async function cereCod(
   magazin: MagazinDeCont,
   fel: FelContact,
   destinatieBruta: string,
   ip: string,
-  scop: "intrare" | "adaugare-contact" = "intrare",
-  contId: string | null = null,
+  scop: "adaugare-contact",
+  contId: string,
 ): Promise<{ mesaj: string; trimis: boolean; motiv: string }> {
   /*
     ⚠ TREI PLASE, IN ORDINEA COSTULUI.
@@ -87,7 +93,7 @@ export async function cereCod(
     /* ⚠ IP-ul merge si in baza: plafonul de acolo e singurul care nu poate cadea
        deschis, iar unul cheiat numai pe destinatie se intoarce impotriva omului
        caruia ii apartine adresa. */
-    p_ip: ip === "necunoscut" ? null : ip,
+    p_ip: ipPentruBaza(ip),
   });
   if (error) throw error;
 
@@ -102,6 +108,7 @@ export async function cereCod(
     cod,
     minute: MINUTE_COD,
     numeMagazin: magazin.store_name ?? magazin.business_name ?? "magazin",
+    scop,
   }, sender);
 
   if ("error" in rez) {
@@ -123,8 +130,8 @@ export async function verificaCod(
   destinatieBruta: string,
   cod: string,
   ip: string,
-  scop: "intrare" | "adaugare-contact" = "intrare",
-  contId: string | null = null,
+  scop: "adaugare-contact",
+  contId: string,
 ): Promise<{ ok: boolean; contId: string | null; motiv: string }> {
   if (!rateLimit(`contVerif:ip:${ip}`, 20, 60_000)) {
     return { ok: false, contId: null, motiv: "rafala" };

@@ -19,6 +19,7 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
   const router = useRouter();
   const [deschis, setDeschis] = useState(false);
   const [cuvant, setCuvant] = useState("");
+  const [cerere, setCerere] = useState(false);
   const [eroare, setEroare] = useState("");
   const [asteapta, setAsteapta] = useState(false);
 
@@ -46,6 +47,17 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
         <li>Daca ai cerut sa nu mai primesti mesaje, alegerea aceea ramane si dupa stergere.</li>
       </ul>
 
+      {comenzi > 0 && (
+        <label className="mt-4 flex items-start gap-2.5 text-sm text-[var(--st-text)]">
+          <input type="checkbox" checked={cerere} onChange={(e) => setCerere(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--st-primary)]" />
+          <span>
+            Cere magazinului sa stearga si datele mele din comenzi
+            <span className="block text-xs text-[var(--st-muted)]">Numele, contactele si adresa. Magazinul primeste cererea pe email si are o luna sa raspunda; facturile raman in evidenta lui contabila.</span>
+          </span>
+        </label>
+      )}
+
       <label htmlFor="confirmare" className={`${ETICHETA_CAMP} mt-4`}>
         Scrie STERGE ca sa confirmi
       </label>
@@ -69,14 +81,15 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
               const r = await fetch("/api/cont/sterge", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ confirmare: cuvant }),
+                body: JSON.stringify({ confirmare: cuvant, cereStergereaDatelor: cerere }),
               });
               if (!r.ok) {
                 const j = await r.json().catch(() => ({}));
                 setEroare(j.eroare ?? "Nu am putut sterge contul.");
               } else {
+                const j = await r.json().catch(() => ({}));
                 router.refresh();
-                router.push("/cont/intra");
+                router.push(`/cont/intra?sters=1${j.cerereTrimisa === true ? "&cerere=1" : j.cerereTrimisa === false ? "&cerere=0" : ""}`);
               }
             } catch {
               setEroare("Nu am putut sterge contul. Verifica legatura la internet.");

@@ -3,6 +3,7 @@ import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-ce
 import { sesiuneCurenta, stergeCookieContului } from "@/lib/cont/sesiune";
 import { vineDePeMagazin } from "@/lib/cont/cerere";
 import { stergeContul } from "@/lib/cont/date";
+import { trimiteCerereaDeStergere } from "@/lib/cont/cerere-stergere";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -17,6 +18,10 @@ import { logError } from "@/lib/error-logger";
  *
  * ⚠ Se cere confirmarea scrisa („STERGE") in corp, nu doar o apasare: e
  * ireversibil, si un buton apasat din greseala nu are drum inapoi.
+ *
+ * ⚠ Cu `cereStergereaDatelor: true`, magazinul primeste INAINTEA stergerii o
+ * cerere de anonimizare a comenzilor (`trimiteCerereaDeStergere`). Nu se face
+ * automat: comenzile sunt ale comerciantului, cu facturi si retururi deschise.
  */
 export async function POST(req: NextRequest) {
   if (!vineDePeMagazin(req)) return new NextResponse("Forbidden", { status: 403 });
@@ -34,12 +39,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const cerereTrimisa = corp?.cereStergereaDatelor === true
+      ? await trimiteCerereaDeStergere(magazin, s.contId)
+      : null;
     const r = await stergeContul(magazin.id, s.contId);
     /* ⚠ Cookie-ul se sterge oricum: epoca s-a ridicat, deci sesiunea e moarta
        si fara el, dar un cookie ramas ar fi aratat ecrane de „nu esti autentificat"
        fara sa spuna de ce. */
     await stergeCookieContului();
-    return NextResponse.json({ ok: r.ok, comenziRamase: r.comenziRamase }, { status: 200 });
+    return NextResponse.json({ ok: r.ok, comenziRamase: r.comenziRamase, cerereTrimisa }, { status: 200 });
   } catch (e) {
     await logError({
       action: "cont/sterge",

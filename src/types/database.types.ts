@@ -7242,10 +7242,51 @@ export type Database = {
         Returns: {
           blocate: number
           coduri: number
+          dispozitive: number
           instiintari: number
           jurnal: number
           sesiuni: number
         }[]
+      }
+      cont_dispozitiv_adauga: {
+        Args: { p_business: string; p_cont: string; p_jeton_hash: string; p_zile?: number }
+        Returns: boolean
+      }
+      cont_dispozitiv_cunoscut: {
+        Args: { p_business: string; p_cont: string; p_jeton_hash: string }
+        Returns: boolean
+      }
+      cont_intrare_cu_parola: {
+        Args: { p_business: string; p_cont: string; p_ip?: string | null }
+        Returns: boolean
+      }
+      cont_intrare_esuata: {
+        Args: { p_business: string; p_cont?: string | null; p_ip?: string | null }
+        Returns: undefined
+      }
+      cont_parola_contului: {
+        Args: { p_business: string; p_cont: string }
+        Returns: { are_parola: boolean; email: string | null; parola_hash: string | null }[]
+      }
+      cont_parola_pentru_intrare: {
+        Args: { p_business: string; p_email: string; p_ip?: string | null }
+        Returns: { blocat: boolean; cont_id: string | null; parola_hash: string | null }[]
+      }
+      cont_retrimite_cod: {
+        Args: { p_business: string; p_cod_hash: string; p_ip?: string | null; p_minute?: number; p_provocare_hash: string }
+        Returns: { destinatie: string | null; motiv: string; ok: boolean; scop: string | null }[]
+      }
+      cont_rupe_legaturile: {
+        Args: { bid: string; p_keys: string[] }
+        Returns: number
+      }
+      cont_schimba_parola: {
+        Args: { p_business: string; p_cont: string; p_ip?: string | null; p_parola_hash: string }
+        Returns: boolean
+      }
+      cont_verifica_provocare: {
+        Args: { p_business: string; p_cod_hash: string; p_ip?: string | null; p_parola_hash?: string | null; p_provocare_hash: string }
+        Returns: { cont_id: string | null; cont_nou: boolean; motiv: string; ok: boolean; scop: string | null }[]
       }
       cont_export: {
         Args: { p_business: string; p_cont: string }
@@ -7287,6 +7328,8 @@ export type Database = {
           p_fel: string
           p_ip?: string | null
           p_minute?: number
+          p_parola_hash?: string | null
+          p_provocare_hash?: string | null
           p_scop: string
         }
         Returns: { destinatie: string | null; motiv: string; ok: boolean }[]

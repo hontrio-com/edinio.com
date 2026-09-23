@@ -264,7 +264,7 @@ export async function sendOrderConfirmationToCustomer(
       <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
     </div>
     ${order.cont_url ? `<div style="border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
-      <p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.6;">Urmaresti comanda, livrarea si factura din <a href="${escapeUrl(order.cont_url)}" style="color:#18181b;font-weight:600;text-decoration:underline;">contul tau</a>. Intri cu adresa asta de email, fara parola.</p>
+      <p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.6;">Urmaresti comanda, livrarea si factura din <a href="${escapeUrl(order.cont_url)}" style="color:#18181b;font-weight:600;text-decoration:underline;">contul tau</a>. Intri cu adresa asta de email, iar daca nu ai inca un cont, il creezi in cateva secunde.</p>
     </div>` : ""}
     ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
@@ -1515,10 +1515,41 @@ export async function sendCustomerMessage(
   }
 }
 
-// ── Cod de intrare in cont → Cumparator ─────────────────────────────────────
+// ── Codurile contului de cumparator → Cumparator ────────────────────────────
+
+/** De ce pleaca un cod. Aceleasi valori ca `privat.cont_cod.scop`. */
+export type ScopCodCont = "inregistrare" | "doi-pasi" | "resetare-parola" | "adaugare-contact";
+
+const TEXTE_COD: Record<ScopCodCont, { subiect: string; titlu: string; text: (magazin: string) => string; nota: string }> = {
+  inregistrare: {
+    subiect: "Confirma-ti contul",
+    titlu: "Confirma-ti adresa de email",
+    text: (m) => `Ca sa-ti creezi contul pe ${m}, scrie codul de mai jos in pagina deschisa.`,
+    nota: "Daca nu ai cerut tu un cont, nu trebuie sa faci nimic: fara cod nu se creeaza nimic.",
+  },
+  "doi-pasi": {
+    subiect: "Codul tau de intrare",
+    titlu: "Codul tau de intrare",
+    text: (m) => `Cineva a intrat cu parola corecta in contul tau de pe ${m}, de pe un dispozitiv nou. Daca ai fost tu, scrie codul ca sa termini intrarea.`,
+    nota: "Daca nu ai fost tu, schimba-ti parola: cineva o cunoaste. Fara cod nu poate intra.",
+  },
+  "resetare-parola": {
+    subiect: "Resetarea parolei",
+    titlu: "Seteaza o parola noua",
+    text: (m) => `Ai cerut o parola noua pentru contul tau de pe ${m}. Scrie codul de mai jos, impreuna cu parola noua.`,
+    nota: "Daca nu ai cerut tu, nu trebuie sa faci nimic: parola ramane cea veche.",
+  },
+  "adaugare-contact": {
+    subiect: "Confirma adresa noua",
+    titlu: "Confirma adresa noua",
+    text: (m) => `Ai adaugat adresa asta in contul tau de pe ${m}. Scrie codul ca s-o confirmi.`,
+    nota: "Daca nu ai cerut tu, nu trebuie sa faci nimic: adresa nu se adauga fara cod.",
+  },
+};
 
 /**
- * Codul de sase cifre cu care cumparatorul intra in contul lui de pe magazin.
+ * Codul de sase cifre al contului de cumparator: confirmarea contului nou, al
+ * doilea pas la intrare, resetarea parolei, adresa noua.
  *
  * ⚠ Pleaca cu marca MAGAZINULUI, prin `sendStoreOrEdinio`, deci si prin SMTP-ul
  * lui daca il are. Asa trece si prin `storeEmailShell`, adica prin logoul servit
@@ -1530,29 +1561,55 @@ export async function sendCustomerMessage(
  */
 export async function sendCodCont(
   to: string,
-  data: { cod: string; minute: number; numeMagazin: string },
+  data: { cod: string; minute: number; numeMagazin: string; scop: ScopCodCont },
   sender?: StoreEmailSender,
 ): Promise<{ success: true } | { error: string }> {
   if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
 
+  const t = TEXTE_COD[data.scop];
   const content = `
-    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Codul tau de intrare</h2>
-    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;line-height:1.6;">Foloseste codul de mai jos ca sa intri in contul tau de pe ${esc(data.numeMagazin)}.</p>
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${t.titlu}</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;line-height:1.6;">${esc(t.text(data.numeMagazin))}</p>
 
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:18px;text-align:center;margin-bottom:16px;">
       <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#18181b;">${data.cod}</p>
     </div>
 
     <p style="margin:0 0 8px 0;font-size:13px;color:#71717a;line-height:1.6;">Codul e valabil ${pluralRo(data.minute, "minut", "minute")} si se poate folosi o singura data.</p>
-    <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.6;">Daca nu ai cerut tu codul, nu trebuie sa faci nimic: fara el nimeni nu poate intra.</p>
+    <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.6;">${t.nota}</p>
   `;
 
   try {
-    await sendStoreOrEdinio(sender, to, `Codul tau de intrare: ${data.cod}`, content);
+    await sendStoreOrEdinio(sender, to, `${t.subiect}: ${data.cod}`, content);
     return { success: true };
   } catch {
     return { error: "Trimiterea emailului a esuat. Incearca din nou." };
   }
+}
+
+/**
+ * Instiintarea ca parola contului s-a schimbat (din cont, prin resetare, sau prin
+ * crearea unui cont pe o adresa care avea deja unul).
+ *
+ * ⚠ Singura cale prin care omul afla ca altcineva i-a schimbat parola. Nu poarta
+ * niciun link care sa schimbe ceva: il trimite pe pagina magazinului, unde poate
+ * cere o parola noua.
+ */
+export async function sendParolaSchimbata(
+  to: string,
+  data: { numeMagazin: string; adresaCont: string | null },
+  sender?: StoreEmailSender,
+): Promise<void> {
+  if (!process.env.RESEND_API_KEY) return;
+  const legatura = data.adresaCont
+    ? `<a href="${escapeUrl(data.adresaCont)}" style="color:#18181b;font-weight:600;text-decoration:underline;">pagina de intrare</a>`
+    : "pagina de intrare a magazinului";
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Parola ta a fost schimbata</h2>
+    <p style="margin:0 0 16px 0;font-size:14px;color:#71717a;line-height:1.6;">Parola contului tau de pe ${esc(data.numeMagazin)} tocmai a fost schimbata, iar celelalte dispozitive au fost scoase din cont.</p>
+    <p style="margin:0;font-size:13px;color:#71717a;line-height:1.6;">Daca n-ai fost tu, intra pe ${legatura} si foloseste „Ai uitat parola?” ca sa-ti setezi alta.</p>
+  `;
+  await sendStoreOrEdinio(sender, to, "Parola contului tau a fost schimbata", content);
 }
 
 // ── Subscription activated → User ───────────────────────────────────────────
@@ -1839,6 +1896,56 @@ export async function sendReturnRequestToMerchant(
   });
 }
 
+
+// ── Cerere de stergere a datelor, din contul de cumparator → Comerciant ─────
+
+/**
+ * Omul si-a sters contul si a cerut ca magazinul sa-i stearga si datele din
+ * comenzi (art. 17 GDPR).
+ *
+ * ⚠⚠ ANONIMIZAREA NU SE FACE AUTOMAT, si dinadins: comenzile sunt ale
+ * comerciantului (facturi, retururi deschise, colete pe drum), iar el hotaraste
+ * ce trebuie pastrat si pentru cat. Emailul ii spune exact ce sa caute si unde e
+ * butonul, plus termenul legal de raspuns.
+ */
+export async function sendCerereDeStergere(
+  to: string,
+  data: { business_name: string; emailuri: string[]; telefoane: string[]; comenzi: number; primitaLa: string },
+): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) return false;
+  const cand = new Date(data.primitaLa).toLocaleString("ro-RO", {
+    timeZone: FUS_RO, day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  const rand = (eticheta: string, valoare: string) =>
+    `<tr><td style="padding:3px 0;font-size:14px;color:#71717a;width:140px;vertical-align:top;">${eticheta}</td><td style="padding:3px 0;font-size:14px;color:#18181b;font-weight:500;vertical-align:top;">${valoare}</td></tr>`;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cerere de stergere a datelor</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;line-height:1.6;">Un client si-a sters contul de pe <strong>${esc(data.business_name)}</strong> si a cerut sa-i fie sterse si datele din comenzi (art. 17 din GDPR). Ai la dispozitie o luna ca sa raspunzi.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+      ${data.emailuri.length ? rand("Email", data.emailuri.map((x) => esc(x)).join("<br>")) : ""}
+      ${data.telefoane.length ? rand("Telefon", data.telefoane.map((x) => esc(x)).join("<br>")) : ""}
+      ${rand("Comenzi legate", String(data.comenzi))}
+      ${rand("Primita la", cand)}
+    </table>
+    <p style="margin:16px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">In panou: <strong>Clienti</strong>, cauta dupa emailul sau telefonul de mai sus, apoi <strong>Anonimizeaza</strong>. Comenzile raman (pentru facturi si evidenta contabila), fara numele, contactele si adresa clientului; contul lui e deja sters.</p>
+    <div style="text-align:center;margin-top:28px;">
+      <a href="${SITE_URL}/dashboard/customers" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Deschide clientii
+      </a>
+    </div>
+  `;
+  try {
+    await getResend().emails.send({
+      from: FROM,
+      to,
+      subject: subiectSigur(`Cerere de stergere a datelor - ${data.business_name}`),
+      html: baseTemplate(content),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ── Noutatile blogului ───────────────────────────────────────────────────────
 

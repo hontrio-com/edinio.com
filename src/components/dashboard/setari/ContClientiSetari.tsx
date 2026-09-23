@@ -126,7 +126,7 @@ export function ContClientiSetari({ businessId, initial }: { businessId: string;
       <div>
         <h2 className="text-lg font-semibold text-foreground">Conturi pentru clienți</h2>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-          Cumpărătorii își pot face cont pe magazinul tău, fără parolă, cu un cod primit pe e-mail. În cont își
+          Cumpărătorii își pot face cont pe magazinul tău, cu e-mail și parolă; contul nou se confirmă cu un cod primit pe e-mail. În cont își
           văd comenzile cu toate detaliile, facturile, retururile și datele. Tu alegi dacă, pentru a comanda, contul
           e opțional sau obligatoriu.
         </p>
@@ -175,7 +175,7 @@ export function ContClientiSetari({ businessId, initial }: { businessId: string;
         <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Contul la comandă">
           {([
             { v: false, titlu: "Opțional", desc: "Oricine poate comanda și fără cont. Recomandat." },
-            { v: true, titlu: "Obligatoriu", desc: "Clientul intră în cont (cod pe e-mail) înainte să trimită comanda." },
+            { v: true, titlu: "Obligatoriu", desc: "Clientul intră în cont (e-mail și parolă) înainte să trimită comanda." },
           ] as const).map((o) => {
             const ales = ciorna.obligatoriu === o.v;
             const blocat = !aprinse || (o.v && !poateObligatoriu);
@@ -194,20 +194,46 @@ export function ContClientiSetari({ businessId, initial }: { businessId: string;
         </div>
         {aprinse && !poateObligatoriu && (
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Ca să poți face contul obligatoriu, intră o dată în contul de client pe {stare.domeniu ?? "domeniul tău"}/cont
-            cu un cod primit pe e-mail. Așa știm sigur că e-mailurile ajung, înainte ca vânzările să depindă de ele.
+            Ca să poți face contul obligatoriu, creează-ți o dată un cont de client pe {stare.domeniu ?? "domeniul tău"}/cont
+            (contul nou se confirmă cu un cod pe e-mail). Așa știm sigur că e-mailurile ajung, înainte ca vânzările să depindă de ele.
           </p>
         )}
         {ciorna.obligatoriu && (
           <Callout variant="warning" icon={AlertTriangle} title="Ce înseamnă contul obligatoriu" className="mt-3">
             <ul className="list-disc space-y-1 pl-4">
-              <li>Fiecare comandă cere un cod primit pe e-mail. Clienții fără e-mail nu mai pot comanda.</li>
+              <li>Fiecare comandă cere un cont cu e-mail și parolă; contul nou se confirmă cu un cod pe e-mail. Clienții fără e-mail nu mai pot comanda.</li>
               <li>Coșul, datele completate și cuponul rămân pe loc cât timp clientul intră în cont.</li>
               <li>Dacă domeniul tău nu răspunde sau se termină plafonul zilnic de coduri, comenzile merg mai departe fără cont, ca să nu pierzi vânzări.</li>
               <li>Comenzile de pe marketplace-uri nu sunt atinse.</li>
             </ul>
           </Callout>
         )}
+      </Card>
+
+      <Card titlu="Codul pe e-mail, la intrare" icon={Lock} stins={!aprinse}
+        descriere="Clienții intră cu e-mail și parolă. Contul nou se confirmă întotdeauna cu un cod pe e-mail; aici alegi când se mai cere codul la intrare.">
+        <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Codul pe e-mail la intrare">
+          {([
+            { v: "dispozitiv_nou", titlu: "Doar pe un dispozitiv nou", desc: "Codul se cere pe un browser pe care clientul nu l-a mai confirmat în ultimele 60 de zile. Recomandat." },
+            { v: "mereu", titlu: "La fiecare intrare", desc: "Parola și, de fiecare dată, un cod pe e-mail. Mai sigur, dar mai lent și consumă mai multe coduri." },
+          ] as const).map((o) => {
+            const ales = ciorna.verificare_intrare === o.v;
+            return (
+              <label key={o.v} className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3.5 transition-all ${
+                ales ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"} ${!aprinse ? "pointer-events-none" : ""}`}>
+                <input type="radio" name="cont-verificare-intrare" className="mt-0.5 shrink-0 accent-primary" checked={ales}
+                  disabled={!aprinse} onChange={() => schimba({ verificare_intrare: o.v })} />
+                <span>
+                  <span className="block text-sm font-semibold text-foreground">{o.titlu}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{o.desc}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Parola se păstrează doar ca amprentă criptografică. După 5 încercări greșite în 15 minute, intrarea se oprește temporar; clientul își poate reseta oricând parola cu un cod pe e-mail.
+        </p>
       </Card>
 
       <Card titlu="Butonul „Contul meu” din antet" icon={UserRoundCheck} stins={!aprinse}
@@ -291,7 +317,7 @@ export function ContClientiSetari({ businessId, initial }: { businessId: string;
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Text</span>
             <textarea value={ciorna.intrare_text} maxLength={LIMITE.intrare_text} rows={3} disabled={!aprinse}
-              placeholder="Intri cu adresa de e-mail cu care ai comandat. Nu ai nevoie de parolă."
+              placeholder="Intri cu emailul și parola ta. Comenzile făcute cu aceeași adresă apar singure."
               onChange={(e) => schimba({ intrare_text: e.target.value })}
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm disabled:opacity-50" />
             <span className="mt-1 block text-[11px] text-muted-foreground">{ciorna.intrare_text.length}/{LIMITE.intrare_text}</span>
@@ -305,7 +331,7 @@ export function ContClientiSetari({ businessId, initial }: { businessId: string;
       </Card>
 
       <Card titlu="Câte coduri pe zi" icon={Lock} stins={!aprinse}
-        descriere="Intrarea în cont se face cu un cod trimis pe e-mail. Plafonul zilnic este ce stă între un străin și cota ta de trimitere.">
+        descriere="Codurile pe e-mail confirmă conturile noi, resetările de parolă și intrările de pe dispozitive noi. Plafonul zilnic este ce stă între un străin și cota ta de trimitere.">
         <label className="block">
           <span className="text-xs text-muted-foreground">Coduri pe e-mail / zi</span>
           <input type="number" min={0} max={LIMITE.buget} value={ciorna.buget_email_zilnic} disabled={!aprinse}

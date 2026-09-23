@@ -31,7 +31,9 @@ export type MagazinDeCont = {
  * Intoarce `null` cand cererea nu are ce cauta aici, si NU spune de ce: ruta
  * raspunde la fel in toate cazurile.
  */
-export async function magazinulCereriiDeCont(host: string | null): Promise<MagazinDeCont | null> {
+export async function magazinulCereriiDeCont(
+  host: string | null,
+): Promise<(MagazinDeCont & { contClientConfig: unknown }) | null> {
   const m = await magazinulDupaGazda(host);
   if (!m) return null;
   if (!conturilePornite(m.contClientConfig)) return null;

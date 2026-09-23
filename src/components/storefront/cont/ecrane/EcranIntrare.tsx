@@ -1,6 +1,7 @@
 import { Package, ReceiptText, ShieldCheck, Truck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormularIntrare } from "../FormularIntrare";
+import type { ModAutentificare } from "../autentificare-client";
 import { CARD, TITLU } from "../ui/clase";
 
 /**
@@ -34,12 +35,17 @@ export function EcranIntrare({
   titlu = "",
   text = "",
   avantaje = true,
+  modInitial = "intrare",
+  dupaStergere = null,
 }: {
   numeMagazin: string;
   greutateTitlu: "font-normal" | "font-semibold";
   titlu?: string;
   text?: string;
   avantaje?: boolean;
+  modInitial?: ModAutentificare;
+  /** Omul tocmai si-a sters contul: `cerere` spune daca cererea catre magazin a plecat. */
+  dupaStergere?: { cerere: boolean | null } | null;
 }) {
   return (
     <main className="flex-1" style={{ fontFamily: "var(--st-font-body)" }}>
@@ -51,7 +57,7 @@ export function EcranIntrare({
               {titlu || `Comenzile tale de la ${numeMagazin}, intr-un singur loc`}
             </h1>
             <p className="mt-3 max-w-md text-sm leading-relaxed opacity-75 lg:text-base">
-              {text || "Intri cu adresa de email cu care ai comandat. Nu ai nevoie de parola si nici de inregistrare."}
+              {text || "Intri cu emailul si parola ta. Contul nou se confirma cu un cod pe email, iar comenzile facute cu aceeasi adresa apar singure."}
             </p>
             {avantaje && <ul className="mt-8 space-y-5">
               <Avantaj icon={Package} titlu="Istoricul comenzilor" text="Fiecare comanda, cu produsele, plata si livrarea ei." />
@@ -62,9 +68,14 @@ export function EcranIntrare({
           </div>
 
           <div className={`order-1 lg:order-2 ${CARD} p-6 sm:p-8`}>
-            <h2 className="text-xl font-semibold text-[var(--st-text)]" style={TITLU}>Intra in cont</h2>
-            <p className="mb-6 mt-1 text-sm text-[var(--st-muted)]">Iti trimitem un cod pe email.</p>
-            <FormularIntrare />
+            {dupaStergere && (
+              <div role="status" className="mb-6 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
+                <p className="font-semibold">Contul tau a fost sters.</p>
+                {dupaStergere.cerere === true && <p className="mt-1">Magazinul a primit cererea ta de stergere a datelor din comenzi si are o luna sa raspunda.</p>}
+                {dupaStergere.cerere === false && <p className="mt-1">Cererea catre magazin nu a putut fi trimisa. Scrie-i direct, din pagina de contact.</p>}
+              </div>
+            )}
+            <FormularIntrare modInitial={modInitial} />
           </div>
         </div>
       </div>

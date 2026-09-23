@@ -132,3 +132,11 @@ export async function stergeContul(
   const r = (Array.isArray(data) ? data[0] : data) ?? null;
   return { ok: r?.ok === true, comenziRamase: Number(r?.comenzi_ramase ?? 0) };
 }
+
+/** Contul are parola? (Conturile facute inainte de 24.09.2026 n-au, si o pot seta din cont.) */
+export async function areParola(businessId: string, contId: string): Promise<boolean> {
+  const { data, error } = await createAdminClient().rpc("cont_parola_contului", { p_business: businessId, p_cont: contId });
+  if (error) throw error;
+  const r = Array.isArray(data) ? data[0] : data;
+  return r?.are_parola === true;
+}

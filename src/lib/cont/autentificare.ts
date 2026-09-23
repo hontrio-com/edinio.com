@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStoreEmailSender } from "@/lib/email/sender";
-import { sendCodCont, sendParolaSchimbata, type ScopCodCont } from "@/lib/email";
+import { sendCodCont, sendParolaSchimbata, type SablonCod } from "@/lib/email";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { logError } from "@/lib/error-logger";
@@ -11,7 +12,7 @@ import { parolaPotrivita, verificareOarba } from "./parola";
 import { deschideSesiune } from "./sesiune";
 import { leagaComenzile } from "./comenzi";
 import type { MagazinDeCont } from "./magazinul-cererii";
-import { ipPentruBaza } from "./cerere";
+import { cheieIp, ipPentruBaza } from "./cerere";
 
 export { ipPentruBaza };
 
@@ -48,6 +49,27 @@ export const MESAJ_INTRARE_GRESITA =
   "Email sau parola gresita. Dupa mai multe incercari gresite, intrarea se opreste 15 minute; poti folosi oricand „Ai uitat parola?”.";
 export const MESAJ_PREA_MULTE = "Prea multe incercari. Asteapta cateva minute si reia.";
 
+/**
+ * Refuzurile care tin de IP (sau de retea), nu de adresa: pot fi spuse pe fata,
+ * fiindca nu spun nimic despre cine are cont.
+ */
+const MOTIVE_DE_IP = new Set(["rafala", "limita-ip", "prea-multe-de-aici"]);
+export function eLimitaDeIp(motiv: string): boolean {
+  return MOTIVE_DE_IP.has(motiv);
+}
+
+/**
+ * ⚠⚠ Plafonul pe IP cerut INAINTEA calculului scump. scrypt cere 32 MB si cam
+ * 100 ms pe fir, pe un bazin de patru fire impartit cu restul serverului; o rafala
+ * de parole trimise fara nicio alta cerinta ar fi ocupat instanta.
+ */
+export async function permisDeCalcul(ip: string): Promise<boolean> {
+  const cheie = cheieIp(ip);
+  if (!rateLimit(`contCalcul:ip:${cheie}`, 10, 60_000)) return false;
+  const lim = await consumaLimita(`cont:calcul:ip:${cheie}`, 40, 900, 900);
+  return lim.permis;
+}
+
 function numeleMagazinului(m: MagazinDeCont): string {
   return m.store_name ?? m.business_name ?? "magazin";
 }
@@ -75,12 +97,19 @@ export async function pornestePas(p: {
   ip: string;
   contId?: string | null;
   parolaHash?: string | null;
+  /**
+   * ⚠⚠ Emailul pleaca DUPA raspuns (`after`). Folosit la contul nou si la
+   * resetare: acolo, pentru o adresa fara cont nu pleaca nimic, iar un raspuns
+   * care astepta trimiterea ar fi spus din timp cine are cont.
+   */
+  inFundal?: boolean;
 }): Promise<{ trimis: boolean; motiv: string }> {
   const { jeton, amprenta } = jetonNou();
   (await cookies()).set(COOKIE_PAS, jeton, { ...optiuniCookie(), maxAge: MINUTE_PAS * 60 });
 
-  if (!rateLimit(`contPas:ip:${p.ip}`, 10, 60_000)) return { trimis: false, motiv: "rafala" };
-  const lim = await consumaLimita(`cont:pas:ip:${p.ip}`, 20, 3600, 900);
+  const cheie = cheieIp(p.ip);
+  if (!rateLimit(`contPas:ip:${cheie}`, 10, 60_000)) return { trimis: false, motiv: "rafala" };
+  const lim = await consumaLimita(`cont:pas:ip:${cheie}`, 20, 3600, 900);
   if (!lim.permis) return { trimis: false, motiv: "limita-ip" };
 
   const { cod, amprenta: codHash } = codNou();
@@ -100,14 +129,23 @@ export async function pornestePas(p: {
   const r = Array.isArray(data) ? data[0] : data;
   if (!r?.ok) return { trimis: false, motiv: r?.motiv ?? "necunoscut" };
 
-  return trimiteCodul(p.magazin, r.destinatie ?? p.email, cod, p.scop);
+  /* Un cont nou pe o adresa cu cont are ALT email: codul de acolo schimba parola. */
+  const sablon: SablonCod = p.scop === "inregistrare" && r.motiv === "trimis-cont-existent" ? "inregistrare-existent" : p.scop;
+  const destinatie = r.destinatie ?? p.email;
+  if (p.inFundal) {
+    after(async () => {
+      await trimiteCodul(p.magazin, destinatie, cod, sablon);
+    });
+    return { trimis: true, motiv: "programat" };
+  }
+  return trimiteCodul(p.magazin, destinatie, cod, sablon);
 }
 
 async function trimiteCodul(
   magazin: MagazinDeCont,
   destinatie: string,
   cod: string,
-  scop: ScopCodCont,
+  scop: SablonCod,
 ): Promise<{ trimis: boolean; motiv: string }> {
   const sender = await getStoreEmailSender(createAdminClient(), magazin.id);
   const rez = await sendCodCont(destinatie, { cod, minute: MINUTE_COD, numeMagazin: numeleMagazinului(magazin), scop }, sender);
@@ -123,11 +161,16 @@ async function trimiteCodul(
   return { trimis: true, motiv: "trimis" };
 }
 
+/** Exista un pas al doilea inceput in browserul asta? (Fara el, nimic de verificat.) */
+export async function arePas(): Promise<boolean> {
+  return !!(await cookies()).get(COOKIE_PAS)?.value;
+}
+
 /** Un cod nou pe aceeasi provocare. Aceleasi plafoane ca primul. */
 export async function retrimitePas(p: { magazin: MagazinDeCont; ip: string }): Promise<{ trimis: boolean; motiv: string; scop: string | null }> {
   const jeton = (await cookies()).get(COOKIE_PAS)?.value;
   if (!jeton) return { trimis: false, motiv: "fara-provocare", scop: null };
-  if (!rateLimit(`contPas:ip:${p.ip}`, 10, 60_000)) return { trimis: false, motiv: "rafala", scop: null };
+  if (!rateLimit(`contPas:ip:${cheieIp(p.ip)}`, 10, 60_000)) return { trimis: false, motiv: "rafala", scop: null };
 
   const { cod, amprenta: codHash } = codNou();
   const { data, error } = await createAdminClient().rpc("cont_retrimite_cod", {
@@ -140,7 +183,18 @@ export async function retrimitePas(p: { magazin: MagazinDeCont; ip: string }): P
   if (error) throw error;
   const r = Array.isArray(data) ? data[0] : data;
   if (!r?.ok || !r.destinatie || !r.scop) return { trimis: false, motiv: r?.motiv ?? "necunoscut", scop: r?.scop ?? null };
-  const t = await trimiteCodul(p.magazin, r.destinatie, cod, r.scop as ScopCodCont);
+  const sablon: SablonCod = r.scop === "inregistrare" && r.motiv === "trimis-cont-existent"
+    ? "inregistrare-existent"
+    : (r.scop as SablonCod);
+  /* Ca la prima trimitere: numai pasul doi (dupa parola) asteapta emailul. */
+  if (r.scop !== "doi-pasi") {
+    const destinatie = r.destinatie;
+    after(async () => {
+      await trimiteCodul(p.magazin, destinatie, cod, sablon);
+    });
+    return { trimis: true, motiv: "programat", scop: r.scop };
+  }
+  const t = await trimiteCodul(p.magazin, r.destinatie, cod, sablon);
   return { ...t, scop: r.scop };
 }
 
@@ -159,8 +213,9 @@ export async function verificaPas(p: {
   const jeton = cos.get(COOKIE_PAS)?.value;
   if (!jeton) return { ok: false, motiv: "fara-cod", contId: null, scop: null, contNou: false };
 
-  if (!rateLimit(`contVerif:ip:${p.ip}`, 20, 60_000)) return { ok: false, motiv: "rafala", contId: null, scop: null, contNou: false };
-  const lim = await consumaLimita(`cont:verif:ip:${p.ip}`, 40, 3600, 900);
+  const cheie = cheieIp(p.ip);
+  if (!rateLimit(`contVerif:ip:${cheie}`, 20, 60_000)) return { ok: false, motiv: "rafala", contId: null, scop: null, contNou: false };
+  const lim = await consumaLimita(`cont:verif:ip:${cheie}`, 40, 3600, 900);
   if (!lim.permis) return { ok: false, motiv: "limita-ip", contId: null, scop: null, contNou: false };
 
   const { data, error } = await createAdminClient().rpc("cont_verifica_provocare", {
@@ -200,7 +255,7 @@ export function mesajulPasului(motiv: string): string {
 
 // ═══ Dispozitivele de incredere ════════════════════════════════════════════
 
-async function dispozitivCunoscut(businessId: string, contId: string): Promise<boolean> {
+export async function dispozitivCunoscut(businessId: string, contId: string): Promise<boolean> {
   const jeton = (await cookies()).get(COOKIE_DISPOZITIV)?.value;
   if (!jeton) return false;
   const { data, error } = await createAdminClient().rpc("cont_dispozitiv_cunoscut", {
@@ -253,10 +308,11 @@ export async function intraCuParola(p: {
   parola: string;
   ip: string;
 }): Promise<RezultatIntrare> {
-  if (!rateLimit(`contParola:ip:${p.ip}`, 10, 60_000)) {
+  const cheie = cheieIp(p.ip);
+  if (!rateLimit(`contParola:ip:${cheie}`, 10, 60_000)) {
     return { rezultat: "refuzat", mesaj: MESAJ_PREA_MULTE };
   }
-  const lim = await consumaLimita(`cont:parola:ip:${p.ip}`, 40, 900, 900);
+  const lim = await consumaLimita(`cont:parola:ip:${cheie}`, 40, 900, 900);
   if (!lim.permis) return { rezultat: "refuzat", mesaj: MESAJ_PREA_MULTE };
 
   const admin = createAdminClient();
@@ -270,12 +326,22 @@ export async function intraCuParola(p: {
   const r = Array.isArray(data) ? data[0] : data;
   const contId = r?.cont_id ?? null;
 
+  /* Blocajul pe IP nu spune nimic despre cont, deci se spune pe fata. */
+  if (r?.blocat_ip === true) return { rezultat: "refuzat", mesaj: MESAJ_PREA_MULTE };
+
+  /*
+    ⚠⚠ Blocajul pe CONT nu se aplica pe un dispozitiv de incredere (un browser pe
+    care omul a trecut deja de codul de pe email): altfel un strain care greseste
+    parola de cinci ori l-ar tine afara chiar de pe telefonul lui.
+  */
+  const blocatCont = r?.blocat_cont === true && !(contId && (await dispozitivCunoscut(p.magazin.id, contId)));
+
   /*
     ⚠⚠ Fara cont, fara parola sau blocat: ACEEASI munca si ACELASI raspuns ca la o
     parola gresita. Blocajul pe cont nu se spune pe fata: altfel cinci incercari
     ar fi aflat daca adresa are cont.
   */
-  const potrivita = contId && r?.parola_hash && !r.blocat
+  const potrivita = contId && r?.parola_hash && !blocatCont
     ? await parolaPotrivita(p.parola, r.parola_hash)
     : await verificareOarba(p.parola);
 

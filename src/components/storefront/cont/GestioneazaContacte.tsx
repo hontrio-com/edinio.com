@@ -15,10 +15,15 @@ import { BUTON_DISCRET, BUTON_PRIMAR, BUTON_SECUNDAR, CAMP, ETICHETA_CAMP, STIL_
  *
  * ⚠ `min-w-0` + `break-all` pe adresa: un email lung fara spatii impingea
  * butonul „Scoate" peste marginea ecranului pe telefon.
+ *
+ * ⚠⚠ Adresa noua cere PAROLA contului (cand are una): o sesiune ramasa deschisa pe
+ * un calculator strain si-ar fi putut adauga adresa ei, apoi ar fi resetat parola
+ * de pe ea, iar contul ar fi fost pierdut pe veci.
  */
-export function GestioneazaContacte({ contacte }: { contacte: ContactulMeu[] }) {
+export function GestioneazaContacte({ contacte, areParola = false }: { contacte: ContactulMeu[]; areParola?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [parola, setParola] = useState("");
   const [cod, setCod] = useState("");
   const [pas, setPas] = useState<"inchis" | "scrie" | "cod">("inchis");
   const [mesaj, setMesaj] = useState("");
@@ -111,9 +116,10 @@ export function GestioneazaContacte({ contacte }: { contacte: ContactulMeu[] }) 
               className="mt-4 space-y-3"
               onSubmit={async (e) => {
                 e.preventDefault();
-                const j = await trimite({ actiune: "cere-cod", fel: "email", valoare: email });
+                const j = await trimite({ actiune: "cere-cod", fel: "email", valoare: email, parola });
                 if (j) {
                   setMesaj(typeof j.mesaj === "string" ? j.mesaj : "");
+                  setParola("");
                   setPas("cod");
                 }
               }}
@@ -131,6 +137,21 @@ export function GestioneazaContacte({ contacte }: { contacte: ContactulMeu[] }) 
                   className={CAMP}
                 />
               </div>
+              {areParola && (
+                <div>
+                  <label htmlFor="parola-contact" className={ETICHETA_CAMP}>Parola contului</label>
+                  <input
+                    id="parola-contact"
+                    type="password"
+                    autoComplete="current-password"
+                    value={parola}
+                    onChange={(ev) => setParola(ev.target.value)}
+                    required
+                    className={CAMP}
+                  />
+                  <p className="mt-1.5 text-xs text-[var(--st-muted)]">O cerem ca sa fim siguri ca esti chiar tu.</p>
+                </div>
+              )}
               {eroare && <p role="alert" className="text-sm text-[var(--st-text)]">{eroare}</p>}
               <div className="flex flex-wrap gap-2">
                 <button type="submit" disabled={asteapta} className={BUTON_PRIMAR} style={STIL_PRIMAR}>
@@ -162,9 +183,8 @@ export function GestioneazaContacte({ contacte }: { contacte: ContactulMeu[] }) 
                   id="cod-nou"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  maxLength={6}
                   value={cod}
-                  onChange={(ev) => setCod(ev.target.value.replace(/\D/g, ""))}
+                  onChange={(ev) => setCod(ev.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="000000"
                   required
                   className={`${CAMP} text-center text-lg tracking-[0.4em] sm:text-lg`}

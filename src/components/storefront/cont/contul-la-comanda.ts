@@ -76,8 +76,18 @@ export function useContulLaComanda({
   const idBloc = useId();
   const [stare, setStare] = useState<Stare | null>(null);
   const cerut = obligatoriu && activ;
+  /*
+    ⚠ Ultima stare CUNOSCUTA, pentru functiile chemate din afara randarii (refuzul
+    serverului vine dupa un `await`, cu valorile de la apasare), si o numaratoare a
+    intrebarilor: un raspuns plecat INAINTEA unei intrari reusite n-are voie sa
+    redeschida pasul dupa ea.
+  */
+  const necesarAcum = useRef(false);
+  const intrebare = useRef(0);
 
-  const aflat = useEffectEvent((s: Stare) => {
+  const aflat = useEffectEvent((s: Stare, numar: number) => {
+    if (numar !== intrebare.current) return;
+    necesarAcum.current = s.cere;
     setStare(s);
     if (s.logat && s.email) laAdresa?.(s.email);
   });
@@ -85,8 +95,9 @@ export function useContulLaComanda({
   useEffect(() => {
     if (!cerut) return;
     let anulat = false;
+    const numar = ++intrebare.current;
     void intreaba().then((s) => {
-      if (!anulat && s) aflat(s);
+      if (!anulat && s) aflat(s, numar);
     });
     return () => {
       anulat = true;
@@ -101,8 +112,9 @@ export function useContulLaComanda({
   useEffect(() => {
     if (!cerut || !necesar) return;
     const laIntoarcere = () => {
+      const numar = ++intrebare.current;
       void intreaba().then((s) => {
-        if (s) aflat(s);
+        if (s) aflat(s, numar);
       });
     };
     window.addEventListener("focus", laIntoarcere);
@@ -127,18 +139,24 @@ export function useContulLaComanda({
     idBloc,
     ceruDeServer: () => {
       /* Blocul deja deschis nu se mai randeaza din nou, deci efectul n-ar mai rula. */
-      if (necesar) duLa(idBloc);
+      if (necesarAcum.current) duLa(idBloc);
       else sariLaBloc.current = true;
+      intrebare.current++;
+      necesarAcum.current = true;
       setStare({ cere: true, logat: false, email: null });
     },
     aIntrat: (email) => {
+      intrebare.current++;
+      necesarAcum.current = false;
       setStare({ cere: false, logat: true, email: email || null });
       if (email) laAdresa?.(email);
     },
     maiECerut: async () => {
-      if (!necesar) return false;
+      if (!necesarAcum.current) return false;
+      const numar = ++intrebare.current;
       const s = await intreaba();
-      if (!s) return false;
+      if (!s || numar !== intrebare.current) return false;
+      necesarAcum.current = s.cere;
       setStare(s);
       if (s.logat && s.email) laAdresa?.(s.email);
       return s.cere;

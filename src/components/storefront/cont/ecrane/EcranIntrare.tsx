@@ -37,6 +37,7 @@ export function EcranIntrare({
   avantaje = true,
   modInitial = "intrare",
   dupaStergere = null,
+  contact = null,
 }: {
   numeMagazin: string;
   greutateTitlu: "font-normal" | "font-semibold";
@@ -46,6 +47,8 @@ export function EcranIntrare({
   modInitial?: ModAutentificare;
   /** Omul tocmai si-a sters contul: `cerere` spune daca cererea catre magazin a plecat. */
   dupaStergere?: { cerere: boolean | null } | null;
+  /** Cum se ajunge la magazin, cand cererea de stergere n-a putut pleca. */
+  contact?: { telefon: string | null; email: string | null } | null;
 }) {
   return (
     <main className="flex-1" style={{ fontFamily: "var(--st-font-body)" }}>
@@ -72,7 +75,16 @@ export function EcranIntrare({
               <div role="status" className="mb-6 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
                 <p className="font-semibold">Contul tau a fost sters.</p>
                 {dupaStergere.cerere === true && <p className="mt-1">Magazinul a primit cererea ta de stergere a datelor din comenzi si are o luna sa raspunda.</p>}
-                {dupaStergere.cerere === false && <p className="mt-1">Cererea catre magazin nu a putut fi trimisa. Scrie-i direct, din pagina de contact.</p>}
+                {dupaStergere.cerere === false && (
+                  <p className="mt-1">
+                    Cererea catre magazin nu a putut fi trimisa.
+                    {contact?.email || contact?.telefon ? (
+                      <> Scrie-i direct{contact?.email ? <> la <a href={`mailto:${contact.email}`} className="font-semibold underline underline-offset-2">{contact.email}</a></> : null}{contact?.email && contact?.telefon ? " sau" : null}{contact?.telefon ? <> suna la <a href={`tel:${contact.telefon}`} className="font-semibold underline underline-offset-2">{contact.telefon}</a></> : null}, si cere stergerea datelor din comenzi.</>
+                    ) : (
+                      <> Scrie-i direct si cere stergerea datelor din comenzi.</>
+                    )}
+                  </p>
+                )}
               </div>
             )}
             <FormularIntrare modInitial={modInitial} />

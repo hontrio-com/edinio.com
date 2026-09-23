@@ -54,6 +54,19 @@ const CORP = M
     )
   : "";
 
+/*
+  ⚠ Curatarea lui `order_source` sta, din 24.09.2026, intr-o functie a ei
+  (`privat.sursa_anonimizata`), folosita si de anonimizare, si de curatarea o data
+  a comenzilor anonimizate inainte. Probele de mai jos citesc corpul ei.
+*/
+const M_SURSA = MIGRATII.filter((m) => m.text.includes("create or replace function privat.sursa_anonimizata")).at(-1);
+const SURSA = M_SURSA
+  ? M_SURSA.text.slice(
+      M_SURSA.text.indexOf("create or replace function privat.sursa_anonimizata"),
+      M_SURSA.text.indexOf("revoke all on function privat.sursa_anonimizata"),
+    )
+  : "";
+
 test("⚠ migratia chiar a fost gasita, altfel proba n-are ce citi", () => {
   assert.ok(M, "nicio migratie nu defineste `customer_anonymize`");
   assert.ok(CORP.length > 1500, `bucata gasita are ${CORP.length} semne`);
@@ -121,7 +134,8 @@ test("⚠⚠ adresa se curata cu LISTA ALBA, sursa cu LISTA NEAGRA", () => {
   assert.match(adresa, /where k in \(/, "adresa nu se mai curata cu lista alba");
   assert.ok(!adresa.includes(" - '"), "adresa a trecut pe lista neagra: se pierde la primul curier nou");
 
-  const sursa = CORP.slice(CORP.indexOf("order_source = case"), CORP.indexOf("where o.id = any(v_ids)"));
+  assert.ok(CORP.includes("order_source = privat.sursa_anonimizata(o.order_source)"), "anonimizarea nu mai curata sursa prin functia comuna");
+  const sursa = SURSA;
   assert.ok(sursa.length > 100, "nu mai gasesc curatarea sursei");
   for (const urmaritor of ["ga_client_id", "fbp", "fbclid", "gclid", "ttclid", "user_agent", "referrer"]) {
     assert.ok(sursa.includes(`- '${urmaritor}'`), `sursa nu mai scoate \`${urmaritor}\``);
@@ -227,14 +241,22 @@ test("⚠⚠ fiecare cheie de urmarire scrisa la checkout e stearsa, sau lasata 
    */
   const actiuni = readFileSync(join("src", "lib", "actions", "order.actions.ts"), "utf8");
   const bloc = actiuni.slice(actiuni.indexOf("const CHEI_ATRIBUIRE = ["), actiuni.indexOf("] as const;", actiuni.indexOf("const CHEI_ATRIBUIRE = [")));
-  const chei = [...bloc.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  /* ⚠ Orice sir din lista, nu doar `[a-z_]`: o cheie cu cifre sau majuscule ar fi scapat tacut. */
+  const chei = [...bloc.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   assert.ok(chei.length >= 15, `am gasit doar ${chei.length} chei de atribuire`);
-  /* Scrise de server, nu din browser, dar tot pe comanda. */
-  chei.push("user_agent", "client_ip", "direct");
+  /*
+    Si cele scrise de SERVER (`curat.<cheie> =` in `buildOrderSource`), citite din cod,
+    nu scrise de mana: tocmai asa scapase `client_ip`.
+  */
+  const construire = actiuni.slice(actiuni.indexOf("function buildOrderSource("), actiuni.indexOf("function buildOrderSource(") + 4000);
+  const deServer = [...construire.matchAll(/curat\.(\w+)\s*=/g)].map((m) => m[1]);
+  assert.ok(deServer.includes("client_ip") && deServer.includes("user_agent"), "nu mai gasesc cheile scrise de server");
+  chei.push(...deServer);
 
   /* Canalul la nivel de CAMPANIE ramane: rapoartele pe canale n-au voie sa se strice. */
   const RAMAN = new Set(["utm_source", "utm_medium", "utm_campaign", "mc_cid", "captured_at", "direct"]);
-  const sursa = CORP.slice(CORP.indexOf("order_source = case"), CORP.indexOf("where o.id = any(v_ids)"));
+  const sursa = SURSA;
+  assert.ok(sursa.length > 100, "nu mai gasesc curatarea sursei");
   for (const cheie of chei) {
     const stearsa = sursa.includes(`- '${cheie}'`);
     if (RAMAN.has(cheie)) {
@@ -261,4 +283,29 @@ test("⚠⚠ contul omului se goleste INAINTE ca datele din comenzi sa dispara",
   const conturi = CORP.indexOf("perform public.cont_rupe_legaturile(bid, v_chei)");
   assert.ok(conturi > 0, "anonimizarea nu mai ajunge in conturile de client");
   assert.ok(conturi < CORP.indexOf("update public."), "conturile se golesc DUPA ce comenzile si-au pierdut contactele");
+});
+
+test("⚠⚠ un cont se goleste numai cand e SIGUR al omului anonimizat", () => {
+  /*
+    Cine a trimis un cadou pe telefonul omului are emailul lui pe comanda aceea.
+    Contul lui, cu alte comenzi proprii, nu se goleste: i se desface doar legatura
+    cu comenzile anonimizate.
+  */
+  const m = MIGRATII.filter((x) => x.text.includes("create or replace function public.cont_rupe_legaturile")).at(-1);
+  assert.ok(m, "nu gasesc `cont_rupe_legaturile`");
+  const corp = m.text.slice(m.text.indexOf("create or replace function public.cont_rupe_legaturile"), m.text.indexOf("revoke all on function public.cont_rupe_legaturile"));
+  assert.ok(corp.includes("l.order_id <> all(v_ids)"), "conturile gasite dupa comenzi nu mai cer lipsa altor comenzi");
+  assert.ok(corp.includes("not (l.cont_id = any(coalesce(v_conturi, '{}')))"), "celelalte conturi nu mai pierd doar legatura");
+});
+
+test("⚠ SMS-urile pierd si TEXTUL, iar raspunsurile primite se golesc", () => {
+  const sms = CORP.slice(CORP.indexOf("update public.notice_sms_log"), CORP.indexOf("update public.notice_inbox"));
+  assert.ok(sms.includes("message = null"), "textul SMS-ului ramane (sabloanele pot purta numele si adresa)");
+  assert.ok(sms.includes("s.order_id = any("), "SMS-urile nu se mai gasesc si dupa comanda");
+  assert.match(CORP, /update public\.notice_inbox n\s+set from_number = null, body = null, raw = null/);
+});
+
+test("⚠ in masa, fiecare client isi pastreaza adresa anonima a lui", () => {
+  /* Cu un singur `gen_random_uuid()` pe apel, N clienti anonimizati deodata deveneau unul. */
+  assert.match(CORP, /select k, 'sters-' \|\| gen_random_uuid\(\)::text \|\| '@anonim\.invalid' as adresa\s+from unnest\(v_chei\) k/);
 });

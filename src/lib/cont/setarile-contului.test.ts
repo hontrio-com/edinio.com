@@ -208,3 +208,24 @@ test("mesajul refuzului are o singura sursa", () => {
     assert.ok(citeste(p).includes("MESAJ_CONT_NECESAR"), `${p} nu foloseste mesajul comun`);
   }
 });
+
+test("⚠⚠ cont obligatoriu fara domeniu propriu: comanda merge ca vizitator, nu se opreste", () => {
+  /*
+    Deconectarea domeniului lasa setarea pe „obligatoriu", iar vitrina merge atunci
+    pe www.edinio.com, unde formularul nu arata niciun pas de intrare. Un refuz
+    acolo ar fi oprit TOATE vanzarile magazinului.
+  */
+  const s = citeste("src/lib/cont/poarta-comenzii.ts");
+  assert.ok(s.includes("if (!domeniu || biz?.custom_domain_healthy === false) {"));
+  /* Contul optional, fara cookie de cont: iese inainte de orice cerere. */
+  const scurt = s.indexOf("if (!cfg.obligatoriu && !(await cookies()).get(COOKIE_CONT)?.value) {");
+  assert.ok(scurt > 0 && scurt < s.indexOf("createAdminClient()"), "contul optional face o cerere in plus pe fiecare comanda");
+});
+
+test("⚠⚠ antetul vitrinei nu devine 404 la toate magazinele daca pica citirea", () => {
+  /* O coloana ceruta si inca inexistenta rupe TOATA interogarea. */
+  const s = citeste("src/lib/storefront/antet-magazin.ts");
+  assert.ok(s.includes("if (!error) return data;"), "eroarea citirii se inghite din nou");
+  const rezerva = s.slice(s.indexOf("const { data: rezerva }"));
+  assert.ok(rezerva.length > 0 && !rezerva.slice(0, 700).includes("cont_client_config"), "citirea de rezerva cere tot coloana conturilor");
+});

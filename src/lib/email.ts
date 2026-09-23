@@ -1520,12 +1520,26 @@ export async function sendCustomerMessage(
 /** De ce pleaca un cod. Aceleasi valori ca `privat.cont_cod.scop`. */
 export type ScopCodCont = "inregistrare" | "doi-pasi" | "resetare-parola" | "adaugare-contact";
 
-const TEXTE_COD: Record<ScopCodCont, { subiect: string; titlu: string; text: (magazin: string) => string; nota: string }> = {
+/**
+ * Textul emailului. ⚠ `inregistrare-existent` e un cont nou cerut pe o adresa care
+ * ARE deja cont: acolo codul nu creeaza nimic, SCHIMBA parola contului existent,
+ * iar emailul trebuie sa spuna asta limpede (altfel omul ar fi dat codul cuiva
+ * care i-l cere „ca sa-si faca un cont").
+ */
+export type SablonCod = ScopCodCont | "inregistrare-existent";
+
+const TEXTE_COD: Record<SablonCod, { subiect: string; titlu: string; text: (magazin: string) => string; nota: string }> = {
   inregistrare: {
     subiect: "Confirma-ti contul",
     titlu: "Confirma-ti adresa de email",
     text: (m) => `Ca sa-ti creezi contul pe ${m}, scrie codul de mai jos in pagina deschisa.`,
     nota: "Daca nu ai cerut tu un cont, nu trebuie sa faci nimic: fara cod nu se creeaza nimic.",
+  },
+  "inregistrare-existent": {
+    subiect: "Parola noua pentru contul tau",
+    titlu: "Ai deja un cont cu adresa asta",
+    text: (m) => `Cineva a cerut un cont nou pe ${m} cu adresa ta, dar ai deja unul. Codul de mai jos SETEAZA O PAROLA NOUA pentru contul tau existent si te scoate de pe celelalte dispozitive.`,
+    nota: "Daca nu ai cerut tu, nu da codul nimanui si nu trebuie sa faci nimic: parola ramane cea veche.",
   },
   "doi-pasi": {
     subiect: "Codul tau de intrare",
@@ -1561,7 +1575,7 @@ const TEXTE_COD: Record<ScopCodCont, { subiect: string; titlu: string; text: (ma
  */
 export async function sendCodCont(
   to: string,
-  data: { cod: string; minute: number; numeMagazin: string; scop: ScopCodCont },
+  data: { cod: string; minute: number; numeMagazin: string; scop: SablonCod },
   sender?: StoreEmailSender,
 ): Promise<{ success: true } | { error: string }> {
   if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
@@ -1910,7 +1924,7 @@ export async function sendReturnRequestToMerchant(
  */
 export async function sendCerereDeStergere(
   to: string,
-  data: { business_name: string; emailuri: string[]; telefoane: string[]; comenzi: number; primitaLa: string },
+  data: { business_name: string; emailuri: string[]; telefoane: string[]; comenzi: number; numere: string[]; primitaLa: string },
 ): Promise<boolean> {
   if (!process.env.RESEND_API_KEY) return false;
   const cand = new Date(data.primitaLa).toLocaleString("ro-RO", {
@@ -1925,9 +1939,10 @@ export async function sendCerereDeStergere(
       ${data.emailuri.length ? rand("Email", data.emailuri.map((x) => esc(x)).join("<br>")) : ""}
       ${data.telefoane.length ? rand("Telefon", data.telefoane.map((x) => esc(x)).join("<br>")) : ""}
       ${rand("Comenzi legate", String(data.comenzi))}
+      ${data.numere.length ? rand("Numerele lor", data.numere.map((x) => esc(x)).join(", ") + (data.comenzi > data.numere.length ? " si altele" : "")) : ""}
       ${rand("Primita la", cand)}
     </table>
-    <p style="margin:16px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">In panou: <strong>Clienti</strong>, cauta dupa emailul sau telefonul de mai sus, apoi <strong>Anonimizeaza</strong>. Comenzile raman (pentru facturi si evidenta contabila), fara numele, contactele si adresa clientului; contul lui e deja sters.</p>
+    <p style="margin:16px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">In panou: <strong>Clienti</strong>, cauta dupa emailul, telefonul sau numerele de comanda de mai sus, apoi <strong>Anonimizeaza</strong>. Comenzile raman (pentru facturi si evidenta contabila), fara numele, contactele si adresa clientului; contul lui e deja sters.</p>
     <div style="text-align:center;margin-top:28px;">
       <a href="${SITE_URL}/dashboard/customers" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Deschide clientii

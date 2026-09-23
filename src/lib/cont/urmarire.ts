@@ -48,7 +48,8 @@ export function curierulReal(nume: string | null | undefined): CurierCunoscut | 
     fedex: "fedex",
     ups: "ups",
   };
-  return harta[primul] ?? null;
+  /* ⚠ `Object.hasOwn`: numele vine de la broker, iar „constructor” sau „__proto__” ar fi intors o functie a lui Object. */
+  return Object.hasOwn(harta, primul) ? harta[primul] : null;
 }
 
 const COD = encodeURIComponent;

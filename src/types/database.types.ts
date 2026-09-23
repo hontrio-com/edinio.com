@@ -7270,7 +7270,7 @@ export type Database = {
       }
       cont_parola_pentru_intrare: {
         Args: { p_business: string; p_email: string; p_ip?: string | null }
-        Returns: { blocat: boolean; cont_id: string | null; parola_hash: string | null }[]
+        Returns: { blocat_cont: boolean; blocat_ip: boolean; cont_id: string | null; parola_hash: string | null }[]
       }
       cont_retrimite_cod: {
         Args: { p_business: string; p_cod_hash: string; p_ip?: string | null; p_minute?: number; p_provocare_hash: string }

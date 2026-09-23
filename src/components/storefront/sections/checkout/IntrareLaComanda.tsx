@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, CheckCircle2, CircleUserRound, Eye, EyeOff, Loader2, Mail } from "lucide-react";
 import { useAutentificare } from "@/components/storefront/cont/autentificare-client";
 import type { ContulLaComanda } from "@/components/storefront/cont/contul-la-comanda";
@@ -70,6 +71,10 @@ function CampParola({ id, eticheta, valoare, schimba, autoComplete }: {
 export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color: string }) {
   const uid = useId();
   const a = useAutentificare({ dupaIntrare: cont.aIntrat });
+  const campCod = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (a.pas === "cod") campCod.current?.focus();
+  }, [a.pas]);
 
   if (cont.logat) {
     return (
@@ -110,13 +115,13 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
         </div>
 
         {a.pas === "date" && a.mod !== "uitata" && (
-          <div role="tablist" aria-label="Intra sau creeaza cont" className="mt-4 grid grid-cols-2 gap-1 rounded-lg bg-muted/60 p-1">
+          <div role="group" aria-label="Intra sau creeaza cont" className="mt-4 grid grid-cols-2 gap-1 rounded-lg bg-muted/60 p-1">
             {(["intrare", "inregistrare"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
-                role="tab"
-                aria-selected={a.mod === m}
+                aria-pressed={a.mod === m}
+                disabled={a.asteapta}
                 onClick={() => a.schimbaMod(m)}
                 className={`min-h-9 rounded-md px-3 text-xs font-semibold transition-colors ${
                   a.mod === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
@@ -129,7 +134,8 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
         )}
 
         {a.pas === "date" ? (
-          <form onSubmit={a.trimiteDatele} className="mt-4 space-y-3">
+          <form onSubmit={a.trimiteDatele} className="mt-4">
+            <fieldset disabled={a.asteapta} className="m-0 min-w-0 space-y-3 border-0 p-0">
             <div>
               <label htmlFor={`${uid}-email`} className="mb-1 block text-sm font-semibold text-foreground">Adresa de email</label>
               <input
@@ -166,26 +172,32 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
                   <ArrowLeft size={12} aria-hidden="true" /> Inapoi la intrare
                 </button>
               ) : (
-                <span className="text-muted-foreground">Iti confirmam adresa cu un cod pe email.</span>
+                <span className="text-muted-foreground">
+                  Iti confirmam adresa cu un cod pe email. Creand contul, esti de acord cu{" "}
+                  <Link href="/politici/termeni" target="_blank" className={LEGATURA}>termenii magazinului</Link> si ai citit{" "}
+                  <Link href="/politici/confidentialitate" target="_blank" className={LEGATURA}>politica de confidentialitate</Link>.
+                </span>
               )}
             </div>
+            </fieldset>
           </form>
         ) : (
-          <form onSubmit={a.trimiteCodul} className="mt-4 space-y-3">
+          <form onSubmit={a.trimiteCodul} className="mt-4">
+            <fieldset disabled={a.asteapta} className="m-0 min-w-0 space-y-3 border-0 p-0">
             <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
               <Mail size={14} className="mt-0.5 shrink-0 text-foreground" aria-hidden="true" />
               <span className="min-w-0">
                 {a.mesaj || "Daca adresa poate fi folosita, codul a plecat."}{" "}
-                <span className="break-all font-semibold text-foreground">{a.email}</span>
+                <span className="break-all font-semibold text-foreground">{a.emailPas}</span>
               </span>
             </p>
             <div>
               <label htmlFor={`${uid}-cod`} className="mb-1 block text-sm font-semibold text-foreground">Codul de sase cifre din email</label>
               <input
+                ref={campCod}
                 id={`${uid}-cod`}
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                maxLength={6}
                 value={a.cod}
                 onChange={(ev) => a.scrieCod(ev.target.value)}
                 className={`${CAMP} text-center text-lg tracking-[0.45em] sm:text-lg`}
@@ -196,9 +208,12 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
             {a.mod === "uitata" && (
               <CampParola id={`${uid}-parola-noua`} eticheta="Parola noua (cel putin 8 caractere)" valoare={a.parolaNoua} schimba={a.setParolaNoua} autoComplete="new-password" />
             )}
-            <label className="flex items-center gap-2 text-xs text-foreground">
-              <input type="checkbox" checked={a.tineMinte} onChange={(ev) => a.setTineMinte(ev.target.checked)} className="h-4 w-4 shrink-0" />
-              Tine minte acest dispozitiv 60 de zile
+            <label className="flex items-start gap-2 text-xs text-foreground">
+              <input type="checkbox" checked={a.tineMinte} onChange={(ev) => a.setTineMinte(ev.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Tine minte acest dispozitiv 60 de zile
+                <span className="block text-muted-foreground">Nu bifa pe un calculator folosit si de altii.</span>
+              </span>
             </label>
             {a.eroare && <p role="alert" className="text-xs text-red-500">{a.eroare}</p>}
             <button type="submit" disabled={a.asteapta || a.cod.length !== 6} className={BUTON} style={stilButon(color)}>
@@ -210,11 +225,12 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
                 <ArrowLeft size={12} aria-hidden="true" /> Inapoi
               </button>
               {a.ramas > 0 ? (
-                <span className="text-muted-foreground" aria-live="polite">Poti cere alt cod in {a.ramas} s</span>
+                <span className="text-muted-foreground">Poti cere alt cod in {a.ramas} s</span>
               ) : (
                 <button type="button" onClick={() => void a.retrimite()} disabled={a.asteapta} className={LEGATURA}>Retrimite codul</button>
               )}
             </div>
+            </fieldset>
           </form>
         )}
       </section>

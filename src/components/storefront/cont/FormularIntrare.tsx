@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, Mail } from "lucide-react";
@@ -79,17 +79,23 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
     },
   });
   const t = TITLURI[a.mod];
+  const campCod = useRef<HTMLInputElement>(null);
+  /* Butonul apasat dispare cand se schimba pasul: focusul merge pe campul codului,
+     nu ramane pe nimic (cititorul de ecran n-ar mai sti unde e omul). */
+  useEffect(() => {
+    if (a.pas === "cod") campCod.current?.focus();
+  }, [a.pas]);
 
   return (
     <div>
       {a.mod !== "uitata" && a.pas === "date" && (
-        <div role="tablist" aria-label="Intra sau creeaza cont" className="mb-6 grid grid-cols-2 gap-1 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] p-1">
+        <div role="group" aria-label="Intra sau creeaza cont" className="mb-6 grid grid-cols-2 gap-1 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] p-1">
           {(["intrare", "inregistrare"] as const).map((m) => (
             <button
               key={m}
               type="button"
-              role="tab"
-              aria-selected={a.mod === m}
+              aria-pressed={a.mod === m}
+              disabled={a.asteapta}
               onClick={() => a.schimbaMod(m)}
               className={`min-h-10 rounded-[calc(var(--st-radius-sm)-2px)] px-3 text-sm font-semibold transition-colors ${FOCUS} ${
                 a.mod === m ? "bg-[var(--st-surface)] text-[var(--st-text)] shadow-sm" : "text-[var(--st-muted)] hover:text-[var(--st-text)]"
@@ -108,23 +114,24 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
 
       {a.pas === "cod" ? (
         <form onSubmit={a.trimiteCodul} className="space-y-5">
+          <fieldset disabled={a.asteapta} className="m-0 min-w-0 space-y-5 border-0 p-0">
           <div className="flex items-start gap-3 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3">
             <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[var(--st-text)]" aria-hidden="true" />
             <div className="min-w-0 text-sm leading-relaxed text-[var(--st-text)]">
               <p>{a.mesaj || "Daca adresa poate fi folosita, codul a plecat."}</p>
               <p className="mt-0.5 text-[var(--st-muted)]">
-                Adresa: <span className="break-all font-semibold text-[var(--st-text)]">{a.email}</span>
+                Adresa: <span className="break-all font-semibold text-[var(--st-text)]">{a.emailPas}</span>
               </p>
             </div>
           </div>
           <div>
             <label htmlFor="cod" className={ETICHETA_CAMP}>Codul de sase cifre din email</label>
             <input
+              ref={campCod}
               id="cod"
               name="cod"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
               value={a.cod}
               onChange={(ev) => a.scrieCod(ev.target.value)}
               className={`${CAMP} py-3 text-center text-xl tracking-[0.5em] sm:text-xl`}
@@ -164,16 +171,18 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Inapoi
             </button>
             {a.ramas > 0 ? (
-              <span className="text-[var(--st-muted)]" aria-live="polite">Poti cere alt cod in {a.ramas} s</span>
+              <span className="text-[var(--st-muted)]">Poti cere alt cod in {a.ramas} s</span>
             ) : (
               <button type="button" onClick={() => void a.retrimite()} disabled={a.asteapta} className={LEGATURA}>
                 Retrimite codul
               </button>
             )}
           </div>
+          </fieldset>
         </form>
       ) : (
         <form onSubmit={a.trimiteDatele} className="space-y-5">
+          <fieldset disabled={a.asteapta} className="m-0 min-w-0 space-y-5 border-0 p-0">
           <div>
             <label htmlFor="email" className={ETICHETA_CAMP}>Adresa de email</label>
             <input
@@ -228,6 +237,7 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
               </button>
             </div>
           )}
+          </fieldset>
         </form>
       )}
     </div>

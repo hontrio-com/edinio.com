@@ -33,6 +33,7 @@ export default async function IntraInCont({ params, searchParams }: Props) {
           avantaje={p.intrare.avantaje}
           modInitial={mod === "inregistrare" ? "inregistrare" : "intrare"}
           dupaStergere={sters === "1" ? { cerere: cerere === "1" ? true : cerere === "0" ? false : null } : null}
+          contact={p.contact}
         />
       </StorePageShell>
     </StorefrontThemeScope>

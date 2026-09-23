@@ -20,7 +20,7 @@ export function EcranDate({ contacte, comenzi, areParola }: { contacte: Contactu
         icon={KeyRound}
         descriere="Adresele confirmate sunt cele cu care intri in cont, si felul in care comenzile tale se leaga de el."
       >
-        <GestioneazaContacte contacte={contacte} />
+        <GestioneazaContacte contacte={contacte} areParola={areParola} />
       </Sectiune>
 
       <Sectiune titlu="Parola" icon={LockKeyhole} descriere="Intri cu emailul si parola; pe un dispozitiv nou iti cerem si un cod pe email.">

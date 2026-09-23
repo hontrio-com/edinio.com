@@ -130,7 +130,11 @@ test("⚠⚠ contul nou si parola uitata raspund LA FEL, oricare ar fi adresa", 
   for (const p of ["src/app/api/cont/inregistrare/route.ts", "src/app/api/cont/parola/route.ts"]) {
     const s = citeste(p);
     assert.ok(s.includes("await pornestePas("), `${p} nu mai porneste pasul`);
-    assert.equal(/(const|let)\s+\w+\s*=\s*await pornestePas\(/.test(s), false, `${p} citeste rezultatul lui pornestePas`);
+    /* Rezultatul se poate citi NUMAI pentru plafonul pe IP, care nu spune nimic despre adresa. */
+    const folosiri = [...s.matchAll(/\br\.(\w+)/g)].map((m) => m[1]);
+    assert.ok(folosiri.every((f) => f === "motiv"), `${p} citeste din rezultat altceva decat motivul`);
+    assert.ok(s.includes("eLimitaDeIp(r.motiv)"), `${p} nu mai deosebeste plafonul pe IP`);
+    assert.ok(s.includes("inFundal: true"), `${p} asteapta emailul in raspuns (timpul ar spune cine are cont)`);
     assert.ok(s.includes("MESAJ_PARTEA_INTAI"), `${p} nu foloseste raspunsul comun`);
   }
 });
@@ -148,7 +152,7 @@ test("⚠⚠ la intrare, contul lipsa si contul blocat raspund ca o parola gresi
   const s = citeste("src/lib/cont/autentificare.ts");
   const corp = s.slice(s.indexOf("export async function intraCuParola("), s.indexOf("export async function incheieIntrarea("));
   assert.ok(corp.includes("await verificareOarba(p.parola)"), "adresa fara cont nu mai consuma aceeasi munca");
-  assert.ok(corp.includes("r.blocat ? await parolaPotrivita") || corp.includes("!r.blocat"), "blocajul nu mai trece prin aceeasi ramura");
+  assert.ok(corp.includes("&& !blocatCont"), "blocajul pe cont nu mai trece prin aceeasi ramura ca parola gresita");
   assert.equal(/mesaj:[^\n]*blocat/i.test(corp), false, "blocajul pe cont are mesaj propriu (oracol)");
   assert.equal((corp.match(/MESAJ_INTRARE_GRESITA/g) ?? []).length, 1, "mai multe feluri de refuz inainte de parola");
 });
@@ -212,7 +216,11 @@ test("IP-ul ajunge in baza numai cand e un IP", () => {
   assert.equal(ipPentruBaza(null), null);
   assert.equal(ipPentruBaza("1.2.3.4, 5.6.7.8"), null);
   assert.equal(ipPentruBaza(" 1.2.3.4 "), "1.2.3.4");
-  assert.equal(ipPentruBaza("2a02:2f0e::1"), "2a02:2f0e::1");
+  /* IPv6 pe retea: doua adrese din acelasi /64 dau aceeasi cheie. */
+  assert.equal(ipPentruBaza("2a02:2f0e::1"), "2a02:2f0e:0:0::/64");
+  assert.equal(ipPentruBaza("2a02:2f0e:0:0:ffff::9"), ipPentruBaza("2a02:2f0e::1"));
+  assert.notEqual(ipPentruBaza("2a02:2f0e:0:1::1"), ipPentruBaza("2a02:2f0e::1"));
+  assert.equal(ipPentruBaza("::ffff:1.2.3.4"), "1.2.3.4");
   for (const p of fisiereDin("src/lib/cont", [".ts"])) {
     assert.equal(citeste(p).includes("ip === \"necunoscut\""), false, `${p} compara IP-ul cu un sir pe care clientIp nu-l intoarce`);
   }
@@ -225,4 +233,66 @@ test("codul la intrare: implicit pe dispozitiv nou, si numai cele doua valori", 
   assert.equal(curataContClientConfig({ enabled: true, verificare_intrare: "mereu" }).verificare_intrare, "mereu");
   assert.equal(curataContClientConfig({ enabled: true, verificare_intrare: "niciodata" }).verificare_intrare, "dispozitiv_nou");
   assert.equal(curataContClientConfig({ enabled: true, verificare_intrare: 1 }).verificare_intrare, "dispozitiv_nou");
+});
+
+/* ═══ Intarite dupa verificarea din 24.09.2026 ═══ */
+
+test("⚠⚠ resetarea pe o adresa FARA cont lasa un rand-momeala, dupa plafoane", () => {
+  /*
+    Fara el, codul pasului doi raspundea „a expirat" in loc de „gresit", iar
+    retrimiterea spunea „pasul a expirat": oricine afla ce adrese au cont.
+  */
+  const cere = ultimaDefinitie("public.cont_cere_cod");
+  const momeala = cere.indexOf("'momeala:' || gen_random_uuid()");
+  assert.ok(momeala > 0, "randul-momeala lipseste");
+  assert.ok(cere.indexOf("'buget-epuizat'") < momeala, "momeala se scrie inaintea plafoanelor (le-ar ocoli)");
+});
+
+test("⚠⚠ numaratorile si scrierile stau sub aceeasi incuietoare pe destinatie", () => {
+  for (const f of ["public.cont_cere_cod", "public.cont_verifica_provocare", "public.cont_verifica_cod"]) {
+    assert.ok(ultimaDefinitie(f).includes("pg_advisory_xact_lock(hashtextextended(p_business::text"), `${f} numara fara incuietoare`);
+  }
+});
+
+test("⚠⚠ zece incercari pe zi pe adresa, peste toate provocarile ei", () => {
+  const v = ultimaDefinitie("public.cont_verifica_provocare");
+  assert.ok(v.includes("interval '24 hours'") && v.includes("if v_zi >= 10 then"), "plafonul zilnic pe adresa lipseste");
+});
+
+test("⚠⚠ codurile pasului doi se numara separat si nu le opreste plafonul zilnic", () => {
+  const cere = ultimaDefinitie("public.cont_cere_cod");
+  assert.ok(cere.includes("((x.scop = 'doi-pasi') = (p_scop = 'doi-pasi'))"), "un strain poate bloca pasul doi cerand coduri");
+  assert.ok(cere.includes("if p_scop <> 'doi-pasi' then"), "plafonul zilnic opreste si pasul doi");
+});
+
+test("⚠⚠ orice schimbare de parola inchide codurile inca vii ale contului", () => {
+  /* Numarat pe forma, nu pe spatii: cele doua locuri din verificare au alta indentare. */
+  const inchide = /update privat\.cont_cod c\s+set folosit_la = now\(\)\s+where c\.business_id = p_business and c\.folosit_la is null\s+and \(c\.cont_id = /g;
+  assert.equal((ultimaDefinitie("public.cont_schimba_parola").match(inchide) ?? []).length, 1, "schimbarea din cont lasa coduri vii");
+  const v = ultimaDefinitie("public.cont_verifica_provocare");
+  /* De doua ori: la contul nou pe o adresa cu cont si la resetare. */
+  assert.equal((v.match(inchide) ?? []).length, 2, "o parola setata prin cod lasa coduri vii");
+  assert.ok(v.includes("c.parola_schimbata_la <= ("), "pasul doi nu mai verifica parola schimbata intre timp");
+});
+
+test("⚠ codul vechi nu mai poate crea conturi fara parola", () => {
+  const v = ultimaDefinitie("public.cont_verifica_cod");
+  assert.ok(v.includes("p_scop is distinct from 'adaugare-contact' or p_cont is null"));
+  assert.equal(v.includes("insert into privat.cont_cumparator"), false, "ramura veche de intrare a revenit");
+});
+
+test("⚠ scrypt ruleaza abia dupa plafonul pe IP si dupa provocare", () => {
+  const inreg = citeste("src/app/api/cont/inregistrare/route.ts");
+  assert.ok(inreg.indexOf("permisDeCalcul(") > 0 && inreg.indexOf("permisDeCalcul(") < inreg.indexOf("amprentaParolei("));
+  const pas = citeste("src/app/api/cont/pas/route.ts");
+  const provocare = pas.indexOf("await arePas()");
+  assert.ok(provocare > 0 && provocare < pas.indexOf("amprentaParolei("), "parola se amprenteaza fara provocare");
+  assert.ok(pas.indexOf("permisDeCalcul(") < pas.indexOf("amprentaParolei("));
+});
+
+test("⚠⚠ o adresa noua in cont cere parola contului", () => {
+  const s2 = citeste("src/app/api/cont/contact/route.ts");
+  const corp = s2.slice(s2.indexOf("if (actiune === \"cere-cod\")"), s2.indexOf("if (actiune === \"confirma\")"));
+  const parola = corp.indexOf("parolaPotrivita(");
+  assert.ok(parola > 0 && parola < corp.indexOf("await cereCod("), "codul pentru adresa noua pleaca fara parola");
 });

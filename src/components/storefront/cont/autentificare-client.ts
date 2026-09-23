@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LUNGIME_MINIMA } from "@/lib/cont/parola-reguli";
 
 /**
@@ -14,6 +14,13 @@ import { LUNGIME_MINIMA } from "@/lib/cont/parola-reguli";
  *
  * ⚠ Mesajele de la server pentru contul nou si pentru resetare sunt ACELEASI si
  * cand adresa are cont, si cand nu are. Formularul nu incearca sa ghiceasca nimic.
+ *
+ * ⚠⚠ UN RASPUNS VENIT DUPA O SCHIMBARE SE ARUNCA. Fiecare cerere poarta
+ * „generatia" formularului; schimbarea filei, „Inapoi" sau „Ai uitat parola?"
+ * o ridica. Fara asta, raspunsul unei intrari (un cod de pas doi) ateriza peste
+ * ecranul de resetare: omul vedea „Parola noua", intra, si credea ca a schimbat
+ * parola. Iar pasul codului arata adresa CU CARE s-a cerut codul, nu ce s-a
+ * scris intre timp in camp.
  *
  * ⚠ „Retrimite codul" asteapta un minut; plafoanele adevarate stau in baza.
  */
@@ -47,14 +54,18 @@ export function useAutentificare({
   const [mod, setMod] = useState<ModAutentificare>(modInitial);
   const [pas, setPas] = useState<"date" | "cod">("date");
   const [email, setEmail] = useState("");
+  /** Adresa pe care a plecat codul: pasul al doilea o arata si o foloseste pe ea. */
+  const [emailPas, setEmailPas] = useState("");
   const [parola, setParola] = useState("");
   const [parolaNoua, setParolaNoua] = useState("");
   const [cod, setCod] = useState("");
-  const [tineMinte, setTineMinte] = useState(true);
+  /* ⚠ Nebifat: pe un calculator al altcuiva, o bifa uitata ar fi lasat contul fara pasul doi. */
+  const [tineMinte, setTineMinte] = useState(false);
   const [mesaj, setMesaj] = useState("");
   const [eroare, setEroare] = useState("");
   const [asteapta, setAsteapta] = useState(false);
   const [ramas, setRamas] = useState(0);
+  const generatie = useRef(0);
 
   useEffect(() => {
     if (ramas <= 0) return;
@@ -63,6 +74,7 @@ export function useAutentificare({
   }, [ramas]);
 
   function schimbaMod(m: ModAutentificare) {
+    generatie.current++;
     setMod(m);
     setPas("date");
     setCod("");
@@ -70,9 +82,18 @@ export function useAutentificare({
     setParolaNoua("");
     setEroare("");
     setMesaj("");
+    setAsteapta(false);
   }
 
-  function laPasulCodului(m: unknown) {
+  function inapoi() {
+    generatie.current++;
+    setPas("date");
+    setCod("");
+    setAsteapta(false);
+  }
+
+  function laPasulCodului(m: unknown, adresa: string) {
+    setEmailPas(adresa);
     setMesaj(text(m, ""));
     setCod("");
     setPas("cod");
@@ -87,26 +108,33 @@ export function useAutentificare({
       setEroare(`Parola trebuie sa aiba cel putin ${LUNGIME_MINIMA} caractere.`);
       return;
     }
+    const gen = generatie.current;
+    const adresa = email.trim();
+    let reusit = false;
     setAsteapta(true);
     try {
       if (mod === "intrare") {
-        const { ok, j } = await trimite("/api/cont/intra", { email, parola });
-        if (!ok) setEroare(text(j.eroare, "Nu am putut deschide contul."));
-        else if (j.pas === "cod") laPasulCodului(j.mesaj);
-        else dupaIntrare(email.trim());
-      } else if (mod === "inregistrare") {
-        const { ok, j } = await trimite("/api/cont/inregistrare", { email, parola });
-        if (!ok) setEroare(text(j.eroare, "Nu am putut trimite codul."));
-        else laPasulCodului(j.mesaj);
+        const { ok, j } = await trimite("/api/cont/intra", { email: adresa, parola });
+        if (gen !== generatie.current) return;
+        if (ok && j.ok === true) {
+          reusit = true;
+          dupaIntrare(adresa);
+        } else if (ok && j.pas === "cod") laPasulCodului(j.mesaj, adresa);
+        else setEroare(text(j.eroare, "Nu am putut deschide contul."));
       } else {
-        const { ok, j } = await trimite("/api/cont/parola", { actiune: "uitata", email });
-        if (!ok) setEroare(text(j.eroare, "Nu am putut trimite codul."));
-        else laPasulCodului(j.mesaj);
+        const { ok, j } = mod === "inregistrare"
+          ? await trimite("/api/cont/inregistrare", { email: adresa, parola })
+          : await trimite("/api/cont/parola", { actiune: "uitata", email: adresa });
+        if (gen !== generatie.current) return;
+        if (ok && j.pas === "cod") laPasulCodului(j.mesaj, adresa);
+        else setEroare(text(j.eroare, "Nu am putut trimite codul."));
       }
     } catch {
-      setEroare("Nu am putut trimite cererea. Verifica legatura la internet.");
+      if (gen === generatie.current) setEroare("Nu am putut trimite cererea. Verifica legatura la internet.");
     } finally {
-      setAsteapta(false);
+      /* ⚠ Dupa reusita butonul ramane oprit: pagina pleaca, iar o a doua apasare ar
+         fi trimis inca o cerere fara provocare. */
+      if (gen === generatie.current && !reusit) setAsteapta(false);
     }
   }
 
@@ -118,6 +146,8 @@ export function useAutentificare({
       setEroare(`Parola noua trebuie sa aiba cel putin ${LUNGIME_MINIMA} caractere.`);
       return;
     }
+    const gen = generatie.current;
+    let reusit = false;
     setAsteapta(true);
     try {
       const { ok, j } = await trimite("/api/cont/pas", {
@@ -126,30 +156,40 @@ export function useAutentificare({
         tineMinte,
         ...(mod === "uitata" ? { parola: parolaNoua } : {}),
       });
-      if (!ok) setEroare(text(j.eroare, "Nu am putut verifica codul."));
-      else dupaIntrare(email.trim());
+      if (gen !== generatie.current) return;
+      if (ok && j.ok === true) {
+        reusit = true;
+        dupaIntrare(emailPas);
+      } else if (j.expirat === true) {
+        inapoi();
+        setEroare(text(j.eroare, "Pasul a expirat. Reia de la inceput."));
+      } else setEroare(text(j.eroare, "Nu am putut verifica codul."));
     } catch {
-      setEroare("Nu am putut verifica codul. Verifica legatura la internet.");
+      if (gen === generatie.current) setEroare("Nu am putut verifica codul. Verifica legatura la internet.");
     } finally {
-      setAsteapta(false);
+      if (gen === generatie.current && !reusit) setAsteapta(false);
     }
   }
 
   async function retrimite() {
     if (asteapta || ramas > 0) return;
     setEroare("");
+    const gen = generatie.current;
     setAsteapta(true);
     try {
       const { ok, j } = await trimite("/api/cont/pas", { actiune: "retrimite" });
-      if (!ok) setEroare(text(j.eroare, "Nu am putut trimite alt cod."));
-      else {
+      if (gen !== generatie.current) return;
+      if (ok) {
         setMesaj(text(j.mesaj, ""));
         setRamas(ASTEPTARE_RETRIMITERE);
-      }
+      } else if (j.expirat === true) {
+        inapoi();
+        setEroare(text(j.eroare, "Pasul a expirat. Reia de la inceput."));
+      } else setEroare(text(j.eroare, "Nu am putut trimite alt cod."));
     } catch {
-      setEroare("Nu am putut trimite alt cod. Verifica legatura la internet.");
+      if (gen === generatie.current) setEroare("Nu am putut trimite alt cod. Verifica legatura la internet.");
     } finally {
-      setAsteapta(false);
+      if (gen === generatie.current) setAsteapta(false);
     }
   }
 
@@ -158,12 +198,13 @@ export function useAutentificare({
     pas,
     email,
     setEmail,
+    emailPas,
     parola,
     setParola,
     parolaNoua,
     setParolaNoua,
     cod,
-    /** Numai cifre: tastatura numerica de pe telefon mai strecoara spatii. */
+    /** Numai cifre, taiat la sase: un cod lipit ca „123 456" ramane intreg. */
     scrieCod: (v: string) => setCod(v.replace(/\D/g, "").slice(0, 6)),
     tineMinte,
     setTineMinte,
@@ -173,8 +214,7 @@ export function useAutentificare({
     ramas,
     schimbaMod,
     inapoi: () => {
-      setPas("date");
-      setCod("");
+      inapoi();
       setEroare("");
     },
     trimiteDatele,

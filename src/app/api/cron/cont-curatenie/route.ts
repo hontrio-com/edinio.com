@@ -23,7 +23,8 @@ import { logError } from "@/lib/error-logger";
  *   - instiintari deja trimise, mai vechi de 30 de zile;
  *   - dispozitivele de incredere expirate.
  *
- * ⚠ NU atinge conturile sterse: acelea raman doua ani, ca sa se poata raspunde
+ * ⚠ NU atinge randurile conturilor sterse: raman GOALE (fara contacte, parola,
+ * sesiuni sau jurnal), numai cu data stergerii, ca sa se poata raspunde
  * la „de ce nu mai pot intra", si fiindca randul e deja golit de date.
  *
  * ⚠ Cronul isi scrie urma in raspuns, si esecul ajunge in `error_logs`: cinci

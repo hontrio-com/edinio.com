@@ -1,9 +1,10 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { logError } from "@/lib/error-logger";
 import { MESAJ_CONT_NECESAR, curataContClientConfig } from "./config";
 import { sesiuneCurenta } from "./sesiune";
+import { COOKIE_CONT } from "./jeton";
 
 /**
  * Poarta contului la plasarea unei comenzi de vitrina, si contul de care se leaga.
@@ -19,6 +20,9 @@ import { sesiuneCurenta } from "./sesiune";
  * ⚠⚠ CADE DESCHIS acolo unde un „nu" ar opri vanzarile fara vina cumparatorului:
  *   - domeniul propriu e masurat CAZUT: vitrina se serveste atunci pe
  *     `www.edinio.com`, unde contul nu poate exista;
+ *   - magazinul nu mai are domeniu propriu (deconectat), cu setarea ramasa pe
+ *     obligatoriu: acelasi lucru, vitrina merge pe `www.edinio.com`;
+ *   - randul magazinului nu se poate citi (o pana a bazei);
  *   - bugetul zilnic de coduri pe email e epuizat: un strain l-ar putea arde de
  *     pe cateva IP-uri si ar fi oprit toate comenzile magazinului.
  * In ambele cazuri comanda merge ca vizitator si se scrie un avertisment.
@@ -41,46 +45,66 @@ export async function poartaContuluiLaComanda(p: {
    */
   jurnal?: boolean;
 }): Promise<RezultatPoarta> {
-  const jurnal = p.jurnal !== false;
   const cfg = curataContClientConfig(p.config);
   if (!cfg.enabled) return { ok: true, contId: null };
 
+  /*
+    ⚠ Cont OPTIONAL si niciun cookie de cont: nu e nimic de cerut si nimic de
+    legat, deci nicio cerere in plus pe drumul comenzii.
+  */
+  if (!cfg.obligatoriu && !(await cookies()).get(COOKIE_CONT)?.value) {
+    return { ok: true, contId: null };
+  }
+
+  const avertizeaza = async (message: string) => {
+    if (p.jurnal === false) return;
+    await logError({ action: "cont/poarta-comenzii", message, businessId: p.businessId, severity: "warning" });
+  };
+
   const admin = createAdminClient();
-  const { data: biz } = await admin
+  const { data: biz, error: eroareMagazin } = await admin
     .from("businesses")
     .select("custom_domain, custom_domain_healthy")
     .eq("id", p.businessId)
     .maybeSingle();
+  if (eroareMagazin) {
+    /* ⚠ Fara randul magazinului nu se poate judeca originea; o pana a bazei nu
+       are voie sa opreasca vanzarile. */
+    await avertizeaza(`domeniul magazinului nu s-a putut citi, comanda merge ca vizitator: ${eroareMagazin.message}`);
+    return { ok: true, contId: null };
+  }
   const domeniu = biz?.custom_domain ?? null;
   const host = (await headers()).get("host");
 
   if (!esteDomeniulPropriu(host, domeniu)) {
     if (!cfg.obligatoriu) return { ok: true, contId: null };
-    if (biz?.custom_domain_healthy === false) {
-      if (jurnal) await logError({
-        action: "cont/poarta-comenzii",
-        message: "cont obligatoriu, dar domeniul e cazut: comanda merge ca vizitator",
-        businessId: p.businessId,
-        severity: "warning",
-      });
+    /*
+      ⚠⚠ Fara domeniu (deconectat din Setari, ori setarea scrisa direct) sau cu el
+      masurat cazut: vitrina se serveste pe `www.edinio.com`, unde contul nu exista
+      si formularul nu arata niciun pas de intrare. Un refuz aici ar fi oprit TOATE
+      vanzarile magazinului; comanda merge ca vizitator si se scrie un avertisment.
+    */
+    if (!domeniu || biz?.custom_domain_healthy === false) {
+      await avertizeaza(!domeniu
+        ? "cont obligatoriu, dar magazinul nu are domeniu propriu: comanda merge ca vizitator"
+        : "cont obligatoriu, dar domeniul e cazut: comanda merge ca vizitator");
       return { ok: true, contId: null };
     }
-    /* Vitrina nu se serveste legitim pe alta gazda cand domeniul e sanatos (307). */
+    /* Domeniul e sanatos: vitrina nu se serveste legitim pe alta gazda (307). */
     return {
       ok: false,
       contNecesar: false,
-      mesaj: domeniu
-        ? `Comenzile se trimit de pe ${domeniu}. Deschide magazinul acolo ca sa comanzi.`
-        : "Magazinul primeste comenzi doar de pe domeniul lui.",
+      mesaj: `Comenzile se trimit de pe ${domeniu}. Deschide magazinul acolo ca sa comanzi.`,
     };
   }
 
   let contId: string | null = null;
   try {
     contId = (await sesiuneCurenta(p.businessId))?.contId ?? null;
-  } catch {
+  } catch (e) {
     /* ⚠ `sesiuneCurenta` arunca la o pana de baza. Aici nu are voie: formularul ar fi
        spus „nu stim daca s-a inregistrat comanda". */
+    await avertizeaza(`sesiunea contului nu s-a putut verifica: ${String(e)}`);
     if (cfg.obligatoriu) {
       return { ok: false, contNecesar: false, mesaj: "Nu am putut verifica contul. Incearca din nou in cateva momente." };
     }
@@ -89,14 +113,10 @@ export async function poartaContuluiLaComanda(p: {
 
   if (contId || !cfg.obligatoriu) return { ok: true, contId };
 
-  const { data: epuizat } = await admin.rpc("cont_buget_email_epuizat", { p_business: p.businessId });
+  const { data: epuizat, error: eroareBuget } = await admin.rpc("cont_buget_email_epuizat", { p_business: p.businessId });
+  if (eroareBuget) await avertizeaza(`plafonul de coduri nu s-a putut citi: ${eroareBuget.message}`);
   if (epuizat === true) {
-    if (jurnal) await logError({
-      action: "cont/poarta-comenzii",
-      message: "cont obligatoriu, dar plafonul zilnic de coduri e epuizat: comanda merge ca vizitator",
-      businessId: p.businessId,
-      severity: "warning",
-    });
+    await avertizeaza("cont obligatoriu, dar plafonul zilnic de coduri e epuizat: comanda merge ca vizitator");
     return { ok: true, contId: null };
   }
 

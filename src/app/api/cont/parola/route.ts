@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import {
-  anuntaParolaSchimbata, ipPentruBaza, MESAJ_PARTEA_INTAI, MESAJ_PREA_MULTE, pornestePas, tineMinteDispozitivul,
+  anuntaParolaSchimbata, dispozitivCunoscut, eLimitaDeIp, ipPentruBaza, MESAJ_PARTEA_INTAI, MESAJ_PREA_MULTE,
+  permisDeCalcul, pornestePas, tineMinteDispozitivul,
 } from "@/lib/cont/autentificare";
 import { amprentaParolei, parolaPotrivita, problemaParolei, verificareOarba } from "@/lib/cont/parola";
 import { deschideSesiune, sesiuneCurenta } from "@/lib/cont/sesiune";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { clientIp } from "@/lib/utils/rate-limit";
-import { vineDePeMagazin } from "@/lib/cont/cerere";
+import { adresaEmailValida, vineDePeMagazin } from "@/lib/cont/cerere";
 
 /**
  * Parola contului.
  *
  *   `{ actiune: "uitata", email }`: porneste resetarea (codul, apoi parola noua
- *   prin `/api/cont/pas`). ⚠ ACELASI raspuns si pentru o adresa fara cont.
+ *   prin `/api/cont/pas`). ⚠ ACELASI raspuns si pentru o adresa fara cont (baza
+ *   scrie atunci un rand-momeala), iar emailul pleaca dupa raspuns.
  *   `{ actiune: "schimba", parolaVeche?, parolaNoua }`: din cont, cu sesiune.
  *   Parola veche se cere cand exista; un cont facut inainte de parole (numai pe
  *   demo) isi poate seta una direct.
  *
  * ⚠ Schimbarea scoate din cont TOATE celelalte dispozitive (epoca urca in baza)
- * si deschide pe loc o sesiune noua aici, ca omul sa ramana inauntru.
+ * si deschide pe loc o sesiune noua aici, ca omul sa ramana inauntru. Browserul
+ * de aici ramane „de incredere" NUMAI daca era si inainte.
  * ⚠ Parolele nu ajung in `logError`.
  */
 export async function POST(req: NextRequest) {
@@ -41,9 +44,11 @@ export async function POST(req: NextRequest) {
 
   if (corp?.actiune === "uitata") {
     const email = typeof corp?.email === "string" ? corp.email.trim() : "";
-    if (!email.includes("@")) return NextResponse.json({ eroare: "Scrie adresa de email a contului." }, { status: 400 });
+    if (!adresaEmailValida(email)) return NextResponse.json({ eroare: "Scrie adresa de email a contului." }, { status: 400 });
     try {
-      await pornestePas({ magazin, scop: "resetare-parola", email, ip });
+      const r = await pornestePas({ magazin, scop: "resetare-parola", email, ip, inFundal: true });
+      /* ⚠ Numai plafonul pe IP se spune; orice alt motiv raspunde ca o reusita. */
+      if (eLimitaDeIp(r.motiv)) return NextResponse.json({ eroare: MESAJ_PREA_MULTE }, { status: 429 });
     } catch (e) {
       await logError({ action: "cont/parola", message: `resetarea nu a pornit: ${String(e)}`, businessId: magazin.id, severity: "error" });
       return NextResponse.json({ eroare: "Nu am putut trimite codul. Incearca din nou." }, { status: 500 });
@@ -57,6 +62,7 @@ export async function POST(req: NextRequest) {
 
   const s = await sesiuneCurenta(magazin.id).catch(() => null);
   if (!s) return new NextResponse("Not found", { status: 404 });
+  if (!(await permisDeCalcul(ip))) return NextResponse.json({ eroare: MESAJ_PREA_MULTE }, { status: 429 });
 
   try {
     const admin = createAdminClient();
@@ -65,12 +71,15 @@ export async function POST(req: NextRequest) {
     const cont = Array.isArray(data) ? data[0] : data;
     if (!cont) return new NextResponse("Not found", { status: 404 });
 
+    const eraDeIncredere = await dispozitivCunoscut(magazin.id, s.contId);
+
     if (cont.are_parola) {
       /* Acelasi plafon ca la intrare: altfel ruta asta ar fi fost o usa de ghicit parole. */
       const { data: st } = await admin.rpc("cont_parola_pentru_intrare", {
         p_business: magazin.id, p_email: cont.email ?? "", p_ip: ipPentruBaza(ip),
       });
-      const blocat = (Array.isArray(st) ? st[0] : st)?.blocat === true;
+      const rand = Array.isArray(st) ? st[0] : st;
+      const blocat = rand?.blocat_ip === true || rand?.blocat_cont === true;
       const veche = typeof corp?.parolaVeche === "string" ? corp.parolaVeche : "";
       const buna = blocat ? await verificareOarba(veche) : await parolaPotrivita(veche, cont.parola_hash);
       if (!buna) {
@@ -93,7 +102,7 @@ export async function POST(req: NextRequest) {
 
     /* Epoca a urcat: sesiunea de acum a cazut si ea. Se deschide alta, aici. */
     await deschideSesiune(magazin.id, s.contId, ipPentruBaza(ip));
-    await tineMinteDispozitivul(magazin.id, s.contId);
+    if (eraDeIncredere) await tineMinteDispozitivul(magazin.id, s.contId);
     await anuntaParolaSchimbata(magazin, s.contId);
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e) {

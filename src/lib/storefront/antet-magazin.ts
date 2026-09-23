@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logError } from "@/lib/error-logger";
 
 /**
  * Datele de antet ale magazinului, citite O SINGURA DATA pe randare.
@@ -19,7 +20,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * credentiale la fiecare vizita pe un magazin public, degeaba.
  */
 export const incarcaAntetMagazin = cache(async (slug: string) => {
-  const { data } = await createAdminClient()
+  const admin = createAdminClient();
+  const { data, error } = await admin
     .from("businesses")
     // Un singur literal, NU concatenare: supabase-js deduce tipul randului din
     // textul lui `select`, iar un sir compus ii scapa si intoarce `GenericStringError`.
@@ -29,7 +31,28 @@ export const incarcaAntetMagazin = cache(async (slug: string) => {
     .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config, cont_client_config)")
     .eq("slug", slug)
     .maybeSingle();
-  return data;
+  if (!error) return data;
+
+  /*
+    ⚠⚠ O EROARE AICI ERA TACUTA si facea din FIECARE vitrina un 404: randul venea
+    `null`, iar paginile cheama `notFound()`. Cel mai la indemana drum spre ea e o
+    coloana ceruta si inca inexistenta (`cont_client_config`, daca vreodata codul
+    pleaca inaintea migratiilor), fiindca o coloana lipsa rupe TOATA interogarea.
+    Se scrie in jurnal si se incearca o data fara setarile optionale ale
+    conturilor: vitrina merge mai departe, cu conturile stinse.
+  */
+  await logError({
+    action: "storefront/antet",
+    message: `antetul magazinului nu s-a putut citi: ${error.message}`,
+    details: { slug, code: error.code },
+    severity: "error",
+  });
+  const { data: rezerva } = await admin
+    .from("businesses")
+    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config)")
+    .eq("slug", slug)
+    .maybeSingle();
+  return rezerva as typeof data;
 });
 
 /** `store_settings` vine ca obiect sau ca tablou, dupa cum decide PostgREST. */

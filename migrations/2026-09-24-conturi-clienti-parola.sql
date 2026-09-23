@@ -28,9 +28,26 @@
 --  5. Plafoanele parolei stau in baza: 5 greseli in 15 minute pe cont, 20 pe IP
 --     la acelasi magazin. Contorul pe cont porneste de la ultima intrare reusita
 --     sau de la ultima schimbare a parolei.
---  6. `cont_sterge` goleste si parola, dispozitivele si sesiunile; curatenia
---     sterge si sesiunile expirate de care nu s-a atins nimeni (pastrau IP-ul pe
---     veci: se stergeau numai cele INCHEIATE).
+--  6. `cont_sterge` goleste si parola, dispozitivele, sesiunile, jurnalul si
+--     codurile de pe adresele contului; curatenia sterge si sesiunile expirate de
+--     care nu s-a atins nimeni (pastrau IP-ul pe veci: se stergeau numai cele
+--     INCHEIATE).
+--
+-- Intarite dupa verificarea din 24.09.2026 (patru recenzenti independenti):
+--  7. FARA ORACOL la resetare: pentru o adresa fara cont se scrie un rand-
+--     MOMEALA (cod pe care nu-l potriveste nimic), deci verificarea raspunde
+--     „gresit", iar retrimiterea merge, exact ca la o adresa cu cont.
+--  8. Codurile pasului doi se numara SEPARAT de cele pe care le poate cere
+--     oricine (cont nou, resetare), si nu le opreste plafonul zilnic: altfel un
+--     strain care cere coduri pe adresa omului i-ar fi blocat intrarea.
+--  9. Ghicitul codului: pe langa cinci incercari pe provocare, ZECE pe zi pe
+--     adresa; numaratoarea si scrierea sub o incuietoare pe destinatie
+--     (`pg_advisory_xact_lock`), si la cerere, si la verificare.
+-- 10. Orice schimbare de parola inchide codurile inca vii ale contului.
+-- 11. Blocajul pe IP si cel pe cont vin separat, ca intrarea de pe un dispozitiv
+--     de incredere sa nu poata fi tinuta afara de un strain.
+-- 12. `cont_verifica_cod` pierde ramura de intrare numai cu cod (crea conturi
+--     fara parola); ramane numai adaugarea unei adrese dintr-un cont deschis.
 
 -- ═══ 1. Coloanele ═════════════════════════════════════════════════════════
 
@@ -132,10 +149,15 @@ language plpgsql security definer set search_path = '' as $$
 declare
   v_dest text; v_vii integer; v_cate integer; v_buget integer; v_azi integer;
   v_cont uuid := p_cont;
+  v_existent boolean := false;
 begin
   /* ⚠⚠ Intrarea numai cu cod e INCHISA: cu parole, ar fi ocolit parola. */
   if p_scop is null or p_scop not in ('adaugare-contact', 'inregistrare', 'resetare-parola', 'doi-pasi') then
     return query select false, 'scop-inchis', null::text;
+    return;
+  end if;
+  if p_scop = 'adaugare-contact' and p_cont is null then
+    return query select false, 'alt-cont', null::text;
     return;
   end if;
   if p_scop <> 'adaugare-contact' and (p_provocare_hash is null or p_fel <> 'email') then
@@ -148,10 +170,21 @@ begin
   end if;
 
   v_dest := privat.cont_normalizeaza(p_fel, p_destinatie_bruta);
-  if v_dest is null then
+  /* ⚠ Aceeasi forma ca `cont_cod_destinatie_are_forma`: altfel insertul ar fi
+     aruncat, iar ruta ar fi raspuns 500 in loc de un refuz. */
+  if v_dest is null
+     or (p_fel = 'email' and (v_dest !~ '^[^@[:space:],;<>"\\]+@[^@[:space:],;<>"\\]+\.[a-z]{2,}$' or length(v_dest) > 254))
+     or (p_fel = 'telefon' and length(v_dest) < 9) then
     return query select false, 'contact-nevalid', null::text;
     return;
   end if;
+
+  /*
+    ⚠⚠ PLAFOANELE SE NUMARA SI CODUL SE SCRIE SUB ACEEASI INCUIETOARE, pe
+    destinatie. Fara ea, cereri trimise deodata treceau toate de numaratoare
+    inainte ca vreuna sa scrie.
+  */
+  perform pg_advisory_xact_lock(hashtextextended(p_business::text || ':' || p_fel || ':' || v_dest, 0));
 
   if exists (
     select 1 from privat.cont_contact_blocat x
@@ -163,8 +196,10 @@ begin
   end if;
 
   /*
-    ⚠ Resetarea se trimite numai unui cont viu cu adresa asta. Pentru o adresa
-    necunoscuta nu pleaca nimic, iar ruta raspunde ACELASI lucru (fara oracol).
+    ⚠ Resetarea: contul se cauta ACUM, dar lipsa lui nu iese inca; iese abia dupa
+    plafoane, cu un rand-momeala, ca adresa fara cont sa arate din afara exact ca
+    una cu cont (aceleasi plafoane, un cod „viu", aceleasi raspunsuri la verificare
+    si la retrimitere).
     ⚠ Al doilea pas se trimite numai pe o adresa a CHIAR contului care a trecut
     de parola.
   */
@@ -174,10 +209,6 @@ begin
       join privat.cont_cumparator c on c.id = k.cont_id and c.business_id = k.business_id
      where k.business_id = p_business and k.fel = p_fel and k.valoare = v_dest
        and c.sters_la is null;
-    if v_cont is null then
-      return query select false, 'fara-cont', v_dest;
-      return;
-    end if;
   elsif p_scop = 'doi-pasi' then
     if p_cont is null or not exists (
       select 1 from privat.cont_contact k
@@ -190,6 +221,11 @@ begin
     end if;
   elsif p_scop = 'inregistrare' then
     v_cont := null;
+    v_existent := exists (
+      select 1 from privat.cont_contact k
+        join privat.cont_cumparator c on c.id = k.cont_id and c.business_id = k.business_id
+       where k.business_id = p_business and k.fel = p_fel and k.valoare = v_dest and c.sters_la is null
+    );
   end if;
 
   if p_ip is not null then
@@ -212,26 +248,45 @@ begin
     return;
   end if;
 
+  /*
+    ⚠⚠ Codurile pasului doi se numara SEPARAT de cele cerute de oricine (cont nou,
+    resetare): altfel un strain care cere coduri pe adresa omului i-ar fi blocat
+    intrarea, desi pasul doi se deschide numai cu parola lui.
+  */
   select count(*) into v_cate
     from privat.cont_cod x
    where x.business_id = p_business and x.fel = p_fel and x.destinatie = v_dest
+     and ((x.scop = 'doi-pasi') = (p_scop = 'doi-pasi'))
      and x.creat_la > now() - interval '15 minutes';
   if v_cate >= 4 then
     return query select false, 'prea-multe', v_dest;
     return;
   end if;
 
-  select coalesce((st.cont_client_config->>(case when p_fel = 'telefon' then 'buget_sms_zilnic' else 'buget_email_zilnic' end))::integer,
-                  case when p_fel = 'telefon' then 100 else 300 end)
-    into v_buget
-    from privat.store_settings st where st.business_id = p_business;
+  /* ⚠ Tot de aceea, plafonul zilnic al magazinului nu opreste pasul doi. */
+  if p_scop <> 'doi-pasi' then
+    select coalesce((st.cont_client_config->>(case when p_fel = 'telefon' then 'buget_sms_zilnic' else 'buget_email_zilnic' end))::integer,
+                    case when p_fel = 'telefon' then 100 else 300 end)
+      into v_buget
+      from privat.store_settings st where st.business_id = p_business;
 
-  select count(*) into v_azi
-    from privat.cont_cod x
-   where x.business_id = p_business and x.fel = p_fel
-     and x.creat_la >= privat.cont_inceputul_zilei();
-  if v_azi >= coalesce(v_buget, case when p_fel = 'telefon' then 100 else 300 end) then
-    return query select false, 'buget-epuizat', v_dest;
+    select count(*) into v_azi
+      from privat.cont_cod x
+     where x.business_id = p_business and x.fel = p_fel
+       and x.creat_la >= privat.cont_inceputul_zilei();
+    if v_azi >= coalesce(v_buget, case when p_fel = 'telefon' then 100 else 300 end) then
+      return query select false, 'buget-epuizat', v_dest;
+      return;
+    end if;
+  end if;
+
+  /* Resetare pe o adresa fara cont: un rand-momeala, cu un cod pe care nu-l poate
+     potrivi nimic (nu e amprenta unui cod de sase cifre), si nimic nu pleaca. */
+  if p_scop = 'resetare-parola' and v_cont is null then
+    insert into privat.cont_cod (business_id, cont_id, scop, fel, destinatie, cod_hash, expira_la, ip, provocare_hash)
+    values (p_business, null, p_scop, p_fel, v_dest, 'momeala:' || gen_random_uuid()::text,
+            now() + make_interval(mins => greatest(1, least(60, p_minute))), p_ip, p_provocare_hash);
+    return query select false, 'fara-cont', v_dest;
     return;
   end if;
 
@@ -240,7 +295,8 @@ begin
           now() + make_interval(mins => greatest(1, least(60, p_minute))), p_ip,
           p_provocare_hash, case when p_scop = 'inregistrare' then p_parola_hash end);
 
-  return query select true, 'trimis', v_dest;
+  /* Pentru textul emailului, nu pentru raspunsul rutei. */
+  return query select true, case when v_existent then 'trimis-cont-existent' else 'trimis' end, v_dest;
 end $$;
 
 -- ═══ 5. Retrimiterea, pe aceeasi provocare ════════════════════════════════
@@ -298,7 +354,9 @@ create or replace function public.cont_verifica_provocare(
 ) returns table (ok boolean, motiv text, cont_id uuid, scop text, cont_nou boolean)
 language plpgsql security definer set search_path = '' as $$
 declare
+  v_meta record;
   v_incercari integer;
+  v_zi integer;
   v_cod record;
   v_contact_id uuid;
   v_contact_cont uuid;
@@ -310,12 +368,42 @@ begin
     return;
   end if;
 
+  select x.fel, x.destinatie, x.scop into v_meta
+    from privat.cont_cod x
+   where x.business_id = p_business and x.provocare_hash = p_provocare_hash
+   order by x.creat_la desc
+   limit 1;
+  if v_meta.destinatie is null then
+    return query select false, 'fara-cod', null::uuid, null::text, false;
+    return;
+  end if;
+
+  /* ⚠⚠ Numaratoarea si scrierea sub ACEEASI incuietoare ca cererea codului: ghicirile
+     trimise deodata nu mai trec toate de plafon inainte ca vreuna sa-l ridice. */
+  perform pg_advisory_xact_lock(hashtextextended(p_business::text || ':' || v_meta.fel || ':' || v_meta.destinatie, 0));
+
   /* Cinci incercari pe provocare, adunate peste toate codurile ei vii. */
   select coalesce(sum(x.incercari), 0) into v_incercari
     from privat.cont_cod x
    where x.business_id = p_business and x.provocare_hash = p_provocare_hash
      and x.folosit_la is null and x.expira_la > now();
   if v_incercari >= 5 then
+    return query select false, 'prea-multe-incercari', null::uuid, null::text, false;
+    return;
+  end if;
+
+  /*
+    ⚠⚠ Si ZECE pe zi pe adresa, peste toate provocarile ei: altfel fiecare cont nou
+    sau resetare cerute din nou aduceau cinci incercari proaspete, adica zeci de
+    ghiciri pe ora pentru un cod care, la o adresa cu cont, schimba parola.
+    Pasul doi se numara separat: el se deschide numai cu parola.
+  */
+  select coalesce(sum(x.incercari), 0) into v_zi
+    from privat.cont_cod x
+   where x.business_id = p_business and x.fel = v_meta.fel and x.destinatie = v_meta.destinatie
+     and ((x.scop = 'doi-pasi') = (v_meta.scop = 'doi-pasi'))
+     and x.creat_la > now() - interval '24 hours';
+  if v_zi >= 10 then
     return query select false, 'prea-multe-incercari', null::uuid, null::text, false;
     return;
   end if;
@@ -361,9 +449,13 @@ begin
   if v_cod.scop = 'doi-pasi' then
     select c.id into v_cont
       from privat.cont_cumparator c
-     where c.id = v_cod.cont_id and c.business_id = p_business and c.sters_la is null;
+     where c.id = v_cod.cont_id and c.business_id = p_business and c.sters_la is null
+       /* ⚠ O parola schimbata DUPA ce a inceput provocarea o inchide. */
+       and (c.parola_schimbata_la is null or c.parola_schimbata_la <= (
+             select min(x.creat_la) from privat.cont_cod x
+              where x.business_id = p_business and x.provocare_hash = p_provocare_hash));
     if v_cont is null then
-      return query select false, 'fara-cont', null::uuid, v_cod.scop, false;
+      return query select false, 'fara-cod', null::uuid, v_cod.scop, false;
       return;
     end if;
     insert into privat.cont_jurnal (business_id, cont_id, fapta, detalii, ip)
@@ -394,7 +486,7 @@ begin
       /*
         ⚠ Adresa are deja un cont viu. Codul dovedeste ca e a lui, deci parola
         aleasa acum devine parola contului: e o resetare, cu tot ce cere una
-        (sesiunile vechi si dispozitivele de incredere cad).
+        (sesiunile vechi, dispozitivele de incredere si codurile inca vii cad).
       */
       v_cont := v_contact_cont;
       update privat.cont_cumparator c
@@ -402,6 +494,13 @@ begin
              epoca_sesiunii = c.epoca_sesiunii + 1
        where c.id = v_cont and c.business_id = p_business;
       delete from privat.cont_dispozitiv d where d.cont_id = v_cont and d.business_id = p_business;
+      update privat.cont_cod c
+         set folosit_la = now()
+       where c.business_id = p_business and c.folosit_la is null
+         and (c.cont_id = v_cont or exists (
+               select 1 from privat.cont_contact k
+                where k.business_id = p_business and k.cont_id = v_cont
+                  and k.fel = c.fel and k.valoare = c.destinatie));
       update privat.cont_contact set verificat_la = coalesce(verificat_la, now()) where id = v_contact_id;
       insert into privat.cont_jurnal (business_id, cont_id, fapta, detalii, ip)
       values (p_business, v_cont, 'parola-setata', jsonb_build_object('prin', 'inregistrare'), v_ip);
@@ -439,6 +538,13 @@ begin
            epoca_sesiunii = c.epoca_sesiunii + 1
      where c.id = v_cont and c.business_id = p_business;
     delete from privat.cont_dispozitiv d where d.cont_id = v_cont and d.business_id = p_business;
+    update privat.cont_cod c
+       set folosit_la = now()
+     where c.business_id = p_business and c.folosit_la is null
+       and (c.cont_id = v_cont or exists (
+             select 1 from privat.cont_contact k
+              where k.business_id = p_business and k.cont_id = v_cont
+                and k.fel = c.fel and k.valoare = c.destinatie));
     insert into privat.cont_jurnal (business_id, cont_id, fapta, detalii, ip)
     values (p_business, v_cont, 'parola-resetata', '{}'::jsonb, v_ip);
     insert into privat.cont_jurnal (business_id, cont_id, fapta, detalii, ip)
@@ -455,12 +561,17 @@ end $$;
 -- ⚠ Amprenta pleaca spre Node, unde se compara in timp constant. Plafoanele stau
 -- AICI, nu in memorie: pe serverless, un limitator din memorie se inmulteste cu
 -- numarul de instante calde si nu limiteaza nimic.
+-- ⚠ Blocajul pe IP si cel pe cont vin SEPARAT: pe un dispozitiv de incredere,
+-- blocajul pe cont nu se aplica, ca un strain care greseste parola de cinci ori sa
+-- nu-l poata tine afara pe omul care intra de pe telefonul lui.
 
-create or replace function public.cont_parola_pentru_intrare(
+drop function if exists public.cont_parola_pentru_intrare(uuid, text, text);
+
+create function public.cont_parola_pentru_intrare(
   p_business uuid,
   p_email text,
   p_ip text default null
-) returns table (cont_id uuid, parola_hash text, blocat boolean)
+) returns table (cont_id uuid, parola_hash text, blocat_ip boolean, blocat_cont boolean)
 language plpgsql security definer set search_path = '' as $$
 declare
   v_dest text := privat.cont_normalizeaza('email', p_email);
@@ -469,7 +580,8 @@ declare
   v_hash text;
   v_schimbata timestamptz;
   v_de_la timestamptz;
-  v_blocat boolean := false;
+  v_blocat_ip boolean := false;
+  v_blocat_cont boolean := false;
   v_cate integer;
 begin
   if v_ip is not null then
@@ -478,7 +590,7 @@ begin
      where j.business_id = p_business and j.fapta = 'parola-gresita' and j.ip = v_ip
        and j.creat_la > now() - interval '15 minutes';
     if v_cate >= 20 then
-      v_blocat := true;
+      v_blocat_ip := true;
     end if;
   end if;
 
@@ -490,7 +602,7 @@ begin
        and c.sters_la is null;
   end if;
 
-  if v_cont is not null and not v_blocat then
+  if v_cont is not null then
     /* Contorul porneste de la ultima intrare reusita sau schimbare a parolei. */
     select greatest(
              now() - interval '15 minutes',
@@ -504,11 +616,11 @@ begin
      where j.business_id = p_business and j.cont_id = v_cont and j.fapta = 'parola-gresita'
        and j.creat_la > v_de_la;
     if v_cate >= 5 then
-      v_blocat := true;
+      v_blocat_cont := true;
     end if;
   end if;
 
-  return query select v_cont, v_hash, v_blocat;
+  return query select v_cont, v_hash, v_blocat_ip, v_blocat_cont;
 end $$;
 
 create or replace function public.cont_intrare_esuata(
@@ -626,9 +738,122 @@ begin
     return false;
   end if;
   delete from privat.cont_dispozitiv d where d.cont_id = p_cont and d.business_id = p_business;
+  /* ⚠ Si codurile inca vii ale contului: un pas doi inceput cu parola veche nu mai
+     are voie sa se incheie. */
+  update privat.cont_cod c
+     set folosit_la = now()
+   where c.business_id = p_business and c.folosit_la is null
+     and (c.cont_id = p_cont or exists (
+           select 1 from privat.cont_contact k
+            where k.business_id = p_business and k.cont_id = p_cont
+              and k.fel = c.fel and k.valoare = c.destinatie));
   insert into privat.cont_jurnal (business_id, cont_id, fapta, ip)
   values (p_business, p_cont, 'parola-schimbata', privat.cont_ip_sigur(p_ip));
   return true;
+end $$;
+
+-- ═══ 9b. Codul vechi, numai pentru adresele noi ═══════════════════════════
+--
+-- ⚠⚠ `cont_verifica_cod` avea o ramura de INTRARE numai cu cod, care CREA conturi
+-- fara parola. Nimic nu o mai cheama, dar o usa lasata deschisa e o usa: acum
+-- functia verifica NUMAI codul unei adrese noi, cerut dintr-un cont deschis.
+
+create or replace function public.cont_verifica_cod(
+  p_business uuid,
+  p_scop text,
+  p_fel text,
+  p_destinatie_bruta text,
+  p_cod_hash text,
+  p_cont uuid default null
+) returns table (ok boolean, motiv text, cont_id uuid)
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_dest text; v_cod record; v_contact record; v_incercari integer;
+begin
+  if p_scop is distinct from 'adaugare-contact' or p_cont is null then
+    return query select false, 'scop-inchis', null::uuid;
+    return;
+  end if;
+
+  v_dest := privat.cont_normalizeaza(p_fel, p_destinatie_bruta);
+  if v_dest is null then
+    return query select false, 'contact-nevalid', null::uuid;
+    return;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_business::text || ':' || p_fel || ':' || v_dest, 0));
+
+  select coalesce(sum(x.incercari), 0) into v_incercari
+    from privat.cont_cod x
+   where x.business_id = p_business and x.scop = p_scop
+     and x.fel = p_fel and x.destinatie = v_dest
+     and x.folosit_la is null and x.expira_la > now();
+  if v_incercari >= 5 then
+    return query select false, 'prea-multe-incercari', null::uuid;
+    return;
+  end if;
+
+  select * into v_cod
+    from privat.cont_cod x
+   where x.business_id = p_business and x.scop = p_scop
+     and x.fel = p_fel and x.destinatie = v_dest
+     and x.folosit_la is null and x.expira_la > now()
+     and x.cod_hash = p_cod_hash
+   order by x.creat_la desc
+   limit 1
+   for update;
+
+  if v_cod.id is null then
+    update privat.cont_cod c
+       set incercari = c.incercari + 1
+     where c.id = (
+       select x.id from privat.cont_cod x
+        where x.business_id = p_business and x.scop = p_scop
+          and x.fel = p_fel and x.destinatie = v_dest
+          and x.folosit_la is null and x.expira_la > now()
+        order by x.creat_la desc limit 1
+     );
+    if not found then
+      return query select false, 'fara-cod', null::uuid;
+      return;
+    end if;
+    return query select false, 'gresit', null::uuid;
+    return;
+  end if;
+
+  update privat.cont_cod c
+     set folosit_la = now()
+   where c.business_id = p_business and c.scop = p_scop
+     and c.fel = p_fel and c.destinatie = v_dest and c.folosit_la is null;
+
+  /* ⚠⚠ Codul trebuie sa fi fost cerut de CHIAR contul asta. */
+  if v_cod.cont_id is distinct from p_cont then
+    return query select false, 'alt-cont', null::uuid;
+    return;
+  end if;
+
+  select * into v_contact
+    from privat.cont_contact x
+   where x.business_id = p_business and x.fel = p_fel and x.valoare = v_dest;
+
+  /* ⚠ Un contact care e deja al altcuiva NU se muta tacit. */
+  if v_contact.id is not null and v_contact.cont_id <> p_cont then
+    return query select false, 'contact-la-alt-cont', null::uuid;
+    return;
+  end if;
+
+  if v_contact.id is null then
+    insert into privat.cont_contact (cont_id, business_id, fel, valoare_bruta, valoare, verificat_la)
+    values (p_cont, p_business, p_fel, p_destinatie_bruta, v_dest, now());
+  else
+    update privat.cont_contact set verificat_la = now(), valoare_bruta = p_destinatie_bruta
+     where id = v_contact.id;
+  end if;
+
+  insert into privat.cont_jurnal (business_id, cont_id, fapta, detalii)
+  values (p_business, p_cont, 'contact-adaugat', jsonb_build_object('fel', p_fel));
+
+  return query select true, 'adaugat', p_cont;
 end $$;
 
 -- ═══ 10. Stergerea contului goleste si parola ═════════════════════════════
@@ -641,13 +866,22 @@ begin
   select count(*) into v_comenzi
     from privat.cont_comanda l where l.business_id = p_business and l.cont_id = p_cont;
 
+  /* ⚠ Codurile se sterg si dupa ADRESA, nu doar dupa cont: codurile de cont nou
+     n-au cont (`cont_id` nul) si poarta emailul, IP-ul si amprenta parolei. */
+  delete from privat.cont_cod c
+   where c.business_id = p_business
+     and (c.cont_id = p_cont or exists (
+           select 1 from privat.cont_contact k
+            where k.business_id = p_business and k.cont_id = p_cont
+              and k.fel = c.fel and k.valoare = c.destinatie));
   delete from privat.cont_contact x where x.business_id = p_business and x.cont_id = p_cont;
   delete from privat.cont_comanda l where l.business_id = p_business and l.cont_id = p_cont;
-  delete from privat.cont_cod c where c.business_id = p_business and c.cont_id = p_cont;
   delete from privat.cont_dispozitiv d where d.business_id = p_business and d.cont_id = p_cont;
-  /* ⚠ Sesiunile poarta IP-uri: se sterg acum, nu la curatenie. */
+  /* ⚠ Sesiunile si jurnalul poarta IP-uri: se sterg acum, nu la curatenie. Ramane
+     un singur rand, fara IP, care spune ce s-a intamplat. */
   delete from privat.cont_sesiune s where s.business_id = p_business and s.cont_id = p_cont;
   delete from privat.cont_instiintare i where i.business_id = p_business and i.cont_id = p_cont;
+  delete from privat.cont_jurnal j where j.business_id = p_business and j.cont_id = p_cont;
 
   update privat.cont_cumparator c
      set sters_la = now(), nume = '', parola_hash = null, parola_schimbata_la = null,
@@ -683,7 +917,10 @@ begin
   get diagnostics c = row_count;
   delete from privat.cont_contact_blocat where expira_la < now();
   get diagnostics d = row_count;
-  delete from privat.cont_instiintare where trimisa_la is not null and trimisa_la < now() - interval '30 days';
+  /* Si cele netrimise de o luna: o instiintare care n-a plecat atunci nu mai are rost. */
+  delete from privat.cont_instiintare
+   where (trimisa_la is not null and trimisa_la < now() - interval '30 days')
+      or (trimisa_la is null and creata_la < now() - interval '30 days');
   get diagnostics e = row_count;
   delete from privat.cont_dispozitiv where expira_la < now();
   get diagnostics f = row_count;
@@ -710,6 +947,7 @@ begin
     'public.cont_dispozitiv_adauga(uuid, uuid, text, integer)',
     'public.cont_parola_contului(uuid, uuid)',
     'public.cont_schimba_parola(uuid, uuid, text, text)',
+    'public.cont_verifica_cod(uuid, text, text, text, text, uuid)',
     'public.cont_sterge(uuid, uuid)',
     'public.cont_curatenie()'
   ] loop

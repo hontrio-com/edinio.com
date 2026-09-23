@@ -39,9 +39,9 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
         <li>Se sterg datele contului si legatura lui cu comenzile. Poti deschide oricand alt cont, cu aceeasi adresa.</li>
         <li>
           {comenzi === 1
-            ? "Comanda ta RAMANE la magazin, fiindca in spatele ei stau documente fiscale. Daca vrei sa fie sterse si datele din ea, scrie magazinului."
+            ? "Comanda ta RAMANE la magazin, fiindca in spatele ei stau documente fiscale. Daca vrei sa fie sterse si datele din ea, bifeaza mai jos."
             : comenzi > 1
-              ? `Cele ${pluralRo(comenzi, "comanda", "comenzi")} ale tale RAMAN la magazin, fiindca in spatele lor stau documente fiscale. Daca vrei sa fie sterse si datele din ele, scrie magazinului.`
+              ? `Cele ${pluralRo(comenzi, "comanda", "comenzi")} ale tale RAMAN la magazin, fiindca in spatele lor stau documente fiscale. Daca vrei sa fie sterse si datele din ele, bifeaza mai jos.`
               : "Comenzile plasate raman la magazin, fiindca in spatele lor stau documente fiscale."}
         </li>
         <li>Daca ai cerut sa nu mai primesti mesaje, alegerea aceea ramane si dupa stergere.</li>
@@ -77,6 +77,7 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
           onClick={async () => {
             setAsteapta(true);
             setEroare("");
+            let sters = false;
             try {
               const r = await fetch("/api/cont/sterge", {
                 method: "POST",
@@ -88,13 +89,15 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
                 setEroare(j.eroare ?? "Nu am putut sterge contul.");
               } else {
                 const j = await r.json().catch(() => ({}));
+                sters = true;
                 router.refresh();
                 router.push(`/cont/intra?sters=1${j.cerereTrimisa === true ? "&cerere=1" : j.cerereTrimisa === false ? "&cerere=0" : ""}`);
               }
             } catch {
               setEroare("Nu am putut sterge contul. Verifica legatura la internet.");
             } finally {
-              setAsteapta(false);
+              /* Dupa reusita butonul ramane oprit: pagina pleaca, iar a doua apasare ar fi dat 404. */
+              if (!sters) setAsteapta(false);
             }
           }}
           className={BUTON_SECUNDAR}

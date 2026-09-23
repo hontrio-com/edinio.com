@@ -74,6 +74,8 @@ export const CE_RAMANE = [
   "dezabonarea lui de la emailuri și SMS-uri, ca să nu ajungă din nou pe listă",
   "IBAN-ul din retururile încă deschise, ca să poți face rambursarea",
   "sursa comenzii la nivel de campanie (de exemplu „Facebook”), ca rapoartele pe canale să rămână corecte",
+  "etichetele de curier deja generate și datele primite de la marketplace-uri (eMAG, Trendyol, Pepita, About You), în forma în care au venit",
+  "textele de personalizare ale produselor comandate și folosirile codurilor de reducere",
 ] as const;
 
 /** Ce NU putem face, si trebuie spus inainte, nu dupa. */
@@ -91,7 +93,7 @@ export function intrebareaAnonimizarii(nume: string, cateComenzi: number): strin
   const comenzi = cateComenzi === 1 ? "1 comandă" : `${cateComenzi} comenzi`;
   return (
     `Ștergi datele lui „${nume}”?\n\n`
-    + `Numele, telefonul, emailul și adresa dispar din ${comenzi} și din tot restul platformei.\n\n`
+    + `Numele, telefonul, emailul și adresa dispar din ${comenzi}, din coșuri, din SMS-uri și din contul lui de client.\n\n`
     + "RĂMÂN: comenzile cu sumele lor, facturile și AWB-urile, și dezabonarea lui de la mesaje.\n\n"
     + "Nu se poate lua înapoi."
   );

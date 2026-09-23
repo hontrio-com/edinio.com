@@ -5654,6 +5654,7 @@ export type Database = {
           cod_discount_config: Json
           cod_fee_config: Json | null
           colete_config: Json | null
+          cont_client_config: Json | null
           cookie_banner_config: Json | null
           created_at: string
           currency: string
@@ -5732,6 +5733,7 @@ export type Database = {
           cod_discount_config?: Json
           cod_fee_config?: Json | null
           colete_config?: Json | null
+          cont_client_config?: Json | null
           cookie_banner_config?: Json | null
           created_at?: string
           currency?: string
@@ -5810,6 +5812,7 @@ export type Database = {
           cod_discount_config?: Json
           cod_fee_config?: Json | null
           colete_config?: Json | null
+          cont_client_config?: Json | null
           cookie_banner_config?: Json | null
           created_at?: string
           currency?: string
@@ -7219,6 +7222,54 @@ export type Database = {
           p_status: string
         }
         Returns: boolean
+      }
+      cont_cere_cod: {
+        Args: {
+          p_business: string
+          p_cod_hash: string
+          p_cont?: string | null
+          p_destinatie_bruta: string
+          p_fel: string
+          p_minute?: number
+          p_scop: string
+        }
+        Returns: { destinatie: string | null; motiv: string; ok: boolean }[]
+      }
+      cont_iesi_de_peste_tot: {
+        Args: { p_business: string; p_cont: string }
+        Returns: undefined
+      }
+      cont_sesiune_creeaza: {
+        Args: {
+          p_business: string
+          p_cont: string
+          p_ip?: string | null
+          p_jeton_hash: string
+        }
+        Returns: { expira_la: string; sesiune_id: string }[]
+      }
+      cont_sesiune_incheie: {
+        Args: { p_business: string; p_jeton_hash: string }
+        Returns: undefined
+      }
+      cont_sesiune_roteste: {
+        Args: { p_business: string; p_jeton_nou: string; p_jeton_vechi: string }
+        Returns: { expira_la: string; sesiune_id: string }[]
+      }
+      cont_sesiune_verifica: {
+        Args: { p_business: string; p_jeton_hash: string }
+        Returns: { cont_id: string; nume: string; trebuie_rotit: boolean }[]
+      }
+      cont_verifica_cod: {
+        Args: {
+          p_business: string
+          p_cod_hash: string
+          p_cont?: string | null
+          p_destinatie_bruta: string
+          p_fel: string
+          p_scop: string
+        }
+        Returns: { cont_id: string | null; motiv: string; ok: boolean }[]
       }
       customers_aggregate: {
         Args: {

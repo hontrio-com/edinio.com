@@ -1507,6 +1507,46 @@ export async function sendCustomerMessage(
   }
 }
 
+// ── Cod de intrare in cont → Cumparator ─────────────────────────────────────
+
+/**
+ * Codul de sase cifre cu care cumparatorul intra in contul lui de pe magazin.
+ *
+ * ⚠ Pleaca cu marca MAGAZINULUI, prin `sendStoreOrEdinio`, deci si prin SMTP-ul
+ * lui daca il are. Asa trece si prin `storeEmailShell`, adica prin logoul servit
+ * ca PNG (WebP iese negru in Gmail) si cu `width`/`height` ca atribute (Outlook
+ * pe Windows nu stie `max-height`).
+ *
+ * ⚠ Codul NU se escapeaza si nici nu are de ce: sunt sase cifre generate de noi.
+ * Numele magazinului DA, e text care vine din baza.
+ */
+export async function sendCodCont(
+  to: string,
+  data: { cod: string; minute: number; numeMagazin: string },
+  sender?: StoreEmailSender,
+): Promise<{ success: true } | { error: string }> {
+  if (!process.env.RESEND_API_KEY) return { error: "Serviciul de email nu este configurat." };
+
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Codul tau de intrare</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;line-height:1.6;">Foloseste codul de mai jos ca sa intri in contul tau de pe ${esc(data.numeMagazin)}.</p>
+
+    <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:18px;text-align:center;margin-bottom:16px;">
+      <p style="margin:0;font-size:32px;font-weight:700;letter-spacing:8px;color:#18181b;">${data.cod}</p>
+    </div>
+
+    <p style="margin:0 0 8px 0;font-size:13px;color:#71717a;line-height:1.6;">Codul e valabil ${data.minute} de minute si se poate folosi o singura data.</p>
+    <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.6;">Daca nu ai cerut tu codul, nu trebuie sa faci nimic: fara el nimeni nu poate intra.</p>
+  `;
+
+  try {
+    await sendStoreOrEdinio(sender, to, `Codul tau de intrare: ${data.cod}`, content);
+    return { success: true };
+  } catch {
+    return { error: "Trimiterea emailului a esuat. Incearca din nou." };
+  }
+}
+
 // ── Subscription activated → User ───────────────────────────────────────────
 
 export async function sendSubscriptionActivatedEmail(

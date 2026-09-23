@@ -414,11 +414,33 @@ mosteneste. Deci un preview al ramurii noi cade inapoi pe valorile de Preview **
 care sunt **ALE PRODUCTIEI**: Supabase de productie, Resend adevarat, Stripe adevarat,
 SmartBill adevarat, token Vercel adevarat.
 
-**Inainte de prima desfasurare a ramurii**, cele 8 se copiaza pe `gitBranch: conturi-clienti`.
-`SUPABASE_SERVICE_ROLE_KEY` o pune proprietarul; MCP-ul nu o da.
+**FACUT pe 23.09.2026.** Cele SAPTE chei de mai jos sunt legate de `gitBranch: conturi-clienti`,
+toate pe `preview`. Cheia de service role a bazei demo a pus-o proprietarul.
 
-⚠ **Lista de curatenie de la final creste de la 8 la 16 chei**, toate sterse dupa id. Id-urile
-celor noi se scriu aici in clipa in care sunt create.
+| ID | Cheie | Valoare |
+|----|-------|---------|
+| `hnS50tytVVhewyZj` | NEXT_PUBLIC_SUPABASE_URL | baza demo |
+| `64e74YdkJ3LeAXsA` | NEXT_PUBLIC_SUPABASE_ANON_KEY | baza demo |
+| `SCXotbAR6IOY1et0` | SUPABASE_SERVICE_ROLE_KEY | baza demo |
+| `eiUiJibh441bgaHx` | RESELLER_API_KEY | `dezactivat-pe-demo` |
+| `yUCi2J0gFXnul2Cf` | VERCEL_TOKEN | `dezactivat-pe-demo` |
+| `em1VK1wZAtNpN3jB` | STRIPE_SECRET_KEY | `dezactivat-pe-demo` |
+| `HuTaUYEkkWzF9xA7` | SMARTBILL_TOKEN | `dezactivat-pe-demo` |
+
+⚠⚠ **`RESEND_API_KEY` NU e suprascrisa pe ramura, si e o hotarare, nu o scapare.** Pusa
+`dezactivat-pe-demo`, codul de intrare in cont n-ar pleca si zona de cont n-ar putea fi probata
+deloc: in baza se pastreaza doar AMPRENTA codului, deci nu se poate citi de nicaieri. Nesuprascrisa,
+mosteneste cheia adevarata din Preview. Cronurile NU ruleaza pe desfasurarile de preview, deci
+singurele emailuri care pleaca sunt chiar codurile cerute de noi, catre adresele noastre.
+
+⚠ **Lista de curatenie de la final creste de la 8 la 15 chei**, toate sterse DUPA ID.
+
+⚠⚠ **`[skip ci]` NU opreste Vercel.** Incercat pe 23.09.2026: commitul gol cu `[skip ci]` in mesaj
+a pornit totusi o desfasurare (`dpl_BoF9gTH2xMa39RfLExGCiydQnox6`), care a fost ANULATA de mana la
+~2 minute. Verificat dupa, obiect cu obiect, ca productia n-a fost atinsa: zero tabele `privat.cont_*`,
+zero coloana `cont_client_config`, iar singurele urme din acea jumatate de ora erau trafic real.
+Cine mai urca o ramura noua sa stie: ordinea sigura e **urca, anuleaza pe loc desfasurarea, leaga
+cheile, abia apoi declanseaza**.
 
 ---
 

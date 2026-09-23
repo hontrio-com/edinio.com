@@ -18,6 +18,21 @@ nicaieri nu se cere cont ca sa poti cumpara.
 
 **H2. Comerciantul aprinde functia din Setari.** E o setare pe magazin, stinsa implicit.
 
+**H3. Cand comerciantul STINGE functia, datele raman si doar accesul se inchide.** Sesiunile se
+incheie, rutele dau 404, nimic nu se sterge. Reaprinsa, oamenii intra inapoi in conturile lor.
+
+**H4. Comanda pe firma: factura SE ARATA.** Omul vede documentul fiscal al comenzilor LUI, chiar
+cand titularul e firma. ⚠ Legatura se face numai pe contactul LUI verificat, deci un angajat nu
+vede comenzile altui angajat al aceleiasi firme. Masurat pe 23.09.2026: azi sunt **zero** comenzi
+de vitrina cu `billing_company`, deci hotararea nu misca nimic din ce exista.
+
+**H5. Anularea unei comenzi `pending` se poate din cont.** ⚠ Trece OBLIGATORIU prin
+`aplica_tranzitia_comenzii`, nu printr-un `update` de status: acolo stau eliberarea stocului,
+desfacerea cuponului si cele doua declansatoare de email marketing de pe `status`. Nu se poate la
+comenzile de marketplace, care oricum nu intra in cont.
+
+**H6. Ecranele noi se scriu FARA diacritice**, ca vitrina de azi („Finalizeaza comanda").
+
 Din ele ies doua reguli care taie mult din plan:
 
 - **Valul 1 nu atinge fluxul de comanda.** Nici `order.actions.ts`, nici `checkout-core.ts`,
@@ -224,10 +239,16 @@ separarea originilor.
 **Contul exista numai acolo unde cererea a venit CHIAR pe domeniul magazinului.** Pe originea
 platformei, rutele de cont raspund 404, exact ca atunci cand setarea e stinsa.
 
-Regula se scrie o singura data, cu ajutorul care exista deja:
+Regula se scrie o singura data, intr-un ajutor al ei, si **numele conteaza**: nu
+„are domeniu propriu", ci „originea e numai a acestui magazin". Cand va aparea
+`<slug>.edinio.com` (capitolul 14), se adauga a doua ramura aici si nimic altceva nu se schimba.
 
 ```ts
-if (!esteDomeniulPropriu(host, business.custom_domain)) notFound();
+// src/lib/cont/origine.ts
+export function originaEsteNumaiAMagazinului(host: string | null, business: { custom_domain: string | null }): boolean {
+  return esteDomeniulPropriu(host, business.custom_domain);
+  // Valul 3 adauga aici: || esteSubdomeniulMagazinului(host, business.slug)
+}
 ```
 
 Si se aseaza singura, fara niciun rand nou in proxy:
@@ -411,7 +432,7 @@ Sub `/{slug}/cont/`, toate cu `Cache-Control: private, no-store`.
 |---|---|
 | `/cont` | Salutul, ultimele comenzi, si numarul comenzilor nelegate din ultimele 30 de zile, cu „Ai comandat recent si nu vezi comanda aici?" |
 | `/cont/comenzi` | Lista, paginata cu tiparul casei |
-| `/cont/comenzi/[id]` | Comanda: linii, bani, stare, adresa, urmarirea coletului, buton catre retur |
+| `/cont/comenzi/[id]` | Comanda: linii, bani, stare, adresa, urmarirea coletului, buton catre retur, si **anulare cand e `pending`** (H5) |
 | `/cont/facturi` | Documentele fiscale ale comenzilor lui |
 | `/cont/retururi` | Cererile lui de retur |
 | `/cont/date` | Contacte: adauga, verifica si **scoate** |
@@ -449,9 +470,21 @@ toate cele 286 de facturi. Deci:
   opuse, iar cea de editare e o pagina de login.
 - Raspunsul e `private, no-store`, si nu trece prin corpul unei functii peste 4,5 MB.
 
-⚠ **Comanda pe firma.** Titularul documentului fiscal e FIRMA, contul e al unei PERSOANE. Un
-angajat care isi face cont ar primi facturile firmei. Se masoara cate comenzi de vitrina au
-`billing_company` si se hotaraste anume. E in capitolul 14.
+**Comanda pe firma: factura se arata** (H4). Titularul documentului fiscal e FIRMA, contul e al
+unei PERSOANE, dar omul vede documentul comenzilor LUI. ⚠ Ce tine linia e ca legatura se face
+numai pe contactul LUI verificat: un angajat nu vede comenzile altui angajat al aceleiasi firme,
+fiindca nimic nu se leaga pe CUI. Masurat pe 23.09.2026: zero comenzi de vitrina au
+`billing_company`, deci hotararea nu schimba niciun rand existent.
+
+### Anularea unei comenzi `pending` (H5)
+
+⚠⚠ Trece prin `aplica_tranzitia_comenzii`, niciodata printr-un `update` pe `status`. Acolo stau
+eliberarea stocului (`elibereaza_stoc_comanda`), desfacerea cuponului (`release_order_discount`)
+si cele doua declansatoare de email marketing de pe `status`. Un `update` direct ar lasa stocul
+blocat si cuponul consumat, tacut.
+
+⚠ Si nu se poate la comenzile de marketplace, unde ciclul e tinut de ei. Nu e o verificare noua:
+acelea nu intra in cont deloc.
 
 ---
 
@@ -482,8 +515,11 @@ intr-un magazin oprit omul s-ar putea inca autentifica, iar `cont_cere_cod` ar c
 de SMS al unui comerciant care nu mai plateste. Cuvantul „suspendat" nu aparea in niciuna din
 cele 296 de capcane gasite de cei 14 exploratori.
 
-**Cand comerciantul stinge functia:** propunerea mea e ca datele sa ramana si doar accesul sa se
-inchida, iar Setarile sa spuna cati oameni au cont. E o intrebare pentru tine, in capitolul 14.
+**Cand comerciantul stinge functia (H3): datele raman, accesul se inchide.** Sesiunile se incheie
+(`cont_sesiune_verifica` cere setarea aprinsa, deci se inchid singure, in baza, nu printr-o
+stergere), rutele raspund 404, nimic nu se sterge. Reaprinsa, oamenii intra inapoi in conturile
+lor. Setarile spun cati oameni au cont chiar langa comutator, ca cifra sa se vada INAINTE de
+apasare, nu dupa.
 
 ---
 
@@ -534,7 +570,7 @@ lui `authenticated`, chemata din `customer_anonymize`. E tiparul casei pentru fu
 | 4 | Codurile: `cont_cere_cod`, `cont_verifica_cod`, cu plafonul in baza |
 | 5 | Citirile: `cont_comenzile_mele`, `cont_comanda_mea`, `cont_retururile_mele`, `cont_facturile_mele` |
 | 6 | Revendicarea: `cont_maturare`, `cont_revendica_cu_jeton`, `cont_revendica_o_comanda`, plus scrierea in `cont_instiintare` |
-| 7 | `cont_sterge`, `cont_export`, `public.cont_rupe_legaturile` |
+| 7 | `cont_sterge`, `cont_export`, `public.cont_rupe_legaturile`, si `cont_anuleaza_comanda` (H5), care **cheama `aplica_tranzitia_comenzii`**, nu scrie `status` |
 | 8 | Cresterea lui `customer_anonymize`: lista alba pe `order_source`, contactele pe amandoua formele, IBAN si motiv pe retururile inchise |
 
 Fiecare functie primeste, imediat dupa definitie, `revoke all ... from public, anon, authenticated`
@@ -564,16 +600,28 @@ Pe langa cele patru plase din capitolul 5:
 8. Semnul lung nu ajunge pe ecranele noi. ⚠ Plasa de azi acopera doar panourile de curier si
    ecranele de integrari; ecranele de Clienti au deja semnul lung pe ecran si nicio proba nu cade.
 9. `formatPrice`, `formatDate` si zilele romanesti pe toate ecranele de bani si de date.
+10. **Anularea din cont trece prin `aplica_tranzitia_comenzii`.** Proba citeste corpul lui
+    `cont_anuleaza_comanda` din migratia de pe disc si cade daca gaseste acolo `update ... set status`.
+    Regula se apara pe CITIRE, nu pe apelant: un al doilea drum scris maine ar ocoli-o.
+11. **Contul nu se deschide pe o origine care nu e numai a magazinului.** Proba cheama chiar ruta
+    cu antetul `Host` al platformei si cere 404, si o cheama cu domeniul propriu si cere 200.
+12. **Diacriticele nu ajung pe ecranele noi** (H6), cu aceeasi forma ca plasa semnului lung.
 
 ---
 
 ## 13. Etapele
 
-**Etapa 0, masuratorile care mai lipsesc.** Cate magazine n-au rand in `privat.store_settings`.
-Cate au stins campul de email la checkout (la acelea nici comenzile viitoare n-au email). Cate
-comenzi de vitrina au `billing_company`. Cate au `customization` cu fisiere, si cate sunt
-dinainte de 07.09.2026. Cate din cele 286 de facturi SmartBill au si serie, si numar. Cate
-telefoane normalizate sunt purtate de doua emailuri deosebite.
+**Etapa 0, masuratorile. FACUTA pe 23.09.2026**, pe productie, doar citiri.
+
+| Masurat | Rezultat | Ce hotaraste |
+|---|---|---|
+| Magazine fara rand in `privat.store_settings` | **0** (nici publicate, nici nepublicate) | Capcana „salvat" tacut a lui `jsonb_merge_config` n-are victime azi. Garda se scrie oricum, pentru magazinele de maine |
+| Magazine cu campul de email STINS la checkout | **0** (57 nu l-au atins, deci pornit si neobligatoriu; 4 l-au facut obligatoriu) | **Codul pe email merge la toate magazinele.** Multimea „nu are nici email, nici SMS" e goala, deci comutatorul nu trebuie sa se apere de ea |
+| Comenzi de vitrina cu `billing_company` | **0** | H4 nu misca nimic din ce exista azi |
+| Facturi SmartBill cu serie SI numar | **286 din 286** | `getMerchantInvoicePdfUrl` acopera tot istoricul. Capitolul 8 sta in picioare |
+| Comenzi cu `customization` | **1**, si **0** dinainte de 07.09.2026 | „Fisierele mele" e val 2. Plasa cheilor R2 se scrie oricum: nu apara randuri, apara regula |
+| Telefon normalizat cu doua emailuri | **1** din 317 identitati | Sub 1% |
+| Email cu doua telefoane | **2** din 260 | Sub 1%. „Familia care comanda de pe telefonul mamei" e reala, dar rara |
 
 **Etapa A, temelia.** Migratiile 1-4, sesiunea, codul, `/cont/intra`. Nimic vizibil inca.
 
@@ -582,7 +630,8 @@ urmarire a coletului pentru toti 17 curieri.
 
 **Etapa C, revendicarea.** Migratia 6, cele patru usi, instiintarea si cronul ei.
 
-**Etapa D, restul ecranelor.** Facturi, retururi, date, preferinte, export, stergere.
+**Etapa D, restul ecranelor.** Facturi, retururi, date, preferinte, export, stergere, si anularea
+comenzii `pending`.
 
 **Etapa E, panoul.** Fila din Setari, garda de suspendare, ce vede comerciantul la Clienti,
 notificarea catre el la „nu am fost eu".
@@ -591,17 +640,41 @@ Fiecare etapa trece singura de cele patru porti locale si de CI.
 
 ---
 
-## 14. Ce ramane hotararea ta
+## 14. Cele cinci intrebari, si raspunsurile lor
 
-1. **Cele 57 de magazine de pe originea comuna.** Valul 1 le lasa pe dinafara, si asta acopera
-   92,7% din comenzile de vitrina. Facem valul 2 cu `<slug>.edinio.com`, sau ramane asa?
-2. **Cand comerciantul stinge functia**, ce se intampla cu conturile facute deja. Propunerea mea:
-   datele raman, accesul se inchide.
-3. **Comanda pe firma.** Un angajat cu cont ar vedea facturile firmei. Se arata, se ascunde, sau
-   se arata fara documentul fiscal?
-4. **Anularea unei comenzi `pending`** din contul lui: se poate sau nu?
-5. **Diacriticele pe ecranele noi.** Vitrina de azi e fara („Finalizeaza comanda"), panoul e cu.
-   Contul sta langa vitrina, deci as merge fara, dar e textul care se vede.
+Raspunse de proprietar pe 23.09.2026. Patru sunt in capitolul 0, ca H3, H4, H5 si H6. A cincea,
+cea a magazinelor de pe originea comuna, mi-a lasat-o mie: „cum consideri tu ca e mai bine".
+
+### Hotararea mea: originea pe magazin se face, dar ca val de sine statator
+
+**Valul 1 ramane pe domeniile proprii.** Valul 3 aduce `<slug>.edinio.com` pentru restul.
+
+Patru motive, in ordinea greutatii:
+
+1. **Cele 57 de magazine de pe originea comuna au impreuna 25 de comenzi de vitrina.** Cele 8 cu
+   domeniu propriu au 318. Pusa prima, originea pe magazin ar amana functia pentru oamenii care
+   exista, ca sa o pregateasca pentru magazine care inca n-au vandut nimic.
+2. **`src/proxy.ts` e pe drumul FIECAREI cereri**, iar `isPlatformHost` trateaza azi orice
+   `*.edinio.com` ca gazda a platformei: `ajutor.edinio.com` servea tot site-ul, cu 200, pana a
+   fost oprit anume. O ramura noua de gazda acolo merita propriul val, cu propria dovada, nu sa
+   calatoreasca pe langa un subsistem nou.
+3. **Nu e o fundatura pentru comerciant.** Conectarea unui domeniu propriu e ceva ce platforma
+   stie sa faca si il vrea oricum. „Conturile de client cer un domeniu propriu" e un imbold
+   catre ceva bun pentru el, nu un refuz.
+4. **Nu se pierde nimic din munca.** Regula scrisa in valul 1 nu e „are domeniu propriu", ci
+   **„cererea a venit pe o origine care e numai a acestui magazin"**. Cand apare
+   `<slug>.edinio.com`, se adauga a doua ramura in acelasi ajutor si nimic din cont nu se rescrie.
+
+⚠ De aceea, garda se scrie de la inceput cu numele asta: `originaEsteNumaiAMagazinului(host, business)`,
+nu `areDomeniuPropriu(...)`. O eticheta gresita ar fi ascuns, peste doua luni, exact locul in care
+se adauga al doilea caz.
+
+### Ce ramane de hotarat mai tarziu, nu acum
+
+- Daca `<slug>.edinio.com` duce TOT magazinul sau numai zona de cont. Inclin catre numai zona de
+  cont: muta zero adrese existente, deci nu atinge nici SEO-ul, nici linkurile vechi.
+- Unde se aseaza noile gazde fata de invarianta SEO (vitrinele raman `noindex` pe gazdele
+  platformei, indexabile numai pe domeniul propriu).
 
 ---
 

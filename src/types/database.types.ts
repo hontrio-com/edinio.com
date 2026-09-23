@@ -7235,9 +7235,56 @@ export type Database = {
         }
         Returns: { destinatie: string | null; motiv: string; ok: boolean }[]
       }
+      cont_comanda_mea: {
+        Args: { p_business: string; p_cont: string; p_order: string }
+        Returns: {
+          awb: string | null
+          creata_la: string
+          curier: string | null
+          factura: Json | null
+          firma: Json | null
+          incasata: boolean
+          linii: Json
+          livrare: Json | null
+          metoda_plata: string | null
+          numar: string
+          order_id: string
+          reducere: number
+          stare: string
+          subtotal: number
+          taxa_ramburs: number
+          total: number
+          transport: number
+          urmarire: string | null
+          vedere: string
+        }[]
+      }
+      cont_comenzile_mele: {
+        Args: {
+          p_business: string
+          p_cont: string
+          p_decalaj?: number
+          p_limita?: number
+        }
+        Returns: {
+          bucati: number
+          creata_la: string
+          incasata: boolean
+          numar: string
+          order_id: string
+          stare: string
+          total: number
+          total_randuri: number
+          vedere: string
+        }[]
+      }
       cont_iesi_de_peste_tot: {
         Args: { p_business: string; p_cont: string }
         Returns: undefined
+      }
+      cont_maturare: {
+        Args: { p_business: string; p_cont: string }
+        Returns: number
       }
       cont_sesiune_creeaza: {
         Args: {

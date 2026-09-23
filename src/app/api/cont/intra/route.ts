@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { verificaCod, mesajulRefuzului, type FelContact } from "@/lib/cont/cod";
 import { deschideSesiune } from "@/lib/cont/sesiune";
+import { leagaComenzile } from "@/lib/cont/comenzi";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -45,6 +46,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ eroare: mesajulRefuzului(r.motiv) }, { status: 400 });
     }
     await deschideSesiune(magazin.id, r.contId, ip === "necunoscut" ? null : ip);
+
+    /*
+      ⚠ Legarea comenzilor se face AICI, dupa ce sesiunea exista, si nu are voie
+      sa rupa intrarea: omul a dovedit ca e el, deci intra chiar daca legarea
+      esueaza. Se reia la urmatoarea intrare, si ecranul principal are oricum un
+      drum catre revendicare.
+    */
+    try {
+      await leagaComenzile(magazin.id, r.contId);
+    } catch (e) {
+      await logError({
+        action: "cont/intra",
+        message: `legarea comenzilor a esuat: ${String(e)}`,
+        businessId: magazin.id,
+        severity: "warning",
+      });
+    }
+
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e) {
     await logError({

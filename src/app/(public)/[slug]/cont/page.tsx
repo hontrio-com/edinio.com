@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
+import { comenzileMele } from "@/lib/cont/comenzi";
+import { orderStatus } from "@/lib/orders/status";
+import { formatPrice, formatDate } from "@/lib/utils/format";
 
 export const metadata: Metadata = { robots: { index: false } };
 
@@ -16,6 +21,9 @@ export default async function AcasaInCont({ params }: Props) {
 
   if (!p.sesiune) redirect("/cont/intra");
 
+  /* Trei randuri pe prima pagina; lista intreaga are ecranul ei. */
+  const { comenzi: ultimele, total } = await comenzileMele(p.magazin.id, p.sesiune.contId, 3, 0);
+
   return (
     <StorefrontThemeScope style={p.resolved.style}>
       <StorePageShell chrome={p.chrome} design={p.resolved.design} className="min-h-screen flex flex-col">
@@ -25,15 +33,47 @@ export default async function AcasaInCont({ params }: Props) {
           </h1>
           <div className="w-12 h-1 rounded-full mb-5" style={{ backgroundColor: p.color }} />
 
-          {/*
-            ⚠ Etapa A se opreste aici, si o spune pe fata in loc sa arate ecrane
-            goale. Comenzile, facturile si retururile vin in Etapa B si D, dupa
-            migratia 5. Un „Nu ai nicio comanda" pus acum ar fi fost o minciuna:
-            comenzile omului exista, doar nu sunt inca legate de cont.
-          */}
-          <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-            Contul tau e deschis. Istoricul comenzilor si al facturilor se adauga aici in curand.
-          </p>
+          {ultimele.length === 0 ? (
+            <p className="text-sm text-muted-foreground leading-relaxed mb-8">
+              Nu am gasit inca nicio comanda legata de contul tau. Daca ai comandat cu alt email sau cu
+              alt numar de telefon, adauga-l la datele contului si comenzile apar aici.
+            </p>
+          ) : (
+            <section className="mb-8">
+              <h2 className="font-semibold text-foreground mb-3">Ultimele comenzi</h2>
+              <ul className="space-y-3">
+                {ultimele.map((c) => {
+                  const st = orderStatus(c.stare);
+                  return (
+                    <li key={c.orderId}>
+                      <Link
+                        href={`/cont/comenzi/${c.orderId}`}
+                        className="block rounded-xl ring-1 ring-foreground/10 p-4 hover:ring-foreground/20 transition"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-foreground">{c.numar}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{formatDate(c.creataLa)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-foreground">{formatPrice(c.total)}</p>
+                            <div className="mt-1 flex justify-end">
+                              <EtichetaStare ton={st.ton} marime="mic">{st.label}</EtichetaStare>
+                            </div>
+                          </div>
+                        </div>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+              {total > ultimele.length && (
+                <Link href="/cont/comenzi" className="inline-block mt-3 text-sm underline" style={{ color: p.color }}>
+                  Vezi toate cele {total} de comenzi
+                </Link>
+              )}
+            </section>
+          )}
 
           <form method="post" action="/api/cont/iesire">
             <button type="submit" className="text-sm text-muted-foreground underline">

@@ -77,11 +77,11 @@ export function FisaContului({
               {telefon && ` · ${formatPhoneDisplay(telefon)}`}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Cont făcut pe {formatDate(fisa.creatLa)}
+              Cont creat pe {formatDate(fisa.creatLa)}
               {" · "}
               {fisa.ultimaIntrare
                 ? `ultima intrare ${acumCatTimp(fisa.ultimaIntrare, acum)}`
-                : "n-a intrat în ultimele 12 luni"}
+                : "nu a intrat în ultimele 12 luni"}
             </p>
           </div>
           {cautareClient && (
@@ -226,7 +226,7 @@ export function FisaContului({
               <Rand eticheta="Parolă">
                 {fisa.areParola
                   ? fisa.parolaSchimbataLa ? `setată, ultima schimbare pe ${formatDate(fisa.parolaSchimbataLa)}` : "setată"
-                  : "fără parolă (cont făcut înainte de intrarea cu parolă)"}
+                  : "fără parolă (cont creat înainte de intrarea cu parolă)"}
               </Rand>
               <Rand eticheta="Sesiuni deschise">{fisa.sesiuniDeschise}</Rand>
               <Rand eticheta="Dispozitive ținute minte">{fisa.dispozitive}</Rand>
@@ -242,7 +242,7 @@ export function FisaContului({
           {/* ═══ Preferintele ═══ */}
           <Sectiune icon={SlidersHorizontal} titlu="Mesaje de marketing" descriere="Ce a ales clientul în contul lui, la Preferințe.">
             <dl className="space-y-2 text-sm">
-              <Rand eticheta="Emailuri">{alegerea(fisa.primesteEmail, "fără adresă confirmată")}</Rand>
+              <Rand eticheta="Emailuri despre coșul abandonat">{alegerea(fisa.primesteEmail, "fără adresă confirmată")}</Rand>
               <Rand eticheta="SMS-uri">{alegerea(fisa.primesteSms, "fără telefon confirmat")}</Rand>
             </dl>
           </Sectiune>

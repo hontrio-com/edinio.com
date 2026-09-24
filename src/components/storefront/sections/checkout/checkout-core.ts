@@ -312,6 +312,27 @@ export function useCheckoutOrder({
         return rest;
       });
     },
+    /*
+     * ⚠ Profilul contului completeaza NUMAI campurile goale: ce a scris omul deja
+     * (sau ce a venit din alta parte) nu se suprascrie niciodata. Adresa intra numai
+     * la o livrare in Romania, si numai intreaga (judetul, localitatea, strada), ca
+     * sa nu ramana o adresa pe jumatate din doua surse.
+     */
+    laLivrare: (d) => {
+      setForm((f) => {
+        const n = { ...f };
+        if (!n.name.trim() && d.nume) n.name = d.nume;
+        if (!n.phone.trim() && d.telefon) n.phone = d.telefon;
+        const faraAdresa = !n.county && !n.city.trim() && !n.address.trim();
+        if (n.country === "RO" && faraAdresa && d.adresa.judet && d.adresa.localitate && d.adresa.adresa) {
+          n.county = d.adresa.judet;
+          n.city = d.adresa.localitate;
+          n.address = d.adresa.adresa;
+          if (!n.postCode.trim()) n.postCode = d.adresa.codPostal;
+        }
+        return n;
+      });
+    },
   });
   // Comenzile din afara tarii NU primesc blocul de firma: cifra de control a
   // CUI-ului e un algoritm strict romanesc, deci orice cod de TVA european ar fi

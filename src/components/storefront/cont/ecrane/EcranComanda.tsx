@@ -47,14 +47,14 @@ function Linie({ l }: { l: LinieComanda }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             {legatura ? (
-              <Link href={legatura} className={`rounded-sm text-sm font-semibold leading-snug text-[var(--st-text)] hover:underline ${FOCUS}`}>
+              <Link href={legatura} className={`rounded-sm text-sm font-semibold leading-snug text-[var(--st-text)] [overflow-wrap:anywhere] hover:underline ${FOCUS}`}>
                 {l.nume}
               </Link>
             ) : (
-              <p className="text-sm font-semibold leading-snug text-[var(--st-text)]">{l.nume}</p>
+              <p className="text-sm font-semibold leading-snug text-[var(--st-text)] [overflow-wrap:anywhere]">{l.nume}</p>
             )}
             <p className="mt-1 text-xs text-[var(--st-muted)]">
-              {l.extra ? "Optiune adaugata la comanda" : `Cantitate: ${l.cantitate}`}
+              {l.extra ? "Optiune suplimentara" : `Cantitate: ${l.cantitate}`}
               {/* ⚠ Pretul pe bucata se arata NUMAI cand, inmultit, da chiar totalul de langa el. */}
               {!l.extra && l.cantitate > 1 && unitarSeInchide(l.pret, l.cantitate) && <> · {formatPrice(l.pret)} / buc.</>}
             </p>
@@ -65,7 +65,7 @@ function Linie({ l }: { l: LinieComanda }) {
         </div>
 
         {l.personalizare && l.personalizare.length > 0 && (
-          <dl className="mt-3 space-y-1 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-3 py-2.5 text-xs">
+          <dl className="mt-3 space-y-1 rounded-[min(var(--st-radius-sm),0.5rem)] bg-[var(--st-primary-soft)] px-3 py-2.5 text-xs">
             {l.personalizare.map((p, i) => (
               <div key={i} className="flex flex-wrap gap-x-1.5">
                 <dt className="text-[var(--st-muted)]">{p.eticheta}:</dt>
@@ -139,13 +139,13 @@ export function EcranComanda({
           comanda e verificat printr-un cod, adresa, factura si AWB-ul nu se arata.
         */
         <Mesaj>
-          <span className="inline-flex items-center gap-1.5 font-semibold"><Lock className="h-3.5 w-3.5" aria-hidden="true" />Comanda arata putin.</span>{" "}
-          A fost legata de cont doar pe numarul ei. Adresa de livrare, factura si urmarirea coletului se deschid dupa ce
-          confirmi, printr-un cod, un contact de pe comanda.
+          <span className="inline-flex items-center gap-1.5 font-semibold"><Lock className="h-3.5 w-3.5" aria-hidden="true" />Unele detalii sunt ascunse.</span>{" "}
+          Comanda a fost adaugata in cont doar pe baza numarului ei. Adresa de livrare, factura si urmarirea coletului
+          apar dupa ce confirmi prin cod adresa de email de pe comanda.
         </Mesaj>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
+      <div className="grid gap-5 @4xl:grid-cols-[minmax(0,1fr)_20rem] @4xl:items-start">
         <div className="min-w-0 space-y-5">
           <Sectiune titlu="Produse" descriere={pluralRo(marfa, "produs", "produse")} icon={Package}>
             <ul className="divide-y divide-[var(--st-border)]">
@@ -158,7 +158,7 @@ export function EcranComanda({
           {!redusa && livrare && (
             <Sectiune titlu="Livrare" descriere={livrare.titlu} icon={Truck}>
               <ListaDate>
-                {livrare.metoda && <RandDate eticheta="Metoda aleasa">{livrare.metoda}</RandDate>}
+                {livrare.metoda && <RandDate eticheta="Metoda de livrare">{livrare.metoda}</RandDate>}
                 {livrare.fel === "punct" && livrare.punct && <RandDate eticheta="Punct de ridicare">{livrare.punct}</RandDate>}
                 {livrare.adresa.length > 0 && (
                   <RandDate eticheta={livrare.fel === "punct" ? "Adresa punctului" : "Adresa"}>
@@ -166,10 +166,10 @@ export function EcranComanda({
                   </RandDate>
                 )}
                 {livrare.fel === "ridicare" && (
-                  <RandDate eticheta="Ridici de la">{adresaMagazin ?? numeMagazin}</RandDate>
+                  <RandDate eticheta="Adresa de ridicare">{adresaMagazin ?? numeMagazin}</RandDate>
                 )}
                 {(livrare.destinatar.nume || livrare.destinatar.telefon) && (
-                  <RandDate eticheta={livrare.fel === "ridicare" ? "Ridica" : "Destinatar"}>
+                  <RandDate eticheta={livrare.fel === "ridicare" ? "Persoana care ridica" : "Destinatar"}>
                     {livrare.destinatar.nume && <span className="block">{livrare.destinatar.nume}</span>}
                     {livrare.destinatar.telefon && (
                       <span className="block font-normal text-[var(--st-muted)]">{formatPhoneDisplay(livrare.destinatar.telefon)}</span>
@@ -189,7 +189,7 @@ export function EcranComanda({
                   </>
                 ) : !cron.capat && c.stare !== "delivered" ? (
                   <RandDate eticheta="Urmarire">
-                    <span className="font-normal text-[var(--st-muted)]">Numarul de urmarire apare aici cand coletul pleaca.</span>
+                    <span className="font-normal text-[var(--st-muted)]">Numarul AWB apare aici dupa expediere.</span>
                   </RandDate>
                 ) : null}
               </ListaDate>
@@ -227,7 +227,7 @@ export function EcranComanda({
         </div>
 
         <div className="min-w-0 space-y-5">
-          <Sectiune titlu="Sumar plata" icon={CreditCard}>
+          <Sectiune titlu="Sumar comanda" icon={CreditCard}>
             <div className="space-y-1">
               {bani.map((r) => (
                 <div key={r.eticheta} className="flex items-baseline justify-between gap-4 py-1 text-sm">
@@ -242,10 +242,10 @@ export function EcranComanda({
             </div>
             {c.economieOferte !== null && c.economieOferte > 0 && (
               <p className="mt-2 text-xs text-[var(--st-muted)]">
-                Ai economisit {formatPrice(c.economieOferte)} din oferte, deja scazuti din preturi.
+                Ai economisit {formatPrice(c.economieOferte)} din oferte. Reducerea este deja inclusa in preturi.
               </p>
             )}
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[var(--st-radius-sm)] border border-[var(--st-border)] px-3 py-2.5">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-[min(var(--st-radius-sm),0.5rem)] border border-[var(--st-border)] px-3 py-2.5">
               <span className="text-sm text-[var(--st-text)]">{metoda ?? "Plata"}</span>
               <EtichetaStareCont ton={plata.ton}>{plata.text}</EtichetaStareCont>
             </div>
@@ -258,8 +258,8 @@ export function EcranComanda({
               ) : (
                 <p className="text-sm leading-relaxed text-[var(--st-muted)]">
                   {cron.capat
-                    ? "Pentru aceasta comanda nu exista o factura emisa."
-                    : "Factura apare aici dupa ce magazinul o emite. Primesti si un email."}
+                    ? "Nu a fost emisa nicio factura pentru aceasta comanda."
+                    : "Factura apare aici dupa ce magazinul o emite."}
                 </p>
               )}
             </Sectiune>
@@ -298,7 +298,7 @@ export function EcranComanda({
                 {anulabila && (
                   <div className="space-y-2">
                     <p className="text-sm leading-relaxed text-[var(--st-muted)]">
-                      Comanda n-a intrat inca in lucru, deci o poti anula de aici.
+                      Comanda nu a fost inca procesata, asa ca o poti anula.
                     </p>
                     {/* ⚠ Butonul apare numai la `pending`, dar apararea e in baza, nu aici. */}
                     <AnuleazaComanda orderId={c.orderId} />
@@ -307,7 +307,7 @@ export function EcranComanda({
                 {poateReturna && (
                   <div className="space-y-2">
                     <p className="text-sm leading-relaxed text-[var(--st-muted)]">
-                      Ai dreptul sa te retragi din contract in cel putin 14 zile de la primirea produselor.
+                      Ai dreptul sa te retragi din contract in termen de 14 zile de la primirea produselor.
                     </p>
                     <Link href={`/retur?order=${encodeURIComponent(c.numar)}`} className={BUTON_SECUNDAR}>
                       <Undo2 className="h-4 w-4" aria-hidden="true" />

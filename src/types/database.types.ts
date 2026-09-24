@@ -7509,6 +7509,7 @@ export type Database = {
           comenzi: number
           facturi: number
           in_curs: number
+          poza_la: string | null
           retururi: number
         }[]
       }
@@ -7540,6 +7541,43 @@ export type Database = {
           primeste_email: boolean
           primeste_sms: boolean
         }[]
+      }
+      cont_profil: {
+        Args: { p_business: string; p_cont: string }
+        Returns: {
+          adresa: Json | null
+          nume: string
+          poza_la: string | null
+          telefon: string | null
+        }[]
+      }
+      cont_profil_salveaza: {
+        Args: {
+          p_adresa: string | null
+          p_business: string
+          p_cod_postal: string | null
+          p_cont: string
+          p_judet: string | null
+          p_localitate: string | null
+          p_nume: string
+          p_telefon: string | null
+        }
+        Returns: string
+      }
+      cont_poza: {
+        Args: { p_business: string; p_cont: string }
+        Returns: {
+          imagine_b64: string
+          schimbata_la: string
+        }[]
+      }
+      cont_poza_salveaza: {
+        Args: { p_business: string; p_cont: string; p_imagine_b64: string }
+        Returns: string
+      }
+      cont_poza_sterge: {
+        Args: { p_business: string; p_cont: string }
+        Returns: boolean
       }
       cont_preferinte_schimba: {
         Args: {

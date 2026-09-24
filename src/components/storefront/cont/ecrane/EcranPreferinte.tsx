@@ -12,8 +12,8 @@ export function EcranPreferinte({ pref }: { pref: Preferinte }) {
             <ComutatorPreferinta
               canal="email"
               pornit={pref.primesteEmail}
-              eticheta="Amintiri pe email despre cosul neterminat"
-              explicatie="Cand lasi produse in cos fara sa comanzi, magazinul iti poate scrie."
+              eticheta="Emailuri despre produsele lasate in cos"
+              explicatie="Primesti un email daca lasi produse in cos fara sa finalizezi comanda."
             />
           ) : (
             <p className="py-4 text-sm text-[var(--st-muted)] first:pt-0">Nu ai nicio adresa de email confirmata in cont.</p>
@@ -22,8 +22,8 @@ export function EcranPreferinte({ pref }: { pref: Preferinte }) {
             <ComutatorPreferinta
               canal="sms"
               pornit={pref.primesteSms}
-              eticheta="SMS-uri de la magazin"
-              explicatie="Campaniile trimise de magazin pe telefon."
+              eticheta="Oferte prin SMS"
+              explicatie="Mesaje promotionale trimise de magazin prin SMS."
             />
           ) : (
             <p className="py-4 text-sm text-[var(--st-muted)] last:pb-0">Nu ai niciun numar de telefon confirmat in cont.</p>
@@ -38,8 +38,8 @@ export function EcranPreferinte({ pref }: { pref: Preferinte }) {
         lucruri deosebite si asa trebuie sa ramana.
       */}
       <Mesaj>
-        Mesajele legate de o comanda a ta (confirmare, livrare, factura, retur) nu sunt reclama si se trimit indiferent
-        de alegerea de mai sus.
+        Mesajele despre comenzile tale (confirmare, livrare, factura, retur) se trimit in continuare, indiferent de
+        aceste setari.
       </Mesaj>
     </>
   );

@@ -101,13 +101,13 @@ export async function anuleazaComanda(
 export function mesajulAnularii(motiv: string): string {
   switch (motiv) {
     case "prea-tarziu":
-      return "Comanda a intrat deja in lucru si nu se mai poate anula de aici. Scrie magazinului.";
+      return "Comanda este deja in procesare si nu mai poate fi anulata din cont. Contacteaza magazinul.";
     case "marketplace":
-      return "Comanda asta vine de pe un marketplace, iar anularea se face acolo.";
+      return "Aceasta comanda a fost plasata pe un marketplace. Anularea se face de acolo.";
     case "platita":
-      return "Comanda e deja platita, deci o anuleaza magazinul, care iti si intoarce banii. Scrie-i.";
+      return "Comanda este deja platita, asa ca o poate anula doar magazinul, care iti va returna banii. Contacteaza magazinul.";
     case "plata-online":
-      return "Comenzile platite online se anuleaza de magazin, ca plata sa nu ramana pe drum. Scrie-i.";
+      return "Comenzile cu plata online pot fi anulate doar de magazin. Contacteaza magazinul.";
     case "negasita":
       return "Comanda nu se poate anula.";
     default:

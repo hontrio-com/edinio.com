@@ -120,7 +120,7 @@ export function useAutentificare({
           reusit = true;
           dupaIntrare(adresa);
         } else if (ok && j.pas === "cod") laPasulCodului(j.mesaj, adresa);
-        else setEroare(text(j.eroare, "Nu am putut deschide contul."));
+        else setEroare(text(j.eroare, "Nu am putut sa te autentificam."));
       } else {
         const { ok, j } = mod === "inregistrare"
           ? await trimite("/api/cont/inregistrare", { email: adresa, parola })
@@ -162,7 +162,7 @@ export function useAutentificare({
         dupaIntrare(emailPas);
       } else if (j.expirat === true) {
         inapoi();
-        setEroare(text(j.eroare, "Pasul a expirat. Reia de la inceput."));
+        setEroare(text(j.eroare, "Timpul pentru confirmare a expirat. Incepe din nou."));
       } else setEroare(text(j.eroare, "Nu am putut verifica codul."));
     } catch {
       if (gen === generatie.current) setEroare("Nu am putut verifica codul. Verifica legatura la internet.");
@@ -184,7 +184,7 @@ export function useAutentificare({
         setRamas(ASTEPTARE_RETRIMITERE);
       } else if (j.expirat === true) {
         inapoi();
-        setEroare(text(j.eroare, "Pasul a expirat. Reia de la inceput."));
+        setEroare(text(j.eroare, "Timpul pentru confirmare a expirat. Incepe din nou."));
       } else setEroare(text(j.eroare, "Nu am putut trimite alt cod."));
     } catch {
       if (gen === generatie.current) setEroare("Nu am putut trimite alt cod. Verifica legatura la internet.");

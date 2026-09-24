@@ -99,25 +99,25 @@ test("⚠ metoda necunoscuta NU devine ramburs", () => {
 
 test("⚠⚠ rambursul LIVRAT e achitat, desi campul scrie `unpaid`", () => {
   const s = stareaPlatii({ stare: "delivered", incasata: true, metoda: "cash_on_delivery", starePlata: "unpaid" });
-  assert.equal(s.text, "Achitata la livrare");
+  assert.equal(s.text, "Platita la livrare");
   assert.equal(s.ton, "bun");
 });
 
 test("rambursul nelivrat se plateste la livrare; cardul neplatit nu e „platit”", () => {
-  assert.equal(stareaPlatii({ stare: "pending", incasata: false, metoda: "cash_on_delivery", starePlata: "unpaid" }).text, "Se plateste la livrare");
+  assert.equal(stareaPlatii({ stare: "pending", incasata: false, metoda: "cash_on_delivery", starePlata: "unpaid" }).text, "Plata la livrare");
   assert.equal(stareaPlatii({ stare: "pending", incasata: false, metoda: "netopia", starePlata: "unpaid" }).text, "Plata nu a fost finalizata");
   assert.equal(stareaPlatii({ stare: "confirmed", incasata: true, metoda: "stripe", starePlata: "paid" }).text, "Platita");
 });
 
 test("⚠⚠ comanda anulata si PLATITA nu primeste „nu ai platit”", () => {
   const s = stareaPlatii({ stare: "cancelled", incasata: false, metoda: "netopia", starePlata: "paid" });
-  assert.match(s.text, /Rambursarea o face magazinul/);
-  assert.equal(stareaPlatii({ stare: "cancelled", incasata: false, metoda: "netopia", starePlata: "unpaid" }).text, "Comanda anulata, nu s-a incasat nimic");
-  assert.equal(stareaPlatii({ stare: "refunded", incasata: false, metoda: "stripe", starePlata: "refunded" }).text, "Suma a fost returnata");
+  assert.match(s.text, /Magazinul iti returneaza banii/);
+  assert.equal(stareaPlatii({ stare: "cancelled", incasata: false, metoda: "netopia", starePlata: "unpaid" }).text, "Anulata, nu ai platit nimic");
+  assert.equal(stareaPlatii({ stare: "refunded", incasata: false, metoda: "stripe", starePlata: "refunded" }).text, "Rambursata");
 });
 
 test("vederea redusa (fara metoda) nu spune mai mult decat stie", () => {
-  assert.equal(stareaPlatii({ stare: "pending", incasata: false, metoda: null, starePlata: null }).text, "Neincasata inca");
+  assert.equal(stareaPlatii({ stare: "pending", incasata: false, metoda: null, starePlata: null }).text, "Neplatita");
   assert.equal(stareaPlatii({ stare: "delivered", incasata: true, metoda: null, starePlata: null }).text, "Platita");
 });
 
@@ -215,7 +215,7 @@ test("⚠⚠ factura STORNATA se spune pe fata", () => {
     storno_serie: "CLM", storno_numar: "0225", storno_descarcabil: true, emisa_la: "2026-09-05",
   });
   assert.ok(d);
-  assert.equal(stareaDocumentului(d).text, "Anulata prin stornare");
+  assert.equal(stareaDocumentului(d).text, "Stornata");
   assert.equal(numarulDocumentului(d.stornoSerie, d.stornoNumar), "CLM 0225");
   assert.equal(d.stornoDescarcabil, true);
 });

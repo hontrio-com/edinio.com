@@ -6,7 +6,7 @@ import { comandaMea } from "@/lib/cont/comenzi";
 import { rezumatulContului } from "@/lib/cont/rezumat";
 import { randurileDeBani } from "@/lib/cont/banii-comenzii";
 import { detaliileDeLaCheckout } from "@/lib/cont/detalii-checkout";
-import { orderStatus } from "@/lib/orders/status";
+import { stareaComenzii } from "@/lib/cont/stare-comanda";
 import { formatDateTime } from "@/lib/utils/format";
 import { PaginaCont } from "@/components/storefront/cont/ui/PaginaCont";
 import { EcranComanda } from "@/components/storefront/cont/ecrane/EcranComanda";
@@ -35,7 +35,7 @@ export default async function ComandaMea({ params }: Props) {
   */
   if (!c) notFound();
 
-  const st = orderStatus(c.stare);
+  const st = stareaComenzii(c.stare);
   /*
     ⚠⚠ RANDUL „PRODUSE” E SUMA LINIILOR ARATATE, nu `orders.subtotal`, si coloana
     se aduna pana la total: ce nu se explica primeste randul lui, in loc sa fie
@@ -51,6 +51,7 @@ export default async function ComandaMea({ params }: Props) {
       rezumat={rezumat}
       activ="comenzi"
       inapoi={{ href: "/cont/comenzi", eticheta: "Toate comenzile" }}
+      ajutorInPagina
       titlu={`Comanda ${c.numar}`}
       subtitlu={
         <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1.5">

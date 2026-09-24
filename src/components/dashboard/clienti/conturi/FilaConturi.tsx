@@ -144,7 +144,7 @@ export async function FilaConturi({
               <div className="hidden items-center gap-3 bg-muted/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground lg:flex">
                 <span className="w-9 flex-shrink-0" aria-hidden="true" />
                 <span className="min-w-0 flex-1">Client</span>
-                <span className="w-32 flex-shrink-0">Cont făcut</span>
+                <span className="w-32 flex-shrink-0">Cont creat</span>
                 <span className="w-36 flex-shrink-0">Ultima intrare</span>
                 <span className="w-20 flex-shrink-0 text-right">Comenzi</span>
                 <span className="w-24 flex-shrink-0 text-right">Stare</span>
@@ -171,7 +171,7 @@ export async function FilaConturi({
                       </p>
                       {/* Pe telefon, ce pe desktop sta in coloane: un rand scurt sub nume. */}
                       <p className="mt-0.5 text-[11px] text-muted-foreground lg:hidden">
-                        {c.ultimaIntrare ? `a intrat ${acumCatTimp(c.ultimaIntrare, acum)}` : "n-a intrat în ultimul an"}
+                        {c.ultimaIntrare ? `a intrat ${acumCatTimp(c.ultimaIntrare, acum)}` : "nu a intrat în ultimele 12 luni"}
                         {" · "}
                         {c.comenzi} {c.comenzi === 1 ? "comandă" : "comenzi"}
                       </p>
@@ -184,7 +184,7 @@ export async function FilaConturi({
                         ⚠ Jurnalul se pastreaza 12 luni, deci „niciodata” ar fi o
                         minciuna pentru un cont mai vechi: se spune cat stim.
                       */}
-                      {c.ultimaIntrare ? acumCatTimp(c.ultimaIntrare, acum) : "n-a intrat în ultimul an"}
+                      {c.ultimaIntrare ? acumCatTimp(c.ultimaIntrare, acum) : "nu a intrat în ultimele 12 luni"}
                     </span>
                     <span className="hidden w-20 flex-shrink-0 text-right text-sm tabular-nums text-foreground lg:block">
                       {c.comenzi}

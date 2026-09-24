@@ -51,5 +51,5 @@ export function numarulDocumentului(serie: string | null, numar: string | null):
 }
 
 export function stareaDocumentului(d: DocumentFiscal): { text: string; ton: TonEticheta } {
-  return d.stornata ? { text: "Anulata prin stornare", ton: "neutru" } : { text: "Emisa", ton: "bun" };
+  return d.stornata ? { text: "Stornata", ton: "neutru" } : { text: "Emisa", ton: "bun" };
 }

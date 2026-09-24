@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
 import { areParola, contacteleMele } from "@/lib/cont/date";
 import { rezumatulContului } from "@/lib/cont/rezumat";
+import { adresaPozei, profilulContului } from "@/lib/cont/profil";
 import { PaginaCont } from "@/components/storefront/cont/ui/PaginaCont";
 import { EcranDate } from "@/components/storefront/cont/ecrane/EcranDate";
 
@@ -15,7 +16,7 @@ interface Props {
 
 /* Numai textele noastre: `?eroare=` vine din adresa, deci nu se afiseaza niciodata ca atare. */
 const ERORI: Record<string, string> = {
-  iesire: "Nu am putut inchide celelalte sesiuni. Esti inca in cont pe toate dispozitivele; incearca din nou peste cateva minute.",
+  iesire: "Nu am putut inchide celelalte sesiuni. Esti in continuare conectat pe toate dispozitivele. Incearca din nou peste cateva minute.",
   export: "Nu am putut pregati fisierul cu datele tale. Incearca din nou peste cateva minute.",
 };
 
@@ -26,15 +27,16 @@ export default async function DateleMele({ params, searchParams }: Props) {
   const pag = await incarcaPaginaDeCont(slug);
   if (!pag.sesiune) redirect("/cont/intra");
 
-  const [rezumat, contacte, cuParola] = await Promise.all([
+  const [rezumat, contacte, cuParola, profil] = await Promise.all([
     rezumatulContului(pag.magazin.id, pag.sesiune.contId),
     contacteleMele(pag.magazin.id, pag.sesiune.contId),
     areParola(pag.magazin.id, pag.sesiune.contId),
+    profilulContului(pag.magazin.id, pag.sesiune.contId),
   ]);
 
   return (
-    <PaginaCont pag={pag} rezumat={rezumat} activ="date" titlu="Datele mele" subtitlu="Contactele, parola, sesiunile si datele pe care le pastreaza magazinul despre tine.">
-      <EcranDate contacte={contacte} comenzi={rezumat.comenzi} areParola={cuParola} eroare={mesajEroare} />
+    <PaginaCont pag={pag} rezumat={rezumat} activ="date" titlu="Datele mele" subtitlu="Profilul, adresele de email, parola, dispozitivele conectate si datele tale.">
+      <EcranDate profil={profil} pozaSrc={adresaPozei(profil.pozaLa)} contacte={contacte} comenzi={rezumat.comenzi} areParola={cuParola} eroare={mesajEroare} />
     </PaginaCont>
   );
 }

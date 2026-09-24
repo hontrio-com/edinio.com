@@ -8,15 +8,15 @@ import { BUTON_PRIMAR, CARD, LEGATURA, STIL_PRIMAR } from "../ui/clase";
 
 /** Starile cererilor de retur (`return.actions.ts`), scrise pentru cumparator. */
 const STARE: Record<string, { text: string; ton: TonEticheta; fraza: string }> = {
-  nou: { text: "Trimisa", ton: "asteptare", fraza: "Magazinul a primit cererea si o verifica." },
-  aprobat: { text: "Aprobata", ton: "info", fraza: "Cererea e aprobata. Trimite produsele cum ti-a spus magazinul." },
-  respins: { text: "Respinsa", ton: "rau", fraza: "Magazinul a respins cererea. Pentru detalii, scrie-i." },
-  rambursat: { text: "Banii intorsi", ton: "bun", fraza: "Suma a fost returnata." },
+  nou: { text: "In asteptare", ton: "asteptare", fraza: "Magazinul a primit cererea si o analizeaza." },
+  aprobat: { text: "Aprobata", ton: "info", fraza: "Cererea a fost aprobata. Trimite produsele urmand instructiunile magazinului." },
+  respins: { text: "Respinsa", ton: "rau", fraza: "Cererea a fost respinsa. Pentru detalii, contacteaza magazinul." },
+  rambursat: { text: "Rambursata", ton: "bun", fraza: "Banii au fost returnati." },
 };
 
 const RESTITUIRE: Record<string, string> = {
-  iban: "In contul bancar",
-  original: "Pe aceeasi cale ca plata",
+  iban: "Transfer bancar (IBAN)",
+  original: "Prin aceeasi metoda de plata",
   card: "Pe card",
 };
 
@@ -28,7 +28,7 @@ export function EcranRetururi({ retururi }: { retururi: ReturulMeu[] }) {
         titlu="Nu ai nicio cerere de retur"
         actiune={<Link href="/cont/comenzi" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Vezi comenzile</Link>}
       >
-        Te poti retrage din contract in cel putin 14 zile de la primirea produselor, din pagina comenzii.
+        Poti returna produsele in termen de 14 zile de la primire. Cererea o faci din pagina comenzii.
       </StareGoala>
     );
   }
@@ -50,7 +50,7 @@ export function EcranRetururi({ retururi }: { retururi: ReturulMeu[] }) {
                   )}
                 </p>
                 <p className="mt-0.5 text-sm text-[var(--st-muted)]">
-                  Cerut pe {formatDate(r.creatLa)} · {pluralRo(r.bucati, "produs", "produse")}
+                  Cerere trimisa pe {formatDate(r.creatLa)} · {pluralRo(r.bucati, "produs", "produse")}
                 </p>
               </div>
               <EtichetaStareCont ton={st.ton}>{st.text}</EtichetaStareCont>
@@ -71,7 +71,7 @@ export function EcranRetururi({ retururi }: { retururi: ReturulMeu[] }) {
                 )}
                 {r.motiv && <RandDate eticheta="Motiv">{r.motiv}</RandDate>}
                 {r.felRestituire && (
-                  <RandDate eticheta="Restituire">
+                  <RandDate eticheta="Rambursare">
                     {RESTITUIRE[r.felRestituire] ?? r.felRestituire}
                     {/*
                       ⚠ IBAN-ul vine DEJA mascat din baza, la ultimele patru cifre. O

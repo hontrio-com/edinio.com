@@ -12,15 +12,21 @@ import { useContulMagazinului } from "./ContulMagazinului";
  * catre pixeli (`AddPaymentInfo`) nu mai pleaca pentru o trimitere pe care
  * serverul oricum o refuza.
  *
- * ⚠ Formularul intreaba serverul (`/api/cont/stare`) NUMAI cand magazinul cere
- * cont; la celelalte nu pleaca nicio cerere in plus.
+ * ⚠ Formularul intreaba serverul (`/api/cont/stare`) NUMAI cand magazinul are conturile
+ * pornite (obligatorii sau nu): omul intrat in cont isi gaseste formularul completat
+ * din profil. La magazinele fara conturi nu pleaca nicio cerere in plus.
  *
  * ⚠ Cand raspunsul lipseste (pana, retea), pasul NU se arata si trimiterea merge
  * la server ca de obicei: acolo se hotaraste, iar un refuz aprinde pasul
  * (`ceruDeServer`).
  */
 
-type Stare = { cere: boolean; logat: boolean; email: string | null };
+import type { AdresaProfil } from "@/lib/cont/profil-reguli";
+
+/** Ce stie contul despre livrare (din profil), pentru campurile goale ale formularului. */
+export type DateLivrareCont = { nume: string; telefon: string; adresa: AdresaProfil };
+
+type Stare = { cere: boolean; logat: boolean; email: string | null; livrare: DateLivrareCont | null };
 
 export type ContulLaComanda = {
   /** Magazinul cere cont si omul nu e in cont: pasul de intrare se arata. */
@@ -57,7 +63,21 @@ async function intreaba(): Promise<Stare | null> {
     const r = await fetch("/api/cont/stare", { cache: "no-store" });
     if (!r.ok) return null;
     const j = await r.json();
-    return { cere: j?.cere === true, logat: j?.logat === true, email: typeof j?.email === "string" ? j.email : null };
+    const l = j?.livrare;
+    const livrare =
+      l && typeof l === "object" && l.adresa && typeof l.adresa === "object"
+        ? {
+            nume: typeof l.nume === "string" ? l.nume : "",
+            telefon: typeof l.telefon === "string" ? l.telefon : "",
+            adresa: {
+              judet: typeof l.adresa.judet === "string" ? l.adresa.judet : "",
+              localitate: typeof l.adresa.localitate === "string" ? l.adresa.localitate : "",
+              adresa: typeof l.adresa.adresa === "string" ? l.adresa.adresa : "",
+              codPostal: typeof l.adresa.codPostal === "string" ? l.adresa.codPostal : "",
+            },
+          }
+        : null;
+    return { cere: j?.cere === true, logat: j?.logat === true, email: typeof j?.email === "string" ? j.email : null, livrare };
   } catch {
     return null;
   }
@@ -66,16 +86,24 @@ async function intreaba(): Promise<Stare | null> {
 export function useContulLaComanda({
   activ,
   laAdresa,
+  laLivrare,
 }: {
   /** Formularul e deschis si e cel adevarat (nu miniatura din galerie). */
   activ: boolean;
   /** Adresa contului, cand se afla: formularul o pune in campul de email, daca e gol. */
   laAdresa?: (email: string) => void;
+  /** Datele de livrare din profil: formularul le pune NUMAI in campurile goale. */
+  laLivrare?: (d: DateLivrareCont) => void;
 }): ContulLaComanda {
-  const { obligatoriu } = useContulMagazinului();
+  const { obligatoriu, aprins } = useContulMagazinului();
   const idBloc = useId();
   const [stare, setStare] = useState<Stare | null>(null);
-  const cerut = obligatoriu && activ;
+  /*
+    ⚠ Se intreaba si cand contul NU e obligatoriu, dar zona de cont e aprinsa: omul
+    intrat in cont isi gaseste formularul completat din profil. La magazinele fara
+    conturi nu pleaca nicio cerere in plus.
+  */
+  const cerut = (obligatoriu || aprins) && activ;
   /*
     ⚠ Ultima stare CUNOSCUTA, pentru functiile chemate din afara randarii (refuzul
     serverului vine dupa un `await`, cu valorile de la apasare), si o numaratoare a
@@ -90,6 +118,7 @@ export function useContulLaComanda({
     necesarAcum.current = s.cere;
     setStare(s);
     if (s.logat && s.email) laAdresa?.(s.email);
+    if (s.logat && s.livrare) laLivrare?.(s.livrare);
   });
 
   useEffect(() => {
@@ -146,13 +175,18 @@ export function useContulLaComanda({
       else sariLaBloc.current = true;
       intrebare.current++;
       necesarAcum.current = true;
-      setStare({ cere: true, logat: false, email: null });
+      setStare({ cere: true, logat: false, email: null, livrare: null });
     },
     aIntrat: (email) => {
       intrebare.current++;
       necesarAcum.current = false;
-      setStare({ cere: false, logat: true, email: email || null });
+      setStare({ cere: false, logat: true, email: email || null, livrare: null });
       if (email) laAdresa?.(email);
+      /* Profilul vine abia acum: se intreaba o data, ca formularul sa-si completeze campurile goale. */
+      const numar = intrebare.current;
+      void intreaba().then((s) => {
+        if (s && numar === intrebare.current && s.logat && s.livrare) laLivrare?.(s.livrare);
+      });
     },
     maiECerut: async () => {
       if (!necesarAcum.current) return false;

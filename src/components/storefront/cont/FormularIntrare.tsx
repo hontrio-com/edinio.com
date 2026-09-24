@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, Mail } from "lucide-react";
 import { BUTON_PRIMAR, CAMP, ETICHETA_CAMP, LEGATURA, STIL_PRIMAR, TITLU, FOCUS } from "./ui/clase";
+import { cn } from "@/lib/utils";
+import { Mesaj } from "./ui/piese";
 import { useAutentificare, type ModAutentificare } from "./autentificare-client";
 
 /**
@@ -109,23 +111,23 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
 
       <h2 className="text-xl font-semibold text-[var(--st-text)]" style={TITLU}>{a.pas === "cod" ? "Verifica-ti emailul" : t.titlu}</h2>
       <p className="mb-6 mt-1 text-sm text-[var(--st-muted)]">
-        {a.pas === "cod" ? "Am trimis un cod de sase cifre." : t.sub}
+        {a.pas === "cod" ? "Ti-am trimis un cod de 6 cifre pe email." : t.sub}
       </p>
 
       {a.pas === "cod" ? (
         <form onSubmit={a.trimiteCodul} className="space-y-5">
           <fieldset disabled={a.asteapta} className="m-0 min-w-0 space-y-5 border-0 p-0">
-          <div className="flex items-start gap-3 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3">
+          <div className="flex items-start gap-3 rounded-[min(var(--st-radius-sm),0.5rem)] bg-[var(--st-primary-soft)] px-4 py-3">
             <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[var(--st-text)]" aria-hidden="true" />
             <div className="min-w-0 text-sm leading-relaxed text-[var(--st-text)]">
-              <p>{a.mesaj || "Daca adresa poate fi folosita, codul a plecat."}</p>
+              <p>{a.mesaj || "Daca adresa poate fi folosita, ti-am trimis un cod."}</p>
               <p className="mt-0.5 text-[var(--st-muted)]">
                 Adresa: <span className="break-all font-semibold text-[var(--st-text)]">{a.emailPas}</span>
               </p>
             </div>
           </div>
           <div>
-            <label htmlFor="cod" className={ETICHETA_CAMP}>Codul de sase cifre din email</label>
+            <label htmlFor="cod" className={ETICHETA_CAMP}>Codul primit pe email</label>
             <input
               ref={campCod}
               id="cod"
@@ -134,7 +136,8 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
               autoComplete="one-time-code"
               value={a.cod}
               onChange={(ev) => a.scrieCod(ev.target.value)}
-              className={`${CAMP} py-3 text-center text-xl tracking-[0.5em] sm:text-xl`}
+              className={cn(CAMP, "py-3 text-center indent-[0.5em] text-xl tracking-[0.5em] sm:text-xl")}
+              maxLength={6}
               placeholder="000000"
               required
             />
@@ -146,7 +149,7 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
               valoare={a.parolaNoua}
               schimba={a.setParolaNoua}
               autoComplete="new-password"
-              ajutor="Cel putin 8 caractere. Te scoatem din cont de pe celelalte dispozitive."
+              ajutor="Minimum 8 caractere. Vei fi deconectat de pe celelalte dispozitive."
             />
           )}
           <label className="flex items-start gap-2.5 text-sm text-[var(--st-text)]">
@@ -157,23 +160,23 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
               className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--st-primary)]"
             />
             <span>
-              Tine minte acest dispozitiv 60 de zile
+              Retine acest dispozitiv 60 de zile
               <span className="block text-xs text-[var(--st-muted)]">Nu bifa pe un calculator folosit si de altii.</span>
             </span>
           </label>
-          {a.eroare && <p role="alert" className="text-sm text-[var(--st-text)]">{a.eroare}</p>}
+          {a.eroare && <Mesaj fel="eroare">{a.eroare}</Mesaj>}
           <button type="submit" disabled={a.asteapta || a.cod.length !== 6} className={`${BUTON_PRIMAR} w-full`} style={STIL_PRIMAR}>
             {a.asteapta ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {a.asteapta ? "Se verifica..." : a.mod === "uitata" ? "Schimba parola si intra" : a.mod === "inregistrare" ? "Confirma si creeaza contul" : "Intra in cont"}
           </button>
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <button type="button" onClick={a.inapoi} className={`inline-flex items-center gap-1.5 ${LEGATURA}`}>
+            <button type="button" onClick={a.inapoi} className={`inline-flex min-h-10 items-center gap-1.5 ${LEGATURA}`}>
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Inapoi
             </button>
             {a.ramas > 0 ? (
               <span className="text-[var(--st-muted)]">Poti cere alt cod in {a.ramas} s</span>
             ) : (
-              <button type="button" onClick={() => void a.retrimite()} disabled={a.asteapta} className={LEGATURA}>
+              <button type="button" onClick={() => void a.retrimite()} disabled={a.asteapta} className={`inline-flex min-h-10 items-center ${LEGATURA}`}>
                 Retrimite codul
               </button>
             )}
@@ -198,7 +201,7 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
             />
             {a.mod === "inregistrare" && (
               <p className="mt-2 text-xs leading-relaxed text-[var(--st-muted)]">
-                Foloseste adresa cu care ai comandat: comenzile se leaga singure de cont.
+                Foloseste adresa de email cu care ai mai comandat, ca sa vezi comenzile anterioare in cont.
               </p>
             )}
           </div>
@@ -214,10 +217,10 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
           )}
           {a.mod === "intrare" && (
             <div className="-mt-2 text-right text-sm">
-              <button type="button" onClick={() => a.schimbaMod("uitata")} className={LEGATURA}>Ai uitat parola?</button>
+              <button type="button" onClick={() => a.schimbaMod("uitata")} className={`inline-flex min-h-10 items-center ${LEGATURA}`}>Ai uitat parola?</button>
             </div>
           )}
-          {a.eroare && <p role="alert" className="text-sm text-[var(--st-text)]">{a.eroare}</p>}
+          {a.eroare && <Mesaj fel="eroare">{a.eroare}</Mesaj>}
           <button type="submit" disabled={a.asteapta} className={`${BUTON_PRIMAR} w-full`} style={STIL_PRIMAR}>
             {a.asteapta ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {a.asteapta ? "Se trimite..." : a.mod === "intrare" ? "Intra in cont" : a.mod === "inregistrare" ? "Creeaza contul" : "Trimite-mi un cod"}
@@ -232,8 +235,8 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
           )}
           {a.mod === "uitata" && (
             <div className="text-center text-sm">
-              <button type="button" onClick={() => a.schimbaMod("intrare")} className={`inline-flex items-center gap-1.5 ${LEGATURA}`}>
-                <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Inapoi la intrare
+              <button type="button" onClick={() => a.schimbaMod("intrare")} className={`inline-flex min-h-10 items-center gap-1.5 ${LEGATURA}`}>
+                <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Inapoi la autentificare
               </button>
             </div>
           )}

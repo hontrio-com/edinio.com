@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     magazin = await magazinulCereriiDeCont(req.headers.get("host"));
   } catch (e) {
     await logError({ action: "cont/intra", message: `cautarea magazinului a esuat: ${String(e)}`, severity: "error" });
-    return NextResponse.json({ eroare: "Serviciu indisponibil temporar." }, { status: 503 });
+    return NextResponse.json({ eroare: "Serviciul este indisponibil momentan. Incearca mai tarziu." }, { status: 503 });
   }
   if (!magazin) return new NextResponse("Not found", { status: 404 });
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
@@ -75,6 +75,6 @@ export async function POST(req: NextRequest) {
       businessId: magazin.id,
       severity: "error",
     });
-    return NextResponse.json({ eroare: "Nu am putut deschide contul. Incearca din nou." }, { status: 500 });
+    return NextResponse.json({ eroare: "Nu am putut sa te autentificam. Incearca din nou." }, { status: 500 });
   }
 }

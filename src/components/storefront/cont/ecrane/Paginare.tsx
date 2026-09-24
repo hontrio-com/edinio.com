@@ -20,7 +20,7 @@ export function Paginare({ baza, pagina, pagini }: { baza: string; pagina: numbe
       {pagina > 1 ? (
         <Link href={`${baza}?p=${pagina - 1}`} className={buton} rel="prev">
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">Inapoi</span>
+          <span className="sr-only sm:not-sr-only">Anterioara</span>
         </Link>
       ) : <span />}
       <span className="text-sm tabular-nums text-[var(--st-on-bg)] opacity-75">
@@ -28,7 +28,7 @@ export function Paginare({ baza, pagina, pagini }: { baza: string; pagina: numbe
       </span>
       {pagina < pagini ? (
         <Link href={`${baza}?p=${pagina + 1}`} className={buton} rel="next">
-          <span className="sr-only sm:not-sr-only">Inainte</span>
+          <span className="sr-only sm:not-sr-only">Urmatoare</span>
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       ) : <span />}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CircleX } from "lucide-react";
-import { BUTON_SECUNDAR } from "./ui/clase";
+import { CircleX, LoaderCircle } from "lucide-react";
+import { BUTON_PERICOL, BUTON_SECUNDAR } from "./ui/clase";
+import { Mesaj } from "./ui/piese";
 
 /**
  * Anularea unei comenzi care inca nu a intrat in lucru (H5).
@@ -24,10 +25,20 @@ export function AnuleazaComanda({ orderId }: { orderId: string }) {
   const [sigur, setSigur] = useState(false);
   const [eroare, setEroare] = useState("");
   const [asteapta, setAsteapta] = useState(false);
+  const grup = useRef<HTMLDivElement>(null);
+  const deschide = useRef<HTMLButtonElement>(null);
+  const aFostDeschis = useRef(false);
+
+  /* Focusul merge pe confirmare cand se deschide, si inapoi pe buton cand se renunta (altfel cadea pe pagina). */
+  useEffect(() => {
+    if (sigur) grup.current?.focus();
+    else if (aFostDeschis.current) deschide.current?.focus();
+    aFostDeschis.current = sigur;
+  }, [sigur]);
 
   if (!sigur) {
     return (
-      <button type="button" onClick={() => setSigur(true)} className={BUTON_SECUNDAR}>
+      <button ref={deschide} type="button" onClick={() => setSigur(true)} className={BUTON_SECUNDAR}>
         <CircleX className="h-4 w-4 text-destructive" aria-hidden="true" />
         Anuleaza comanda
       </button>
@@ -35,15 +46,13 @@ export function AnuleazaComanda({ orderId }: { orderId: string }) {
   }
 
   return (
-    <div className="w-full rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] p-4" role="group" aria-label="Confirma anularea">
-      <p className="text-sm font-semibold text-[var(--st-text)]">Anulezi comanda?</p>
-      <p className="mt-1 text-sm leading-relaxed text-[var(--st-muted)]">
-        Nu se mai poate desface. Daca ai platit deja online, rambursarea o face magazinul.
-      </p>
+    <div ref={grup} tabIndex={-1} className="w-full rounded-[min(var(--st-radius),0.75rem)] border border-[var(--st-border)] bg-[var(--st-surface)] p-4 focus:outline-none" role="group" aria-label="Confirma anularea">
+      <p className="text-sm font-semibold text-[var(--st-text)]">Sigur vrei sa anulezi comanda?</p>
+      <p className="mt-1 text-sm leading-relaxed text-[var(--st-muted)]">Anularea este definitiva.</p>
       {eroare && (
-        <p role="alert" className="mt-3 text-sm text-[var(--st-text)]">
-          {eroare}
-        </p>
+        <div className="mt-3">
+          <Mesaj fel="eroare">{eroare}</Mesaj>
+        </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
@@ -70,13 +79,13 @@ export function AnuleazaComanda({ orderId }: { orderId: string }) {
               setAsteapta(false);
             }
           }}
-          className={BUTON_SECUNDAR}
+          className={BUTON_PERICOL}
         >
-          <CircleX className="h-4 w-4 text-destructive" aria-hidden="true" />
+          {asteapta ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CircleX className="h-4 w-4" aria-hidden="true" />}
           {asteapta ? "Se anuleaza..." : "Da, anuleaza comanda"}
         </button>
         <button type="button" onClick={() => setSigur(false)} className={BUTON_SECUNDAR} disabled={asteapta}>
-          Nu, pastreaz-o
+          Nu, pastreaza comanda
         </button>
       </div>
     </div>

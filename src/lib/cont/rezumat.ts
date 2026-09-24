@@ -6,9 +6,11 @@ export type RezumatCont = {
   inCurs: number;
   facturi: number;
   retururi: number;
+  /** Cand s-a schimbat poza de profil, sau null cand nu are. */
+  pozaLa: string | null;
 };
 
-export const REZUMAT_GOL: RezumatCont = { comenzi: 0, inCurs: 0, facturi: 0, retururi: 0 };
+export const REZUMAT_GOL: RezumatCont = { comenzi: 0, inCurs: 0, facturi: 0, retururi: 0, pozaLa: null };
 
 /**
  * Numerele din meniul contului, intr-un singur drum pana la baza.
@@ -30,5 +32,6 @@ export async function rezumatulContului(businessId: string, contId: string): Pro
     inCurs: Number(r.in_curs ?? 0),
     facturi: Number(r.facturi ?? 0),
     retururi: Number(r.retururi ?? 0),
+    pozaLa: r.poza_la ?? null,
   };
 }

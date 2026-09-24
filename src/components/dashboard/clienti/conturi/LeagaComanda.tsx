@@ -57,7 +57,7 @@ export function LeagaComanda({ businessId, contId }: { businessId: string; contI
       try {
         r = await leagaComandaDeCont(businessId, contId, c.orderId);
       } catch {
-        toast.error("Nu am primit răspuns până la capăt. Reîncarcă pagina și uită-te la comenzile contului înainte să reiei.");
+        toast.error("Nu am primit răspuns de la server. Reîncarcă pagina și uită-te la comenzile contului înainte să reiei.");
         return;
       }
       if ("error" in r) {
@@ -141,7 +141,7 @@ export function LeagaComanda({ businessId, contId }: { businessId: string; contI
               E o comandă venită de pe un marketplace. Acelea nu se leagă de conturile magazinului.
             </p>
           ) : gasita.legataDe === contId ? (
-            <p className="mt-2 text-xs text-foreground">E deja în contul ăsta.</p>
+            <p className="mt-2 text-xs text-foreground">Este deja în acest cont.</p>
           ) : gasita.legataDe ? (
             <p className="mt-2 text-xs text-foreground">
               E deja legată de{" "}

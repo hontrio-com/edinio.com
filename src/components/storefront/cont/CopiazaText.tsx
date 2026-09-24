@@ -14,7 +14,7 @@ export function CopiazaText({ text, eticheta }: { text: string; eticheta: string
     <button
       type="button"
       className={BUTON_DISCRET}
-      aria-label={copiat ? "Copiat" : eticheta}
+      aria-label={eticheta}
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);
@@ -28,6 +28,8 @@ export function CopiazaText({ text, eticheta }: { text: string; eticheta: string
     >
       {copiat ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
       <span>{copiat ? "Copiat" : "Copiaza"}</span>
+      {/* Anuntul pentru cititoarele de ecran: o eticheta schimbata pe un buton focalizat nu se citeste sigur. */}
+      <span role="status" className="sr-only">{copiat ? "Copiat" : ""}</span>
     </button>
   );
 }

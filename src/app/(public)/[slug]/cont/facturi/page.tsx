@@ -35,7 +35,7 @@ export default async function FacturileMele({ params, searchParams }: Props) {
       rezumat={rezumat}
       activ="facturi"
       titlu="Facturi"
-      subtitlu={`Documentele emise de ${pag.storeName} pentru comenzile tale.`}
+      subtitlu={`Facturile emise de ${pag.storeName} pentru comenzile tale.`}
     >
       <EcranFacturi
         facturi={facturi}

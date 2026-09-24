@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FOCUS } from "./ui/clase";
+import { Mesaj } from "./ui/piese";
 
 /**
  * Un comutator de preferinta, care salveaza pe loc.
@@ -60,7 +61,11 @@ export function ComutatorPreferinta({
       <div className="min-w-0">
         <p id={`${id}-e`} className="text-sm font-semibold text-[var(--st-text)]">{eticheta}</p>
         <p id={`${id}-d`} className="mt-0.5 text-sm leading-relaxed text-[var(--st-muted)]">{explicatie}</p>
-        {eroare && <p role="alert" className="mt-1.5 text-sm text-[var(--st-text)]">{eroare}</p>}
+        {eroare && (
+          <div className="mt-2">
+            <Mesaj fel="eroare">{eroare}</Mesaj>
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -70,7 +75,7 @@ export function ComutatorPreferinta({
         aria-describedby={`${id}-d`}
         onClick={schimba}
         disabled={asteapta}
-        className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition-colors disabled:opacity-60 ${FOCUS} ${
+        className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition-colors before:absolute before:-inset-2 before:content-[''] disabled:opacity-60 ${FOCUS} ${
           stare ? "border-transparent" : "border-[var(--st-border)] bg-[var(--st-border)]"
         }`}
         style={stare ? { backgroundColor: "var(--st-primary)" } : undefined}
@@ -78,8 +83,9 @@ export function ComutatorPreferinta({
         <span className="sr-only">{stare ? "Pornit" : "Oprit"}</span>
         <span
           aria-hidden="true"
-          className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[var(--st-surface)] shadow-sm transition-[left]"
-          style={{ left: stare ? "1.5rem" : "0.1875rem" }}
+          className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full shadow-sm transition-[left]"
+          /* ⚠ Pornit: bila ia culoarea de contrast a primarei. Pe o tema cu primara alba, o bila alba pe fond alb nu se vedea. */
+          style={{ left: stare ? "1.5rem" : "0.1875rem", backgroundColor: stare ? "var(--st-primary-contrast)" : "var(--st-surface)" }}
         />
       </button>
     </div>

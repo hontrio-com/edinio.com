@@ -63,35 +63,35 @@ export function EcranIntrare({
               {titlu || `Comenzile tale de la ${numeMagazin}, intr-un singur loc`}
             </h1>
             <p className="mt-3 max-w-md text-sm leading-relaxed opacity-75 lg:text-base">
-              {text || "Intri cu emailul si parola ta. Contul nou se confirma cu un cod pe email, iar comenzile facute cu aceeasi adresa apar singure."}
+              {text || "Intri cu emailul si parola ta. Contul nou se confirma cu un cod pe email, iar comenzile plasate cu aceeasi adresa apar automat in cont."}
             </p>
             {avantaje && <ul className="mt-8 space-y-5">
               <Avantaj icon={Package} titlu="Istoricul comenzilor" text="Fiecare comanda, cu produsele, plata si livrarea ei." />
-              <Avantaj icon={Truck} titlu="Urmarirea coletului" text="Unde e coletul si cand a plecat, fara sa cauti emailuri." />
-              <Avantaj icon={ReceiptText} titlu="Facturile, gata de descarcat" text="Documentele emise de magazin, in PDF." />
-              <Avantaj icon={ShieldCheck} titlu="Datele tale, sub control" text="Alegi ce mesaje primesti si iti poti sterge contul oricand." />
+              <Avantaj icon={Truck} titlu="Urmarirea coletului" text="Vezi unde este coletul, fara sa cauti prin emailuri." />
+              <Avantaj icon={ReceiptText} titlu="Facturi in format PDF" text="Descarci oricand facturile emise de magazin." />
+              <Avantaj icon={ShieldCheck} titlu="Controlul datelor tale" text="Alegi ce mesaje primesti si iti poti sterge contul oricand." />
             </ul>}
           </div>
 
           <div className={`order-1 lg:order-2 ${CARD} p-6 sm:p-8`}>
             {dupaStergere && (
-              <div role="status" className="mb-6 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
+              <div role="status" className="mb-6 rounded-[min(var(--st-radius-sm),0.5rem)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
                 <p className="font-semibold">Contul tau a fost sters.</p>
-                {dupaStergere.cerere === true && <p className="mt-1">Magazinul a primit cererea ta de stergere a datelor din comenzi si are o luna sa raspunda.</p>}
+                {dupaStergere.cerere === true && <p className="mt-1">Magazinul a primit cererea ta de stergere a datelor din comenzi si are la dispozitie o luna sa raspunda.</p>}
                 {dupaStergere.cerere === false && (
                   <p className="mt-1">
-                    Cererea catre magazin nu a putut fi trimisa.
+                    Nu am putut trimite cererea catre magazin.
                     {contact?.email || contact?.telefon ? (
-                      <> Scrie-i direct{contact?.email ? <> la <a href={`mailto:${contact.email}`} className="font-semibold underline underline-offset-2">{contact.email}</a></> : null}{contact?.email && contact?.telefon ? " sau" : null}{contact?.telefon ? <> suna la <a href={`tel:${contact.telefon}`} className="font-semibold underline underline-offset-2">{contact.telefon}</a></> : null}, si cere stergerea datelor din comenzi.</>
+                      <> Contacteaza magazinul{contact?.email ? <> la <a href={`mailto:${contact.email}`} className="font-semibold underline underline-offset-2">{contact.email}</a></> : null}{contact?.email && contact?.telefon ? " sau" : null}{contact?.telefon ? <> la <a href={`tel:${contact.telefon}`} className="font-semibold underline underline-offset-2">{contact.telefon}</a></> : null} si cere stergerea datelor din comenzi.</>
                     ) : (
-                      <> Scrie-i direct si cere stergerea datelor din comenzi.</>
+                      <> Contacteaza magazinul si cere stergerea datelor din comenzi.</>
                     )}
                   </p>
                 )}
               </div>
             )}
             {dupaParolaNoua && !dupaStergere && (
-              <div role="status" className="mb-6 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
+              <div role="status" className="mb-6 rounded-[min(var(--st-radius-sm),0.5rem)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
                 <p className="font-semibold">Parola ta a fost schimbata.</p>
                 <p className="mt-1">Intra din nou in cont cu parola noua.</p>
               </div>

@@ -28,14 +28,14 @@ export type FelContact = "email" | "telefon";
  * pentru adaugarea unei adrese in cont). Cel vechi, „daca adresa e cunoscuta de
  * magazin", era scris pentru intrarea cu cod si nu mai avea sens.
  */
-export const MESAJ_UNIC = "Daca adresa poate fi adaugata, ti-am trimis un cod pe ea. Uita-te si in Spam.";
+export const MESAJ_UNIC = "Daca adresa poate fi adaugata, ti-am trimis un cod pe email. Verifica si folderul Spam.";
 
 /**
  * ⚠ Intrarea pe TELEFON nu e pornita inca: niciun drum de SMS nu e legat de
  * zona de cont. Se spune limpede, si NU prin `MESAJ_UNIC`: acolo textul spune
  * ca a plecat ceva, si n-ar fi adevarat.
  */
-export const MESAJ_SMS_INCA_NU = "Intrarea cu numarul de telefon nu e pornita inca. Foloseste adresa de email.";
+export const MESAJ_SMS_INCA_NU = "Autentificarea cu numarul de telefon nu este disponibila momentan. Foloseste adresa de email.";
 
 /**
  * Cere un cod pentru o ADRESA NOUA adaugata din cont. Intoarce mereu acelasi mesaj
@@ -169,13 +169,13 @@ export async function verificaCod(
 export function mesajulRefuzului(motiv: string): string {
   switch (motiv) {
     case "gresit":
-      return "Codul nu e bun. Mai incearca o data.";
+      return "Codul este gresit. Incearca din nou.";
     case "prea-multe-incercari":
-      return "Prea multe incercari gresite pentru codul asta. Cere unul nou.";
+      return "Prea multe incercari gresite pentru acest cod. Cere unul nou.";
     case "fara-cod":
       return "Codul a expirat sau a fost deja folosit. Cere unul nou.";
     case "contact-la-alt-cont":
-      return "Contactul asta e deja legat de alt cont.";
+      return "Aceasta adresa este deja folosita de alt cont.";
     case "rafala":
     case "limita-ip":
       return "Prea multe incercari. Asteapta un minut si reia.";

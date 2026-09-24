@@ -23,7 +23,7 @@ export type IntrareMeniu = {
 };
 
 export const MENIU: IntrareMeniu[] = [
-  { cheie: "acasa", eticheta: "Prezentare", scurt: "Prezentare", href: "/cont", icon: House, grup: 1 },
+  { cheie: "acasa", eticheta: "Contul meu", scurt: "Acasa", href: "/cont", icon: House, grup: 1 },
   { cheie: "comenzi", eticheta: "Comenzile mele", scurt: "Comenzi", href: "/cont/comenzi", icon: Package, grup: 1 },
   { cheie: "facturi", eticheta: "Facturi", scurt: "Facturi", href: "/cont/facturi", icon: ReceiptText, grup: 1 },
   { cheie: "retururi", eticheta: "Retururi", scurt: "Retururi", href: "/cont/retururi", icon: Undo2, grup: 1 },

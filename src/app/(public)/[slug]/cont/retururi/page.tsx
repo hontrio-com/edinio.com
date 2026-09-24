@@ -31,7 +31,7 @@ export default async function RetururileMele({ params }: Props) {
       rezumat={rezumat}
       activ="retururi"
       titlu="Retururi"
-      subtitlu="Cererile tale de retragere din contract si stadiul lor."
+      subtitlu="Cererile tale de retur si stadiul lor."
       actiuni={
         /* ⚠ Formularea ceruta de OUG 18/2026: o eticheta neechivoca, vizibila si in cont. */
         <Link href="/retur" className={BUTON_SECUNDAR}>

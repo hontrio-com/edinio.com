@@ -77,15 +77,15 @@ export function cronologia(p: {
   }));
 
   const fraze: Record<string, string> = {
-    pending: "Am primit comanda. Magazinul o confirma in curand.",
+    pending: "Comanda a fost primita si urmeaza sa fie confirmata.",
     confirmed: "Comanda e confirmata. Magazinul o pregateste.",
     processing: p.ridicare
-      ? "Magazinul pregateste comanda. Primesti un mesaj cand o poti ridica."
-      : "Magazinul pregateste coletul. Primesti un email cand pleaca.",
-    shipped: p.ridicare ? "Comanda te asteapta la punctul de ridicare." : "Coletul e la curier, pe drum spre tine.",
+      ? "Magazinul pregateste comanda pentru ridicare."
+      : "Magazinul pregateste coletul.",
+    shipped: p.ridicare ? "Comanda este gata de ridicare de la magazin." : "Coletul e la curier, pe drum spre tine.",
     delivered: p.ridicare ? "Ai ridicat comanda." : "Comanda a fost livrata.",
-    cancelled: "Comanda a fost anulata si nu se mai trimite.",
-    refunded: "Comanda a fost rambursata.",
+    cancelled: "Comanda nu va mai fi livrata.",
+    refunded: "Banii au fost returnati.",
   };
 
   return { pasi, capat, fraza: fraze[p.stare] ?? fraze.pending };

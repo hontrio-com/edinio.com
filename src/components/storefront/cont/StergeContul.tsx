@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { LoaderCircle, Trash2 } from "lucide-react";
 import { pluralRo } from "@/lib/utils/format";
-import { BUTON_SECUNDAR, CAMP, ETICHETA_CAMP } from "./ui/clase";
+import { BUTON_PERICOL, BUTON_SECUNDAR, CAMP, ETICHETA_CAMP } from "./ui/clase";
+import { Mesaj } from "./ui/piese";
 
 /**
  * Stergerea contului.
@@ -25,10 +26,19 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
   const [cerere, setCerere] = useState(false);
   const [eroare, setEroare] = useState("");
   const [asteapta, setAsteapta] = useState(false);
+  const deschide = useRef<HTMLButtonElement>(null);
+  const aFostDeschis = useRef(false);
+  /* ⚠ Pe telefon tastatura pune majuscula numai pe prima litera („Sterge”): cuvantul se compara fara ea. */
+  const confirmat = cuvant.trim().toUpperCase() === "STERGE";
+
+  useEffect(() => {
+    if (!deschis && aFostDeschis.current) deschide.current?.focus();
+    aFostDeschis.current = deschis;
+  }, [deschis]);
 
   if (!deschis) {
     return (
-      <button type="button" onClick={() => setDeschis(true)} className={BUTON_SECUNDAR}>
+      <button ref={deschide} type="button" onClick={() => setDeschis(true)} className={BUTON_SECUNDAR}>
         <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
         Sterge contul
       </button>
@@ -36,18 +46,18 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
   }
 
   return (
-    <div className="rounded-[var(--st-radius)] border border-[var(--st-border)] p-4" role="group" aria-label="Confirma stergerea contului">
-      <p className="text-sm font-semibold text-[var(--st-text)]">Stergi contul?</p>
+    <div className="rounded-[min(var(--st-radius),0.75rem)] border border-[var(--st-border)] p-4" role="group" aria-label="Confirma stergerea contului">
+      <p className="text-sm font-semibold text-[var(--st-text)]">Sigur vrei sa stergi contul?</p>
       <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--st-muted)]">
         <li>Se sterg datele contului si legatura lui cu comenzile. Poti deschide oricand alt cont, cu aceeasi adresa.</li>
         <li>
           {comenzi === 1
-            ? "Comanda ta RAMANE la magazin, fiindca in spatele ei stau documente fiscale. Daca vrei sa fie sterse si datele din ea, bifeaza mai jos."
+            ? "Comanda ta se pastreaza la magazin, pentru ca are documente fiscale asociate (de exemplu factura). Daca vrei sa fie sterse si datele personale din ea, bifeaza mai jos."
             : comenzi > 1
-              ? `Cele ${pluralRo(comenzi, "comanda", "comenzi")} ale tale RAMAN la magazin, fiindca in spatele lor stau documente fiscale. Daca vrei sa fie sterse si datele din ele, bifeaza mai jos.`
-              : "Comenzile plasate raman la magazin, fiindca in spatele lor stau documente fiscale."}
+              ? `Cele ${pluralRo(comenzi, "comanda", "comenzi")} ale tale se pastreaza la magazin, pentru ca au documente fiscale asociate (de exemplu facturi). Daca vrei sa fie sterse si datele personale din ele, bifeaza mai jos.`
+              : "Daca ai plasat comenzi, acestea se pastreaza la magazin pentru evidenta fiscala."}
         </li>
-        <li>Daca ai cerut sa nu mai primesti mesaje, alegerea aceea ramane si dupa stergere.</li>
+        <li>Daca te-ai dezabonat de la mesaje, dezabonarea ramane valabila si dupa stergere.</li>
       </ul>
 
       {comenzi > 0 && (
@@ -56,7 +66,7 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
             className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--st-primary)]" />
           <span>
             Cere magazinului sa stearga si datele mele din comenzi
-            <span className="block text-xs text-[var(--st-muted)]">Numele, contactele si adresa. Magazinul primeste cererea pe email si are o luna sa raspunda; facturile raman in evidenta lui contabila.</span>
+            <span className="block text-xs text-[var(--st-muted)]">Numele, datele de contact si adresa. Magazinul primeste cererea pe email si are la dispozitie o luna sa raspunda. Facturile se pastreaza in evidenta contabila.</span>
           </span>
         </label>
       )}
@@ -68,6 +78,10 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
         id="confirmare"
         value={cuvant}
         autoComplete="off"
+        autoCapitalize="characters"
+        autoCorrect="off"
+        spellCheck={false}
+        autoFocus
         onChange={(e) => setCuvant(e.target.value)}
         className={CAMP}
       />
@@ -86,12 +100,16 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
           />
         </>
       )}
-      {eroare && <p role="alert" className="mt-2 text-sm text-[var(--st-text)]">{eroare}</p>}
+      {eroare && (
+        <div className="mt-3">
+          <Mesaj fel="eroare">{eroare}</Mesaj>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={asteapta || cuvant !== "STERGE" || (areParola && parola === "")}
+          disabled={asteapta || !confirmat || (areParola && parola === "")}
           onClick={async () => {
             setAsteapta(true);
             setEroare("");
@@ -100,7 +118,7 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
               const r = await fetch("/api/cont/sterge", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ confirmare: cuvant, cereStergereaDatelor: cerere, parola }),
+                body: JSON.stringify({ confirmare: cuvant.trim().toUpperCase(), cereStergereaDatelor: cerere, parola }),
               });
               if (!r.ok) {
                 const j = await r.json().catch(() => ({}));
@@ -119,9 +137,9 @@ export function StergeContul({ comenzi, areParola = false }: { comenzi: number; 
               if (!sters) setAsteapta(false);
             }
           }}
-          className={BUTON_SECUNDAR}
+          className={BUTON_PERICOL}
         >
-          <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
+          {asteapta ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
           {asteapta ? "Se sterge..." : "Sterge definitiv"}
         </button>
         <button type="button" onClick={() => setDeschis(false)} className={BUTON_SECUNDAR}>

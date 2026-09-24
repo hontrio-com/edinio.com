@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulDupaGazda, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { poartaContuluiLaComanda } from "@/lib/cont/poarta-comenzii";
 import { contacteleMele } from "@/lib/cont/date";
+import { profilulContului } from "@/lib/cont/profil";
+import type { AdresaProfil } from "@/lib/cont/profil-reguli";
 
 /**
  * Formularul de comanda intreaba, la deschidere: „trebuie sa intru in cont ca sa
@@ -21,7 +23,10 @@ import { contacteleMele } from "@/lib/cont/date";
  * `no-store`: e starea unui singur om, pe o singura clipa.
  */
 
-type Raspuns = { cere: boolean; logat: boolean; email: string | null };
+/** Datele din profil, ca formularul de comanda sa-si completeze campurile goale. */
+type DateLivrare = { nume: string; telefon: string; adresa: AdresaProfil };
+
+type Raspuns = { cere: boolean; logat: boolean; email: string | null; livrare?: DateLivrare | null };
 
 const NIMIC: Raspuns = { cere: false, logat: false, email: null };
 
@@ -58,5 +63,13 @@ export async function GET(req: NextRequest) {
   } catch {
     email = null;
   }
-  return raspunde({ cere: false, logat: true, email });
+  /* Profilul (numele, telefonul, adresa salvata): tot numai pentru campurile goale ale formularului. */
+  let livrare: DateLivrare | null = null;
+  try {
+    const p = await profilulContului(magazin.id, poarta.contId);
+    livrare = { nume: p.nume, telefon: p.telefon, adresa: p.adresa };
+  } catch {
+    livrare = null;
+  }
+  return raspunde({ cere: false, logat: true, email, livrare });
 }

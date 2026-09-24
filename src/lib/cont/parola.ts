@@ -56,7 +56,7 @@ export function problemaParolei(parola: unknown, email?: string | null): string 
   if ([...p].length > LUNGIME_MAXIMA) return `Parola poate avea cel mult ${LUNGIME_MAXIMA} caractere.`;
   if (p.trim() === "") return "Parola nu poate fi formata doar din spatii.";
   const mica = p.toLowerCase();
-  if (PREA_DES_FOLOSITE.has(mica) || /^(.)\1+$/u.test(p)) return "Parola asta e printre cele mai des folosite. Alege alta.";
+  if (PREA_DES_FOLOSITE.has(mica) || /^(.)\1+$/u.test(p)) return "Aceasta parola este prea des folosita. Alege alta.";
   const adresa = (email ?? "").trim().toLowerCase();
   if (adresa && (mica === adresa || mica === adresa.split("@")[0])) return "Parola nu poate fi adresa ta de email.";
   return null;

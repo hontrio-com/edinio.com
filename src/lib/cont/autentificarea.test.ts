@@ -88,10 +88,10 @@ test("verificarea oarba consuma timp si intoarce mereu fals", async () => {
 test("regula parolei: lungimea, cele ghicite din prima si adresa", () => {
   assert.match(problemaParolei("scurt") ?? "", /cel putin 8/);
   assert.match(problemaParolei("x".repeat(129)) ?? "", /cel mult 128/);
-  assert.match(problemaParolei("        ") ?? "", /spatii|des folosite/);
-  assert.match(problemaParolei("12345678") ?? "", /des folosite/);
-  assert.match(problemaParolei("aaaaaaaaaa") ?? "", /des folosite/);
-  assert.match(problemaParolei("Password123") ?? "", /des folosite/);
+  assert.match(problemaParolei("        ") ?? "", /spatii|prea des folosita/);
+  assert.match(problemaParolei("12345678") ?? "", /prea des folosita/);
+  assert.match(problemaParolei("aaaaaaaaaa") ?? "", /prea des folosita/);
+  assert.match(problemaParolei("Password123") ?? "", /prea des folosita/);
   assert.match(problemaParolei("ion.popescu@exemplu.ro", "Ion.Popescu@exemplu.ro") ?? "", /adresa/);
   assert.match(problemaParolei("ion.popescu", "ion.popescu@exemplu.ro") ?? "", /adresa/);
   assert.equal(problemaParolei(42), "Scrie o parola.");

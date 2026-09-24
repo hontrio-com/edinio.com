@@ -45,10 +45,10 @@ const MINUTE_PAS = 20;
 export const ZILE_DISPOZITIV = 60;
 
 export const MESAJ_PARTEA_INTAI =
-  "Daca adresa poate fi folosita, ti-am trimis un cod pe email. Scrie-l mai jos.";
+  "Daca adresa poate fi folosita, ti-am trimis un cod pe email. Introdu-l mai jos.";
 export const MESAJ_INTRARE_GRESITA =
-  "Email sau parola gresita. Dupa mai multe incercari gresite, intrarea se opreste 15 minute; poti folosi oricand „Ai uitat parola?”.";
-export const MESAJ_PREA_MULTE = "Prea multe incercari. Asteapta cateva minute si reia.";
+  "Email sau parola gresita. Dupa mai multe incercari nereusite, autentificarea se blocheaza 15 minute. Poti folosi oricand „Ai uitat parola?”.";
+export const MESAJ_PREA_MULTE = "Prea multe incercari. Asteapta cateva minute si incearca din nou.";
 /**
  * Contul suspendat de magazin (din panou, Clienti, Conturi). Se spune NUMAI dupa
  * ce parola, sau codul de pe email, a dovedit ca omul e chiar el.
@@ -259,15 +259,15 @@ export async function verificaPas(p: {
 export function mesajulPasului(motiv: string): string {
   switch (motiv) {
     case "gresit":
-      return "Codul nu e bun. Mai incearca o data.";
+      return "Codul este gresit. Incearca din nou.";
     case "prea-multe-incercari":
-      return "Prea multe incercari gresite. Reia de la inceput peste cateva minute.";
+      return "Prea multe incercari gresite. Incepe din nou peste cateva minute.";
     case "fara-cod":
     case "fara-provocare":
     case "provocare-incheiata":
       return "Codul a expirat sau a fost deja folosit. Cere unul nou.";
     case "fara-parola":
-      return "Scrie si parola noua.";
+      return "Introdu si parola noua.";
     case "suspendat":
       return MESAJ_CONT_SUSPENDAT;
     case "rafala":

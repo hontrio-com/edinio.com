@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     magazin = await magazinulCereriiDeCont(req.headers.get("host"));
   } catch (e) {
     await logError({ action: "cont/parola", message: `cautarea magazinului a esuat: ${String(e)}`, severity: "error" });
-    return NextResponse.json({ eroare: "Serviciu indisponibil temporar." }, { status: 503 });
+    return NextResponse.json({ eroare: "Serviciul este indisponibil momentan. Incearca mai tarziu." }, { status: 503 });
   }
   if (!magazin) return new NextResponse("Not found", { status: 404 });
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     /* Acelasi plafon ca la intrare: altfel ruta asta ar fi fost o usa de ghicit parole. */
     const v = await parolaDinCont({
       magazinId: magazin.id, contId: s.contId, parola: corp?.parolaVeche, ip,
-      mesajGresita: "Parola actuala nu e buna.", permisCerut: true,
+      mesajGresita: "Parola actuala este gresita.", permisCerut: true,
     });
     if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
     const cont = v.cont;
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     if (problema) return NextResponse.json({ eroare: problema }, { status: 400 });
     /* Aceeasi parola ar fi scos omul de pe toate dispozitivele degeaba. */
     if (await parolaNouaEAceeasi(corp.parolaNoua as string, cont.parola_hash)) {
-      return NextResponse.json({ eroare: "Parola noua e la fel ca cea de acum. Alege alta." }, { status: 400 });
+      return NextResponse.json({ eroare: "Parola noua trebuie sa fie diferita de cea actuala." }, { status: 400 });
     }
 
     const { data: ok, error: e2 } = await admin.rpc("cont_schimba_parola", {

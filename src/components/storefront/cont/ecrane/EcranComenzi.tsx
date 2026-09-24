@@ -24,10 +24,10 @@ export function EcranComenzi({
     return (
       <StareGoala
         icon={PackageSearch}
-        titlu="Nicio comanda legata de cont"
+        titlu="Nu ai nicio comanda in cont"
         actiune={<Link href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</Link>}
       >
-        Comenzile se leaga singure de adresa cu care ai intrat. Daca ai comandat cu alta adresa, adaug-o in{" "}
+        Comenzile plasate cu adresa de email a contului apar aici automat. Daca ai comandat cu alta adresa, adaug-o in{" "}
         <Link href="/cont/date" className={LEGATURA}>Datele mele</Link> si le vei vedea aici.
       </StareGoala>
     );

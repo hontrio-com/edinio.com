@@ -37,9 +37,16 @@ export const STIL_PRIMAR: CSSProperties = { backgroundColor: "var(--st-primary)"
 export const BUTON_SECUNDAR =
   `${BUTON} border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] hover:bg-[var(--st-primary-soft)]`;
 
+/**
+ * Butonul care distruge ceva (sterge contul, anuleaza comanda). Nu plin rosu, dar
+ * nici la fel cu „Renunta” de langa el: altfel cele doua se confunda.
+ */
+export const BUTON_PERICOL =
+  `${BUTON} border border-destructive/50 bg-[var(--st-surface)] text-destructive hover:bg-destructive/5`;
+
 /** Buton mic, fara chenar, pentru actiuni de rand (Scoate, Copiaza). */
 export const BUTON_DISCRET =
-  `inline-flex min-h-9 items-center gap-1.5 rounded-[var(--st-radius-sm)] px-2.5 text-sm font-medium text-[var(--st-muted)] transition-colors hover:bg-[var(--st-primary-soft)] hover:text-[var(--st-text)] disabled:opacity-50 ${FOCUS}`;
+  `inline-flex min-h-10 items-center gap-1.5 rounded-[var(--st-radius-sm)] px-2.5 text-sm font-medium text-[var(--st-muted)] transition-colors hover:bg-[var(--st-primary-soft)] hover:text-[var(--st-text)] disabled:opacity-50 ${FOCUS}`;
 
 export const LEGATURA =
   `rounded-sm font-medium text-[var(--st-text)] underline decoration-[var(--st-border)] underline-offset-4 transition-colors hover:decoration-[var(--st-text)] ${FOCUS}`;
@@ -47,6 +54,18 @@ export const LEGATURA =
 /** `text-base` pe telefon: la 14px, iOS mareste pagina cand se focalizeaza campul. */
 export const CAMP =
   "w-full rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] px-3.5 py-2.5 text-base text-[var(--st-text)] placeholder:text-[var(--st-muted)] transition-shadow focus:border-[var(--st-text)] focus:outline-none focus:ring-2 focus:ring-[var(--st-primary-soft)] sm:text-sm";
+
+/**
+ * ⚠ Razele blocurilor, PLAFONATE. Tema „rotunjire completa” pune `--st-radius` la 9999px,
+ * iar un bloc de mai multe randuri iesea oval, cu textul trecand peste marginea curbata.
+ * Butoanele, campurile si pastilele raman pe raza temei (acolo pastila e chiar forma dorita).
+ */
+export const RAZA_BLOC = "rounded-[min(var(--st-radius),0.75rem)]";
+export const RAZA_MIC = "rounded-[min(var(--st-radius-sm),0.5rem)]";
+
+/** Legatura-text folosita ca buton (Ai uitat parola?, Retrimite codul): tinta de atins de 40px. */
+export const BUTON_TEXT =
+  `inline-flex min-h-10 items-center gap-1.5 rounded-sm text-sm text-[var(--st-muted)] underline-offset-4 transition-colors hover:text-[var(--st-text)] hover:underline disabled:opacity-50 ${FOCUS}`;
 
 export const ETICHETA_CAMP = "mb-1.5 block text-sm font-medium text-[var(--st-text)]";
 

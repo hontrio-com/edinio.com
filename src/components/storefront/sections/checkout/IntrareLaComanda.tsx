@@ -57,7 +57,7 @@ function CampParola({ id, eticheta, valoare, schimba, autoComplete }: {
         <button
           type="button"
           onClick={() => setVizibila((v) => !v)}
-          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40"
           aria-label={vizibila ? "Ascunde parola" : "Arata parola"}
           aria-pressed={vizibila}
         >
@@ -86,7 +86,7 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
               Comanzi din contul <span className="break-all font-semibold text-foreground">{cont.email}</span>
             </span>
           ) : (
-            <span>Esti in cont. Comanda intra in contul tau.</span>
+            <span>Esti autentificat. Comanda va aparea in contul tau.</span>
           )}
         </p>
       </div>
@@ -109,7 +109,7 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
           <div className="min-w-0">
             <h3 id={`${uid}-titlu`} className="text-sm font-bold text-foreground">{titlu}</h3>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Magazinul primeste comenzi din cont. Cosul si datele completate raman aici.
+              Pentru a comanda la acest magazin ai nevoie de un cont. Cosul si datele completate se pastreaza.
             </p>
           </div>
         </div>
@@ -123,7 +123,7 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
                 aria-pressed={a.mod === m}
                 disabled={a.asteapta}
                 onClick={() => a.schimbaMod(m)}
-                className={`min-h-9 rounded-md px-3 text-xs font-semibold transition-colors ${
+                className={`min-h-9 rounded-md px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 ${
                   a.mod === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -145,7 +145,7 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
                 value={a.email}
                 onChange={(ev) => a.setEmail(ev.target.value)}
                 className={CAMP}
-                placeholder="adresa@email.ro"
+                placeholder="adresa@exemplu.ro"
                 required
               />
             </div>
@@ -158,7 +158,7 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
                 autoComplete={a.mod === "inregistrare" ? "new-password" : "current-password"}
               />
             )}
-            {a.eroare && <p role="alert" className="text-xs text-red-500">{a.eroare}</p>}
+            {a.eroare && <p role="alert" className="text-sm text-red-600">{a.eroare}</p>}
             <button type="submit" disabled={a.asteapta} className={BUTON} style={stilButon(color)}>
               {a.asteapta ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
               {a.asteapta ? "Se trimite..." : a.mod === "intrare" ? "Intra in cont" : a.mod === "inregistrare" ? "Creeaza contul" : "Trimite-mi un cod"}
@@ -166,10 +166,10 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
             </button>
             <div className="text-center text-xs">
               {a.mod === "intrare" ? (
-                <button type="button" onClick={() => a.schimbaMod("uitata")} className={LEGATURA}>Ai uitat parola?</button>
+                <button type="button" onClick={() => a.schimbaMod("uitata")} className={`inline-flex min-h-10 items-center ${LEGATURA}`}>Ai uitat parola?</button>
               ) : a.mod === "uitata" ? (
-                <button type="button" onClick={() => a.schimbaMod("intrare")} className={`inline-flex items-center gap-1 ${LEGATURA}`}>
-                  <ArrowLeft size={12} aria-hidden="true" /> Inapoi la intrare
+                <button type="button" onClick={() => a.schimbaMod("intrare")} className={`inline-flex min-h-10 items-center gap-1 ${LEGATURA}`}>
+                  <ArrowLeft size={12} aria-hidden="true" /> Inapoi la autentificare
                 </button>
               ) : (
                 <span className="text-muted-foreground">
@@ -187,12 +187,12 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
             <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
               <Mail size={14} className="mt-0.5 shrink-0 text-foreground" aria-hidden="true" />
               <span className="min-w-0">
-                {a.mesaj || "Daca adresa poate fi folosita, codul a plecat."}{" "}
+                {a.mesaj || "Daca adresa poate fi folosita, ti-am trimis un cod."}{" "}
                 <span className="break-all font-semibold text-foreground">{a.emailPas}</span>
               </span>
             </p>
             <div>
-              <label htmlFor={`${uid}-cod`} className="mb-1 block text-sm font-semibold text-foreground">Codul de sase cifre din email</label>
+              <label htmlFor={`${uid}-cod`} className="mb-1 block text-sm font-semibold text-foreground">Codul primit pe email</label>
               <input
                 ref={campCod}
                 id={`${uid}-cod`}
@@ -200,7 +200,7 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
                 autoComplete="one-time-code"
                 value={a.cod}
                 onChange={(ev) => a.scrieCod(ev.target.value)}
-                className={`${CAMP} text-center text-lg tracking-[0.45em] sm:text-lg`}
+                className={`${CAMP} text-center indent-[0.45em] text-lg tracking-[0.45em] sm:text-lg`}
                 placeholder="000000"
                 required
               />
@@ -209,16 +209,16 @@ export function IntrareLaComanda({ cont, color }: { cont: ContulLaComanda; color
               <CampParola id={`${uid}-parola-noua`} eticheta="Parola noua (cel putin 8 caractere)" valoare={a.parolaNoua} schimba={a.setParolaNoua} autoComplete="new-password" />
             )}
             <label className="flex items-start gap-2 text-xs text-foreground">
-              <input type="checkbox" checked={a.tineMinte} onChange={(ev) => a.setTineMinte(ev.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
+              <input type="checkbox" checked={a.tineMinte} onChange={(ev) => a.setTineMinte(ev.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" style={{ accentColor: `var(--st-primary, ${color})` }} />
               <span>
-                Tine minte acest dispozitiv 60 de zile
+                Retine acest dispozitiv 60 de zile
                 <span className="block text-muted-foreground">Nu bifa pe un calculator folosit si de altii.</span>
               </span>
             </label>
-            {a.eroare && <p role="alert" className="text-xs text-red-500">{a.eroare}</p>}
+            {a.eroare && <p role="alert" className="text-sm text-red-600">{a.eroare}</p>}
             <button type="submit" disabled={a.asteapta || a.cod.length !== 6} className={BUTON} style={stilButon(color)}>
               {a.asteapta ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : null}
-              {a.asteapta ? "Se verifica..." : a.mod === "uitata" ? "Schimba parola si intra" : a.mod === "inregistrare" ? "Confirma contul" : "Intra in cont"}
+              {a.asteapta ? "Se verifica..." : a.mod === "uitata" ? "Schimba parola si intra" : a.mod === "inregistrare" ? "Confirma si creeaza contul" : "Intra in cont"}
             </button>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <button type="button" onClick={a.inapoi} className={`inline-flex items-center gap-1 ${LEGATURA}`}>

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
-import { Check, CircleAlert, Info, Package, type LucideIcon } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, Info, Package, type LucideIcon } from "lucide-react";
 import type { TonEticheta } from "@/components/ui/eticheta-stare";
 import type { Cronologie } from "@/lib/cont/cronologie";
 import { formatDate } from "@/lib/utils/format";
-import { CARD, TITLU } from "./clase";
+import { CARD, RAZA_MIC, TITLU } from "./clase";
 
 /**
  * Piesele zonei de cont. Toate sunt componente de SERVER, fara stare.
@@ -113,7 +113,7 @@ export function StareGoala({
 }) {
   return (
     <div className="rounded-[min(var(--st-radius-lg),1.25rem)] border border-dashed border-[var(--st-border)] bg-[var(--st-surface)] px-6 py-14 text-center">
-      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-[var(--st-radius)] bg-[var(--st-primary-soft)]">
+      <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-[min(var(--st-radius),0.75rem)] bg-[var(--st-primary-soft)]">
         <Icon className="h-6 w-6 text-[var(--st-text)]" strokeWidth={1.6} aria-hidden="true" />
       </div>
       <p className="text-base font-semibold text-[var(--st-text)]" style={TITLU}>{titlu}</p>
@@ -125,18 +125,22 @@ export function StareGoala({
 
 /* ═══ Mesaj (nu toast: un toast dispare, iar o eroare trebuie sa ramana) ═══ */
 
-export function Mesaj({ fel = "info", children }: { fel?: "info" | "eroare"; children: ReactNode }) {
-  const Icon = fel === "eroare" ? CircleAlert : Info;
+export function Mesaj({ fel = "info", children }: { fel?: "info" | "eroare" | "succes"; children: ReactNode }) {
+  const Icon = fel === "eroare" ? CircleAlert : fel === "succes" ? CircleCheck : Info;
+  const culori =
+    fel === "eroare"
+      ? "border-destructive/40 bg-destructive/5"
+      : "border-[var(--st-border)] bg-[var(--st-surface)]";
   return (
     <div
-      role={fel === "eroare" ? "alert" : undefined}
-      className="flex items-start gap-2.5 rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] px-3.5 py-3 text-sm leading-relaxed text-[var(--st-text)]"
+      role={fel === "eroare" ? "alert" : fel === "succes" ? "status" : undefined}
+      className={`flex items-start gap-2.5 ${RAZA_MIC} border px-3.5 py-3 text-sm leading-relaxed text-[var(--st-text)] ${culori}`}
     >
       <Icon
-        className={`mt-0.5 h-4 w-4 shrink-0 ${fel === "eroare" ? "text-destructive" : "text-[var(--st-muted)]"}`}
+        className={`mt-0.5 h-4 w-4 shrink-0 ${fel === "eroare" ? "text-destructive" : fel === "succes" ? "text-[var(--st-text)]" : "text-[var(--st-muted)]"}`}
         aria-hidden="true"
       />
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0 break-words">{children}</div>
     </div>
   );
 }
@@ -183,7 +187,7 @@ export function Pastila({ children }: { children: ReactNode }) {
 export function PasiComanda({ c }: { c: Cronologie }) {
   if (c.capat) {
     return (
-      <div className="flex items-start gap-3 rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] px-4 py-3.5">
+      <div className="flex items-start gap-3 rounded-[min(var(--st-radius-sm),0.5rem)] border border-[var(--st-border)] bg-[var(--st-surface)] px-4 py-3.5">
         <span aria-hidden="true" className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--st-muted)]" />
         <div>
           <p className="text-sm font-semibold text-[var(--st-text)]">{c.capat.eticheta}</p>
@@ -216,7 +220,10 @@ export function PasiComanda({ c }: { c: Cronologie }) {
               >
                 {facut ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden="true" /> : i + 1}
               </span>
-              <span className={`mt-2 px-0.5 text-[11px] leading-tight sm:text-xs ${curent || facut ? "font-semibold text-[var(--st-text)]" : "text-[var(--st-muted)]"}`}>
+              {/* ⚠ Pe telefon se scrie numai pasul curent: cinci etichete in 320px se calcau una pe alta. Celelalte raman pentru cititoarele de ecran. */}
+              <span
+                className={`mt-2 px-0.5 text-[11px] leading-tight sm:text-xs ${curent ? "whitespace-nowrap" : "sr-only sm:not-sr-only"} ${curent || facut ? "font-semibold text-[var(--st-text)]" : "text-[var(--st-muted)]"}`}
+              >
                 {p.eticheta}
               </span>
               {p.la && <span className="mt-0.5 hidden text-[11px] text-[var(--st-muted)] sm:block">{formatDate(p.la)}</span>}

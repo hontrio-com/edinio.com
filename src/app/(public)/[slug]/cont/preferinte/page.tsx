@@ -23,7 +23,7 @@ export default async function Preferinte({ params }: Props) {
   ]);
 
   return (
-    <PaginaCont pag={pag} rezumat={rezumat} activ="preferinte" titlu="Preferinte" subtitlu="Ce mesaje primesti de la magazin.">
+    <PaginaCont pag={pag} rezumat={rezumat} activ="preferinte" titlu="Preferinte" subtitlu="Alege ce mesaje primesti de la magazin.">
       <EcranPreferinte pref={pref} />
     </PaginaCont>
   );

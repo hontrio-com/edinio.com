@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     magazin = await magazinulCereriiDeCont(req.headers.get("host"));
   } catch (e) {
     await logError({ action: "cont/pas", message: `cautarea magazinului a esuat: ${String(e)}`, severity: "error" });
-    return NextResponse.json({ eroare: "Serviciu indisponibil temporar." }, { status: 503 });
+    return NextResponse.json({ eroare: "Serviciul este indisponibil momentan. Incearca mai tarziu." }, { status: 503 });
   }
   if (!magazin) return new NextResponse("Not found", { status: 404 });
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const corp = await req.json().catch(() => null);
   const ip = clientIp(req);
   const expirat = () =>
-    NextResponse.json({ eroare: "Pasul a expirat. Reia de la inceput.", expirat: true }, { status: 400 });
+    NextResponse.json({ eroare: "Timpul pentru confirmare a expirat. Incepe din nou.", expirat: true }, { status: 400 });
 
   try {
     if (corp?.actiune === "retrimite") {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     const cod = typeof corp?.cod === "string" ? corp.cod.trim() : "";
-    if (!/^\d{6}$/.test(cod)) return NextResponse.json({ eroare: "Codul are sase cifre." }, { status: 400 });
+    if (!/^\d{6}$/.test(cod)) return NextResponse.json({ eroare: "Codul trebuie sa aiba 6 cifre." }, { status: 400 });
 
     /* ⚠ Fara provocare nu e nimic de verificat: se raspunde INAINTEA oricarui calcul. */
     if (!(await arePas())) return expirat();
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       /* Codul si parola au trecut; numai sesiunea n-a putut fi deschisa. Se spune cinstit. */
       await logError({ action: "cont/pas", message: `sesiunea nu s-a deschis dupa cod: ${String(e)}`, businessId: magazin.id, severity: "error" });
-      return NextResponse.json({ eroare: "Totul e in regula, dar nu te-am putut conecta acum. Intra din nou cu emailul si parola.", expirat: true }, { status: 400 });
+      return NextResponse.json({ eroare: "Codul este corect, dar nu te-am putut autentifica. Intra din nou cu emailul si parola.", expirat: true }, { status: 400 });
     }
     if (corp?.tineMinte === true) await tineMinteDispozitivul(magazin.id, r.contId);
     return NextResponse.json({ ok: true, contNou: r.contNou }, { status: 200 });

@@ -50,18 +50,18 @@ export function stareaPlatii(p: {
 }): StareaPlatii {
   const ramburs = p.metoda !== null && METODE_RAMBURS.has(p.metoda);
 
-  if (p.starePlata === "refunded") return { text: "Suma a fost returnata", ton: "neutru" };
+  if (p.starePlata === "refunded") return { text: "Rambursata", ton: "neutru" };
 
   if (p.stare === "cancelled") {
     return p.starePlata === "paid"
-      ? { text: "Comanda anulata. Rambursarea o face magazinul", ton: "neutru" }
-      : { text: "Comanda anulata, nu s-a incasat nimic", ton: "neutru" };
+      ? { text: "Anulata. Magazinul iti returneaza banii", ton: "neutru" }
+      : { text: "Anulata, nu ai platit nimic", ton: "neutru" };
   }
   if (p.stare === "refunded") return { text: "Comanda rambursata", ton: "neutru" };
 
-  if (p.incasata) return { text: ramburs ? "Achitata la livrare" : "Platita", ton: "bun" };
-  if (ramburs) return { text: "Se plateste la livrare", ton: "asteptare" };
+  if (p.incasata) return { text: ramburs ? "Platita la livrare" : "Platita", ton: "bun" };
+  if (ramburs) return { text: "Plata la livrare", ton: "asteptare" };
   /* Vederea redusa nu stie metoda; nu spune mai mult decat stie. */
-  if (p.metoda === null) return { text: "Neincasata inca", ton: "asteptare" };
+  if (p.metoda === null) return { text: "Neplatita", ton: "asteptare" };
   return { text: "Plata nu a fost finalizata", ton: "asteptare" };
 }

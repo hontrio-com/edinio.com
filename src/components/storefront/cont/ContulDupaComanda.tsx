@@ -33,8 +33,8 @@ export function ContulDupaComanda({ areEmail }: { areEmail: boolean }) {
         <span className="block text-sm font-semibold">Urmareste comanda in contul tau</span>
         <span className="mt-0.5 block text-xs leading-relaxed text-[var(--st-muted)]">
           {obligatoriu
-            ? "Comenzile plasate din cont apar acolo, cu livrarea, plata si factura, cand e emisa."
-            : "Fa-ti un cont (sau intra) cu adresa de email din comanda: vezi livrarea, plata si factura, cand e emisa."}
+            ? "In cont vezi stadiul livrarii, plata si factura, dupa ce este emisa."
+            : "Creeaza un cont sau intra in cont cu adresa de email folosita la comanda, ca sa urmaresti livrarea, plata si factura."}
         </span>
       </span>
       <ArrowRight className="h-4 w-4 shrink-0 text-[var(--st-muted)]" aria-hidden="true" />

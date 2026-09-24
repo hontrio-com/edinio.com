@@ -75,8 +75,8 @@ export function adresaListeiDinCerere(v: string | string[] | undefined): string 
 export const TEMEIURI: Record<string, string> = {
   "plasata-in-cont": "Plasată din cont",
   "contact-verificat": "Aceeași adresă de email, confirmată",
-  "legat-de-comerciant": "Legată de tine",
-  "jeton-email": "Din linkul din emailul comenzii",
+  "legat-de-comerciant": "Legată manual de tine",
+  "jeton-email": "Din linkul primit pe email la comandă",
   "numar-plus-contact": "După număr și contact",
 };
 
@@ -143,7 +143,7 @@ export function descrieFapta(
         : { titlu: "A ieșit de pe toate dispozitivele", detaliu: null, ton: "normal" };
     case "jeton-refolosit":
       return {
-        titlu: "Sesiuni închise din prevedere",
+        titlu: "Sesiuni închise din motive de siguranță",
         detaliu: "o cheie de sesiune veche a fost folosită din nou, deci am închis toate sesiunile",
         ton: "atentie",
       };
@@ -160,13 +160,20 @@ export function descrieFapta(
         ton: "normal",
       };
     case "preferinte": {
-      const canal = detalii.canal === "sms" ? "SMS-urile" : "emailurile";
+      /* ⚠ Comutatorul de email e numai `recovery_optout`: emailurile despre coșul abandonat, nu tot marketingul. */
+      const canal = detalii.canal === "sms" ? "SMS-urile de marketing" : "emailurile despre coșul abandonat";
       return {
-        titlu: detalii.vrea === true ? `A pornit ${canal} de marketing` : `A oprit ${canal} de marketing`,
+        titlu: detalii.vrea === true ? `A pornit ${canal}` : `A oprit ${canal}`,
         detaliu: null,
         ton: "normal",
       };
     }
+    case "profil-schimbat":
+      return { titlu: "Și-a actualizat profilul", detaliu: "numele, telefonul sau adresa de livrare", ton: "normal" };
+    case "poza-schimbata":
+      return { titlu: "Și-a schimbat poza de profil", detaliu: null, ton: "normal" };
+    case "poza-stearsa":
+      return { titlu: "Și-a șters poza de profil", detaliu: null, ton: "normal" };
     case "comanda-plasata":
       return { titlu: "A plasat o comandă din cont", detaliu: numar, ton: "normal" };
     case "anulare-comanda":
@@ -192,7 +199,8 @@ export function descrieFapta(
 export const FAPTE_CUNOSCUTE = [
   "cont-creat", "intrare", "intrare-refuzata", "parola-gresita", "parola-setata",
   "parola-schimbata", "parola-resetata", "iesire-de-peste-tot", "jeton-refolosit",
-  "contact-adaugat", "contact-scos", "preferinte", "comanda-plasata", "anulare-comanda",
+  "contact-adaugat", "contact-scos", "preferinte", "profil-schimbat", "poza-schimbata", "poza-stearsa",
+  "comanda-plasata", "anulare-comanda",
   "suspendat-de-magazin", "reactivat-de-magazin", "comanda-legata-de-magazin",
   "comanda-dezlegata-de-magazin", "cont-sters", "cont-anonimizat-de-magazin",
 ] as const;
@@ -205,7 +213,7 @@ export function mesajulLegarii(motiv: string): string {
     case "legata":
       return "Comanda a fost legată de cont.";
     case "deja-legata":
-      return "Comanda era deja legată de contul ăsta.";
+      return "Comanda era deja legată de acest cont.";
     case "legata-de-alt-cont":
       return "Comanda e deja legată de alt cont al magazinului.";
     case "marketplace":
@@ -226,7 +234,7 @@ export function mesajulDezlegarii(motiv: string): string {
     case "nu-e-legata-de-magazin":
       return "Poți dezlega numai comenzile legate de tine. Celelalte țin de adresa confirmată a clientului sau au fost plasate din cont.";
     case "negasita":
-      return "Comanda nu mai e legată de contul ăsta.";
+      return "Comanda nu mai e legată de acest cont.";
     default:
       return "Nu am putut dezlega comanda. Încearcă din nou.";
   }

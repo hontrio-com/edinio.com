@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, LoaderCircle, RotateCcw } from "lucide-react";
 import { BUTON_PRIMAR, BUTON_SECUNDAR, STIL_PRIMAR } from "./ui/clase";
+import { Mesaj } from "./ui/piese";
 
 /**
  * Descarcarea unei facturi sau a notei ei de stornare.
@@ -25,11 +26,11 @@ function mesajul(motiv: Motiv, email: string | null): string {
   const cere = email ? ` Il poti cere la ${email}.` : " Il poti cere magazinului.";
   switch (motiv) {
     case "casa_neconectata":
-      return `Magazinul nu mai are legat programul de facturare, asa ca documentul nu se poate descarca de aici. Documentul exista.${cere}`;
+      return `Documentul nu poate fi descarcat momentan din cont.${cere}`;
     case "furnizor_indisponibil":
     case "nu_e_pdf":
     case "prea_mare":
-      return `Nu am putut aduce acum PDF-ul de la programul de facturare al magazinului. Documentul exista: incearca din nou peste cateva minute.${cere}`;
+      return `Nu am putut descarca documentul acum. Incearca din nou peste cateva minute.${cere}`;
     case "retea":
       return "Nu am putut descarca documentul. Verifica legatura la internet si incearca din nou.";
     case "sesiune":
@@ -109,13 +110,9 @@ export function DescarcaDocument({
         ) : (
           <Download className="h-4 w-4" aria-hidden="true" />
         )}
-        {asteapta ? "Se descarca..." : eroare ? "Incearca din nou" : eticheta}
+        {asteapta ? "Se descarca..." : eticheta}
       </button>
-      {eroare && (
-        <p role="alert" className="text-sm leading-relaxed text-[var(--st-text)]">
-          {mesajul(eroare, emailMagazin)}
-        </p>
-      )}
+      {eroare && <Mesaj fel="eroare">{mesajul(eroare, emailMagazin)}</Mesaj>}
     </div>
   );
 }

@@ -37,7 +37,7 @@ export function BlocDocument({
         <div className="min-w-0">
           <p className="text-base font-semibold tabular-nums text-[var(--st-text)]">Factura {numar}</p>
           <p className="mt-0.5 text-sm text-[var(--st-muted)]">
-            {doc.emisaLa ? `Emisa pe ${formatDate(doc.emisaLa)}` : "Data emiterii e trecuta pe factura"}
+            {doc.emisaLa ? `Emisa pe ${formatDate(doc.emisaLa)}` : "Data emiterii apare pe factura"}
           </p>
         </div>
         <EtichetaStareCont ton={st.ton}>{st.text}</EtichetaStareCont>
@@ -52,7 +52,7 @@ export function BlocDocument({
             <span className="tabular-nums">{formatPrice(comanda.total)}</span>
           </RandDate>
           {comanda.firma && (
-            <RandDate eticheta="Pe firma">
+            <RandDate eticheta="Facturata pe firma">
               {comanda.firma.denumire}
               {comanda.firma.cui ? <span className="text-[var(--st-muted)]">, CUI {comanda.firma.cui}</span> : null}
             </RandDate>
@@ -69,22 +69,22 @@ export function BlocDocument({
       />
 
       {doc.stornata && (
-        <div className="rounded-[var(--st-radius-sm)] border border-[var(--st-border)] p-4">
+        <div className="rounded-[min(var(--st-radius-sm),0.5rem)] border border-[var(--st-border)] p-4">
           <div className="flex items-start gap-3">
             <FileMinus2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--st-muted)]" strokeWidth={1.7} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-[var(--st-text)]">
-                Nota de stornare{doc.stornoNumar ? ` ${numarulDocumentului(doc.stornoSerie, doc.stornoNumar)}` : ""}
+                Factura de stornare{doc.stornoNumar ? ` ${numarulDocumentului(doc.stornoSerie, doc.stornoNumar)}` : ""}
               </p>
               <p className="mt-0.5 text-sm leading-relaxed text-[var(--st-muted)]">
-                Factura a fost anulata printr-o nota de stornare. Cele doua documente merg impreuna.
+                Factura a fost stornata. Pastreaza ambele documente.
               </p>
               <div className="mt-3">
                 {doc.stornoDescarcabil ? (
-                  <DescarcaDocument orderId={orderId} fel="storno" eticheta="Descarca nota de stornare" emailMagazin={emailMagazin} />
+                  <DescarcaDocument orderId={orderId} fel="storno" eticheta="Descarca factura de stornare" emailMagazin={emailMagazin} />
                 ) : (
                   <p className="text-sm text-[var(--st-text)]">
-                    Nota de stornare nu se poate descarca de aici.
+                    Factura de stornare nu poate fi descarcata din cont.
                     {emailMagazin ? <> O poti cere la <a href={`mailto:${emailMagazin}`} className={LEGATURA}>{emailMagazin}</a>.</> : " O poti cere magazinului."}
                   </p>
                 )}

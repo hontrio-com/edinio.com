@@ -38,16 +38,16 @@ export async function POST(req: NextRequest) {
   const actiune = corp?.actiune;
   const fel: "email" | "telefon" = corp?.fel === "telefon" ? "telefon" : "email";
   const valoare = typeof corp?.valoare === "string" ? corp.valoare : "";
-  if (!valoare.trim()) return NextResponse.json({ eroare: "Scrie un contact." }, { status: 400 });
+  if (!valoare.trim()) return NextResponse.json({ eroare: "Introdu adresa de email." }, { status: 400 });
 
   const ip = clientIp(req);
 
   try {
     if (actiune === "cere-cod") {
       if (fel === "telefon") return NextResponse.json({ eroare: MESAJ_SMS_INCA_NU }, { status: 400 });
-      if (!adresaEmailValida(valoare)) return NextResponse.json({ eroare: "Adresa de email nu pare buna." }, { status: 400 });
+      if (!adresaEmailValida(valoare)) return NextResponse.json({ eroare: "Adresa de email nu este valida." }, { status: 400 });
       const v = await parolaDinCont({
-        magazinId: magazin.id, contId: s.contId, parola: corp?.parola, ip, mesajGresita: "Parola contului nu e buna.",
+        magazinId: magazin.id, contId: s.contId, parola: corp?.parola, ip, mesajGresita: "Parola este gresita.",
       });
       if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
       const r = await cereCod(magazin, fel, valoare, ip, "adaugare-contact", s.contId);
@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
           nesfarsit un buton care nu face nimic.
         */
         const text = r.motiv === "ultimul-contact"
-          ? "Nu poti scoate ultimul contact confirmat: fara el nu ai cum sa mai intri in cont. Adauga altul intai."
-          : "Contactul nu s-a putut scoate.";
+          ? "Nu poti sterge singura adresa confirmata, pentru ca nu ai mai putea intra in cont. Adauga intai alta adresa."
+          : "Nu am putut sterge adresa.";
         return NextResponse.json({ eroare: text }, { status: 400 });
       }
       return NextResponse.json({ ok: true }, { status: 200 });

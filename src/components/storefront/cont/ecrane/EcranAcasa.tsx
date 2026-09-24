@@ -3,11 +3,11 @@ import { ArrowRight, Package, PackageSearch, ReceiptText, Truck, Undo2, type Luc
 import type { ComandaDinCont } from "@/lib/cont/comenzi";
 import type { RezumatCont } from "@/lib/cont/rezumat";
 import { cronologia } from "@/lib/cont/cronologie";
-import { orderStatus } from "@/lib/orders/status";
+import { stareaComenzii } from "@/lib/cont/stare-comanda";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { CardComanda } from "./CardComanda";
-import { EtichetaStareCont, Mesaj, Miniatura, PasiComanda, Sectiune, StareGoala } from "../ui/piese";
-import { BUTON_PRIMAR, BUTON_SECUNDAR, CARD, FOCUS, LEGATURA, STIL_PRIMAR, TITLU } from "../ui/clase";
+import { EtichetaStareCont, Mesaj, Miniatura, PasiComanda, StareGoala } from "../ui/piese";
+import { BUTON_PRIMAR, CARD, FOCUS, LEGATURA, STIL_PRIMAR, TITLU } from "../ui/clase";
 
 /**
  * Pagina de start a contului.
@@ -46,22 +46,22 @@ export function EcranAcasa({
       <>
         <StareGoala
           icon={PackageSearch}
-          titlu="Inca nu ai comenzi in contul asta"
+          titlu="Nu ai inca nicio comanda"
           actiune={<Link href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</Link>}
         >
-          Comenzile se leaga singure de adresa de email cu care ai intrat. Daca ai comandat cu alta adresa, adaug-o in{" "}
+          Comenzile plasate cu adresa de email a contului apar aici automat. Daca ai comandat cu alta adresa, adaug-o in{" "}
           <Link href="/cont/date" className={LEGATURA}>Datele mele</Link> si le vei vedea aici.
         </StareGoala>
       </>
     );
   }
 
-  const st = inCurs ? orderStatus(inCurs.stare) : null;
+  const st = inCurs ? stareaComenzii(inCurs.stare) : null;
   const pasi = inCurs ? cronologia({ stare: inCurs.stare, creataLa: inCurs.creataLa, awbEmisLa: null, ridicare: false }) : null;
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
         <Placa href="/cont/comenzi" icon={Package} numar={rezumat.comenzi} eticheta="Comenzi" />
         <Placa href="/cont/comenzi" icon={Truck} numar={rezumat.inCurs} eticheta="In curs" />
         <Placa href="/cont/facturi" icon={ReceiptText} numar={rezumat.facturi} eticheta="Facturi" />
@@ -102,25 +102,29 @@ export function EcranAcasa({
         </section>
       )}
 
-      <Sectiune
-        titlu="Comenzi recente"
-        icon={Package}
-        actiune={
-          rezumat.comenzi > recente.length ? (
-            <Link href="/cont/comenzi" className={`${BUTON_SECUNDAR} min-h-9 px-3`}>Vezi toate</Link>
-          ) : undefined
-        }
-      >
+      {/* ⚠ Cardurile stau direct pe pagina, nu intr-un alt card: chenarul dublu manca 40px din latime pe telefon. */}
+      <section aria-labelledby="recente-titlu" className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="recente-titlu" className="text-base font-semibold text-[var(--st-on-bg)]" style={TITLU}>
+            Comenzi recente
+          </h2>
+          {rezumat.comenzi > recente.length && (
+            <Link href="/cont/comenzi" className={`inline-flex min-h-10 items-center gap-1 rounded-sm text-sm font-medium text-[var(--st-on-bg)] underline-offset-4 hover:underline ${FOCUS}`}>
+              Vezi toate
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
+        </div>
         <div className="space-y-3">
           {recente.map((c) => (
             <CardComanda key={c.orderId} c={c} />
           ))}
         </div>
-      </Sectiune>
+      </section>
 
       <Mesaj>
-        <span className="font-semibold">Nu vezi o comanda?</span> Comenzile se leaga singure de adresele de email
-        confirmate in cont. Daca ai comandat cu alta adresa, adaug-o in{" "}
+        <span className="font-semibold">Nu vezi o comanda?</span> Comenzile plasate cu adresele de email confirmate
+        apar automat in cont. Daca ai comandat cu alta adresa, adaug-o in{" "}
         <Link href="/cont/date" className={LEGATURA}>Datele mele</Link>.
       </Mesaj>
     </>

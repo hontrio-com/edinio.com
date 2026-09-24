@@ -60,7 +60,7 @@ export function ActiuniCont({
       try {
         r = await f();
       } catch {
-        toast.error("Nu am primit răspuns până la capăt. Reîncarcă pagina și uită-te la cont înainte să reiei: se poate să fi mers.", { duration: 12000 });
+        toast.error("Nu am primit răspuns de la server. Reîncarcă pagina și uită-te la cont înainte să reiei: se poate să fi mers.", { duration: 12000 });
         return;
       }
       if ("error" in r) {
@@ -79,7 +79,7 @@ export function ActiuniCont({
     <div className="space-y-2">
       {/* ═══ Iesirea de peste tot ═══ */}
       <button type="button" className={BUTON} disabled={lucreaza} onClick={() => deschide("iesire")} aria-expanded={deschis === "iesire"}>
-        <LogOut className="h-4 w-4 text-muted-foreground" /> Scoate-l de pe toate dispozitivele
+        <LogOut className="h-4 w-4 text-muted-foreground" /> Deconectează-l de pe toate dispozitivele
       </button>
       {deschis === "iesire" && (
         <Confirmare>
@@ -90,7 +90,7 @@ export function ActiuniCont({
           </p>
           <Butoane
             lucreaza={lucreaza}
-            eticheta="Scoate-l de pe toate"
+            eticheta="Deconectează-l de pe toate dispozitivele"
             onDa={() => ruleaza(() => scoateDePeDispozitive(businessId, contId))}
             onNu={() => setDeschis(null)}
           />

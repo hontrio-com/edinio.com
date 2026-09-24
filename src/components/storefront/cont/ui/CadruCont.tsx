@@ -3,10 +3,11 @@ import Link from "next/link";
 import { ChevronLeft, LogOut, Mail, MessageCircle, Phone } from "lucide-react";
 import type { RezumatCont } from "@/lib/cont/rezumat";
 import { formatPhoneDisplay, whatsappLink } from "@/lib/utils/format";
+import { adresaPozei } from "@/lib/cont/profil";
 import { MENIU, type CheieMeniu } from "./meniu";
 import { MeniuFile } from "./MeniuFile";
 import { Pastila } from "./piese";
-import { CARD, FOCUS, TEXT_CONT, TITLU } from "./clase";
+import { BUTON_SECUNDAR, CARD, FOCUS, TEXT_CONT, TITLU } from "./clase";
 
 /**
  * Cadrul oricarei pagini de cont dupa intrare: meniul (lateral pe desktop, file
@@ -31,6 +32,8 @@ export type PropsCadru = {
   subtitlu?: ReactNode;
   inapoi?: { href: string; eticheta: string };
   actiuni?: ReactNode;
+  /** Pagina isi arata singura ajutorul magazinului (pagina comenzii), deci cadrul nu-l mai pune jos pe telefon. */
+  ajutorInPagina?: boolean;
   children: ReactNode;
 };
 
@@ -47,20 +50,26 @@ function numere(r: RezumatCont): Partial<Record<CheieMeniu, number>> {
 function MeniuLateral({ activ, nume, numeMagazin, rezumat, contact }: Omit<PropsCadru, "titlu" | "children" | "greutateTitlu">) {
   const n = numere(rezumat);
   const init = initiale(nume);
+  const poza = adresaPozei(rezumat.pozaLa);
   return (
     <div className="space-y-4">
       <div className={`${CARD} p-4`}>
         <div className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold"
-            style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}
-          >
-            {init || "?"}
-          </span>
+          {poza ? (
+            // eslint-disable-next-line @next/next/no-img-element -- poza e privata (cu sesiune), nu trece prin optimizatorul de imagini
+            <img src={poza} alt="" className="h-11 w-11 shrink-0 rounded-full border border-[var(--st-border)] object-cover" />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-sm font-semibold"
+              style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}
+            >
+              {init || "?"}
+            </span>
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[var(--st-text)]">{nume || "Contul meu"}</p>
-            <p className="truncate text-xs text-[var(--st-muted)]">Client {numeMagazin}</p>
+            <p className="truncate text-xs text-[var(--st-muted)]">Client la {numeMagazin}</p>
           </div>
         </div>
       </div>
@@ -166,7 +175,7 @@ export function CadruCont(p: PropsCadru) {
             <MeniuLateral activ={p.activ} nume={p.nume} numeMagazin={p.numeMagazin} rezumat={p.rezumat} contact={p.contact} />
           </aside>
 
-          <div className="min-w-0">
+          <div className="@container min-w-0">
             <MeniuFile activ={p.activ} numere={numere(p.rezumat)} />
 
             {/* ⚠ Antetul sta DIRECT pe fundalul magazinului, deci foloseste `--st-on-bg`,
@@ -202,6 +211,22 @@ export function CadruCont(p: PropsCadru) {
             </header>
 
             <div className="space-y-5">{p.children}</div>
+
+            {/*
+              ⚠ Pe telefon meniul lateral nu exista, deci iesirea din cont si datele
+              magazinului ar fi fost la o fila distanta sau deloc. Stau aici, jos, pe
+              orice pagina. Pagina comenzii are ajutorul ei (cu numarul comenzii in
+              subiect), deci acolo nu se dubleaza.
+            */}
+            <div className="mt-8 space-y-4 lg:hidden">
+              {!p.ajutorInPagina && <AjutorMagazin contact={p.contact} numeMagazin={p.numeMagazin} />}
+              <form method="post" action="/api/cont/iesire">
+                <button type="submit" className={`${BUTON_SECUNDAR} w-full`}>
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                  Iesi din cont
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       </div>

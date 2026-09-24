@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, ReceiptText } from "lucide-react";
 import type { ComandaDinCont } from "@/lib/cont/comenzi";
-import { orderStatus } from "@/lib/orders/status";
+import { stareaComenzii } from "@/lib/cont/stare-comanda";
 import { formatDate, formatPrice, pluralRo } from "@/lib/utils/format";
 import { EtichetaStareCont, Miniatura } from "../ui/piese";
 import { CARD, FOCUS } from "../ui/clase";
@@ -14,8 +14,9 @@ import { CARD, FOCUS } from "../ui/clase";
  * liniile, cu tot cu ambalajul cadou.
  */
 export function CardComanda({ c }: { c: ComandaDinCont }) {
-  const st = orderStatus(c.stare);
+  const st = stareaComenzii(c.stare);
   const alte = Math.max(0, c.produse - c.miniaturi.length);
+  const alteMobil = Math.max(0, c.produse - Math.min(3, c.miniaturi.length));
   const primul = c.miniaturi[0]?.nume ?? "";
   return (
     <Link
@@ -37,12 +38,20 @@ export function CardComanda({ c }: { c: ComandaDinCont }) {
       </div>
 
       <div className="mt-4 flex items-center gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        {/* ⚠ Pe telefon incap TREI miniaturi (patru plus „+N” ieseau din card la 320-375px). */}
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {c.miniaturi.map((m, i) => (
-            <Miniatura key={i} imagine={m.imagine} nume={m.nume} marime="sm" />
+            <span key={i} className={i >= 3 ? "hidden shrink-0 sm:block" : "shrink-0"}>
+              <Miniatura imagine={m.imagine} nume={m.nume} marime="sm" />
+            </span>
           ))}
+          {alteMobil > 0 && (
+            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-[min(var(--st-radius-sm),0.5rem)] border border-[var(--st-border)] text-xs font-semibold text-[var(--st-muted)] sm:hidden`}>
+              +{alteMobil}
+            </span>
+          )}
           {alte > 0 && (
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[var(--st-radius-sm)] border border-[var(--st-border)] text-xs font-semibold text-[var(--st-muted)]">
+            <span className="hidden h-11 w-11 shrink-0 place-items-center rounded-[min(var(--st-radius-sm),0.5rem)] border border-[var(--st-border)] text-xs font-semibold text-[var(--st-muted)] sm:grid">
               +{alte}
             </span>
           )}

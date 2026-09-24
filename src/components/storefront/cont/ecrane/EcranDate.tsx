@@ -1,5 +1,7 @@
-import { Download, KeyRound, LockKeyhole, LogOut, MonitorSmartphone, ShieldAlert } from "lucide-react";
+import { Download, KeyRound, LockKeyhole, LogOut, MonitorSmartphone, ShieldAlert, UserRound } from "lucide-react";
 import type { ContactulMeu } from "@/lib/cont/date";
+import type { ProfilCont } from "@/lib/cont/profil-reguli";
+import { EditeazaProfilul } from "../EditeazaProfilul";
 import { GestioneazaContacte } from "../GestioneazaContacte";
 import { StergeContul } from "../StergeContul";
 import { SchimbaParola } from "../SchimbaParola";
@@ -13,11 +15,15 @@ import { BUTON_SECUNDAR } from "../ui/clase";
  * pentru ea. Parola exista din 24.09.2026 (intrarea e cu email si parola).
  */
 export function EcranDate({
+  profil,
+  pozaSrc,
   contacte,
   comenzi,
   areParola,
   eroare = null,
 }: {
+  profil: ProfilCont;
+  pozaSrc: string | null;
   contacte: ContactulMeu[];
   comenzi: number;
   areParola: boolean;
@@ -28,23 +34,27 @@ export function EcranDate({
     <>
       {eroare && <Mesaj fel="eroare">{eroare}</Mesaj>}
 
+      <Sectiune titlu="Profil" icon={UserRound} descriere="Numele, poza, telefonul si adresa de livrare.">
+        <EditeazaProfilul profil={profil} pozaSrc={pozaSrc} />
+      </Sectiune>
+
       <Sectiune
         titlu="Contacte"
         icon={KeyRound}
-        descriere="Adresele confirmate sunt cele cu care intri in cont, si felul in care comenzile tale se leaga de el."
+        descriere="Cu adresele confirmate intri in cont, iar comenzile plasate cu ele apar automat aici."
       >
         <GestioneazaContacte contacte={contacte} areParola={areParola} />
       </Sectiune>
 
-      <Sectiune titlu="Parola" icon={LockKeyhole} descriere="Intri cu emailul si parola; pe un dispozitiv nou iti cerem si un cod pe email.">
+      <Sectiune titlu="Parola" icon={LockKeyhole} descriere="Intri cu emailul si parola. Uneori iti cerem si un cod trimis pe email.">
         <SchimbaParola areParola={areParola} />
       </Sectiune>
 
       {/* ⚠ Numerele sunt cele din `privat.cont_reguli_sesiune()` (30 de zile, 14 fara folosire). */}
       <Sectiune
-        titlu="Sesiuni"
+        titlu="Dispozitive conectate"
         icon={MonitorSmartphone}
-        descriere="Contul ramane deschis pe acest dispozitiv cel mult 30 de zile, sau pana nu-l mai folosesti 14 zile."
+        descriere="Ramai conectat pe acest dispozitiv cel mult 30 de zile. Daca nu folosesti contul 14 zile, vei fi deconectat."
       >
         <div className="flex flex-wrap gap-2">
           {/* ⚠ Formulare, nu legaturi: iesirea trece prin POST si merge si fara JavaScript. */}
@@ -62,12 +72,12 @@ export function EcranDate({
           </form>
         </div>
         <p className="mt-3 text-sm leading-relaxed text-[var(--st-muted)]">
-          Ai intrat de pe un calculator care nu e al tau? Iesi de pe toate dispozitivele si intra din nou doar de aici.
-          Dispozitivele tinute minte uita si ele contul, deci la urmatoarea intrare iti cerem din nou codul pe email.
+          Ai intrat in cont de pe un calculator strain? Iesi din cont de pe toate dispozitivele, apoi intra din nou de aici.
+          Dispozitivele memorate vor fi si ele uitate, asa ca la urmatoarea autentificare iti vom cere din nou codul primit pe email.
         </p>
       </Sectiune>
 
-      <Sectiune titlu="Descarca datele tale" icon={Download} descriere="Contul, contactele, toate comenzile cu detaliile lor, retururile, preferintele, dispozitivele tinute minte si jurnalul intrarilor.">
+      <Sectiune titlu="Descarca datele tale" icon={Download} descriere="Contul, contactele, toate comenzile cu detaliile lor, retururile, preferintele, dispozitivele memorate si istoricul autentificarilor.">
         {/* ⚠ Formular, nu legatura: descarcarea trece prin POST, deci are si poarta
             de origine, si merge fara JavaScript. */}
         <form method="post" action="/api/cont/export">
@@ -78,7 +88,7 @@ export function EcranDate({
         </form>
       </Sectiune>
 
-      <Sectiune titlu="Stergerea contului" icon={ShieldAlert} descriere="Ireversibil. Citeste ce se sterge si ce ramane.">
+      <Sectiune titlu="Stergerea contului" icon={ShieldAlert} descriere="Stergerea este definitiva. Vezi mai jos ce se sterge si ce se pastreaza.">
         <StergeContul comenzi={comenzi} areParola={areParola} />
       </Sectiune>
     </>

@@ -108,7 +108,7 @@ function corpul(nume: string): { f: string; corp: string } {
 test("⚠ cele patru functii reparate au ultima definitie in migratia 52 (sau in 54, care le-a intarit)", () => {
   const unde: Record<string, string> = {
     cont_iesi_de_peste_tot: "2026-09-24-conturi-clienti-zz-datele-mele.sql",
-    cont_export: "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql",
+    cont_export: "2026-09-24-conturi-clienti-zzzzzz-profilul.sql",
     cont_sterge_contact: "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql",
     cont_verifica_cod: "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql",
   };
@@ -178,7 +178,7 @@ test("⚠⚠ stergerea contului cere parola INAINTEA cererii catre magazin si a 
   assert.ok(s.indexOf("stergeContul(magazin.id") < s.indexOf("trimiteCerereaDeStergere(magazin.id"), "cererea pleaca inaintea stergerii");
   assert.ok(parola < s.indexOf("stergeContul(magazin.id"), "stergerea vine abia dupa parola");
   const ecran = citeste("src/components/storefront/cont/StergeContul.tsx");
-  assert.match(ecran, /JSON\.stringify\(\{ confirmare: cuvant, cereStergereaDatelor: cerere, parola \}\)/);
+  assert.match(ecran, /JSON\.stringify\(\{ confirmare: cuvant\.trim\(\)\.toUpperCase\(\), cereStergereaDatelor: cerere, parola \}\)/);
   assert.match(citeste("src/components/storefront/cont/ecrane/EcranDate.tsx"), /<StergeContul comenzi=\{comenzi\} areParola=\{areParola\} \/>/);
 });
 
@@ -223,6 +223,6 @@ test("textul despre sesiuni spune limitele ADEVARATE", () => {
   assert.match(reguli, /select interval '30 days', interval '14 days'/);
   assert.equal(VIATA_COOKIE_SEC, 30 * 24 * 3600);
   const ecran = citeste("src/components/storefront/cont/ecrane/EcranDate.tsx");
-  assert.match(ecran, /cel mult 30 de zile, sau pana nu-l mai folosesti 14 zile/);
+  assert.match(ecran, /cel mult 30 de zile\. Daca nu folosesti contul 14 zile, vei fi deconectat/);
   assert.doesNotMatch(ecran, /pana iesi din el/);
 });

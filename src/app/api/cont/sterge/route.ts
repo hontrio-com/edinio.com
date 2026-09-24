@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   try {
     const v = await parolaDinCont({
       magazinId: magazin.id, contId: s.contId, parola: corp?.parola, ip: clientIp(req),
-      mesajGresita: "Parola contului nu e buna.",
+      mesajGresita: "Parola este gresita.",
     });
     if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
 

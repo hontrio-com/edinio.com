@@ -217,29 +217,52 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   }, [searchQuery, filtre.cautare, cereFiltre]);
 
   /*
-   * „Selecteaza tot" inseamna TOT ce trece de filtre, nu pagina curenta.
+   * „Selecteaza tot" din capul listei inseamna PAGINA CURENTA (cerut de comerciant pe
+   * 24.09.2026: bifa lua toate produsele filtrate, desi omul vedea numai 25, iar de ea
+   * atarna actiunile in masa, inclusiv STERGEREA). Toate paginile se aleg ANUME, din
+   * bara de selectie, cu „Selecteaza toate paginile", ca in Gmail.
    *
-   * Asa a insemnat dintotdeauna, si de el atarna actiunile in masa — inclusiv
-   * stergerea. Cu lista redusa la o pagina, id-urile se cer de la server, dar
-   * numai CAND SE APASA: pe o incarcare obisnuita nu costa nimic.
+   * Id-urile tuturor paginilor se cer de la server numai CAND SE APASA acel buton.
    */
   const [selectieTotala, setSelectieTotala] = useState(false);
-  const allSelected = selectieTotala || (paginated.length > 0 && paginated.every(p => selected.has(p.id)));
+  const [aducToatePaginile, setAducToatePaginile] = useState(false);
+  const allSelected = paginated.length > 0 && paginated.every(p => selected.has(p.id));
   const someSelected = !allSelected && paginated.some(p => selected.has(p.id));
+  const maiMultePagini = totalFiltrate > paginated.length;
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
   }, [someSelected]);
 
   function toggleOne(id: string) {
+    /* Un produs scos sau adaugat de mana: selectia nu mai e „toate paginile". */
+    setSelectieTotala(false);
     setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
-  async function toggleAll() {
+  function toggleAll() {
     if (allSelected) { setSelected(new Set()); setSelectieTotala(false); return; }
+    setSelected(new Set(paginated.map(p => p.id)));
+    setSelectieTotala(false);
+  }
+  async function selecteazaToatePaginile() {
+    /*
+     * ⚠ Filtrele se pot schimba cat asteptam raspunsul, iar schimbarea goleste selectia.
+     * Un raspuns intarziat ar fi bifat la loc produsele listei VECHI, nevazute, pe care
+     * ar fi lucrat apoi actiunile in masa. Deci raspunsul se primeste numai daca lista e
+     * tot aceeasi.
+     */
+    const ceruta = semnaturaFiltre;
+    setAducToatePaginile(true);
     const r = await idurileProduselorFiltrate(businessId, filtre);
+    setAducToatePaginile(false);
+    if (semnaturaVeche.current !== ceruta) return;
     if ("error" in r) { toast.error(r.error); return; }
     setSelected(new Set(r.ids));
     setSelectieTotala(true);
+  }
+  function doarPaginaCurenta() {
+    setSelected(new Set(paginated.map(p => p.id)));
+    setSelectieTotala(false);
   }
   function clearSelection() { setSelected(new Set()); setSelectieTotala(false); setBulkPanel(null); setConfirmBulkDelete(false); }
 
@@ -524,7 +547,22 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
       {selected.size > 0 && (
         <div className="mb-3 rounded-xl border border-primary/30 bg-primary/5">
           <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-            <span className="text-sm font-semibold text-foreground mr-1">{selected.size} selectate</span>
+            <span className="text-sm font-semibold text-foreground mr-1">
+              {selectieTotala ? `Toate cele ${selected.size} produse selectate` : `${selected.size} selectate`}
+            </span>
+            {allSelected && !selectieTotala && maiMultePagini && (
+              <button type="button" disabled={bulkBusy || aducToatePaginile} onClick={selecteazaToatePaginile}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary border border-primary/40 bg-surface hover:bg-primary/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                {aducToatePaginile && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Selecteaza toate paginile ({totalFiltrate})
+              </button>
+            )}
+            {selectieTotala && maiMultePagini && (
+              <button type="button" disabled={bulkBusy} onClick={doarPaginaCurenta}
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-50">
+                Doar pagina curenta
+              </button>
+            )}
             <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "active", value: true }, "{n} produse activate")} className={bulkBtn}>Activeaza</button>
             <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "active", value: false }, "{n} produse dezactivate")} className={bulkBtn}>Dezactiveaza</button>
             <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "featured", value: true }, "{n} produse recomandate")} className={bulkBtn}><Star className="h-3.5 w-3.5" /> Recomanda</button>
@@ -607,9 +645,9 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
           <div className="sm:hidden space-y-2">
             <label className="flex w-fit items-center gap-2 px-1 pb-0.5 cursor-pointer">
               <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                aria-label="Selecteaza toate produsele filtrate"
+                aria-label="Selecteaza produsele de pe pagina curenta"
                 className="h-4 w-4 rounded border-border accent-primary cursor-pointer" />
-              <span className="text-xs font-medium text-muted-foreground">{allSelected ? "Deselecteaza tot" : "Selecteaza tot"}</span>
+              <span className="text-xs font-medium text-muted-foreground">{allSelected ? "Deselecteaza tot" : "Selecteaza pagina"}</span>
             </label>
             {paginated.map((product) => {
               const images = Array.isArray(product.images) ? product.images : [];
@@ -713,7 +751,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-3 py-3 w-10">
                   <input ref={selectAllRef} type="checkbox" checked={allSelected} onChange={toggleAll}
-                    aria-label="Selecteaza toate produsele filtrate"
+                    aria-label="Selecteaza produsele de pe pagina curenta"
                     className="h-4 w-4 rounded border-border accent-primary cursor-pointer align-middle" />
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[36%] lg:w-[32%]">Produs</th>

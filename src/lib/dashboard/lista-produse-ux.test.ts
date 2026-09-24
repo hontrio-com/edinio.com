@@ -131,3 +131,45 @@ test("⚠ bara de selectie publica numai unde exista o cale pe ID-uri", () => {
   const p = faraComentarii(pagina);
   assert.match(p, /trendyol_config, emag_config/, "pagina nu citeste conexiunile");
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   „SELECTEAZA TOT" = PAGINA CURENTA                            (24.09.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Cerut de comerciant: bifa din capul listei lua TOATE produsele filtrate (mii, la un magazin
+   mare), desi pe ecran erau 25, iar de ea atarna actiunile in masa, inclusiv stergerea. Acum bifa
+   ia pagina, iar toate paginile se aleg anume, din bara de selectie.
+*/
+
+function corpulFunctiei(cod: string, nume: string): string {
+  const i = cod.indexOf(`function ${nume}(`);
+  assert.ok(i > 0, `lipseste ${nume}`);
+  const j = cod.indexOf("\n  function ", i + 10);
+  const k = cod.indexOf("\n  async function ", i + 10);
+  const capete = [j, k].filter((x) => x > 0);
+  return cod.slice(i, capete.length ? Math.min(...capete) : i + 1500);
+}
+
+test("⚠ bifa din capul listei selecteaza NUMAI pagina curenta", () => {
+  const cod = faraComentarii(lista);
+  const toggleAll = corpulFunctiei(cod, "toggleAll");
+  assert.doesNotMatch(toggleAll, /idurileProduselorFiltrate/, "bifa nu mai cere de la server toate produsele");
+  assert.match(toggleAll, /setSelected\(new Set\(paginated\.map\(p => p\.id\)\)\)/, "bifa ia id-urile paginii");
+  assert.match(cod, /const allSelected = paginated\.length > 0 && paginated\.every\(p => selected\.has\(p\.id\)\);/,
+    "bifa se aprinde dupa pagina, nu dupa „toate paginile”");
+  assert.equal((lista.match(/aria-label="Selecteaza produsele de pe pagina curenta"/g) ?? []).length, 2,
+    "amandoua bifele (mobil si tabel) spun ca e pagina");
+});
+
+test("⚠ toate paginile se aleg anume, din bara, iar un raspuns intarziat nu bifeaza lista veche", () => {
+  const cod = faraComentarii(lista);
+  const toate = corpulFunctiei(cod, "selecteazaToatePaginile");
+  assert.match(toate, /idurileProduselorFiltrate\(businessId, filtre\)/);
+  assert.match(toate, /if \(semnaturaVeche\.current !== ceruta\) return;/,
+    "filtrele schimbate cat astepta: raspunsul ar fi bifat produse nevazute");
+  assert.ok(toate.indexOf("semnaturaVeche.current !== ceruta") < toate.indexOf("setSelected("));
+  assert.match(cod, /allSelected && !selectieTotala && maiMultePagini && \(/, "butonul apare dupa pagina bifata");
+  assert.match(lista, /Selecteaza toate paginile \(\{totalFiltrate\}\)/);
+  /* O bifa scoasa de mana nu mai lasa selectia sa se numeasca „toate paginile”. */
+  assert.match(corpulFunctiei(cod, "toggleOne"), /setSelectieTotala\(false\);/);
+});

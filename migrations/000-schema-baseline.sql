@@ -7598,7 +7598,7 @@ begin
   o := o || E'-- ── GRANTURI PE COLOANA (RLS verifica RANDURI, nu COLOANE) ─\n' || p || E'\n\n';
 
   select coalesce(string_agg(format('grant execute on function %I.%I(%s) to %I;',
-           n.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid), a.grantee), E'\n' order by n.nspname, pr.proname, a.grantee), '')
+           n.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid), a.grantee), E'\n' order by n.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid), a.grantee), '')
     into p from pg_proc pr join pg_namespace n on n.oid = pr.pronamespace
     cross join lateral aclexplode(coalesce(pr.proacl, acldefault('f', pr.proowner))) x
     cross join lateral (select pg_get_userbyid(x.grantee) as grantee) a
@@ -7623,7 +7623,7 @@ begin
    */
   select coalesce(string_agg(format('revoke execute on function %I.%I(%s) from public;',
            n2.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid)),
-           E'\n' order by n2.nspname, pr.proname), '')
+           E'\n' order by n2.nspname, pr.proname, pg_get_function_identity_arguments(pr.oid)), '')
     into p from pg_proc pr join pg_namespace n2 on n2.oid = pr.pronamespace
    where n2.nspname = any(c_scheme)
      and pr.prokind = 'f'
@@ -16816,11 +16816,11 @@ grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
+grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
-grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;

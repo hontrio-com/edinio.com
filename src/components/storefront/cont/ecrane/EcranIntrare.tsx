@@ -2,7 +2,7 @@ import { Package, ReceiptText, ShieldCheck, Truck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormularIntrare } from "../FormularIntrare";
 import type { ModAutentificare } from "../autentificare-client";
-import { CARD, TITLU } from "../ui/clase";
+import { CARD, TEXT_CONT, TITLU } from "../ui/clase";
 
 /**
  * Intrarea in cont. Fara meniul contului: omul inca n-a intrat.
@@ -51,7 +51,7 @@ export function EcranIntrare({
   contact?: { telefon: string | null; email: string | null } | null;
 }) {
   return (
-    <main className="flex-1" style={{ fontFamily: "var(--st-font-body)" }}>
+    <main className="flex-1" style={TEXT_CONT}>
       <div className="mx-auto w-full px-4 py-10 sm:px-6 lg:py-16" style={{ maxWidth: "min(var(--st-container), 68rem)" }}>
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] lg:gap-16">
           <div className="order-2 text-[var(--st-on-bg)] lg:order-1">

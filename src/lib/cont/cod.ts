@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { codNou, amprentaCodului } from "./jeton";
 import type { MagazinDeCont } from "./magazinul-cererii";
-import { ipPentruBaza } from "./cerere";
+import { cheieIp, ipPentruBaza } from "./cerere";
 
 /** Cat traieste un cod. Acelasi numar ajunge si in baza, si in textul emailului. */
 export const MINUTE_COD = 10;
@@ -20,11 +20,15 @@ export type FelContact = "email" | "telefon";
  * si sa nu trimita degeaba. Dar catre browser pleaca MEREU acelasi text,
  * inclusiv cand destinatia nu exista la magazinul asta.
  *
- * Altfel formularul de intrare devine un oracol prin care oricine afla ce
- * emailuri si ce telefoane cunoaste magazinul, si e chiar tiparul pe care
- * `lookupReturnableOrder` il are azi si pe care nu-l copiem.
+ * Altfel formularul devine un oracol prin care cineva afla ce emailuri au deja
+ * cont la magazin, si e chiar tiparul pe care `lookupReturnableOrder` il are azi
+ * si pe care nu-l copiem.
+ *
+ * ⚠ Textul vorbeste despre o adresa NOUA (din 24.09.2026 codul de aici e numai
+ * pentru adaugarea unei adrese in cont). Cel vechi, „daca adresa e cunoscuta de
+ * magazin", era scris pentru intrarea cu cod si nu mai avea sens.
  */
-export const MESAJ_UNIC = "Daca adresa e cunoscuta de magazin, codul a plecat. Verifica-ti casuta.";
+export const MESAJ_UNIC = "Daca adresa poate fi adaugata, ti-am trimis un cod pe ea. Uita-te si in Spam.";
 
 /**
  * ⚠ Intrarea pe TELEFON nu e pornita inca: niciun drum de SMS nu e legat de
@@ -72,10 +76,11 @@ export async function cereCod(
     return { mesaj: MESAJ_SMS_INCA_NU, trimis: false, motiv: "sms-neimplementat" };
   }
 
-  if (!rateLimit(`contCod:ip:${ip}`, 10, 60_000)) {
+  /* ⚠ `cheieIp`: un IPv6 se numara pe retea (/64), altfel fiecare adresa din ea avea plafonul ei. */
+  if (!rateLimit(`contCod:ip:${cheieIp(ip)}`, 10, 60_000)) {
     return { mesaj: MESAJ_UNIC, trimis: false, motiv: "rafala" };
   }
-  const lim = await consumaLimita(`cont:cod:ip:${ip}`, 20, 3600, 900);
+  const lim = await consumaLimita(`cont:cod:ip:${cheieIp(ip)}`, 20, 3600, 900);
   if (!lim.permis) {
     return { mesaj: MESAJ_UNIC, trimis: false, motiv: "limita-ip" };
   }
@@ -133,10 +138,10 @@ export async function verificaCod(
   scop: "adaugare-contact",
   contId: string,
 ): Promise<{ ok: boolean; contId: string | null; motiv: string }> {
-  if (!rateLimit(`contVerif:ip:${ip}`, 20, 60_000)) {
+  if (!rateLimit(`contVerif:ip:${cheieIp(ip)}`, 20, 60_000)) {
     return { ok: false, contId: null, motiv: "rafala" };
   }
-  const lim = await consumaLimita(`cont:verif:ip:${ip}`, 40, 3600, 900);
+  const lim = await consumaLimita(`cont:verif:ip:${cheieIp(ip)}`, 40, 3600, 900);
   if (!lim.permis) {
     return { ok: false, contId: null, motiv: "limita-ip" };
   }

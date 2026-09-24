@@ -4,6 +4,7 @@ import { sesiuneCurenta } from "@/lib/cont/sesiune";
 import { vineDePeMagazin } from "@/lib/cont/cerere";
 import { anuleazaComanda, mesajulAnularii } from "@/lib/cont/date";
 import { logError } from "@/lib/error-logger";
+import { esteUuid } from "@/lib/supabase/ids";
 
 /**
  * Anularea unei comenzi `pending`, din contul cumparatorului (H5).
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const corp = await req.json().catch(() => null);
   const orderId = typeof corp?.orderId === "string" ? corp.orderId : "";
-  if (corp?.actiune !== "anuleaza" || !orderId) {
+  if (corp?.actiune !== "anuleaza" || !esteUuid(orderId)) {
     return NextResponse.json({ eroare: "Cerere nevalida." }, { status: 400 });
   }
 

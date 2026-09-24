@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { sesiuneCurenta, stergeCookieContului } from "@/lib/cont/sesiune";
 import { vineDePeMagazin } from "@/lib/cont/cerere";
+import { parolaDinCont } from "@/lib/cont/autentificare";
+import { clientIp } from "@/lib/utils/rate-limit";
 import { stergeContul } from "@/lib/cont/date";
 import { trimiteCerereaDeStergere } from "@/lib/cont/cerere-stergere";
 import { logError } from "@/lib/error-logger";
@@ -18,6 +20,9 @@ import { logError } from "@/lib/error-logger";
  *
  * ⚠ Se cere confirmarea scrisa („STERGE") in corp, nu doar o apasare: e
  * ireversibil, si un buton apasat din greseala nu are drum inapoi.
+ *
+ * ⚠⚠ Si PAROLA contului, cand are una: altfel oricine gasea contul deschis pe un
+ * calculator strain il putea sterge, cu tot cu legaturile comenzilor.
  *
  * ⚠ Cu `cereStergereaDatelor: true`, magazinul primeste INAINTEA stergerii o
  * cerere de anonimizare a comenzilor (`trimiteCerereaDeStergere`). Nu se face
@@ -39,6 +44,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const v = await parolaDinCont({
+      magazinId: magazin.id, contId: s.contId, parola: corp?.parola, ip: clientIp(req),
+      mesajGresita: "Parola contului nu e buna.",
+    });
+    if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
+
     const cerereTrimisa = corp?.cereStergereaDatelor === true
       ? await trimiteCerereaDeStergere(magazin, s.contId)
       : null;

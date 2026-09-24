@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
 import { comenzileMele } from "@/lib/cont/comenzi";
+import { PE_PAGINA, numarulPaginii } from "@/lib/cont/paginare";
 import { rezumatulContului } from "@/lib/cont/rezumat";
 import { pluralRo } from "@/lib/utils/format";
 import { PaginaCont } from "@/components/storefront/cont/ui/PaginaCont";
@@ -11,15 +12,13 @@ export const metadata: Metadata = { title: "Comenzile mele", robots: { index: fa
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ p?: string }>;
+  searchParams: Promise<{ p?: string | string[] }>;
 }
-
-const PE_PAGINA = 20;
 
 export default async function ComenzileMele({ params, searchParams }: Props) {
   const { slug } = await params;
   const { p } = await searchParams;
-  const pagina = Math.max(1, Number.parseInt(p ?? "1", 10) || 1);
+  const pagina = numarulPaginii(p);
 
   const pag = await incarcaPaginaDeCont(slug);
   if (!pag.sesiune) redirect("/cont/intra");
@@ -28,6 +27,8 @@ export default async function ComenzileMele({ params, searchParams }: Props) {
     rezumatulContului(pag.magazin.id, pag.sesiune.contId),
     comenzileMele(pag.magazin.id, pag.sesiune.contId, PE_PAGINA, (pagina - 1) * PE_PAGINA),
   ]);
+  /* O pagina de dupa capatul listei (link vechi, `?p=` scris de mana): inapoi la prima. */
+  if (pagina > 1 && comenzi.length === 0) redirect("/cont/comenzi");
 
   return (
     <PaginaCont

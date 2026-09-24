@@ -1,4 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { esteUuid } from "@/lib/supabase/ids";
+import { decalajSigur } from "./paginare";
 import { documentulFiscal, type DocumentFiscal } from "./documente";
 import { numeleCurierului, urmareste, type Urmarire } from "./urmarire";
 import type { LivrareBruta } from "./livrare";
@@ -187,7 +189,7 @@ export async function comenzileMele(
     p_business: businessId,
     p_cont: contId,
     p_limita: limita,
-    p_decalaj: decalaj,
+    p_decalaj: decalajSigur(decalaj),
   });
   if (error) throw error;
 
@@ -217,6 +219,8 @@ export async function comandaMea(
   contId: string,
   orderId: string,
 ): Promise<DetaliuComanda | null> {
+  /* ⚠ Id-ul vine din adresa: un `/cont/comenzi/abc` ar fi cazut in baza (22P02) cu eroare, nu cu 404. */
+  if (!esteUuid(orderId)) return null;
   const { data, error } = await createAdminClient().rpc("cont_comanda_mea", {
     p_business: businessId,
     p_cont: contId,

@@ -1939,7 +1939,7 @@ export async function sendCerereDeStergere(
       ${data.emailuri.length ? rand("Email", data.emailuri.map((x) => esc(x)).join("<br>")) : ""}
       ${data.telefoane.length ? rand("Telefon", data.telefoane.map((x) => esc(x)).join("<br>")) : ""}
       ${rand("Comenzi legate", String(data.comenzi))}
-      ${data.numere.length ? rand("Numerele lor", data.numere.map((x) => esc(x)).join(", ") + (data.comenzi > data.numere.length ? " si altele" : "")) : ""}
+      ${data.numere.length ? rand("Numerele lor", data.numere.map((x) => esc(x)).join(", ") + (data.comenzi > data.numere.length ? ` si inca ${data.comenzi - data.numere.length}` : "")) : ""}
       ${rand("Primita la", cand)}
     </table>
     <p style="margin:16px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">In panou: <strong>Clienti</strong>, cauta dupa emailul, telefonul sau numerele de comanda de mai sus, apoi <strong>Anonimizeaza</strong>. Comenzile raman (pentru facturi si evidenta contabila), fara numele, contactele si adresa clientului; contul lui e deja sters.</p>

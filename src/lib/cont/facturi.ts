@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { documentulFiscal, type DocumentFiscal } from "./documente";
+import { decalajSigur } from "./paginare";
 
 export type FacturaDinCont = {
   orderId: string;
@@ -28,7 +29,7 @@ export async function facturileMele(
     p_business: businessId,
     p_cont: contId,
     p_limita: limita,
-    p_decalaj: decalaj,
+    p_decalaj: decalajSigur(decalaj),
   });
   if (error) throw error;
 

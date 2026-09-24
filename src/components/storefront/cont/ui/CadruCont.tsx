@@ -6,7 +6,7 @@ import { formatPhoneDisplay, whatsappLink } from "@/lib/utils/format";
 import { MENIU, type CheieMeniu } from "./meniu";
 import { MeniuFile } from "./MeniuFile";
 import { Pastila } from "./piese";
-import { CARD, FOCUS, TITLU } from "./clase";
+import { CARD, FOCUS, TEXT_CONT, TITLU } from "./clase";
 
 /**
  * Cadrul oricarei pagini de cont dupa intrare: meniul (lateral pe desktop, file
@@ -157,7 +157,7 @@ export function AjutorMagazin({ contact, numeMagazin, subiect }: { contact: Cont
 
 export function CadruCont(p: PropsCadru) {
   return (
-    <main className="flex-1 text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-body)" }}>
+    <main className="flex-1 text-[var(--st-text)]" style={TEXT_CONT}>
       <div className="mx-auto w-full px-4 pb-16 pt-6 sm:px-6 lg:pb-24 lg:pt-10" style={{ maxWidth: "min(var(--st-container), 78rem)" }}>
         <div className="lg:grid lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start lg:gap-10 xl:gap-12">
           {/* ⚠ Bara nu se lipeste la derulare: antetul magazinului e lipit si are

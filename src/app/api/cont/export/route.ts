@@ -18,6 +18,9 @@ import { logError } from "@/lib/error-logger";
  * Exportul aduna tot ce stim despre om intr-un singur fisier; merita poarta.
  *
  * ⚠ `no-store`: fisierul poarta tot ce stim despre om.
+ *
+ * ⚠ Formularul navigheaza: un 500 in text simplu ar fi lasat omul pe o pagina
+ * alba. La eroare se intoarce la „Datele mele", cu mesaj; fara sesiune, la intrare.
  */
 export async function POST(req: NextRequest) {
   if (!vineDePeMagazin(req)) return new NextResponse("Forbidden", { status: 403 });
@@ -25,8 +28,15 @@ export async function POST(req: NextRequest) {
   const magazin = await magazinulCereriiDeCont(req.headers.get("host")).catch(() => null);
   if (!magazin) return new NextResponse("Not found", { status: 404 });
 
-  const s = await sesiuneCurenta(magazin.id).catch(() => null);
-  if (!s) return new NextResponse("Not found", { status: 404 });
+  const inapoiCuEroare = () => NextResponse.redirect(new URL("/cont/date?eroare=export", req.nextUrl.origin), 303);
+
+  let s;
+  try {
+    s = await sesiuneCurenta(magazin.id);
+  } catch {
+    return inapoiCuEroare();
+  }
+  if (!s) return NextResponse.redirect(new URL("/cont/intra", req.nextUrl.origin), 303);
 
   try {
     const date = await exportulMeu(magazin.id, s.contId);
@@ -45,6 +55,6 @@ export async function POST(req: NextRequest) {
       businessId: magazin.id,
       severity: "error",
     });
-    return new NextResponse("Exportul nu se poate face acum.", { status: 500 });
+    return inapoiCuEroare();
   }
 }

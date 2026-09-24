@@ -51,3 +51,13 @@ export const CAMP =
 export const ETICHETA_CAMP = "mb-1.5 block text-sm font-medium text-[var(--st-text)]";
 
 export const TITLU: CSSProperties = { fontFamily: "var(--st-font-heading)" };
+
+/**
+ * Invelisul zonei de cont: fontul textului al magazinului.
+ *
+ * ⚠ `fontSynthesisWeight: "none"`: Instrument Serif vine intr-o SINGURA greutate
+ * (400). Titlul mare trece deja pe `font-normal` la el (`greutateTitlu`), dar
+ * titlurile mici din carduri sunt `font-semibold`, iar browserul le-ar fi ingrosat
+ * artificial. Fonturile variabile au greutatile adevarate, deci la ele nu schimba nimic.
+ */
+export const TEXT_CONT: CSSProperties = { fontFamily: "var(--st-font-body)", fontSynthesisWeight: "none" };

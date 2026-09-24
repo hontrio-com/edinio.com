@@ -19,6 +19,10 @@ import { logError } from "@/lib/error-logger";
  * trimite `Origin` la POST.
  *
  * Raspunsul e 303 spre intrare, ca formularul sa mearga si fara JavaScript.
+ *
+ * ⚠ Cand baza nu raspunde, inapoi la „Datele mele" CU mesaj si FARA sa stergem
+ * cookie-ul de aici: omul care si-a pierdut telefonul trebuie sa afle ca celelalte
+ * sesiuni sunt inca deschise, nu sa fie scos numai de pe calculatorul lui.
  */
 export async function POST(req: NextRequest) {
   if (!vineDePeMagazin(req)) return new NextResponse("Forbidden", { status: 403 });
@@ -26,7 +30,20 @@ export async function POST(req: NextRequest) {
   const magazin = await magazinulCereriiDeCont(req.headers.get("host")).catch(() => null);
   if (!magazin) return new NextResponse("Not found", { status: 404 });
 
-  const s = await sesiuneCurenta(magazin.id).catch(() => null);
+  const inapoiCuEroare = () => NextResponse.redirect(new URL("/cont/date?eroare=iesire", req.nextUrl.origin), 303);
+
+  let s;
+  try {
+    s = await sesiuneCurenta(magazin.id);
+  } catch (e) {
+    await logError({
+      action: "cont/iesire-peste-tot",
+      message: `citirea sesiunii a esuat: ${String(e)}`,
+      businessId: magazin.id,
+      severity: "error",
+    });
+    return inapoiCuEroare();
+  }
   if (s) {
     const { error } = await createAdminClient().rpc("cont_iesi_de_peste_tot", {
       p_business: magazin.id,
@@ -39,7 +56,7 @@ export async function POST(req: NextRequest) {
         businessId: magazin.id,
         severity: "error",
       });
-      return NextResponse.redirect(new URL("/cont/date", req.nextUrl.origin), 303);
+      return inapoiCuEroare();
     }
   }
 

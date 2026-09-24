@@ -10,10 +10,19 @@ export const metadata: Metadata = { title: "Datele mele", robots: { index: false
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ eroare?: string | string[] }>;
 }
 
-export default async function DateleMele({ params }: Props) {
+/* Numai textele noastre: `?eroare=` vine din adresa, deci nu se afiseaza niciodata ca atare. */
+const ERORI: Record<string, string> = {
+  iesire: "Nu am putut inchide celelalte sesiuni. Esti inca in cont pe toate dispozitivele; incearca din nou peste cateva minute.",
+  export: "Nu am putut pregati fisierul cu datele tale. Incearca din nou peste cateva minute.",
+};
+
+export default async function DateleMele({ params, searchParams }: Props) {
   const { slug } = await params;
+  const { eroare } = await searchParams;
+  const mesajEroare = typeof eroare === "string" ? ERORI[eroare] ?? null : null;
   const pag = await incarcaPaginaDeCont(slug);
   if (!pag.sesiune) redirect("/cont/intra");
 
@@ -25,7 +34,7 @@ export default async function DateleMele({ params }: Props) {
 
   return (
     <PaginaCont pag={pag} rezumat={rezumat} activ="date" titlu="Datele mele" subtitlu="Contactele, parola, sesiunile si datele pe care le pastreaza magazinul despre tine.">
-      <EcranDate contacte={contacte} comenzi={rezumat.comenzi} areParola={cuParola} />
+      <EcranDate contacte={contacte} comenzi={rezumat.comenzi} areParola={cuParola} eroare={mesajEroare} />
     </PaginaCont>
   );
 }

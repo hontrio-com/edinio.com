@@ -374,6 +374,59 @@ export async function intraCuParola(p: {
   return { rezultat: "cod" };
 }
 
+// ═══ Parola ceruta din cont, inaintea unei fapte grele ═════════════════════
+
+export type ContulCuParola = { are_parola: boolean; email: string | null; parola_hash: string | null };
+
+export type ParolaDinCont =
+  | { ok: true; cont: ContulCuParola }
+  | { ok: false; status: 400 | 404 | 429; eroare: string };
+
+/**
+ * Parola contului, ceruta cu sesiunea deschisa, inaintea unei fapte grele:
+ * schimbarea parolei, o adresa noua in cont, stergerea contului.
+ *
+ * ⚠⚠ Fara ea, o sesiune ramasa deschisa pe un calculator strain ajungea sa
+ * schimbe adresa, parola sau sa stearga contul. Si cu ACELEASI plafoane ca la
+ * intrare (IP-ul inaintea lui scrypt, blocajul pe IP si pe cont, greseala
+ * numarata): altfel fiecare usa de aici ar fi fost una de ghicit parole.
+ *
+ * Un cont FARA parola (facut inainte de 24.09.2026) trece fara ea.
+ *
+ * `permisCerut`: ruta a cerut deja `permisDeCalcul` (schimbarea parolei o cere
+ * oricum, pentru amprenta parolei noi); altfel s-ar fi numarat de doua ori.
+ */
+export async function parolaDinCont(p: {
+  magazinId: string;
+  contId: string;
+  parola: unknown;
+  ip: string;
+  mesajGresita: string;
+  permisCerut?: boolean;
+}): Promise<ParolaDinCont> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("cont_parola_contului", { p_business: p.magazinId, p_cont: p.contId });
+  if (error) throw error;
+  const cont = (Array.isArray(data) ? data[0] : data) ?? null;
+  if (!cont) return { ok: false, status: 404, eroare: "Contul nu mai exista." };
+  if (!cont.are_parola) return { ok: true, cont };
+
+  if (!p.permisCerut && !(await permisDeCalcul(p.ip))) return { ok: false, status: 429, eroare: MESAJ_PREA_MULTE };
+
+  const { data: st } = await admin.rpc("cont_parola_pentru_intrare", {
+    p_business: p.magazinId, p_email: cont.email ?? "", p_ip: ipPentruBaza(p.ip),
+  });
+  const rand = Array.isArray(st) ? st[0] : st;
+  const blocat = rand?.blocat_ip === true || rand?.blocat_cont === true;
+  const scrisa = typeof p.parola === "string" ? p.parola : "";
+  const buna = blocat ? await verificareOarba(scrisa) : await parolaPotrivita(scrisa, cont.parola_hash);
+  if (!buna) {
+    await admin.rpc("cont_intrare_esuata", { p_business: p.magazinId, p_cont: p.contId, p_ip: ipPentruBaza(p.ip) });
+    return { ok: false, status: blocat ? 429 : 400, eroare: blocat ? MESAJ_PREA_MULTE : p.mesajGresita };
+  }
+  return { ok: true, cont };
+}
+
 // ═══ Dupa o intrare reusita ════════════════════════════════════════════════
 
 /**

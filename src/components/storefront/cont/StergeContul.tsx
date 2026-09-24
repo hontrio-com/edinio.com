@@ -14,11 +14,14 @@ import { BUTON_SECUNDAR, CAMP, ETICHETA_CAMP } from "./ui/clase";
  * crede de obicei ca sterge si comenzile; ele raman, fiindca in spatele lor stau
  * documente fiscale, iar el are dreptul sa stie asta INAINTE.
  * ⚠ Nu e buton rosu plin: rosul ramane pe iconita, ca pe orice tema sa se citeasca.
+ * ⚠ Cu parola contului, cand are una: un cont ramas deschis pe un calculator
+ * strain nu se poate sterge de cine il gaseste.
  */
-export function StergeContul({ comenzi }: { comenzi: number }) {
+export function StergeContul({ comenzi, areParola = false }: { comenzi: number; areParola?: boolean }) {
   const router = useRouter();
   const [deschis, setDeschis] = useState(false);
   const [cuvant, setCuvant] = useState("");
+  const [parola, setParola] = useState("");
   const [cerere, setCerere] = useState(false);
   const [eroare, setEroare] = useState("");
   const [asteapta, setAsteapta] = useState(false);
@@ -68,12 +71,27 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
         onChange={(e) => setCuvant(e.target.value)}
         className={CAMP}
       />
+      {areParola && (
+        <>
+          <label htmlFor="parola-stergere" className={`${ETICHETA_CAMP} mt-4`}>
+            Parola contului
+          </label>
+          <input
+            id="parola-stergere"
+            type="password"
+            autoComplete="current-password"
+            value={parola}
+            onChange={(e) => setParola(e.target.value)}
+            className={CAMP}
+          />
+        </>
+      )}
       {eroare && <p role="alert" className="mt-2 text-sm text-[var(--st-text)]">{eroare}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={asteapta || cuvant !== "STERGE"}
+          disabled={asteapta || cuvant !== "STERGE" || (areParola && parola === "")}
           onClick={async () => {
             setAsteapta(true);
             setEroare("");
@@ -82,11 +100,12 @@ export function StergeContul({ comenzi }: { comenzi: number }) {
               const r = await fetch("/api/cont/sterge", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ confirmare: cuvant, cereStergereaDatelor: cerere }),
+                body: JSON.stringify({ confirmare: cuvant, cereStergereaDatelor: cerere, parola }),
               });
               if (!r.ok) {
                 const j = await r.json().catch(() => ({}));
                 setEroare(j.eroare ?? "Nu am putut sterge contul.");
+                setParola("");
               } else {
                 const j = await r.json().catch(() => ({}));
                 sters = true;

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import {
   anuntaParolaSchimbata, dispozitivCunoscut, eLimitaDeIp, ipPentruBaza, MESAJ_PARTEA_INTAI, MESAJ_PREA_MULTE,
-  permisDeCalcul, pornestePas, tineMinteDispozitivul,
+  parolaDinCont, permisDeCalcul, pornestePas, tineMinteDispozitivul,
 } from "@/lib/cont/autentificare";
-import { amprentaParolei, parolaPotrivita, problemaParolei, verificareOarba } from "@/lib/cont/parola";
+import { amprentaParolei, problemaParolei } from "@/lib/cont/parola";
 import { deschideSesiune, sesiuneCurenta } from "@/lib/cont/sesiune";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
@@ -66,27 +66,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const admin = createAdminClient();
-    const { data, error } = await admin.rpc("cont_parola_contului", { p_business: magazin.id, p_cont: s.contId });
-    if (error) throw error;
-    const cont = Array.isArray(data) ? data[0] : data;
-    if (!cont) return new NextResponse("Not found", { status: 404 });
+    /* Acelasi plafon ca la intrare: altfel ruta asta ar fi fost o usa de ghicit parole. */
+    const v = await parolaDinCont({
+      magazinId: magazin.id, contId: s.contId, parola: corp?.parolaVeche, ip,
+      mesajGresita: "Parola actuala nu e buna.", permisCerut: true,
+    });
+    if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
+    const cont = v.cont;
 
     const eraDeIncredere = await dispozitivCunoscut(magazin.id, s.contId);
-
-    if (cont.are_parola) {
-      /* Acelasi plafon ca la intrare: altfel ruta asta ar fi fost o usa de ghicit parole. */
-      const { data: st } = await admin.rpc("cont_parola_pentru_intrare", {
-        p_business: magazin.id, p_email: cont.email ?? "", p_ip: ipPentruBaza(ip),
-      });
-      const rand = Array.isArray(st) ? st[0] : st;
-      const blocat = rand?.blocat_ip === true || rand?.blocat_cont === true;
-      const veche = typeof corp?.parolaVeche === "string" ? corp.parolaVeche : "";
-      const buna = blocat ? await verificareOarba(veche) : await parolaPotrivita(veche, cont.parola_hash);
-      if (!buna) {
-        await admin.rpc("cont_intrare_esuata", { p_business: magazin.id, p_cont: s.contId, p_ip: ipPentruBaza(ip) });
-        return NextResponse.json({ eroare: blocat ? MESAJ_PREA_MULTE : "Parola actuala nu e buna." }, { status: 400 });
-      }
-    }
 
     const problema = problemaParolei(corp?.parolaNoua, cont.email);
     if (problema) return NextResponse.json({ eroare: problema }, { status: 400 });

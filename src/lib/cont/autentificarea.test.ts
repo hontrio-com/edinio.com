@@ -293,6 +293,8 @@ test("⚠ scrypt ruleaza abia dupa plafonul pe IP si dupa provocare", () => {
 test("⚠⚠ o adresa noua in cont cere parola contului", () => {
   const s2 = citeste("src/app/api/cont/contact/route.ts");
   const corp = s2.slice(s2.indexOf("if (actiune === \"cere-cod\")"), s2.indexOf("if (actiune === \"confirma\")"));
-  const parola = corp.indexOf("parolaPotrivita(");
+  /* Din 24.09.2026 prin `parolaDinCont`, aceeasi verificare ca la schimbarea parolei si la stergerea contului. */
+  const parola = corp.indexOf("await parolaDinCont(");
   assert.ok(parola > 0 && parola < corp.indexOf("await cereCod("), "codul pentru adresa noua pleaca fara parola");
+  assert.match(corp, /if \(!v\.ok\) return NextResponse\.json\(\{ eroare: v\.eroare \}, \{ status: v\.status \}\);/);
 });

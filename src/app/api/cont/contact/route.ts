@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { sesiuneCurenta } from "@/lib/cont/sesiune";
-import { vineDePeMagazin } from "@/lib/cont/cerere";
+import { adresaEmailValida, vineDePeMagazin } from "@/lib/cont/cerere";
 import { clientIp } from "@/lib/utils/rate-limit";
 import { cereCod, verificaCod, mesajulRefuzului, MESAJ_SMS_INCA_NU } from "@/lib/cont/cod";
 import { scoateContact } from "@/lib/cont/date";
 import { leagaComenzile } from "@/lib/cont/comenzi";
-import { ipPentruBaza, MESAJ_PREA_MULTE, permisDeCalcul } from "@/lib/cont/autentificare";
-import { parolaPotrivita, verificareOarba } from "@/lib/cont/parola";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { eLimitaDeIp, MESAJ_PREA_MULTE, parolaDinCont } from "@/lib/cont/autentificare";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -47,25 +45,14 @@ export async function POST(req: NextRequest) {
   try {
     if (actiune === "cere-cod") {
       if (fel === "telefon") return NextResponse.json({ eroare: MESAJ_SMS_INCA_NU }, { status: 400 });
-      const admin = createAdminClient();
-      const { data: d, error: eParola } = await admin.rpc("cont_parola_contului", { p_business: magazin.id, p_cont: s.contId });
-      if (eParola) throw eParola;
-      const cont = Array.isArray(d) ? d[0] : d;
-      if (cont?.are_parola) {
-        if (!(await permisDeCalcul(ip))) return NextResponse.json({ eroare: MESAJ_PREA_MULTE }, { status: 429 });
-        const { data: st } = await admin.rpc("cont_parola_pentru_intrare", {
-          p_business: magazin.id, p_email: cont.email ?? "", p_ip: ipPentruBaza(ip),
-        });
-        const rand = Array.isArray(st) ? st[0] : st;
-        const blocat = rand?.blocat_ip === true || rand?.blocat_cont === true;
-        const parolaScrisa = typeof corp?.parola === "string" ? corp.parola : "";
-        const buna = blocat ? await verificareOarba(parolaScrisa) : await parolaPotrivita(parolaScrisa, cont.parola_hash);
-        if (!buna) {
-          await admin.rpc("cont_intrare_esuata", { p_business: magazin.id, p_cont: s.contId, p_ip: ipPentruBaza(ip) });
-          return NextResponse.json({ eroare: blocat ? MESAJ_PREA_MULTE : "Parola contului nu e buna." }, { status: 400 });
-        }
-      }
+      if (!adresaEmailValida(valoare)) return NextResponse.json({ eroare: "Adresa de email nu pare buna." }, { status: 400 });
+      const v = await parolaDinCont({
+        magazinId: magazin.id, contId: s.contId, parola: corp?.parola, ip, mesajGresita: "Parola contului nu e buna.",
+      });
+      if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
       const r = await cereCod(magazin, fel, valoare, ip, "adaugare-contact", s.contId);
+      /* Plafonul pe IP poate spune adevarul: nu spune nimic despre adresa. */
+      if (!r.trimis && eLimitaDeIp(r.motiv)) return NextResponse.json({ eroare: MESAJ_PREA_MULTE }, { status: 429 });
       return NextResponse.json({ mesaj: r.mesaj }, { status: 200 });
     }
 

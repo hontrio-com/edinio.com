@@ -23,7 +23,8 @@ export async function trimiteCerereaDeStergere(magazin: MagazinDeCont, contId: s
     const admin = createAdminClient();
     const [contacte, comenzi, setari] = await Promise.all([
       contacteleMele(magazin.id, contId),
-      comenzileMele(magazin.id, contId, 200, 0),
+      /* 100 e plafonul din baza (`cont_comenzile_mele`); peste el, emailul spune cate mai sunt. */
+      comenzileMele(magazin.id, contId, 100, 0),
       admin.from("store_settings").select("notifications_config").eq("business_id", magazin.id).maybeSingle(),
     ]);
     const cfg = parseNotificationsConfig((setari.data?.notifications_config as Record<string, unknown>) ?? {});

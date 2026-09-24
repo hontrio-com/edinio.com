@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BUTON_SECUNDAR } from "../ui/clase";
+import { LegaturaCont } from "../ui/LegaturaCont";
 
 /**
  * Paginarea listelor din cont. `?p=` se citeste in pagina, ca numar pozitiv;
@@ -18,19 +18,19 @@ export function Paginare({ baza, pagina, pagini }: { baza: string; pagina: numbe
   return (
     <nav aria-label="Paginare" className="flex items-center justify-between gap-3 pt-1">
       {pagina > 1 ? (
-        <Link href={`${baza}?p=${pagina - 1}`} className={buton} rel="prev">
+        <LegaturaCont href={`${baza}?p=${pagina - 1}`} className={buton} rel="prev">
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only sm:not-sr-only">Anterioara</span>
-        </Link>
+        </LegaturaCont>
       ) : <span />}
       <span className="text-sm tabular-nums text-[var(--st-on-bg)] opacity-75">
         Pagina {pagina} din {pagini}
       </span>
       {pagina < pagini ? (
-        <Link href={`${baza}?p=${pagina + 1}`} className={buton} rel="next">
+        <LegaturaCont href={`${baza}?p=${pagina + 1}`} className={buton} rel="next">
           <span className="sr-only sm:not-sr-only">Urmatoare</span>
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
+        </LegaturaCont>
       ) : <span />}
     </nav>
   );

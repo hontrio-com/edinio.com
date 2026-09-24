@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { ChevronLeft, LogOut, Mail, MessageCircle, Phone } from "lucide-react";
 import type { RezumatCont } from "@/lib/cont/rezumat";
 import { formatPhoneDisplay, whatsappLink } from "@/lib/utils/format";
@@ -9,6 +8,7 @@ import { MENIU, type CheieMeniu } from "./meniu";
 import { MeniuFile } from "./MeniuFile";
 import { Pastila } from "./piese";
 import { BUTON_SECUNDAR, CARD, FOCUS, TEXT_CONT, TITLU } from "./clase";
+import { LegaturaCont } from "./LegaturaCont";
 
 /**
  * Cadrul oricarei pagini de cont dupa intrare: meniul (lateral pe desktop, file
@@ -93,7 +93,7 @@ function MeniuLateral({ activ, contId, nume, numeMagazin, rezumat, contact }: Om
               const numar = n[m.cheie];
               return (
                 <li key={m.cheie}>
-                  <Link
+                  <LegaturaCont
                     href={m.href}
                     aria-current={este ? "page" : undefined}
                     className={`relative flex min-h-11 items-center gap-3 rounded-[var(--st-radius-sm)] px-3 text-sm transition-colors ${FOCUS} ${
@@ -108,7 +108,7 @@ function MeniuLateral({ activ, contId, nume, numeMagazin, rezumat, contact }: Om
                     <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} aria-hidden="true" />
                     <span className="flex-1 truncate">{m.eticheta}</span>
                     {typeof numar === "number" && numar > 0 && <Pastila>{numar}</Pastila>}
-                  </Link>
+                  </LegaturaCont>
                 </li>
               );
             })}
@@ -193,13 +193,13 @@ export function CadruCont(p: PropsCadru) {
                 ar fi iesit la 1,56:1. */}
             <header className="mb-6 text-[var(--st-on-bg)] lg:mb-8">
               {p.inapoi && (
-                <Link
+                <LegaturaCont
                   href={p.inapoi.href}
-                  className={`mb-3 inline-flex items-center gap-1 rounded-sm text-sm font-medium opacity-75 transition-opacity hover:opacity-100 ${FOCUS}`}
+                  className={`relative mb-3 inline-flex min-h-10 items-center gap-1 rounded-sm text-sm font-medium opacity-75 transition-opacity hover:opacity-100 ${FOCUS}`}
                 >
                   <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                   {p.inapoi.eticheta}
-                </Link>
+                </LegaturaCont>
               )}
               <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
                 <div className="min-w-0">

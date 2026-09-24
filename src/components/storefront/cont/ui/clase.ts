@@ -26,10 +26,10 @@ export const FOCUS =
  * forma de stadion.
  */
 export const CARD =
-  "rounded-[min(var(--st-radius-lg),1.25rem)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
+  "relative rounded-[min(var(--st-radius-lg),1.25rem)] border border-[var(--st-border)] bg-[var(--st-surface)] shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
 
 const BUTON =
-  `inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--st-radius-btn)] px-5 py-2 text-sm font-semibold transition-[opacity,transform,background-color] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${FOCUS}`;
+  `relative inline-flex min-h-11 items-center justify-center gap-2 overflow-hidden rounded-[var(--st-radius-btn)] px-5 py-2 text-sm font-semibold transition-[opacity,transform,background-color] active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${FOCUS}`;
 
 export const BUTON_PRIMAR = `${BUTON} hover:opacity-90`;
 export const STIL_PRIMAR: CSSProperties = { backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" };

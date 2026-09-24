@@ -86,15 +86,6 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
   const host = (await headers()).get("host");
   if (!originaEsteNumaiAMagazinului(host, business)) notFound();
 
-  const { data: storeSettings, error: eSetari } = await createAdminClient()
-    .from("store_settings")
-    .select("page_content, storefront_design, cont_client_config, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
-    .eq("business_id", business.id)
-    .single();
-
-  if (eSetari && eSetari.code !== "PGRST116") throw eSetari;
-  if (!conturilePornite(storeSettings?.cont_client_config)) notFound();
-
   const magazin: MagazinDeCont = {
     id: business.id,
     slug: business.slug,
@@ -105,7 +96,25 @@ export async function incarcaPaginaDeCont(slug: string): Promise<PaginaDeCont> {
     suspended_until: business.suspended_until,
     user_id: business.user_id,
   };
-  if (await magazinulEOprit(magazin)) notFound();
+
+  /*
+    ⚠ Setarile si starea abonamentului nu depind una de alta: se citesc DEODATA.
+    Inainte erau doua drumuri la baza unul dupa altul, pe fiecare pagina de cont.
+    Portile raman aceleasi si in aceeasi ordine a hotararii: conturile pornite,
+    apoi magazinul activ; niciuna nu lasa sa treaca nimic din ce refuza.
+  */
+  const [{ data: storeSettings, error: eSetari }, oprit] = await Promise.all([
+    createAdminClient()
+      .from("store_settings")
+      .select("page_content, storefront_design, cont_client_config, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
+      .eq("business_id", business.id)
+      .single(),
+    magazinulEOprit(magazin),
+  ]);
+
+  if (eSetari && eSetari.code !== "PGRST116") throw eSetari;
+  if (!conturilePornite(storeSettings?.cont_client_config)) notFound();
+  if (oprit) notFound();
 
   const color = business.primary_color ?? "#07c527";
   const storeName = business.store_name ?? business.business_name ?? "magazin";

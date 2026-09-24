@@ -125,3 +125,31 @@ test("⚠⚠ la comanda, profilul completeaza NUMAI campurile goale", () => {
   /* Intrebarea pleaca si cand contul nu e obligatoriu, dar NUMAI cand conturile sunt pornite. */
   assert.match(citeste("src/components/storefront/cont/contul-la-comanda.ts"), /const cerut = \(obligatoriu \|\| aprins\) && activ;/);
 });
+
+/* ═══ Viteza (24.09.2026) ═══ */
+
+test("⚠ pagina de cont citeste setarile si starea abonamentului DEODATA, iar portile raman", () => {
+  const p = citeste("src/lib/cont/pagina.ts");
+  assert.match(p, /const \[\{ data: storeSettings, error: eSetari \}, oprit\] = await Promise\.all\(\[/);
+  const i = p.indexOf("const [{ data: storeSettings");
+  const dupa = p.slice(i, i + 900);
+  assert.match(dupa, /if \(!conturilePornite\(storeSettings\?\.cont_client_config\)\) notFound\(\);/);
+  assert.match(dupa, /if \(oprit\) notFound\(\);/);
+  /* Sesiunea se citeste abia DUPA porti. */
+  assert.ok(p.indexOf("sesiuneCurenta(business.id)") > p.indexOf("if (oprit) notFound();"));
+});
+
+test("⚠ legaturile din cont arata pe loc ca s-a apasat (paginile sunt no-store, deci nu se preiau)", () => {
+  const l = citeste("src/components/storefront/cont/ui/LegaturaCont.tsx");
+  assert.match(l, /const \{ pending \} = useLinkStatus\(\);/);
+  assert.doesNotMatch(l, /router\.prefetch|onMouseEnter/, "preluarea la hover nu face nimic pe no-store (masurat in panou)");
+  for (const f of ["ui/CadruCont.tsx", "ui/MeniuFile.tsx", "ecrane/CardComanda.tsx", "ecrane/EcranAcasa.tsx", "ecrane/Paginare.tsx"]) {
+    const s = citeste(`src/components/storefront/cont/${f}`);
+    assert.doesNotMatch(s, /<Link\b/, `${f} foloseste inca <Link> fara stare`);
+    assert.match(s, /<LegaturaCont\b/, f);
+  }
+  /* Bara se asaza fata de legatura: cardurile si butoanele sunt `relative`. */
+  const c = citeste("src/components/storefront/cont/ui/clase.ts");
+  assert.match(c, /export const CARD =\n  "relative /);
+  assert.match(c, /`relative inline-flex min-h-11/);
+});

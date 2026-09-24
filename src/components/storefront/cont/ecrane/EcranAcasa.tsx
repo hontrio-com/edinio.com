@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ArrowRight, Package, PackageSearch, ReceiptText, Truck, Undo2, type LucideIcon } from "lucide-react";
 import type { ComandaDinCont } from "@/lib/cont/comenzi";
 import type { RezumatCont } from "@/lib/cont/rezumat";
@@ -8,6 +7,7 @@ import { formatDate, formatPrice } from "@/lib/utils/format";
 import { CardComanda } from "./CardComanda";
 import { EtichetaStareCont, Mesaj, Miniatura, PasiComanda, StareGoala } from "../ui/piese";
 import { BUTON_PRIMAR, CARD, FOCUS, LEGATURA, STIL_PRIMAR, TITLU } from "../ui/clase";
+import { LegaturaCont } from "../ui/LegaturaCont";
 
 /**
  * Pagina de start a contului.
@@ -20,7 +20,7 @@ import { BUTON_PRIMAR, CARD, FOCUS, LEGATURA, STIL_PRIMAR, TITLU } from "../ui/c
 
 function Placa({ href, icon: Icon, numar, eticheta }: { href: string; icon: LucideIcon; numar: number; eticheta: string }) {
   return (
-    <Link href={href} className={`${CARD} group flex items-center gap-3 p-4 transition-colors hover:border-[var(--st-muted)] ${FOCUS}`}>
+    <LegaturaCont href={href} className={`${CARD} group flex items-center gap-3 p-4 transition-colors hover:border-[var(--st-muted)] ${FOCUS}`}>
       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)]">
         <Icon className="h-5 w-5 text-[var(--st-text)]" strokeWidth={1.7} aria-hidden="true" />
       </span>
@@ -28,7 +28,7 @@ function Placa({ href, icon: Icon, numar, eticheta }: { href: string; icon: Luci
         <span className="block text-xl font-semibold leading-none tabular-nums text-[var(--st-text)]">{numar}</span>
         <span className="mt-1 block truncate text-xs font-medium text-[var(--st-muted)]">{eticheta}</span>
       </span>
-    </Link>
+    </LegaturaCont>
   );
 }
 
@@ -47,10 +47,10 @@ export function EcranAcasa({
         <StareGoala
           icon={PackageSearch}
           titlu="Nu ai inca nicio comanda"
-          actiune={<Link href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</Link>}
+          actiune={<LegaturaCont href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</LegaturaCont>}
         >
           Comenzile plasate cu adresa de email a contului apar aici automat. Daca ai comandat cu alta adresa, adaug-o in{" "}
-          <Link href="/cont/date" className={LEGATURA}>Datele mele</Link> si le vei vedea aici.
+          <LegaturaCont href="/cont/date" className={LEGATURA}>Datele mele</LegaturaCont> si le vei vedea aici.
         </StareGoala>
       </>
     );
@@ -94,10 +94,10 @@ export function EcranAcasa({
           </div>
 
           <div className="mt-5">
-            <Link href={`/cont/comenzi/${inCurs.orderId}`} className={BUTON_PRIMAR} style={STIL_PRIMAR}>
+            <LegaturaCont href={`/cont/comenzi/${inCurs.orderId}`} className={BUTON_PRIMAR} style={STIL_PRIMAR}>
               Vezi comanda
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            </LegaturaCont>
           </div>
         </section>
       )}
@@ -109,10 +109,10 @@ export function EcranAcasa({
             Comenzi recente
           </h2>
           {rezumat.comenzi > recente.length && (
-            <Link href="/cont/comenzi" className={`inline-flex min-h-10 items-center gap-1 rounded-sm text-sm font-medium text-[var(--st-on-bg)] underline-offset-4 hover:underline ${FOCUS}`}>
+            <LegaturaCont href="/cont/comenzi" className={`inline-flex min-h-10 items-center gap-1 rounded-sm text-sm font-medium text-[var(--st-on-bg)] underline-offset-4 hover:underline ${FOCUS}`}>
               Vezi toate
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
+            </LegaturaCont>
           )}
         </div>
         <div className="space-y-3">
@@ -125,7 +125,7 @@ export function EcranAcasa({
       <Mesaj>
         <span className="font-semibold">Nu vezi o comanda?</span> Comenzile plasate cu adresele de email confirmate
         apar automat in cont. Daca ai comandat cu alta adresa, adaug-o in{" "}
-        <Link href="/cont/date" className={LEGATURA}>Datele mele</Link>.
+        <LegaturaCont href="/cont/date" className={LEGATURA}>Datele mele</LegaturaCont>.
       </Mesaj>
     </>
   );

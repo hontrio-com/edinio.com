@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { MENIU, type CheieMeniu } from "./meniu";
+import { LegaturaCont } from "./LegaturaCont";
 
 /**
  * Meniul contului pe telefon si pe tableta: o grila cu toate sectiunile deodata.
@@ -24,7 +24,7 @@ export function MeniuFile({ activ, numere }: { activ: CheieMeniu; numere: Partia
           const Icon = m.icon;
           return (
             <li key={m.cheie} className="min-w-0">
-              <Link
+              <LegaturaCont
                 href={m.href}
                 aria-current={este ? "page" : undefined}
                 className={`relative flex min-h-16 flex-col items-center justify-center gap-1 rounded-[min(var(--st-radius-sm),0.75rem)] border px-1 py-2 text-center text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--st-text)] ${
@@ -40,7 +40,7 @@ export function MeniuFile({ activ, numere }: { activ: CheieMeniu; numere: Partia
                     {n}
                   </span>
                 )}
-              </Link>
+              </LegaturaCont>
             </li>
           );
         })}

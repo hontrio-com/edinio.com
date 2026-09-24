@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { ChevronRight, ReceiptText } from "lucide-react";
 import type { ComandaDinCont } from "@/lib/cont/comenzi";
 import { stareaComenzii } from "@/lib/cont/stare-comanda";
 import { formatDate, formatPrice, pluralRo } from "@/lib/utils/format";
 import { EtichetaStareCont, Miniatura } from "../ui/piese";
 import { CARD, FOCUS } from "../ui/clase";
+import { LegaturaCont } from "../ui/LegaturaCont";
 
 /**
  * O comanda in lista: miniaturile produselor, numarul, data, cate bucati, totalul
@@ -19,7 +19,7 @@ export function CardComanda({ c }: { c: ComandaDinCont }) {
   const alteMobil = Math.max(0, c.produse - Math.min(3, c.miniaturi.length));
   const primul = c.miniaturi[0]?.nume ?? "";
   return (
-    <Link
+    <LegaturaCont
       href={`/cont/comenzi/${c.orderId}`}
       className={`${CARD} group block p-4 transition-colors hover:border-[var(--st-muted)] sm:p-5 ${FOCUS}`}
     >
@@ -67,6 +67,6 @@ export function CardComanda({ c }: { c: ComandaDinCont }) {
         )}
         <ChevronRight className="h-4 w-4 shrink-0 text-[var(--st-muted)] transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
       </div>
-    </Link>
+    </LegaturaCont>
   );
 }

@@ -21,6 +21,16 @@ Dosarul demo si curatenia de dupa: [`demo-seed/LA-FINAL.md`](../../../demo-seed/
 inca. Pus invers, panoul principal ar arata „Graficul de vanzari nu a putut fi incarcat" intre
 push si aplicarea migratiei, la toti comerciantii.
 
+   ✅ **FACUT 24.09.2026, cu acordul lui („Iti dau permisiune, da push pe main”)**: toate 17 (38-54)
+   aplicate in productie, in ordinea listei, fiecare intreaga cu `apply_migration`, toate verificarile
+   de drepturi din fisiere trecute. Dupa: aceleasi 61 de functii ca pe demo (corpurile identice fara
+   comentarii si spatii; singura deosebire, `cont_verifica_provocare`, e numai de comentarii `--`, si
+   productia e cea identica cu fisierul), aceleasi 9 tabele, indexuri, constrangeri si drepturi (`anon`
+   nicaieri; `authenticated` numai `cont_rupe_legaturile`, `customer_anonymize`,
+   `privat.sursa_anonimizata`). `customer_anonymize` verificata INAINTE de inlocuire: era cea din nota
+   migratiei 51 (`md5(pg_get_functiondef)` = `0867eeff...`). Toate 134 de magazine au
+   `cont_client_config`, niciunul pornit. ⚠ Pasul 3 (schema de referinta) NU s-a facut: scriptul cere
+   cheia de service a productiei, iar local e numai cea de demo.
 1. **Intai migratiile CONTURILOR (38-54)**, in productie (`rtefdpioqmowkdiybwrr`), in ORDINEA
    din lista „Conturile de client (38-54)” de sub tabelul B (NU alfabetic), fiecare INTREAGA
    intr-o singura tranzactie, cu verificarea drepturilor dupa fiecare. ⚠⚠ Fara ele, `placeOrder` si

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { brandCanonic } from "@/lib/dashboard/branduri";
 import { SiglaMarketplace } from "./SiglaMarketplace";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -166,7 +167,8 @@ interface GoogleShoppingState {
 // True daca produsul are deja macar un atribut Google Shopping completat — folosit
 // ca sa deschidem sectiunea din start la editare (altfel ar ascunde date existente).
 function hasGoogleData(g: GoogleShoppingState): boolean {
-  return Object.values(g).some((v) => typeof v === "string" && v.trim() !== "");
+  /* Brandul si GTIN-ul stau in „Organizare”: un produs cu brand nu deschide singur sectiunea Google. */
+  return Object.entries(g).some(([k, v]) => k !== "brand" && k !== "gtin" && typeof v === "string" && v.trim() !== "");
 }
 
 function toSlug(name: string) {
@@ -603,6 +605,8 @@ interface Props {
   businessId: string;
   product?: Product;
   categories: CategoryOption[];
+  /** Brandurile deja folosite in magazin: sugestiile campului si forma lor exacta la salvare. */
+  brands?: string[];
   backHref?: string;
   // Store slug + publish status, so we can show "Vezi produsul" only when the
   // public product page is actually live (active product + published store).
@@ -627,7 +631,7 @@ interface Props {
   shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
+export function ProductForm({ businessId, product, categories, brands = [], backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
@@ -1077,7 +1081,8 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
         })(),
         google: {
           gtin: form.google.gtin.trim(),
-          brand: form.google.brand.trim(),
+          /* „armaf” scris aici devine „Armaf” daca brandul exista deja: altfel ar aparea de doua ori in filtrul magazinului. */
+          brand: brandCanonic(form.google.brand, brands),
           mpn: form.google.mpn.trim(),
           google_product_category: form.google.google_product_category.trim(),
           condition: form.google.condition,
@@ -1381,6 +1386,17 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                       onChange={(e) => set("google", { ...form.google, gtin: e.target.value })}
                       placeholder="ex: 5941234567890" className={inputCls} />
                     <p className="text-xs text-muted-foreground mt-1">GTIN / EAN / UPC. Recomandat pentru Google Shopping si marketplace-uri.</p>
+                  </div>
+                  <div>
+                    <label htmlFor="produs-brand" className="block text-sm font-medium text-foreground mb-1.5">Brand</label>
+                    <input id="produs-brand" type="text" list="produs-branduri" value={form.google.brand}
+                      onChange={(e) => set("google", { ...form.google, brand: e.target.value })}
+                      onBlur={(e) => { const c = brandCanonic(e.target.value, brands); if (c !== e.target.value) set("google", { ...form.google, brand: c }); }}
+                      maxLength={120} placeholder="ex: Portwest" className={inputCls} />
+                    <datalist id="produs-branduri">
+                      {brands.map((b) => <option key={b} value={b} />)}
+                    </datalist>
+                    <p className="text-xs text-muted-foreground mt-1">Apare pe pagina produsului, in filtrul magazinului si in feeduri (Google, Facebook, marketplace-uri).</p>
                   </div>
                 </div>
                 <div>
@@ -2013,14 +2029,9 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
               {showGoogle && (
               <div className="px-5 py-5 space-y-4">
                 <p className="text-xs text-muted-foreground">
-                  Codul de bare (GTIN/EAN) se completeaza in sectiunea <span className="font-medium text-foreground">Organizare</span>, mai sus.
+                  Codul de bare (GTIN/EAN) si brandul se completeaza in sectiunea <span className="font-medium text-foreground">Organizare</span>, mai sus.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Brand</label>
-                    <input type="text" value={form.google.brand} onChange={e => set("google", { ...form.google, brand: e.target.value })}
-                      placeholder="Marca produsului" className={inputCls} />
-                  </div>
                   <div>
                     <label className="text-sm font-medium text-foreground mb-1.5 block">MPN (cod producator)</label>
                     <input type="text" value={form.google.mpn} onChange={e => set("google", { ...form.google, mpn: e.target.value })}

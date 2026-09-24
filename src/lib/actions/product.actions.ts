@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { curataBrand } from "@/lib/dashboard/branduri";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
 import { maybeSyncMailchimpProduct, maybeSyncMailchimpProductsBulk } from "@/lib/mailchimp-sync";
@@ -585,6 +586,8 @@ export type BulkAction =
   | { kind: "active"; value: boolean }
   | { kind: "featured"; value: boolean }
   | { kind: "category"; value: string | null }
+  /** Brandul (`page_sections.google.brand`); `null` il scoate. */
+  | { kind: "brand"; value: string | null }
   | { kind: "price"; mode: "inc_pct" | "dec_pct" | "inc_amt" | "dec_amt" | "set"; amount: number }
   | { kind: "delete" };
 
@@ -683,6 +686,32 @@ export async function bulkProductAction(
       dupaRaspuns(() => enqueueEmagSyncMany(businessId, ids), "enqueueEmagSyncMany", businessId);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
+      return { success: true, count };
+    }
+
+    if (action.kind === "brand") {
+      /*
+       * Prin functia din baza, nu printr-un `update` de aici: brandul sta ADANC in
+       * `page_sections`, iar un `update` pe toata coloana ar fi rescris si restul
+       * campurilor Google ale fiecarui produs cu ce stia browserul. Functia schimba
+       * numai cheia `brand` (vezi `produse_seteaza_brandul`). Id-urile pleaca in
+       * CORPUL cererii (RPC), deci n-au plafonul de adresa al lui `.in()`.
+       */
+      const brand = curataBrand(action.value) || null;
+      const { data: atinse, error } = await supabase.rpc("produse_seteaza_brandul", {
+        p_business: businessId, p_ids: ids, p_brand: brand,
+      });
+      if (error) throw error;
+      const count = (atinse ?? []).length;
+      /* Aceleasi cozi ca la categorie: brandul pleaca in toate feedurile si pe marketplace-uri. */
+      dupaRaspuns(() => enqueueGmcSyncMany(businessId, ids), "enqueueGmcSyncMany", businessId);
+      dupaRaspuns(() => enqueueOlxSyncMany(businessId, ids), "enqueueOlxSyncMany", businessId);
+      dupaRaspuns(() => enqueueAboutYouSyncMany(businessId, ids), "enqueueAboutYouSyncMany", businessId);
+      dupaRaspuns(() => enqueueTrendyolSyncMany(businessId, ids), "enqueueTrendyolSyncMany", businessId);
+      dupaRaspuns(() => enqueueEmagSyncMany(businessId, ids), "enqueueEmagSyncMany", businessId);
+      await proiecteazaImediat(businessId);
+      revalidatePath("/dashboard/products");
+      revalidatePath("/dashboard/products/brands");
       return { success: true, count };
     }
 

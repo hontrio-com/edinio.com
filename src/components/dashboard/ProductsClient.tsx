@@ -1,12 +1,13 @@
 "use client";
 
-import { FARA_CATEGORIE } from "@/lib/dashboard/produse-filtre";
+import { FARA_BRAND, FARA_CATEGORIE } from "@/lib/dashboard/produse-filtre";
 import { SiglaMarketplace } from "./SiglaMarketplace";
 import { useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent } from "lucide-react";
+import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent, Award } from "lucide-react";
+import { brandCanonic, curataBrand, type BrandCuProduse } from "@/lib/dashboard/branduri";
 import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
 import { bulkPublishTrendyol } from "@/lib/actions/trendyol.actions";
 import { publicaSelectiaPeEmag } from "@/lib/actions/emag.actions";
@@ -24,9 +25,12 @@ import type { CategoryOption } from "@/components/dashboard/ProductForm";
 type Product = Pick<
   Database["public"]["Tables"]["products"]["Row"],
   "id" | "name" | "slug" | "sku" | "price" | "compare_at_price" | "images" | "category" | "is_active" | "is_featured" | "track_inventory" | "stock_quantity" | "sort_order" | "created_at" | "business_id"
->;
+> & {
+  /** Din `page_sections.google.brand`, adus singur (nu tot `page_sections`). */
+  brand?: string | null;
+};
 
-export function ProductsClient({ products, businessId, filtre, totalFiltrate, categories = [], productLimit, productCount, plan, olxConnected = false, trendyolConnected, emagConnected}: {
+export function ProductsClient({ products, businessId, filtre, totalFiltrate, categories = [], brands = [], productLimit, productCount, plan, olxConnected = false, trendyolConnected, emagConnected}: {
   products: Product[];
   businessId: string;
   /**
@@ -38,6 +42,8 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   /** Cate produse trec de filtre IN TOTAL, nu cate sunt pe pagina. */
   totalFiltrate: number;
   categories: CategoryOption[];
+  /** Brandurile magazinului, cu cate produse are fiecare (`produse_branduri`). */
+  brands?: BrandCuProduse[];
   productLimit: number;
   productCount: number;
   plan: string;
@@ -74,6 +80,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
     if (noi.categorie) p.set("cat", noi.categorie);
     if (noi.stare !== "all") p.set("stare", noi.stare);
     if (noi.stoc !== "all") p.set("stoc", noi.stoc);
+    if (noi.brand) p.set("brand", noi.brand);
     if (noi.pagina > 1) p.set("page", String(noi.pagina));
     const qs = p.toString();
     startNavigare(() => router.push(qs ? `/dashboard/products?${qs}` : "/dashboard/products", { scroll: false }));
@@ -87,16 +94,20 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   const setCategoryFilter = (v: string) => cereFiltre({ categorie: v });
   const setStatusFilter = (v: "all" | "active" | "inactive") => cereFiltre({ stare: v });
   const setStockFilter = (v: "all" | "in" | "out") => cereFiltre({ stoc: v });
+  const brandFilter = filtre.brand;
+  const setBrandFilter = (v: string) => cereFiltre({ brand: v });
+  const numeBranduri = brands.map((b) => b.brand);
   const [exporting, setExporting] = useState(false);
 
   // ── Bulk selection + actions ──
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkPanel, setBulkPanel] = useState<null | "price" | "category">(null);
+  const [bulkPanel, setBulkPanel] = useState<null | "price" | "category" | "brand">(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [priceMode, setPriceMode] = useState<Extract<BulkAction, { kind: "price" }>["mode"]>("inc_pct");
   const [priceAmount, setPriceAmount] = useState("");
   const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkBrand, setBulkBrand] = useState("");
   const selectAllRef = useRef<HTMLInputElement>(null);
   const [, startBulkTransition] = useTransition();
 
@@ -106,12 +117,13 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   // contin produsele, deci lista de dupa nu e complet previzibila).
   const [produse, aplicaOptimist] = useOptimistic(
     products,
-    (stare: Product[], a: Extract<BulkAction, { kind: "active" | "featured" | "category" }> & { ids: string[] }) => {
+    (stare: Product[], a: Extract<BulkAction, { kind: "active" | "featured" | "category" | "brand" }> & { ids: string[] }) => {
       const vizate = new Set(a.ids);
       return stare.map((p) => {
         if (!vizate.has(p.id)) return p;
         if (a.kind === "active") return { ...p, is_active: a.value };
         if (a.kind === "featured") return { ...p, is_featured: a.value };
+        if (a.kind === "brand") return { ...p, brand: a.value };
         return { ...p, category: a.value };
       });
     },
@@ -157,13 +169,12 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   // una singura. Scrisa si aici, prima nepotrivire ar fi fost o categorie care
   // arata alte produse decat numara.
 
-  const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "" || statusFilter !== "all" || stockFilter !== "all";
+  const hasActiveFilters = searchQuery.trim() !== "" || categoryFilter !== "" || statusFilter !== "all" || stockFilter !== "all" || brandFilter !== "";
 
   function resetFilters() {
     setSearchQuery("");
-    setCategoryFilter("");
-    setStatusFilter("all");
-    setStockFilter("all");
+    /* O singura navigare, nu cate una pe filtru: patru cereri la rand se calcau una pe alta. */
+    cereFiltre({ cautare: "", categorie: "", stare: "all", stoc: "all", brand: "" });
   }
 
   /*
@@ -289,7 +300,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
     const ids = [...selected];
     setBulkBusy(true);
     startBulkTransition(async () => {
-      if (action.kind === "active" || action.kind === "featured" || action.kind === "category") {
+      if (action.kind === "active" || action.kind === "featured" || action.kind === "category" || action.kind === "brand") {
         aplicaOptimist({ ...action, ids });
       }
       let res: Awaited<ReturnType<typeof bulkProductAction>>;
@@ -324,6 +335,16 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
     if (priceAmount.trim() === "" || !Number.isFinite(amt) || amt < 0) { toast.error("Introdu o valoare valida."); return; }
     runBulk({ kind: "price", mode: priceMode, amount: amt }, "Pret actualizat la {n} produse");
   }
+  /*
+   * ⚠ Brandul scris se aduce la forma unuia existent cand difera numai prin majuscule
+   * („armaf” -> „Armaf”): altfel acelasi brand ar aparea de doua ori in filtrul magazinului.
+   */
+  function applyBrand(scoate = false) {
+    const brand = scoate ? "" : brandCanonic(bulkBrand, numeBranduri);
+    if (!scoate && !brand) { toast.error("Scrie brandul."); return; }
+    runBulk({ kind: "brand", value: brand || null }, scoate ? "Brand scos de la {n} produse" : `Brandul „${brand}” setat la {n} produse`);
+  }
+
   function applyCategory() {
     if (bulkCategory === "") { toast.error("Alege o categorie."); return; }
     runBulk({ kind: "category", value: bulkCategory === "__none__" ? null : bulkCategory }, "Categorie setata la {n} produse");
@@ -471,6 +492,16 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
             })}
           </select>
         )}
+        {brands.length > 0 && (
+          <select value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} aria-label="Filtreaza dupa brand"
+            className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
+            <option value="">Toate brandurile</option>
+            <option value={FARA_BRAND}>Produse fara brand</option>
+            {brands.map((b) => (
+              <option key={b.brand} value={b.brand}>{`${b.brand} (${b.produse})`}</option>
+            ))}
+          </select>
+        )}
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
           className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
           <option value="all">Toate statusurile</option>
@@ -569,6 +600,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
             <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "featured", value: false }, "Recomandat eliminat de la {n} produse")} className={bulkBtn}>Scoate recomandat</button>
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "price" ? null : "price"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "price" && "border-primary ring-1 ring-primary/30")}><Percent className="h-3.5 w-3.5" /> Pret</button>
             <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "category" ? null : "category"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "category" && "border-primary ring-1 ring-primary/30")}><Tag className="h-3.5 w-3.5" /> Categorie</button>
+            <button type="button" disabled={bulkBusy} onClick={() => { setBulkPanel(p => p === "brand" ? null : "brand"); setConfirmBulkDelete(false); }} className={cn(bulkBtn, bulkPanel === "brand" && "border-primary ring-1 ring-primary/30")}><Award className="h-3.5 w-3.5" /> Brand</button>
             {olxConnected && (
               <button type="button" disabled={bulkBusy} onClick={publishSelectedToOlx} className={bulkBtn}>
                 <SiglaMarketplace piata="olx" inaltime={14} /> Publică pe OLX
@@ -626,6 +658,29 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
             </div>
           )}
 
+          {bulkPanel === "brand" && (
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-primary/15">
+              <input
+                list="branduri-magazin"
+                value={bulkBrand}
+                onChange={e => setBulkBrand(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); applyBrand(); } }}
+                maxLength={120}
+                placeholder="Scrie sau alege brandul"
+                aria-label="Brandul pentru produsele selectate"
+                className="w-56 px-2.5 py-1.5 text-xs border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+              />
+              <datalist id="branduri-magazin">
+                {numeBranduri.map(b => <option key={b} value={b} />)}
+              </datalist>
+              <button type="button" disabled={bulkBusy} onClick={() => applyBrand()} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors disabled:opacity-50">Aplica</button>
+              <button type="button" disabled={bulkBusy} onClick={() => applyBrand(true)} className={bulkBtn}>Scoate brandul</button>
+              {curataBrand(bulkBrand) && brandCanonic(bulkBrand, numeBranduri) !== curataBrand(bulkBrand) && (
+                <span className="text-[11px] text-muted-foreground">Se va folosi brandul existent „{brandCanonic(bulkBrand, numeBranduri)}”.</span>
+              )}
+            </div>
+          )}
+
           {confirmBulkDelete && (
             <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-destructive/20">
               <span className="text-sm font-medium text-destructive">Stergi definitiv {selected.size} produse? Actiunea nu poate fi anulata.</span>
@@ -675,6 +730,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                         <span className="truncate">{product.name}</span>
                         {product.is_featured && <Star className="h-3 w-3 text-amber-400 fill-amber-400 flex-shrink-0" />}
                       </div>
+                      {product.brand && <div className="text-xs text-muted-foreground truncate">{product.brand}</div>}
                       {product.sku && <div className="text-xs text-muted-foreground font-mono truncate">SKU: {product.sku}</div>}
                       <div className="mt-1 flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-sm whitespace-nowrap">{formatPrice(Number(product.price))}</span>
@@ -790,6 +846,9 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                               <Star className="h-3 w-3 text-amber-400 fill-amber-400 flex-shrink-0" />
                             )}
                           </div>
+                          {product.brand && (
+                            <div className="text-xs text-muted-foreground truncate">{product.brand}</div>
+                          )}
                           {product.sku && (
                             <div className="text-xs text-muted-foreground font-mono truncate">SKU: {product.sku}</div>
                           )}

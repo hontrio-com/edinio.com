@@ -22,6 +22,8 @@ export interface FiltreProduse {
   categorie: string;
   stare: "all" | "active" | "inactive";
   stoc: "all" | "in" | "out";
+  /** Brandul exact (din `page_sections.google.brand`), `FARA_BRAND`, sau gol pentru toate. */
+  brand: string;
   pagina: number;
 }
 
@@ -40,6 +42,7 @@ export function citesteFiltreProduse(sp: Record<string, string | string[] | unde
     categorie: unul(sp.cat).slice(0, 200),
     stare: stare === "active" || stare === "inactive" ? stare : "all",
     stoc: stoc === "in" || stoc === "out" ? stoc : "all",
+    brand: unul(sp.brand).slice(0, 120),
     pagina: Number.isFinite(pagina) && pagina > 0 ? pagina : 1,
   };
 }
@@ -52,6 +55,15 @@ export function citesteFiltreProduse(sp: Record<string, string | string[] | unde
  * categorie numita asa ar vedea filtrul aratand altceva decat scrie pe el.
  */
 export const FARA_CATEGORIE = "__fara_categorie__";
+
+/** Valoarea filtrului „produse fara brand”. Tot un semn, nu un nume: vezi `FARA_CATEGORIE`. */
+export const FARA_BRAND = "__fara_brand__";
+
+/**
+ * ⚠ Calea JSON a brandului, scrisa O SINGURA DATA: de aici il citesc si feedurile,
+ * si pagina produsului, si functiile `produse_*_brand*` din baza.
+ */
+const CALE_BRAND = "page_sections->google->>brand";
 
 /**
  * Categoria plus copiii ei DIRECTI — un singur nivel.
@@ -104,6 +116,12 @@ export function aplicaFiltreProduse(
     out = out.or("category.is.null,category.eq.");
   } else if (filtre.categorie) {
     out = out.in("category", subarboreUnNivel(categories, filtre.categorie));
+  }
+  if (filtre.brand === FARA_BRAND) {
+    /* Si cheia lipsa, si sirul gol: un import vechi putea scrie `""`. */
+    out = out.or(`${CALE_BRAND}.is.null,${CALE_BRAND}.eq.`);
+  } else if (filtre.brand) {
+    out = out.eq(CALE_BRAND, filtre.brand);
   }
   if (filtre.stare === "active") out = out.eq("is_active", true);
   if (filtre.stare === "inactive") out = out.eq("is_active", false);

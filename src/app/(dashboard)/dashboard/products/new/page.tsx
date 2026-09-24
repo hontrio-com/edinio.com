@@ -22,7 +22,7 @@ export default async function NewProductPage() {
 
   // Windowed past the 1000-row PostgREST cap so big imported taxonomies
   // stay complete in the category dropdown.
-  const categories = await fetchAllRows("dashboard.product-new.categories", (from, to) =>
+  const [categories, { data: branduri }] = await Promise.all([fetchAllRows("dashboard.product-new.categories", (from, to) =>
     supabase
       .from("categories")
       .select("id, name, parent_id")
@@ -31,12 +31,16 @@ export default async function NewProductPage() {
       .order("name")
       .order("id")
       .range(from, to)
-  );
+  ),
+    /* Sugestiile campului Brand: brandurile deja folosite in magazin. */
+    supabase.rpc("produse_branduri", { p_business: business.id }),
+  ]);
 
   return (
     <ProductForm
       businessId={business.id}
       categories={categories}
+      brands={(branduri ?? []).map((b) => b.brand)}
       gmcConnected={gmcConnected}
       shippingClasses={shippingClasses}
     />

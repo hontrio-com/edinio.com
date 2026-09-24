@@ -60,7 +60,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
   const shippingClasses = parseShippingClasses(settings?.shipping_classes);
 
   // Categories windowed past the 1000-row PostgREST cap (big imported taxonomies).
-  const [{ data: product }, categories] = await Promise.all([
+  const [{ data: product }, categories, { data: branduri }] = await Promise.all([
     // `is_bundle: false`: formularul obisnuit reconstruieste `page_sections` de la
     // zero si nu cunoaste cheia `bundle`, iar `updateProduct` scrie inlocuire. O
     // SINGURA salvare lasa `is_bundle = true` cu configul sters — pachetul
@@ -72,6 +72,8 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       supabase.from("categories").select("id, name, parent_id").eq("business_id", business.id)
         .order("sort_order").order("name").order("id").range(from, to)
     ),
+    /* Sugestiile campului Brand: brandurile deja folosite in magazin. */
+    supabase.rpc("produse_branduri", { p_business: business.id }),
   ]);
 
   if (!product) notFound();
@@ -102,6 +104,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       businessId={business.id}
       product={product}
       categories={categories}
+      brands={(branduri ?? []).map((b) => b.brand)}
       backHref={backHref}
       business={business.slug ? { slug: business.slug, is_published: !!business.is_published } : undefined}
       olxConnected={olxConnected}

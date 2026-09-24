@@ -56,6 +56,7 @@ export const MENIU_PANOU: IntrarePanou[] = [
     children: [
       { href: "/dashboard/products", label: "Toate produsele" },
       { href: "/dashboard/products/categories", label: "Categorii" },
+      { href: "/dashboard/products/brands", label: "Branduri" },
       { href: "/dashboard/products/bundles", label: "Pachete" },
     ],
   },

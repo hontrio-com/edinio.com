@@ -8679,6 +8679,22 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.produse_branduri(p_business uuid)
+ RETURNS TABLE(brand text, produse bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select x.b, count(*)
+    from (select nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') as b
+            from public.products p
+           where p.business_id = p_business) x
+   where x.b is not null
+   group by x.b
+   order by lower(x.b), x.b;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval DEFAULT '00:10:00'::interval, p_limita integer DEFAULT 50, p_amprente jsonb DEFAULT NULL::jsonb)
  RETURNS SETOF uuid
  LANGUAGE sql
@@ -8707,6 +8723,45 @@ AS $function$
         where q.business_id = p_business_id and q.product_id = p.id)
    order by p.id
    limit greatest(1, least(coalesce(p_limita, 50), 500));
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.produse_redenumeste_brandul(p_business uuid, p_vechi text, p_nou text)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  select * from public.produse_seteaza_brandul(
+    p_business,
+    array(select p.id from public.products p
+           where p.business_id = p_business
+             and nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') = btrim(coalesce(p_vechi, ''))),
+    p_nou);
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.produse_seteaza_brandul(p_business uuid, p_ids uuid[], p_brand text)
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  update public.products p
+     set page_sections =
+           case
+             when nullif(btrim(coalesce(p_brand, '')), '') is null then
+               case when jsonb_typeof(p.page_sections -> 'google') = 'object'
+                    then jsonb_set(p.page_sections, '{google}', (p.page_sections -> 'google') - 'brand')
+                    else p.page_sections end
+             else
+               coalesce(p.page_sections, '{}'::jsonb)
+               || jsonb_build_object('google',
+                    coalesce(case when jsonb_typeof(p.page_sections -> 'google') = 'object'
+                                  then p.page_sections -> 'google' end, '{}'::jsonb)
+                    || jsonb_build_object('brand', left(btrim(p_brand), 120)))
+           end,
+         updated_at = now()
+   where p.business_id = p_business and p.id = any(p_ids)
+  returning p.id;
 $function$
 ;
 
@@ -16574,7 +16629,13 @@ grant execute on function public.panou_carduri(p_business uuid) to service_role;
 grant execute on function public.pepita_stampileaza_listarea() to service_role;
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
+grant execute on function public.produse_branduri(p_business uuid) to authenticated;
+grant execute on function public.produse_branduri(p_business uuid) to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
+grant execute on function public.produse_redenumeste_brandul(p_business uuid, p_vechi text, p_nou text) to authenticated;
+grant execute on function public.produse_redenumeste_brandul(p_business uuid, p_vechi text, p_nou text) to service_role;
+grant execute on function public.produse_seteaza_brandul(p_business uuid, p_ids uuid[], p_brand text) to authenticated;
+grant execute on function public.produse_seteaza_brandul(p_business uuid, p_ids uuid[], p_brand text) to service_role;
 grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
 grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to service_role;
 grant execute on function public.produse_vandute(bid uuid, categorii text[], exclude_ids uuid[], p_limit integer, zile integer) to authenticated;
@@ -16635,8 +16696,8 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
-grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to anon;
+grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
@@ -16867,7 +16928,10 @@ revoke execute on function public.panou_carduri(p_business uuid) from public;
 revoke execute on function public.pepita_stampileaza_listarea() from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
+revoke execute on function public.produse_branduri(p_business uuid) from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
+revoke execute on function public.produse_redenumeste_brandul(p_business uuid, p_vechi text, p_nou text) from public;
+revoke execute on function public.produse_seteaza_brandul(p_business uuid, p_ids uuid[], p_brand text) from public;
 revoke execute on function public.produse_sub_prag(p_business uuid, p_prag integer) from public;
 revoke execute on function public.produse_vandute(bid uuid, categorii text[], exclude_ids uuid[], p_limit integer, zile integer) from public;
 revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;

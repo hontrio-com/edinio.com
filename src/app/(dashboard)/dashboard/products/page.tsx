@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; page?: string; cat?: string; stare?: string; stoc?: string }>;
+  searchParams: Promise<{ search?: string; page?: string; cat?: string; stare?: string; stoc?: string; brand?: string }>;
 }) {
   const supabase = await createClient();
   const user = await getCachedUser();
@@ -165,13 +165,13 @@ async function ListaProduse({
       .range(from, to)
   );
 
-  const [{ data: productsRaw, count: totalFiltrate }, { count: totalCatalog }] = await Promise.all([
+  const [{ data: productsRaw, count: totalFiltrate }, { count: totalCatalog }, { data: brandsRaw }] = await Promise.all([
     ordoneazaProduse(
       aplicaFiltreProduse(
         supabase
           .from("products")
           .select(
-            "id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id",
+            "id, name, slug, sku, price, compare_at_price, images, category, is_active, is_featured, is_bundle, track_inventory, stock_quantity, sort_order, created_at, business_id, brand:page_sections->google->>brand",
             { count: "exact" },
           )
           .eq("business_id", businessId),
@@ -184,6 +184,8 @@ async function ListaProduse({
       .select("id", { count: "exact", head: true })
       .eq("business_id", businessId)
       .eq("is_bundle", false),
+    /* Brandurile magazinului, cu cate produse are fiecare: selectorul de filtru si sugestiile din bara de selectie. */
+    supabase.rpc("produse_branduri", { p_business: businessId }),
   ]);
 
   const products = productsRaw ?? [];
@@ -198,6 +200,7 @@ async function ListaProduse({
       filtre={filtre}
       totalFiltrate={totalFiltrate ?? 0}
       categories={categories}
+      brands={(brandsRaw ?? []).map((b) => ({ brand: b.brand, produse: Number(b.produse) }))}
       productLimit={productLimit}
       productCount={totalCatalog ?? 0}
       plan={plan}

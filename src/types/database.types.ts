@@ -7055,6 +7055,21 @@ export type Database = {
           ramase: number
         }[]
       }
+      produse_branduri: {
+        Args: { p_business: string }
+        Returns: {
+          brand: string
+          produse: number
+        }[]
+      }
+      produse_redenumeste_brandul: {
+        Args: { p_business: string; p_nou: string | null; p_vechi: string }
+        Returns: string[]
+      }
+      produse_seteaza_brandul: {
+        Args: { p_brand: string | null; p_business: string; p_ids: string[] }
+        Returns: string[]
+      }
       produse_vandute: {
         Args: {
           bid: string

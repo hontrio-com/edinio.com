@@ -138,6 +138,21 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION privat.cont_goleste_profilul()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if new.sters_la is not null and old.sters_la is null then
+    new.telefon := null;
+    new.adresa := null;
+    delete from privat.cont_poza p where p.cont_id = new.id and p.business_id = new.business_id;
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION privat.cont_inceputul_zilei()
  RETURNS timestamp with time zone
  LANGUAGE sql
@@ -3857,7 +3872,10 @@ AS $function$
   select jsonb_build_object(
     'cont', (select jsonb_build_object('nume', c.nume, 'creat_la', c.creat_la,
                                        'are_parola', c.parola_hash is not null,
-                                       'parola_schimbata_la', c.parola_schimbata_la)
+                                       'parola_schimbata_la', c.parola_schimbata_la,
+                                       'telefon', c.telefon, 'adresa_de_livrare', c.adresa,
+                                       'are_poza', exists (select 1 from privat.cont_poza p
+                                                           where p.cont_id = c.id and p.business_id = c.business_id))
                from privat.cont_cumparator c where c.id = p_cont and c.business_id = p_business),
     'contacte', (select coalesce(jsonb_agg(jsonb_build_object(
         'fel', x.fel, 'valoare', x.valoare_bruta, 'verificat_la', x.verificat_la, 'creat_la', x.creat_la)), '[]'::jsonb)
@@ -4631,6 +4649,65 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.cont_poza(p_business uuid, p_cont uuid)
+ RETURNS TABLE(imagine_b64 text, schimbata_la timestamp with time zone)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select encode(p.imagine, 'base64'), p.schimbata_la
+    from privat.cont_poza p
+    join privat.cont_cumparator c on c.id = p.cont_id and c.business_id = p.business_id and c.sters_la is null
+   where p.cont_id = p_cont and p.business_id = p_business;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cont_poza_salveaza(p_business uuid, p_cont uuid, p_imagine_b64 text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_img bytea;
+begin
+  if not exists (select 1 from privat.cont_cumparator c
+                  where c.id = p_cont and c.business_id = p_business and c.sters_la is null) then
+    return 'negasit';
+  end if;
+  begin
+    v_img := decode(coalesce(p_imagine_b64, ''), 'base64');
+  exception when others then
+    return 'nevalida';
+  end;
+  if octet_length(v_img) = 0 or octet_length(v_img) > 200000 then
+    return 'nevalida';
+  end if;
+  insert into privat.cont_poza (cont_id, business_id, imagine, schimbata_la)
+  values (p_cont, p_business, v_img, now())
+  on conflict (cont_id) do update set imagine = excluded.imagine, schimbata_la = excluded.schimbata_la;
+  insert into privat.cont_jurnal (business_id, cont_id, fapta)
+  values (p_business, p_cont, 'poza-schimbata');
+  return 'salvata';
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.cont_poza_sterge(p_business uuid, p_cont uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  delete from privat.cont_poza p where p.cont_id = p_cont and p.business_id = p_business;
+  if not found then
+    return false;
+  end if;
+  insert into privat.cont_jurnal (business_id, cont_id, fapta)
+  values (p_business, p_cont, 'poza-stearsa');
+  return true;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.cont_preferinte(p_business uuid, p_cont uuid)
  RETURNS TABLE(primeste_email boolean, primeste_sms boolean, are_email boolean, are_telefon boolean)
  LANGUAGE sql
@@ -4720,6 +4797,59 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.cont_profil(p_business uuid, p_cont uuid)
+ RETURNS TABLE(nume text, telefon text, adresa jsonb, poza_la timestamp with time zone)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select c.nume, c.telefon, c.adresa,
+         (select p.schimbata_la from privat.cont_poza p where p.cont_id = c.id and p.business_id = c.business_id)
+    from privat.cont_cumparator c
+   where c.id = p_cont and c.business_id = p_business and c.sters_la is null;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cont_profil_salveaza(p_business uuid, p_cont uuid, p_nume text, p_telefon text, p_judet text, p_localitate text, p_adresa text, p_cod_postal text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_nume text := left(btrim(coalesce(p_nume, '')), 120);
+  v_tel text := nullif(btrim(coalesce(p_telefon, '')), '');
+  v_adresa jsonb;
+begin
+  if v_nume = '' then
+    return 'nume-lipsa';
+  end if;
+  if v_tel is not null and (length(v_tel) > 20 or length(regexp_replace(v_tel, '[^0-9]', '', 'g')) not between 9 and 15) then
+    return 'telefon-nevalid';
+  end if;
+
+  v_adresa := jsonb_strip_nulls(jsonb_build_object(
+    'judet', nullif(left(btrim(coalesce(p_judet, '')), 60), ''),
+    'localitate', nullif(left(btrim(coalesce(p_localitate, '')), 80), ''),
+    'adresa', nullif(left(btrim(coalesce(p_adresa, '')), 200), ''),
+    'cod_postal', nullif(left(btrim(coalesce(p_cod_postal, '')), 10), '')));
+  if v_adresa = '{}'::jsonb then
+    v_adresa := null;
+  end if;
+
+  update privat.cont_cumparator c
+     set nume = v_nume, telefon = v_tel, adresa = v_adresa
+   where c.id = p_cont and c.business_id = p_business and c.sters_la is null;
+  if not found then
+    return 'negasit';
+  end if;
+
+  insert into privat.cont_jurnal (business_id, cont_id, fapta)
+  values (p_business, p_cont, 'profil-schimbat');
+  return 'salvat';
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION public.cont_retrimite_cod(p_business uuid, p_provocare_hash text, p_cod_hash text, p_minute integer DEFAULT 10, p_ip text DEFAULT NULL::text)
  RETURNS TABLE(ok boolean, motiv text, destinatie text, scop text)
  LANGUAGE plpgsql
@@ -4797,7 +4927,7 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.cont_rezumat(p_business uuid, p_cont uuid)
- RETURNS TABLE(comenzi bigint, in_curs bigint, facturi bigint, retururi bigint)
+ RETURNS TABLE(comenzi bigint, in_curs bigint, facturi bigint, retururi bigint, poza_la timestamp with time zone)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO ''
@@ -4821,7 +4951,9 @@ AS $function$
     (select count(*)
        from public.return_requests r
        join privat.cont_comanda l on l.order_id = r.order_id and l.business_id = r.business_id
-      where r.business_id = p_business and l.cont_id = p_cont and l.vedere = 'intreaga');
+      where r.business_id = p_business and l.cont_id = p_cont and l.vedere = 'intreaga'),
+    (select p.schimbata_la from privat.cont_poza p
+      where p.cont_id = p_cont and p.business_id = p_business);
 $function$
 ;
 
@@ -10418,7 +10550,9 @@ create table if not exists privat.cont_cumparator (
   creat_la timestamp with time zone default now() not null,
   parola_hash text,
   parola_schimbata_la timestamp with time zone,
-  suspendat_la timestamp with time zone);
+  suspendat_la timestamp with time zone,
+  telefon text,
+  adresa jsonb);
 
 create table if not exists privat.cont_dispozitiv (
   id uuid default gen_random_uuid() not null,
@@ -10450,6 +10584,12 @@ create table if not exists privat.cont_jurnal (
   detalii jsonb default '{}'::jsonb not null,
   ip inet,
   creat_la timestamp with time zone default now() not null);
+
+create table if not exists privat.cont_poza (
+  cont_id uuid not null,
+  business_id uuid not null,
+  imagine bytea not null,
+  schimbata_la timestamp with time zone default now() not null);
 
 create table if not exists privat.cont_sesiune (
   id uuid default gen_random_uuid() not null,
@@ -12395,6 +12535,7 @@ alter table privat.cont_cumparator add constraint cont_cumparator_pkey PRIMARY K
 alter table privat.cont_dispozitiv add constraint cont_dispozitiv_pkey PRIMARY KEY (id);
 alter table privat.cont_instiintare add constraint cont_instiintare_pkey PRIMARY KEY (id);
 alter table privat.cont_jurnal add constraint cont_jurnal_pkey PRIMARY KEY (id);
+alter table privat.cont_poza add constraint cont_poza_pkey PRIMARY KEY (cont_id);
 alter table privat.cont_sesiune add constraint cont_sesiune_pkey PRIMARY KEY (id);
 alter table privat.ritm_extern add constraint ritm_extern_pkey PRIMARY KEY (cheie);
 alter table privat.store_settings add constraint store_settings_pkey PRIMARY KEY (id);
@@ -12575,8 +12716,12 @@ alter table privat.cont_contact add constraint cont_contact_fel_check CHECK ((fe
 alter table privat.cont_contact add constraint cont_contact_telefon_are_cifre CHECK (((fel <> 'telefon'::text) OR (length(valoare) >= 9)));
 alter table privat.cont_contact_blocat add constraint cont_contact_blocat_fel_check CHECK ((fel = ANY (ARRAY['email'::text, 'telefon'::text])));
 alter table privat.cont_contact_blocat add constraint cont_contact_blocat_motiv_check CHECK ((motiv = 'contestat'::text));
+alter table privat.cont_cumparator add constraint cont_cumparator_adresa_forma CHECK (((adresa IS NULL) OR ((jsonb_typeof(adresa) = 'object'::text) AND (length((adresa)::text) <= 600))));
+alter table privat.cont_cumparator add constraint cont_cumparator_nume_lungime CHECK ((length(nume) <= 120));
 alter table privat.cont_cumparator add constraint cont_cumparator_parola_forma CHECK (((parola_hash IS NULL) OR (parola_hash ~~ 'scrypt$%'::text)));
+alter table privat.cont_cumparator add constraint cont_cumparator_telefon_forma CHECK (((telefon IS NULL) OR ((length(telefon) <= 20) AND ((length(regexp_replace(telefon, '[^0-9]'::text, ''::text, 'g'::text)) >= 9) AND (length(regexp_replace(telefon, '[^0-9]'::text, ''::text, 'g'::text)) <= 15)))));
 alter table privat.cont_instiintare add constraint cont_instiintare_canal_check CHECK ((canal = ANY (ARRAY['email'::text, 'sms'::text])));
+alter table privat.cont_poza add constraint cont_poza_imagine_check CHECK (((octet_length(imagine) >= 1) AND (octet_length(imagine) <= 200000)));
 alter table privat.cont_sesiune add constraint cont_sesiune_motiv_incheiere_check CHECK ((motiv_incheiere = ANY (ARRAY['iesire'::text, 'rotire'::text, 'refolosire'::text, 'epoca'::text, 'expirare'::text, 'inactivitate'::text, 'stingere'::text, 'stergere'::text])));
 alter table public.aboutyou_batches add constraint aboutyou_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'stock'::text, 'stock_removal'::text, 'price'::text, 'status'::text, 'removal'::text, 'ship'::text, 'cancel'::text, 'return'::text])));
 alter table public.aboutyou_bulk_jobs add constraint aboutyou_bulk_jobs_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'price'::text, 'publish'::text])));
@@ -12653,6 +12798,7 @@ alter table privat.cont_instiintare add constraint cont_instiintare_business_fk 
 alter table privat.cont_instiintare add constraint cont_instiintare_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
 alter table privat.cont_jurnal add constraint cont_jurnal_business_fk FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table privat.cont_jurnal add constraint cont_jurnal_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
+alter table privat.cont_poza add constraint cont_poza_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
 alter table privat.cont_sesiune add constraint cont_sesiune_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
 alter table privat.store_settings add constraint store_settings_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.abandoned_carts add constraint abandoned_carts_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -13272,6 +13418,7 @@ create or replace view public.store_settings with (security_invoker = true) as
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
+CREATE TRIGGER cont_goleste_profilul BEFORE UPDATE OF sters_la ON privat.cont_cumparator FOR EACH ROW EXECUTE FUNCTION privat.cont_goleste_profilul();
 CREATE TRIGGER set_store_settings_updated_at BEFORE UPDATE ON privat.store_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER aboutyou_marcheaza_listarea AFTER UPDATE OF brand_id, category_id, color_id, attributes, material_composition, country_of_origin, hs_code ON public.aboutyou_listings FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_listarea();
 CREATE TRIGGER trg_aboutyou_marcheaza_aprobarea BEFORE INSERT OR UPDATE ON public.aboutyou_listings FOR EACH ROW EXECUTE FUNCTION aboutyou_marcheaza_aprobarea();
@@ -13818,6 +13965,10 @@ grant DELETE on table privat.cont_jurnal to service_role;
 grant INSERT on table privat.cont_jurnal to service_role;
 grant SELECT on table privat.cont_jurnal to service_role;
 grant UPDATE on table privat.cont_jurnal to service_role;
+grant DELETE on table privat.cont_poza to service_role;
+grant INSERT on table privat.cont_poza to service_role;
+grant SELECT on table privat.cont_poza to service_role;
+grant UPDATE on table privat.cont_poza to service_role;
 grant DELETE on table privat.cont_sesiune to service_role;
 grant INSERT on table privat.cont_sesiune to service_role;
 grant SELECT on table privat.cont_sesiune to service_role;
@@ -16261,8 +16412,13 @@ grant execute on function public.cont_panou_sumar(p_business uuid) to service_ro
 grant execute on function public.cont_panou_suspenda(p_business uuid, p_cont uuid, p_motiv text) to service_role;
 grant execute on function public.cont_parola_contului(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_parola_pentru_intrare(p_business uuid, p_email text, p_ip text) to service_role;
+grant execute on function public.cont_poza(p_business uuid, p_cont uuid) to service_role;
+grant execute on function public.cont_poza_salveaza(p_business uuid, p_cont uuid, p_imagine_b64 text) to service_role;
+grant execute on function public.cont_poza_sterge(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_preferinte(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_preferinte_schimba(p_business uuid, p_cont uuid, p_canal text, p_vrea boolean) to service_role;
+grant execute on function public.cont_profil(p_business uuid, p_cont uuid) to service_role;
+grant execute on function public.cont_profil_salveaza(p_business uuid, p_cont uuid, p_nume text, p_telefon text, p_judet text, p_localitate text, p_adresa text, p_cod_postal text) to service_role;
 grant execute on function public.cont_retrimite_cod(p_business uuid, p_provocare_hash text, p_cod_hash text, p_minute integer, p_ip text) to service_role;
 grant execute on function public.cont_retururile_mele(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_rezumat(p_business uuid, p_cont uuid) to service_role;
@@ -16483,8 +16639,8 @@ grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to authenticated;
-grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;
@@ -16514,6 +16670,7 @@ revoke execute on function privat.cheie_integrari() from public;
 revoke execute on function privat.cont_defalcarea_liniei(p_linie jsonb) from public;
 revoke execute on function privat.cont_documentul_comenzii(o anyelement) from public;
 revoke execute on function privat.cont_e_document_de_test(p_adresa text) from public;
+revoke execute on function privat.cont_goleste_profilul() from public;
 revoke execute on function privat.cont_inceputul_zilei() from public;
 revoke execute on function privat.cont_ip_ascuns(p inet) from public;
 revoke execute on function privat.cont_ip_sigur(p text) from public;
@@ -16616,8 +16773,13 @@ revoke execute on function public.cont_panou_sumar(p_business uuid) from public;
 revoke execute on function public.cont_panou_suspenda(p_business uuid, p_cont uuid, p_motiv text) from public;
 revoke execute on function public.cont_parola_contului(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_parola_pentru_intrare(p_business uuid, p_email text, p_ip text) from public;
+revoke execute on function public.cont_poza(p_business uuid, p_cont uuid) from public;
+revoke execute on function public.cont_poza_salveaza(p_business uuid, p_cont uuid, p_imagine_b64 text) from public;
+revoke execute on function public.cont_poza_sterge(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_preferinte(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_preferinte_schimba(p_business uuid, p_cont uuid, p_canal text, p_vrea boolean) from public;
+revoke execute on function public.cont_profil(p_business uuid, p_cont uuid) from public;
+revoke execute on function public.cont_profil_salveaza(p_business uuid, p_cont uuid, p_nume text, p_telefon text, p_judet text, p_localitate text, p_adresa text, p_cod_postal text) from public;
 revoke execute on function public.cont_retrimite_cod(p_business uuid, p_provocare_hash text, p_cod_hash text, p_minute integer, p_ip text) from public;
 revoke execute on function public.cont_retururile_mele(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_rezumat(p_business uuid, p_cont uuid) from public;

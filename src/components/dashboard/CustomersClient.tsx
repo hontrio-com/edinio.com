@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
-  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2, Upload,
+  X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2, Upload, UserRound,
 } from "lucide-react";
 import { formatPrice, formatPriceValue, formatDate, formatDateShort, formatPhoneDisplay } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -67,7 +67,7 @@ function Camp({ eticheta, valoare }: { eticheta: string; valoare: string | null 
   );
 }
 
-export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, judet, canal, judete, canale, segmentId, segmentLipsa, businessId }: {
+export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, judet, canal, judete, canale, segmentId, segmentLipsa, businessId, doarCuCont, conturi, areConturi }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
   customers: Customer[];
   summary: CustomersSummary;
@@ -89,6 +89,12 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   /** Segmentul cerut prin adresa n-are niciun om (sters, sau gol). */
   segmentLipsa: boolean;
   businessId: string;
+  /** Filtrul „numai cu cont in magazin” e pus (din adresa, `?cont=da`). */
+  doarCuCont: boolean;
+  /** Cheia clientului -> contul lui, numai pentru clientii de pe pagina asta. */
+  conturi: Record<string, string>;
+  /** Magazinul are macar un cont: altfel filtrul n-ar gasi pe nimeni si nu se arata. */
+  areConturi: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -124,7 +130,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   const totalPages = Math.max(1, Math.ceil(totalCount / CUSTOMERS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
-  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null }) => {
+  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null; cont?: boolean }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nsort = next.sort ?? sort;
@@ -144,10 +150,12 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     if (njudet) params.set("judet", njudet);
     const ncanal = next.canal === undefined ? canal : next.canal;
     if (ncanal) params.set("canal", ncanal);
+    const ncont = next.cont === undefined ? doarCuCont : next.cont;
+    if (ncont) params.set("cont", "da");
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, sort, page, perioada, segment, valoare, judet, canal]);
+  }, [pathname, searchQuery, sort, page, perioada, segment, valoare, judet, canal, doarCuCont]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -167,7 +175,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null }) {
+  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null; cont?: boolean }) {
     /*
       ⚠ BIFELE SE GOLESC LA ORICE NAVIGARE. Altfel, un om care bifeaza zece
       clienti, pune un filtru si apasa „Șterge datele" ar sterge oameni pe care
@@ -436,17 +444,35 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         )}
 
         {/*
+          ⚠ „CU CONT ÎN MAGAZIN” apare numai la magazinele care au conturi, din
+          aceeași regulă ca județul și canalul: un filtru care n-are pe cine găsi
+          îl pune pe om să-l deschidă ca să afle asta. Rămâne vizibil cât e pus,
+          ca să se poată scoate.
+        */}
+        {(areConturi || doarCuCont) && (
+          <select
+            value={doarCuCont ? "da" : ""}
+            onChange={(e) => goTo({ cont: e.target.value === "da", page: 1 })}
+            aria-label="Cont în magazin"
+            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
+          >
+            <option value="">Cu sau fără cont</option>
+            <option value="da">Numai cu cont în magazin</option>
+          </select>
+        )}
+
+        {/*
           ⚠ „Șterge filtrele” apare DOAR când există ce șterge. Un buton mereu acolo,
           de cele mai multe ori fără efect, îl învață pe om să-l ignore — și atunci nu-l
           mai vede nici când chiar are nevoie de el.
         */}
-        {cateFiltreTot({ segment, valoare, judet, canal }) > 0 && (
+        {cateFiltreTot({ segment, valoare, judet, canal, cont: doarCuCont }) > 0 && (
           <button
             type="button"
-            onClick={() => goTo({ segment: "toti", valoare: null, judet: null, canal: null, page: 1 })}
+            onClick={() => goTo({ segment: "toti", valoare: null, judet: null, canal: null, cont: false, page: 1 })}
             className="col-span-2 rounded-xl px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground sm:col-span-1"
           >
-            Șterge filtrele ({cateFiltreTot({ segment, valoare, judet, canal })})
+            Șterge filtrele ({cateFiltreTot({ segment, valoare, judet, canal, cont: doarCuCont })})
           </button>
         )}
 
@@ -456,11 +482,11 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           filtru e tot magazinul sub un nume care promite altceva — server-ul îl
           refuză oricum, dar un buton care refuză mereu e o promisiune goală.
         */}
-        {cateFiltreTot({ segment, valoare, judet, canal }) > 0 && (
+        {cateFiltreTot({ segment, valoare, judet, canal, cont: doarCuCont }) > 0 && (
           <div className="col-span-2 sm:col-span-1">
             <SalveazaSegment
               businessId={businessId}
-              criterii={{ segment, valoare, q: searchQuery, judet, canal }}
+              criterii={{ segment, valoare, q: searchQuery, judet, canal, cont: doarCuCont }}
             />
           </div>
         )}
@@ -516,7 +542,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             <Users className="h-6 w-6 text-muted-foreground" />
           </div>
           <p className="font-medium text-foreground mb-1">
-            {searchQuery || cateFiltreTot({ segment, valoare, judet, canal }) > 0
+            {searchQuery || cateFiltreTot({ segment, valoare, judet, canal, cont: doarCuCont }) > 0
               ? "Niciun client pentru ce ai ales"
               : "Niciun client încă"}
           </p>
@@ -526,8 +552,8 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             filtrul — și ce se poate face cu ea.
           */}
           <p className="text-sm text-muted-foreground">
-            {cateFiltreTot({ segment, valoare, judet, canal }) > 0
-              ? "Sterge filtrele sau alege altele."
+            {cateFiltreTot({ segment, valoare, judet, canal, cont: doarCuCont }) > 0
+              ? "Șterge filtrele sau alege altele."
               : searchQuery
                 ? "Încearcă altă căutare."
                 : "Clienții apar aici după prima comandă din magazin, sau Îi poți aduce acum prin import."}
@@ -598,7 +624,18 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                 {c.name[0]?.toUpperCase() ?? "C"}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-foreground">{c.name}</p>
+                <p className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
+                  {/* Clientul are cont in magazin: fisa lui duce la cont. */}
+                  {conturi[c.key] && (
+                    <span
+                      title="Are cont în magazin"
+                      className="inline-flex flex-shrink-0 items-center gap-0.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
+                    >
+                      <UserRound className="h-3 w-3" aria-hidden="true" /> Cont
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground truncate">
                   {/*
                     ⚠ Trecut prin `formatPhoneDisplay`. Până acum rândurile arătau
@@ -755,12 +792,19 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         </div>
       )}
 
-      {selected && <CustomerDetail customer={selected} businessId={businessId} onClose={() => setSelected(null)} />}
+      {selected && (
+        <CustomerDetail
+          customer={selected}
+          businessId={businessId}
+          contId={conturi[selected.key] ?? null}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
 
-function CustomerDetail({ customer, businessId, onClose }: { customer: Customer; businessId: string; onClose: () => void }) {
+function CustomerDetail({ customer, businessId, contId, onClose }: { customer: Customer; businessId: string; contId: string | null; onClose: () => void }) {
   const addressParts = [customer.address, customer.city, customer.county].filter(Boolean);
 
   // Istoricul se incarca on-demand (paginat) — clientul poate avea mii de
@@ -856,6 +900,15 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <MapPin className="h-3 w-3 flex-shrink-0" /> {addressParts.join(", ")}
                 </p>
+              )}
+              {/* Contul lui din magazin, cand are: cu ce intra, ce vede, ce i s-a intamplat. */}
+              {contId && (
+                <Link
+                  href={`/dashboard/customers/conturi/${contId}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                >
+                  <UserRound className="h-3 w-3" /> Are cont în magazin · vezi contul
+                </Link>
               )}
             </div>
           </div>

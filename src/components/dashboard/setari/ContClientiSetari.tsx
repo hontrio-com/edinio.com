@@ -168,6 +168,12 @@ export function ContClientiSetari({ businessId, initial }: { businessId: string;
             aria-label="Permite conturi de client"
           />
         </label>
+        {/* Lista conturilor sta la Clienti, unde sta si restul despre clienti. */}
+        {stare.cateConturi > 0 && (
+          <Link href="/dashboard/customers?fila=conturi" className="mt-3 inline-block text-xs font-semibold text-primary hover:underline">
+            Vezi conturile clienților
+          </Link>
+        )}
       </Card>
 
       <Card titlu="Contul, la comandă" icon={Lock} stins={!aprinse}

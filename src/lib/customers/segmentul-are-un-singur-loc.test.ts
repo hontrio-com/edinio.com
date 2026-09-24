@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SEGMENTE } from "./filtre";
 import {
   CRITERII_GOALE, adresaSegmentului, catiIn, criteriiGoale, criteriiValide,
-  descrieCriteriile, numeValid, type CriteriiSegment,
+  descrieCriteriile, numaiSegmentul, numeValid, type CriteriiSegment,
 } from "./segmente";
 
 /*
@@ -297,12 +297,12 @@ test("⚠⚠ un filtru nou nu se poate pierde tacut la salvarea segmentului", ()
    * adresa. Un camp adaugat fara sa fie dus mai departe pica aici.
    */
   const pline: CriteriiSegment = {
-    segment: "vip", valoare: "200-500", q: "ana", judet: "Cluj", canal: "emag",
+    segment: "vip", valoare: "200-500", q: "ana", judet: "Cluj", canal: "emag", cont: true,
   };
 
   /* Fiecare camp e un criteriu, si toate trebuie sa se vada undeva. */
   const campuri = Object.keys(pline) as (keyof CriteriiSegment)[];
-  assert.equal(campuri.length, 5, "s-a adaugat un criteriu: du-l si in descriere, si in adresa");
+  assert.equal(campuri.length, 6, "s-a adaugat un criteriu: du-l si in descriere, si in adresa");
 
   const descriere = descrieCriteriile(pline);
   const adresa = new URL(adresaSegmentului(pline), "https://x.ro");
@@ -312,12 +312,53 @@ test("⚠⚠ un filtru nou nu se poate pierde tacut la salvarea segmentului", ()
   assert.match(descriere, /Cluj/);
   assert.match(descriere, /eMAG/, "canalul se scrie cu numele lui, nu cu slug-ul");
   assert.match(descriere, /ana/);
+  assert.match(descriere, /cu cont în magazin/);
 
   assert.equal(adresa.searchParams.get("segment"), "vip");
   assert.equal(adresa.searchParams.get("valoare"), "200-500");
   assert.equal(adresa.searchParams.get("judet"), "Cluj");
   assert.equal(adresa.searchParams.get("canal"), "emag");
   assert.equal(adresa.searchParams.get("q"), "ana");
+  assert.equal(adresa.searchParams.get("cont"), "da");
+
+  /*
+   * ⚠⚠ Si in SCRIEREA segmentului. Salvarea pune criteriile camp cu camp; pe 24.09.2026
+   * `cont` ajunsese in descriere si in adresa, dar nu si aici, deci un segment salvat
+   * din „cu cont” se deschidea fara filtru.
+   */
+  const actiune = readFileSync(join("src", "lib", "actions", "customer-segments.actions.ts"), "utf8");
+  const scris = actiune.slice(actiune.indexOf("criterii: {"), actiune.indexOf("},", actiune.indexOf("criterii: {")));
+  for (const c of campuri) {
+    assert.ok(scris.includes(`${c}: criterii.${c}`), `salvarea segmentului nu scrie criteriul „${c}”`);
+  }
+});
+
+test("⚠ „cu cont in magazin” e un criteriu intreg: se curata si conteaza ca filtru", () => {
+  /* Numai `true` il aprinde: un „da” sau 1 venit din `jsonb` il lasa stins. */
+  assert.equal(criteriiValide({ cont: true }).cont, true);
+  for (const v of ["da", 1, "true", null, undefined]) assert.equal(criteriiValide({ cont: v }).cont, false);
+  assert.equal(criteriiGoale({ ...CRITERII_GOALE, cont: true }), false);
+  /* Adresa fara el nu-l poarta. */
+  assert.equal(new URL(adresaSegmentului(CRITERII_GOALE), "https://x.ro").searchParams.get("cont"), null);
+});
+
+test("⚠⚠ numarul de pe placa se da NUMAI segmentului fara alte filtre", () => {
+  /*
+   * Prima scriere se uita numai la valoare si la cautare: „Recurenti din Cluj”
+   * primea numarul TUTUROR recurentilor. Judetul, canalul si contul scot placa.
+   */
+  assert.equal(numaiSegmentul({ ...CRITERII_GOALE, segment: "recurenti" }), true);
+  assert.equal(numaiSegmentul({ ...CRITERII_GOALE, segment: "recurenti", judet: "Cluj" }), false);
+  assert.equal(numaiSegmentul({ ...CRITERII_GOALE, segment: "recurenti", canal: "emag" }), false);
+  assert.equal(numaiSegmentul({ ...CRITERII_GOALE, segment: "recurenti", cont: true }), false);
+  assert.equal(numaiSegmentul({ ...CRITERII_GOALE, segment: "recurenti", q: "ana" }), false);
+  assert.equal(numaiSegmentul({ ...CRITERII_GOALE, segment: "recurenti", valoare: "200-500" }), false);
+  assert.equal(numaiSegmentul(CRITERII_GOALE), false, "toti clientii nu e un segment");
+  assert.match(
+    readFileSync(join("src", "components", "dashboard", "clienti", "FilaSegmente.tsx"), "utf8"),
+    /numaiSegmentul\(s\.criterii\)/,
+    "placa segmentului salvat nu mai trece prin `numaiSegmentul`",
+  );
 });
 
 test("⚠ un segment cu DOAR judet nu e „gol”", () => {

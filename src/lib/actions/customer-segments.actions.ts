@@ -81,7 +81,7 @@ export async function salveazaSegment(
       fel: "criterii",
       criterii: {
         segment: criterii.segment, valoare: criterii.valoare, q: criterii.q,
-        judet: criterii.judet, canal: criterii.canal,
+        judet: criterii.judet, canal: criterii.canal, cont: criterii.cont,
       },
       creat_de: user.id,
     })

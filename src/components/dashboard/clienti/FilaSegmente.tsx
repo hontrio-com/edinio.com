@@ -4,7 +4,7 @@ import { ArrowRight, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { NUMELE_SEGMENTULUI } from "@/lib/customers/filtre";
 import {
-  CRITERII_GOALE, SEGMENTE_IMPLICITE, adresaSegmentului, catiIn, criteriiGoale, criteriiValide,
+  CRITERII_GOALE, SEGMENTE_IMPLICITE, adresaSegmentului, catiIn, criteriiValide, numaiSegmentul,
   felValid,
 } from "@/lib/customers/segmente";
 import type { SegmentSalvat } from "@/lib/actions/customer-segments.actions";
@@ -148,7 +148,7 @@ export async function FilaSegmente({ businessId }: { businessId: string }) {
               cati:
                 s.fel === "lista"
                   ? (s.cati ?? 0)
-                  : !s.criterii.valoare && !s.criterii.q && !criteriiGoale(s.criterii)
+                  : numaiSegmentul(s.criterii)
                     ? catiIn(cifre, s.criterii.segment)
                     : null,
             }))}

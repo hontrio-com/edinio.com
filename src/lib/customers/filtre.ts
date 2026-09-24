@@ -139,6 +139,8 @@ export function cateFiltreTot(f: {
   valoare: string | null;
   judet: string | null;
   canal: string | null;
+  /* „Numai cu cont in magazin” (24.09.2026). */
+  cont: boolean;
 }): number {
-  return cateFiltre(f) + (f.judet ? 1 : 0) + (f.canal ? 1 : 0);
+  return cateFiltre(f) + (f.judet ? 1 : 0) + (f.canal ? 1 : 0) + (f.cont ? 1 : 0);
 }

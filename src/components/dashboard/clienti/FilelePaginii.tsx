@@ -4,11 +4,12 @@ import { cn } from "@/lib/utils/cn";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * CELE TREI FILE ALE PAGINII DE CLIENTI                         (21.09.2026)
+ * FILELE PAGINII DE CLIENTI                     (21.09.2026, Conturi 24.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Toți clienții · Segmente · Importuri. **Fara intrare noua in meniu** — cerut
- * anume: segmentele si importurile sunt despre clienti, nu langa ei.
+ * Toți clienții · Segmente · Importuri · Conturi. **Fara intrare noua in meniu**,
+ * cerut anume: segmentele, importurile si conturile sunt despre clienti, nu
+ * langa ei.
  *
  * ⚠ FILA STA IN ADRESA, spre deosebire de filele din fisa clientului, care stau
  * in stare. Deosebirea nu e de gust: fila paginii e un loc in care te afli si pe
@@ -29,6 +30,8 @@ export const FILELE = [
   { cheie: "clienti", eticheta: "Toți clienții" },
   { cheie: "segmente", eticheta: "Segmente" },
   { cheie: "importuri", eticheta: "Importuri" },
+  /* Conturile facute de clienti in magazin (24.09.2026). Se vad si cu functia stinsa: datele raman. */
+  { cheie: "conturi", eticheta: "Conturi" },
 ] as const;
 
 export type FilaPaginii = (typeof FILELE)[number]["cheie"];
@@ -39,7 +42,8 @@ export function filaValida(v: string | null | undefined): FilaPaginii {
 
 export function FilelePaginii({ activa }: { activa: FilaPaginii }) {
   return (
-    <div className="mb-5 flex gap-1 border-b border-border" role="tablist">
+    /* ⚠ Patru file nu incap la 360px: randul se deruleaza in el, nu impinge pagina lateral. */
+    <div className="mb-5 flex gap-1 overflow-x-auto border-b border-border" role="tablist">
       {FILELE.map((f) => {
         const aici = f.cheie === activa;
         return (
@@ -49,7 +53,7 @@ export function FilelePaginii({ activa }: { activa: FilaPaginii }) {
             role="tab"
             aria-selected={aici}
             className={cn(
-              "border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
+              "flex-shrink-0 whitespace-nowrap border-b-2 px-2.5 py-2.5 text-sm font-semibold transition-colors sm:px-3",
               aici
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",

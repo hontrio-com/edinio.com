@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { CustomersClient } from "@/components/dashboard/CustomersClient";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +12,10 @@ import { segmentValid, treaptaValoare, type Segment } from "@/lib/customers/filt
 import { FilelePaginii, filaValida } from "@/components/dashboard/clienti/FilelePaginii";
 import { FilaSegmente } from "@/components/dashboard/clienti/FilaSegmente";
 import { FilaImporturi } from "@/components/dashboard/clienti/FilaImporturi";
+import { FilaConturi } from "@/components/dashboard/clienti/conturi/FilaConturi";
+import { conturileClientilor } from "@/lib/cont/panou";
+import { CAUTARE_MAXIMA, ordineValida, stareValida } from "@/lib/cont/panou-texte";
+import { logError } from "@/lib/error-logger";
 
 const SORT_KEYS = new Set(["recent", "spent", "orders", "name"]);
 
@@ -75,6 +80,12 @@ export default async function CustomersPage({
     n-are criterii, are oameni. Cheile se afla pe server, mai jos.
   */
   const segmentId = (firstParam(sp.segment_id) ?? "").trim().slice(0, 40) || null;
+  /*
+    ⚠ „Numai clientii cu cont in magazin” (24.09.2026). E un criteriu ca oricare
+    altul: intra si in segmentele salvate (`CriteriiSegment.cont`), altfel un
+    segment salvat cu el ar fi pastrat numai jumatate din filtru.
+  */
+  const doarCuCont = firstParam(sp.cont) === "da";
 
   const { data: bizRow } = await supabase
     .from("businesses")
@@ -115,11 +126,18 @@ export default async function CustomersPage({
         </Suspense>
       )}
 
+      {fila === "conturi" && (
+        <Suspense fallback={<ScheletFila />}>
+          <FilaConturi businessId={bizRow.id} q={q.slice(0, CAUTARE_MAXIMA)} pagina={page}
+            stare={stareValida(firstParam(sp.stare))} ordine={ordineValida(firstParam(sp.ordine))} />
+        </Suspense>
+      )}
+
       {fila === "clienti" && (
         <Suspense fallback={<ScheletClienti />}>
           <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada}
             segment={segment} valoare={firstParam(sp.valoare) ?? null}
-            judet={judet} canal={canal} segmentId={segmentId} />
+            judet={judet} canal={canal} segmentId={segmentId} doarCuCont={doarCuCont} />
         </Suspense>
       )}
     </div>
@@ -166,6 +184,7 @@ async function ListaClienti({
   judet,
   canal,
   segmentId,
+  doarCuCont,
 }: {
   businessId: string;
   q: string;
@@ -177,6 +196,7 @@ async function ListaClienti({
   judet: string | null;
   canal: string | null;
   segmentId: string | null;
+  doarCuCont: boolean;
 }) {
   const supabase = await createClient();
 
@@ -199,13 +219,23 @@ async function ListaClienti({
     chei = (membri ?? []).map((m) => m.cheie);
     segmentLipsa = chei.length === 0;
   }
+  /*
+    ⚠⚠ „Cu cont” se aplica prin ACEEASI usa ca segmentul cu lista (`p_chei`), deci
+    filtrarea, numaratoarea si paginarea raman ale bazei. Cu un segment deschis,
+    cele doua liste se INTERSECTEAZA: altfel unul l-ar fi inlocuit pe celalalt.
+    ⚠ O eroare aici NU se inghite: o lista nefiltrata sub „cu cont” ar minti.
+  */
+  if (doarCuCont) {
+    const cuCont = new Set((await conturileClientilor(businessId, null)).keys());
+    chei = chei === null ? [...cuCont] : chei.filter((k) => cuCont.has(k));
+  }
   const f = fereastra(perioada);
   const treapta = treaptaValoare(valoare);
 
   // Clientii sunt agregati, cautati si paginati in Postgres (functiile
   // customers_aggregate / customers_summary, sub RLS) — corect la orice numar
   // de comenzi; pagina primeste doar cei CUSTOMERS_PAGE_SIZE clienti afisati.
-  const [{ data: custRows }, { data: summaryRows }, { data: optiuniRows }] = await Promise.all([
+  const [{ data: custRows }, { data: summaryRows }, { data: optiuniRows }, { data: cateConturi }] = await Promise.all([
     supabase.rpc("customers_aggregate", {
       bid: businessId,
       search: q ? escapeLike(q) : undefined,
@@ -243,6 +273,8 @@ async function ListaClienti({
       deci nu adauga nimic la asteptare.
     */
     supabase.rpc("customer_filter_options", { bid: businessId }),
+    /* Cate conturi are magazinul: numai ca sa se stie daca filtrul „cu cont” are rost. */
+    createAdminClient().rpc("cont_cate_conturi", { p_business: businessId }),
   ]);
 
   const optiuni = optiuniRows ?? [];
@@ -274,6 +306,23 @@ async function ListaClienti({
   }));
   const totalCount = custRows?.length ? Number(custRows[0].total_count) : 0;
 
+  /*
+    Care clienti de pe pagina au cont in magazin (eticheta „Cont” si legatura din
+    fisa). ⚠ Aici o eroare se inghite, cu jurnal: fara eticheta, lista ramane
+    adevarata; cu pagina cazuta, comerciantul n-ar mai vedea niciun client.
+  */
+  let conturi: Record<string, string> = {};
+  try {
+    conturi = Object.fromEntries(await conturileClientilor(businessId, customers.map((c) => c.key)));
+  } catch (e) {
+    await logError({
+      action: "clienti/conturi",
+      message: `eticheta „are cont” nu s-a putut citi: ${e instanceof Error ? e.message : String(e)}`,
+      businessId,
+      severity: "warning",
+    });
+  }
+
   const s = summaryRows?.[0];
   const summary: CustomersSummary = {
     totalContacts: Number(s?.total_contacts ?? 0),
@@ -301,6 +350,9 @@ async function ListaClienti({
       canal={canal}
       segmentId={segmentId}
       segmentLipsa={segmentLipsa}
+      doarCuCont={doarCuCont}
+      conturi={conturi}
+      areConturi={typeof cateConturi === "number" && cateConturi > 0}
       judete={judete}
       canale={canale}
       businessId={businessId}

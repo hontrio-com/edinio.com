@@ -37,9 +37,17 @@ export interface CriteriiSegment {
    */
   judet: string | null;
   canal: string | null;
+  /**
+   * Numai clientii care au cont in magazin (24.09.2026).
+   *
+   * ⚠⚠ ADAUGAT ODATA CU FILTRUL, din acelasi motiv ca judetul si canalul: fara
+   * el, un segment salvat din „cu cont” ar fi aratat a doua zi TOTI clientii sub
+   * un nume care spune altceva.
+   */
+  cont: boolean;
 }
 
-export const CRITERII_GOALE: CriteriiSegment = { segment: "toti", valoare: null, q: "", judet: null, canal: null };
+export const CRITERII_GOALE: CriteriiSegment = { segment: "toti", valoare: null, q: "", judet: null, canal: null, cont: false };
 
 /** Cat de lung poate fi numele unui segment. Acelasi numar si in baza. */
 export const NUME_MAXIM = 60;
@@ -69,12 +77,26 @@ export function criteriiValide(x: unknown): CriteriiSegment {
     */
     judet: typeof o.judet === "string" && o.judet.trim() ? o.judet.trim().slice(0, 80) : null,
     canal: typeof o.canal === "string" && o.canal.trim() ? o.canal.trim().slice(0, 40) : null,
+    /* Numai `true` aprinde filtrul; orice altceva (lipsa, "da", 1) il lasa stins. */
+    cont: o.cont === true,
   };
 }
 
 /** Sunt criteriile astea macar un filtru, sau e tot magazinul? */
 export function criteriiGoale(c: CriteriiSegment): boolean {
-  return c.segment === "toti" && !c.valoare && c.q === "" && !c.judet && !c.canal;
+  return c.segment === "toti" && !c.valoare && c.q === "" && !c.judet && !c.canal && !c.cont;
+}
+
+/**
+ * E un segment gata facut si NIMIC altceva? Numai atunci numarul de pe placa
+ * lui se potriveste cu segmentul salvat.
+ *
+ * ⚠ Prima scriere se uita numai la valoare si la cautare: un segment salvat ca
+ * „Recurenti din Cluj” primea numarul TUTUROR recurentilor, fiindca judetul si
+ * canalul venisera dupa si nu intrasera in conditie.
+ */
+export function numaiSegmentul(c: CriteriiSegment): boolean {
+  return c.segment !== "toti" && !c.valoare && c.q === "" && !c.judet && !c.canal && !c.cont;
 }
 
 /**
@@ -90,6 +112,7 @@ export function descrieCriteriile(c: CriteriiSegment): string {
   if (t) parti.push(t.eticheta);
   if (c.judet) parti.push(c.judet);
   if (c.canal) parti.push(numeleCanalului(c.canal));
+  if (c.cont) parti.push("cu cont în magazin");
   if (c.q) parti.push(`caută „${c.q}”`);
   return parti.join(" · ");
 }
@@ -127,6 +150,7 @@ export function adresaSegmentului(c: CriteriiSegment): string {
   if (c.valoare) p.set("valoare", c.valoare);
   if (c.judet) p.set("judet", c.judet);
   if (c.canal) p.set("canal", c.canal);
+  if (c.cont) p.set("cont", "da");
   if (c.q) p.set("q", c.q);
   const s = p.toString();
   return s ? `/dashboard/customers?${s}` : "/dashboard/customers";

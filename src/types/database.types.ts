@@ -7264,6 +7264,87 @@ export type Database = {
         Args: { p_business: string; p_cont?: string | null; p_ip?: string | null }
         Returns: undefined
       }
+      cont_panou_chei: {
+        Args: { p_business: string; p_chei?: string[] | null }
+        Returns: { cheie: string; cont_id: string }[]
+      }
+      cont_panou_comanda_de_legat: {
+        Args: { p_business: string; p_cont: string; p_numar: string }
+        Returns: {
+          creata_la: string
+          email_client: string | null
+          legata_de: string | null
+          marketplace: boolean
+          numar: string
+          nume_client: string | null
+          order_id: string
+          se_potriveste: boolean
+          stare: string
+          telefon_client: string | null
+          total: number
+        }[]
+      }
+      cont_panou_dezleaga_comanda: {
+        Args: { p_business: string; p_cont: string; p_order: string }
+        Returns: string
+      }
+      cont_panou_fisa: {
+        Args: { p_business: string; p_cont: string }
+        Returns: Json
+      }
+      cont_panou_iesire: {
+        Args: { p_business: string; p_cont: string }
+        Returns: { ok: boolean; sesiuni: number }[]
+      }
+      cont_panou_leaga_comanda: {
+        Args: { p_business: string; p_cont: string; p_order: string }
+        Returns: string
+      }
+      cont_panou_lista: {
+        Args: {
+          p_business: string
+          p_cautare?: string | null
+          p_decalaj?: number
+          p_limita?: number
+          p_ordine?: string
+          p_stare?: string
+        }
+        Returns: {
+          are_parola: boolean
+          comenzi: number
+          cont_id: string
+          creat_la: string
+          email: string | null
+          email_confirmat: boolean
+          nume: string | null
+          primeste_email: boolean
+          suspendat_la: string | null
+          telefon: string | null
+          total_randuri: number
+          ultima_intrare: string | null
+        }[]
+      }
+      cont_panou_reactiveaza: {
+        Args: { p_business: string; p_cont: string }
+        Returns: string
+      }
+      cont_panou_sterge: {
+        Args: { p_business: string; p_cont: string }
+        Returns: { comenzi_ramase: number; ok: boolean }[]
+      }
+      cont_panou_sumar: {
+        Args: { p_business: string }
+        Returns: {
+          activi_30_zile: number
+          conturi: number
+          cu_comenzi: number
+          suspendate: number
+        }[]
+      }
+      cont_panou_suspenda: {
+        Args: { p_business: string; p_cont: string; p_motiv?: string | null }
+        Returns: string
+      }
       cont_parola_contului: {
         Args: { p_business: string; p_cont: string }
         Returns: { are_parola: boolean; email: string | null; parola_hash: string | null }[]
@@ -7282,6 +7363,10 @@ export type Database = {
       }
       cont_schimba_parola: {
         Args: { p_business: string; p_cont: string; p_ip?: string | null; p_parola_hash: string }
+        Returns: boolean
+      }
+      cont_verifica_suspendarea: {
+        Args: { p_business: string; p_cont: string; p_ip?: string | null }
         Returns: boolean
       }
       cont_verifica_provocare: {

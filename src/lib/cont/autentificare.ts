@@ -48,6 +48,12 @@ export const MESAJ_PARTEA_INTAI =
 export const MESAJ_INTRARE_GRESITA =
   "Email sau parola gresita. Dupa mai multe incercari gresite, intrarea se opreste 15 minute; poti folosi oricand „Ai uitat parola?”.";
 export const MESAJ_PREA_MULTE = "Prea multe incercari. Asteapta cateva minute si reia.";
+/**
+ * Contul suspendat de magazin (din panou, Clienti, Conturi). Se spune NUMAI dupa
+ * ce parola, sau codul de pe email, a dovedit ca omul e chiar el.
+ */
+export const MESAJ_CONT_SUSPENDAT =
+  "Contul tau la acest magazin a fost suspendat. Pentru detalii, scrie magazinului.";
 
 /**
  * Refuzurile care tin de IP (sau de retea), nu de adresa: pot fi spuse pe fata,
@@ -245,6 +251,8 @@ export function mesajulPasului(motiv: string): string {
       return "Codul a expirat sau a fost deja folosit. Cere unul nou.";
     case "fara-parola":
       return "Scrie si parola noua.";
+    case "suspendat":
+      return MESAJ_CONT_SUSPENDAT;
     case "rafala":
     case "limita-ip":
       return MESAJ_PREA_MULTE;
@@ -349,6 +357,20 @@ export async function intraCuParola(p: {
     await admin.rpc("cont_intrare_esuata", { p_business: p.magazin.id, p_cont: contId, p_ip: ip });
     return { rezultat: "refuzat", mesaj: MESAJ_INTRARE_GRESITA };
   }
+
+  /*
+    ⚠⚠ Contul suspendat de magazin: abia ACUM, dupa parola buna, se poate spune
+    pe fata. Inainte de pasul doi si de dispozitivul de incredere, ca sa nu plece
+    niciun cod si sa nu se deschida nicio sesiune. (Si baza refuza oricum o sesiune
+    noua pe un cont suspendat, in `cont_sesiune_creeaza`.)
+  */
+  const { data: suspendat, error: eSuspendat } = await admin.rpc("cont_verifica_suspendarea", {
+    p_business: p.magazin.id,
+    p_cont: contId,
+    p_ip: ip,
+  });
+  if (eSuspendat) throw eSuspendat;
+  if (suspendat === true) return { rezultat: "refuzat", mesaj: MESAJ_CONT_SUSPENDAT };
 
   const cfg = curataContClientConfig(p.magazin.contClientConfig);
   if (cfg.verificare_intrare !== "mereu" && (await dispozitivCunoscut(p.magazin.id, contId))) {

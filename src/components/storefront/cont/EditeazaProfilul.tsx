@@ -10,7 +10,6 @@ import {
   curataProfilul,
   eBucuresti,
   greseliProfil,
-  initialeDinNume,
   type GreseliProfil,
   type ProfilCont,
 } from "@/lib/cont/profil-reguli";
@@ -80,7 +79,16 @@ function Camp({
   );
 }
 
-export function EditeazaProfilul({ profil, pozaSrc }: { profil: ProfilCont; pozaSrc: string | null }) {
+export function EditeazaProfilul({
+  profil,
+  pozaSrc,
+  avatarSvg,
+}: {
+  profil: ProfilCont;
+  pozaSrc: string | null;
+  /** Avatarul implicit (blob din id, desenat pe server), cand nu are poza. */
+  avatarSvg: string;
+}) {
   const router = useRouter();
   const uid = useId();
   const id = (n: string) => `${uid}-${n}`;
@@ -212,8 +220,6 @@ export function EditeazaProfilul({ profil, pozaSrc }: { profil: ProfilCont; poza
     }
   }
 
-  const initiale = initialeDinNume(f.nume) || "?";
-
   return (
     <div className="space-y-6">
       {/* ── Poza ── */}
@@ -225,11 +231,9 @@ export function EditeazaProfilul({ profil, pozaSrc }: { profil: ProfilCont; poza
           ) : (
             <span
               aria-hidden="true"
-              className="grid h-full w-full place-items-center text-xl font-semibold"
-              style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}
-            >
-              {initiale}
-            </span>
+              className="block h-full w-full bg-[var(--st-surface)] [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: avatarSvg }}
+            />
           )}
           {lucreazaPoza && (
             <span className="absolute inset-0 grid place-items-center" style={{ backgroundColor: "color-mix(in srgb, var(--st-text) 45%, transparent)" }}>

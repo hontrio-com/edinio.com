@@ -19,7 +19,7 @@ export function PaginaCont({
   rezumat,
   children,
   ...cadru
-}: Omit<PropsCadru, "nume" | "numeMagazin" | "rezumat" | "contact" | "greutateTitlu"> & {
+}: Omit<PropsCadru, "contId" | "nume" | "numeMagazin" | "rezumat" | "contact" | "greutateTitlu"> & {
   pag: PaginaDeCont;
   rezumat: RezumatCont;
   children: ReactNode;
@@ -30,6 +30,7 @@ export function PaginaCont({
         {pag.sesiune && <RotesteJetonul trebuie={pag.sesiune.trebuieRotit} />}
         <CadruCont
           {...cadru}
+          contId={pag.sesiune?.contId ?? null}
           nume={pag.sesiune?.nume ?? null}
           numeMagazin={pag.storeName}
           rezumat={rezumat}

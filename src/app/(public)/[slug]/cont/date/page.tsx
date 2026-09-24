@@ -4,6 +4,7 @@ import { incarcaPaginaDeCont } from "@/lib/cont/pagina";
 import { areParola, contacteleMele } from "@/lib/cont/date";
 import { rezumatulContului } from "@/lib/cont/rezumat";
 import { adresaPozei, profilulContului } from "@/lib/cont/profil";
+import { avatarUtilizator } from "@/lib/avatar-blob";
 import { PaginaCont } from "@/components/storefront/cont/ui/PaginaCont";
 import { EcranDate } from "@/components/storefront/cont/ecrane/EcranDate";
 
@@ -36,7 +37,7 @@ export default async function DateleMele({ params, searchParams }: Props) {
 
   return (
     <PaginaCont pag={pag} rezumat={rezumat} activ="date" titlu="Datele mele" subtitlu="Profilul, adresele de email, parola, dispozitivele conectate si datele tale.">
-      <EcranDate profil={profil} pozaSrc={adresaPozei(profil.pozaLa)} contacte={contacte} comenzi={rezumat.comenzi} areParola={cuParola} eroare={mesajEroare} />
+      <EcranDate profil={profil} pozaSrc={adresaPozei(profil.pozaLa)} avatarSvg={avatarUtilizator(pag.sesiune.contId, 80)} contacte={contacte} comenzi={rezumat.comenzi} areParola={cuParola} eroare={mesajEroare} />
     </PaginaCont>
   );
 }

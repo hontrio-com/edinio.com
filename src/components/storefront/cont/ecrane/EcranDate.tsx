@@ -17,6 +17,7 @@ import { BUTON_SECUNDAR } from "../ui/clase";
 export function EcranDate({
   profil,
   pozaSrc,
+  avatarSvg,
   contacte,
   comenzi,
   areParola,
@@ -24,6 +25,7 @@ export function EcranDate({
 }: {
   profil: ProfilCont;
   pozaSrc: string | null;
+  avatarSvg: string;
   contacte: ContactulMeu[];
   comenzi: number;
   areParola: boolean;
@@ -35,7 +37,7 @@ export function EcranDate({
       {eroare && <Mesaj fel="eroare">{eroare}</Mesaj>}
 
       <Sectiune titlu="Profil" icon={UserRound} descriere="Numele, poza, telefonul si adresa de livrare.">
-        <EditeazaProfilul profil={profil} pozaSrc={pozaSrc} />
+        <EditeazaProfilul profil={profil} pozaSrc={pozaSrc} avatarSvg={avatarSvg} />
       </Sectiune>
 
       <Sectiune

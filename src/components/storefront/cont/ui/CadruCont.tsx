@@ -4,6 +4,7 @@ import { ChevronLeft, LogOut, Mail, MessageCircle, Phone } from "lucide-react";
 import type { RezumatCont } from "@/lib/cont/rezumat";
 import { formatPhoneDisplay, whatsappLink } from "@/lib/utils/format";
 import { adresaPozei } from "@/lib/cont/profil";
+import { avatarUtilizator } from "@/lib/avatar-blob";
 import { MENIU, type CheieMeniu } from "./meniu";
 import { MeniuFile } from "./MeniuFile";
 import { Pastila } from "./piese";
@@ -22,6 +23,8 @@ export type ContactMagazin = { telefon: string | null; email: string | null; wha
 
 export type PropsCadru = {
   activ: CheieMeniu;
+  /** Samanta avatarului implicit (ca in panou): id-ul, nu numele, ca sa nu se schimbe cand omul isi schimba numele. */
+  contId: string | null;
   nume: string | null;
   numeMagazin: string;
   rezumat: RezumatCont;
@@ -47,7 +50,7 @@ function numere(r: RezumatCont): Partial<Record<CheieMeniu, number>> {
   return { comenzi: r.comenzi, facturi: r.facturi, retururi: r.retururi };
 }
 
-function MeniuLateral({ activ, nume, numeMagazin, rezumat, contact }: Omit<PropsCadru, "titlu" | "children" | "greutateTitlu">) {
+function MeniuLateral({ activ, contId, nume, numeMagazin, rezumat, contact }: Omit<PropsCadru, "titlu" | "children" | "greutateTitlu">) {
   const n = numere(rezumat);
   const init = initiale(nume);
   const poza = adresaPozei(rezumat.pozaLa);
@@ -58,6 +61,13 @@ function MeniuLateral({ activ, nume, numeMagazin, rezumat, contact }: Omit<Props
           {poza ? (
             // eslint-disable-next-line @next/next/no-img-element -- poza e privata (cu sesiune), nu trece prin optimizatorul de imagini
             <img src={poza} alt="" className="h-11 w-11 shrink-0 rounded-full border border-[var(--st-border)] object-cover" />
+          ) : contId ? (
+            /* Avatarul implicit, acelasi desen ca in panou (`blobatar`), facut pe server din id: nimic scris de om nu ajunge in SVG. */
+            <span
+              aria-hidden="true"
+              className="block h-11 w-11 shrink-0 overflow-hidden rounded-full border border-[var(--st-border)] bg-[var(--st-surface)] [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: avatarUtilizator(contId, 44) }}
+            />
           ) : (
             <span
               aria-hidden="true"
@@ -172,7 +182,7 @@ export function CadruCont(p: PropsCadru) {
           {/* ⚠ Bara nu se lipeste la derulare: antetul magazinului e lipit si are
               inaltimi deosebite de la o tema la alta, iar variabila lui nu se emite. */}
           <aside className="hidden lg:block">
-            <MeniuLateral activ={p.activ} nume={p.nume} numeMagazin={p.numeMagazin} rezumat={p.rezumat} contact={p.contact} />
+            <MeniuLateral activ={p.activ} contId={p.contId} nume={p.nume} numeMagazin={p.numeMagazin} rezumat={p.rezumat} contact={p.contact} />
           </aside>
 
           <div className="@container min-w-0">

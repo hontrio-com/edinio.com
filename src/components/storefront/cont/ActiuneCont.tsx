@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useContulMagazinului } from "./ContulMagazinului";
 import { ICONITA_CONT } from "./iconite-cont";
@@ -17,6 +16,12 @@ import { ICONITA_CONT } from "./iconite-cont";
  *
  * ⚠ Legatura e statica, spre `/cont`: nu citeste cookie-ul si nu stie daca omul e
  * logat. `/cont` il trimite singur la intrare cand nu e.
+ *
+ * ⚠⚠ `<a>` SIMPLU, NU `<Link>` (auditul din 24.09.2026). Cu navigare de client,
+ * pixelii comerciantului (Meta, GA4, TikTok, GTM), deja incarcati pe pagina de
+ * magazin, ramaneau vii in zona de cont si trimiteau adresele `/cont/comenzi/...`
+ * mai departe; o incarcare intreaga de pagina porneste zona de cont fara ei. Iar
+ * `<Link>` mai facea si o preluare in avans a lui `/cont` la fiecare vizita.
  *
  * ⚠ In modul „text", pe telefon se arata iconita: un text de 24 de caractere nu
  * incape langa cos. Numele accesibil e mereu eticheta, oricum ar arata.
@@ -41,10 +46,11 @@ export function ActiuneCont({
     <Icon aria-hidden="true" strokeWidth={stroke} style={{ width: marime, height: marime }} className="shrink-0" />
   );
   return (
-    <Link href="/cont" className={clasa} style={stil} aria-label={buton.eticheta} title={buton.eticheta}>
+    // eslint-disable-next-line @next/next/no-html-link-for-pages -- dinadins, vezi capul fisierului
+    <a href="/cont" className={clasa} style={stil} aria-label={buton.eticheta} title={buton.eticheta}>
       {buton.afisare === "text" ? <span className="sm:hidden">{iconita}</span> : iconita}
       {buton.afisare !== "iconita" && <span className={`hidden whitespace-nowrap sm:inline ${clasaText}`}>{buton.eticheta}</span>}
-    </Link>
+    </a>
   );
 }
 
@@ -57,10 +63,11 @@ export function RandContInSertar({ clasa, clasaInvelis, laClic }: { clasa: strin
   const Icon = ICONITA_CONT[buton.iconita];
   return (
     <div className={clasaInvelis}>
-      <Link href="/cont" className={clasa} onClick={laClic}>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- `<a>` dinadins, vezi `ActiuneCont` */}
+      <a href="/cont" className={clasa} onClick={laClic}>
         <Icon aria-hidden="true" className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} />
         <span>{buton.eticheta}</span>
-      </Link>
+      </a>
     </div>
   );
 }

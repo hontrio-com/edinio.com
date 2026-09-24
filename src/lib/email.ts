@@ -1924,7 +1924,7 @@ export async function sendReturnRequestToMerchant(
  */
 export async function sendCerereDeStergere(
   to: string,
-  data: { business_name: string; emailuri: string[]; telefoane: string[]; comenzi: number; numere: string[]; primitaLa: string },
+  data: { business_name: string; emailuri: string[]; telefoane: string[]; comenzi: number; numere: { numar: string; id: string }[]; primitaLa: string },
 ): Promise<boolean> {
   if (!process.env.RESEND_API_KEY) return false;
   const cand = new Date(data.primitaLa).toLocaleString("ro-RO", {
@@ -1939,10 +1939,10 @@ export async function sendCerereDeStergere(
       ${data.emailuri.length ? rand("Email", data.emailuri.map((x) => esc(x)).join("<br>")) : ""}
       ${data.telefoane.length ? rand("Telefon", data.telefoane.map((x) => esc(x)).join("<br>")) : ""}
       ${rand("Comenzi legate", String(data.comenzi))}
-      ${data.numere.length ? rand("Numerele lor", data.numere.map((x) => esc(x)).join(", ") + (data.comenzi > data.numere.length ? ` si inca ${data.comenzi - data.numere.length}` : "")) : ""}
+      ${data.numere.length ? rand("Comenzile", data.numere.map((x) => `<a href="${SITE_URL}/dashboard/orders/${encodeURIComponent(x.id)}" style="color:#07c527;">${esc(x.numar)}</a>`).join(", ") + (data.comenzi > data.numere.length ? ` si inca ${data.comenzi - data.numere.length}` : "")) : ""}
       ${rand("Primita la", cand)}
     </table>
-    <p style="margin:16px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">In panou: <strong>Clienti</strong>, cauta dupa emailul, telefonul sau numerele de comanda de mai sus, apoi <strong>Anonimizeaza</strong>. Comenzile raman (pentru facturi si evidenta contabila), fara numele, contactele si adresa clientului; contul lui e deja sters.</p>
+    <p style="margin:16px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">In panou: <strong>Clienti</strong>, cauta dupa emailul sau telefonul de mai sus, deschide clientul, fila <strong>Date</strong>, apoi <strong>Sterge datele clientului</strong>. O comanda facuta cu alt email sau alt telefon o deschizi din legatura de mai sus si cauti in Clienti dupa telefonul de pe ea. Comenzile raman (pentru facturi si evidenta contabila), fara numele, contactele si adresa clientului; contul lui e deja sters.</p>
     <div style="text-align:center;margin-top:28px;">
       <a href="${SITE_URL}/dashboard/customers" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Deschide clientii
@@ -1954,6 +1954,40 @@ export async function sendCerereDeStergere(
       from: FROM,
       to,
       subject: subiectSigur(`Cerere de stergere a datelor - ${data.business_name}`),
+      html: baseTemplate(content),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Comerciantul afla ca un client si-a anulat singur comanda, din contul lui.
+ *
+ * ⚠ Fara emailul asta, o comanda anulata de client in contul lui se vedea numai in
+ * panou, iar comerciantul putea s-o pregateasca si s-o expedieze.
+ */
+export async function sendComandaAnulataDeClient(
+  to: string,
+  data: { business_name: string; order_number: string; customer_name: string; total: number; link: string },
+): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) return false;
+  const content = `
+    <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Comanda ${esc(data.order_number)} a fost anulata de client</h2>
+    <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;line-height:1.6;"><strong>${esc(data.customer_name)}</strong> si-a anulat comanda din contul lui de pe <strong>${esc(data.business_name)}</strong>, inainte sa intre in lucru. Stocul a fost pus la loc. Nu o mai pregati si nu o expedia.</p>
+    <p style="margin:0 0 4px 0;font-size:14px;color:#18181b;">Total: <strong>${formatPrice(data.total)}</strong></p>
+    <div style="text-align:center;margin-top:28px;">
+      <a href="${escapeUrl(data.link)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+        Vezi comanda
+      </a>
+    </div>
+  `;
+  try {
+    await getResend().emails.send({
+      from: FROM,
+      to,
+      subject: subiectSigur(`Comanda ${data.order_number} anulata de client - ${data.business_name}`),
       html: baseTemplate(content),
     });
     return true;

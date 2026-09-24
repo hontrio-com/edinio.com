@@ -11,6 +11,7 @@ import { curataContClientConfig } from "./config";
 import { parolaPotrivita, verificareOarba } from "./parola";
 import { deschideSesiune } from "./sesiune";
 import { leagaComenzile } from "./comenzi";
+import { contacteleMele } from "./date";
 import type { MagazinDeCont } from "./magazinul-cererii";
 import { cheieIp, ipPentruBaza } from "./cerere";
 
@@ -93,8 +94,9 @@ export type ScopPas = "inregistrare" | "doi-pasi" | "resetare-parola";
  * Porneste pasul al doilea: scrie codul (legat de o provocare noua), trimite
  * emailul si pune cookie-ul provocarii.
  *
- * ⚠ Cookie-ul se pune INTOTDEAUNA, si cand nu s-a trimis nimic: prezenta lui nu
- * are voie sa spuna daca adresa are cont.
+ * ⚠ Cookie-ul se pune cand baza a scris o provocare: codul, sau momeala unei
+ * resetari fara cont. Deci si la o adresa fara cont (prezenta lui nu are voie sa
+ * spuna cine are cont), dar NU la un refuz, care ar fi inlocuit provocarea buna.
  */
 export async function pornestePas(p: {
   magazin: MagazinDeCont;
@@ -111,7 +113,6 @@ export async function pornestePas(p: {
   inFundal?: boolean;
 }): Promise<{ trimis: boolean; motiv: string }> {
   const { jeton, amprenta } = jetonNou();
-  (await cookies()).set(COOKIE_PAS, jeton, { ...optiuniCookie(), maxAge: MINUTE_PAS * 60 });
 
   const cheie = cheieIp(p.ip);
   if (!rateLimit(`contPas:ip:${cheie}`, 10, 60_000)) return { trimis: false, motiv: "rafala" };
@@ -133,6 +134,22 @@ export async function pornestePas(p: {
   });
   if (error) throw error;
   const r = Array.isArray(data) ? data[0] : data;
+  /*
+    ⚠⚠ Cookie-ul provocarii se scrie NUMAI cand baza a scris o provocare (codul, sau
+    momeala la o resetare fara cont, ca raspunsul sa ramana acelasi). Scris inainte,
+    un refuz („ai deja coduri vii") suprascria provocarea buna cu una goala, iar
+    omul caruia i se spunea „foloseste ultimul cod" nu mai avea cum. Refuzurile nu
+    depind de existenta contului (momeala se numara ca un cod), deci nu spun nimic.
+  */
+  if (r?.ok || r?.motiv === "fara-cont") {
+    (await cookies()).set(COOKIE_PAS, jeton, { ...optiuniCookie(), maxAge: MINUTE_PAS * 60 });
+  } else if (p.scop === "inregistrare") {
+    /*
+      ⚠ La contul nou provocarea veche poarta PAROLA de atunci: pastrata, codul
+      vechi ar fi deschis contul cu parola dinainte, nu cu cea tocmai scrisa.
+    */
+    (await cookies()).delete(COOKIE_PAS);
+  }
   if (!r?.ok) return { trimis: false, motiv: r?.motiv ?? "necunoscut" };
 
   /* Un cont nou pe o adresa cu cont are ALT email: codul de acolo schimba parola. */
@@ -244,7 +261,7 @@ export function mesajulPasului(motiv: string): string {
     case "gresit":
       return "Codul nu e bun. Mai incearca o data.";
     case "prea-multe-incercari":
-      return "Prea multe incercari gresite. Cere un cod nou.";
+      return "Prea multe incercari gresite. Reia de la inceput peste cateva minute.";
     case "fara-cod":
     case "fara-provocare":
     case "provocare-incheiata":
@@ -305,9 +322,28 @@ export async function tineMinteDispozitivul(businessId: string, contId: string):
 
 // ═══ Intrarea cu parola ════════════════════════════════════════════════════
 
+/**
+ * Parola a fost buna: incercarea rezervata nu mai e o greseala. Nu arunca (omul a
+ * trecut, iar o cadere aici nu trebuie sa-l intoarca), dar se SCRIE: ramasa in
+ * jurnal, rezervarea s-ar numara la prag si ar putea bloca un om cinstit.
+ */
+async function elibereazaRezervarea(businessId: string, id: number): Promise<void> {
+  try {
+    const { error } = await createAdminClient().rpc("cont_incercare_reusita", { p_business: businessId, p_id: id });
+    if (error) throw error;
+  } catch (e) {
+    await logError({
+      action: "cont/parola",
+      message: `incercarea buna a ramas numarata ca greseala: ${String(e)}`,
+      businessId,
+      severity: "warning",
+    });
+  }
+}
+
 export type RezultatIntrare =
   | { rezultat: "intrat"; contId: string }
-  | { rezultat: "cod" }
+  | { rezultat: "cod"; mesaj?: string }
   | { rezultat: "refuzat"; mesaj: string };
 
 export async function intraCuParola(p: {
@@ -342,7 +378,31 @@ export async function intraCuParola(p: {
     care omul a trecut deja de codul de pe email): altfel un strain care greseste
     parola de cinci ori l-ar tine afara chiar de pe telefonul lui.
   */
-  const blocatCont = r?.blocat_cont === true && !(contId && (await dispozitivCunoscut(p.magazin.id, contId)));
+  let deIncredere = r?.blocat_cont === true && !!contId && (await dispozitivCunoscut(p.magazin.id, contId));
+  let blocatCont = r?.blocat_cont === true && !deIncredere;
+
+  /*
+    ⚠⚠ Incercarea se REZERVA inainte de comparatie, sub incuietoarea contului
+    (`cont_incercare_parola`): altfel zeci de ghiciri trimise deodata citeau toate
+    „sub prag" inainte ca vreuna sa scrie greseala. Cat contul e blocat, nu se mai
+    rezerva nimic, deci un strain nu mai poate tine blocajul in viata.
+  */
+  let rezervare: number | null = null;
+  if (contId && r?.parola_hash && !blocatCont && !deIncredere) {
+    const { data: inc, error: eInc } = await admin.rpc("cont_incercare_parola", {
+      p_business: p.magazin.id, p_cont: contId, p_ip: ip,
+    });
+    if (eInc) throw eInc;
+    const ri = Array.isArray(inc) ? inc[0] : inc;
+    /*
+      ⚠ Blocajul poate aparea INTRE cele doua citiri (a cincea greseala a unui
+      strain a ajuns prima). Dispozitivul de incredere ramane scutit si atunci.
+    */
+    if (ri?.blocat === true) {
+      if (await dispozitivCunoscut(p.magazin.id, contId)) deIncredere = true;
+      else blocatCont = true;
+    } else rezervare = ri?.id ?? null;
+  }
 
   /*
     ⚠⚠ Fara cont, fara parola sau blocat: ACEEASI munca si ACELASI raspuns ca la o
@@ -354,9 +414,13 @@ export async function intraCuParola(p: {
     : await verificareOarba(p.parola);
 
   if (!potrivita || !contId) {
-    await admin.rpc("cont_intrare_esuata", { p_business: p.magazin.id, p_cont: contId, p_ip: ip });
+    /* Rezervata = deja scrisa ca greseala. Blocat = numai IP-ul se numara, nu contul. */
+    if (rezervare === null) {
+      await admin.rpc("cont_intrare_esuata", { p_business: p.magazin.id, p_cont: blocatCont ? null : contId, p_ip: ip });
+    }
     return { rezultat: "refuzat", mesaj: MESAJ_INTRARE_GRESITA };
   }
+  if (rezervare !== null) await elibereazaRezervarea(p.magazin.id, rezervare);
 
   /*
     ⚠⚠ Contul suspendat de magazin: abia ACUM, dupa parola buna, se poate spune
@@ -385,6 +449,14 @@ export async function intraCuParola(p: {
 
   /* Parola a trecut: de aici incolo omul e chiar el, deci refuzul poate spune adevarul. */
   const pas = await pornestePas({ magazin: p.magazin, scop: "doi-pasi", email: p.email, contId, ip: p.ip });
+  /*
+    ⚠ „Ai deja coduri vii": provocarea din cookie e inca a lor (refuzul nu o mai
+    suprascrie), deci omul trebuie dus la ecranul codului, nu lasat pe cel al
+    parolei, unde „foloseste ultimul cod" n-ar avea unde.
+  */
+  if (!pas.trimis && (pas.motiv === "are-cod-viu" || pas.motiv === "prea-multe") && (await arePas())) {
+    return { rezultat: "cod", mesaj: "Ti-am trimis deja un cod pe email. Foloseste-l pe ultimul primit." };
+  }
   if (!pas.trimis) {
     return {
       rezultat: "refuzat",
@@ -439,14 +511,37 @@ export async function parolaDinCont(p: {
     p_business: p.magazinId, p_email: cont.email ?? "", p_ip: ipPentruBaza(p.ip),
   });
   const rand = Array.isArray(st) ? st[0] : st;
-  const blocat = rand?.blocat_ip === true || rand?.blocat_cont === true;
+  let blocat = rand?.blocat_ip === true || rand?.blocat_cont === true;
+  /* Aceeasi rezervare ca la intrare: ghicirile deodata nu mai trec toate de prag. */
+  let rezervare: number | null = null;
+  if (!blocat) {
+    const { data: inc, error: eInc } = await admin.rpc("cont_incercare_parola", {
+      p_business: p.magazinId, p_cont: p.contId, p_ip: ipPentruBaza(p.ip),
+    });
+    if (eInc) throw eInc;
+    const ri = Array.isArray(inc) ? inc[0] : inc;
+    if (ri?.blocat === true) blocat = true;
+    else rezervare = ri?.id ?? null;
+  }
   const scrisa = typeof p.parola === "string" ? p.parola : "";
   const buna = blocat ? await verificareOarba(scrisa) : await parolaPotrivita(scrisa, cont.parola_hash);
   if (!buna) {
-    await admin.rpc("cont_intrare_esuata", { p_business: p.magazinId, p_cont: p.contId, p_ip: ipPentruBaza(p.ip) });
+    if (rezervare === null) {
+      await admin.rpc("cont_intrare_esuata", { p_business: p.magazinId, p_cont: blocat ? null : p.contId, p_ip: ipPentruBaza(p.ip) });
+    }
     return { ok: false, status: blocat ? 429 : 400, eroare: blocat ? MESAJ_PREA_MULTE : p.mesajGresita };
   }
+  if (rezervare !== null) await elibereazaRezervarea(p.magazinId, rezervare);
   return { ok: true, cont };
+}
+
+/**
+ * Parola noua e chiar cea de acum? Nu e o autentificare (omul a trecut deja de
+ * `parolaDinCont`): refuza doar o schimbare care l-ar scoate degeaba de pe toate
+ * dispozitivele.
+ */
+export async function parolaNouaEAceeasi(noua: string, hashActual: string | null): Promise<boolean> {
+  return !!hashActual && (await parolaPotrivita(noua, hashActual));
 }
 
 // ═══ Dupa o intrare reusita ════════════════════════════════════════════════
@@ -472,11 +567,16 @@ export async function incheieIntrarea(magazinId: string, contId: string, ip: str
 /** Instiintarea ca parola s-a schimbat. Best-effort. */
 export async function anuntaParolaSchimbata(magazin: MagazinDeCont, contId: string): Promise<void> {
   try {
-    const { data } = await createAdminClient().rpc("cont_parola_contului", { p_business: magazin.id, p_cont: contId });
-    const r = Array.isArray(data) ? data[0] : data;
-    if (!r?.email) return;
+    /* ⚠ Pe TOATE adresele confirmate: cine a schimbat parola dintr-o sesiune furata
+       ar fi putut adauga intai adresa lui, iar emailul pleca numai pe cea mai veche. */
+    const adrese = (await contacteleMele(magazin.id, contId))
+      .filter((c) => c.fel === "email" && c.verificat)
+      .map((c) => c.valoareBruta);
+    if (adrese.length === 0) return;
     const sender = await getStoreEmailSender(createAdminClient(), magazin.id);
-    await sendParolaSchimbata(r.email, { numeMagazin: numeleMagazinului(magazin), adresaCont: paginaDeIntrare(magazin) }, sender);
+    for (const a of adrese) {
+      await sendParolaSchimbata(a, { numeMagazin: numeleMagazinului(magazin), adresaCont: paginaDeIntrare(magazin) }, sender);
+    }
   } catch (e) {
     await logError({
       action: "cont/parola",

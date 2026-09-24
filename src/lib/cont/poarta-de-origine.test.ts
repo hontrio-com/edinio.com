@@ -65,7 +65,7 @@ test("comutatorul nu se poate aprinde fara domeniu propriu sanatos", () => {
 test("motivul refuzului e scris in romana, si spune unde se rezolva", () => {
   const v = poateAprindeConturi({ custom_domain: null, custom_domain_healthy: null });
   assert.match(v.motiv ?? "", /domeniu propriu/i);
-  assert.match(v.motiv ?? "", /Setari/);
+  assert.match(v.motiv ?? "", /Setări/);
 });
 
 /*

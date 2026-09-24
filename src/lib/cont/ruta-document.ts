@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "./magazinul-cererii";
 import { sesiuneCurenta } from "./sesiune";
 import { comandaMea } from "./comenzi";
+import { sesiuneExpirata } from "./cerere";
 import { aducePdf, numeleFisierului, type MotivEsec, type SursaPdf } from "./pdf-document";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
@@ -52,10 +53,20 @@ export async function servesteDocumentul(
   if (!magazin) return new NextResponse("Not found", { status: 404 });
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
 
-  const s = await sesiuneCurenta(magazin.id);
-  if (!s) return new NextResponse("Not found", { status: 404 });
-
-  const c = await comandaMea(magazin.id, s.contId, orderId);
+  /*
+    ⚠ O eroare de baza NU e „documentul nu exista": omul ar fi crezut ca factura a
+    disparut. Iar fara sesiune i se spune sa intre din nou, nu „nu se gaseste".
+  */
+  let s: Awaited<ReturnType<typeof sesiuneCurenta>>;
+  let c: Awaited<ReturnType<typeof comandaMea>>;
+  try {
+    s = await sesiuneCurenta(magazin.id);
+    if (!s) return sesiuneExpirata();
+    c = await comandaMea(magazin.id, s.contId, orderId);
+  } catch (e) {
+    await logError({ action: "cont/factura", message: `citirea comenzii a esuat: ${String(e)}`, businessId: magazin.id, severity: "error" });
+    return NextResponse.json({ motiv: "furnizor_indisponibil" }, { status: 503 });
+  }
   if (!c || c.vedere !== "intreaga" || !c.factura) return esec("fara_document");
   const doc = c.factura;
   if (fel === "storno" && !(doc.stornata && doc.stornoDescarcabil)) return esec("fara_document");

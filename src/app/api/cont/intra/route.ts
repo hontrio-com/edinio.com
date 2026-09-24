@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
     if (r.rezultat === "cod") {
       return NextResponse.json(
-        { pas: "cod", mesaj: "Ti-am trimis un cod pe email, ca sa confirmam ca esti tu." },
+        { pas: "cod", mesaj: r.mesaj ?? "Ti-am trimis un cod pe email, ca sa confirmam ca esti tu." },
         { status: 200 },
       );
     }

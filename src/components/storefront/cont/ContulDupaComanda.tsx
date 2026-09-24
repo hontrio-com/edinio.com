@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowRight, CircleUserRound } from "lucide-react";
 import { useContulMagazinului } from "./ContulMagazinului";
 import { CARD, FOCUS } from "./ui/clase";
@@ -21,7 +20,8 @@ export function ContulDupaComanda({ areEmail }: { areEmail: boolean }) {
   const { aprins, obligatoriu } = useContulMagazinului();
   if (!aprins || !(areEmail || obligatoriu)) return null;
   return (
-    <Link
+    // eslint-disable-next-line @next/next/no-html-link-for-pages -- `<a>` dinadins: fara pixelii paginii in zona de cont (vezi `ActiuneCont`)
+    <a
       /* Cine a comandat ca vizitator n-are de obicei cont: ajunge direct pe „Cont nou”. Cel logat e trimis de /cont/intra mai departe, in cont. */
       href={obligatoriu ? "/cont" : "/cont/intra?mod=inregistrare"}
       className={`mt-6 flex items-center gap-4 ${CARD} p-4 text-left text-[var(--st-text)] transition-colors hover:bg-[var(--st-primary-soft)] ${FOCUS}`}
@@ -38,6 +38,6 @@ export function ContulDupaComanda({ areEmail }: { areEmail: boolean }) {
         </span>
       </span>
       <ArrowRight className="h-4 w-4 shrink-0 text-[var(--st-muted)]" aria-hidden="true" />
-    </Link>
+    </a>
   );
 }

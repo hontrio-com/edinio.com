@@ -37,6 +37,7 @@ export function EcranIntrare({
   avantaje = true,
   modInitial = "intrare",
   dupaStergere = null,
+  dupaParolaNoua = false,
   contact = null,
 }: {
   numeMagazin: string;
@@ -47,6 +48,8 @@ export function EcranIntrare({
   modInitial?: ModAutentificare;
   /** Omul tocmai si-a sters contul: `cerere` spune daca cererea catre magazin a plecat. */
   dupaStergere?: { cerere: boolean | null } | null;
+  /** Parola s-a schimbat, dar sesiunea n-a putut fi redeschisa: intra cu cea noua. */
+  dupaParolaNoua?: boolean;
   /** Cum se ajunge la magazin, cand cererea de stergere n-a putut pleca. */
   contact?: { telefon: string | null; email: string | null } | null;
 }) {
@@ -85,6 +88,12 @@ export function EcranIntrare({
                     )}
                   </p>
                 )}
+              </div>
+            )}
+            {dupaParolaNoua && !dupaStergere && (
+              <div role="status" className="mb-6 rounded-[var(--st-radius-sm)] bg-[var(--st-primary-soft)] px-4 py-3 text-sm leading-relaxed text-[var(--st-text)]">
+                <p className="font-semibold">Parola ta a fost schimbata.</p>
+                <p className="mt-1">Intra din nou in cont cu parola noua.</p>
               </div>
             )}
             <FormularIntrare modInitial={modInitial} />

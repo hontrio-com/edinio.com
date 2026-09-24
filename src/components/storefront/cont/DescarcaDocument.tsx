@@ -19,7 +19,7 @@ import { BUTON_PRIMAR, BUTON_SECUNDAR, STIL_PRIMAR } from "./ui/clase";
 
 type Motiv =
   | "casa_neconectata" | "furnizor_indisponibil" | "nu_e_pdf" | "prea_mare"
-  | "document_de_test" | "fara_document" | "retea";
+  | "document_de_test" | "fara_document" | "retea" | "sesiune";
 
 function mesajul(motiv: Motiv, email: string | null): string {
   const cere = email ? ` Il poti cere la ${email}.` : " Il poti cere magazinului.";
@@ -32,6 +32,8 @@ function mesajul(motiv: Motiv, email: string | null): string {
       return `Nu am putut aduce acum PDF-ul de la programul de facturare al magazinului. Documentul exista: incearca din nou peste cateva minute.${cere}`;
     case "retea":
       return "Nu am putut descarca documentul. Verifica legatura la internet si incearca din nou.";
+    case "sesiune":
+      return "Sesiunea a expirat. Intra din nou in cont si descarca documentul.";
     default:
       return "Documentul nu se mai gaseste. Reincarca pagina.";
   }
@@ -69,7 +71,7 @@ export function DescarcaDocument({
       });
       if (!r.ok) {
         const j = (await r.json().catch(() => ({}))) as { motiv?: Motiv };
-        setEroare(j.motiv ?? "fara_document");
+        setEroare(r.status === 401 ? "sesiune" : (j.motiv ?? "fara_document"));
         return;
       }
       const blob = await r.blob();

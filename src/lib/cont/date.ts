@@ -104,6 +104,10 @@ export function mesajulAnularii(motiv: string): string {
       return "Comanda a intrat deja in lucru si nu se mai poate anula de aici. Scrie magazinului.";
     case "marketplace":
       return "Comanda asta vine de pe un marketplace, iar anularea se face acolo.";
+    case "platita":
+      return "Comanda e deja platita, deci o anuleaza magazinul, care iti si intoarce banii. Scrie-i.";
+    case "plata-online":
+      return "Comenzile platite online se anuleaza de magazin, ca plata sa nu ramana pe drum. Scrie-i.";
     case "negasita":
       return "Comanda nu se poate anula.";
     default:

@@ -58,6 +58,9 @@ export async function aducePdf(sursa: SursaPdf): Promise<RezultatPdf> {
     if (!adresa) return { ok: false, motiv: "fara_document" };
     /* ⚠ Garda 1, INAINTE de retea. */
     if (eDocumentDeTest(adresa)) return { ok: false, motiv: "document_de_test" };
+    /* ⚠ Si numai catre casele de facturare: adresa sta pe comanda, iar comerciantul o
+       poate scrie; altfel serverul ar fi cerut orice adresa, si din reteaua lui. */
+    if (!adresaDeFurnizor(adresa)) return { ok: false, motiv: "furnizor_indisponibil" };
     let raspuns: Response;
     try {
       raspuns = await fetch(adresa, { cache: "no-store", signal: AbortSignal.timeout(LIMITA_DE_TIMP_MS) });
@@ -77,6 +80,22 @@ export async function aducePdf(sursa: SursaPdf): Promise<RezultatPdf> {
   if (octeti.byteLength > MARIME_MAXIMA) return { ok: false, motiv: "prea_mare" };
   if (!esteChiarPdf(octeti)) return { ok: false, motiv: "nu_e_pdf" };
   return { ok: true, octeti };
+}
+
+/** Casele de facturare de la care se aduce un PDF dupa legatura lui (Oblio, fGO). */
+export const GAZDE_FURNIZORI = ["oblio.eu", "fgo.ro"] as const;
+
+/** O legatura https catre una dintre casele de facturare (sau un subdomeniu al ei). */
+export function adresaDeFurnizor(adresa: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(adresa);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" || u.username || u.password || u.port) return false;
+  const gazda = u.hostname.toLowerCase();
+  return GAZDE_FURNIZORI.some((g) => gazda === g || gazda.endsWith(`.${g}`));
 }
 
 /** Numele fisierului, curatat inainte sa intre intr-un ANTET. */

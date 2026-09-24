@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { sesiuneCurenta } from "@/lib/cont/sesiune";
-import { vineDePeMagazin } from "@/lib/cont/cerere";
+import { sesiuneExpirata, vineDePeMagazin } from "@/lib/cont/cerere";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
 
   const s = await sesiuneCurenta(magazin.id).catch(() => null);
-  if (!s) return new NextResponse("Not found", { status: 404 });
+  if (!s) return sesiuneExpirata();
 
   const corp = await req.json().catch(() => null);
   const canal = corp?.canal === "sms" ? "sms" : corp?.canal === "email" ? "email" : null;

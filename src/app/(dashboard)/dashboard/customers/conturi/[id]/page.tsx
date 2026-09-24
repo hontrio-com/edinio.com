@@ -4,6 +4,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { esteUuid } from "@/lib/supabase/ids";
 import { conturilePornite, fisaContului } from "@/lib/cont/panou";
 import { FisaContului } from "@/components/dashboard/clienti/conturi/FisaContului";
+import { adresaListeiDinCerere } from "@/lib/cont/panou-texte";
 
 /**
  * Fisa unui cont de client, in panoul comerciantului (24.09.2026).
@@ -12,8 +13,15 @@ import { FisaContului } from "@/components/dashboard/clienti/conturi/FisaContulu
  * magazinul, si contul, deci un id de cont al altui magazin da 404, la fel ca unul
  * care nu exista. Cele doua nu au voie sa se deosebeasca.
  */
-export default async function PaginaContului({ params }: { params: Promise<{ id: string }> }) {
+export default async function PaginaContului({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ lista?: string | string[] }>;
+}) {
   const { id } = await params;
+  const { lista } = await searchParams;
   const user = await getCachedUser();
   if (!user) redirect("/login");
   if (!esteUuid(id)) notFound();
@@ -33,7 +41,7 @@ export default async function PaginaContului({ params }: { params: Promise<{ id:
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <FisaContului businessId={biz.id} fisa={fisa} pornite={pornite} />
+      <FisaContului businessId={biz.id} fisa={fisa} pornite={pornite} inapoi={adresaListeiDinCerere(lista)} />
     </div>
   );
 }

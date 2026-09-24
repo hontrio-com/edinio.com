@@ -139,13 +139,23 @@ test("⚠⚠ contul nou si parola uitata raspund LA FEL, oricare ar fi adresa", 
   }
 });
 
-test("⚠⚠ cookie-ul provocarii se pune INAINTEA oricarei iesiri", () => {
-  /* Altfel prezenta lui ar fi spus daca adresa exista sau daca s-a atins un plafon. */
+test("⚠⚠ cookie-ul provocarii se pune cand baza a scris o provocare, si NUMAI atunci", () => {
+  /*
+   * Pana pe 24.09.2026 se punea inaintea oricarei iesiri, deci si la un refuz
+   * („ai deja coduri vii"), inlocuind provocarea buna cu una goala. Acum se pune
+   * dupa baza, cand a scris un cod SAU momeala unei resetari fara cont: asa ramane
+   * si la o adresa fara cont (prezenta lui nu spune cine are cont).
+   */
   const s = citeste("src/lib/cont/autentificare.ts");
   const corp = s.slice(s.indexOf("export async function pornestePas("), s.indexOf("async function trimiteCodul("));
+  const rpc = corp.indexOf("rpc(\"cont_cere_cod\"");
   const cookie = corp.indexOf("(await cookies()).set(COOKIE_PAS");
-  const primaIesire = corp.indexOf("return ");
-  assert.ok(cookie > 0 && primaIesire > 0 && cookie < primaIesire);
+  assert.ok(rpc > 0 && cookie > rpc, "cookie-ul se pune dupa baza");
+  assert.ok(
+    corp.includes('if (r?.ok || r?.motiv === "fara-cont") {\n    (await cookies()).set(COOKIE_PAS'),
+    "cookie-ul nu mai e pus numai cand baza a scris o provocare",
+  );
+  assert.equal(corp.split(".set(COOKIE_PAS").length - 1, 1);
 });
 
 test("⚠⚠ la intrare, contul lipsa si contul blocat raspund ca o parola gresita", () => {

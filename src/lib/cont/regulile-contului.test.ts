@@ -331,7 +331,7 @@ test("rotirea jetonului chiar se cheama de undeva", () => {
 
 test("pixelii comerciantului nu se randeaza pe paginile de cont", () => {
   const layout = citeste("src/app/(public)/[slug]/layout.tsx");
-  const inceput = layout.indexOf("<DoarInAfaraContului>");
+  const inceput = layout.indexOf("<DoarInAfaraContului slug={slug}>");
   const sfarsit = layout.indexOf("</DoarInAfaraContului>");
   assert.ok(inceput > 0 && sfarsit > inceput, "blocul de pixeli nu e inchis in `DoarInAfaraContului`");
   const inauntru = layout.slice(inceput, sfarsit);

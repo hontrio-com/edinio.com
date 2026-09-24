@@ -105,10 +105,16 @@ function corpul(nume: string): { f: string; corp: string } {
   return { f: m.f, corp: m.text.slice(a + 2, b) };
 }
 
-test("⚠ cele patru functii reparate au ultima definitie in migratia 52", () => {
-  for (const n of ["cont_iesi_de_peste_tot", "cont_export", "cont_sterge_contact", "cont_verifica_cod"]) {
+test("⚠ cele patru functii reparate au ultima definitie in migratia 52 (sau in 54, care le-a intarit)", () => {
+  const unde: Record<string, string> = {
+    cont_iesi_de_peste_tot: "2026-09-24-conturi-clienti-zz-datele-mele.sql",
+    cont_export: "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql",
+    cont_sterge_contact: "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql",
+    cont_verifica_cod: "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql",
+  };
+  for (const n of Object.keys(unde)) {
     const { f, corp } = corpul(n);
-    assert.equal(f, "2026-09-24-conturi-clienti-zz-datele-mele.sql", n);
+    assert.equal(f, unde[n], n);
     assert.ok(corp.length > 150, `${n}: corp de ${corp.length} semne`);
   }
 });
@@ -167,7 +173,9 @@ test("⚠⚠ stergerea contului cere parola INAINTEA cererii catre magazin si a 
   const s = citeste("src/app/api/cont/sterge/route.ts");
   const parola = s.indexOf("await parolaDinCont(");
   assert.ok(parola > 0);
-  assert.ok(parola < s.indexOf("trimiteCerereaDeStergere(magazin"), "cererea catre magazin pleaca abia dupa parola");
+  assert.ok(parola < s.indexOf("pregatesteCerereaDeStergere(magazin"), "cererea catre magazin se pregateste abia dupa parola");
+  /* ⚠ Si pleaca abia DUPA stergere: altfel o stergere cazuta lasa o cerere pentru un cont viu. */
+  assert.ok(s.indexOf("stergeContul(magazin.id") < s.indexOf("trimiteCerereaDeStergere(magazin.id"), "cererea pleaca inaintea stergerii");
   assert.ok(parola < s.indexOf("stergeContul(magazin.id"), "stergerea vine abia dupa parola");
   const ecran = citeste("src/components/storefront/cont/StergeContul.tsx");
   assert.match(ecran, /JSON\.stringify\(\{ confirmare: cuvant, cereStergereaDatelor: cerere, parola \}\)/);

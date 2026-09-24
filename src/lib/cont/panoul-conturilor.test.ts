@@ -31,6 +31,7 @@ const MIGRATII = readdirSync(join(RAD, "migrations"))
   .map((f) => ({ f, text: readFileSync(join(RAD, "migrations", f), "utf8").replace(/\r\n/g, "\n") }));
 
 const M53 = "2026-09-24-conturi-clienti-zzz-panoul-conturilor.sql";
+const M54 = "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql";
 
 /** Corpul ULTIMEI definitii a unei functii (ordinea numelor e si cea a aplicarii aici). */
 function corpul(nume: string): { f: string; corp: string } {
@@ -53,7 +54,9 @@ test("⚠ functiile redefinite si cele noi au ultima definitie in migratia 53", 
     "cont_panou_dezleaga_comanda", "cont_panou_chei",
   ]) {
     const { f, corp } = corpul(n);
-    assert.equal(f, M53, n);
+    /* Lista, fisa, legarea si cheile au fost intarite in 54, dupa audit. */
+    const in54 = ["cont_panou_lista", "cont_panou_fisa", "cont_panou_comanda_de_legat", "cont_panou_chei"].includes(n);
+    assert.equal(f, in54 ? M54 : M53, n);
     assert.ok(corp.length > 100, `${n}: corp de ${corp.length} semne`);
   }
 });

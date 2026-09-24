@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { sesiuneCurenta } from "@/lib/cont/sesiune";
-import { adresaEmailValida, vineDePeMagazin } from "@/lib/cont/cerere";
+import { adresaEmailValida, sesiuneExpirata, vineDePeMagazin } from "@/lib/cont/cerere";
 import { clientIp } from "@/lib/utils/rate-limit";
 import { cereCod, verificaCod, mesajulRefuzului, MESAJ_SMS_INCA_NU } from "@/lib/cont/cod";
 import { scoateContact } from "@/lib/cont/date";
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
 
   const s = await sesiuneCurenta(magazin.id).catch(() => null);
-  if (!s) return new NextResponse("Not found", { status: 404 });
+  if (!s) return sesiuneExpirata();
 
   const corp = await req.json().catch(() => null);
   const actiune = corp?.actiune;

@@ -1,7 +1,7 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { aducePdf, numeleFisierului, MARIME_MAXIMA } from "./pdf-document";
+import { aducePdf, adresaDeFurnizor, numeleFisierului, MARIME_MAXIMA } from "./pdf-document";
 import { GAZDE_DE_TEST } from "@/lib/billing/factura-comenzii";
 
 /*
@@ -55,20 +55,20 @@ test("un PDF adevarat trece, cu octetii lui", async () => {
 
 test("⚠ peste plafonul Vercel se refuza, si dupa antet, si dupa corp", async () => {
   inlocuiesteFetch(() => new Response(PDF, { headers: { "content-length": String(MARIME_MAXIMA + 1) } }));
-  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://x.ro/f.pdf" }), { ok: false, motiv: "prea_mare" });
+  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://www.oblio.eu/f.pdf" }), { ok: false, motiv: "prea_mare" });
 
   const mare = new Uint8Array(MARIME_MAXIMA + 10);
   mare.set(PDF, 0);
   inlocuiesteFetch(() => new Response(mare));
-  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://x.ro/f.pdf" }), { ok: false, motiv: "prea_mare" });
+  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://www.oblio.eu/f.pdf" }), { ok: false, motiv: "prea_mare" });
 });
 
 test("⚠ furnizorul care nu raspunde sau raspunde cu eroare: „indisponibil”, nu „nu exista”", async () => {
   inlocuiesteFetch(() => { throw new Error("timeout"); });
-  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://x.ro/f.pdf" }), { ok: false, motiv: "furnizor_indisponibil" });
+  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://www.oblio.eu/f.pdf" }), { ok: false, motiv: "furnizor_indisponibil" });
 
   inlocuiesteFetch(() => new Response("eroare", { status: 500 }));
-  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://x.ro/f.pdf" }), { ok: false, motiv: "furnizor_indisponibil" });
+  assert.deepEqual(await aducePdf({ fel: "link", adresa: "https://www.oblio.eu/f.pdf" }), { ok: false, motiv: "furnizor_indisponibil" });
 });
 
 test("SmartBill: fara acreditari nu pleaca nicio cerere, iar un 401 e „indisponibil”", async () => {
@@ -138,4 +138,28 @@ test("⚠ si garda de test sta INAINTEA cererii, in sursa", () => {
   const s = readFileSync("src/lib/cont/pdf-document.ts", "utf8");
   const corp = s.slice(s.indexOf("export async function aducePdf"));
   assert.ok(corp.indexOf("eDocumentDeTest(adresa)") < corp.indexOf("await fetch("), "garda de test vine dupa cerere");
+});
+
+test("⚠ legatura unui PDF se urmeaza NUMAI catre casele de facturare, pe https", async () => {
+  /* Adresa sta pe comanda si o poate scrie comerciantul: altfel serverul ar fi cerut orice. */
+  let cerute = 0;
+  inlocuiesteFetch(() => {
+    cerute++;
+    return new Response("%PDF-1.4", { status: 200 });
+  });
+  for (const rea of [
+    "http://www.oblio.eu/f.pdf",
+    "https://169.254.169.254/latest/meta-data",
+    "https://localhost/f.pdf",
+    "https://oblio.eu.rau.ro/f.pdf",
+    "https://rauoblio.eu/f.pdf",
+    "https://user:pass@www.oblio.eu/f.pdf",
+    "https://www.oblio.eu:8443/f.pdf",
+    "nu e adresa",
+  ]) {
+    assert.deepEqual(await aducePdf({ fel: "link", adresa: rea }), { ok: false, motiv: "furnizor_indisponibil" }, rea);
+  }
+  assert.equal(cerute, 0, "nicio cerere nu pleaca spre o adresa nepermisa");
+  assert.equal(adresaDeFurnizor("https://www.oblio.eu/utils/show_file/?it=x"), true);
+  assert.equal(adresaDeFurnizor("https://app.fgo.ro/f.pdf"), true);
 });

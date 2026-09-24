@@ -2792,6 +2792,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               <ContClientiSetari businessId={businessId} initial={stareaConturilor} />
             </div>
           )}
+          {/* ⚠ Fara stare (citirea a cazut), fila nu ramane goala: se spune de ce. */}
+          {activeSection === "conturi-clienti" && !stareaConturilor && (
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 text-sm text-muted-foreground">
+              Nu am putut încărca setările conturilor de client. Reîncarcă pagina; dacă se repetă, scrie-ne la suport.
+            </div>
+          )}
 
           {/* ── Securitate ── */}
           {activeSection === "securitate" && (

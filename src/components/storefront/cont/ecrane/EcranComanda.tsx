@@ -10,6 +10,7 @@ import { livrarea } from "@/lib/cont/livrare";
 import { numeleMetodei, stareaPlatii } from "@/lib/cont/plata";
 import { formatDate, formatPhoneDisplay, formatPrice, pluralRo, unitarSeInchide } from "@/lib/utils/format";
 import { AnuleazaComanda } from "../AnuleazaComanda";
+import { sePoateAnulaDinCont } from "@/lib/cont/anulare-reguli";
 import { CopiazaText } from "../CopiazaText";
 import { AjutorMagazin, type ContactMagazin } from "../ui/CadruCont";
 import { BlocDocument } from "./BlocDocument";
@@ -121,6 +122,8 @@ export function EcranComanda({
   const metoda = numeleMetodei(c.metodaPlata);
   const marfa = c.linii.filter((l) => !l.extra).reduce((s, l) => s + l.cantitate, 0);
   const poateReturna = !redusa && (c.stare === "shipped" || c.stare === "delivered");
+  /* Aceeasi regula ca in baza: la plata online sau deja platita, anuleaza magazinul. */
+  const anulabila = sePoateAnulaDinCont({ stare: c.stare, starePlata: c.starePlata, metodaPlata: c.metodaPlata });
 
   return (
     <>
@@ -289,10 +292,10 @@ export function EcranComanda({
             </Sectiune>
           )}
 
-          {!redusa && (c.stare === "pending" || poateReturna) && (
+          {!redusa && (anulabila || poateReturna) && (
             <Sectiune titlu="Actiuni" icon={Undo2}>
               <div className="space-y-4">
-                {c.stare === "pending" && (
+                {anulabila && (
                   <div className="space-y-2">
                     <p className="text-sm leading-relaxed text-[var(--st-muted)]">
                       Comanda n-a intrat inca in lucru, deci o poti anula de aici.

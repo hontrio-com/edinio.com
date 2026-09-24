@@ -43,6 +43,11 @@ export function SchimbaParola({ areParola }: { areParola: boolean }) {
         setEroare(j.eroare ?? "Nu am putut schimba parola.");
         return;
       }
+      /* Parola s-a schimbat, dar sesiunea n-a putut fi redeschisa: la intrare, cu parola noua. */
+      if (j.reintra === true) {
+        window.location.href = "/cont/intra?parola=1";
+        return;
+      }
       setGata(true);
       setDeschis(false);
       setVeche("");

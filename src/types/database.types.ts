@@ -7260,6 +7260,14 @@ export type Database = {
         Args: { p_business: string; p_cont: string; p_ip?: string | null }
         Returns: boolean
       }
+      cont_incercare_parola: {
+        Args: { p_business: string; p_cont: string; p_ip?: string | null }
+        Returns: { blocat: boolean; id: number | null }[]
+      }
+      cont_incercare_reusita: {
+        Args: { p_business: string; p_id: number }
+        Returns: undefined
+      }
       cont_intrare_esuata: {
         Args: { p_business: string; p_cont?: string | null; p_ip?: string | null }
         Returns: undefined

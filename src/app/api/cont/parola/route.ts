@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import {
   anuntaParolaSchimbata, dispozitivCunoscut, eLimitaDeIp, ipPentruBaza, MESAJ_PARTEA_INTAI, MESAJ_PREA_MULTE,
-  parolaDinCont, permisDeCalcul, pornestePas, tineMinteDispozitivul,
+  parolaDinCont, parolaNouaEAceeasi, permisDeCalcul, pornestePas, tineMinteDispozitivul,
 } from "@/lib/cont/autentificare";
 import { amprentaParolei, problemaParolei } from "@/lib/cont/parola";
 import { deschideSesiune, sesiuneCurenta } from "@/lib/cont/sesiune";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { clientIp } from "@/lib/utils/rate-limit";
-import { adresaEmailValida, vineDePeMagazin } from "@/lib/cont/cerere";
+import { adresaEmailValida, sesiuneExpirata, vineDePeMagazin } from "@/lib/cont/cerere";
 
 /**
  * Parola contului.
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   }
 
   const s = await sesiuneCurenta(magazin.id).catch(() => null);
-  if (!s) return new NextResponse("Not found", { status: 404 });
+  if (!s) return sesiuneExpirata();
   if (!(await permisDeCalcul(ip))) return NextResponse.json({ eroare: MESAJ_PREA_MULTE }, { status: 429 });
 
   try {
@@ -78,6 +78,10 @@ export async function POST(req: NextRequest) {
 
     const problema = problemaParolei(corp?.parolaNoua, cont.email);
     if (problema) return NextResponse.json({ eroare: problema }, { status: 400 });
+    /* Aceeasi parola ar fi scos omul de pe toate dispozitivele degeaba. */
+    if (await parolaNouaEAceeasi(corp.parolaNoua as string, cont.parola_hash)) {
+      return NextResponse.json({ eroare: "Parola noua e la fel ca cea de acum. Alege alta." }, { status: 400 });
+    }
 
     const { data: ok, error: e2 } = await admin.rpc("cont_schimba_parola", {
       p_business: magazin.id,
@@ -88,10 +92,19 @@ export async function POST(req: NextRequest) {
     if (e2) throw e2;
     if (ok !== true) throw new Error("cont_schimba_parola a intors fals");
 
-    /* Epoca a urcat: sesiunea de acum a cazut si ea. Se deschide alta, aici. */
-    await deschideSesiune(magazin.id, s.contId, ipPentruBaza(ip));
-    if (eraDeIncredere) await tineMinteDispozitivul(magazin.id, s.contId);
+    /*
+      ⚠ De aici parola E schimbata. Instiintarea pleaca intai; apoi, epoca urcand,
+      sesiunea de acum a cazut si se deschide alta. Daca asta cade, nu se mai spune
+      „n-a mers": omul ar fi crezut ca are parola veche.
+    */
     await anuntaParolaSchimbata(magazin, s.contId);
+    try {
+      await deschideSesiune(magazin.id, s.contId, ipPentruBaza(ip));
+      if (eraDeIncredere) await tineMinteDispozitivul(magazin.id, s.contId);
+    } catch (e) {
+      await logError({ action: "cont/parola", message: `sesiunea nu s-a redeschis dupa schimbarea parolei: ${String(e)}`, businessId: magazin.id, severity: "error" });
+      return NextResponse.json({ ok: true, reintra: true, mesaj: "Parola a fost schimbata. Intra din nou cu parola noua." }, { status: 200 });
+    }
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (e) {
     await logError({

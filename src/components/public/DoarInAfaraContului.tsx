@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { eZonaDeCont } from "@/lib/cont/zona";
 
 /**
  * Randeaza continutul peste tot in magazin, DAR NU in zona de cont.
@@ -30,12 +31,10 @@ import { usePathname } from "next/navigation";
  * care o face si `DoarInMagazinReal`: pixelii trag `PageView` la montare, deci un
  * „nu" gresit ar fi trimis evenimentul inainte sa dispara.
  */
-export function DoarInAfaraContului({ children }: { children: React.ReactNode }) {
+export function DoarInAfaraContului({ slug, children }: { slug: string; children: React.ReactNode }) {
   const cale = usePathname();
   if (cale === null) return null;
-  /* Si `/cont`, si `/{slug}/cont`: pe domeniul propriu calea e fara slug, pe
-     gazda platformei ar fi cu el (acolo zona da oricum 404, dar regula nu se
-     sprijina pe asta). */
-  if (/(^|\/)cont(\/|$)/.test(cale)) return null;
+  if (eZonaDeCont(cale, slug)) return null;
   return <>{children}</>;
 }
+

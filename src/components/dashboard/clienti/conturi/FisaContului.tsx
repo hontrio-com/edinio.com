@@ -28,7 +28,18 @@ import { DezleagaComanda } from "./DezleagaComanda";
  * ⚠ Actiunile stau la vedere, dar fiecare cere o confirmare: suspendarea si
  * stergerea il scot pe om din cont pe loc.
  */
-export function FisaContului({ businessId, fisa, pornite }: { businessId: string; fisa: FisaCont; pornite: boolean | null }) {
+export function FisaContului({
+  businessId,
+  fisa,
+  pornite,
+  inapoi,
+}: {
+  businessId: string;
+  fisa: FisaCont;
+  pornite: boolean | null;
+  /** Lista de unde s-a venit, cu cautarea, filtrul si pagina ei. */
+  inapoi: string;
+}) {
   const email = fisa.contacte.find((c) => c.fel === "email" && c.verificatLa)?.valoare
     ?? fisa.contacte.find((c) => c.fel === "email")?.valoare
     ?? null;
@@ -42,7 +53,7 @@ export function FisaContului({ businessId, fisa, pornite }: { businessId: string
   return (
     <div>
       <Link
-        href="/dashboard/customers?fila=conturi"
+        href={inapoi}
         className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> Toate conturile

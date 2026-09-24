@@ -109,8 +109,11 @@ export function useContulLaComanda({
     citit, sau dintr-un tab in care a intrat deja), starea se reciteste.
   */
   const necesar = stare?.cere === true;
+  /* ⚠ Pe `activ`, nu pe `cerut`: daca magazinul a facut contul obligatoriu DUPA ce
+     s-a incarcat pagina, pasul apare abia la refuzul serverului, iar `cerut` (luat
+     la incarcare) ar fi oprit recitirea tocmai atunci. */
   useEffect(() => {
-    if (!cerut || !necesar) return;
+    if (!activ || !necesar) return;
     const laIntoarcere = () => {
       const numar = ++intrebare.current;
       void intreaba().then((s) => {
@@ -119,7 +122,7 @@ export function useContulLaComanda({
     };
     window.addEventListener("focus", laIntoarcere);
     return () => window.removeEventListener("focus", laIntoarcere);
-  }, [cerut, necesar]);
+  }, [activ, necesar]);
 
   /*
     ⚠ Dupa un refuz al serverului, blocul apare abia cand se incheie tranzitia

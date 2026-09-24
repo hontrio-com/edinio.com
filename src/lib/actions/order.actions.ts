@@ -87,7 +87,7 @@ import { raporteazaCumparareaMeta } from "@/lib/orders/meta-comanda";
 import { raporteazaCumparareaTikTok } from "@/lib/orders/tiktok-comanda";
 import { isIP } from "node:net";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
-import { leagaComandaPlasata, poartaContuluiLaComanda } from "@/lib/cont/poarta-comenzii";
+import { emailulContului, leagaComandaPlasata, poartaContuluiLaComanda } from "@/lib/cont/poarta-comenzii";
 import { adresaContului } from "@/lib/cont/origine";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
@@ -1253,6 +1253,10 @@ export async function placeOrder(data: {
   const poartaCont = await poartaContuluiLaComanda({ businessId: data.business_id, config: cfgRow?.cont_client_config });
   if (!poartaCont.ok) {
     return { error: poartaCont.mesaj, contNecesar: poartaCont.contNecesar };
+  }
+  /* Din cont, fara email in formular: adresa contului, ca omul sa primeasca confirmarea. */
+  if (poartaCont.contId && !data.customer_email?.trim()) {
+    data.customer_email = (await emailulContului(data.business_id, poartaCont.contId)) ?? undefined;
   }
   const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
   if ("error" in metoda) {
@@ -4496,6 +4500,10 @@ export async function placeCartOrder(data: {
   const poartaCont = await poartaContuluiLaComanda({ businessId: data.business_id, config: cfgRow?.cont_client_config });
   if (!poartaCont.ok) {
     return { error: poartaCont.mesaj, contNecesar: poartaCont.contNecesar };
+  }
+  /* Din cont, fara email in formular: adresa contului, ca omul sa primeasca confirmarea. */
+  if (poartaCont.contId && !data.customer_email?.trim()) {
+    data.customer_email = (await emailulContului(data.business_id, poartaCont.contId)) ?? undefined;
   }
   const metoda = verificaMetodaPlata(data.payment_method, cfgRow);
   if ("error" in metoda) {

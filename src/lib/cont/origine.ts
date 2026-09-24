@@ -73,13 +73,13 @@ export function poateAprindeConturi(business: {
   if (!business.custom_domain) {
     return {
       poate: false,
-      motiv: "Conturile de client cer un domeniu propriu. Conecteaza-l din Setari, Domenii, si comutatorul se deschide.",
+      motiv: "Conturile de client cer un domeniu propriu. Conectează-l din Setări, Domenii, și comutatorul se deschide.",
     };
   }
   if (business.custom_domain_healthy === false) {
     return {
       poate: false,
-      motiv: "Domeniul magazinului nu raspunde, iar pana se repara vitrina e servita pe adresa Edinio, unde conturile nu se pot deschide.",
+      motiv: "Domeniul magazinului nu răspunde, iar până se repară vitrina e servită pe adresa Edinio, unde conturile nu se pot deschide.",
     };
   }
   return { poate: true };

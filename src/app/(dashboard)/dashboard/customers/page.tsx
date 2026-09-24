@@ -312,8 +312,10 @@ async function ListaClienti({
     adevarata; cu pagina cazuta, comerciantul n-ar mai vedea niciun client.
   */
   let conturi: Record<string, string> = {};
+  const areConturi = typeof cateConturi === "number" && cateConturi > 0;
   try {
-    conturi = Object.fromEntries(await conturileClientilor(businessId, customers.map((c) => c.key)));
+    /* Fara niciun cont in magazin nu e nimic de cautat: cererea nu mai pleaca. */
+    if (areConturi) conturi = Object.fromEntries(await conturileClientilor(businessId, customers.map((c) => c.key)));
   } catch (e) {
     await logError({
       action: "clienti/conturi",
@@ -352,7 +354,7 @@ async function ListaClienti({
       segmentLipsa={segmentLipsa}
       doarCuCont={doarCuCont}
       conturi={conturi}
-      areConturi={typeof cateConturi === "number" && cateConturi > 0}
+      areConturi={areConturi}
       judete={judete}
       canale={canale}
       businessId={businessId}

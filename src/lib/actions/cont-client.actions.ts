@@ -36,11 +36,11 @@ export type StareaConturilor = {
 async function guard(businessId: string): Promise<{ ok: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Nu esti autentificat." };
+  if (!user) return { error: "Nu ești autentificat." };
   const { data, error } = await supabase
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).maybeSingle();
-  if (error) return { error: "Nu am putut verifica magazinul. Incearca din nou." };
-  if (!data) return { error: "Magazin negasit." };
+  if (error) return { error: "Nu am putut verifica magazinul. Încearcă din nou." };
+  if (!data) return { error: "Magazin negăsit." };
   return { ok: true };
 }
 
@@ -123,12 +123,17 @@ export async function salveazaContClientConfig(
        originea magazinului, fiindca pe `www.edinio.com` toate vitrinele impart o
        origine si acolo un cont nu se poate apara.
   */
-  if (curatat.enabled) {
+  /*
+    ⚠ Numai cand conturile SE PORNESC acum. Cu ele deja pornite si domeniul picat
+    pentru o vreme, comerciantul trebuie sa poata totusi opri „obligatoriu", schimba
+    bugetul sau textele; altfel singura salvare posibila ar fi fost oprirea lor.
+  */
+  if (curatat.enabled && !curent.enabled) {
     const v = poateAprindeConturi({
       custom_domain: biz?.custom_domain ?? null,
       custom_domain_healthy: biz?.custom_domain_healthy ?? null,
     });
-    if (!v.poate) return { error: v.motiv ?? "Conturile nu se pot porni pentru magazinul asta." };
+    if (!v.poate) return { error: v.motiv ?? "Conturile nu se pot porni pentru magazinul ăsta." };
   }
 
   /*
@@ -141,12 +146,17 @@ export async function salveazaContClientConfig(
   if (curatat.obligatoriu) {
     if (!curent.obligatoriu && (await intrariRecente(businessId)) === 0) {
       return {
-        error: `Intra o data in contul de client pe ${biz?.custom_domain ?? "domeniul magazinului"} (cu codul primit pe email), ca sa fim siguri ca emailurile ajung. Apoi poti face contul obligatoriu.`,
+        error: `Intră o dată în contul de client pe ${biz?.custom_domain ?? "domeniul magazinului"} (cu codul primit pe email), ca să fim siguri că emailurile ajung. Apoi poți face contul obligatoriu.`,
       };
     }
     if (curatat.buget_email_zilnic < BUGET_MINIM_OBLIGATORIU) {
-      return { error: `Cu contul obligatoriu, plafonul zilnic de coduri trebuie sa fie de cel putin ${BUGET_MINIM_OBLIGATORIU}.` };
+      return { error: `Cu contul obligatoriu, plafonul zilnic de coduri trebuie să fie de cel puțin ${BUGET_MINIM_OBLIGATORIU}.` };
     }
+  }
+
+  /* Un plafon zilnic de 0 cu conturile pornite ar opri tacut contul nou si resetarea. */
+  if (curatat.enabled && curatat.buget_email_zilnic < 1) {
+    return { error: "Plafonul zilnic de coduri trebuie să fie de cel puțin 1 cât timp conturile sunt pornite." };
   }
 
   const { error } = await admin.rpc("jsonb_merge_config", {
@@ -165,7 +175,7 @@ export async function salveazaContClientConfig(
   */
   const dupa = await citesteConfig(businessId, "cont-client.dupa-salvare");
   if (JSON.stringify(dupa) !== JSON.stringify(curatat)) {
-    return { error: "Setarea nu s-a scris intreaga (poate a salvat altcineva in acelasi timp). Reincarca pagina si incearca din nou." };
+    return { error: "Setarea nu s-a scris întreagă (poate a salvat altcineva în același timp). Reîncarcă pagina și încearcă din nou." };
   }
 
   revalidatePath("/dashboard/settings");

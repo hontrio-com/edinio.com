@@ -141,6 +141,10 @@ async function ContinutSetari({
   const business = bizRow ? { id: bizRow.id, business_name: bizRow.business_name, address: bizRow.address, city: bizRow.city, county: bizRow.county, phone: bizRow.phone, email: bizRow.email, cui: bizRow.cui, reg_com: bizRow.reg_com, custom_domain: bizRow.custom_domain } : null;
   const rawSettings = bizRow?.store_settings;
   const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
+  /* ⚠ Pornita ACUM, ca sa mearga in paralel cu produsele de mai jos; asteptata la sfarsit. */
+  const stareConturiPromisa = business?.id
+    ? incarcaStareaConturilor(business.id).catch(() => null)
+    : Promise.resolve(null);
 
   /*
    * ═══ ⚠ CHEIA SMSO NU SE MAI CITESTE AICI, SI NU MAI PLEACA IN BROWSER (14.09.2026) ═══
@@ -366,13 +370,11 @@ async function ContinutSetari({
   /*
     ⚠ Se incarca separat si se INGHITE eroarea: o pana la citirea starii
     conturilor n-are de ce sa rupa restul Setarilor, unde stau livrarea, taxele
-    si platile. Fila ramane goala si atat.
+    si platile. Fila spune atunci ca n-a putut incarca.
   */
   /* ⚠ `try`: citirea foloseste `randCitit`, care ARUNCA la o pana de baza. Fara el,
      comentariul de mai sus mintea, iar o pana la conturi dadea jos toate Setarile. */
-  const stareConturi = business?.id
-    ? await incarcaStareaConturilor(business.id).catch(() => null)
-    : null;
+  const stareConturi = await stareConturiPromisa;
   const stareaConturilor = stareConturi && !("error" in stareConturi) ? stareConturi : undefined;
 
   return (

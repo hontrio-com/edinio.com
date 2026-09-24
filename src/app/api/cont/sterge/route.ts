@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-cererii";
 import { sesiuneCurenta, stergeCookieContului } from "@/lib/cont/sesiune";
-import { vineDePeMagazin } from "@/lib/cont/cerere";
+import { sesiuneExpirata, vineDePeMagazin } from "@/lib/cont/cerere";
 import { parolaDinCont } from "@/lib/cont/autentificare";
 import { clientIp } from "@/lib/utils/rate-limit";
 import { stergeContul } from "@/lib/cont/date";
-import { trimiteCerereaDeStergere } from "@/lib/cont/cerere-stergere";
+import { pregatesteCerereaDeStergere, trimiteCerereaDeStergere } from "@/lib/cont/cerere-stergere";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -25,7 +25,7 @@ import { logError } from "@/lib/error-logger";
  * calculator strain il putea sterge, cu tot cu legaturile comenzilor.
  *
  * ⚠ Cu `cereStergereaDatelor: true`, magazinul primeste INAINTEA stergerii o
- * cerere de anonimizare a comenzilor (`trimiteCerereaDeStergere`). Nu se face
+ * cerere de anonimizare a comenzilor (pregatita inainte, trimisa dupa). Nu se face
  * automat: comenzile sunt ale comerciantului, cu facturi si retururi deschise.
  */
 export async function POST(req: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (await magazinulEOprit(magazin)) return new NextResponse("Not found", { status: 404 });
 
   const s = await sesiuneCurenta(magazin.id).catch(() => null);
-  if (!s) return new NextResponse("Not found", { status: 404 });
+  if (!s) return sesiuneExpirata();
 
   const corp = await req.json().catch(() => null);
   if (corp?.confirmare !== "STERGE") {
@@ -50,10 +50,12 @@ export async function POST(req: NextRequest) {
     });
     if (!v.ok) return NextResponse.json({ eroare: v.eroare }, { status: v.status });
 
-    const cerereTrimisa = corp?.cereStergereaDatelor === true
-      ? await trimiteCerereaDeStergere(magazin, s.contId)
-      : null;
+    /* Datele pentru cerere se citesc INAINTE (dupa stergere nu mai sunt), dar cererea
+       pleaca abia DUPA ce stergerea a reusit. */
+    const vreaCerere = corp?.cereStergereaDatelor === true;
+    const cerere = vreaCerere ? await pregatesteCerereaDeStergere(magazin, s.contId) : null;
     const r = await stergeContul(magazin.id, s.contId);
+    const cerereTrimisa = vreaCerere && r.ok ? await trimiteCerereaDeStergere(magazin.id, cerere) : null;
     /* ⚠ Cookie-ul se sterge oricum: epoca s-a ridicat, deci sesiunea e moarta
        si fara el, dar un cookie ramas ar fi aratat ecrane de „nu esti autentificat"
        fara sa spuna de ce. */

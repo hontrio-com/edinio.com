@@ -246,7 +246,7 @@ export default async function StoreLayout({ children, params }: Props) {
         altcineva. Vezi `DoarInAfaraContului` pentru ce s-a incercat si de ce nu
         merge un `layout.tsx` sub `cont/`.
       */}
-      <DoarInAfaraContului>
+      <DoarInAfaraContului slug={slug}>
         <DoarInMagazinReal>
           <AttributionCapture basePath={basePath} />
           {fbPixelId && (

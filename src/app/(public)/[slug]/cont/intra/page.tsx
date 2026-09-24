@@ -10,13 +10,13 @@ export const metadata: Metadata = { title: "Intra in cont", robots: { index: fal
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ mod?: string; sters?: string; cerere?: string }>;
+  searchParams: Promise<{ mod?: string; sters?: string; cerere?: string; parola?: string }>;
 }
 
 export default async function IntraInCont({ params, searchParams }: Props) {
   const { slug } = await params;
   /* Numai forma ecranului; nimic din adresa nu ajunge la server ca identitate. */
-  const { mod, sters, cerere } = await searchParams;
+  const { mod, sters, cerere, parola } = await searchParams;
   const p = await incarcaPaginaDeCont(slug);
 
   /* Deja logat: n-are ce cauta aici. */
@@ -33,6 +33,7 @@ export default async function IntraInCont({ params, searchParams }: Props) {
           avantaje={p.intrare.avantaje}
           modInitial={mod === "inregistrare" ? "inregistrare" : "intrare"}
           dupaStergere={sters === "1" ? { cerere: cerere === "1" ? true : cerere === "0" ? false : null } : null}
+          dupaParolaNoua={parola === "1"}
           contact={p.contact}
         />
       </StorePageShell>

@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { bareHost } from "@/lib/platform-hosts";
 
 /**
@@ -79,4 +79,17 @@ export function cheieIp(ip: string | null | undefined): string {
 export function adresaEmailValida(email: string): boolean {
   const e = email.trim().toLowerCase();
   return e.length <= 254 && /^[^@\s,;<>"\\]+@[^@\s,;<>"\\]+\.[a-z]{2,}$/.test(e);
+}
+
+/**
+ * Raspunsul pentru o sesiune care nu mai e (expirata, inchisa de pe alt dispozitiv,
+ * cont suspendat). ⚠ 401 cu un text, nu 404: un 404 ajungea pe ecran ca „nu am
+ * putut salva" sau „documentul nu se mai gaseste", iar omul nu afla ca trebuie
+ * doar sa intre din nou.
+ */
+export function sesiuneExpirata(): NextResponse {
+  return NextResponse.json(
+    { eroare: "Sesiunea a expirat. Intra din nou in cont.", reintra: true },
+    { status: 401 },
+  );
 }

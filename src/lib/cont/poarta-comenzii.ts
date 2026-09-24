@@ -149,3 +149,19 @@ export async function leagaComandaPlasata(businessId: string, contId: string | n
     });
   }
 }
+
+/**
+ * Adresa confirmata a contului, pentru o comanda plasata din cont FARA email in
+ * formular (magazinul poate ascunde campul). ⚠ Fara ea, omul logat nu primea nici
+ * confirmarea comenzii, nici emailurile de stare. `null` la orice problema: comanda
+ * merge mai departe asa cum a venit.
+ */
+export async function emailulContului(businessId: string, contId: string): Promise<string | null> {
+  try {
+    const { data } = await createAdminClient().rpc("cont_parola_contului", { p_business: businessId, p_cont: contId });
+    const r = Array.isArray(data) ? data[0] : data;
+    return typeof r?.email === "string" && r.email.trim() ? r.email.trim() : null;
+  } catch {
+    return null;
+  }
+}

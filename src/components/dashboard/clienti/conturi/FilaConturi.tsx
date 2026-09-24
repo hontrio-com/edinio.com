@@ -155,7 +155,8 @@ export async function FilaConturi({
                 return (
                   <Link
                     key={c.contId}
-                    href={`/dashboard/customers/conturi/${c.contId}`}
+                    /* Fisa primeste si adresa listei, ca „Toate conturile” sa se intoarca exact aici. */
+                    href={`/dashboard/customers/conturi/${c.contId}?lista=${encodeURIComponent(adresa(pagina))}`}
                     className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
                   >
                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">

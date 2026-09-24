@@ -73,15 +73,34 @@ export async function POST(req: NextRequest) {
 
     const r = await verificaPas({ magazin, cod, ip, parolaHash });
     if (!r.ok || !r.contId) {
-      return NextResponse.json({ eroare: mesajulPasului(r.motiv) }, { status: eLimitaDeIp(r.motiv) ? 429 : 400 });
+      /*
+        ⚠ Dupa prea multe greseli, sau pe un cont suspendat, provocarea nu mai poate
+        fi dusa la capat nici cu un cod nou (greselile se aduna pe provocare): ecranul
+        se intoarce la inceput, nu ramane pe un „cere un cod nou" care n-ar merge.
+      */
+      const reiaDeLaInceput = r.motiv === "prea-multe-incercari" || r.motiv === "suspendat";
+      return NextResponse.json(
+        { eroare: mesajulPasului(r.motiv), ...(reiaDeLaInceput ? { expirat: true } : {}) },
+        { status: eLimitaDeIp(r.motiv) ? 429 : 400 },
+      );
     }
 
-    await incheieIntrarea(magazin.id, r.contId, ip);
-    if (corp?.tineMinte === true) await tineMinteDispozitivul(magazin.id, r.contId);
-    /* Parola s-a schimbat: la resetare, sau la un „cont nou" pe o adresa care avea deja cont. */
+    /*
+      ⚠ Parola s-a schimbat (la resetare, sau la un „cont nou" pe o adresa care avea
+      deja cont): instiintarea pleaca INAINTEA sesiunii, ca o sesiune care cade sa nu
+      lase omul fara emailul de siguranta.
+    */
     if (r.scop === "resetare-parola" || (r.scop === "inregistrare" && !r.contNou)) {
       await anuntaParolaSchimbata(magazin, r.contId);
     }
+    try {
+      await incheieIntrarea(magazin.id, r.contId, ip);
+    } catch (e) {
+      /* Codul si parola au trecut; numai sesiunea n-a putut fi deschisa. Se spune cinstit. */
+      await logError({ action: "cont/pas", message: `sesiunea nu s-a deschis dupa cod: ${String(e)}`, businessId: magazin.id, severity: "error" });
+      return NextResponse.json({ eroare: "Totul e in regula, dar nu te-am putut conecta acum. Intra din nou cu emailul si parola.", expirat: true }, { status: 400 });
+    }
+    if (corp?.tineMinte === true) await tineMinteDispozitivul(magazin.id, r.contId);
     return NextResponse.json({ ok: true, contNou: r.contNou }, { status: 200 });
   } catch (e) {
     await logError({

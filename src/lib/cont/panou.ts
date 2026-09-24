@@ -99,12 +99,22 @@ export async function fisaContului(businessId: string, contId: string): Promise<
  */
 export async function conturileClientilor(businessId: string, chei: string[] | null): Promise<Map<string, string>> {
   if (chei !== null && chei.length === 0) return new Map();
-  const { data, error } = await createAdminClient().rpc("cont_panou_chei", {
-    p_business: businessId,
-    p_chei: chei,
-  });
-  if (error) throw error;
-  return new Map((data ?? []).map((r) => [r.cheie, r.cont_id]));
+  /*
+    ⚠⚠ PE PAGINI. PostgREST taie orice raspuns la 1000 de randuri, TACUT: un magazin
+    cu peste o mie de clienti cu cont ar fi vazut sub „cu cont" numai o parte din ei,
+    cu o numaratoare care arata a numaratoare.
+  */
+  const PAGINA = 1000;
+  const harta = new Map<string, string>();
+  for (let de = 0; ; de += PAGINA) {
+    const { data, error } = await createAdminClient()
+      .rpc("cont_panou_chei", { p_business: businessId, p_chei: chei })
+      .range(de, de + PAGINA - 1);
+    if (error) throw error;
+    for (const r of data ?? []) harta.set(r.cheie, r.cont_id);
+    if ((data ?? []).length < PAGINA) break;
+  }
+  return harta;
 }
 
 /**

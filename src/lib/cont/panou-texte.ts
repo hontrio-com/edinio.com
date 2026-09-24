@@ -52,6 +52,20 @@ export function ordineValida(v: string | null | undefined): OrdineCont {
   return ORDINI_CONT.some((o) => o.cheie === v) ? (v as OrdineCont) : "noi";
 }
 
+/**
+ * Adresa listei, primita prin `?lista=` pe fisa unui cont. ⚠ Vine din adresa, deci
+ * se primeste NUMAI daca e chiar lista conturilor din panou: altfel „Toate conturile”
+ * ar fi putut duce oriunde (o redirectionare deschisa, pe o legatura trimisa cuiva).
+ */
+export function adresaListeiDinCerere(v: string | string[] | undefined): string {
+  const s = Array.isArray(v) ? v[0] : v;
+  const baza = "/dashboard/customers?fila=conturi";
+  if (typeof s !== "string" || s.length > 300 || !s.startsWith(baza)) return baza;
+  const rest = s.slice(baza.length);
+  if (rest !== "" && !/^&[A-Za-z0-9_=&%.+*-]*$/.test(rest)) return baza;
+  return s;
+}
+
 // ═══ Cum a ajuns o comanda in cont ═════════════════════════════════════════
 
 /**

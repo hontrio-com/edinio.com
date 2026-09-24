@@ -238,6 +238,8 @@ interface Props {
   initialDrillParentId?: string | null;
   /** Categoria parinte a celei din cale. „Inapoi" urca la ea, nu la lista curenta. */
   parinteCategorie?: string | null;
+  /** Brandul paginii, pe `/brand/<segment>`: titlul, logo-ul si descrierea din antet. */
+  paginaBrand?: { nume: string; logo: string | null; descriere: string | null };
   /** Fatetele calculate pe server. Doar pagina de catalog le cere. */
   fatete?: Fateta[];
   jetoane?: string[];
@@ -268,7 +270,7 @@ interface Props {
   samanta?: number;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, paginaBrand, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, editorDesign);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -1500,6 +1502,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     radacinaPaginare: radacinaPaginare || catalogRootPagina,
     categoriiPePagina: categoriileNavigheaza,
     parinteCategorie,
+    paginaBrand,
     // Categoriile duc MEREU la pagina de catalog cand ea exista, chiar daca
     // pagina asta are si ea o grila: acolo sunt filtrele pe atribute si pret,
     // adica exact ce cauta cineva care apasa pe o categorie.

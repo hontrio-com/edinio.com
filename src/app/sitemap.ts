@@ -6,6 +6,8 @@ import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
 import { isPlatformHost, bareHost } from "@/lib/platform-hosts";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
+import { SEGMENT_BRAND } from "@/lib/pages/reserved-slugs";
+import { branduriMagazin } from "@/lib/storefront/catalog/branduri-magazin";
 import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
@@ -492,6 +494,12 @@ export type DateMagazinPentruSitemap = {
   categoriiCuProduse: readonly string[] | null;
   produse: { slug: string | null; updated_at: string | null }[];
   pagini: { slug: string | null; updated_at: string | null; seo: unknown }[];
+  /**
+   * Paginile de brand (`/brand/<segment>`), din `branduriMagazin`: produsele VIZIBILE
+   * ale fiecaruia. Lipsa sau `null` (citire picata) = nicio pagina de brand anuntata;
+   * restul sitemapului ramane neatins.
+   */
+  branduri?: readonly { segment: string; produse: number }[] | null;
 };
 
 /**
@@ -553,6 +561,23 @@ export function intrariMagazin(
       if (subarboreAreProduse(vizibile, c.name ?? "", date.categoriiCuProduse) === false) continue;
       entries.push({
         url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
+        ...dataDacaOStim(biz.updated_at),
+      });
+    }
+  }
+
+  // Paginile de brand, in aceleasi conditii ca paginile de categorie (exista numai
+  // cand magazinul are pagina de catalog, iar `noindex`-ul de magazin le ascunde).
+  // ⚠ Numai brandurile cu produse VIZIBILE: pagina unui brand fara produse poarta
+  // `noindex` (`metadataPaginiiBrand`), iar o pagina `noindex` anuntata in sitemap e
+  // contradictia pe care Search Console o raporteaza. Un segment intra o singura data.
+  if (!homepageNoindex(biz) && shopOnPage(designPublicat(biz.store_settings))) {
+    const vazute = new Set<string>();
+    for (const b of date.branduri ?? []) {
+      if (!b.segment || b.produse <= 0 || vazute.has(b.segment)) continue;
+      vazute.add(b.segment);
+      entries.push({
+        url: `${base}/${SEGMENT_BRAND}/${b.segment}`,
         ...dataDacaOStim(biz.updated_at),
       });
     }
@@ -644,7 +669,9 @@ export async function citesteDateMagazin(
    * paginii ar fi scos din sitemap categorii pe care pagina le arata, sau invers.
    */
   const pc = (pcDinRand(biz) ?? {}) as { hide_products_without_images?: unknown; hide_out_of_stock_products?: unknown };
-  const [categorii, produse, pagini, rezumat] = await Promise.all([
+  const faraImagini = pc.hide_products_without_images === true;
+  const faraStocAscuns = pc.hide_out_of_stock_products === true;
+  const [categorii, produse, pagini, rezumat, branduri] = await Promise.all([
     areCatalog
       ? fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
         // ⚠ Ordinea e a paginii (`categoriiMagazin`), nu doar `id`: vezi decizia 6 in
@@ -675,11 +702,13 @@ export async function citesteDateMagazin(
     ),
     // `null` la orice eroare (`rezumatMagazin` o scrie in jurnal): nu stim, deci nu scoatem nimic.
     areCatalog
-      ? rezumatMagazin(biz.id, pc.hide_products_without_images === true, pc.hide_out_of_stock_products === true)
+      ? rezumatMagazin(biz.id, faraImagini, faraStocAscuns)
       : Promise.resolve(null),
+    // Aceeasi lista (si aceleasi comutatoare) din care pagina de brand isi decide `noindex`-ul.
+    areCatalog ? branduriMagazin(biz.id, faraImagini, faraStocAscuns) : Promise.resolve(null),
   ]);
 
-  return { categorii, categoriiCuProduse: rezumat?.categorii ?? null, produse, pagini };
+  return { categorii, categoriiCuProduse: rezumat?.categorii ?? null, produse, pagini, branduri };
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

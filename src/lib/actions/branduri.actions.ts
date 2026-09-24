@@ -114,6 +114,41 @@ export async function adaugaBrandul(businessId: string, nume: string): Promise<R
   return { success: true, count: 0 };
 }
 
+/**
+ * Logo-ul si descrierea unui brand, pentru pagina lui din magazin.
+ *
+ * Un brand purtat doar de produse n-are inca rand in lista: il primeste acum
+ * (`brand_salveaza_detalii`). Logo-ul vine din `uploadImage` (octetii verificati
+ * acolo); aici se cere doar sa fie o adresa `https`, ca si constrangerea din baza.
+ */
+export async function salveazaDetaliileBrandului(
+  businessId: string,
+  nume: string,
+  detalii: { logo: string | null; descriere: string },
+): Promise<Rezultat> {
+  const brand = curataBrand(nume);
+  if (!brand) return { error: "Brand negasit." };
+  const logo = typeof detalii.logo === "string" ? detalii.logo.trim() : "";
+  if (logo && (!/^https:\/\//.test(logo) || logo.length > 1000)) return { error: "Adresa logo-ului nu e valida." };
+  const descriere = typeof detalii.descriere === "string" ? detalii.descriere.trim() : "";
+  if (descriere.length > 5000) return { error: "Descrierea poate avea cel mult 5000 de caractere." };
+
+  const { supabase, ok } = await magazinulMeu(businessId);
+  if (!ok) return { error: "Magazin negasit." };
+  const { error } = await supabase.rpc("brand_salveaza_detalii", {
+    p_business: businessId,
+    p_nume: brand,
+    p_logo: logo || null,
+    p_descriere: descriere || null,
+  });
+  if (error) {
+    await logError({ action: "branduri/detalii", message: error.message, businessId, severity: "error" });
+    return { error: "Nu am putut salva. Incearca din nou." };
+  }
+  revalidatePath("/dashboard/products/brands");
+  return { success: true, count: 0 };
+}
+
 /** Uneste un brand in altul existent (toate produsele lui trec pe cel ales). */
 export async function unesteBrandul(businessId: string, dinBrand: string, inBrand: string): Promise<Rezultat> {
   const din = curataBrand(dinBrand);

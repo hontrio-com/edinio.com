@@ -114,7 +114,7 @@ test("⚠⚠ fiecare actiune de brand verifica utilizatorul si ca magazinul e al
   assert.match(a, /auth\.getUser\(\)/);
   assert.match(a, /\.eq\("id", businessId\)\.eq\("user_id", user\.id\)/);
   const exporturi = [...a.matchAll(/export async function (\w+)/g)].map((x) => x[1]);
-  assert.deepEqual(exporturi.sort(), ["adaugaBrandul", "redenumesteBrandul", "stergeBrandul", "unesteBrandul"]);
+  assert.deepEqual(exporturi.sort(), ["adaugaBrandul", "redenumesteBrandul", "salveazaDetaliileBrandului", "stergeBrandul", "unesteBrandul"]);
   /* Adaugarea scrie direct in `brands`: tot intai proprietarul, apoi scrierea. */
   const corpAdauga = a.slice(a.indexOf("export async function adaugaBrandul")).split("\nexport ")[0];
   assert.ok(corpAdauga.indexOf("magazinulMeu") > 0, "adaugaBrandul verifica proprietarul");

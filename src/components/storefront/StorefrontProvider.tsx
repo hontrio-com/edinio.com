@@ -183,6 +183,11 @@ export interface StoreChromeValue {
    */
   parinteCategorie?: string | null;
   /**
+   * Brandul paginii, cand pagina de catalog e a unui brand (`/brand/<segment>`):
+   * `AntetPagina` ii scrie numele ca titlu, logo-ul si descrierea.
+   */
+  paginaBrand?: { nume: string; logo: string | null; descriere: string | null };
+  /**
    * Adresa pe care se construiesc linkurile de paginare.
    *
    * De obicei chiar `catalogRoot`. Difera pe pagina unei categorii, unde

@@ -4,9 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Award, Check, GitMerge, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Award, Check, ExternalLink, GitMerge, ImageIcon, Loader2, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { adaugaBrandul, redenumesteBrandul, stergeBrandul, unesteBrandul } from "@/lib/actions/branduri.actions";
+import { adaugaBrandul, redenumesteBrandul, salveazaDetaliileBrandului, stergeBrandul, unesteBrandul } from "@/lib/actions/branduri.actions";
+import { uploadImage } from "@/lib/actions/upload.actions";
+import { caleBrand } from "@/lib/storefront/brand-href";
 import { curataBrand, dubluriDeBrand, type BrandCuProduse } from "@/lib/dashboard/branduri";
 import { pluralRo } from "@/lib/utils/format";
 
@@ -26,13 +28,18 @@ const inputCls =
 const butonMic =
   "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
+type BrandCuDetalii = BrandCuProduse & { logo: string | null; descriere: string | null };
+
 export function BranduriClient({
   businessId,
+  adresaMagazin,
   branduri,
   totalProduse,
 }: {
   businessId: string;
-  branduri: BrandCuProduse[];
+  /** `storeBaseUrl(business)`: domeniul propriu sau adresa de pe platforma, pentru „Vezi in magazin”. */
+  adresaMagazin: string;
+  branduri: BrandCuDetalii[];
   totalProduse: number;
 }) {
   const router = useRouter();
@@ -43,6 +50,11 @@ export function BranduriClient({
   const [lucreaza, setLucreaza] = useState<string | null>(null);
   const [adaug, setAdaug] = useState(false);
   const [numeAdaugat, setNumeAdaugat] = useState("");
+  /* Panoul „Logo si descriere”, deschis pe cel mult un brand. */
+  const [detalii, setDetalii] = useState<string | null>(null);
+  const [logoNou, setLogoNou] = useState<string | null>(null);
+  const [descriereNoua, setDescriereNoua] = useState("");
+  const [incarcLogo, setIncarcLogo] = useState(false);
   const [, startTransition] = useTransition();
 
   const cuBrand = branduri.reduce((s, b) => s + b.produse, 0);
@@ -66,6 +78,7 @@ export function BranduriClient({
         setDeSters(null);
         setAdaug(false);
         setNumeAdaugat("");
+        setDetalii(null);
         router.refresh();
       } catch {
         toast.error("Nu am putut salva. Verifica legatura la internet.");
@@ -87,6 +100,34 @@ export function BranduriClient({
     }
     ruleaza(`nume:${vechi}`, () => redenumesteBrandul(businessId, vechi, nou), (n) =>
       n === 0 ? "Nicio schimbare." : `Brandul a fost redenumit la ${pluralRo(n, "produs", "produse")}.`);
+  }
+
+  function deschideDetalii(b: BrandCuDetalii) {
+    setDetalii(b.brand);
+    setLogoNou(b.logo);
+    setDescriereNoua(b.descriere ?? "");
+    setEditez(null);
+    setDeSters(null);
+  }
+
+  async function incarcaLogo(file: File) {
+    if (!file.type.startsWith("image/")) { toast.error("Fisierul trebuie sa fie o imagine (JPG, PNG sau WebP)."); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Imaginea trebuie sa aiba sub 5 MB."); return; }
+    setIncarcLogo(true);
+    try {
+      const r = await uploadImage(file, "products", "brands");
+      if ("error" in r) toast.error(r.error);
+      else setLogoNou(r.url);
+    } catch {
+      toast.error("Nu am putut incarca imaginea. Verifica legatura la internet.");
+    } finally {
+      setIncarcLogo(false);
+    }
+  }
+
+  function salveazaDetalii(nume: string) {
+    ruleaza(`detalii:${nume}`, () => salveazaDetaliileBrandului(businessId, nume, { logo: logoNou, descriere: descriereNoua }),
+      () => "Salvat.");
   }
 
   function adauga() {
@@ -261,6 +302,12 @@ export function BranduriClient({
                   </form>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
+                    {b.logo ? (
+                      <div className="h-10 w-10 shrink-0 rounded-lg border border-border bg-white p-1 flex items-center justify-center overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={b.logo} alt="" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : null}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground break-words">{b.brand}</p>
                       {b.produse > 0 ? (
@@ -295,11 +342,34 @@ export function BranduriClient({
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {b.produse > 0 && caleBrand(adresaMagazin, b.brand) && (
+                          <a
+                            href={caleBrand(adresaMagazin, b.brand) ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={butonMic}
+                            aria-label={`Vezi pagina ${b.brand} in magazin`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Vezi in magazin
+                          </a>
+                        )}
                         <button
                           type="button"
                           disabled={ocupat}
-                          onClick={() => { setEditez(b.brand); setNumeNou(b.brand); setDeSters(null); }}
+                          onClick={() => (detalii === b.brand ? setDetalii(null) : deschideDetalii(b))}
+                          className={butonMic}
+                          aria-expanded={detalii === b.brand}
+                          aria-label={`Logo si descriere pentru ${b.brand}`}
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Logo si descriere
+                        </button>
+                        <button
+                          type="button"
+                          disabled={ocupat}
+                          onClick={() => { setEditez(b.brand); setNumeNou(b.brand); setDeSters(null); setDetalii(null); }}
                           className={butonMic}
                           aria-label={`Redenumeste ${b.brand}`}
                         >
@@ -309,7 +379,7 @@ export function BranduriClient({
                         <button
                           type="button"
                           disabled={ocupat}
-                          onClick={() => { setDeSters(b.brand); setEditez(null); }}
+                          onClick={() => { setDeSters(b.brand); setEditez(null); setDetalii(null); }}
                           className={butonMic}
                           aria-label={`Sterge ${b.brand}`}
                         >
@@ -319,6 +389,75 @@ export function BranduriClient({
                       </div>
                     )}
                   </div>
+                )}
+                {detalii === b.brand && !inEditare && (
+                  <form
+                    className="mt-3 space-y-3 rounded-lg border border-border bg-muted/30 p-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      salveazaDetalii(b.brand);
+                    }}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground mb-1.5">Logo</p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="h-16 w-16 shrink-0 rounded-lg border border-border bg-white p-1.5 flex items-center justify-center overflow-hidden">
+                          {logoNou ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={logoNou} alt={`Logo ${b.brand}`} className="max-h-full max-w-full object-contain" />
+                          ) : (
+                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <label className={`${butonMic} cursor-pointer`}>
+                          {incarcLogo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                          {logoNou ? "Schimba" : "Incarca logo"}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="sr-only"
+                            disabled={incarcLogo || ocupat}
+                            onChange={(e) => {
+                              const fisier = e.target.files?.[0];
+                              e.target.value = "";
+                              if (fisier) void incarcaLogo(fisier);
+                            }}
+                          />
+                        </label>
+                        {logoNou && (
+                          <button type="button" disabled={incarcLogo || ocupat} onClick={() => setLogoNou(null)} className={butonMic}>
+                            <X className="h-3.5 w-3.5" />
+                            Scoate
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5">JPG, PNG sau WebP, sub 5 MB. Se vede pe pagina brandului din magazin.</p>
+                    </div>
+                    <div>
+                      <label htmlFor={`descriere-${b.brand}`} className="block text-sm font-medium text-foreground mb-1.5">Descriere</label>
+                      <textarea
+                        id={`descriere-${b.brand}`}
+                        value={descriereNoua}
+                        onChange={(e) => setDescriereNoua(e.target.value)}
+                        maxLength={5000}
+                        rows={4}
+                        placeholder={`Cateva randuri despre ${b.brand}: ce produce, de unde vine, de ce il vindeti.`}
+                        className={`${inputCls} resize-y`}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Apare sub numele brandului, pe pagina lui din magazin, si in rezultatele Google.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="submit" disabled={ocupat || incarcLogo} className={butonMic}>
+                        {lucreaza === `detalii:${b.brand}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        Salveaza
+                      </button>
+                      <button type="button" disabled={ocupat} onClick={() => setDetalii(null)} className={butonMic}>
+                        Renunta
+                      </button>
+                    </div>
+                  </form>
                 )}
               </li>
             );

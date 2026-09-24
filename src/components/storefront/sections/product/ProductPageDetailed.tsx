@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { legaturaBrand } from "@/lib/storefront/brand-href";
 import Image from "next/image";
 import {
   ChevronUp, ChevronDown, ChevronRight, Check, Package, Plus, Minus,
@@ -765,6 +766,8 @@ export function ProductPageDetailed({
    * acolo se cade pe valoarea derivata din `basePath` — exact cea de dinainte.
    */
   const radacinaCatalog = chrome?.catalogRoot ?? radacinaMagazin(basePath);
+  /* Pagina brandului, numai la magazinele cu pagina de catalog (vezi `legaturaBrand`). */
+  const hrefBrand = legaturaBrand(basePath, chrome?.catalogRoot, brand);
 
   // Catalogul isi tine pagina curenta in sessionStorage tocmai ca intoarcerea
   // de pe pagina de produs sa nu arunce clientul inapoi la pagina 1.
@@ -853,7 +856,12 @@ export function ProductPageDetailed({
 
             {brand !== "" && (
               <p className="text-[13px] text-muted-foreground -mt-2">
-                Brand: <span className="font-semibold" style={{ color }}>{brand}</span>
+                Brand:{" "}
+                {hrefBrand ? (
+                  <a href={hrefBrand} className="font-semibold hover:underline" style={{ color }}>{brand}</a>
+                ) : (
+                  <span className="font-semibold" style={{ color }}>{brand}</span>
+                )}
               </p>
             )}
 

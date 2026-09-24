@@ -43,6 +43,15 @@ export const SEGMENT_CAUTARE = "cautare";
  */
 export const SEGMENT_CONT = "cont";
 
+/**
+ * Segmentul paginilor de brand (`/brand/<segment>`).
+ *
+ * ⚠ Rezervat IN ACELASI COMMIT cu ruta, ca la catalog si la cautare. Verificat pe
+ * PRODUCTIE pe 24.09.2026: niciuna dintre cele 34 de pagini proprii nu se numeste
+ * „brand”, „branduri” sau „brands”.
+ */
+export const SEGMENT_BRAND = "brand";
+
 export const RESERVED_PAGE_SLUGS = new Set<string>([
   // existing public store sub-routes
   "product", "politici", "confirm", "retur",
@@ -71,6 +80,9 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   // apara o pagina proprie pe care comerciantul o crede legata de cont si care
   // nu e. „contact” NU e in lista si nu are de ce sa fie: e alt segment.
   SEGMENT_CONT, "account", "contul-meu", "comenzile-mele", "profil",
+  // paginile de brand si numele lor apropiate (o pagina proprie „branduri” ar fi
+  // fost crezuta lista brandurilor, si nu e).
+  SEGMENT_BRAND, "branduri", "brands",
   // platform / framework
   "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path

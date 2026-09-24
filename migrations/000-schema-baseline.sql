@@ -2408,6 +2408,18 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.brand_salveaza_detalii(p_business uuid, p_nume text, p_logo text, p_descriere text)
+ RETURNS void
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  insert into public.brands (business_id, name, logo_url, description)
+  values (p_business, left(btrim(p_nume), 120), nullif(btrim(coalesce(p_logo, '')), ''), nullif(btrim(coalesce(p_descriere, '')), ''))
+  on conflict (business_id, lower(name)) do update
+    set logo_url = excluded.logo_url, description = excluded.description;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.canale_vanzare(p_business uuid)
  RETURNS TABLE(canal text, comenzi bigint)
  LANGUAGE sql
@@ -2531,6 +2543,36 @@ begin
   get diagnostics v_afectate = row_count;
   return v_afectate;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean)
+ RETURNS TABLE(brand text, produse bigint, logo_url text, descriere text)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with ascunse as (select public.categorii_ascunse(p_business) as a),
+  vizibile as (
+    select substr(t, 7) as b, count(*) as n
+      from public.catalog_produs c
+      cross join ascunse
+      cross join lateral unnest(c.fatete) t
+     where c.business_id = p_business
+       and (not coalesce(p_fara_imagini, false) or c.are_imagine)
+       and (not coalesce(p_fara_stoc_ascuns, false) or not c.fara_stoc)
+       and (c.category is null or c.category <> all (ascunse.a))
+       and left(t, 6) = 'brand' || chr(1)
+     group by 1
+  ),
+  toate as (
+    select b.brand from public.produse_branduri(p_business) b
+  )
+  select t.brand, coalesce(v.n, 0), l.logo_url, l.description
+    from toate t
+    left join vizibile v on v.b = regexp_replace(t.brand, '\s+', ' ', 'g')
+    left join public.brands l on l.business_id = p_business and lower(l.name) = lower(t.brand)
+   order by coalesce(v.n, 0) desc, lower(t.brand), t.brand;
 $function$
 ;
 
@@ -8743,6 +8785,7 @@ AS $function$
 declare
   v_vechi text := btrim(coalesce(p_vechi, ''));
   v_nou   text := nullif(left(btrim(coalesce(p_nou, '')), 120), '');
+  v_vechi_folosit boolean;
 begin
   return query
     select * from public.produse_seteaza_brandul(
@@ -8752,18 +8795,30 @@ begin
                and nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') = v_vechi),
       v_nou);
 
+  v_vechi_folosit := exists (
+    select 1 from public.products p
+     where p.business_id = p_business
+       and lower(nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '')) = lower(v_vechi));
+
   if v_nou is not null then
-    insert into public.brands (business_id, name) values (p_business, v_nou)
-      on conflict (business_id, lower(name)) do update set name = excluded.name;
+    if exists (select 1 from public.brands l where l.business_id = p_business and lower(l.name) = lower(v_nou)) then
+      update public.brands l set name = v_nou
+       where l.business_id = p_business and lower(l.name) = lower(v_nou) and l.name <> v_nou;
+    elsif not v_vechi_folosit
+      and exists (select 1 from public.brands l where l.business_id = p_business and lower(l.name) = lower(v_vechi)) then
+      update public.brands l set name = v_nou
+       where l.business_id = p_business and lower(l.name) = lower(v_vechi);
+    else
+      insert into public.brands (business_id, name) values (p_business, v_nou)
+        on conflict (business_id, lower(name)) do nothing;
+    end if;
   end if;
 
   delete from public.brands l
    where l.business_id = p_business
      and lower(l.name) = lower(v_vechi)
      and lower(l.name) <> lower(coalesce(v_nou, ''))
-     and not exists (select 1 from public.products p
-                      where p.business_id = p_business
-                        and lower(nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '')) = lower(v_vechi));
+     and not v_vechi_folosit;
 end $function$
 ;
 
@@ -10191,8 +10246,11 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
+    -- ⚠ Un produs inactiv pana acum n-avea rand in catalog: il primeste chiar mai jos,
+    -- GOL, deci trebuie proiectat oricat de putin s-ar fi schimbat in rest.
     v_doar_stoc :=
-      new.name             is not distinct from old.name
+      coalesce(old.is_active, false)
+      and new.name             is not distinct from old.name
       and new.description  is not distinct from old.description
       and new.category     is not distinct from old.category
       and new.tags         is not distinct from old.tags
@@ -11149,7 +11207,9 @@ create table if not exists public.brands (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
   name text not null,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  logo_url text,
+  description text);
 
 create table if not exists public.brevo_suppressions (
   id uuid default gen_random_uuid() not null,
@@ -12828,6 +12888,8 @@ alter table public.blog_posts add constraint blog_posts_status_known CHECK ((sta
 alter table public.blog_redirects add constraint blog_redirects_fel_check CHECK ((fel = ANY (ARRAY['articol'::text, 'categorie'::text, 'autor'::text])));
 alter table public.blog_redirects add constraint blog_redirects_not_circular CHECK ((from_slug <> to_slug));
 alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
+alter table public.brands add constraint brands_descriere_lungime CHECK (((description IS NULL) OR (char_length(description) <= 5000)));
+alter table public.brands add constraint brands_logo_https CHECK (((logo_url IS NULL) OR ((logo_url ~ '^https://'::text) AND (char_length(logo_url) <= 1000))));
 alter table public.brands add constraint brands_name_curat CHECK (((name = btrim(name)) AND ((char_length(name) >= 1) AND (char_length(name) <= 120))));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
@@ -16455,11 +16517,14 @@ grant execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) to
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to anon;
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to authenticated;
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to service_role;
+grant execute on function public.brand_salveaza_detalii(p_business uuid, p_nume text, p_logo text, p_descriere text) to authenticated;
+grant execute on function public.brand_salveaza_detalii(p_business uuid, p_nume text, p_logo text, p_descriere text) to service_role;
 grant execute on function public.canale_vanzare(p_business uuid) to authenticated;
 grant execute on function public.canale_vanzare(p_business uuid) to service_role;
 grant execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to authenticated;
 grant execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
 grant execute on function public.catalog_aplica_proiectii(p_randuri jsonb) to service_role;
+grant execute on function public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean) to service_role;
 grant execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) to service_role;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to anon;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to authenticated;
@@ -16752,10 +16817,10 @@ grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to anon;
-grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
-grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;
@@ -16835,9 +16900,11 @@ revoke execute on function public.blog_salveaza_articol(p_id uuid, p_rand jsonb,
 revoke execute on function public.blog_sterge_articol(p_id uuid) from public;
 revoke execute on function public.blog_sterge_eticheta(p_id uuid) from public;
 revoke execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) from public;
+revoke execute on function public.brand_salveaza_detalii(p_business uuid, p_nume text, p_logo text, p_descriere text) from public;
 revoke execute on function public.canale_vanzare(p_business uuid) from public;
 revoke execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
+revoke execute on function public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
 revoke execute on function public.catalog_fara_stoc(p_id uuid) from public;

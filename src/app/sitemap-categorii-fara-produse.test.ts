@@ -270,6 +270,8 @@ const baza = http.createServer((req, res) => {
     if (url.pathname === "/rest/v1/categories") return json(200, raspunde(CATEGORII, url));
     if (url.pathname === "/rest/v1/products") return json(200, raspunde(PRODUSE, url));
     if (url.pathname === "/rest/v1/custom_pages") return json(200, raspunde(PAGINI, url));
+    // Lista de branduri (paginile `/brand/<segment>`): goala aici, proba e despre categorii.
+    if (url.pathname === "/rest/v1/rpc/catalog_branduri") return json(200, []);
     if (url.pathname === "/rest/v1/catalog_rezumat") {
       if (url.searchParams.get("business_id") === `eq.${B_CADE}`) {
         return json(500, { code: "XX000", message: "baza de proba: rezumatul nu raspunde" });

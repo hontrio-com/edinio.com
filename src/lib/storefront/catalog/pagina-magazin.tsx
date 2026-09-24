@@ -12,7 +12,10 @@ import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { UrmaCautarePixel } from "@/components/storefront/UrmaCautarePixel";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
-import { construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
+import { CHEIE_BRAND, construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
+import {
+  branduriMagazin, caleBrand, dateStructurateBrand, filtruJetonBrand, jetonBrand, potrivesteBrand, valoareBrand, type BrandMagazin,
+} from "@/lib/storefront/catalog/branduri-magazin";
 import { alegePalier } from "@/lib/storefront/catalog/tier";
 import { cautaPeServer, sortareLaCautare } from "@/lib/storefront/catalog/cauta-server";
 import { numeSubarbore } from "@/lib/storefront/catalog/subarbore";
@@ -35,6 +38,7 @@ import {
 } from "@/lib/storefront/catalog/metadata-magazin";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Json } from "@/types/database.types";
+import { parseStoreSeo, storeBaseUrl } from "@/lib/seo";
 import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
 
 /*
@@ -60,7 +64,15 @@ type Argumente = ArgumentePaginaMagazin;
 
 type CategorieMinima = { id: string; name: string; parent_id: string | null };
 
-export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: Argumente) {
+/**
+ * Pe pagina unui brand, filtrul „Brand” din bara laterala n-are ce cauta: brandul e
+ * deja fixat de cale, iar o bifa pe alt brand ar fi dat o grila goala (SI intre chei).
+ */
+function faraFatetaBrand(fatete: Fateta[], pePaginaBrand: boolean): Fateta[] {
+  return pePaginaBrand ? fatete.filter((f) => f.cheie !== CHEIE_BRAND) : fatete;
+}
+
+export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, esteCautare }: Argumente) {
   const supabase = await createClient();
   /*
    * Randul de magazin vine din citirea DEDUPLICATA a antetului, nu dintr-o a doua
@@ -134,7 +146,29 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
    * inapoi pe pagina principala — peste erou, peste randurile de produse — la altii.
    * Chiar ce a raportat eSAFE: „sunt tot pe pagina principala".
    */
-  if (!esteCautare && !shopOnPage(resolved.design)) redirect(radacinaMagazinCuFiltre(basePath, sp));
+  const pc = (storeSettings?.page_content as Record<string, unknown>) ?? {};
+  const faraImagini = pc.hide_products_without_images === true;
+  const faraStocAscuns = pc.hide_out_of_stock_products === true;
+
+  /*
+   * Brandul din cale, cand pagina e a unui brand. Aceeasi lista (cu `cache()`) ca
+   * metadata, deci aceeasi potrivire.
+   *
+   * ⚠ `null` = lista N-A PUTUT fi citita, nu „nu exista": atunci eroare (500), nu 404.
+   * Un 404 pe o pagina adevarata o scoate din index; un 500 il face pe Google sa revina.
+   */
+  let brandPagina: BrandMagazin | null = null;
+  if (brandSlug) {
+    const branduri = await branduriMagazin(business.id, faraImagini, faraStocAscuns);
+    if (!branduri) throw new Error(`[branduri] lista magazinului ${business.slug} n-a putut fi citita`);
+    brandPagina = potrivesteBrand(branduri, brandSlug);
+    if (!brandPagina) notFound();
+  }
+
+  // Fara pagina de catalog, brandul pleaca pe prima pagina ca filtru (`?brand=`).
+  if (!esteCautare && !shopOnPage(resolved.design)) {
+    redirect(radacinaMagazinCuFiltre(basePath, brandPagina ? { ...sp, [CHEIE_BRAND]: valoareBrand(brandPagina.nume) } : sp));
+  }
 
   if (!business.is_published && !isOwner) redirect(radacinaMagazinCuFiltre(basePath, sp));
 
@@ -169,10 +203,6 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
    * adica exact invers decat scopul. Rezumatul si categoriile sunt amandoua
    * ieftine (un rand, respectiv cateva zeci), deci valul asta nu costa nimic.
    */
-  const pc = (storeSettings?.page_content as Record<string, unknown>) ?? {};
-  const faraImagini = pc.hide_products_without_images === true;
-  const faraStocAscuns = pc.hide_out_of_stock_products === true;
-
   /*
    * ⚠ Prin ACELEASI incarcatoare ca metadata (`context-descriere.ts`), cu `cache()`.
    *
@@ -289,7 +319,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
 
   let reusitPeServer = false;
   if (peServer && rezumat) {
-    fateteDePagina = rezumat.fatete?.fatete ?? [];
+    fateteDePagina = faraFatetaBrand(rezumat.fatete?.fatete ?? [], !!brandPagina);
     jetoaneDePagina = rezumat.fatete?.jetoane ?? [];
     filtre = citesteFiltreDinAdresa(sp, fateteDePagina);
 
@@ -336,7 +366,11 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
       stoc: filtre.stoc,
       faraImagini,
       faraStocAscuns,
-      fatete: Object.entries(filtre.fatete).map(([cheie, valori]) => valori.map((v) => jeton(cheie, v))),
+      fatete: [
+        ...Object.entries(filtre.fatete).map(([cheie, valori]) => valori.map((v) => jeton(cheie, v))),
+        // Brandul paginii: un grup de SI in plus, pe jetonul pe care il poarta fiecare produs al lui.
+        ...(brandPagina ? [[jetonBrand(brandPagina.nume)]] : []),
+      ],
     };
 
     let pag: { randuri: RandProiectie[]; total: number } | null = null;
@@ -420,20 +454,25 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
   }
 
   if (!reusitPeServer) {
-    const productsRaw = await fetchAllRows("storefront.magazin.products", (from, to) =>
-      proiectieDb()
+    const productsRaw = await fetchAllRows("storefront.magazin.products", (from, to) => {
+      let q = proiectieDb()
         .from("catalog_produs")
         .select(COLOANE_PROIECTIE)
-        .eq("business_id", business.id)
+        .eq("business_id", business.id);
+      // Pe pagina unui brand, browserul primeste numai produsele lui: acelasi jeton ca pe server.
+      // `text[]`: literalul cu ghilimele, nu `.contains(..., [jeton])` (vezi `filtruJetonBrand`).
+      if (brandPagina) q = q.filter("fatete", "cs", filtruJetonBrand(brandPagina.nume));
+      return q
         .order("is_featured", { ascending: false })
         .order("sort_order")
         .order("product_id")
-        .range(from, to));
+        .range(from, to);
+    });
     const randuri = productsRaw as unknown as RandProiectie[];
     const index = construiesteFateteDinJetoane(
       randuri.map((r) => ({ id: r.product_id, fatete: r.fatete })),
     );
-    fateteDePagina = index.fatete;
+    fateteDePagina = faraFatetaBrand(index.fatete, !!brandPagina);
     jetoaneDePagina = index.jetoane;
     filtre = citesteFiltreDinAdresa(sp, fateteDePagina);
     // Adnotarea tabloului, nu un cast: `as StorefrontProduct` ar fi trecut chiar
@@ -536,7 +575,9 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
         referrer: referrerVizitei,
         country: taraVizitatorului,
         /* Calea, cat sa se poata deosebi catalogul de o categorie anume. */
-        path: categorieSlug ? `/magazin/${categorieSlug}` : "/magazin",
+        path: brandPagina
+          ? `/brand/${brandPagina.segment}`
+          : categorieSlug ? `/magazin/${categorieSlug}` : "/magazin",
       });
     });
   }
@@ -577,7 +618,17 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
    *
    * ⚠ Aici raman doar intrarile, fiecare cu sursa ei din randare.
    */
-  const dateStructurate = await dateStructuratePaginaCatalog({
+  const dateStructurate = brandPagina
+    ? dateStructurateBrand({
+        brand: brandPagina,
+        business,
+        radacina: storeBaseUrl(business),
+        titluCatalog: setari.titlu,
+        sp,
+        noindexMagazin: !!parseStoreSeo(storeSettings?.page_content ?? null).noindex,
+        esteCiorna: isPreview || !business.is_published,
+      })
+    : await dateStructuratePaginaCatalog({
     business,
     pageContent: storeSettings?.page_content ?? null,
     faraTva: preturiFaraTva(storeSettings),
@@ -649,8 +700,13 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
       // Calea se compune din numele gasit, nu din segmentul cerut: „Bocanci" si
       // „bocanci" duc la aceeasi pagina, iar paginarea si filtrele trebuie sa
       // ramana pe adresa canonica a categoriei.
-      caleCategorie={numeCategorie
-        ? `${shopHref(basePath)}/${slugCategorie(numeCategorie)}`
+      caleCategorie={brandPagina
+        ? caleBrand(basePath, brandPagina.nume) ?? undefined
+        : numeCategorie
+          ? `${shopHref(basePath)}/${slugCategorie(numeCategorie)}`
+          : undefined}
+      paginaBrand={brandPagina
+        ? { nume: brandPagina.nume, logo: brandPagina.logo, descriere: brandPagina.descriere }
         : undefined}
       initialDrillParentId={categorieDinCale
         ? (categorieDinCale.areCopii ? categorieDinCale.id : categorieDinCale.parent_id)

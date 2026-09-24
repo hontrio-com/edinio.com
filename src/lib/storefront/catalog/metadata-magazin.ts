@@ -20,6 +20,7 @@ import {
 import { sortareEfectivaGrila } from "@/lib/storefront/catalog/sortare-efectiva";
 import type { CategorieArbore } from "@/lib/storefront/catalog/subarbore";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
+import { branduriMagazin, metadataPaginiiBrand, potrivesteBrand } from "@/lib/storefront/catalog/branduri-magazin";
 
 /**
  * Metadata paginii de catalog, a paginilor de categorie si a rezultatelor cautarii.
@@ -38,6 +39,8 @@ export interface ArgumentePaginaMagazin {
   sp: Record<string, string | string[] | undefined>;
   /** Segmentul de categorie din cale, cand pagina e a unei categorii. */
   categorieSlug?: string;
+  /** Segmentul de brand din cale, cand pagina e a unui brand (`/brand/<segment>`). */
+  brandSlug?: string;
   /**
    * Pagina de REZULTATE ale cautarii (`/cautare?q=…`).
    *
@@ -330,6 +333,44 @@ export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: 
     indexabila,
     noindex: !!seo.noindex || faraProduse,
     images,
+  });
+}
+
+/**
+ * Metadata paginii unui brand (`/brand/<segment>`).
+ *
+ * Aceleasi citiri ca `metadataMagazin` (magazinul, publicarea, setarile SEO,
+ * comutatoarele), apoi brandul prin `branduriMagazin`, cu `cache()`: randarea il cere
+ * cu aceleasi argumente, deci lista se citeste o singura data. Compunerea sta in
+ * `metadataPaginiiBrand`, care ruleaza in probe.
+ */
+export async function metadataBrand({ slug, sp, brandSlug }: { slug: string; sp: ArgumentePaginaMagazin["sp"]; brandSlug: string }): Promise<Metadata> {
+  const { data: business } = await createAdminClient()
+    .from("businesses")
+    .select("id, business_name, store_name, cover_url, custom_domain, is_published, store_settings(page_content, storefront_design, vat_enabled, prices_include_vat)")
+    .eq("slug", slug)
+    .single();
+  if (!business) return {};
+  if (!business.is_published) {
+    return metadataMagazinNepublicat(business.store_name ?? business.business_name);
+  }
+  const brut = (business as unknown as { store_settings: SetariCitite | SetariCitite[] | null }).store_settings;
+  const settings = Array.isArray(brut) ? brut[0] : brut;
+  const seo = parseStoreSeo(settings?.page_content ?? null);
+  const pc = (settings?.page_content ?? {}) as Record<string, unknown>;
+  const branduri = await branduriMagazin(
+    business.id, pc.hide_products_without_images === true, pc.hide_out_of_stock_products === true,
+  );
+  const brand = branduri ? potrivesteBrand(branduri, brandSlug) : null;
+  // Fara brand nu exista pagina: ruta raspunde 404 (sau 500, cand lista n-a putut fi citita).
+  if (!brand) return {};
+  return metadataPaginiiBrand({
+    brand,
+    displayName: business.store_name ?? business.business_name,
+    radacina: storeBaseUrl({ slug, custom_domain: business.custom_domain }),
+    sp,
+    noindexMagazin: !!seo.noindex,
+    imagineMagazin: seo.ogImage || business.cover_url || null,
   });
 }
 

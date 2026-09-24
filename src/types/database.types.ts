@@ -1353,19 +1353,25 @@ export type Database = {
         Row: {
           business_id: string
           created_at: string
+          description: string | null
           id: string
+          logo_url: string | null
           name: string
         }
         Insert: {
           business_id: string
           created_at?: string
+          description?: string | null
           id?: string
+          logo_url?: string | null
           name: string
         }
         Update: {
           business_id?: string
           created_at?: string
+          description?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
         }
         Relationships: [
@@ -7082,6 +7088,28 @@ export type Database = {
           nume: string
           cerute: number
           ramase: number
+        }[]
+      }
+      brand_salveaza_detalii: {
+        Args: {
+          p_business: string
+          p_descriere: string | null
+          p_logo: string | null
+          p_nume: string
+        }
+        Returns: undefined
+      }
+      catalog_branduri: {
+        Args: {
+          p_business: string
+          p_fara_imagini: boolean
+          p_fara_stoc_ascuns: boolean
+        }
+        Returns: {
+          brand: string
+          descriere: string | null
+          logo_url: string | null
+          produse: number
         }[]
       }
       produse_branduri: {

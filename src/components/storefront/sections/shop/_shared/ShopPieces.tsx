@@ -705,11 +705,13 @@ export function Paginare() {
 /* ─── Antet ──────────────────────────────────────────────────────────────── */
 
 export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; aratatTitlu?: boolean }) {
-  const { categoryFilter, setariMagazin, basePath, business, catalogRoot, categoriiRoot, categoriiPePagina, parinteCategorie } = useStorefront();
+  const { categoryFilter, setariMagazin, basePath, business, catalogRoot, categoriiRoot, categoriiPePagina, parinteCategorie, paginaBrand } = useStorefront();
   // Categoria aleasa devine titlul: vizitatorul venit dintr-un link de categorie
   // trebuie sa vada unde a ajuns, nu un titlu generic peste o lista filtrata.
-  const inCategorie = !!categoryFilter && categoryFilter !== "toate";
-  const text = inCategorie ? categoryFilter : titlu;
+  // Pe pagina unui brand, titlul e brandul.
+  const inCategorie = !paginaBrand && !!categoryFilter && categoryFilter !== "toate";
+  const text = paginaBrand ? paginaBrand.nume : inCategorie ? categoryFilter : titlu;
+  const inAdancime = inCategorie || !!paginaBrand;
 
   return (
     <div className="space-y-2">
@@ -721,7 +723,7 @@ export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; arat
           <span aria-hidden="true">/</span>
           {/* Din categorie, „Magazin" e drumul inapoi la catalogul intreg — singurul
               loc din pagina de unde se iese fara butonul browserului. */}
-          {inCategorie ? (
+          {inAdancime ? (
             <a href={catalogRoot} className="hover:text-[var(--st-text)] transition-colors">{titlu}</a>
           ) : (
             <span className="text-[var(--st-text)] font-medium">{titlu}</span>
@@ -739,15 +741,35 @@ export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; arat
               <span className="text-[var(--st-text)] font-medium truncate">{categoryFilter}</span>
             </>
           )}
+          {paginaBrand && (
+            <>
+              <span aria-hidden="true">/</span>
+              <span className="text-[var(--st-text)] font-medium truncate">{paginaBrand.nume}</span>
+            </>
+          )}
         </nav>
       )}
-      <h1 className={aratatTitlu ? "text-2xl font-bold text-[var(--st-text)]" : "sr-only"}>{text}</h1>
+      {paginaBrand?.logo ? (
+        <div className="flex items-center gap-4">
+          <div className="h-16 w-16 sm:h-20 sm:w-20 shrink-0 rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-white p-2 flex items-center justify-center overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={cdnImage(paginaBrand.logo, 200)} alt={`Logo ${paginaBrand.nume}`} className="max-h-full max-w-full object-contain" />
+          </div>
+          {/* Cu logo, titlul se arata MEREU: logo-ul singur, fara nume, n-ar spune ce pagina e. */}
+          <h1 className="text-2xl font-bold text-[var(--st-text)] min-w-0 break-words">{text}</h1>
+        </div>
+      ) : (
+        <h1 className={aratatTitlu || paginaBrand ? "text-2xl font-bold text-[var(--st-text)]" : "sr-only"}>{text}</h1>
+      )}
+      {paginaBrand?.descriere && (
+        <p className="text-sm text-[var(--st-muted)] max-w-3xl leading-relaxed whitespace-pre-line">{paginaBrand.descriere}</p>
+      )}
       {/*
         Subtitlul dispare cand vizitatorul e intr-o categorie: e scris despre
         catalogul intreg, iar peste o lista filtrata ar descrie altceva decat
         se vede.
       */}
-      {setariMagazin.subtitlu && !inCategorie && (
+      {setariMagazin.subtitlu && !inAdancime && (
         <p className="text-sm text-[var(--st-muted)] max-w-2xl leading-relaxed">{setariMagazin.subtitlu}</p>
       )}
     </div>

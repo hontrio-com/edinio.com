@@ -1349,6 +1349,35 @@ export type Database = {
         }
         Relationships: []
       }
+      brands: {
+        Row: {
+          business_id: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brands_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brevo_suppressions: {
         Row: {
           business_id: string

@@ -13,7 +13,8 @@ import { enqueueEmagSyncMany } from "@/lib/emag/queue";
 import { logError } from "@/lib/error-logger";
 
 /**
- * Administrarea brandurilor, din Produse > Branduri.
+ * Administrarea brandurilor, din Produse > Branduri. Lista magazinului sta in
+ * `brands` (ca la categorii); pe produs, brandul ramane in `page_sections.google.brand`.
  *
  * ⚠⚠ ORICE EXPORT DE AICI E UN CAPAT PUBLIC: Next le rezolva dintr-un manifest global,
  * deci o actiune se poate chema de oriunde, cu orice argumente. Fiecare verifica deci
@@ -83,6 +84,34 @@ export async function redenumesteBrandul(businessId: string, vechi: string, nou:
   const tinta = brandCanonic(scris, altele);
   if (tinta === brandVechi) return { success: true, count: 0 };
   return schimba(businessId, brandVechi, tinta);
+}
+
+/**
+ * Adauga un brand in lista magazinului, fara sa-l puna inca pe vreun produs (ca
+ * „Categorie noua”). Se aplica apoi din produs sau din lista de produse.
+ * Un brand care exista deja, in orice forma de majuscule, nu se mai adauga.
+ */
+export async function adaugaBrandul(businessId: string, nume: string): Promise<Rezultat> {
+  const scris = curataBrand(nume);
+  if (!scris) return { error: "Scrie numele brandului." };
+
+  const { supabase, ok } = await magazinulMeu(businessId);
+  if (!ok) return { error: "Magazin negasit." };
+  const { data: existente } = await supabase.rpc("produse_branduri", { p_business: businessId });
+  const cheie = scris.toLocaleLowerCase("ro");
+  const deja = (existente ?? []).find((b) => curataBrand(b.brand).toLocaleLowerCase("ro") === cheie);
+  if (deja) return { error: `Brandul „${deja.brand}” exista deja.` };
+
+  const { error } = await supabase.from("brands").insert({ business_id: businessId, name: scris });
+  if (error) {
+    /* 23505: adaugat intre timp (alt tab, dublu clic), tot „exista deja”. */
+    if (error.code === "23505") return { error: `Brandul „${scris}” exista deja.` };
+    await logError({ action: "branduri/adauga", message: error.message, businessId, severity: "error" });
+    return { error: "Nu am putut salva. Incearca din nou." };
+  }
+  revalidatePath("/dashboard/products/brands");
+  revalidatePath("/dashboard/products");
+  return { success: true, count: 0 };
 }
 
 /** Uneste un brand in altul existent (toate produsele lui trec pe cel ales). */

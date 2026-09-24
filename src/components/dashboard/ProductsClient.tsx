@@ -497,7 +497,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
             className="px-3 py-2 text-sm border border-border rounded-xl bg-muted/40 text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors">
             <option value="">Toate brandurile</option>
             <option value={FARA_BRAND}>Produse fara brand</option>
-            {brands.map((b) => (
+            {brands.filter((b) => b.produse > 0).map((b) => (
               <option key={b.brand} value={b.brand}>{`${b.brand} (${b.produse})`}</option>
             ))}
           </select>

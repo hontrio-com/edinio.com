@@ -114,7 +114,11 @@ test("⚠⚠ fiecare actiune de brand verifica utilizatorul si ca magazinul e al
   assert.match(a, /auth\.getUser\(\)/);
   assert.match(a, /\.eq\("id", businessId\)\.eq\("user_id", user\.id\)/);
   const exporturi = [...a.matchAll(/export async function (\w+)/g)].map((x) => x[1]);
-  assert.deepEqual(exporturi.sort(), ["redenumesteBrandul", "stergeBrandul", "unesteBrandul"]);
+  assert.deepEqual(exporturi.sort(), ["adaugaBrandul", "redenumesteBrandul", "stergeBrandul", "unesteBrandul"]);
+  /* Adaugarea scrie direct in `brands`: tot intai proprietarul, apoi scrierea. */
+  const corpAdauga = a.slice(a.indexOf("export async function adaugaBrandul")).split("\nexport ")[0];
+  assert.ok(corpAdauga.indexOf("magazinulMeu") > 0, "adaugaBrandul verifica proprietarul");
+  assert.ok(corpAdauga.indexOf("magazinulMeu") < corpAdauga.indexOf('.from("brands").insert'), "verificarea vine INAINTEA scrierii");
   /* Toate trec prin `schimba`, care intreaba intai `magazinulMeu`. */
   const corpSchimba = a.slice(a.indexOf("async function schimba"), a.indexOf("export async function"));
   assert.ok(corpSchimba.indexOf("magazinulMeu") < corpSchimba.indexOf("rpc("), "verificarea vine INAINTEA scrierii");
@@ -141,4 +145,31 @@ test("Branduri e in meniul Produse", () => {
   const produse = MENIU_PANOU.flatMap((g) => ("items" in g ? g.items : [g]) as unknown[])
     .flatMap((i) => [i, ...(((i as { children?: unknown[] }).children) ?? [])]) as { href?: string; label?: string }[];
   assert.ok(produse.some((i) => i.href === "/dashboard/products/brands" && i.label === "Branduri"));
+});
+
+/* ─────────────── lista proprie (`brands`), ca la categorii ─────────────── */
+
+test("⚠⚠ `brands`: RLS pornit, numai proprietarul, nicio citire pentru anon", () => {
+  const m = sursa("migrations/2026-09-24-produse-branduri-z-lista.sql");
+  assert.match(m, /alter table public\.brands enable row level security/);
+  /* `with check` cere proprietarul si la SCRIERE: fara el, cineva ar putea insera in magazinul altuia. */
+  assert.match(m, /with check \(business_id in \(select b\.id from public\.businesses b where b\.user_id = \(select auth\.uid\(\)\)\)\)/);
+  assert.match(m, /revoke all on table public\.brands from public, anon, authenticated/);
+  assert.doesNotMatch(m, /grant [^;]*on table public\.brands to [^;]*anon/);
+  assert.doesNotMatch(m, /security\s+definer/i);
+  /* Un brand in doua forme de majuscule e acelasi rand. */
+  assert.match(m, /unique index [^;]*on public\.brands \(business_id, lower\(name\)\)/);
+});
+
+test("⚠ stergerea unei forme nu scoate din lista brandul inca folosit in alta forma", () => {
+  /* Probat pe demo: „Sterge ARMAF” cu „Armaf” pe un produs lasa randul „Armaf”. */
+  const m = sursa("migrations/2026-09-24-produse-branduri-z-lista.sql");
+  const stergerea = m.slice(m.indexOf("delete from public.brands"), m.indexOf("end $$;", m.indexOf("delete from public.brands")));
+  assert.match(stergerea, /and not exists \(select 1 from public\.products p/);
+});
+
+test("pagina Branduri are „Brand nou”, care cheama adaugaBrandul", () => {
+  const c = sursa("src/components/dashboard/BranduriClient.tsx");
+  assert.match(c, /Brand nou/);
+  assert.match(c, /adaugaBrandul\(businessId, nume\)/);
 });

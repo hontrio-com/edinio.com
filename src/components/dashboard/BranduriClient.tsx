@@ -4,19 +4,21 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Award, Check, GitMerge, Loader2, Pencil, Search, Trash2, X } from "lucide-react";
-import { redenumesteBrandul, stergeBrandul, unesteBrandul } from "@/lib/actions/branduri.actions";
+import { Award, Check, GitMerge, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { adaugaBrandul, redenumesteBrandul, stergeBrandul, unesteBrandul } from "@/lib/actions/branduri.actions";
 import { curataBrand, dubluriDeBrand, type BrandCuProduse } from "@/lib/dashboard/branduri";
 import { pluralRo } from "@/lib/utils/format";
 
 /**
  * Produse > Branduri.
  *
- * Brandurile NU sunt o lista separata: sunt valorile scrise pe produse
- * (`page_sections.google.brand`). Deci un brand exista cat timp are macar un
- * produs, si „a sterge un brand” inseamna a-l scoate de pe produsele lui. Un brand
- * nou se adauga din produs (campul Brand) sau din lista de produse, pe mai multe
- * deodata (bara de selectie > Brand).
+ * Ca la categorii: lista magazinului sta in `brands`, iar produsul isi tine brandul
+ * ca text, in `page_sections.google.brand` (de acolo il citesc feedurile). Pagina
+ * arata ambele: brandurile de pe produse si cele adaugate aici care n-au inca
+ * produse. Un brand se pune pe produse din produs (campul Brand) sau din lista de
+ * produse, pe mai multe deodata (bara de selectie > Brand). „A sterge un brand”
+ * inseamna a-l scoate din lista si de pe produsele lui; produsele raman.
  */
 
 const inputCls =
@@ -39,6 +41,8 @@ export function BranduriClient({
   const [numeNou, setNumeNou] = useState("");
   const [deSters, setDeSters] = useState<string | null>(null);
   const [lucreaza, setLucreaza] = useState<string | null>(null);
+  const [adaug, setAdaug] = useState(false);
+  const [numeAdaugat, setNumeAdaugat] = useState("");
   const [, startTransition] = useTransition();
 
   const cuBrand = branduri.reduce((s, b) => s + b.produse, 0);
@@ -60,6 +64,8 @@ export function BranduriClient({
         toast.success(mesaj(r.count));
         setEditez(null);
         setDeSters(null);
+        setAdaug(false);
+        setNumeAdaugat("");
         router.refresh();
       } catch {
         toast.error("Nu am putut salva. Verifica legatura la internet.");
@@ -83,29 +89,80 @@ export function BranduriClient({
       n === 0 ? "Nicio schimbare." : `Brandul a fost redenumit la ${pluralRo(n, "produs", "produse")}.`);
   }
 
+  function adauga() {
+    const nume = curataBrand(numeAdaugat);
+    if (!nume) {
+      toast.error("Scrie numele brandului.");
+      return;
+    }
+    ruleaza("adauga", () => adaugaBrandul(businessId, nume), () => `Brandul „${nume}” a fost adaugat.`);
+  }
+
   return (
     <div className="p-6 max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-foreground">Branduri</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {branduri.length === 0
-            ? "Niciun brand"
-            : `${pluralRo(branduri.length, "brand", "branduri")} · ${cuBrand} din ${pluralRo(totalProduse, "produs", "produse")} au brand`}
-        </p>
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-foreground">Branduri</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {branduri.length === 0
+              ? "Niciun brand"
+              : `${pluralRo(branduri.length, "brand", "branduri")} · ${cuBrand} din ${pluralRo(totalProduse, "produs", "produse")} au brand`}
+          </p>
+        </div>
+        <Button onClick={() => { setAdaug(true); setEditez(null); setDeSters(null); }} disabled={adaug}>
+          <Plus />
+          Brand nou
+        </Button>
       </div>
 
-      {branduri.length === 0 && (
+      {adaug && (
+        <form
+          className="mb-5 rounded-xl border border-border bg-surface p-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            adauga();
+          }}
+        >
+          <label htmlFor="brand-nou" className="block text-sm font-medium text-foreground mb-1.5">Numele brandului</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              id="brand-nou"
+              autoFocus
+              value={numeAdaugat}
+              onChange={(e) => setNumeAdaugat(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") { setAdaug(false); setNumeAdaugat(""); } }}
+              maxLength={120}
+              placeholder="ex: Portwest"
+              className={`${inputCls} flex-1 min-w-[10rem]`}
+            />
+            <button type="submit" disabled={lucreaza !== null || !curataBrand(numeAdaugat)} className={butonMic}>
+              {lucreaza === "adauga" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Adauga
+            </button>
+            <button type="button" disabled={lucreaza !== null} onClick={() => { setAdaug(false); setNumeAdaugat(""); }} className={butonMic}>
+              <X className="h-3.5 w-3.5" />
+              Renunta
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Dupa ce il adaugi, il alegi in pagina produsului (campul Brand) sau il pui pe mai multe produse deodata din lista de produse.
+          </p>
+        </form>
+      )}
+
+      {branduri.length === 0 && !adaug && (
         <div className="text-center py-16 border-2 border-dashed border-border rounded-2xl">
           <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
             <Award className="h-6 w-6 text-muted-foreground" />
           </div>
-          <p className="font-medium text-foreground mb-1">Niciun produs nu are brand</p>
+          <p className="font-medium text-foreground mb-1">Niciun brand adaugat</p>
           <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-            Adauga brandul din pagina produsului (sectiunea Organizare) sau pe mai multe produse deodata, din lista de produse.
+            Adauga brandurile pe care le vinzi, apoi alege-le pe produse.
           </p>
-          <Link href="/dashboard/products" className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white bg-primary hover:bg-primary/90 transition-colors">
-            Mergi la produse
-          </Link>
+          <Button onClick={() => setAdaug(true)}>
+            <Plus />
+            Adauga primul brand
+          </Button>
         </div>
       )}
 
@@ -199,33 +256,39 @@ export function BranduriClient({
                       Renunta
                     </button>
                     <p className="w-full text-xs text-muted-foreground">
-                      Se schimba la toate cele {pluralRo(b.produse, "produs", "produse")}. Daca scrii numele unui brand existent, produsele trec la el.
+                      {b.produse > 0 ? `Se schimba la toate cele ${pluralRo(b.produse, "produs", "produse")}. ` : ""}Daca scrii numele unui brand existent, produsele trec la el.
                     </p>
                   </form>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground break-words">{b.brand}</p>
-                      <Link
-                        href={`/dashboard/products?brand=${encodeURIComponent(b.brand)}`}
-                        className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-                      >
-                        {pluralRo(b.produse, "produs", "produse")}
-                      </Link>
+                      {b.produse > 0 ? (
+                        <Link
+                          href={`/dashboard/products?brand=${encodeURIComponent(b.brand)}`}
+                          className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                        >
+                          {pluralRo(b.produse, "produs", "produse")}
+                        </Link>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Niciun produs inca</p>
+                      )}
                     </div>
                     {confirmare ? (
                       <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`Confirma stergerea brandului ${b.brand}`}>
-                        <span className="text-xs text-foreground">Scoti brandul de pe {pluralRo(b.produse, "produs", "produse")}?</span>
+                        <span className="text-xs text-foreground">
+                          {b.produse > 0 ? `Scoti brandul de pe ${pluralRo(b.produse, "produs", "produse")}?` : "Stergi brandul din lista?"}
+                        </span>
                         <button
                           type="button"
                           autoFocus
                           disabled={ocupat}
                           onClick={() => ruleaza(`sterge:${b.brand}`, () => stergeBrandul(businessId, b.brand), (n) =>
-                            `Brandul a fost scos de pe ${pluralRo(n, "produs", "produse")}.`)}
+                            n > 0 ? `Brandul a fost scos de pe ${pluralRo(n, "produs", "produse")}.` : "Brandul a fost sters.")}
                           className={`${butonMic} border-destructive/40 text-destructive hover:bg-destructive/5`}
                         >
                           {lucreaza === `sterge:${b.brand}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                          Da, scoate
+                          {b.produse > 0 ? "Da, scoate" : "Da, sterge"}
                         </button>
                         <button type="button" disabled={ocupat} onClick={() => setDeSters(null)} className={butonMic}>
                           Nu
@@ -265,8 +328,8 @@ export function BranduriClient({
 
       {branduri.length > 0 && (
         <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
-          Stergerea scoate numai brandul de pe produse; produsele raman. Un brand nou se adauga din pagina produsului sau
-          din lista de produse (selecteaza produsele, apoi Brand).
+          Un brand se pune pe produse din pagina produsului (campul Brand) sau din lista de produse: selectezi produsele,
+          apoi Brand. Stergerea scoate brandul din lista si de pe produse; produsele raman.
         </p>
       )}
     </div>

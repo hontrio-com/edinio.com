@@ -8685,13 +8685,22 @@ CREATE OR REPLACE FUNCTION public.produse_branduri(p_business uuid)
  STABLE
  SET search_path TO ''
 AS $function$
-  select x.b, count(*)
-    from (select nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') as b
-            from public.products p
-           where p.business_id = p_business) x
-   where x.b is not null
-   group by x.b
-   order by lower(x.b), x.b;
+  with numarate as (
+    select x.b, count(*) as n
+      from (select nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') as b
+              from public.products p
+             where p.business_id = p_business) x
+     where x.b is not null
+     group by x.b
+  )
+  select u.brand, u.produse
+    from (select n.b as brand, n.n as produse from numarate n
+          union all
+          select l.name, 0::bigint
+            from public.brands l
+           where l.business_id = p_business
+             and not exists (select 1 from numarate n where lower(n.b) = lower(l.name))) u
+   order by lower(u.brand), u.brand;
 $function$
 ;
 
@@ -8728,16 +8737,34 @@ $function$
 
 CREATE OR REPLACE FUNCTION public.produse_redenumeste_brandul(p_business uuid, p_vechi text, p_nou text)
  RETURNS SETOF uuid
- LANGUAGE sql
+ LANGUAGE plpgsql
  SET search_path TO ''
 AS $function$
-  select * from public.produse_seteaza_brandul(
-    p_business,
-    array(select p.id from public.products p
-           where p.business_id = p_business
-             and nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') = btrim(coalesce(p_vechi, ''))),
-    p_nou);
-$function$
+declare
+  v_vechi text := btrim(coalesce(p_vechi, ''));
+  v_nou   text := nullif(left(btrim(coalesce(p_nou, '')), 120), '');
+begin
+  return query
+    select * from public.produse_seteaza_brandul(
+      p_business,
+      array(select p.id from public.products p
+             where p.business_id = p_business
+               and nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '') = v_vechi),
+      v_nou);
+
+  if v_nou is not null then
+    insert into public.brands (business_id, name) values (p_business, v_nou)
+      on conflict (business_id, lower(name)) do update set name = excluded.name;
+  end if;
+
+  delete from public.brands l
+   where l.business_id = p_business
+     and lower(l.name) = lower(v_vechi)
+     and lower(l.name) <> lower(coalesce(v_nou, ''))
+     and not exists (select 1 from public.products p
+                      where p.business_id = p_business
+                        and lower(nullif(btrim(p.page_sections -> 'google' ->> 'brand'), '')) = lower(v_vechi));
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.produse_seteaza_brandul(p_business uuid, p_ids uuid[], p_brand text)
@@ -11118,6 +11145,12 @@ create table if not exists public.blog_tags (
   name text not null,
   created_at timestamp with time zone default now() not null);
 
+create table if not exists public.brands (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  name text not null,
+  created_at timestamp with time zone default now() not null);
+
 create table if not exists public.brevo_suppressions (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -12622,6 +12655,7 @@ alter table public.blog_posts add constraint blog_posts_pkey PRIMARY KEY (id);
 alter table public.blog_redirects add constraint blog_redirects_pkey PRIMARY KEY (id);
 alter table public.blog_subscribers add constraint blog_subscribers_pkey PRIMARY KEY (id);
 alter table public.blog_tags add constraint blog_tags_pkey PRIMARY KEY (id);
+alter table public.brands add constraint brands_pkey PRIMARY KEY (id);
 alter table public.brevo_suppressions add constraint brevo_suppressions_pkey PRIMARY KEY (id);
 alter table public.business_daily_stats add constraint business_daily_stats_pkey PRIMARY KEY (business_id, zi, event_type, device, source);
 alter table public.businesses add constraint businesses_pkey PRIMARY KEY (id);
@@ -12794,6 +12828,7 @@ alter table public.blog_posts add constraint blog_posts_status_known CHECK ((sta
 alter table public.blog_redirects add constraint blog_redirects_fel_check CHECK ((fel = ANY (ARRAY['articol'::text, 'categorie'::text, 'autor'::text])));
 alter table public.blog_redirects add constraint blog_redirects_not_circular CHECK ((from_slug <> to_slug));
 alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
+alter table public.brands add constraint brands_name_curat CHECK (((name = btrim(name)) AND ((char_length(name) >= 1) AND (char_length(name) <= 120))));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));
@@ -12881,6 +12916,7 @@ alter table public.blog_post_tags add constraint blog_post_tags_post_id_fkey FOR
 alter table public.blog_post_tags add constraint blog_post_tags_tag_id_fkey FOREIGN KEY (tag_id) REFERENCES blog_tags(id) ON DELETE CASCADE;
 alter table public.blog_posts add constraint blog_posts_author_id_fkey FOREIGN KEY (author_id) REFERENCES blog_authors(id) ON DELETE SET NULL;
 alter table public.blog_posts add constraint blog_posts_category_id_fkey FOREIGN KEY (category_id) REFERENCES blog_categories(id) ON DELETE SET NULL;
+alter table public.brands add constraint brands_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.brevo_suppressions add constraint brevo_suppressions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.business_daily_stats add constraint business_daily_stats_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.businesses add constraint businesses_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -13140,6 +13176,7 @@ CREATE UNIQUE INDEX blog_redirects_fel_from ON public.blog_redirects USING btree
 CREATE INDEX blog_subscribers_confirmed_idx ON public.blog_subscribers USING btree (confirmed_at) WHERE (confirmed_at IS NOT NULL);
 CREATE INDEX blog_subscribers_token_hash ON public.blog_subscribers USING btree (token_hash) WHERE (token_hash IS NOT NULL);
 CREATE UNIQUE INDEX blog_subscribers_unsub_token ON public.blog_subscribers USING btree (unsub_token) WHERE (unsub_token IS NOT NULL);
+CREATE UNIQUE INDEX brands_business_nume_key ON public.brands USING btree (business_id, lower(name));
 CREATE INDEX brevo_suppressions_business_email_idx ON public.brevo_suppressions USING btree (business_id, email);
 CREATE INDEX catalog_index_cuvant_product_id_idx ON public.catalog_index_cuvant USING btree (product_id);
 CREATE INDEX categories_business_id_idx ON public.categories USING btree (business_id);
@@ -13546,6 +13583,7 @@ alter table public.blog_posts enable row level security;
 alter table public.blog_redirects enable row level security;
 alter table public.blog_subscribers enable row level security;
 alter table public.blog_tags enable row level security;
+alter table public.brands enable row level security;
 alter table public.brevo_suppressions enable row level security;
 alter table public.business_daily_stats enable row level security;
 alter table public.businesses enable row level security;
@@ -13727,6 +13765,11 @@ create policy blog_tags_public_read on public.blog_tags as PERMISSIVE for SELECT
    FROM (blog_post_tags pt
      JOIN blog_posts p ON ((p.id = pt.post_id)))
   WHERE ((pt.tag_id = blog_tags.id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
+create policy "Owners manage own brands" on public.brands as PERMISSIVE for ALL to authenticated using ((business_id IN ( SELECT b.id
+   FROM businesses b
+  WHERE (b.user_id = ( SELECT auth.uid() AS uid))))) with check ((business_id IN ( SELECT b.id
+   FROM businesses b
+  WHERE (b.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Owners read own brevo suppressions" on public.brevo_suppressions as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = brevo_suppressions.business_id) AND (b.user_id = auth.uid())))));
@@ -14519,6 +14562,17 @@ grant SELECT on table public.blog_tags to service_role;
 grant TRIGGER on table public.blog_tags to service_role;
 grant TRUNCATE on table public.blog_tags to service_role;
 grant UPDATE on table public.blog_tags to service_role;
+grant DELETE on table public.brands to authenticated;
+grant INSERT on table public.brands to authenticated;
+grant SELECT on table public.brands to authenticated;
+grant UPDATE on table public.brands to authenticated;
+grant DELETE on table public.brands to service_role;
+grant INSERT on table public.brands to service_role;
+grant REFERENCES on table public.brands to service_role;
+grant SELECT on table public.brands to service_role;
+grant TRIGGER on table public.brands to service_role;
+grant TRUNCATE on table public.brands to service_role;
+grant UPDATE on table public.brands to service_role;
 grant DELETE on table public.brevo_suppressions to anon;
 grant INSERT on table public.brevo_suppressions to anon;
 grant REFERENCES on table public.brevo_suppressions to anon;
@@ -16696,12 +16750,12 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
-grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(regdictionary, text) to authenticated;
+grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
-grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;

@@ -1392,7 +1392,7 @@ export function ProductForm({ businessId, product, categories, brands = [], back
                     <input id="produs-brand" type="text" list="produs-branduri" value={form.google.brand}
                       onChange={(e) => set("google", { ...form.google, brand: e.target.value })}
                       onBlur={(e) => { const c = brandCanonic(e.target.value, brands); if (c !== e.target.value) set("google", { ...form.google, brand: c }); }}
-                      maxLength={120} placeholder="ex: Portwest" className={inputCls} />
+                      maxLength={120} placeholder="ex: Nike" className={inputCls} />
                     <datalist id="produs-branduri">
                       {brands.map((b) => <option key={b} value={b} />)}
                     </datalist>

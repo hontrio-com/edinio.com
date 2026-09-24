@@ -54,6 +54,8 @@ export function BranduriClient({
   const [detalii, setDetalii] = useState<string | null>(null);
   const [logoNou, setLogoNou] = useState<string | null>(null);
   const [descriereNoua, setDescriereNoua] = useState("");
+  /* Descrierea e optionala: campul apare numai cu bifa pusa. Fara bifa, la salvare se scoate. */
+  const [cuDescriere, setCuDescriere] = useState(false);
   const [incarcLogo, setIncarcLogo] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -106,6 +108,7 @@ export function BranduriClient({
     setDetalii(b.brand);
     setLogoNou(b.logo);
     setDescriereNoua(b.descriere ?? "");
+    setCuDescriere(!!b.descriere?.trim());
     setEditez(null);
     setDeSters(null);
   }
@@ -126,7 +129,7 @@ export function BranduriClient({
   }
 
   function salveazaDetalii(nume: string) {
-    ruleaza(`detalii:${nume}`, () => salveazaDetaliileBrandului(businessId, nume, { logo: logoNou, descriere: descriereNoua }),
+    ruleaza(`detalii:${nume}`, () => salveazaDetaliileBrandului(businessId, nume, { logo: logoNou, descriere: cuDescriere ? descriereNoua : "" }),
       () => "Salvat.");
   }
 
@@ -173,7 +176,7 @@ export function BranduriClient({
               onChange={(e) => setNumeAdaugat(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Escape") { setAdaug(false); setNumeAdaugat(""); } }}
               maxLength={120}
-              placeholder="ex: Portwest"
+              placeholder="ex: Nike"
               className={`${inputCls} flex-1 min-w-[10rem]`}
             />
             <button type="submit" disabled={lucreaza !== null || !curataBrand(numeAdaugat)} className={butonMic}>
@@ -434,19 +437,33 @@ export function BranduriClient({
                       <p className="text-xs text-muted-foreground mt-1.5">JPG, PNG sau WebP, sub 5 MB. Se vede pe pagina brandului din magazin.</p>
                     </div>
                     <div>
-                      <label htmlFor={`descriere-${b.brand}`} className="block text-sm font-medium text-foreground mb-1.5">Descriere</label>
-                      <textarea
-                        id={`descriere-${b.brand}`}
-                        value={descriereNoua}
-                        onChange={(e) => setDescriereNoua(e.target.value)}
-                        maxLength={5000}
-                        rows={4}
-                        placeholder={`Cateva randuri despre ${b.brand}: ce produce, de unde vine, de ce il vindeti.`}
-                        className={`${inputCls} resize-y`}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Apare sub numele brandului, pe pagina lui din magazin, si in rezultatele Google.
-                      </p>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={cuDescriere}
+                          onChange={(e) => setCuDescriere(e.target.checked)}
+                        />
+                        <span>
+                          <span className="font-medium text-foreground">Adauga o descriere</span>
+                          <span className="block text-xs text-muted-foreground">
+                            Optional. Apare sub numele brandului, pe pagina lui din magazin, si in rezultatele Google.
+                          </span>
+                        </span>
+                      </label>
+                      {cuDescriere && (
+                        <textarea
+                          id={`descriere-${b.brand}`}
+                          aria-label={`Descrierea brandului ${b.brand}`}
+                          value={descriereNoua}
+                          onChange={(e) => setDescriereNoua(e.target.value)}
+                          maxLength={5000}
+                          rows={4}
+                          autoFocus={!descriereNoua}
+                          placeholder={`Cateva randuri despre ${b.brand}: ce produce, de unde vine, de ce il vindeti.`}
+                          className={`${inputCls} resize-y mt-2`}
+                        />
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <button type="submit" disabled={ocupat || incarcLogo} className={butonMic}>

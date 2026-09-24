@@ -173,3 +173,11 @@ test("pagina Branduri are „Brand nou”, care cheama adaugaBrandul", () => {
   assert.match(c, /Brand nou/);
   assert.match(c, /adaugaBrandul\(businessId, nume\)/);
 });
+
+test("descrierea brandului e optionala: fara bifa nu se vede campul, iar la salvare se scoate", () => {
+  const c = sursa("src/components/dashboard/BranduriClient.tsx");
+  assert.match(c, /descriere: cuDescriere \? descriereNoua : ""/);
+  assert.match(c, /\{cuDescriere && \(\s*<textarea/);
+  /* Bifa porneste pusa numai daca brandul are deja o descriere. */
+  assert.match(c, /setCuDescriere\(!!b\.descriere\?\.trim\(\)\)/);
+});

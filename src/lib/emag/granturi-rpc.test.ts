@@ -64,6 +64,18 @@ const PUBLICE_DINADINS: Record<string, string> = {
    */
   pazeste_secretele: "chemata din declansatorul vederii, care ruleaza sub rolul apelantului",
   /*
+   * ⚠ VERIFICAT, ca `pazeste_secretele`. E chemata din `customer_anonymize`, iar aceea e
+   * `security invoker` dinadins: butonul „Anonimizeaza" din panou o cheama cu clientul
+   * comerciantului, ca paza sa fie RLS-ul de pe `orders`. Fara EXECUTE pentru `authenticated`,
+   * prima anonimizare ar fi cazut cu `42501`, pentru toti comerciantii.
+   *
+   * ⚠ Si nu ocoleste nimic: PRIMA instructiune din corp refuza (`42501`) orice magazin care nu e
+   * al celui care cheama (`businesses.user_id = auth.uid()`), aceeasi conditie ca politica de pe
+   * `orders`. Deci un comerciant poate rupe numai conturile din magazinul lui, adica exact ce
+   * putea si prin `customer_anonymize`. Migratia 51 (`...-z-anonimizarea.sql`).
+   */
+  cont_rupe_legaturile: "chemata din `customer_anonymize` (security invoker), cu paza de proprietar in corp",
+  /*
    * ⚠ GASITA DE PROBA DE MAI JOS, la prima ei rulare, si NU e o exceptie de comoditate.
    *
    * `privat.cripteaza_rand(p_rand jsonb)` e chemata din `privat.store_settings_ins` si

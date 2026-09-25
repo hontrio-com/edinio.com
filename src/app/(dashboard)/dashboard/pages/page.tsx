@@ -7,6 +7,7 @@ import type { MenuItem } from "@/lib/pages/menu";
 import { cartOnPage, checkoutOnPage, shopOnPage } from "@/lib/storefront/design/commerce";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { Skeleton } from "@/components/ui/skeleton";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /** Identitatea magazinului, asa cum o cere lista de pagini. */
 type BusinessPagini = ComponentProps<typeof PagesListClient>["business"];
@@ -105,6 +106,7 @@ async function ListaPagini({ business }: { business: BusinessPagini }) {
       catalogPePagina={shopOnPage(design)}
       cosPePagina={cartOnPage(design)}
       comandaPePagina={checkoutOnPage(design)}
+      prefixCatalog={permalinkuriDin(pc).magazin}
     />
   );
 }

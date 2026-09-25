@@ -143,6 +143,12 @@ export function suntImplicite(p: Permalinkuri): boolean {
 export function valideazaPermalinkuri(
   cerute: Partial<Record<FelPermalink, unknown>>,
   paginiProprii: readonly string[],
+  /**
+   * Prefixele folosite inainte. Unul luat acum de ALT fel ar muta adresele vechi
+   * ale felului lui pe noul proprietar: `/produse/x` (fost produs) n-ar mai
+   * redirectiona, ci ar deveni o categorie inexistenta, adica 404.
+   */
+  anterioare?: Record<FelPermalink, readonly string[]>,
 ): { ok: true; valoare: Permalinkuri } | { ok: false; eroare: string } {
   const valoare = {} as Permalinkuri;
   for (const fel of FELURI_PERMALINK) {
@@ -153,6 +159,18 @@ export function valideazaPermalinkuri(
   }
   if (new Set(FELURI_PERMALINK.map((f) => valoare[f])).size !== FELURI_PERMALINK.length) {
     return { ok: false, eroare: "Cele trei prefixe trebuie să fie diferite între ele." };
+  }
+  if (anterioare) {
+    for (const fel of FELURI_PERMALINK) {
+      for (const altul of FELURI_PERMALINK) {
+        if (altul !== fel && anterioare[altul].includes(valoare[fel])) {
+          return {
+            ok: false,
+            eroare: `„${valoare[fel]}” a fost folosit înainte pentru ${ETICHETE[altul]}, iar adresele vechi de acolo duc încă la ele. Alege alt prefix pentru ${ETICHETE[fel]}.`,
+          };
+        }
+      }
+    }
   }
   const pagini = new Set(paginiProprii.map((s) => s.toLowerCase()));
   for (const fel of FELURI_PERMALINK) {
@@ -190,12 +208,16 @@ export function urmatoareaSetare(veche: SetarePermalinkuri, noua: Permalinkuri):
  *   - `curent: false` = implicitul sau un prefix vechi: se redirectioneaza.
  * Prefixele CURENTE se verifica primele, pe toate felurile: daca produsul a luat
  * vechiul prefix al brandurilor, adresa e a produsului.
+ *
+ * ⚠ EXACT, cu litere mari si mici. Rutele Next sunt sensibile la ele: `/Magazin`
+ * si `/Product/x` dau azi 404 la orice magazin. Comparat fara diferenta, captura-tot
+ * le-ar fi randat cu 200, adica o schimbare la TOATE magazinele, si cu setare, si fara.
  */
 export function felulSegmentului(
   segment: string,
   s: SetarePermalinkuri,
 ): { fel: FelPermalink; curent: boolean } | null {
-  const seg = segment.toLowerCase();
+  const seg = segment;
   for (const fel of FELURI_PERMALINK) if (s[fel] === seg) return { fel, curent: true };
   for (const fel of FELURI_PERMALINK) {
     if (PERMALINKURI_IMPLICITE[fel] === seg || s.anterioare[fel].includes(seg)) return { fel, curent: false };

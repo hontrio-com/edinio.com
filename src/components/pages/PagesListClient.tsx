@@ -26,7 +26,7 @@ function adresa(b: Business, slug: string): string {
   return slug ? `${publicBase(b)}/${slug}` : publicBase(b);
 }
 
-export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial, catalogPePagina, cosPePagina, comandaPePagina }: {
+export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial, catalogPePagina, cosPePagina, comandaPePagina, prefixCatalog = SEGMENT_MAGAZIN }: {
   business: Business;
   pages: PageRow[];
   initialMenu: MenuItem[];
@@ -36,6 +36,8 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
   catalogPePagina: boolean;
   cosPePagina: boolean;
   comandaPePagina: boolean;
+  /** Prefixul catalogului (Setari > Permalink-uri). */
+  prefixCatalog?: string;
 }) {
   const router = useRouter();
   const [menuSalvat, setMenu] = useState<MenuItem[]>(initialMenu);
@@ -213,7 +215,7 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
         <Link href="/dashboard/pages/messages" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Mesaje</Link>
       </div>
 
-      <PaginiDeSistem business={business} catalogPePagina={catalogPePagina} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} />
+      <PaginiDeSistem business={business} catalogPePagina={catalogPePagina} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} prefixCatalog={prefixCatalog} />
 
       {/* Pages list */}
       {pages.length === 0 ? (
@@ -362,11 +364,13 @@ function PaginiDeSistem({
   catalogPePagina,
   cosPePagina,
   comandaPePagina,
+  prefixCatalog,
 }: {
   business: Business;
   catalogPePagina: boolean;
   cosPePagina: boolean;
   comandaPePagina: boolean;
+  prefixCatalog: string;
 }) {
   const randuri = [
     {
@@ -386,7 +390,7 @@ function PaginiDeSistem({
     },
     {
       titlu: "Magazin",
-      slug: "magazin",
+      slug: prefixCatalog,
       activa: catalogPePagina,
       inactivInsigna: "PE ACASA",
       inactivExplicatie: "Acum produsele stau pe pagina principala, sub celelalte sectiuni.",

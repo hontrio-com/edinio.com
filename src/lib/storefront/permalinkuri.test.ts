@@ -57,6 +57,15 @@ test("validarea pe server: diferite intre ele si nu peste o pagina proprie", () 
   assert.match((pestePagina as { eroare: string }).eroare, /pagină cu linkul „contact”/);
 });
 
+test("un prefix vechi al altui fel nu se poate lua: adresele lui ar da 404", () => {
+  const anterioare = { produs: ["produse"], magazin: [], brand: [] };
+  const r = valideazaPermalinkuri({ produs: "articole", magazin: "produse", brand: "brand" }, [], anterioare);
+  assert.equal(r.ok, false);
+  assert.match((r as { eroare: string }).eroare, /folosit înainte pentru produselor/);
+  // acelasi fel isi poate relua prefixul vechi
+  assert.equal(valideazaPermalinkuri({ produs: "produse", magazin: "magazin", brand: "brand" }, [], anterioare).ok, true);
+});
+
 test("istoricul: prefixul vechi ramane, implicitul nu se tine, cel nou iese din istoric", () => {
   const s0 = setareaPermalinkurilor({});
   const s1 = urmatoareaSetare(s0, { produs: "produs", magazin: "magazin", brand: "brand" });
@@ -85,6 +94,10 @@ test("felul unui segment: curentul se randeaza, implicitul si cele vechi redirec
   assert.deepEqual(felulSegmentului("marci", s), { fel: "brand", curent: true });
   assert.deepEqual(felulSegmentului("brand", s), { fel: "brand", curent: false });
   assert.equal(felulSegmentului("contact", s), null);
+  // exact, ca rutele Next: `/Magazin`, `/Product/x` dau 404 si inainte, si dupa
+  assert.equal(felulSegmentului("Produs", s), null);
+  assert.equal(felulSegmentului("Product", setareaPermalinkurilor({})), null);
+  assert.equal(felulSegmentului("Magazin", setareaPermalinkurilor({})), null);
   // fara setare: implicitul e curent
   assert.deepEqual(felulSegmentului("product", setareaPermalinkurilor({})), { fel: "produs", curent: true });
 });

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
 import { queueSyncAll } from "@/lib/actions/google-merchant.actions";
@@ -48,11 +49,10 @@ export async function salveazaPermalinkurile(
   }
   if (!ss) return { ok: false, eroare: "Setările magazinului lipsesc. Salvează întâi o setare generală." };
 
-  const validare = valideazaPermalinkuri(cerute, (pagini ?? []).map((p) => p.slug as string));
-  if (!validare.ok) return { ok: false, eroare: validare.eroare };
-
   const pageContent = (ss.page_content as Record<string, unknown> | null) ?? {};
   const veche = setareaPermalinkurilor(pageContent);
+  const validare = valideazaPermalinkuri(cerute, (pagini ?? []).map((p) => p.slug as string), veche.anterioare);
+  if (!validare.ok) return { ok: false, eroare: validare.eroare };
   const schimbat = FELURI_PERMALINK.some((f) => veche[f] !== validare.valoare[f]);
   if (!schimbat) return { ok: true, valoare: validare.valoare, schimbat: false };
 
@@ -80,8 +80,12 @@ export async function salveazaPermalinkurile(
    * cand s-a schimbat prefixul produselor, catalogul intra in coada acum. Fara conexiune,
    * `queueSyncAll` refuza singur, iar asta nu e o eroare a salvarii.
    */
+  // DUPA raspuns (`after`): pe un catalog mare, punerea in coada ar fi facut salvarea lenta,
+  // iar o cadere tarzie ar fi aratat eroare pentru o salvare care reusise deja.
   if (veche.produs !== validare.valoare.produs) {
-    try { await queueSyncAll(businessId); } catch { /* reimprospatarea de 7 zile o prinde */ }
+    after(async () => {
+      try { await queueSyncAll(businessId); } catch { /* reimprospatarea de 7 zile o prinde */ }
+    });
   }
 
   revalidatePath("/dashboard/settings");

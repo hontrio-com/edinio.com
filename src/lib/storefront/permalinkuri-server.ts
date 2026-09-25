@@ -21,15 +21,21 @@ export const setareaPermalinkurilorMagazinului = cache(async (slug: string): Pro
 
 type Interogare = Record<string, string | string[] | undefined>;
 
-function sirInterogare(sp: Interogare | undefined): string {
+/**
+ * Interogarea, scrisa cu `encodeURIComponent` (spatiul = `%20`), nu cu
+ * `URLSearchParams` (spatiul = `+`): la fel ca `scrieFiltre` si canonicalele, ca
+ * redirectionarea sa nu produca a doua adresa pentru acelasi continut.
+ */
+export function sirInterogare(sp: Interogare | undefined): string {
   if (!sp) return "";
-  const q = new URLSearchParams();
+  const parti: string[] = [];
   for (const [cheie, valoare] of Object.entries(sp)) {
     if (valoare === undefined) continue;
-    for (const v of Array.isArray(valoare) ? valoare : [valoare]) q.append(cheie, v);
+    for (const v of Array.isArray(valoare) ? valoare : [valoare]) {
+      parti.push(`${encodeURIComponent(cheie)}=${encodeURIComponent(v)}`);
+    }
   }
-  const s = q.toString();
-  return s ? `?${s}` : "";
+  return parti.length ? `?${parti.join("&")}` : "";
 }
 
 /**

@@ -133,9 +133,10 @@ export async function createPage(input: {
 
   const v = validatePageSlug(input.slug?.trim() || title);
   if (!v.ok) return { error: v.error };
-  const ocupat = await slugOcupatDePrefix(supabase, input.businessId, v.slug);
-  if (ocupat) return { error: ocupat };
+  // Pe slugul FINAL (dupa `-2`, `-3`), nu doar pe cel cerut.
   const slug = await resolveUniquePageSlug(supabase, input.businessId, v.slug);
+  const ocupat = await slugOcupatDePrefix(supabase, input.businessId, slug);
+  if (ocupat) return { error: ocupat };
 
   const { data, error } = await supabase
     .from("custom_pages")
@@ -179,9 +180,9 @@ export async function updatePage(
   if (patch.slug !== undefined) {
     const v = validatePageSlug(patch.slug);
     if (!v.ok) return { error: v.error };
-    const ocupat = v.slug === page.slug ? null : await slugOcupatDePrefix(supabase, page.business_id, v.slug);
-    if (ocupat) return { error: ocupat };
     nextSlug = await resolveUniquePageSlug(supabase, page.business_id, v.slug, pageId);
+    const ocupat = nextSlug === page.slug ? null : await slugOcupatDePrefix(supabase, page.business_id, nextSlug);
+    if (ocupat) return { error: ocupat };
     update.slug = nextSlug;
   }
 
@@ -260,6 +261,8 @@ export async function duplicatePage(pageId: string): Promise<{ error: string } |
   if (!ctx) return { error: "Neautorizat" };
 
   const slug = await resolveUniquePageSlug(supabase, src.business_id, `${src.slug}-copie`);
+  const ocupat = await slugOcupatDePrefix(supabase, src.business_id, slug);
+  if (ocupat) return { error: ocupat };
   const { data, error } = await supabase
     .from("custom_pages")
     .insert({

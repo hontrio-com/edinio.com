@@ -190,6 +190,8 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
     revalidatePath(`/${owned.slug}/magazin`);
     revalidatePath(`/${owned.slug}/cos`);
     revalidatePath(`/${owned.slug}/checkout`);
+    // Si catalogul pe un prefix propriu (Setari > Permalink-uri): tot ce sta sub magazin.
+    revalidatePath(`/${owned.slug}`, "layout");
   }
   return { success: true };
 }

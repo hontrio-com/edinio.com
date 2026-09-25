@@ -14,6 +14,7 @@ import { numeScurtMagazin } from "@/lib/storefront/catalog/descriere-generata";
 import { continutMeta, problemeDescriere } from "./descrieri";
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
 import { permalinkuriMagazinDupaId, prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
+import type { Permalinkuri } from "@/lib/storefront/permalinkuri";
 
 /**
  * SANTINELA: cere paginile importante si verifica CE CONTIN, nu doar ca raspund.
@@ -248,9 +249,15 @@ function areTip(noduri: Record<string, unknown>[], ...tipuri: string[]): boolean
   return noduri.some((n) => typeof n["@type"] === "string" && tipuri.includes(n["@type"] as string));
 }
 
-/** Slugurile de produs dintr-o pagina, o singura data fiecare. */
-function produseDinPagina(text: string): string[] {
-  const gasite = [...text.matchAll(/href="[^"]*\/product\/([^"?#]+)"/g)].map((m) => m[1]);
+/*
+ * Prefixul de produs intra direct in expresie: `problemaPrefixului` nu lasa decat
+ * litere mici, cifre si cratima, deci nu poate purta niciun caracter special.
+ */
+
+/** Slugurile de produs dintr-o pagina, o singura data fiecare. Cu prefixul magazinului. */
+function produseDinPagina(text: string, prefixProdus = "product"): string[] {
+  const re = new RegExp(`href="[^"]*/${prefixProdus}/([^"?#]+)"`, "g");
+  const gasite = [...text.matchAll(re)].map((m) => m[1]);
   return [...new Set(gasite)].sort();
 }
 
@@ -402,6 +409,8 @@ async function magazineVii(admin: Admin): Promise<{
 /** Magazinul de proba, impreuna cu ce s-a aflat cerandu-i pagina de catalog. */
 interface MagazinProba extends MagazinViu {
   total: number;
+  /** Prefixele magazinului (Setari > Permalink-uri): cu ele se cauta cardurile si catalogul. */
+  prefixe: Permalinkuri;
   /** Adresa la care traieste CHIAR grila de produse. */
   catalog: string;
   /** `false` cand `/magazin` duce inapoi la radacina: grila e pe pagina principala. */
@@ -497,16 +506,20 @@ export async function GET(req: NextRequest) {
   let rezerva: MagazinProba | null = null;
   const incercariCazute: string[] = [];
   for (const c of clasament.slice(0, MAX_INCERCARI)) {
-    const r = await ia(`${c.baza}/magazin`);
+    // Catalogul pe prefixul LUI (Setari > Permalink-uri), nu `/magazin` fix: altfel fiecare
+    // proba ar trece printr-o redirectionare, iar mesajele ar arata alta adresa.
+    const prefixe = await permalinkuriMagazinDupaId(c.id);
+    const adresaCatalog = `${c.baza}/${prefixe.magazin}`;
+    const r = await ia(adresaCatalog);
     if (r.cod !== 200) {
-      incercariCazute.push(`${c.baza}/magazin raspunde cu ${r.cod}`);
+      incercariCazute.push(`${adresaCatalog} raspunde cu ${r.cod}`);
       continue;
     }
     if (!acelasiLoc(r.url, c.baza)) {
-      magazin = { ...c, catalog: `${c.baza}/magazin`, paginaCatalogSeparata: true, primaPagina: r };
+      magazin = { ...c, prefixe, catalog: adresaCatalog, paginaCatalogSeparata: true, primaPagina: r };
       break;
     }
-    rezerva ??= { ...c, catalog: c.baza, paginaCatalogSeparata: false, primaPagina: r };
+    rezerva ??= { ...c, prefixe, catalog: c.baza, paginaCatalogSeparata: false, primaPagina: r };
   }
   /*
    * `const`, ca sa se poata ingusta inauntrul probelor: TypeScript nu duce
@@ -764,7 +777,7 @@ export async function GET(req: NextRequest) {
       ruleaza: async () => {
         if (!magazinProba) return motivFaraMagazin;
         const { text, url } = magazinProba.primaPagina;
-        const n = numara(text, /href="[^"]*\/product\//g);
+        const n = numara(text, new RegExp(`href="[^"]*/${magazinProba.prefixe.produs}/`, "g"));
         // Exact defectul „0 din 1049 produse": pagina raspunde, contorul arata
         // numarul intreg, si grila e goala.
         //
@@ -791,8 +804,8 @@ export async function GET(req: NextRequest) {
         const unu = magazinProba.primaPagina;
         const doi = await ia(`${magazinProba.catalog}?page=2`);
         if (doi.cod !== 200) return `pagina 2 (${doi.url}) raspunde cu ${doi.cod}`;
-        const a = produseDinPagina(unu.text);
-        const b = produseDinPagina(doi.text);
+        const a = produseDinPagina(unu.text, magazinProba.prefixe.produs);
+        const b = produseDinPagina(doi.text, magazinProba.prefixe.produs);
         /* Fiecare mesaj poarta adresa CHIAR MASURATA de el, nu pe a paginii vecine. */
         if (a.length === 0) return `pagina 1 (${unu.url}) e goala`;
         if (b.length === 0) return `pagina 2 (${doi.url}) e goala`;
@@ -862,7 +875,7 @@ export async function GET(req: NextRequest) {
          * Se ia deci un cuvant dintr-un produs care E CHIAR PE PAGINA masurata mai
          * sus: vizibil prin constructie, fara nicio presupunere despre index.
          */
-        const nefiltrat = produseDinPagina(magazinProba.primaPagina.text);
+        const nefiltrat = produseDinPagina(magazinProba.primaPagina.text, magazinProba.prefixe.produs);
         const cuvantDinSlug = (s: string) =>
           s.split("-").filter((w) => /^[a-z]{4,}$/.test(w)).sort((a, b) => b.length - a.length)[0];
         const tinta = nefiltrat.find((s) => cuvantDinSlug(s));
@@ -872,7 +885,7 @@ export async function GET(req: NextRequest) {
 
         const r = await ia(`${magazinProba.catalog}?q=${encodeURIComponent(termen)}`);
         if (r.cod !== 200) return `cautarea raspunde cu ${r.cod} pe ${r.url}`;
-        const gasite = produseDinPagina(r.text);
+        const gasite = produseDinPagina(r.text, magazinProba.prefixe.produs);
         if (gasite.length === 0) {
           return `cautarea dupa „${termen}" n-a gasit nimic pe ${r.url}, desi cuvantul vine chiar din`
             + ` produsul „${tinta}", afisat acum pe ${magazinProba.primaPagina.url}`;
@@ -897,7 +910,7 @@ export async function GET(req: NextRequest) {
          */
         const inexistent = await ia(`${magazinProba.catalog}?q=zzqqxxwv9`);
         if (inexistent.cod !== 200) return `cautarea raspunde cu ${inexistent.cod} pe ${inexistent.url}`;
-        const peNimic = produseDinPagina(inexistent.text);
+        const peNimic = produseDinPagina(inexistent.text, magazinProba.prefixe.produs);
         return peNimic.length > 0
           ? `cautarea dupa un termen inexistent a intors ${peNimic.length} produse pe ${inexistent.url}:`
             + ` filtrul „q" nu se aplica deloc`
@@ -1690,11 +1703,12 @@ export async function GET(req: NextRequest) {
         let magazinDescriere: { m: MagazinViu; nume: string; catalog: Raspuns } | null = null;
         const sarite: string[] = [];
         for (const { m, nume } of candidati.slice(0, MAX_INCERCARI)) {
+          const prefixCatalogCandidat = (await permalinkuriMagazinDupaId(m.id)).magazin;
           const r = magazinProba && magazinProba.id === m.id && magazinProba.paginaCatalogSeparata
             ? magazinProba.primaPagina
-            : await ia(`${m.baza}/magazin`);
+            : await ia(`${m.baza}/${prefixCatalogCandidat}`);
           /* Un candidat SARIT nu se uita (vezi alegerea lui `magazinProba`). */
-          if (r.cod !== 200) { sarite.push(`${m.baza}/magazin raspunde cu ${r.cod}`); continue; }
+          if (r.cod !== 200) { sarite.push(`${m.baza}/${prefixCatalogCandidat} raspunde cu ${r.cod}`); continue; }
           /* Dus inapoi la radacina: n-are pagina de catalog separata, deci nici ce judeca aici. */
           if (acelasiLoc(r.url, m.baza)) continue;
           magazinDescriere = { m, nume, catalog: r };
@@ -1724,7 +1738,7 @@ export async function GET(req: NextRequest) {
           return c.startsWith(`/${prefixCatalogM}/`) && c.length > prefixCatalogM.length + 2 && !c.slice(prefixCatalogM.length + 2).includes("/");
         });
         const deVerificat: { url: string; raspuns: Raspuns | null }[] = [
-          { url: `${m.baza}/magazin`, raspuns: catalog },
+          { url: `${m.baza}/${prefixCatalogM}`, raspuns: catalog },
           ...[...new Set([categorii[0], categorii[categorii.length - 1]])]
             .filter((u): u is string => !!u)
             .map((url) => ({ url, raspuns: null })),

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { expediereInRegistru } from "@/lib/operatii/registru";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
+import { adresaListeiDeComenzi, firstParam } from "@/lib/orders/pagination";
 import { areEticheta } from "@/lib/pepita/eticheta";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
@@ -23,10 +24,13 @@ import type { SmsoConfig } from "@/lib/smso";
 
 interface Props {
   params: Promise<{ orderId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function OrderDetailPage({ params }: Props) {
+export default async function OrderDetailPage({ params, searchParams }: Props) {
   const { orderId } = await params;
+  // Pagina si filtrele listei de unde s-a deschis comanda, ca „Inapoi" sa nu duca pe pagina 1.
+  const adresaListei = adresaListeiDeComenzi(firstParam((await searchParams).lista));
   const supabase = await createClient();
 
   const user = await getCachedUser();
@@ -271,6 +275,7 @@ export default async function OrderDetailPage({ params }: Props) {
       fanCourierEnabled={fanCourierEnabled}
       samedayEnabled={samedayEnabled}
       smsoEnabled={smsoEnabled}
+      adresaListei={adresaListei}
     />
   );
 }

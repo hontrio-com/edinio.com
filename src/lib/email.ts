@@ -266,7 +266,6 @@ export async function sendOrderConfirmationToCustomer(
     ${order.cont_url ? `<div style="border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
       <p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.6;">Urmaresti comanda, livrarea si factura din <a href="${escapeUrl(order.cont_url)}" style="color:#18181b;font-weight:600;text-decoration:underline;">contul tau</a>. Intri cu adresa asta de email, iar daca nu ai inca un cont, il creezi in cateva secunde.</p>
     </div>` : ""}
-    ${order.store_url ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>` : ""}
   `;
 
   await sendStoreOrEdinio(sender, to, subject, content);
@@ -1445,11 +1444,6 @@ export async function sendOrderStatusToCustomer(
   const cfg = STATUS_CONFIG[order.status];
   if (!cfg) return;
 
-  // Right of withdrawal is most relevant once the parcel is on its way / received.
-  const returnLink = order.store_url && (order.status === "shipped" || order.status === "delivered")
-    ? `<p style="margin:20px 0 0 0;font-size:12px;color:#a1a1aa;text-align:center;">Ai dreptul sa te retragi din contract in 14 zile de la primire. <a href="${escapeUrl(`${order.store_url}/retur?order=${encodeURIComponent(order.order_number)}`)}" style="color:#71717a;text-decoration:underline;">Retrage-te din contract</a></p>`
-    : "";
-
   const awbSection = order.status === "shipped" && order.awb
     ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
         <p style="margin:0;font-size:13px;color:#71717a;">Numar AWB: <strong style="color:#18181b;font-family:monospace;">${esc(order.awb)}</strong></p>
@@ -1485,7 +1479,6 @@ export async function sendOrderStatusToCustomer(
 
     <p style="margin:0;font-size:14px;color:#71717a;line-height:1.6;">${cfg.message}</p>
     ${awbSection}
-    ${returnLink}
   `;
 
   await sendStoreOrEdinio(sender, to, subject, content);

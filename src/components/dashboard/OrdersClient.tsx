@@ -31,7 +31,7 @@ import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
-import { ORDERS_PAGE_SIZE } from "@/lib/orders/pagination";
+import { ORDERS_PAGE_SIZE, adresaDetaliuluiComenzii } from "@/lib/orders/pagination";
 import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
 
@@ -1260,7 +1260,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                       <tr
                         key={order.id}
                         className={cn("hover:bg-muted/30 transition-colors cursor-pointer group", selected.has(order.id) && "bg-primary/5")}
-                        onClick={() => window.location.href = `/dashboard/orders/${order.id}`}
+                        onClick={() => window.location.href = adresaDetaliuluiComenzii(order.id, buildUrl({}).split("?")[1])}
                       >
                         <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <input

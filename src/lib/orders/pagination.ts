@@ -34,3 +34,32 @@ export function escapeLike(q: string): string {
 export function orSafeTerm(q: string): string {
   return escapeLike(q.replace(/[,()"]/g, " ")).trim();
 }
+
+/**
+ * Filtrele listei de comenzi care supravietuiesc drumului dus-intors prin
+ * detaliile unei comenzi. Orice alta cheie se arunca, ca `?lista=` sa nu poata
+ * duce butonul „Inapoi" in alta parte decat pe lista.
+ */
+const CHEI_LISTA_COMENZI = ["q", "status", "source", "page"] as const;
+
+function filtreleListei(qs: string | undefined): string {
+  const intrare = new URLSearchParams(qs ?? "");
+  const iesire = new URLSearchParams();
+  for (const cheie of CHEI_LISTA_COMENZI) {
+    const valoare = intrare.get(cheie);
+    if (valoare) iesire.set(cheie, valoare.slice(0, 80));
+  }
+  return iesire.toString();
+}
+
+/** Adresa detaliilor unei comenzi, care tine minte pagina si filtrele listei. */
+export function adresaDetaliuluiComenzii(orderId: string, qsLista: string | undefined): string {
+  const lista = filtreleListei(qsLista);
+  return `/dashboard/orders/${orderId}${lista ? `?lista=${encodeURIComponent(lista)}` : ""}`;
+}
+
+/** Unde duce „Inapoi" din detaliile comenzii: pagina si filtrele de unde a venit. */
+export function adresaListeiDeComenzi(lista: string | undefined): string {
+  const qs = filtreleListei(lista);
+  return qs ? `/dashboard/orders?${qs}` : "/dashboard/orders";
+}

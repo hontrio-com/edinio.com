@@ -391,6 +391,7 @@ export function OrderDetailClient({
   fanCourierEnabled,
   samedayEnabled,
   smsoEnabled,
+  adresaListei = "/dashboard/orders",
 }: {
   order: Order;
   businessId: string;
@@ -445,6 +446,8 @@ export function OrderDetailClient({
   fanCourierEnabled?: boolean;
   samedayEnabled?: boolean;
   smsoEnabled?: boolean;
+  /** Lista de comenzi cu pagina si filtrele de unde s-a venit (vezi `adresaListeiDeComenzi`). */
+  adresaListei?: string;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState(order.status as string);
@@ -804,7 +807,7 @@ export function OrderDetailClient({
       }
       if (result.error) { toast.error(result.error); return; }
       toast.success("Comanda a fost stearsa.");
-      router.push("/dashboard/orders");
+      router.push(adresaListei);
     });
   }
 
@@ -1498,7 +1501,7 @@ export function OrderDetailClient({
     <div className="p-4 sm:p-6 pb-24 lg:pb-6">
       {/* ── Header ── */}
       <div className="flex items-start gap-4 mb-5">
-        <button type="button" onClick={() => router.push("/dashboard/orders")}
+        <button type="button" onClick={() => router.push(adresaListei)}
           className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5">
           <ArrowLeft className="h-4 w-4" />Inapoi
         </button>

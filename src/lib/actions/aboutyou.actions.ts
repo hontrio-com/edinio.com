@@ -44,6 +44,7 @@ import type {
   AboutYouConfig, AboutYouCountriesResponse, AboutYouEnvironment, AboutYouFulfillmentType,
 } from "@/lib/aboutyou/types";
 import { DEFAULT_COUNTRY_OF_ORIGIN } from "@/lib/aboutyou/types";
+import { amprentaCheii, refuzaContFolositDeAltMagazin } from "@/lib/integrari/cont-marketplace-unic";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/aboutyou";
@@ -235,6 +236,14 @@ export async function connectAboutYou(
   if (apiKey.length < 8) return { error: "Cheia API pare invalidă. Copiaz-o din Seller Center > Settings > API Keys." };
   const env: AboutYouEnvironment = environment === "sandbox" ? "sandbox" : "production";
 
+  /*
+   * About You nu ne spune cine e vanzatorul, deci identitatea contului e CHEIA. Doua chei
+   * diferite pe acelasi cont nu se prind; aceeasi cheie pe doua magazine, da.
+   */
+  const amprenta = amprentaCheii(apiKey);
+  const folosit = await refuzaContFolositDeAltMagazin("aboutyou", businessId, { id: amprenta });
+  if (folosit) return { error: folosit };
+
   const test = await testConnection({ apiKey, environment: env });
   if (!test.ok) return { error: test.error };
 
@@ -243,6 +252,7 @@ export async function connectAboutYou(
     ...prev,
     connected: true,
     api_key: apiKey,
+    api_key_amprenta: amprenta,
     api_key_label: (label ?? "").trim() || prev.api_key_label,
     api_key_added_at: new Date().toISOString(),
     environment: env,

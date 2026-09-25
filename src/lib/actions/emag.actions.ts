@@ -81,6 +81,7 @@ import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag
 import { alegeSupplyLeadTime, oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import { dimensiuniPropuse, numarDeColete, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
 import { enqueueEmagPretMany, enqueueEmagStocMany, enqueueEmagSyncMany, publicaPeEmagStrict } from "@/lib/emag/queue";
+import { refuzaContFolositDeAltMagazin } from "@/lib/integrari/cont-marketplace-unic";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/emag";
@@ -513,6 +514,10 @@ export async function connectEmag(
   if (!EMAG_TARI.includes(date.tara)) {
     return { error: "Alege țara contului eMAG." };
   }
+
+  // Acelasi cont eMAG (utilizator + tara) pe doua magazine = comenzi dublate.
+  const folosit = await refuzaContFolositDeAltMagazin("emag", businessId, { id: username, tara: date.tara });
+  if (folosit) return { error: folosit };
 
   const veche = await loadConfig(businessId);
 

@@ -6,6 +6,7 @@ import { invieScrisorileMoarteOlx } from "@/lib/olx/queue";
 import { verifyState, exchangeCode } from "@/lib/olx/oauth";
 import { getMe, isOlxError } from "@/lib/olx/client";
 import type { OlxConfig } from "@/lib/olx/types";
+import { refuzaContFolositDeAltMagazin } from "@/lib/integrari/cont-marketplace-unic";
 
 const FEATURE = "/dashboard/features/olx";
 
@@ -78,6 +79,14 @@ export async function GET(req: NextRequest) {
   // Identify the connected OLX user (for display + advertiser_type default).
   const me = await getMe(tok.accessToken);
   if (!isOlxError(me)) {
+    /*
+     * ⚠ Acelasi cont OLX pe doua magazine Edinio = anunturi si mesaje amestecate, comenzi dublate.
+     * Se refuza INAINTE de scriere; tokenul emis la OLX ramane nefolosit (expira singur).
+     * Daca `/users/me` pica, contul nu se afla si conectarea merge ca inainte.
+     */
+    if (await refuzaContFolositDeAltMagazin("olx", businessId, { id: me.data.id })) {
+      return back(req, "olx=cont_folosit");
+    }
     config.olx_user_id = me.data.id;
     config.olx_user_name = me.data.name;
     /*

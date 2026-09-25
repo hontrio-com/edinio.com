@@ -39,6 +39,8 @@ export interface AboutYouCategoryMapEntry {
 export interface AboutYouConfig {
   connected?: boolean;
   api_key?: string;
+  /** sha256 al cheii (32 hex): identitatea contului, ca sa nu fie legat de doua magazine. Nu e secret. */
+  api_key_amprenta?: string;
   api_key_label?: string;
   api_key_added_at?: string;
   environment?: AboutYouEnvironment;

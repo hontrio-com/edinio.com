@@ -44,6 +44,7 @@ import type {
 import {
   TRENDYOL_DEFAULT_STOREFRONT, TRENDYOL_STOREFRONTS, curieriVitrina, infoVitrina,
 } from "@/lib/trendyol/types";
+import { refuzaContFolositDeAltMagazin } from "@/lib/integrari/cont-marketplace-unic";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 const FEATURE_PATH = "/dashboard/features/trendyol";
@@ -317,6 +318,10 @@ export async function connectTrendyol(
   const vitrina: TrendyolStoreFront =
     TRENDYOL_STOREFRONTS.find((s) => s.code === input.storefront)?.code ?? TRENDYOL_DEFAULT_STOREFRONT;
   const company = (input.company ?? "").trim() || undefined;
+
+  // Un Seller ID legat de doua magazine = comenzi dublate (Okxi si VetDepo, 11.09.2026).
+  const folosit = await refuzaContFolositDeAltMagazin("trendyol", businessId, { id: supplierId });
+  if (folosit) return { error: folosit };
 
   const test = await testConnection({ supplierId, apiKey, apiSecret, environment: env, storefront: vitrina, userAgentCompany: company });
   if (!test.ok) return { error: test.error };

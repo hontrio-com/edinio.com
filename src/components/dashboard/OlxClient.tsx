@@ -89,6 +89,9 @@ export function OlxClient({
     if (p === "connected") toast.success("Cont OLX conectat.");
     else if (p === "norefresh") toast.error("Reconectează-te și acceptă accesul.");
     else if (p === "error") toast.error("Conectarea OLX a eșuat. Încearcă din nou.");
+    else if (p === "cont_folosit") {
+      toast.error("Acest cont OLX este deja conectat la alt magazin Edinio sau nu l-am putut verifica. Un cont poate fi legat de un singur magazin; deconectează-l întâi din celălalt sau scrie-ne la suport.");
+    }
     /*
      * ⚠ „S-a autorizat la OLX, dar n-am putut salva" NU e acelasi lucru cu „autorizarea a
      * esuat". Codul de autorizare e de unica folosinta si a fost deja consumat, deci omul trebuie

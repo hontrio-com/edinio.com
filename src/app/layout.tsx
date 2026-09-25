@@ -122,6 +122,11 @@ export const metadata: Metadata = {
       { url: cuVersiune("/favicon.ico"), sizes: "any" },
       { url: cuVersiune("/favicon-16x16.png"), sizes: "16x16", type: "image/png" },
       { url: cuVersiune("/favicon-32x32.png"), sizes: "32x32", type: "image/png" },
+      /*
+       * Pentru Google: pictograma din rezultate trebuie sa fie patrata si multiplu de 48px,
+       * iar una mai mare ii da de unde alege una clara. Fara ea avea doar 48x48, din `.ico`.
+       */
+      { url: cuVersiune("/android-chrome-192x192.png"), sizes: "192x192", type: "image/png" },
     ],
     apple: cuVersiune("/apple-touch-icon.png"),
   },

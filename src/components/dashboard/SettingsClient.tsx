@@ -40,6 +40,7 @@ import { type StoreSeo, SEO_TITLE_MAX, SEO_DESCRIPTION_MAX, SEO_TITLE_IDEAL_MIN,
 import { TIPURI_POLITICI } from "@/lib/storefront/policy-index";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { type StoreMode } from "@/lib/storefront/store-mode";
+import { usePlataAbonament } from "@/components/dashboard/PlataAbonament";
 
 /**
  * DOAR campurile de care are nevoie ecranul, nu randul intreg. Pagina trimite
@@ -457,20 +458,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   // sa apara ca "activ", nu ca invitatie la downgrade); altfel implicit lunar.
   const [billingInterval, setBillingInterval] = useState<BillingInterval>(isPaidPlan ? currentInterval : "monthly");
 
+  const plataAbonament = usePlataAbonament();
+
   async function startCheckout(planId: string) {
     setCheckoutLoading(planId);
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan: planId, interval: billingInterval }),
+    await plataAbonament.porneste({ plan: planId, interval: billingInterval }, {
+      laSucces: ({ url }) => { window.location.href = url; },
+      laEsec: (mesaj) => { toast.error(mesaj); setCheckoutLoading(null); },
+      laRenuntare: () => setCheckoutLoading(null),
     });
-    const data = await res.json() as { url?: string; error?: string };
-    if (data.error || !data.url) {
-      toast.error(data.error ?? "Eroare la initializarea platii.");
-      setCheckoutLoading(null);
-      return;
-    }
-    window.location.href = data.url;
   }
 
   // Policies — inject templates for any empty policy
@@ -1108,6 +1104,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)]">
+      {plataAbonament.fereastra}
       {/* Left nav */}
       <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6">
         <p className="px-4 mb-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Setari</p>

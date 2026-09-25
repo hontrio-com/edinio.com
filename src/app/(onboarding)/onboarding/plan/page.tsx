@@ -15,6 +15,8 @@ import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import { verificaPlataOnboarding } from "@/lib/actions/plata-onboarding.actions";
 import { type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS, PLAN_PRICES } from "@/lib/plans";
 import { conversiaDinPlata } from "@/lib/edinio-marketing/verdict-plata";
+import { usePlataAbonament } from "@/components/dashboard/PlataAbonament";
+import type { FirmaFacturare } from "@/lib/billing/firma-abonament";
 
 const PLANS = [
   {
@@ -104,6 +106,25 @@ export default function OnboardingPlanPage() {
   );
 }
 
+/*
+  Firma verificata in ANAF la plata. Magazinul se creeaza abia dupa intoarcerea de
+  la Stripe, deci datele asteapta aici, langa `onboarding_details`, si ajung la
+  `createBusiness`, care le verifica din nou. Webhook-ul are oricum copia lui din
+  metadata abonamentului, pentru prima factura.
+*/
+function pastreazaFirma(firma: FirmaFacturare | undefined) {
+  if (firma) sessionStorage.setItem("onboarding_firma", JSON.stringify(firma));
+}
+
+function firmaPastrata(): FirmaFacturare | undefined {
+  try {
+    const brut = sessionStorage.getItem("onboarding_firma");
+    return brut ? (JSON.parse(brut) as FirmaFacturare) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function PlanPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,6 +133,7 @@ function PlanPageContent() {
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const createdRef = useRef(false);
+  const plataAbonament = usePlataAbonament();
 
   const isSuccess = searchParams.get("success") === "1";
   const isCancelled = searchParams.get("cancelled") === "1";
@@ -132,14 +154,10 @@ function PlanPageContent() {
       setLoading(true);
       sessionStorage.setItem("onboarding_pending_plan", preselected);
       sessionStorage.setItem("onboarding_pending_interval", "monthly");
-      fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: preselected, interval: "monthly", return_to: "onboarding" }),
-      })
-        .then(r => r.json())
-        .then((data: { url?: string; error?: string }) => {
-          if (data.url) {
+      plataAbonament.asteapta({ plan: preselected, interval: "monthly", return_to: "onboarding" })
+        .then((data) => {
+          if (data?.url) {
+            pastreazaFirma(data.firma);
             /*
               ⚠ DUPA CONFIRMARE, NU INAINTE — si asta e deosebirea fata de forma
               de ieri. Evenimentul statea inaintea lui `fetch`, deci daca ruta de
@@ -162,7 +180,7 @@ function PlanPageContent() {
             });
             window.location.href = data.url;
           }
-          else { toast.error(data.error ?? "Eroare la plata"); setLoading(false); }
+          else { setLoading(false); }
         })
         .catch(() => { toast.error("Eroare la plata"); setLoading(false); });
     }
@@ -260,6 +278,7 @@ function PlanPageContent() {
           intreaba. Un id inventat da „n-a platit", deci se cade pe drumul gratuit.
         */
         sesiuneStripe: searchParams.get("sid") ?? undefined,
+        firma: firmaPastrata(),
       });
 
       if (result.error) {
@@ -272,6 +291,7 @@ function PlanPageContent() {
       sessionStorage.removeItem("onboarding_details");
       sessionStorage.removeItem("onboarding_pending_plan");
       sessionStorage.removeItem("onboarding_pending_interval");
+      sessionStorage.removeItem("onboarding_firma");
 
       /*
         ⚠ `event_id` E ID-UL MAGAZINULUI TOCMAI CREAT, nu un numar aleator.
@@ -421,18 +441,12 @@ function PlanPageContent() {
       sessionStorage.setItem("onboarding_pending_plan", selectedPlan);
       sessionStorage.setItem("onboarding_pending_interval", billingInterval);
 
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, interval: billingInterval, return_to: "onboarding" }),
-      });
-
-      const data = await res.json() as { url?: string; error?: string };
-      if (!res.ok || !data.url) {
-        toast.error(data.error ?? "Eroare la initializarea platii.");
+      const data = await plataAbonament.asteapta({ plan: selectedPlan, interval: billingInterval, return_to: "onboarding" });
+      if (!data?.url) {
         setLoading(false);
         return;
       }
+      pastreazaFirma(data.firma);
 
       /*
         ════════════════════════════════════════════════════════════════════
@@ -502,6 +516,7 @@ function PlanPageContent() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+      {plataAbonament.fereastra}
       <UrmaPasOnboarding pas="plan" index={2} />
       <OnboardingProgress currentStep={2} />
 

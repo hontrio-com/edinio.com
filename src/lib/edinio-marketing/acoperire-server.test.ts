@@ -493,15 +493,20 @@ test("⚠ `begin_checkout` pleaca DUPA ce Stripe confirma sesiunea, pe amandoua 
   assert.equal(evenimente.length, 2,
     `pagina trage ${evenimente.length} \`begin_checkout\`, nu doua — s-a adaugat unul (poate pe \`.catch\`) sau s-a pierdut un drum`);
 
-  /* Drumul de campanie: evenimentul sta sub `if (data.url)`. */
-  const iGardaCampanie = cod.indexOf("if (data.url) {");
+  /*
+    Din 25.09.2026 ambele drumuri trec prin `plataAbonament.asteapta(...)` (fereastra
+    de CUI), care da `null` cand sesiunea nu s-a creat. Regula e aceeasi: evenimentul
+    sta sub poarta pe `data?.url`.
+  */
+  /* Drumul de campanie: evenimentul sta sub `if (data?.url)`. */
+  const iGardaCampanie = cod.indexOf("if (data?.url) {");
   assert.ok(iGardaCampanie > 0, "drumul de campanie nu mai verifica `data.url`");
   assert.ok(evenimente[0] > iGardaCampanie,
     "`begin_checkout` de campanie a iesit de sub confirmarea sesiunii — pleaca si cand Stripe n-a creat nimic");
 
   /* Drumul cu apasare: cerere, apoi poarta, apoi evenimentul. */
-  const iCerere = cod.lastIndexOf('fetch("/api/stripe/checkout"');
-  const iGardaApasare = cod.indexOf("if (!res.ok || !data.url) {");
+  const iCerere = cod.lastIndexOf("plataAbonament.asteapta(");
+  const iGardaApasare = cod.indexOf("if (!data?.url) {");
   assert.ok(iGardaApasare > 0, "drumul cu apasare nu mai are poarta pe raspunsul rutei");
   assert.ok(iCerere > 0 && iGardaApasare > iCerere,
     "poarta drumului cu apasare nu mai vine dupa cerere");

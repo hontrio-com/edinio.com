@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe, getPriceId } from "@/lib/stripe";
 import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
+import { lookupAnaf } from "@/lib/anaf/lookup";
+import { rateLimit } from "@/lib/utils/rate-limit";
+import { areCuiDeFacturare, firmaDinAnaf, metadataFacturare, type FirmaFacturare } from "@/lib/billing/firma-abonament";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
 
-  const { plan, interval: rawInterval, return_to } = await req.json() as { plan: string; interval?: string; return_to?: string };
+  const { plan, interval: rawInterval, return_to, cui } = await req.json() as { plan: string; interval?: string; return_to?: string; cui?: string };
   const interval: "monthly" | "annual" = rawInterval === "annual" ? "annual" : "monthly";
   const priceId = getPriceId(plan, interval);
   if (!priceId) {
@@ -17,6 +20,62 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  /*
+    FARA CUI NU SE PLATESTE. Factura abonamentului se emite pe firma din
+    `businesses`; fara CUI iesea pe persoana fizica. Cine are deja un CUI bun nu
+    vede nimic nou. Ceilalti primesc `cereCui`, clientul deschide fereastra
+    „Date pentru factura" si revine cu CUI-ul, pe care il verificam AICI in ANAF:
+    fereastra doar arata datele, nu le hotaraste. Reinnoirile automate nu trec pe
+    aici, deci nu cer nimic nimanui.
+  */
+  const { data: magazin } = await supabase
+    .from("businesses")
+    .select("id, business_name, store_name, cui")
+    .eq("user_id", user.id)
+    .eq("type", "ministore")
+    .limit(1)
+    .maybeSingle();
+
+  let firma: FirmaFacturare | null = null;
+  if (!areCuiDeFacturare(magazin?.cui)) {
+    if (!cui?.trim()) {
+      return NextResponse.json(
+        { error: "Completeaza CUI-ul firmei ca sa putem emite factura.", cereCui: true },
+        { status: 422 },
+      );
+    }
+    if (!rateLimit(`anaf:${user.id}`, 20, 60_000)) {
+      return NextResponse.json({ error: "Prea multe cautari. Asteapta un minut.", cereCui: true }, { status: 429 });
+    }
+    const anaf = await lookupAnaf(cui);
+    if (!anaf.ok) {
+      return NextResponse.json({ error: anaf.error, cereCui: true }, { status: anaf.status });
+    }
+    firma = firmaDinAnaf(anaf.company);
+
+    if (magazin) {
+      // Numele afisat in magazin nu se schimba: vitrina arata `store_name ?? business_name`,
+      // deci cand `store_name` lipseste, numele de pana acum se muta acolo.
+      const { error: eFirma } = await supabase
+        .from("businesses")
+        .update({
+          cui: firma.cui,
+          business_name: firma.business_name,
+          ...(magazin.store_name ? {} : { store_name: magazin.business_name }),
+          reg_com: firma.reg_com || null,
+          address: firma.address || null,
+          city: firma.city || null,
+          county: firma.county || null,
+        })
+        .eq("id", magazin.id);
+      if (eFirma) {
+        console.error("[checkout] datele firmei nu s-au putut salva:", eFirma);
+        return NextResponse.json({ error: "Nu am putut salva datele firmei. Incearca din nou.", cereCui: true }, { status: 500 });
+      }
+    }
+  }
+  const facturare = firma ? metadataFacturare(firma) : {};
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -79,8 +138,8 @@ export async function POST(req: NextRequest) {
       inseamna „sesiune deschisa inainte de poarta", si aia trebuie sa se
       deosebeasca de un refuz limpede.
     */
-    metadata: { user_id: user.id, plan, interval, cs, ...(vid ? { vid } : {}) },
-    subscription_data: { metadata: { user_id: user.id, plan, interval, cs, ...(vid ? { vid } : {}) } },
+    metadata: { user_id: user.id, plan, interval, cs, ...(vid ? { vid } : {}), ...facturare },
+    subscription_data: { metadata: { user_id: user.id, plan, interval, cs, ...(vid ? { vid } : {}), ...facturare } },
   };
 
   // Reuse existing Stripe customer or pass email for new one
@@ -92,5 +151,7 @@ export async function POST(req: NextRequest) {
 
   const session = await stripe.checkout.sessions.create(sessionParams);
 
-  return NextResponse.json({ url: session.url });
+  // `firma` merge inapoi pentru onboarding: acolo magazinul se creeaza abia dupa
+  // plata, iar `createBusiness` il primeste de la client.
+  return NextResponse.json({ url: session.url, ...(firma ? { firma } : {}) });
 }

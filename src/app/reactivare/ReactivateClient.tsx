@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Check, ShieldCheck, Infinity as InfinityIcon, LogOut, Zap, Crown, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
+import { usePlataAbonament } from "@/components/dashboard/PlataAbonament";
 import {
   type BillingInterval,
   PLAN_PRICES,
@@ -72,25 +73,15 @@ export function ReactivateClient({ reason, success, currentPlan, userEmail }: Pr
     return () => window.clearInterval(id);
   }, [success, router]);
 
+  const plataAbonament = usePlataAbonament();
+
   async function handlePay() {
     setLoading(true);
-    try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, interval: billingInterval, return_to: "reactivare" }),
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        toast.error(data.error ?? "Eroare la initializarea platii.");
-        setLoading(false);
-      }
-    } catch {
-      toast.error("Eroare de retea. Incearca din nou.");
-      setLoading(false);
-    }
+    await plataAbonament.porneste({ plan: selectedPlan, interval: billingInterval, return_to: "reactivare" }, {
+      laSucces: ({ url }) => { window.location.href = url; },
+      laEsec: (mesaj) => { toast.error(mesaj); setLoading(false); },
+      laRenuntare: () => setLoading(false),
+    });
   }
 
   // ── Stare de activare dupa plata ─────────────────────────────────────────────
@@ -121,6 +112,7 @@ export function ReactivateClient({ reason, success, currentPlan, userEmail }: Pr
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {plataAbonament.fereastra}
       <div className="flex-1 w-full max-w-3xl mx-auto px-4 py-10 sm:py-14">
         <div className="text-center mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">{title}</h1>

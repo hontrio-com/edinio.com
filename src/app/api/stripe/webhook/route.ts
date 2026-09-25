@@ -2,7 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { stripe } from "@/lib/stripe";
 import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
-import { emiteFacturaPlatforma } from "@/lib/billing/factura-platforma";
+import { emiteFacturaPlatforma, type ClientFactura } from "@/lib/billing/factura-platforma";
+import { areCuiDeFacturare, clientFacturaDinMetadata } from "@/lib/billing/firma-abonament";
 import type { Database } from "@/types/database.types";
 import type Stripe from "stripe";
 import { logError } from "@/lib/error-logger";
@@ -73,9 +74,9 @@ type InvoiceCompat = Stripe.Invoice & {
 async function emitSubscriptionInvoice(
   admin: SupabaseClient,
   invoice: Stripe.Invoice,
-  meta: { userId: string; plan: string; interval?: string; stripeInvoiceId: string },
+  meta: { userId: string; plan: string; interval?: string; stripeInvoiceId: string; metaAbonament?: Record<string, string> },
 ): Promise<void> {
-  const { userId, plan, interval, stripeInvoiceId } = meta;
+  const { userId, plan, interval, stripeInvoiceId, metaAbonament } = meta;
 
   const { data: existingInvoice } = await admin
     .from("invoices")
@@ -96,6 +97,21 @@ async function emitSubscriptionInvoice(
 
   const userEmail = authUserData?.user?.email ?? "";
   const clientName = bizData?.business_name || profileData?.full_name || userEmail || "Client";
+  /*
+    Firma de pe magazin are intaietate. Cand magazinul n-are CUI, cel mai des la
+    prima plata din onboarding (magazinul se creeaza abia DUPA plata, deci la ora
+    asta poate lipsi de tot), se foloseste firma verificata in ANAF la plata si
+    purtata in metadata abonamentului (vezi `lib/billing/firma-abonament.ts`).
+  */
+  const dinPlata = areCuiDeFacturare(bizData?.cui) ? null : clientFacturaDinMetadata(metaAbonament, userEmail);
+  const clientFactura: ClientFactura = dinPlata ?? {
+    name: clientName,
+    email: userEmail,
+    vatCode: bizData?.cui ?? undefined,
+    address: bizData?.address ?? undefined,
+    city: bizData?.city ?? undefined,
+    county: bizData?.county ?? undefined,
+  };
 
   // Suma reala incasata de Stripe (bani → lei). Acopera lunar, anual (lunar×9) si
   // eventualele proratari/discounturi. FARA fallback pe pretul de lista: factura
@@ -144,14 +160,7 @@ async function emitSubscriptionInvoice(
     admin as unknown as SupabaseClient<Database>,
     stripeInvoiceId,
     existingInvoice?.id ?? null,
-    {
-      name: clientName,
-      email: userEmail,
-      vatCode: bizData?.cui ?? undefined,
-      address: bizData?.address ?? undefined,
-      city: bizData?.city ?? undefined,
-      county: bizData?.county ?? undefined,
-    },
+    clientFactura,
     {
       name: `Abonament Edinio ${capitalize(plan)} (${intervalLabel(interval)})`,
       price: planPrice,
@@ -898,7 +907,7 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
     // sincron mai sus, deci un esec Smartbill nu afecteaza accesul userului.
     // DOAR pentru incasari reale — 0 lei (acoperit din credit) nu se factureaza.
     if (amountPaid > 0) {
-      after(() => emitSubscriptionInvoice(admin, invoice, { userId, plan, interval, stripeInvoiceId }));
+      after(() => emitSubscriptionInvoice(admin, invoice, { userId, plan, interval, stripeInvoiceId, metaAbonament: subMeta }));
     } else {
       console.log("[webhook] plata 0 lei (credit de proratare) — fara factura Smartbill:", stripeInvoiceId);
     }

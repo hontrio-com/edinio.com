@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { areCuiDeFacturare, type FirmaFacturare } from "@/lib/billing/firma-abonament";
 import { headers } from "next/headers";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
@@ -80,12 +81,22 @@ export async function createBusiness(data: {
     partea sigura.
   */
   sesiuneStripe?: string;
+  /**
+   * Firma verificata in ANAF de `/api/stripe/checkout`, cand omul a platit din
+   * onboarding: acolo magazinul nu exista inca, deci datele n-aveau unde sa se
+   * scrie. `business_name` de mai sus ramane numele afisat (`store_name`).
+   */
+  firma?: FirmaFacturare;
 }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
 
   const slug = normalizeazaSlug(data.slug);
+  // Venita de la client, deci se primeste doar cu un CUI care trece cifra de control.
+  const firma = data.firma && areCuiDeFacturare(data.firma.cui) && data.firma.business_name?.trim()
+    ? data.firma
+    : null;
   const motiv = motivSlugRespins(slug);
   if (motiv) return { error: motiv };
 
@@ -95,14 +106,19 @@ export async function createBusiness(data: {
       user_id: user.id,
       type: "ministore",
       slug,
-      business_name: data.business_name,
+      business_name: firma?.business_name || data.business_name,
+      ...(firma ? {
+        store_name: data.business_name,
+        cui: firma.cui,
+        reg_com: firma.reg_com || null,
+      } : {}),
       tagline: data.tagline || null,
       phone: data.phone,
       whatsapp: data.whatsapp || null,
       email: data.email || null,
-      address: data.address || null,
-      city: data.city || null,
-      county: data.county || null,
+      address: data.address || firma?.address || null,
+      city: data.city || firma?.city || null,
+      county: data.county || firma?.county || null,
       store_address: data.address || null,
       store_city: data.city || null,
       store_county: data.county || null,

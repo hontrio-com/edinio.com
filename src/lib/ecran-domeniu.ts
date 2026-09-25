@@ -97,8 +97,7 @@ export function ecranMagazinNepublicat(m: { slug: string; nume: string; logo: st
       + `<p class="text">Magazinul se pregătește de deschidere. Revino în curând, lucrăm ca totul să fie gata pentru tine.</p>`
       + `<div class="linie"></div>`
       + `<p class="mic">Ești proprietarul magazinului?</p>`
-      + `<a class="buton" href="${html(previzualizare)}">Vezi magazinul în contul tău <span aria-hidden="true">→</span></a>`
-      + `<p class="mic" style="margin-top:12px">După ce îl publici din panou, magazinul apare chiar la această adresă.</p>`
+      + `<a class="buton" href="${html(previzualizare)}">Previzualizează magazinul <span aria-hidden="true">→</span></a>`
       + `</div><p class="subsol">Magazin creat cu <a href="${PLATFORM_ORIGIN}">Edinio</a></p>`,
   });
 }

@@ -7112,6 +7112,17 @@ export type Database = {
           produse: number
         }[]
       }
+      domeniu_pentru_proxy: {
+        Args: { p_domenii: string[] }
+        Returns: {
+          culoare: string | null
+          custom_domain: string
+          is_published: boolean
+          logo_url: string | null
+          nume: string
+          slug: string
+        }[]
+      }
       produse_branduri: {
         Args: { p_business: string }
         Returns: {

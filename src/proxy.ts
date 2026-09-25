@@ -8,6 +8,7 @@ import type { Database } from "@/types/database.types";
 // src/lib/platform-hosts.ts.
 import { isPlatformHost, esteGazdaDeDesfasurare, bareHost as gazdaFaraPort } from "@/lib/platform-hosts";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
+import { ecranDomeniuNeconectat, ecranMagazinNepublicat } from "@/lib/ecran-domeniu";
 import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
 import { EXTENSII_STATICE, NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
 import {
@@ -37,7 +38,15 @@ import {
 // `indexare-pe-platforma.ts`, langa regula care le foloseste si proba ei.
 // ⚠ Se citesc de acolo DIRECT, nu prin nume locale: doua constante locale s-ar
 // putea inversa fara ca vreo proba sa vada (nicio proba nu masoara timpul).
-type RandDomeniu = { slug: string; custom_domain: string | null; is_published: boolean };
+type RandDomeniu = {
+  slug: string;
+  custom_domain: string | null;
+  is_published: boolean;
+  /* Pentru ecranul „in curand” al unui magazin nepublicat. */
+  nume: string | null;
+  logo_url: string | null;
+  culoare: string | null;
+};
 const cacheDomenii = new CacheScurt<RandDomeniu[]>(TTL_REZOLVARE.gasit);
 /**
  * Ce stim despre primul segment al unei cai de pe gazda platformei: e magazin
@@ -292,10 +301,16 @@ export async function proxy(request: NextRequest) {
        * Adus aici, steagul lasa raspunsul sa spuna CARE din cele doua e cazul. Vizitatorul
        * primeste 404 la fel — dar cel care se uita afla adevarul.
        */
-      const { data, error } = await clientAnonim()
-        .from("businesses")
-        .select("slug, custom_domain, is_published")
-        .in("custom_domain", candidates);
+      /*
+       * ⚠⚠ PRIN `domeniu_pentru_proxy`, NU din tabela (25.09.2026).
+       *
+       * Citita cu cheia anonima, `businesses` trece prin RLS-ul „Public can view published
+       * businesses”, deci un magazin NEPUBLICAT nu iesea niciodata de aici, iar reparatia de
+       * mai sus nu lucra: `jhbijouxmagazin.ro`, legat corect, raspundea „nu este conectat la
+       * niciun magazin”. Functia (security definer, cel mult 4 domenii) intoarce si
+       * randurile nepublicate, cu numele si logo-ul pentru ecranul „in curand”.
+       */
+      const { data, error } = await clientAnonim().rpc("domeniu_pentru_proxy", { p_domenii: candidates });
 
       /*
        * O interogare PICATA nu inseamna „domeniul nu exista".
@@ -376,14 +391,23 @@ export async function proxy(request: NextRequest) {
      * Un singur mesaj pentru amandoua a costat o dupa-amiaza de cautat o legatura rupta
      * care nu exista.
      */
-    const nepublicat = (rows ?? []).length > 0;
+    const nepublicat = (rows ?? []).find((r) => r.custom_domain === bareHost)
+      ?? (rows ?? []).find((r) => r.custom_domain === apexHost)
+      ?? null;
+    /*
+     * Ecranele sunt in `lib/ecran-domeniu.ts`: magazinul nepublicat isi arata numele si
+     * logo-ul („in curand”, cu o legatura pentru proprietar catre magazinul lui de pe
+     * platforma), iar domeniul necunoscut primeste un ecran Edinio. Status 404 si
+     * `noindex` la amandoua: nimic de aici nu are ce cauta in index.
+     */
     return new NextResponse(
-      "<!doctype html><meta charset=utf-8><title>Domeniu neconfigurat</title>" +
-        (nepublicat
-          ? "<p>Domeniul e legat de un magazin, dar magazinul nu e încă publicat."
-            + "<p>Publică-l din panou, la Setări, și adresa începe să funcționeze imediat."
-          : "<p>Acest domeniu nu este conectat la niciun magazin."),
-      { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+      nepublicat
+        ? ecranMagazinNepublicat({ slug: nepublicat.slug, nume: nepublicat.nume ?? "", logo: nepublicat.logo_url, culoare: nepublicat.culoare })
+        : ecranDomeniuNeconectat(apexHost),
+      {
+        status: 404,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" },
+      },
     );
   }
 

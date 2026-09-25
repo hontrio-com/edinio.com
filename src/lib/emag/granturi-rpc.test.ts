@@ -52,6 +52,14 @@ const PUBLICE_DINADINS: Record<string, string> = {
   catalog_pagina: "paginarea vitrinei publice",
   catalog_randuri: "randurile vitrinei publice",
   /*
+   * ⚠ Chemata din `proxy.ts` cu cheia ANONIMA, pentru fiecare cerere pe un domeniu propriu.
+   * Trebuie sa fie definer: RLS-ul de pe `businesses` ascunde magazinele nepublicate, deci
+   * `jhbijouxmagazin.ro` (legat corect, nepublicat) raspundea „nu este conectat” (25.09.2026).
+   * Intoarce numai slug, domeniu, publicat, nume, logo si culoare (ce arata si vitrina),
+   * pentru cel mult 4 domenii pe apel.
+   */
+  domeniu_pentru_proxy: "rezolvarea domeniului propriu in proxy, cu cheia anonima",
+  /*
    * ⚠ VERIFICAT INAINTE SA FIE TRECUTA AICI, si aproape am inchis-o gresit.
    *
    * E chemata din `privat.store_settings_upd()` — declansatorul `INSTEAD OF UPDATE` al

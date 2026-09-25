@@ -41,7 +41,10 @@ const jurnal: string[] = [];
 /** Cand e adevarat, baza raspunde 500 la orice. */
 let bazaCazuta = false;
 
-const baza = http.createServer((req, res) => {
+/** Numele si logo-ul din ecranul „in curand” (`domeniu_pentru_proxy`). */
+const NUME: Record<string, string> = { "nepublicat-cu-domeniu": "Bijuterii <b>JH</b>" };
+
+const baza = http.createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://baza");
   jurnal.push(url.pathname + url.search);
   const json = (cod: number, corp: unknown) => {
@@ -49,6 +52,18 @@ const baza = http.createServer((req, res) => {
     res.end(JSON.stringify(corp));
   };
   if (bazaCazuta) return json(500, { message: "baza a picat" });
+  /*
+   * ⚠ `domeniu_pentru_proxy` (security definer): intoarce si magazinele NEPUBLICATE.
+   * Tabela de mai jos, citita cu cheia anonima, NU le intoarce, ca in baza adevarata.
+   */
+  if (url.pathname === "/rest/v1/rpc/domeniu_pentru_proxy") {
+    let corp = "";
+    for await (const bucata of req) corp += bucata;
+    const lista: string[] = (JSON.parse(corp || "{}").p_domenii ?? []).slice(0, 4);
+    return json(200, Object.entries(MAGAZINE)
+      .filter(([, m]) => m.custom_domain && lista.includes(m.custom_domain))
+      .map(([s, m]) => ({ slug: s, custom_domain: m.custom_domain, is_published: m.is_published, nume: NUME[s] ?? s, logo_url: null, culoare: "#a0522d" })));
+  }
   if (url.pathname !== "/rest/v1/businesses") return json(404, { message: "ruta de proba necunoscuta" });
 
   const slug = url.searchParams.get("slug");
@@ -63,9 +78,14 @@ const baza = http.createServer((req, res) => {
     return json(200, randuri);
   }
   if (domenii?.startsWith("in.(")) {
+    /*
+     * ⚠⚠ Ca baza ADEVARATA: cheia anonima trece prin RLS-ul „Public can view published
+     * businesses”, deci aici NU ies magazinele nepublicate. Baza de proba de dinainte le
+     * intorcea, si asa a trecut defectul de pe `jhbijouxmagazin.ro` (25.09.2026).
+     */
     const lista = domenii.slice(4, -1).split(",").map((d) => d.replace(/^"|"$/g, ""));
     const randuri = Object.entries(MAGAZINE)
-      .filter(([, m]) => m.custom_domain && lista.includes(m.custom_domain))
+      .filter(([, m]) => m.custom_domain && lista.includes(m.custom_domain) && m.is_published)
       .map(([s, m]) => ({ slug: s, custom_domain: m.custom_domain, is_published: m.is_published }));
     return json(200, randuri);
   }
@@ -95,7 +115,8 @@ function cerere(url: string) {
 }
 
 const robots = (r: Response) => r.headers.get("x-robots-tag");
-const interogariMagazine = () => jurnal.filter((p) => p.startsWith("/rest/v1/businesses")).length;
+const interogariMagazine = () =>
+  jurnal.filter((p) => p.startsWith("/rest/v1/businesses") || p.startsWith("/rest/v1/rpc/domeniu_pentru_proxy")).length;
 
 describe("vitrina servita pe www.edinio.com: fiecare ruta de sub /{slug} e noindex", () => {
   const CAI = [
@@ -432,5 +453,37 @@ describe("gazdele platformei care nu primesc antetul", () => {
        X-Frame-Options. Aceeasi scutire ca inainte, acum si pentru subdomeniu. */
     const r = await proxy(cerere("https://edinio.com/floraria-mea?preview=1"));
     assert.notEqual(r.status, 308);
+  });
+});
+
+describe("domeniul propriu care nu serveste un magazin: doua ecrane, amandoua 404 si noindex", () => {
+  test("⚠⚠ magazin NEPUBLICAT cu domeniul legat: ecranul „in curand” al magazinului, NU „nu este conectat”", async () => {
+    const r = await proxy(cerere("https://nepublicat.ro/"));
+    assert.equal(r.status, 404);
+    assert.equal(robots(r), "noindex");
+    const corp = await r.text();
+    assert.match(corp, /În curând/);
+    assert.doesNotMatch(corp, /nu este conectat/);
+    /* Proprietarul ajunge la magazinul lui de pe platforma, unde il vede intreg daca e logat. */
+    assert.match(corp, /href="https:\/\/www\.edinio\.com\/nepublicat-cu-domeniu"/);
+    /* Numele il scrie comerciantul: se scapa, nu ajunge ca HTML. */
+    assert.match(corp, /Bijuterii &lt;b&gt;JH&lt;\/b&gt;/);
+    assert.doesNotMatch(corp, /<b>JH<\/b>/);
+  });
+
+  test("si pe www: acelasi ecran al magazinului", async () => {
+    const r = await proxy(cerere("https://www.nepublicat.ro/produs"));
+    assert.equal(r.status, 404);
+    assert.match(await r.text(), /În curând/);
+  });
+
+  test("domeniu necunoscut: ecranul Edinio, cu ce are de facut proprietarul", async () => {
+    const r = await proxy(cerere("https://strain-necunoscut.ro/"));
+    assert.equal(r.status, 404);
+    assert.equal(robots(r), "noindex");
+    const corp = await r.text();
+    assert.match(corp, /nu este conectat încă/);
+    assert.match(corp, /strain-necunoscut\.ro/);
+    assert.doesNotMatch(corp, /În curând/);
   });
 });

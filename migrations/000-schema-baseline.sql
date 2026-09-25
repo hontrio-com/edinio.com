@@ -6858,6 +6858,21 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.domeniu_pentru_proxy(p_domenii text[])
+ RETURNS TABLE(slug text, custom_domain text, is_published boolean, nume text, logo_url text, culoare text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select b.slug, b.custom_domain, coalesce(b.is_published, false),
+         coalesce(nullif(btrim(b.store_name), ''), b.business_name),
+         b.logo_url, b.primary_color
+    from public.businesses b
+   where b.custom_domain = any (p_domenii[1:4])
+     and b.custom_domain is not null;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.edinio_revendica_conversii(limita integer)
  RETURNS TABLE(id uuid, destinatie text, nume_eveniment text, event_id text, sarcina jsonb, incercari integer, next_retry_at timestamp with time zone, trimis_la timestamp with time zone, ultima_eroare text, abandonat_la timestamp with time zone, creat_la timestamp with time zone, vizitator text)
  LANGUAGE sql
@@ -16662,6 +16677,9 @@ grant execute on function public.discount_totaluri(bid uuid) to authenticated;
 grant execute on function public.discount_totaluri(bid uuid) to service_role;
 grant execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) to authenticated;
 grant execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) to service_role;
+grant execute on function public.domeniu_pentru_proxy(p_domenii text[]) to anon;
+grant execute on function public.domeniu_pentru_proxy(p_domenii text[]) to authenticated;
+grant execute on function public.domeniu_pentru_proxy(p_domenii text[]) to service_role;
 grant execute on function public.edinio_revendica_conversii(limita integer) to service_role;
 grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
@@ -17004,6 +17022,7 @@ revoke execute on function public.discount_state_counts(bid uuid, search text) f
 revoke execute on function public.discount_stats(bid uuid) from public;
 revoke execute on function public.discount_totaluri(bid uuid) from public;
 revoke execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) from public;
+revoke execute on function public.domeniu_pentru_proxy(p_domenii text[]) from public;
 revoke execute on function public.edinio_revendica_conversii(limita integer) from public;
 revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;

@@ -16,7 +16,7 @@ import { verificaPlataOnboarding } from "@/lib/actions/plata-onboarding.actions"
 import { type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS, PLAN_PRICES } from "@/lib/plans";
 import { conversiaDinPlata } from "@/lib/edinio-marketing/verdict-plata";
 import { usePlataAbonament } from "@/components/dashboard/PlataAbonament";
-import type { FirmaFacturare } from "@/lib/billing/firma-abonament";
+import type { FirmaFacturare, FirmaManuala } from "@/lib/billing/firma-abonament";
 
 const PLANS = [
   {
@@ -125,6 +125,16 @@ function firmaPastrata(): FirmaFacturare | undefined {
   }
 }
 
+/** Firma pastrata, in forma in care o primeste ruta de plata. */
+function firmaDeRetrimis(): { cui?: string; manual?: FirmaManuala } {
+  const f = firmaPastrata();
+  if (!f) return {};
+  return {
+    cui: f.cui,
+    manual: { nume: f.business_name, regCom: f.reg_com, adresa: f.address, oras: f.city, judet: f.county },
+  };
+}
+
 function PlanPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -154,7 +164,7 @@ function PlanPageContent() {
       setLoading(true);
       sessionStorage.setItem("onboarding_pending_plan", preselected);
       sessionStorage.setItem("onboarding_pending_interval", "monthly");
-      plataAbonament.asteapta({ plan: preselected, interval: "monthly", return_to: "onboarding" })
+      plataAbonament.asteapta({ plan: preselected, interval: "monthly", return_to: "onboarding", ...firmaDeRetrimis() })
         .then((data) => {
           if (data?.url) {
             pastreazaFirma(data.firma);
@@ -441,7 +451,7 @@ function PlanPageContent() {
       sessionStorage.setItem("onboarding_pending_plan", selectedPlan);
       sessionStorage.setItem("onboarding_pending_interval", billingInterval);
 
-      const data = await plataAbonament.asteapta({ plan: selectedPlan, interval: billingInterval, return_to: "onboarding" });
+      const data = await plataAbonament.asteapta({ plan: selectedPlan, interval: billingInterval, return_to: "onboarding", ...firmaDeRetrimis() });
       if (!data?.url) {
         setLoading(false);
         return;

@@ -1,5 +1,5 @@
 import type { AnafCompany } from "@/lib/anaf/lookup";
-import { formatCui, isValidCui } from "@/lib/anaf/cui";
+import { formatCui, isValidCui, normalizeCui } from "@/lib/anaf/cui";
 import type { ClientFactura } from "@/lib/billing/factura-platforma";
 
 /**
@@ -41,6 +41,38 @@ export function firmaDinAnaf(c: AnafCompany): FirmaFacturare {
     city: c.city,
     county: c.county,
   };
+}
+
+/** Datele scrise de mana in fereastra, cand ANAF nu da firma. */
+export interface FirmaManuala {
+  nume?: string;
+  regCom?: string;
+  adresa?: string;
+  oras?: string;
+  judet?: string;
+}
+
+/**
+ * Firma scrisa de mana, primita cand ANAF nu o da: fie nu raspunde (mentenanta,
+ * timeout), fie nu o gaseste (o firma inregistrata de curand apare acolo abia
+ * dupa cateva zile). Fara ramura asta, in ambele cazuri omul n-ar putea plati.
+ *
+ * Se cere totusi un CUI care trece cifra de control (prinde greselile de tastare)
+ * si tot ce trebuie pe o factura catre o firma: denumire si adresa completa.
+ * Fara „RO", fiindca nu stim daca e platitor de TVA.
+ */
+export function firmaFaraAnaf(cui: string | undefined, m: FirmaManuala | undefined): FirmaFacturare | null {
+  const curat = (v: string | undefined, max: number) => (v ?? "").trim().slice(0, max);
+  const f = {
+    business_name: curat(m?.nume, 200),
+    reg_com: curat(m?.regCom, 60),
+    address: curat(m?.adresa, 300),
+    city: curat(m?.oras, 100),
+    county: curat(m?.judet, 100),
+  };
+  if (!cui || !isValidCui(cui)) return null;
+  if (f.business_name.length < 2 || f.address.length < 3 || f.city.length < 2 || f.county.length < 2) return null;
+  return { cui: normalizeCui(cui), ...f };
 }
 
 // Stripe tine cel mult 500 de caractere pe valoare de metadata.

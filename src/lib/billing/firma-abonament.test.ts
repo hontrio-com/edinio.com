@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
-  areCuiDeFacturare, clientFacturaDinMetadata, firmaDinAnaf, metadataFacturare,
+  areCuiDeFacturare, clientFacturaDinMetadata, firmaDinAnaf, firmaFaraAnaf, metadataFacturare,
 } from "./firma-abonament";
 import type { AnafCompany } from "@/lib/anaf/lookup";
 
@@ -53,6 +53,33 @@ test("fara firma in metadata (abonamente vechi) nu inventeaza un client", () => 
 test("metadata ramane sub plafonul Stripe de 500 de caractere", () => {
   const lung = metadataFacturare({ ...firmaDinAnaf(anaf), address: "x".repeat(900) });
   for (const v of Object.values(lung)) assert.ok(v.length <= 500);
+});
+
+const deMana = { nume: "  Firma Noua SRL ", regCom: "", adresa: "Str. Noua nr. 2", oras: "Iasi", judet: "Iasi" };
+
+test("cand ANAF nu da firma (n-o gaseste sau nu raspunde), se primeste scrisa de mana", () => {
+  const f = firmaFaraAnaf("RO18547290", deMana);
+  assert.deepEqual(f, {
+    cui: "18547290", business_name: "Firma Noua SRL", reg_com: "",
+    address: "Str. Noua nr. 2", city: "Iasi", county: "Iasi",
+  });
+  // si ajunge pe factura, cu CUI si adresa
+  const client = clientFacturaDinMetadata(metadataFacturare(f!), "a@b.ro");
+  assert.equal(client?.vatCode, "18547290");
+  assert.equal(client?.address, "Str. Noua nr. 2");
+});
+
+test("de mana se cere totusi un CUI corect, denumire si adresa completa", () => {
+  assert.equal(firmaFaraAnaf("12345", deMana), null, "CUI care nu trece cifra de control");
+  assert.equal(firmaFaraAnaf("18547290", { ...deMana, nume: " " }), null, "fara denumire");
+  assert.equal(firmaFaraAnaf("18547290", { ...deMana, adresa: "" }), null, "fara adresa");
+  assert.equal(firmaFaraAnaf("18547290", { ...deMana, oras: "" }), null, "fara localitate");
+  assert.equal(firmaFaraAnaf("18547290", { ...deMana, judet: "" }), null, "fara judet");
+  assert.equal(firmaFaraAnaf("18547290", undefined), null, "fara nimic");
+});
+
+test("Registrul Comertului e optional", () => {
+  assert.ok(firmaFaraAnaf("18547290", { ...deMana, regCom: undefined }));
 });
 
 /*

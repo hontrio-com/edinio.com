@@ -4,14 +4,19 @@ import { stripe, getPriceId } from "@/lib/stripe";
 import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 import { lookupAnaf } from "@/lib/anaf/lookup";
 import { rateLimit } from "@/lib/utils/rate-limit";
-import { areCuiDeFacturare, firmaDinAnaf, metadataFacturare, type FirmaFacturare } from "@/lib/billing/firma-abonament";
+import {
+  areCuiDeFacturare, firmaDinAnaf, firmaFaraAnaf, metadataFacturare,
+  type FirmaFacturare, type FirmaManuala,
+} from "@/lib/billing/firma-abonament";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
 
-  const { plan, interval: rawInterval, return_to, cui } = await req.json() as { plan: string; interval?: string; return_to?: string; cui?: string };
+  const { plan, interval: rawInterval, return_to, cui, manual } = await req.json() as {
+    plan: string; interval?: string; return_to?: string; cui?: string; manual?: FirmaManuala;
+  };
   const interval: "monthly" | "annual" = rawInterval === "annual" ? "annual" : "monthly";
   const priceId = getPriceId(plan, interval);
   if (!priceId) {
@@ -49,10 +54,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prea multe cautari. Asteapta un minut.", cereCui: true }, { status: 429 });
     }
     const anaf = await lookupAnaf(cui);
-    if (!anaf.ok) {
-      return NextResponse.json({ error: anaf.error, cereCui: true }, { status: anaf.status });
+    if (anaf.ok) {
+      firma = firmaDinAnaf(anaf.company);
+    } else {
+      /*
+        CAND ANAF NU DA FIRMA, NU SE OPRESTE VANZAREA. Fie nu raspunde (pica des),
+        fie nu o gaseste (o firma noua apare la ei abia dupa cateva zile). Atunci
+        se primeste firma scrisa de om in fereastra, cu un CUI care trece cifra de
+        control si cu adresa completa (vezi `firmaFaraAnaf`).
+      */
+      const firmaDeMana = firmaFaraAnaf(cui, manual);
+      if (!firmaDeMana) {
+        return NextResponse.json(
+          {
+            error: anaf.reason === "not_found"
+              ? "ANAF nu gaseste firma cu acest CUI. Verifica cifrele sau completeaza datele firmei."
+              : "ANAF nu raspunde acum. Completeaza datele firmei si continua.",
+            cereCui: true,
+            manual: true,
+          },
+          { status: 422 },
+        );
+      }
+      firma = firmaDeMana;
     }
-    firma = firmaDinAnaf(anaf.company);
 
     if (magazin) {
       // Numele afisat in magazin nu se schimba: vitrina arata `store_name ?? business_name`,
@@ -63,10 +88,11 @@ export async function POST(req: NextRequest) {
           cui: firma.cui,
           business_name: firma.business_name,
           ...(magazin.store_name ? {} : { store_name: magazin.business_name }),
-          reg_com: firma.reg_com || null,
-          address: firma.address || null,
-          city: firma.city || null,
-          county: firma.county || null,
+          // Ce nu stim (ANAF cazut, camp gol la ei) nu sterge ce era deja scris.
+          ...(firma.reg_com ? { reg_com: firma.reg_com } : {}),
+          ...(firma.address ? { address: firma.address } : {}),
+          ...(firma.city ? { city: firma.city } : {}),
+          ...(firma.county ? { county: firma.county } : {}),
         })
         .eq("id", magazin.id);
       if (eFirma) {

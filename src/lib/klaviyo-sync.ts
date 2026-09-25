@@ -22,6 +22,7 @@ import {
   trackOrderEvent, upsertCatalogItem, deleteCatalogItem, catalogInLot, stergeInLot,
   type KlaviyoOrderItem, type KlaviyoOrderMetric, type KlaviyoCatalogProduct,
 } from "@/lib/klaviyo-ecommerce";
+import { prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
 
 export type KlaviyoSource = "checkout" | "popup" | "forms";
 
@@ -98,7 +99,7 @@ export async function maybeSyncKlaviyoSubscriber(opts: {
 
 type OrderItem = { product_id: string; name: string; price: number; quantity: number; category?: string | null; slug?: string | null; image?: string | null };
 
-function liniiKlaviyo(items: OrderItem[], storeUrl?: string | null): KlaviyoOrderItem[] {
+function liniiKlaviyo(items: OrderItem[], storeUrl?: string | null, prefixProdus?: string): KlaviyoOrderItem[] {
   return items
     .filter((i) => !String(i.product_id).startsWith("extra_"))
     .map((i) => ({
@@ -108,7 +109,7 @@ function liniiKlaviyo(items: OrderItem[], storeUrl?: string | null): KlaviyoOrde
       quantity: Number(i.quantity) || 0,
       category: i.category ?? null,
       /* Ca in feedul Merchant Center: `slug`, altfel id-ul, pe care vitrina il rezolva la fel. */
-      url: storeUrl ? `${storeUrl}/product/${i.slug || i.product_id}` : undefined,
+      url: linkProdus(storeUrl, i.slug, i.product_id, prefixProdus),
       image_url: i.image ?? null,
     }));
 }
@@ -204,7 +205,7 @@ export async function evenimentKlaviyo(orderId: string, fel: FelEveniment): Prom
     if ("sarit" in m) return { fel: "sarit", motiv: m.sarit };
 
     const items = (Array.isArray(c.items) ? c.items : []) as OrderItem[];
-    const linii = liniiKlaviyo(items, c.businesses ? storeBaseUrl(c.businesses) : null);
+    const linii = liniiKlaviyo(items, c.businesses ? storeBaseUrl(c.businesses) : null, await prefixProdusMagazin(c.business_id));
     if (linii.length === 0) return { fel: "sarit", motiv: "comanda fara produse" };
 
     const { fname, lname } = splitName(c.customer_name);
@@ -248,7 +249,7 @@ export async function sincronizeazaProduseleKlaviyo(
     title: p.name,
     description: p.description,
     price: p.price,
-    url: linkProdus(cat.adresa, p.slug, p.id) ?? "",
+    url: linkProdus(cat.adresa, p.slug, p.id, cat.prefixProdus) ?? "",
     image_url: p.image,
     published: publicat,
   });

@@ -4,6 +4,8 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductForm } from "@/components/dashboard/ProductForm";
 import { parseShippingClasses } from "@/lib/shipping/rules";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { storeBaseUrl } from "@/lib/seo";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 interface Props {
   params: Promise<{ productId: string }>;
@@ -42,7 +44,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, is_published, store_settings(olx_config, trendyol_config, emag_config, google_merchant_config, shipping_classes)")
+    .select("id, slug, custom_domain, is_published, store_settings(olx_config, trendyol_config, emag_config, google_merchant_config, shipping_classes, permalinks:page_content->permalinks)")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
@@ -107,6 +109,9 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       brands={(branduri ?? []).map((b) => b.brand)}
       backHref={backHref}
       business={business.slug ? { slug: business.slug, is_published: !!business.is_published } : undefined}
+      radacinaProduse={business.slug
+        ? `${storeBaseUrl(business)}/${permalinkuriDin({ permalinks: (settings as { permalinks?: unknown } | null)?.permalinks }).produs}`
+        : undefined}
       olxConnected={olxConnected}
       trendyolConnected={trendyolConnected}
       emagConnected={emagConnected}

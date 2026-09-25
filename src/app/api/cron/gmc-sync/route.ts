@@ -15,6 +15,7 @@ import { insertProductInput, deleteProductInput, getProduct, mapProductStatus, l
 import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { MOTIV_PRET_CARE_MINTE, pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 type Admin = SupabaseClient<Database>;
 const QUEUE_BATCH = 100;
@@ -463,7 +464,7 @@ async function loadBusinessContext(admin: Admin, businessId: string): Promise<
   { ctx: ContextMagazin } | { deconectat: true } | { eroareToken: EroareToken }
 > {
   const { data: ss } = await admin
-    .from("store_settings").select("google_merchant_config").eq("business_id", businessId).single();
+    .from("store_settings").select("google_merchant_config, permalinks:page_content->permalinks").eq("business_id", businessId).single();
   const config = (ss?.google_merchant_config as GoogleMerchantConfig) ?? {};
   if (!config.connected || !config.refresh_token || !config.account_id || !config.data_source_name) return { deconectat: true };
   const t = await obtineTokenul(config.refresh_token);
@@ -471,7 +472,9 @@ async function loadBusinessContext(admin: Admin, businessId: string): Promise<
   const { data: biz } = await admin
     .from("businesses").select("slug, custom_domain, store_name, business_name").eq("id", businessId).single();
   if (!biz) return { deconectat: true };
-  return { ctx: { token: t.token, config, business: biz as MappableBusiness } };
+  // Link-ul produsului poarta prefixul din Setari > Permalink-uri.
+  const prefix_produs = permalinkuriDin({ permalinks: (ss as { permalinks?: unknown } | null)?.permalinks }).produs;
+  return { ctx: { token: t.token, config, business: { ...(biz as MappableBusiness), prefix_produs } } };
 }
 
 /**

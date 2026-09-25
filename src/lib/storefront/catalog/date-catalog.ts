@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { canonicalCatalog, type FiltreCitite } from "@/lib/storefront/catalog/url";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
+import { hrefProdus, PERMALINKURI_IMPLICITE, type Permalinkuri } from "@/lib/storefront/permalinkuri";
 import { deriveStoreDescription, storeBaseUrl, type StoreSeo } from "@/lib/seo";
 import { jsonLdSafe } from "@/lib/json-ld";
 import {
@@ -52,10 +53,12 @@ export function canonicalPagina(
   radacinaAbsoluta: string,
   numeCategorie: string,
   sp: Record<string, string | string[] | undefined>,
+  /** Prefixul catalogului din Setari > Permalink-uri; lipsa = `magazin`, ca inainte. */
+  prefixCatalog: string = SEGMENT_MAGAZIN,
 ): { url: string; indexabila: boolean } {
   const radacinaPagina = numeCategorie
-    ? `${radacinaAbsoluta}/${SEGMENT_MAGAZIN}/${slugCategorie(numeCategorie)}`
-    : `${radacinaAbsoluta}/${SEGMENT_MAGAZIN}`;
+    ? `${radacinaAbsoluta}/${prefixCatalog}/${slugCategorie(numeCategorie)}`
+    : `${radacinaAbsoluta}/${prefixCatalog}`;
   return canonicalCatalog(radacinaPagina, { ...sp, cat: undefined });
 }
 
@@ -201,7 +204,8 @@ export function construiesteDateCatalog(a: ArgumenteDateCatalog & {
   if (!emiteDateCatalog(a)) return null;
 
   const radacina = storeBaseUrl(a.business);
-  const { url } = canonicalPagina(radacina, a.numeCategorie, a.sp);
+  const prefixe = a.permalinkuri ?? PERMALINKURI_IMPLICITE;
+  const { url } = canonicalPagina(radacina, a.numeCategorie, a.sp, prefixe.magazin);
 
   const displayName = a.business.store_name ?? a.business.business_name;
   // ⚠ NICIODATA `a.seo.description`: aceea e a paginii principale. Vezi `titluSiDescriere`.
@@ -214,13 +218,13 @@ export function construiesteDateCatalog(a: ArgumenteDateCatalog & {
    */
   const trepte: TreaptaFirimitura[] = [
     { nume: displayName, url: radacina },
-    { nume: a.setari.titlu, url: `${radacina}/${SEGMENT_MAGAZIN}` },
+    { nume: a.setari.titlu, url: `${radacina}/${prefixe.magazin}` },
   ];
   if (a.numeCategorie && a.parinteCategorie) {
-    trepte.push({ nume: a.parinteCategorie, url: `${radacina}/${SEGMENT_MAGAZIN}/${slugCategorie(a.parinteCategorie)}` });
+    trepte.push({ nume: a.parinteCategorie, url: `${radacina}/${prefixe.magazin}/${slugCategorie(a.parinteCategorie)}` });
   }
   if (a.numeCategorie) {
-    trepte.push({ nume: a.numeCategorie, url: `${radacina}/${SEGMENT_MAGAZIN}/${slugCategorie(a.numeCategorie)}` });
+    trepte.push({ nume: a.numeCategorie, url: `${radacina}/${prefixe.magazin}/${slugCategorie(a.numeCategorie)}` });
   }
 
   /*
@@ -275,7 +279,7 @@ export function construiesteDateCatalog(a: ArgumenteDateCatalog & {
           .filter((p) => (p.slug ?? "").trim())
           .slice(0, 60)
           .map<ElementLista>((p) => ({
-            url: `${radacina}/product/${p.slug}`,
+            url: hrefProdus(radacina, p.slug!, prefixe.produs),
             nume: p.name,
             imagine: Array.isArray(p.images) ? (p.images as unknown[]).find((i) => typeof i === "string") as string : null,
           })),
@@ -337,6 +341,8 @@ export interface ArgumenteDateCatalog {
    * `noindex`; `null` = nu stim (fara rezumat, sau pagina e catalogul intreg).
    */
   subarboreCuProduse: boolean | null;
+  /** Prefixele din Setari > Permalink-uri. Lipsa = cele implicite, ca inainte. */
+  permalinkuri?: Permalinkuri;
 }
 
 /**
@@ -351,7 +357,7 @@ export interface ArgumenteDateCatalog {
  * nu plateasca citirile degeaba (ciorna, `/cautare`, adresele filtrate).
  */
 export function emiteDateCatalog(
-  a: Pick<ArgumenteDateCatalog, "business" | "seo" | "sp" | "numeCategorie" | "esteCiorna" | "esteCautare" | "subarboreCuProduse">,
+  a: Pick<ArgumenteDateCatalog, "business" | "seo" | "sp" | "numeCategorie" | "esteCiorna" | "esteCautare" | "subarboreCuProduse" | "permalinkuri">,
 ): boolean {
   // Magazin nepublicat sau previzualizare: `metadataMagazin` raspunde deja cu
   // `noindex, nofollow`. Ce nu se indexeaza, nu se descrie.
@@ -377,6 +383,6 @@ export function emiteDateCatalog(
 
   // Doua sau mai multe filtre in plus: spatiu combinatoriu, declarat `noindex` in
   // `<head>` de aceeasi functie. Vezi `canonicalPagina`.
-  return canonicalPagina(storeBaseUrl(a.business), a.numeCategorie, a.sp).indexabila;
+  return canonicalPagina(storeBaseUrl(a.business), a.numeCategorie, a.sp, a.permalinkuri?.magazin).indexabila;
 }
 

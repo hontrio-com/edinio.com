@@ -260,7 +260,15 @@ export async function updatePageContent(businessId: string, pageContent: Record<
   // Shallow-merge over the existing JSON so keys managed by OTHER editors are not
   // wiped — e.g. the nav menu set in /dashboard/pages, or hero_banners. Callers
   // pass their full known set of fields, so overwriting per-key is the intent.
-  const merged = { ...((existing?.page_content as Record<string, unknown>) ?? {}), ...pageContent };
+  //
+  // ⚠ `permalinks` NU trece pe aici (25.09.2026). Editorul trimite `page_content`
+  // INTREG, dintr-o copie facuta la deschidere: un editor deschis inainte ca omul
+  // sa-si schimbe prefixele in Setari > Permalink-uri le-ar fi scris inapoi pe cele
+  // vechi, tacut, cu tot istoricul lor de redirectionari. Cheia o scrie numai
+  // `salveazaPermalinkurile`.
+  const { permalinks: _permalinksIgnorate, ...faraPermalinks } = pageContent;
+  void _permalinksIgnorate;
+  const merged = { ...((existing?.page_content as Record<string, unknown>) ?? {}), ...faraPermalinks };
 
   let error;
   if (existing) {

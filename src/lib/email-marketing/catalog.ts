@@ -17,6 +17,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { storeBaseUrl } from "@/lib/seo";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
+import { prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
 
 export type ProdusCatalog = {
   id: string;
@@ -30,6 +32,8 @@ export type ProdusCatalog = {
 export type CatalogCitit = {
   /** Adresa publica a magazinului: domeniul propriu cand exista. */
   adresa: string | null;
+  /** Prefixul produselor (Setari > Permalink-uri). */
+  prefixProdus: string;
   active: ProdusCatalog[];
   inactive: ProdusCatalog[];
   /** Id-uri cerute care nu mai sunt in baza: sterse. */
@@ -51,8 +55,10 @@ function produs(r: Rand): ProdusCatalog {
 }
 
 /** Linkul produsului: `slug`, altfel id-ul, ca in feedul Merchant Center (vitrina le rezolva pe amandoua). */
-export function linkProdus(adresa: string | null | undefined, slug: string | null | undefined, id: string): string | undefined {
-  return adresa ? `${adresa}/product/${slug || id}` : undefined;
+export function linkProdus(
+  adresa: string | null | undefined, slug: string | null | undefined, id: string, prefixProdus?: string,
+): string | undefined {
+  return adresa ? hrefProdus(adresa, slug || id, prefixProdus) : undefined;
 }
 
 /**
@@ -63,6 +69,7 @@ export async function citesteCatalogul(businessId: string, ids?: string[]): Prom
   const admin = createAdminClient();
   const { data: biz } = await admin.from("businesses").select("slug, custom_domain").eq("id", businessId).single();
   const adresa = biz?.slug ? storeBaseUrl(biz as { slug: string; custom_domain: string | null }) : null;
+  const prefixProdus = await prefixProdusMagazin(businessId);
 
   const campuri = "id, name, price, images, slug, description, is_active";
   let randuri: Rand[] = [];
@@ -82,6 +89,7 @@ export async function citesteCatalogul(businessId: string, ids?: string[]): Prom
   const gasite = new Set(randuri.map((r) => r.id));
   return {
     adresa,
+    prefixProdus,
     active: randuri.filter((r) => r.is_active !== false).map(produs),
     inactive: randuri.filter((r) => r.is_active === false).map(produs),
     sterse: (ids ?? []).filter((id) => !gasite.has(id)),

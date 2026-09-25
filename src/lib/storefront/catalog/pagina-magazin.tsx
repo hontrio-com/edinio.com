@@ -40,6 +40,7 @@ import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import type { Json } from "@/types/database.types";
 import { parseStoreSeo, storeBaseUrl } from "@/lib/seo";
 import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /*
  * Metadata sta in `metadata-magazin.ts`, fara JSX, ca sa poata fi rulata in probe.
@@ -147,6 +148,8 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
    * Chiar ce a raportat eSAFE: „sunt tot pe pagina principala".
    */
   const pc = (storeSettings?.page_content as Record<string, unknown>) ?? {};
+  // Prefixele din Setari > Permalink-uri (implicit `magazin` si `brand`).
+  const prefixe = permalinkuriDin(pc);
   const faraImagini = pc.hide_products_without_images === true;
   const faraStocAscuns = pc.hide_out_of_stock_products === true;
 
@@ -576,8 +579,8 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
         country: taraVizitatorului,
         /* Calea, cat sa se poata deosebi catalogul de o categorie anume. */
         path: brandPagina
-          ? `/brand/${brandPagina.segment}`
-          : categorieSlug ? `/magazin/${categorieSlug}` : "/magazin",
+          ? `/${prefixe.brand}/${brandPagina.segment}`
+          : categorieSlug ? `/${prefixe.magazin}/${categorieSlug}` : `/${prefixe.magazin}`,
       });
     });
   }
@@ -627,6 +630,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
         sp,
         noindexMagazin: !!parseStoreSeo(storeSettings?.page_content ?? null).noindex,
         esteCiorna: isPreview || !business.is_published,
+        permalinkuri: prefixe,
       })
     : await dateStructuratePaginaCatalog({
     business,
@@ -701,9 +705,9 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
       // „bocanci" duc la aceeasi pagina, iar paginarea si filtrele trebuie sa
       // ramana pe adresa canonica a categoriei.
       caleCategorie={brandPagina
-        ? caleBrand(basePath, brandPagina.nume) ?? undefined
+        ? caleBrand(basePath, brandPagina.nume, prefixe.brand) ?? undefined
         : numeCategorie
-          ? `${shopHref(basePath)}/${slugCategorie(numeCategorie)}`
+          ? `${shopHref(basePath, prefixe.magazin)}/${slugCategorie(numeCategorie)}`
           : undefined}
       paginaBrand={brandPagina
         ? { nume: brandPagina.nume, logo: brandPagina.logo, descriere: brandPagina.descriere }

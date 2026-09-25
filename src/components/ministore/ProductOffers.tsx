@@ -7,6 +7,8 @@ import { formatPrice } from "@/lib/utils/format";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
 import { esteCrossSellDesenabil, esteFbtDesenabil } from "@/lib/offers/amplasare";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Storefront offers on the product page:
@@ -202,7 +204,8 @@ function OfferCard({ product, basePath, color, onAddToCart }: {
   product: OfferProduct; basePath: string; color: string; onAddToCart?: (p: OfferProduct) => void;
 }) {
   const [added, setAdded] = useState(false);
-  const href = product.slug ? `${basePath}/product/${product.slug}` : basePath || "/";
+  const { produs: prefixProdus } = usePermalinkuri();
+  const href = product.slug ? hrefProdus(basePath, product.slug, prefixProdus) : basePath || "/";
   const hasDiscount = product.compareAtPrice != null && product.compareAtPrice > product.price;
 
   function handleAdd() {

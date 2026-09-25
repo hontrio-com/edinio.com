@@ -33,10 +33,13 @@ type BrandCuDetalii = BrandCuProduse & { logo: string | null; descriere: string 
 export function BranduriClient({
   businessId,
   adresaMagazin,
+  prefixBrand,
   branduri,
   totalProduse,
 }: {
   businessId: string;
+  /** Prefixul brandurilor (Setari > Permalink-uri). */
+  prefixBrand?: string;
   /** `storeBaseUrl(business)`: domeniul propriu sau adresa de pe platforma, pentru „Vezi in magazin”. */
   adresaMagazin: string;
   branduri: BrandCuDetalii[];
@@ -346,9 +349,9 @@ export function BranduriClient({
                       </div>
                     ) : (
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {b.produse > 0 && caleBrand(adresaMagazin, b.brand) && (
+                        {b.produse > 0 && caleBrand(adresaMagazin, b.brand, prefixBrand) && (
                           <a
-                            href={caleBrand(adresaMagazin, b.brand) ?? undefined}
+                            href={caleBrand(adresaMagazin, b.brand, prefixBrand) ?? undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             className={butonMic}

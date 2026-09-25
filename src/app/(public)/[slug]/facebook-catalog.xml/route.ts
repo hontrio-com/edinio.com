@@ -5,6 +5,8 @@ import { buildCatalogItems, serializeCatalogFeed, type CatalogBusiness, type Cat
 import { numeCuDescendenti, parseFeeduri, produseDinFeed, type RegulaFeed } from "@/lib/facebook/feeduri";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 import { logError } from "@/lib/error-logger";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { setarileDin } from "@/lib/storefront/antet-magazin";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,7 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
 
   const { data: biz } = await admin
     .from("businesses")
-    .select("id, slug, custom_domain, store_name, business_name, is_published")
+    .select("id, slug, custom_domain, store_name, business_name, is_published, store_settings(permalinks:page_content->permalinks)")
     .eq("slug", slug)
     .maybeSingle();
   if (!biz || !biz.is_published) return new Response("Not found", { status: 404 });
@@ -62,6 +64,8 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
     custom_domain: biz.custom_domain,
     store_name: biz.store_name,
     business_name: biz.business_name,
+    // Link-urile produselor poarta prefixul din Setari > Permalink-uri.
+    prefix_produs: permalinkuriDin({ permalinks: setarileDin<{ permalinks: unknown }>(biz as never)?.permalinks }).produs,
   };
 
   /*

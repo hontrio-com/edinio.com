@@ -43,6 +43,7 @@ import { jsonLdSafe } from "@/lib/json-ld";
 import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
 import { normalizeazaDefinitia } from "@/lib/customization/definitie";
 import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/permis-incarcare";
+import { setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
 
 /*
  * `sort`, `pmin`, `pmax` si `stoc` sunt aici fiindca grila paginii principale are
@@ -641,7 +642,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     // ca toate canonicalele. `URLSearchParams` le-ar fi scris cu `+`, deci
     // redirectul ar fi produs o A DOUA adresa pentru exact acelasi continut.
     permanentRedirect(hrefCatalog(
-      radacinaCatalog(basePath, resolved.design),
+      radacinaCatalog(basePath, resolved.design, (await setareaPermalinkurilorMagazinului(slug)).magazin),
       scrieFiltre({
         categorie: catParam,
         cautare: qParam,

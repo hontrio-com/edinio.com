@@ -1,5 +1,6 @@
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { lineKey, type CartItem } from "./normalize";
+import { hrefProdus, PERMALINKURI_IMPLICITE } from "@/lib/storefront/permalinkuri";
 
 /**
  * ═══ EDITAREA UNEI LINII PERSONALIZATE, DIN COS ═══
@@ -110,9 +111,11 @@ export function incheie(s?: StocareLinie | null): void {
  * fara ea nu stim CARE pagina de produs. Atunci butonul nu se deseneaza deloc — un buton care duce
  * la 404 e mai rau decat lipsa lui.
  */
-export function adresaDeEditare(basePath: string, item: Pick<CartItem, "slug">): string | null {
+export function adresaDeEditare(
+  basePath: string, item: Pick<CartItem, "slug">, prefixProdus: string = PERMALINKURI_IMPLICITE.produs,
+): string | null {
   if (!item.slug) return null;
-  return `${basePath}/product/${item.slug}?${PARAM_EDITARE}=1`;
+  return `${hrefProdus(basePath, item.slug, prefixProdus)}?${PARAM_EDITARE}=1`;
 }
 
 /**

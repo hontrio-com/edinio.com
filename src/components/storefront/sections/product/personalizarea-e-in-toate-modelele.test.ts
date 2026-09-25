@@ -96,7 +96,9 @@ test("⚠ permisul e emis pe SERVER, in AMANDOUA rutele care randeaza pagina de 
    * refuzul se vede abia cand cumparatorul alege o poza.
    */
   for (const ruta of [
-    "src/app/(public)/[slug]/product/[productSlug]/page.tsx",
+    // Pagina de produs sta aici de pe 25.09.2026: o randeaza si ruta implicita, si prefixul
+    // ales in Setari > Permalink-uri.
+    "src/app/(public)/[slug]/_rute/pagina-produs.tsx",
     "src/app/(public)/[slug]/page.tsx",
   ]) {
     const v = readFileSync(path.resolve(process.cwd(), ruta), "utf8").replace(/\r\n/g, "\n");

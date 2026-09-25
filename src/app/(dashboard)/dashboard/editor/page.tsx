@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 type PropsEditor = ComponentProps<typeof StoreEditor>;
 
@@ -150,6 +151,7 @@ async function ContinutEditor({
         cosPePagina: cartOnPage(design),
         comandaPePagina: checkoutOnPage(design),
         unSingurProdus: parseStoreMode(storeSettings?.page_content).mode === "one_product",
+        prefixProdus: permalinkuriDin(storeSettings?.page_content).produs,
 
       }}
     />

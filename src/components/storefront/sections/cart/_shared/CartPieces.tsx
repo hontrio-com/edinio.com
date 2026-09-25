@@ -9,6 +9,8 @@ import { gtagEvent } from "@/lib/marketing";
 import { lineKey, useCart, type CartItem } from "@/components/storefront/cart/CartProvider";
 import type { CartPricing } from "@/lib/storefront/cart/pricing";
 import { adresaDeEditare, porneste } from "@/lib/storefront/cart/editare";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Piesele din care sunt facute modelele de pagina de cos.
@@ -46,10 +48,11 @@ import { adresaDeEditare, porneste } from "@/lib/storefront/cart/editare";
  * langa cea veche, si omul ar fi platit de doua ori.
  */
 export function ButonEditeaza({ item, basePath, cheie }: { item: CartItem; basePath: string; cheie: string }) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const areValori = !!item.customization && Object.keys(item.customization).length > 0;
-  const adresa = adresaDeEditare(basePath, item);
+  const adresa = adresaDeEditare(basePath, item, prefixProdus);
   if (!areValori || !adresa || !item.slug) return null;
-  const simpla = `${basePath}/product/${item.slug}`;
+  const simpla = hrefProdus(basePath, item.slug, prefixProdus);
   return (
     <a
       href={adresa}
@@ -129,6 +132,7 @@ export function CartLine({
   onRemove: (key: string) => void;
   dens?: "rand" | "compact";
 }) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const key = lineKey(item);
   const cos = useCart();
   const totalLinie = cos.lineTotal(item);
@@ -164,7 +168,7 @@ export function CartLine({
   // economie`: asa raman toate trei numerele impacate intre ele.
   const intreg = pretBucata * item.quantity;
   const rand = useRef<HTMLDivElement>(null);
-  const href = item.slug ? `${basePath}/product/${item.slug}` : null;
+  const href = item.slug ? hrefProdus(basePath, item.slug, prefixProdus) : null;
   const latime = dens === "compact" ? "w-16 h-16" : "w-20 h-20 sm:w-24 sm:h-24";
   // `sizes` urmeaza latimile de mai sus, altfel browserul cere pentru caseta de
   // 64 px a modelului compact o imagine de 96 px — cu 50% mai lata decat trebuie,
@@ -233,7 +237,7 @@ export function CartLine({
               raspunsul — iar pe cele care nu-l au (linii vechi, fara `slug`) sfatul vechi ramane
               singurul adevarat.
             */}
-            {adresaDeEditare(basePath, item)
+            {adresaDeEditare(basePath, item, prefixProdus)
               ? "Necesita actualizare: apasa „Editeaza” si alege din nou"
               : "Necesita actualizare: deschide produsul si alege din nou"}
           </p>

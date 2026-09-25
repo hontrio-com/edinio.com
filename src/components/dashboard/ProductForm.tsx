@@ -39,6 +39,7 @@ import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { modernizeazaSelectul } from "@/lib/customization/definitie";
 import type { Database } from "@/types/database.types";
 import { cuUid, redenumesteValoare, uidNou } from "@/lib/storefront/variante-identitate";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
@@ -611,6 +612,11 @@ interface Props {
   // Store slug + publish status, so we can show "Vezi produsul" only when the
   // public product page is actually live (active product + published store).
   business?: { slug: string; is_published: boolean };
+  /**
+   * Radacina adreselor de produs, absoluta, cu prefixul din Setari > Permalink-uri
+   * (ex. `https://magazin.ro/product`). Lipsa = adresa de pe platforma cu `product`.
+   */
+  radacinaProduse?: string;
   olxConnected?: boolean;
   // Butonul „Publică pe Trendyol" apare doar cand contul e conectat acolo.
   trendyolConnected?: boolean;
@@ -631,7 +637,7 @@ interface Props {
   shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, brands = [], backHref = "/dashboard/products", business, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
+export function ProductForm({ businessId, product, categories, brands = [], backHref = "/dashboard/products", business, radacinaProduse, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
@@ -966,8 +972,15 @@ export function ProductForm({ businessId, product, categories, brands = [], back
     set("seo_description", (plain(form.short_description) || plain(form.description)).slice(0, 160));
   }
 
+  /*
+   * ⚠ Scria `edinio.com/magazin/<slug>`, adresa GRESITA: produsele au stat mereu sub
+   * `/product/`, iar `/magazin` e catalogul. Acum e adresa reala, cu domeniul propriu
+   * si cu prefixul ales in Setari > Permalink-uri.
+   */
+  const radacinaAfisata = (radacinaProduse ?? (business ? `edinio.com/${business.slug}/product` : "edinio.com/product"))
+    .replace(/^https?:\/\//, "").replace(/^www\./, "");
   const serp = {
-    url: `edinio.com/magazin/${form.slug || "produs"}`,
+    url: `${radacinaAfisata}/${form.slug || "produs"}`,
     title: (form.seo_title.trim() || form.name || "Titlu produs").slice(0, 60),
     desc: (form.seo_description.trim() || form.short_description.replace(/<[^>]+>/g, "").trim() || form.description.replace(/<[^>]+>/g, "").slice(0, 160) || "Fara descriere.").slice(0, 160),
   };
@@ -1200,7 +1213,7 @@ export function ProductForm({ businessId, product, categories, brands = [], back
             )}
             {/* Live only when the product is active AND the store is published — otherwise the page 404s. */}
             {product?.is_active && product?.slug && business?.is_published && (
-              <a href={`/${business.slug}/product/${product.slug}`} target="_blank" rel="noopener noreferrer"
+              <a href={radacinaProduse ? `${radacinaProduse}/${product.slug}` : hrefProdus(`/${business.slug}`, product.slug)} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors text-foreground">
                 <ExternalLink className="h-4 w-4" />
                 Vezi produsul
@@ -1245,7 +1258,7 @@ export function ProductForm({ businessId, product, categories, brands = [], back
                   </label>
                   <div className="flex items-center gap-0 border border-border rounded-xl overflow-hidden focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 transition-colors bg-surface">
                     <span className="px-3 text-sm text-muted-foreground bg-muted/50 border-r border-border py-2.5 whitespace-nowrap hidden sm:inline">
-                      edinio.com/magazin/
+                      {radacinaAfisata}/
                     </span>
                     <input type="text" value={form.slug}
                       onChange={(e) => {

@@ -26,6 +26,7 @@ import { idArticol } from "./identitate";
 import { inMonedaPietei, preturilePentruFeed, type RegimTvaMagazin } from "./pret";
 import { disponibilitate } from "./stoc";
 import { PIETE, type PepitaConfig, type TipGarantie } from "./types";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    FORMELE
@@ -143,6 +144,8 @@ export interface ContextArticole {
   caleCategorie: (nume: string | null) => CategoriePepita[];
   /** Adresa publica a magazinului. */
   baza: string;
+  /** Prefixul produselor (Setari > Permalink-uri). Lipsa = `product`, ca inainte. */
+  prefixProdus?: string;
   /** Stocul de siguranta al produsului asta, daca are unul propriu. */
   safetyStock?: number;
   /**
@@ -348,7 +351,7 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     ctx.pragMagazin ?? NaN,
   ].filter((n) => Number.isFinite(n));
   const ultimaModificare = candidati.length ? Math.floor(Math.max(...candidati)) : undefined;
-  const url = `${ctx.baza}/product/${p.slug ?? p.id}`;
+  const url = hrefProdus(ctx.baza, p.slug ?? p.id, ctx.prefixProdus);
 
   /** Ce e comun intre articolul simplu si fiecare combinatie aplatizata. */
   const comun = {

@@ -12,6 +12,8 @@ import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { caiInterziseStraine } from "@/app/robots";
 import { numeScurtMagazin } from "@/lib/storefront/catalog/descriere-generata";
 import { continutMeta, problemeDescriere } from "./descrieri";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
+import { permalinkuriMagazinDupaId, prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
 
 /**
  * SANTINELA: cere paginile importante si verifica CE CONTIN, nu doar ca raspund.
@@ -750,7 +752,9 @@ export async function GET(req: NextRequest) {
            e liniste adevarata; cu magazine cu domeniu, dar niciunul folosibil,
            proba SPUNE de ce — vezi `motivFaraSitemap`. */
         if (!magazinCuSitemap) return motivFaraSitemap;
-        const { cod, cate } = await iaSiNumara(`${magazinCuSitemap.baza}/sitemap.xml`, "/product/");
+        // Prefixul produselor al magazinului (Setari > Permalink-uri), nu `/product/` fix.
+        const prefix = await prefixProdusMagazin(magazinCuSitemap.id);
+        const { cod, cate } = await iaSiNumara(`${magazinCuSitemap.baza}/sitemap.xml`, `/${prefix}/`);
         if (cod !== 200) return `sitemapul ${magazinCuSitemap.baza}/sitemap.xml raspunde cu ${cod}`;
         return cate === 0 ? `sitemapul magazinului ${magazinCuSitemap.slug} n-are niciun produs` : null;
       },
@@ -1206,7 +1210,7 @@ export async function GET(req: NextRequest) {
         const p = (prod ?? [])[0] as { slug: string; price_min: number; name: string } | undefined;
         if (!p) return null; // magazinul n-are produse cu pret: n-avem ce compara
 
-        const { cod, text } = await ia(`${magazinProba.baza}/product/${p.slug}`);
+        const { cod, text } = await ia(hrefProdus(magazinProba.baza, p.slug, await prefixProdusMagazin(magazinProba.id)));
         if (cod !== 200) return `pagina produsului ${p.slug} raspunde cu ${cod}`;
 
         const dateStructurate = noduriJsonLd(text);
@@ -1560,8 +1564,10 @@ export async function GET(req: NextRequest) {
         }
 
         const cale = (u: string) => u.slice(bazaSitemap.length);
-        const categorie = locuri.find((u) => /^\/magazin\/[^/]+$/.test(cale(u)));
-        const catalog = locuri.find((u) => cale(u) === "/magazin");
+        // Prefixul catalogului al magazinului (Setari > Permalink-uri), nu `/magazin` fix.
+        const prefixCatalog = magazinCuSitemap ? (await permalinkuriMagazinDupaId(magazinCuSitemap.id)).magazin : "magazin";
+        const categorie = locuri.find((u) => cale(u).startsWith(`/${prefixCatalog}/`) && !cale(u).slice(prefixCatalog.length + 2).includes("/"));
+        const catalog = locuri.find((u) => cale(u) === `/${prefixCatalog}`);
         const politica = locuri.find((u) => cale(u).startsWith("/politici/"));
 
         /*
@@ -1712,7 +1718,11 @@ export async function GET(req: NextRequest) {
         const sm = await ia(`${m.baza}/sitemap.xml`);
         if (sm.cod !== 200) cazute.push(`sitemapul ${m.baza}/sitemap.xml raspunde cu ${sm.cod}`);
         const locuri = sm.cod === 200 ? [...sm.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((x) => x[1]) : [];
-        const categorii = locuri.filter((u) => u.startsWith(`${m.baza}/`) && /^\/magazin\/[^/]+$/.test(u.slice(m.baza.length)));
+        const prefixCatalogM = (await permalinkuriMagazinDupaId(m.id)).magazin;
+        const categorii = locuri.filter((u) => {
+          const c = u.startsWith(`${m.baza}/`) ? u.slice(m.baza.length) : "";
+          return c.startsWith(`/${prefixCatalogM}/`) && c.length > prefixCatalogM.length + 2 && !c.slice(prefixCatalogM.length + 2).includes("/");
+        });
         const deVerificat: { url: string; raspuns: Raspuns | null }[] = [
           { url: `${m.baza}/magazin`, raspuns: catalog },
           ...[...new Set([categorii[0], categorii[categorii.length - 1]])]

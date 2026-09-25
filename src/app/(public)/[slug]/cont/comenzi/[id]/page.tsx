@@ -12,6 +12,7 @@ import { PaginaCont } from "@/components/storefront/cont/ui/PaginaCont";
 import { EcranComanda } from "@/components/storefront/cont/ecrane/EcranComanda";
 import { EtichetaStareCont } from "@/components/storefront/cont/ui/piese";
 import { BUTON_PRIMAR, STIL_PRIMAR } from "@/components/storefront/cont/ui/clase";
+import { setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
 
 export const metadata: Metadata = { title: "Comanda", robots: { index: false } };
 
@@ -75,6 +76,7 @@ export default async function ComandaMea({ params }: Props) {
         contact={pag.contact}
         numeMagazin={pag.storeName}
         adresaMagazin={pag.adresaMagazin}
+        prefixProdus={(await setareaPermalinkurilorMagazinului(slug)).produs}
       />
     </PaginaCont>
   );

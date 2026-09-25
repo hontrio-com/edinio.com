@@ -18,6 +18,8 @@ import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import type { Metadata } from "next";
 import { contulMagazinului as contulMagazinuluiPeCerere } from "@/lib/cont/config";
 import { ContulMagazinuluiProvider } from "@/components/storefront/cont/ContulMagazinului";
+import { PermalinkuriProvider } from "@/components/storefront/PermalinkuriMagazin";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 interface Props {
   children: React.ReactNode;
@@ -260,7 +262,10 @@ export default async function StoreLayout({ children, params }: Props) {
           )}
         </DoarInMagazinReal>
       </DoarInAfaraContului>
-      <ContulMagazinuluiProvider valoare={contulMagazinului}>{children}</ContulMagazinuluiProvider>
+      {/* Prefixele din Setari > Permalink-uri, din acelasi rand: nicio cerere in plus. */}
+      <PermalinkuriProvider valoare={permalinkuriDin(setarileDin<{ page_content: unknown }>(business)?.page_content)}>
+        <ContulMagazinuluiProvider valoare={contulMagazinului}>{children}</ContulMagazinuluiProvider>
+      </PermalinkuriProvider>
       {cookieConfig.enabled && (
         <DoarInMagazinReal>
           <CookieConsent

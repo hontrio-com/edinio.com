@@ -16,12 +16,15 @@ import { offerIdVarianta } from "./id-oferta";
 
 export { offerIdVarianta };
 import { adresaCuVarianta } from "@/lib/storefront/varianta-din-adresa";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 export interface MappableBusiness {
   slug: string;
   custom_domain: string | null;
   store_name: string | null;
   business_name: string;
+  /** Prefixul produselor (Setari > Permalink-uri). Lipsa = `product`, ca inainte. */
+  prefix_produs?: string;
 }
 
 export interface MappableProduct {
@@ -96,7 +99,11 @@ export function toGoogleProductInput(
   const feedLabel = config.feed_label || DEFAULT_FEED_LABEL;
 
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
-  const link = `${storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain })}/product/${product.slug ?? product.id}`;
+  const link = hrefProdus(
+    storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain }),
+    product.slug ?? product.id,
+    business.prefix_produs,
+  );
   /*
    * Pachetul se scrie cu `track_inventory: false`, deci prima ramura era mereu
    * adevarata: orice pachet pleca „IN_STOCK", inclusiv unul cu toate componentele

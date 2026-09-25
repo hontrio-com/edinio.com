@@ -75,8 +75,9 @@ export function hrefCautare(basePath: string, interogare?: string): string {
   return interogare ? `${cale}?${interogare}` : cale;
 }
 
-export function shopHref(basePath: string): string {
-  return `${basePath}/${SEGMENT_MAGAZIN}`;
+/** `prefix` = prefixul catalogului din Setari > Permalink-uri; lipsa = `magazin`, ca inainte. */
+export function shopHref(basePath: string, prefix: string = SEGMENT_MAGAZIN): string {
+  return `${basePath}/${prefix}`;
 }
 
 /**
@@ -89,8 +90,8 @@ export function shopHref(basePath: string): string {
  * unul dintre cele douasprezece locuri sa trimita clientul in alta parte decat
  * celelalte unsprezece.
  */
-export function radacinaCatalog(basePath: string, design: StoreDesign): string {
-  return shopOnPage(design) ? shopHref(basePath) : radacinaMagazin(basePath);
+export function radacinaCatalog(basePath: string, design: StoreDesign, prefix: string = SEGMENT_MAGAZIN): string {
+  return shopOnPage(design) ? shopHref(basePath, prefix) : radacinaMagazin(basePath);
 }
 
 /**

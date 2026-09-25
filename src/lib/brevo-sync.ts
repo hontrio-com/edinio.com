@@ -16,6 +16,7 @@ import {
   syncOrder, batchProducts, brevoStoreId,
   type BrevoEcomProduct,
 } from "@/lib/brevo-ecommerce";
+import { prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
 
 export type BrevoSource = "checkout" | "popup" | "forms";
 
@@ -111,7 +112,7 @@ export async function maybeSyncBrevoSubscriber(opts: {
 
 type OrderItem = { product_id: string; name: string; price: number; quantity: number; slug?: string | null; image?: string | null };
 
-function toLines(items: OrderItem[], storeUrl?: string | null) {
+function toLines(items: OrderItem[], storeUrl?: string | null, prefixProdus?: string) {
   return items
     .filter((i) => !String(i.product_id).startsWith("extra_"))
     .map((i) => ({
@@ -119,7 +120,7 @@ function toLines(items: OrderItem[], storeUrl?: string | null) {
         id: i.product_id,
         name: i.name,
         price: Number(i.price) || 0,
-        url: linkProdus(storeUrl, i.slug, i.product_id),
+        url: linkProdus(storeUrl, i.slug, i.product_id, prefixProdus),
         image_url: i.image ?? null,
       } as BrevoEcomProduct,
       quantity: Number(i.quantity) || 0,
@@ -147,7 +148,7 @@ export async function sincronizeazaProduseleBrevo(
   const cat = await citesteCatalogul(businessId, ids);
   const conv = (p: ProdusCatalog): BrevoEcomProduct => ({
     id: p.id, name: p.name, price: p.price,
-    url: linkProdus(cat.adresa, p.slug, p.id),
+    url: linkProdus(cat.adresa, p.slug, p.id, cat.prefixProdus),
     image_url: p.image,
   });
   if (cat.active.length > 0) {
@@ -245,7 +246,7 @@ export async function evenimentBrevo(orderId: string, fel: FelEveniment): Promis
 
     const items = (Array.isArray(order.items) ? order.items : []) as OrderItem[];
     const base = order.businesses ? storeBaseUrl(order.businesses) : null;
-    const lines = toLines(items, base);
+    const lines = toLines(items, base, await prefixProdusMagazin(order.business_id));
     if (lines.length === 0) return { fel: "sarit", motiv: "comanda fara produse" };
 
     const adr = (order.shipping_address ?? {}) as { address?: string; city?: string; county?: string; postcode?: string; country?: string };

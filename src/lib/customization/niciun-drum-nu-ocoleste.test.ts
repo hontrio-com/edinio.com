@@ -76,7 +76,8 @@ test("⚠ cardul din grila DUCE LA PAGINA, nu adauga in cos", () => {
    * derularea in capul paginii. Prima versiune a garzii mele cerea `window.location.href` — adica
    * ar fi inghetat in proba chiar lucrul pe care fisierul il explica de ce nu se face.
    */
-  assert.match(corp, /router\.push\(`\$\{basePath\}\/product\//);
+  // Adresa trece prin `hrefProdus` (prefixul din Setari > Permalink-uri, 25.09.2026).
+  assert.match(corp, /router\.push\(hrefProdus\(basePath, /);
 });
 
 test("⚠ blocul de produse din paginile proprii face la fel", () => {

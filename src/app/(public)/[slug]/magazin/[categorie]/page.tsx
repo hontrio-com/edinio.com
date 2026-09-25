@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { metadataMagazin, RandeazaMagazin } from "@/lib/storefront/catalog/pagina-magazin";
+import { redirectioneazaDacaPrefixulEAltul } from "@/lib/storefront/permalinkuri-server";
 
 /**
  * Pagina unei categorii.
@@ -26,5 +27,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
 export default async function PaginaCategorie({ params, searchParams }: Props) {
   const [{ slug, categorie }, sp] = await Promise.all([params, searchParams]);
+  // Magazinul cu alt prefix de catalog (Setari > Permalink-uri): 308 spre el.
+  await redirectioneazaDacaPrefixulEAltul(slug, "magazin", [categorie], sp);
   return RandeazaMagazin({ slug, sp, categorieSlug: categorie });
 }

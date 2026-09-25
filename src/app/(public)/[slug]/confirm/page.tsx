@@ -26,6 +26,7 @@ import { continutTikTokComanda, type ContinutTikTok } from "@/lib/tiktok/continu
 import { utilizatorulPentruGoogle, type UtilizatorGoogle } from "@/lib/google-ads/date-client";
 import { randurileInstantaneului } from "@/lib/customization/comanda";
 import { ContulDupaComanda } from "@/components/storefront/cont/ContulDupaComanda";
+import { setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -249,7 +250,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
    * caruia i-a fost refuzata plata si care trebuie sa reia cumparaturile. Cand
    * catalogul si-a luat pagina lui, radacina nu mai are niciun produs.
    */
-  const catreProduse = radacinaCatalog(basePath, resolved.design);
+  const catreProduse = radacinaCatalog(basePath, resolved.design, (await setareaPermalinkurilorMagazinului(slug)).magazin);
 
   const chrome = buildChromeData({
     searchCategories, business: business as never, pageContent, basePath, design: resolved.design,

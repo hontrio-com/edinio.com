@@ -5,8 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
 import { isPlatformHost, bareHost } from "@/lib/platform-hosts";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
-import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
-import { SEGMENT_BRAND } from "@/lib/pages/reserved-slugs";
+import { shopOnPage } from "@/lib/storefront/design/commerce";
+import { hrefBrandSegment, hrefCatalogPropriu, hrefProdus, permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { branduriMagazin } from "@/lib/storefront/catalog/branduri-magazin";
 import { politiciIndexabile } from "@/lib/storefront/policy-index";
 import { slugCategorie } from "@/lib/storefront/category-href";
@@ -521,6 +521,11 @@ export function intrariMagazin(
     ? []
     : [{ url: base, ...dataDacaOStim(biz.updated_at) }];
 
+  // Prefixele din Setari > Permalink-uri: sitemapul anunta adresele CURENTE, nu pe
+  // cele vechi (care redirectioneaza si n-au ce cauta intr-un sitemap).
+  const setariBrute = biz.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
+  const prefixe = permalinkuriDin((Array.isArray(setariBrute) ? setariBrute[0] : setariBrute)?.page_content);
+
   // Pagina de catalog, cand magazinul si-a ales-o. Prima ruta-sectiune
   // indexabila: cosul si finalizarea sunt deliberat noindex, dar asta e chiar
   // catalogul magazinului.
@@ -532,7 +537,7 @@ export function intrariMagazin(
   // `noindex`-ul de magazin.
   if (!homepageNoindex(biz) && shopOnPage(designPublicat(biz.store_settings))) {
     entries.push({
-      url: `${base}/${SEGMENT_MAGAZIN}`,
+      url: hrefCatalogPropriu(base, prefixe.magazin),
       ...dataDacaOStim(biz.updated_at),
     });
     // Si paginile de categorie: de cand exista, ele sunt adresele care
@@ -560,7 +565,7 @@ export function intrariMagazin(
       vazute.add(seg);
       if (subarboreAreProduse(vizibile, c.name ?? "", date.categoriiCuProduse) === false) continue;
       entries.push({
-        url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
+        url: `${hrefCatalogPropriu(base, prefixe.magazin)}/${seg}`,
         ...dataDacaOStim(biz.updated_at),
       });
     }
@@ -577,7 +582,7 @@ export function intrariMagazin(
       if (!b.segment || b.produse <= 0 || vazute.has(b.segment)) continue;
       vazute.add(b.segment);
       entries.push({
-        url: `${base}/${SEGMENT_BRAND}/${b.segment}`,
+        url: hrefBrandSegment(base, b.segment, prefixe.brand),
         ...dataDacaOStim(biz.updated_at),
       });
     }
@@ -590,7 +595,7 @@ export function intrariMagazin(
     for (const p of date.produse) {
       if (!p.slug) continue;
       entries.push({
-        url: `${base}/product/${p.slug}`,
+        url: hrefProdus(base, p.slug, prefixe.produs),
         ...dataDacaOStim(p.updated_at),
       });
     }

@@ -9,6 +9,7 @@ import { categoriiMagazin } from "@/lib/storefront/catalog/context-descriere";
 import { preturiFaraTva } from "@/lib/storefront/catalog/descriere-generata";
 import { descrierePaginiiCatalog, randulPaginiiCategoriei } from "@/lib/storefront/catalog/metadata-magazin";
 import { contextPaginiiFaraCatalog } from "@/lib/storefront/catalog/metadata-acasa";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /** Ce afla editorul de descriere din panou (Produse > Categorii) despre pagina unei categorii. */
 export interface DescriereAutomataCategorie {
@@ -98,7 +99,7 @@ export async function descriereAutomataCategoriei(
   const baza = {
     // Canonicalul fiecarei forme, prin aceleasi functii ca metadata: pe el il vede Google.
     adresa: areCatalog
-      ? canonicalPagina(radacina, cat.name, {}).url
+      ? canonicalPagina(radacina, cat.name, {}, permalinkuriDin(pageContent).magazin).url
       : canonicalCatalog(radacina, { cat: cat.name }).url,
     areDomeniu: !!business.custom_domain,
   };

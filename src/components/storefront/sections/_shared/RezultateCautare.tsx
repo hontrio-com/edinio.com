@@ -8,6 +8,8 @@ import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefro
 import { documentDeCautare } from "@/lib/storefront/catalog/doc-cautare";
 import { cautaSugestii } from "@/lib/actions/cautare-storefront.actions";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Produsele gasite, chiar sub caseta de cautare din header.
@@ -46,6 +48,7 @@ export function RezultateCautare({
    */
   inFlux?: boolean;
 }) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const catalog = useStorefrontOptional();
   /*
    * Pe palierul server catalogul din browser e o SINGURA pagina, deci nu se
@@ -158,7 +161,7 @@ export function RezultateCautare({
             const faraStoc = esteFaraStoc(p);
             return (
               <li key={p.id} className="border-b border-[var(--st-border)] last:border-0">
-                <a href={`${basePath}/product/${p.slug ?? p.id}`} onClick={onAlege}
+                <a href={hrefProdus(basePath, p.slug ?? p.id, prefixProdus)} onClick={onAlege}
                   className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-[var(--st-primary-soft)] transition-colors">
                   <span className="w-11 h-11 shrink-0 rounded-[var(--st-radius-sm)] overflow-hidden bg-[var(--st-bg)]">
                     {imagine !== "" && (

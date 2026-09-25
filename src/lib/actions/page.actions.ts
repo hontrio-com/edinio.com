@@ -19,6 +19,7 @@ import type { MenuItem } from "@/lib/pages/menu";
 import { sendPageFormEmail } from "@/lib/email";
 import type { Database } from "@/types/database.types";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
+import { FELURI_PERMALINK, permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 type DB = SupabaseClient<Database>;
 
@@ -38,6 +39,20 @@ async function getUserAndBusiness(
   const { data: profile } = await supabase
     .from("users_profile").select("role").eq("id", user.id).single();
   return { userId: user.id, slug: biz.slug, isAdmin: esteAdminConfirmat(user, profile?.role) };
+}
+
+/**
+ * O pagina nu poate lua un prefix CURENT al magazinului (Setari > Permalink-uri):
+ * `/<prefix-catalog>` ar fi apoi si catalogul, si pagina. Regula inversa sta in
+ * `valideazaPermalinkuri`. Intoarce mesajul de refuz sau null.
+ */
+async function slugOcupatDePrefix(supabase: DB, businessId: string, slug: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("store_settings").select("permalinks:page_content->permalinks").eq("business_id", businessId).maybeSingle();
+  const p = permalinkuriDin({ permalinks: (data as { permalinks?: unknown } | null)?.permalinks });
+  return FELURI_PERMALINK.some((f) => p[f] === slug)
+    ? `Linkul "${slug}" e folosit ca prefix de adrese în Setări > Permalink-uri. Alege alt link.`
+    : null;
 }
 
 /** Unique page slug per business: "contact", "contact-2", ... */
@@ -118,6 +133,8 @@ export async function createPage(input: {
 
   const v = validatePageSlug(input.slug?.trim() || title);
   if (!v.ok) return { error: v.error };
+  const ocupat = await slugOcupatDePrefix(supabase, input.businessId, v.slug);
+  if (ocupat) return { error: ocupat };
   const slug = await resolveUniquePageSlug(supabase, input.businessId, v.slug);
 
   const { data, error } = await supabase
@@ -162,6 +179,8 @@ export async function updatePage(
   if (patch.slug !== undefined) {
     const v = validatePageSlug(patch.slug);
     if (!v.ok) return { error: v.error };
+    const ocupat = v.slug === page.slug ? null : await slugOcupatDePrefix(supabase, page.business_id, v.slug);
+    if (ocupat) return { error: ocupat };
     nextSlug = await resolveUniquePageSlug(supabase, page.business_id, v.slug, pageId);
     update.slug = nextSlug;
   }

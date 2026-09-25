@@ -56,6 +56,8 @@ import type {
   StorePageContent,
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 // Randul TAIAT, nu cel intreg: componenta e "use client", deci tot ce primeste
 // ajunge in HTML. Vezi src/lib/storefront/business-public.ts.
@@ -271,6 +273,7 @@ interface Props {
 }
 
 function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, paginaBrand, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
+  const { produs: prefixProdus, magazin: prefixCatalog } = usePermalinkuri();
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, editorDesign);
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
@@ -315,13 +318,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
    * raspunsul din `buildChromeData`, care arata catre pagina de catalog cand
    * exista, fiindca acolo e experienta completa.
    */
-  const categoriiRootPagina = shopOnPage(design) ? shopHref(basePath) : radacinaMagazin(basePath);
+  const categoriiRootPagina = shopOnPage(design) ? shopHref(basePath, prefixCatalog) : radacinaMagazin(basePath);
   // Paginarea si linkurile ei raman pe pagina curenta; `catalogRoot` ramane
   // catalogul intreg, fiindca de el atarna „Toate produsele" din footer si
   // cautarea din header — acelea n-au ce cauta inchise intr-o categorie.
   const radacinaPaginare = caleCategorie ?? "";
   const catalogRootPagina = surface === "shop" || catalogMutat
-    ? shopHref(basePath)
+    ? shopHref(basePath, prefixCatalog)
     : radacinaMagazin(basePath);
   /*
    * Orice navigare pornita din cod trece pe aici.
@@ -1459,7 +1462,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
        * `const router`: o reincarcare intreaga trimite ~207 kB in loc de ~45 kB de payload RSC si
        * sare derularea in capul paginii.
        */
-      router.push(`${basePath}/product/${product.slug ?? product.id}`);
+      router.push(hrefProdus(basePath, product.slug ?? product.id, prefixProdus));
       return;
     }
     const images = Array.isArray(product.images) ? product.images : [];

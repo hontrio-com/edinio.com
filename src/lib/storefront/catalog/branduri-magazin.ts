@@ -3,13 +3,13 @@ import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { slugCategorie } from "@/lib/storefront/category-href";
 import { caleBrand, legaturaBrand, segmentBrand, valoareBrand } from "@/lib/storefront/brand-href";
-import { SEGMENT_BRAND, SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
 import { canonicalCatalog } from "@/lib/storefront/catalog/url";
 import { CHEIE_BRAND, jeton } from "@/lib/storefront/catalog/facets";
 import { metadataCatalog } from "@/lib/storefront/catalog/date-catalog";
 import { firimituriJsonLd, graf, paginaWebJsonLd, referintaMagazin } from "@/lib/storefront/date-structurate";
 import { jsonLdSafe } from "@/lib/json-ld";
 import { pluralRo } from "@/lib/utils/format";
+import { hrefBrandSegment, hrefCatalogPropriu, PERMALINKURI_IMPLICITE, type Permalinkuri } from "@/lib/storefront/permalinkuri";
 
 /**
  * Paginile de brand din magazin: `/<magazin>/brand/<segment>`.
@@ -132,8 +132,11 @@ export function metadataPaginiiBrand(a: {
   sp: Record<string, string | string[] | undefined>;
   noindexMagazin: boolean;
   imagineMagazin: string | null;
+  /** Prefixele din Setari > Permalink-uri. Lipsa = cele implicite, ca inainte. */
+  permalinkuri?: Permalinkuri;
 }): Metadata {
-  const { url, indexabila } = canonicalCatalog(`${a.radacina}/${SEGMENT_BRAND}/${a.brand.segment}`, { ...a.sp, cat: undefined });
+  const prefixe = a.permalinkuri ?? PERMALINKURI_IMPLICITE;
+  const { url, indexabila } = canonicalCatalog(hrefBrandSegment(a.radacina, a.brand.segment, prefixe.brand), { ...a.sp, cat: undefined });
   const imagine = a.brand.logo || a.imagineMagazin;
   return metadataCatalog({
     titlu: `${a.brand.nume} | ${a.displayName}`,
@@ -160,9 +163,12 @@ export function dateStructurateBrand(a: {
   sp: Record<string, string | string[] | undefined>;
   noindexMagazin: boolean;
   esteCiorna: boolean;
+  /** Prefixele din Setari > Permalink-uri. Lipsa = cele implicite, ca inainte. */
+  permalinkuri?: Permalinkuri;
 }): string | null {
   const displayName = a.business.store_name ?? a.business.business_name;
-  const { url, indexabila } = canonicalCatalog(`${a.radacina}/${SEGMENT_BRAND}/${a.brand.segment}`, { ...a.sp, cat: undefined });
+  const prefixe = a.permalinkuri ?? PERMALINKURI_IMPLICITE;
+  const { url, indexabila } = canonicalCatalog(hrefBrandSegment(a.radacina, a.brand.segment, prefixe.brand), { ...a.sp, cat: undefined });
   if (a.esteCiorna || a.noindexMagazin || !indexabila || a.brand.produse === 0) return null;
   const magazin = referintaMagazin(a.business, a.radacina);
   const brand = {
@@ -183,8 +189,8 @@ export function dateStructurateBrand(a: {
     magazin,
     firimituriJsonLd([
       { nume: displayName, url: a.radacina },
-      { nume: a.titluCatalog, url: `${a.radacina}/${SEGMENT_MAGAZIN}` },
-      { nume: a.brand.nume, url: `${a.radacina}/${SEGMENT_BRAND}/${a.brand.segment}` },
+      { nume: a.titluCatalog, url: hrefCatalogPropriu(a.radacina, prefixe.magazin) },
+      { nume: a.brand.nume, url: hrefBrandSegment(a.radacina, a.brand.segment, prefixe.brand) },
     ]),
   );
   return nod ? jsonLdSafe(nod) : null;

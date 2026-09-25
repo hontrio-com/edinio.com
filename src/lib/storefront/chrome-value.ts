@@ -15,6 +15,7 @@ import type {
 import type { StoreDesign } from "@/lib/storefront/design/types";
 import { pentruBrowser, type BusinessCitit } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /**
  * Intrarea e randul INTREG (apelantii sunt componente de server, care au nevoie
@@ -118,10 +119,11 @@ export function buildChromeData({
     // categorie sau o pagina de catalog sa nu il mai deduca fiecare din
     // `basePath`. Fara design — doar miniaturile din editor — ramane radacina
     // magazinului, adica exact ce era inainte.
-    catalogRoot: design ? radacinaCatalog(basePath, design) : radacinaMagazin(basePath),
+    // Cu prefixul catalogului din Setari > Permalink-uri (implicit `magazin`).
+    catalogRoot: design ? radacinaCatalog(basePath, design, permalinkuriDin(pageContent).magazin) : radacinaMagazin(basePath),
     // Pe paginile fara catalog, cele doua coincid: nu exista o grila locala
     // catre care sa arate.
-    categoriiRoot: design ? radacinaCatalog(basePath, design) : radacinaMagazin(basePath),
+    categoriiRoot: design ? radacinaCatalog(basePath, design, permalinkuriDin(pageContent).magazin) : radacinaMagazin(basePath),
     // Categoriile devin pagini exact odata cu catalogul. Fara design — miniaturile
     // din editor — ramane forma cu interogare, adica exact ce era inainte.
     categoriiPePagina: !!design && shopOnPage(design),

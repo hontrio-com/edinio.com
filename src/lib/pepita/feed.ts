@@ -13,6 +13,7 @@ import { citesteConfig } from "./config";
 import { produsXml, stocDisparutXml, stocXml } from "./serializare";
 import { ANTET, INCHEIERE } from "./xml";
 import type { PepitaConfig } from "./types";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /**
  * Cele doua feeduri, scrise IN FLUX.
@@ -97,7 +98,7 @@ export async function pregateste(
 
   const { data: setari, error: eSet } = await admin
     .from("store_settings")
-    .select("pepita_config, vat_enabled, vat_rate, prices_include_vat, currency")
+    .select("pepita_config, vat_enabled, vat_rate, prices_include_vat, currency, permalinks:page_content->permalinks")
     .eq("business_id", businessId).maybeSingle();
   if (eSet) throw eSet;
 
@@ -192,6 +193,7 @@ export async function pregateste(
   const s = (setari ?? {}) as {
     vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean; currency?: string | null;
     pepita_config?: Record<string, unknown> | null;
+    permalinks?: unknown;
   };
 
   /*
@@ -248,6 +250,7 @@ export async function pregateste(
     },
     caleCategorie: caleaCategoriilor(categorii),
     baza: storeBaseUrl(business),
+    prefixProdus: permalinkuriDin({ permalinks: s.permalinks }).produs,
     pragMagazin,
   };
 

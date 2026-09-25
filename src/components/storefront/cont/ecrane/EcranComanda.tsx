@@ -16,6 +16,7 @@ import { AjutorMagazin, type ContactMagazin } from "../ui/CadruCont";
 import { BlocDocument } from "./BlocDocument";
 import { EtichetaStareCont, ListaDate, Mesaj, Miniatura, PasiComanda, RandDate, Sectiune } from "../ui/piese";
 import { BUTON_PRIMAR, BUTON_SECUNDAR, FOCUS, LEGATURA, STIL_PRIMAR } from "../ui/clase";
+import { hrefProdus, PERMALINKURI_IMPLICITE } from "@/lib/storefront/permalinkuri";
 
 /**
  * O comanda, cu toate detaliile.
@@ -29,10 +30,11 @@ function fisiere(n: number): string {
   return n === 1 ? "1 fisier incarcat" : `${pluralRo(n, "fisier", "fisiere")} incarcate`;
 }
 
-function Linie({ l }: { l: LinieComanda }) {
+function Linie({ l, prefixProdus }: { l: LinieComanda; prefixProdus: string }) {
   const total = l.pret * l.cantitate;
   const gratuit = total === 0 && !l.extra;
-  const legatura = l.slug && !l.extra ? `/product/${l.slug}` : null;
+  // Zona de cont exista doar pe domeniul propriu, deci baza e goala.
+  const legatura = l.slug && !l.extra ? hrefProdus("", l.slug, prefixProdus) : null;
   const poza = <Miniatura imagine={l.imagine} nume={l.nume} />;
 
   return (
@@ -107,6 +109,7 @@ export function EcranComanda({
   contact,
   numeMagazin,
   adresaMagazin,
+  prefixProdus = PERMALINKURI_IMPLICITE.produs,
 }: {
   c: DetaliuComanda;
   bani: RandDeBaniDinCont[];
@@ -114,6 +117,8 @@ export function EcranComanda({
   contact: ContactMagazin;
   numeMagazin: string;
   adresaMagazin: string | null;
+  /** Din Setari > Permalink-uri. */
+  prefixProdus?: string;
 }) {
   const redusa = c.vedere === "redusa";
   const livrare = livrarea(c.livrare);
@@ -150,7 +155,7 @@ export function EcranComanda({
           <Sectiune titlu="Produse" descriere={pluralRo(marfa, "produs", "produse")} icon={Package}>
             <ul className="divide-y divide-[var(--st-border)]">
               {c.linii.map((l, i) => (
-                <Linie key={i} l={l} />
+                <Linie key={i} l={l} prefixProdus={prefixProdus} />
               ))}
             </ul>
           </Sectiune>

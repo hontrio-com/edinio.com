@@ -15,6 +15,7 @@ import {
   ensureStore, upsertProduct, deleteProduct, syncOrder, corpComandaIntoarsa, catalogInLot,
   type EcomProduct,
 } from "@/lib/mailchimp-ecommerce";
+import { prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
 
 export type MailchimpSource = "checkout" | "popup" | "forms";
 
@@ -147,7 +148,7 @@ export async function sincronizeazaProduseleMailchimp(
   const cat = await citesteCatalogul(businessId, ids);
   const conv = (p: ProdusCatalog): EcomProduct => ({
     id: p.id, title: p.name, price: p.price,
-    url: linkProdus(cat.adresa, p.slug, p.id),
+    url: linkProdus(cat.adresa, p.slug, p.id, cat.prefixProdus),
     image_url: p.image,
   });
   const scoase = [...cat.inactive.map((p) => p.id), ...cat.sterse];
@@ -290,13 +291,14 @@ export async function evenimentMailchimp(orderId: string, fel: FelEveniment): Pr
 
     const items = (Array.isArray(c.items) ? c.items : []) as Array<{ product_id: string; name: string; price: number; quantity: number; slug?: string | null; image?: string | null }>;
     const base = c.businesses ? storeBaseUrl(c.businesses) : null;
+    const prefixProdus = await prefixProdusMagazin(c.business_id);
     const linii = items
       .filter((it) => !String(it.product_id).startsWith("extra_"))
       .map((it) => ({
         product: {
           id: it.product_id,
           title: it.name,
-          url: linkProdus(base, it.slug, it.product_id),
+          url: linkProdus(base, it.slug, it.product_id, prefixProdus),
           image_url: it.image ?? null,
           price: Number(it.price) || 0,
         } as EcomProduct,

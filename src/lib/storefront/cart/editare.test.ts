@@ -315,7 +315,8 @@ test("⚠ butonul „Editeaza” exista in AMANDOUA suprafetele de cos", () => {
    * singurul sfat care se putea da era „ia-o de la capat"; acum, unde butonul e, el e raspunsul.
    */
   for (const [nume, v] of [["paginile de cos", piese], ["sertar", sertar]] as const) {
-    assert.ok(v.includes("adresaDeEditare(basePath, item)\n"), `${nume}: indicatia nu se uita la buton`);
+    // Cu prefixul produselor din Setari > Permalink-uri (25.09.2026), acelasi buton.
+    assert.ok(v.includes("adresaDeEditare(basePath, item, prefixProdus)\n"), `${nume}: indicatia nu se uita la buton`);
   }
 });
 

@@ -4,6 +4,8 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { ProductForm } from "@/components/dashboard/ProductForm";
 import { parseShippingClasses } from "@/lib/shipping/rules";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { storeBaseUrl } from "@/lib/seo";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 export default async function NewProductPage() {
   const supabase = await createClient();
@@ -11,7 +13,7 @@ export default async function NewProductPage() {
   if (!user) redirect("/login");
 
   const [{ data: business }, ] = await Promise.all([
-    supabase.from("businesses").select("id, store_settings(google_merchant_config, shipping_classes)").eq("user_id", user.id).order("created_at").limit(1).single(),
+    supabase.from("businesses").select("id, slug, custom_domain, store_settings(google_merchant_config, shipping_classes, permalinks:page_content->permalinks)").eq("user_id", user.id).order("created_at").limit(1).single(),
   ]);
   if (!business) redirect("/dashboard");
 
@@ -43,6 +45,9 @@ export default async function NewProductPage() {
       brands={(branduri ?? []).map((b) => b.brand)}
       gmcConnected={gmcConnected}
       shippingClasses={shippingClasses}
+      radacinaProduse={business.slug
+        ? `${storeBaseUrl(business)}/${permalinkuriDin({ permalinks: (settings as { permalinks?: unknown } | null)?.permalinks }).produs}`
+        : undefined}
     />
   );
 }

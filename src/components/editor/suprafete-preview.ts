@@ -1,3 +1,5 @@
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
+
 /**
  * Paginile pe care le poate arata previzualizarea din „Editeaza magazinul".
  *
@@ -32,11 +34,14 @@ export function caleaSuprafetei(
   cheie: CheieSuprafata,
   slug: string,
   produsSlug: string | null,
+  /** Prefixul produselor din Setari > Permalink-uri; lipsa = `product`, ca inainte. */
+  prefixProdus?: string,
 ): string {
   const radacina = `/${slug}`;
   if (cheie === "cos") return `${radacina}/cos`;
   if (cheie === "comanda") return `${radacina}/checkout`;
-  if (cheie === "produs") return produsSlug ? `${radacina}/product/${produsSlug}` : radacina;
+  // Direct cu prefixul curent: o redirectionare in cadrul previzualizarii n-are rost.
+  if (cheie === "produs") return produsSlug ? hrefProdus(radacina, produsSlug, prefixProdus) : radacina;
   return radacina;
 }
 
@@ -50,6 +55,8 @@ export interface SuprafeteDisponibile {
   comandaPePagina: boolean;
   /** Magazinul vinde un singur produs: pagina principala ESTE pagina lui. */
   unSingurProdus: boolean;
+  /** Prefixul produselor (Setari > Permalink-uri). */
+  prefixProdus?: string;
 }
 
 /**

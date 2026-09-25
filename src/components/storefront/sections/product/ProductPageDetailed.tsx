@@ -48,6 +48,7 @@ import {
 } from "./_shared/pieces";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
 
 /**
  * Pagina de produs, varianta „Detaliat".
@@ -258,6 +259,7 @@ export function ProductPageDetailed({
   permisIncarcare?: string | null;
   demo?: boolean;
 }) {
+  const permalinkuri = usePermalinkuri();
   const basePath = basePathProp ?? `/${business.slug}`;
   const images = useMemo(
     () => (Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : []),
@@ -767,7 +769,7 @@ export function ProductPageDetailed({
    */
   const radacinaCatalog = chrome?.catalogRoot ?? radacinaMagazin(basePath);
   /* Pagina brandului, numai la magazinele cu pagina de catalog (vezi `legaturaBrand`). */
-  const hrefBrand = legaturaBrand(basePath, chrome?.catalogRoot, brand);
+  const hrefBrand = legaturaBrand(basePath, chrome?.catalogRoot, brand, permalinkuri);
 
   // Catalogul isi tine pagina curenta in sessionStorage tocmai ca intoarcerea
   // de pe pagina de produs sa nu arunce clientul inapoi la pagina 1.

@@ -1,6 +1,6 @@
 import { COLOANE_BUSINESS_PUBLIC } from "@/lib/storefront/business-public";
 import { cache, Suspense } from "react";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
@@ -28,9 +28,29 @@ import { sanitizeCss } from "@/lib/pages/sanitize-css";
 import { resolveAllProductsBlocks } from "@/lib/pages/resolve-products";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { PublicForm, FormField } from "@/lib/pages/forms.types";
+import { metadataMagazin, RandeazaMagazin } from "@/lib/storefront/catalog/pagina-magazin";
+import { felulSegmentului } from "@/lib/storefront/permalinkuri";
+import { adresaCurenta, setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
 
 interface Props {
   params: Promise<{ slug: string; pageSlug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+/*
+ * ═══ PREFIXUL CATALOGULUI (Setari > Permalink-uri, 25.09.2026) ═══
+ *
+ * Un catalog mutat pe alt prefix (`/produse` in loc de `/magazin`) are un singur
+ * segment, deci ajunge AICI, nu in `magazin/page.tsx`. Prefixul CURENT se
+ * randeaza ca pagina de catalog; nu se poate ciocni cu o pagina proprie, fiindca
+ * salvarea refuza un prefix egal cu slugul unei pagini, iar o pagina noua nu poate
+ * lua un prefix. Un prefix VECHI de catalog redirectioneaza, dar numai daca nu
+ * exista intre timp o pagina cu numele lui: pagina comerciantului castiga.
+ * Fara setare nu se recunoaste nimic aici (`magazin` are dosarul lui).
+ */
+async function felulCatalogului(slug: string, pageSlug: string) {
+  const felul = felulSegmentului(pageSlug, await setareaPermalinkurilorMagazinului(slug));
+  return felul?.fel === "magazin" ? felul : null;
 }
 
 // Deduplicated per request: generateMetadata + the page share one set of queries.
@@ -44,8 +64,9 @@ const loadPage = cache(async (slug: string, pageSlug: string) => {
   return { supabase, business, page };
 });
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug, pageSlug } = await params;
+  if ((await felulCatalogului(slug, pageSlug))?.curent) return metadataMagazin({ slug, sp: await searchParams });
   const loaded = await loadPage(slug, pageSlug);
   if (!loaded?.page) return {};
   const { business, page } = loaded;
@@ -223,8 +244,10 @@ async function dateStructuratePagina(
   return nod ? jsonLdSafe(nod) : null;
 }
 
-export default async function CustomPage({ params }: Props) {
+export default async function CustomPage({ params, searchParams }: Props) {
   const { slug, pageSlug } = await params;
+  const catalog = await felulCatalogului(slug, pageSlug);
+  if (catalog?.curent) return RandeazaMagazin({ slug, sp: await searchParams });
   const loaded = await loadPage(slug, pageSlug);
   if (!loaded) notFound();
   const { supabase, business, page } = loaded;
@@ -261,6 +284,9 @@ export default async function CustomPage({ params }: Props) {
       return <SuspendedStorePage businessName={business.store_name ?? business.business_name} primaryColor={business.primary_color} phone={business.phone} />;
     }
   }
+
+  // Un prefix VECHI de catalog, fara pagina proprie cu acelasi nume: spre cel curent.
+  if (!page && catalog) permanentRedirect(await adresaCurenta(slug, "magazin", [], await searchParams));
 
   // Page must exist; unpublished pages are visible only to the owner.
   if (!page || (!page.is_published && !isOwner)) notFound();

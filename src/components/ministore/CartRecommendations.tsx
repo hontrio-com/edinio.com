@@ -7,6 +7,8 @@ import { formatPrice } from "@/lib/utils/format";
 import { getCartCrossSell } from "@/lib/actions/offer.actions";
 import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 import { OFFER_MAX_PRODUCTS, type OfferProduct } from "@/lib/offers/offer.types";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Câte produse încap în rândul din sertarul de coș.
@@ -53,6 +55,7 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
   cartProductIds: string[];
   onAdd: (p: OfferProduct) => void;
 }) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const [recs, setRecs] = useState<OfferProduct[]>([]);
   const [idOferte, setIdOferte] = useState<string[]>([]);
   const [titlu, setTitlu] = useState<string | null>(null);
@@ -108,7 +111,7 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
       <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
         {recs.map((p) => (
           <div key={p.id} className="w-32 shrink-0">
-            <a href={p.slug ? `${basePath}/product/${p.slug}` : basePath || "/"}
+            <a href={p.slug ? hrefProdus(basePath, p.slug, prefixProdus) : basePath || "/"}
               className="block relative w-32 h-32 rounded-xl overflow-hidden border border-border bg-muted/40">
               {p.imageUrl
                 ? <Image src={p.imageUrl} alt={p.name} fill sizes="128px" className="object-contain p-2" />
@@ -127,7 +130,7 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
               </span>
               {p.needsChoice ? (
                 /* Are variante sau cere personalizare — trimite cumparatorul pe pagina lui. */
-                <a href={p.slug ? `${basePath}/product/${p.slug}` : basePath || "/"} aria-label={`Alege optiunile pentru ${p.name}`}
+                <a href={p.slug ? hrefProdus(basePath, p.slug, prefixProdus) : basePath || "/"} aria-label={`Alege optiunile pentru ${p.name}`}
                   className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
                   style={{ backgroundColor: color }}>
                   <ChevronRight size={13} />

@@ -18,10 +18,13 @@ export function segmentBrand(nume: string): string {
   return slugCategorie(valoareBrand(nume));
 }
 
-/** Adresa paginii brandului, relativa la magazin; `null` cand numele n-are segment. */
-export function caleBrand(basePath: string, nume: string): string | null {
+/**
+ * Adresa paginii brandului, relativa la magazin; `null` cand numele n-are segment.
+ * `prefix` = prefixul brandurilor din Setari > Permalink-uri; lipsa = `brand`, ca inainte.
+ */
+export function caleBrand(basePath: string, nume: string, prefix: string = SEGMENT_BRAND): string | null {
   const s = segmentBrand(nume);
-  return s ? `${basePath}/${SEGMENT_BRAND}/${s}` : null;
+  return s ? `${basePath}/${prefix}/${s}` : null;
 }
 
 /**
@@ -30,7 +33,12 @@ export function caleBrand(basePath: string, nume: string): string | null {
  * Numai cand magazinul ARE pagina de catalog (`catalogRoot` e chiar ea): fara ea,
  * pagina brandului trimite pe prima pagina, deci linkul n-ar duce nicaieri nou.
  */
-export function legaturaBrand(basePath: string, catalogRoot: string | undefined, nume: string): string | null {
-  if (!nume.trim() || catalogRoot !== `${basePath}/${SEGMENT_MAGAZIN}`) return null;
-  return caleBrand(basePath, nume);
+export function legaturaBrand(
+  basePath: string,
+  catalogRoot: string | undefined,
+  nume: string,
+  prefixe: { magazin: string; brand: string } = { magazin: SEGMENT_MAGAZIN, brand: SEGMENT_BRAND },
+): string | null {
+  if (!nume.trim() || catalogRoot !== `${basePath}/${prefixe.magazin}`) return null;
+  return caleBrand(basePath, nume, prefixe.brand);
 }

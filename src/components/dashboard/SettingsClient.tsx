@@ -11,7 +11,7 @@ import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
-  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package, UserRound,
+  ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package, UserRound, Link2,
   AlertTriangle, Infinity as InfinityIcon,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
@@ -19,6 +19,8 @@ import { createClient } from "@/lib/supabase/client";
 import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { ContClientiSetari } from "@/components/dashboard/setari/ContClientiSetari";
+import { PermalinkuriSetari } from "@/components/dashboard/setari/PermalinkuriSetari";
+import type { Permalinkuri } from "@/lib/storefront/permalinkuri";
 import type { StareaConturilor } from "@/lib/actions/cont-client.actions";
 import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { formatPrice } from "@/lib/utils/format";
@@ -55,7 +57,7 @@ type UserProfile = Pick<
 type SectionId =
   | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
   | "taxe" | "plati" | "domeniu" | "seo" | "email" | "notificari" | "politici" | "cookies"
-  | "conturi-clienti" | "securitate";
+  | "conturi-clienti" | "permalinkuri" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
@@ -67,6 +69,7 @@ const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ 
   { id: "plati",      label: "Metode de plata", icon: Wallet },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
   { id: "seo",        label: "SEO",         icon: Search    },
+  { id: "permalinkuri", label: "Permalink-uri", icon: Link2 },
   { id: "email",      label: "Email",       icon: Mail      },
   { id: "notificari", label: "Notificari",  icon: Bell      },
   { id: "politici",   label: "Politici",    icon: FileText  },
@@ -351,6 +354,10 @@ interface Props {
   /** Fila cerută din adresă, când cineva e trimis direct la ea. */
   sectiuneCeruta?: string;
   domainSuccess?: boolean;
+  /** Prefixele adreselor (Setari > Permalink-uri). */
+  permalinkuri: Permalinkuri;
+  /** Domeniul propriu sau `edinio.com/<slug>`, fara protocol. */
+  adresaMagazin: string;
 }
 
 function ComingSoon({ title }: { title: string }) {
@@ -365,7 +372,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -2793,6 +2800,13 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "conturi-clienti" && !stareaConturilor && (
             <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 text-sm text-muted-foreground">
               Nu am putut încărca setările conturilor de client. Reîncarcă pagina; dacă se repetă, scrie-ne la suport.
+            </div>
+          )}
+
+          {/* ── Permalink-uri: corpul sta in `setari/PermalinkuriSetari.tsx`, ca la conturi. ── */}
+          {activeSection === "permalinkuri" && businessId && (
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
+              <PermalinkuriSetari businessId={businessId} initial={permalinkuri} adresaMagazin={adresaMagazin} />
             </div>
           )}
 

@@ -14,6 +14,7 @@ import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl }
 import { parseEmailConfig } from "@/lib/email/config";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import type { Database } from "@/types/database.types";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string; sectiune?: string }>;
@@ -86,9 +87,9 @@ export default async function SettingsPage({ searchParams }: Props) {
 function ScheletSetari() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)]">
-      {/* coloana din stanga tine locul celor 14 file din NAV_SECTIONS */}
+      {/* coloana din stanga tine locul celor 16 file din NAV_SECTIONS */}
       <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6 px-2 space-y-1">
-        {Array.from({ length: 14 }).map((_, i) => (
+        {Array.from({ length: 16 }).map((_, i) => (
           <Skeleton key={i} className="h-9" />
         ))}
       </aside>
@@ -420,6 +421,8 @@ async function ContinutSetari({
       storeSeo={storeSeo}
       seoDefaults={seoDefaults}
       seoPreviewUrl={seoPreviewUrl}
+      permalinkuri={permalinkuriDin(storeSettings?.page_content)}
+      adresaMagazin={seoPreviewUrl.replace(/^https?:\/\//, "").replace(/^www\./, "")}
       emailInitial={emailInitial}
       storeMode={storeMode.mode}
       oneProductId={storeMode.productId}

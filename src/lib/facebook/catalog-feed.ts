@@ -23,6 +23,7 @@ import { pretulDinCatalogMinte, type RandDeCatalog } from "@/lib/customization/p
 // Motivele si textele lor stau in `lasate-afara.ts`: le citeste si panoul, care e componenta
 // client. Hotararea ramane aici, langa generatorul care o aplica.
 import type { MotivLipsaDinCatalog, ProdusLasatAfara } from "./lasate-afara";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 const CURRENCY = "RON";
 
@@ -31,6 +32,8 @@ export interface CatalogBusiness {
   custom_domain: string | null;
   store_name: string | null;
   business_name: string;
+  /** Prefixul produselor (Setari > Permalink-uri). Lipsa = `product`, ca inainte. */
+  prefix_produs?: string;
 }
 
 export interface CatalogProduct {
@@ -267,7 +270,7 @@ export function buildCatalogItems(
   const primaryImage = primaImagine(product);
   if (!primaryImage) return [];
 
-  const link = `${storeBaseUrl(business)}/product/${product.slug ?? product.id}`;
+  const link = hrefProdus(storeBaseUrl(business), product.slug ?? product.id, business.prefix_produs);
   const g = ((product.page_sections as { google?: GoogleAttrs } | null)?.google) ?? {};
   const brand = g.brand || business.store_name || business.business_name;
   const condition = oneOf(g.condition, CONDITIONS) ?? "new";

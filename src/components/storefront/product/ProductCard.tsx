@@ -8,6 +8,8 @@ import { parseVariants } from "@/lib/storefront/variants";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { gtagEvent } from "@/lib/marketing";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Cardul de produs al magazinului, varianta classic.
@@ -67,6 +69,7 @@ export function ProductCard({
   priority = false,
   priceLowestOnly = false,
 }: ProductCardProps) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
   // Momentul se fixeaza la montare, printr-un initializator lene: `Date.now()`
@@ -115,7 +118,7 @@ export function ProductCard({
   // Slug-ul poate lipsi (coloana e nullable, iar importurile o lasa goala). Ruta
   // de produs rezolva si UUID-uri, deci pe id-ul produsului linkul ramane valid
   // in loc sa duca la /product/null.
-  const productHref = `${basePath}/product/${product.slug ?? product.id}`;
+  const productHref = hrefProdus(basePath, product.slug ?? product.id, prefixProdus);
 
   return (
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">

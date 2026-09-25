@@ -286,7 +286,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
    * navigarea dintr-un iframe, in loc sa scoata comerciantul din editor.
    */
   const ducLaSuprafata = useCallback((cheie: CheieSuprafata) => {
-    const tinta = `${caleaSuprafetei(cheie, business.slug, suprafete.produsSlug)}?preview=1`;
+    const tinta = `${caleaSuprafetei(cheie, business.slug, suprafete.produsSlug, suprafete.prefixProdus)}?preview=1`;
     try {
       const fereastra = ramaPreview.current?.contentWindow;
       if (fereastra) { fereastra.location.replace(tinta); return; }
@@ -303,7 +303,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
    * iar previzualizarea de aici trebuie sa ramana navigabila. Vezi
    * `preview-protocol.ts`.
    */
-  const previewUrl = `${caleaSuprafetei(suprafata, business.slug, suprafete.produsSlug)}?preview=1`;
+  const previewUrl = `${caleaSuprafetei(suprafata, business.slug, suprafete.produsSlug, suprafete.prefixProdus)}?preview=1`;
   // Show the connected custom domain when present; otherwise the edinio.com URL.
   const publicUrl = business.custom_domain
     ? `https://${business.custom_domain}`

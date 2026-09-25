@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { storeBaseUrl } from "@/lib/seo";
 import { BranduriClient } from "@/components/dashboard/BranduriClient";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { setarileDin } from "@/lib/storefront/antet-magazin";
 
 /**
  * Produse > Branduri: toate brandurile magazinului, cu cate produse are fiecare,
@@ -18,7 +20,7 @@ export default async function BranduriPage() {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, custom_domain")
+    .select("id, slug, custom_domain, store_settings(permalinks:page_content->permalinks)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -38,6 +40,7 @@ export default async function BranduriPage() {
     <BranduriClient
       businessId={business.id}
       adresaMagazin={storeBaseUrl(business)}
+      prefixBrand={permalinkuriDin({ permalinks: setarileDin<{ permalinks: unknown }>(business as never)?.permalinks }).brand}
       branduri={(branduri ?? []).map((b) => {
         const d = detalii.get(b.brand.toLocaleLowerCase("ro"));
         return { brand: b.brand, produse: Number(b.produse), logo: d?.logo_url ?? null, descriere: d?.description ?? null };

@@ -10,6 +10,8 @@ import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing, type CartPricingInput } from "@/lib/storefront/cart/pricing";
 import { adresaDeEditare } from "@/lib/storefront/cart/editare";
 import { ButonEditeaza } from "@/components/storefront/sections/cart/_shared/CartPieces";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Sertarul de cos, varianta classic.
@@ -39,6 +41,7 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const {
     items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview,
     linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile, lineSummary, total, count,
@@ -206,7 +209,7 @@ export function CartDrawerClassic({
           ) : (
             <div className="space-y-4">
               {items.map((item) => {
-                const href = item.slug ? `${basePath}/product/${item.slug}` : null;
+                const href = item.slug ? hrefProdus(basePath, item.slug, prefixProdus) : null;
                 const thumbCls = "relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted border border-border";
                 const thumb = item.imageUrl ? (
                   <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
@@ -245,7 +248,7 @@ export function CartDrawerClassic({
                     {lineNeedsReview(item) && (
                       <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
                         {/* ⚠ Aceeasi indicatie ca pe paginile de cos, si tot dupa ce se vede pe rand. */}
-                        {adresaDeEditare(basePath, item)
+                        {adresaDeEditare(basePath, item, prefixProdus)
                           ? "Necesita actualizare: apasa „Editeaza” si alege din nou"
                           : "Necesita actualizare: deschide produsul si alege din nou"}
                       </p>

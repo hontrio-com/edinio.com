@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
 import { slugCategorie } from "@/lib/storefront/category-href";
-import { SEGMENT_CAUTARE, SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
+import { SEGMENT_CAUTARE } from "@/lib/pages/reserved-slugs";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { citesteSetariMagazin, type SetariMagazin } from "@/lib/storefront/catalog/shop-settings";
 import { canonicalCatalog, citesteFiltreDinAdresa, type FiltreCitite } from "@/lib/storefront/catalog/url";
@@ -21,6 +21,7 @@ import { sortareEfectivaGrila } from "@/lib/storefront/catalog/sortare-efectiva"
 import type { CategorieArbore } from "@/lib/storefront/catalog/subarbore";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { branduriMagazin, metadataPaginiiBrand, potrivesteBrand } from "@/lib/storefront/catalog/branduri-magazin";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /**
  * Metadata paginii de catalog, a paginilor de categorie si a rezultatelor cautarii.
@@ -169,6 +170,8 @@ export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: 
   // Aceeasi formula ca peste tot in storefront, nu una scrisa a doua oara aici:
   // pe domeniu propriu canonicalul e domeniul, altfel adresa de pe platforma.
   const radacina = storeBaseUrl({ slug, custom_domain: business.custom_domain });
+  // Prefixul catalogului din Setari > Permalink-uri (implicit `magazin`).
+  const prefixCatalog = permalinkuriDin(settings?.page_content).magazin;
   const images = business.cover_url ? [business.cover_url] : [];
 
   /*
@@ -244,7 +247,7 @@ export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: 
    */
   const catBrut = (Array.isArray(sp.cat) ? sp.cat[0] : sp.cat)?.trim() ?? "";
   let categorie = "";
-  let radacinaPagina = `${radacina}/${SEGMENT_MAGAZIN}`;
+  let radacinaPagina = `${radacina}/${prefixCatalog}`;
   // Categoria e in cale sau in interogare; in ambele cazuri se cauta in tabel, ca
   // titlul sa fie numele adevarat si canonicalul adresa adevarata.
 
@@ -259,7 +262,7 @@ export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: 
     // care nu exista n-are ce descrie.
     if (!gasita) return {};
     categorie = gasita.name;
-    radacinaPagina = `${radacina}/${SEGMENT_MAGAZIN}/${slugCategorie(gasita.name)}`;
+    radacinaPagina = `${radacina}/${prefixCatalog}/${slugCategorie(gasita.name)}`;
   } else if (catBrut) {
     /*
      * Forma veche, `?cat=`, isi trimite acum valoarea catre pagina categoriei.
@@ -274,7 +277,7 @@ export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: 
       ?? vizibile.find((c) => c.name.toLowerCase() === catBrut.toLowerCase());
     if (gasita) {
       categorie = gasita.name;
-      radacinaPagina = `${radacina}/${SEGMENT_MAGAZIN}/${slugCategorie(gasita.name)}`;
+      radacinaPagina = `${radacina}/${prefixCatalog}/${slugCategorie(gasita.name)}`;
     } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(catBrut)) {
       // Nume care nu e in tabel (categorie ramasa doar pe produse, dintr-un
       // import): bun de titlu, dar canonicalul ramane pe catalog.
@@ -368,6 +371,7 @@ export async function metadataBrand({ slug, sp, brandSlug }: { slug: string; sp:
     brand,
     displayName: business.store_name ?? business.business_name,
     radacina: storeBaseUrl({ slug, custom_domain: business.custom_domain }),
+    permalinkuri: permalinkuriDin(settings?.page_content),
     sp,
     noindexMagazin: !!seo.noindex,
     imagineMagazin: seo.ogImage || business.cover_url || null,
@@ -500,6 +504,7 @@ export async function dateStructuratePaginaCatalog(a: {
     esteCautare: a.esteCautare,
     // Decizia 6: ACEEASI regula ca `robots` din `<head>` si ca sitemapul.
     subarboreCuProduse: subarboreAreProduse(a.categorii, a.numeCategorie, a.categoriiCuProduse),
+    permalinkuri: permalinkuriDin(a.pageContent),
   };
   if (!emiteDateCatalog(argumente)) return null;
   const { context, descriereProprie } = await descrierePaginiiCatalog({

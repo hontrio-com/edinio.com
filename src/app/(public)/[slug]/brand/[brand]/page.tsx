@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { RandeazaMagazin } from "@/lib/storefront/catalog/pagina-magazin";
 import { metadataBrand } from "@/lib/storefront/catalog/metadata-magazin";
+import { redirectioneazaDacaPrefixulEAltul } from "@/lib/storefront/permalinkuri-server";
 
 /**
  * Pagina unui brand: catalogul magazinului, filtrat pe brand, cu logo-ul si
@@ -22,5 +23,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 
 export default async function PaginaBrand({ params, searchParams }: Props) {
   const [{ slug, brand }, sp] = await Promise.all([params, searchParams]);
+  // Magazinul cu alt prefix de branduri (Setari > Permalink-uri): 308 spre el.
+  await redirectioneazaDacaPrefixulEAltul(slug, "brand", [brand], sp);
   return RandeazaMagazin({ slug, sp, brandSlug: brand });
 }

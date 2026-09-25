@@ -11,6 +11,8 @@ import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import type { PriceRange } from "@/lib/utils/product-price";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 /**
  * Butonul de adaugare in cos de pe blocurile de produse ale paginilor proprii.
@@ -27,7 +29,7 @@ import { normalizeazaCantitate } from "@/lib/orders/quantity";
  * Produsele cu variante deschid intai selectorul de optiuni, ca in cos sa intre
  * varianta aleasa — niciodata o linie la pretul de baza, fara optiune.
  */
-export function AddToCartButton({ product, storeSlug, color }: {
+export function AddToCartButton({ product, storeSlug, basePath, color }: {
   product: {
     id: string;
     name: string;
@@ -41,8 +43,14 @@ export function AddToCartButton({ product, storeSlug, color }: {
     priceRange: PriceRange;
   };
   storeSlug: string;
+  /**
+   * `""` pe domeniul propriu, `/<slug>` pe platforma. Lipsa lui (apelanti vechi) = `/<slug>`,
+   * adica exact adresa de dinainte, care pe domeniul propriu ducea insa in 404.
+   */
+  basePath?: string;
   color: string;
 }) {
+  const { produs: prefixProdus } = usePermalinkuri();
   const [added, setAdded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const variants = parseVariants(product.pageSections);
@@ -93,7 +101,7 @@ export function AddToCartButton({ product, storeSlug, color }: {
      * linia de cos n-are unde s-o poarte. Se duce la pagina produsului, unde exista formularul.
      */
     if (cerePersonalizarea(product.pageSections)) {
-      window.location.href = `/${storeSlug}/product/${product.slug ?? product.id}`;
+      window.location.href = hrefProdus(basePath ?? `/${storeSlug}`, product.slug ?? product.id, prefixProdus);
       return;
     }
     writeLine({ productId: product.id, slug: product.slug ?? undefined, name: product.name, price: product.price, imageUrl: product.image });

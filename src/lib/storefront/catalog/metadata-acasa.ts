@@ -19,6 +19,7 @@ import {
 import {
   orfaneCuProduse, preturiFaraTva, subarboreAreProduse, type ContextDescriere,
 } from "@/lib/storefront/catalog/descriere-generata";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
 /**
  * Metadata paginii principale cand adresa ei poarta un filtru care ii schimba
@@ -215,7 +216,7 @@ export async function metadataAcasaFiltrata(a: {
   if (shopOnPage(a.design)) {
     // Ramurile 3 si 4. Textul e al paginii tinta, prin ACELASI `descrierePaginiiCatalog`
     // ca `metadataMagazin` si ca `CollectionPage`-ul ei.
-    const { url, indexabila } = canonicalPagina(radacina, nume, a.sp);
+    const { url, indexabila } = canonicalPagina(radacina, nume, a.sp, permalinkuriDin(a.pageContent).magazin);
     const { context, descriereProprie } = await descrierePaginiiCatalog({
       businessId: id,
       numeCategorie: nume,

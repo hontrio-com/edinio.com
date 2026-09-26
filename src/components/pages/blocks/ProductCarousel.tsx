@@ -13,20 +13,21 @@ export function ProductCarousel({ products, color, basePath, storeSlug, columns,
     const el = ref.current;
     if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
   };
-  const wCls = columns === 2 ? "w-[72%] sm:w-[48%]" : columns === 3 ? "w-[64%] sm:w-[31%]" : "w-[58%] sm:w-[40%] lg:w-[23%]";
+  const wCls = columns === 2 ? "w-[72%] pg-sm:w-[48%]" : columns === 3 ? "w-[64%] pg-sm:w-[31%]" : "w-[58%] pg-sm:w-[40%] pg-lg:w-[23%]";
   return (
     <div className="relative">
-      <div ref={ref} className="flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 px-1 -mx-1">
+      <div ref={ref} className="flex gap-3 pg-sm:gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-2 px-1 -mx-1">
         {products.map((p) => (
-          <div key={p.id} className={`snap-start shrink-0 ${wCls}`}>
-            <PageProductCard p={p} color={color} basePath={basePath} storeSlug={storeSlug} addToCart={addToCart} />
+          /* `flex` + `w-full`: cardul ia inaltimea randului, deci pretul si butonul stau la aceeasi linie in toate. */
+          <div key={p.id} className={`flex snap-start shrink-0 ${wCls}`}>
+            <PageProductCard p={p} color={color} basePath={basePath} storeSlug={storeSlug} addToCart={addToCart} className="w-full" />
           </div>
         ))}
       </div>
       {products.length > columns && (
         <>
-          <button type="button" aria-label="Inapoi" onClick={() => scroll(-1)} className="hidden md:flex absolute left-0 top-1/3 -translate-x-1/2 w-9 h-9 rounded-full bg-white shadow-md border border-border items-center justify-center hover:bg-muted z-10"><ChevronLeft className="h-4 w-4" /></button>
-          <button type="button" aria-label="Inainte" onClick={() => scroll(1)} className="hidden md:flex absolute right-0 top-1/3 translate-x-1/2 w-9 h-9 rounded-full bg-white shadow-md border border-border items-center justify-center hover:bg-muted z-10"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" aria-label="Inapoi" onClick={() => scroll(-1)} className="hidden pg-md:flex absolute left-0 top-1/3 -translate-x-1/2 w-9 h-9 rounded-full bg-white shadow-md border border-border items-center justify-center hover:bg-muted z-10"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" aria-label="Inainte" onClick={() => scroll(1)} className="hidden pg-md:flex absolute right-0 top-1/3 translate-x-1/2 w-9 h-9 rounded-full bg-white shadow-md border border-border items-center justify-center hover:bg-muted z-10"><ChevronRight className="h-4 w-4" /></button>
         </>
       )}
     </div>

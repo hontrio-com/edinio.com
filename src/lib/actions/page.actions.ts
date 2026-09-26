@@ -12,8 +12,13 @@ import { maybeSyncMailchimpSubscriber } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
-import { validatePageSlug } from "@/lib/pages/reserved-slugs";
-import type { Block, PageSeo } from "@/lib/pages/blocks.types";
+import { problemaTitlului, validatePageSlug } from "@/lib/pages/reserved-slugs";
+import type { Block, ContactBlock, PageSeo, TipPaginaProprie } from "@/lib/pages/blocks.types";
+import type { FormField } from "@/lib/pages/forms.types";
+import { campuriFormularSimplu, DURATA_MINIMA_MS, valideazaTrimitere } from "@/lib/pages/validare-formular";
+import { TIPURI_PAGINA_PROPRIE } from "@/lib/pages/blocks.types";
+import { blocuriSablon, esteSablon, DESPRE_SABLOANE } from "@/lib/pages/sabloane";
+import { newMenuItemId } from "@/lib/pages/menu";
 import { curataSeoPagina } from "@/lib/pages/pagina-seo";
 import type { MenuItem } from "@/lib/pages/menu";
 import { sendPageFormEmail } from "@/lib/email";
@@ -24,6 +29,7 @@ import { FELURI_PERMALINK, permalinkuriDin } from "@/lib/storefront/permalinkuri
 type DB = SupabaseClient<Database>;
 
 const MAX_BLOCKS_BYTES = 400_000; // ~400KB of block JSON per page
+const MAX_CSS_PAGINA = 50_000;
 
 /* ─── Helpers ──────────────────────────────────────────────────────────────── */
 
@@ -123,6 +129,12 @@ function revalidatePage(slug: string | null, pageSlug?: string) {
 
 export async function createPage(input: {
   businessId: string; title: string; slug?: string;
+  /* 25.09.2026: optiunile ferestrei „Pagina noua”. Toate optionale. */
+  sablon?: string;
+  tip?: string;
+  publicata?: boolean;
+  inMeniu?: boolean;
+  descriere?: string;
 }): Promise<{ error: string } | { success: true; pageId: string; slug: string }> {
   const supabase = await createClient();
   const ctx = await getUserAndBusiness(supabase, input.businessId);
@@ -130,6 +142,9 @@ export async function createPage(input: {
 
   const title = input.title.trim();
   if (title.length < 2) return { error: "Titlul paginii e prea scurt." };
+  if (title.length > 120) return { error: "Titlul paginii e prea lung (maxim 120 de caractere)." };
+  const titluSistem = problemaTitlului(title);
+  if (titluSistem) return { error: titluSistem };
 
   const v = validatePageSlug(input.slug?.trim() || title);
   if (!v.ok) return { error: v.error };
@@ -138,9 +153,26 @@ export async function createPage(input: {
   const ocupat = await slugOcupatDePrefix(supabase, input.businessId, slug);
   if (ocupat) return { error: ocupat };
 
+  /*
+   * Sablonul si tipul se hotarasc AICI, din chei cunoscute. Nimic din ce vine
+   * de la client nu ajunge direct in coloane: un sablon necunoscut e pagina
+   * goala, un tip necunoscut e „pagina”.
+   */
+  const sablon = esteSablon(input.sablon) ? input.sablon : "goala";
+  const tip: TipPaginaProprie = TIPURI_PAGINA_PROPRIE.some((t) => t.valoare === input.tip)
+    ? (input.tip as TipPaginaProprie)
+    : DESPRE_SABLOANE[sablon].tip;
+  const descriere = (input.descriere ?? "").trim().slice(0, 300);
+  const seo = curataSeoPagina({ tip, ...(descriere ? { description: descriere } : {}) } as PageSeo);
+
   const { data, error } = await supabase
     .from("custom_pages")
-    .insert({ business_id: input.businessId, title, slug, blocks: [], is_published: false })
+    .insert({
+      business_id: input.businessId, title, slug,
+      blocks: gateRawBlocks(blocuriSablon(sablon, title), ctx.isAdmin, ctx.userId) as never,
+      is_published: input.publicata === true,
+      seo: seo as never,
+    })
     .select("id, slug")
     .single();
 
@@ -148,31 +180,69 @@ export async function createPage(input: {
     logError({ action: "createPage", message: error?.message ?? "no row", details: { businessId: input.businessId }, userId: ctx.userId });
     return { error: "Eroare la crearea paginii." };
   }
+
+  /*
+   * In meniu, daca a cerut. O cadere aici NU desface pagina: ea exista deja si
+   * se poate pune in meniu din lista, cu o bifa. De aceea doar se jurnalizeaza.
+   */
+  if (input.inMeniu) {
+    const eroare = await adaugaInMeniu(supabase, input.businessId, { label: title, target: data.slug });
+    if (eroare) logError({ action: "createPage.meniu", message: eroare, details: { businessId: input.businessId, pageId: data.id }, userId: ctx.userId });
+  }
+
   revalidatePage(ctx.slug, data.slug);
   return { success: true, pageId: data.id, slug: data.slug };
 }
 
+/** Pune o pagina la capatul meniului, fara sa atinga restul `page_content`. */
+async function adaugaInMeniu(supabase: DB, businessId: string, p: { label: string; target: string }): Promise<string | null> {
+  const { data: existing } = await supabase
+    .from("store_settings").select("page_content").eq("business_id", businessId).maybeSingle();
+  const pc = (existing?.page_content as Record<string, unknown> | null) ?? {};
+  const menu = Array.isArray(pc.menu) ? (pc.menu as MenuItem[]) : [];
+  if (menu.some((m) => m.type === "page" && m.target === p.target)) return null;
+  const next = { ...pc, menu: [...menu, { id: newMenuItemId(), type: "page", label: p.label, target: p.target }] };
+  const { error } = existing
+    ? await supabase.from("store_settings").update({ page_content: next as never, updated_at: new Date().toISOString() }).eq("business_id", businessId)
+    : await supabase.from("store_settings").insert({ business_id: businessId, page_content: next as never });
+  return error?.message ?? null;
+}
+
 export async function updatePage(
   pageId: string,
-  patch: { title?: string; slug?: string; blocks?: Block[]; page_css?: string | null; seo?: PageSeo; is_published?: boolean },
-): Promise<{ error: string } | { success: true; slug: string }> {
+  patch: {
+    title?: string; slug?: string; blocks?: Block[]; page_css?: string | null; seo?: PageSeo; is_published?: boolean;
+    /**
+     * `updated_at` al paginii asa cum l-a incarcat editorul. Cand e dat, salvarea
+     * trece numai daca pagina n-a fost salvata intre timp din alta parte.
+     */
+    versiune?: string;
+  },
+): Promise<{ error: string; conflict?: true } | { success: true; slug: string; versiune: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
   // Resolve the page + its business (ownership enforced via RLS + explicit check).
   const { data: page } = await supabase
-    .from("custom_pages").select("id, business_id, slug").eq("id", pageId).single();
+    .from("custom_pages").select("id, business_id, slug, title, updated_at").eq("id", pageId).single();
   if (!page) return { error: "Pagina negasita" };
 
   const ctx = await getUserAndBusiness(supabase, page.business_id);
   if (!ctx) return { error: "Neautorizat" };
 
-  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const acum = new Date().toISOString();
+  const update: Record<string, unknown> = { updated_at: acum };
 
   if (patch.title !== undefined) {
     const t = patch.title.trim();
     if (t.length < 2) return { error: "Titlul paginii e prea scurt." };
+    if (t.length > 120) return { error: "Titlul paginii e prea lung (maxim 120 de caractere)." };
+    // Numai un titlu SCHIMBAT: o pagina veche nu se blocheaza la salvare pentru un nume pe care il avea deja.
+    if (t !== page.title) {
+      const titluSistem = problemaTitlului(t);
+      if (titluSistem) return { error: titluSistem };
+    }
     update.title = t;
   }
 
@@ -193,7 +263,13 @@ export async function updatePage(
     }
     update.blocks = gated;
   }
-  if (patch.page_css !== undefined) update.page_css = patch.page_css;
+  if (patch.page_css !== undefined) {
+    // Plafon (auditul din 26.09.2026): coloana primea orice, de orice marime. In productie: zero pagini cu CSS.
+    if (typeof patch.page_css === "string" && patch.page_css.length > MAX_CSS_PAGINA) {
+      return { error: `CSS-ul paginii poate avea cel mult ${MAX_CSS_PAGINA.toLocaleString("ro-RO")} de caractere.` };
+    }
+    update.page_css = typeof patch.page_css === "string" ? patch.page_css : null;
+  }
   /*
    * `seo` trece prin lista alba INAINTE de coloana, nu doar la citire.
    *
@@ -205,14 +281,49 @@ export async function updatePage(
   if (patch.seo !== undefined) update.seo = curataSeoPagina(patch.seo) as never;
   if (patch.is_published !== undefined) update.is_published = patch.is_published;
 
-  const { error } = await supabase.from("custom_pages").update(update as never).eq("id", pageId);
+  /*
+   * ⚠⚠ DOUA FILE, O SINGURA PAGINA (25.09.2026).
+   *
+   * Salvarea trimite TOT continutul, deci pana acum ultima fila care salva
+   * stergea tacut ce se salvase din cealalta: blocuri adaugate, SEO, titlu.
+   * Acum editorul trimite versiunea pe care a incarcat-o, iar randul se scrie
+   * numai daca e inca aceea. Altfel omul afla, in loc sa piarda munca.
+   */
+  let cerere = supabase.from("custom_pages").update(update as never).eq("id", pageId);
+  if (patch.versiune) cerere = cerere.eq("updated_at", patch.versiune);
+  const { data: scrise, error } = await cerere.select("updated_at");
   if (error) {
     logError({ action: "updatePage", message: error.message, details: { pageId }, userId: user.id });
     return { error: "Eroare la salvarea paginii." };
   }
+  if (!scrise || scrise.length === 0) {
+    return {
+      error: "Pagina a fost salvată între timp din altă parte (altă filă sau alt dispozitiv). Ca să nu pierzi nimic, copiază ce ai schimbat, reîncarcă editorul și aplică din nou.",
+      conflict: true,
+    };
+  }
+  if (nextSlug !== page.slug) await mutaPaginaInMeniu(supabase, page.business_id, page.slug, nextSlug);
   revalidatePage(ctx.slug, nextSlug);
   if (nextSlug !== page.slug) revalidatePage(ctx.slug, page.slug); // old URL too
-  return { success: true, slug: nextSlug };
+  return { success: true, slug: nextSlug, versiune: scrise[0].updated_at };
+}
+
+/*
+ * Meniul urmeaza pagina redenumita (26.09.2026, auditul paginilor). Intrarile de
+ * meniu tin pagina dupa ADRESA (`target: slug`), deci o adresa schimbata lasa in
+ * meniu o legatura spre 404, iar bifa „In meniu” disparea din lista de pagini.
+ * Nu e exportata: fisierul e "use server", orice export ar fi un capat public.
+ */
+async function mutaPaginaInMeniu(supabase: Awaited<ReturnType<typeof createClient>>, businessId: string, vechi: string, nou: string) {
+  const { data } = await supabase.from("store_settings").select("page_content").eq("business_id", businessId).maybeSingle();
+  const pc = (data?.page_content ?? null) as Record<string, unknown> | null;
+  const meniu = Array.isArray(pc?.menu) ? (pc.menu as { type?: string; target?: string }[]) : null;
+  if (!pc || !meniu || !meniu.some((i) => i?.type === "page" && i.target === vechi)) return;
+  const nouMeniu = meniu.map((i) => (i?.type === "page" && i.target === vechi ? { ...i, target: nou } : i));
+  const { error } = await supabase.from("store_settings")
+    .update({ page_content: { ...pc, menu: nouMeniu } as never, updated_at: new Date().toISOString() })
+    .eq("business_id", businessId);
+  if (error) logError({ action: "updatePage.meniu", message: error.message, details: { businessId, vechi, nou } });
 }
 
 export async function deletePage(pageId: string): Promise<{ error: string } | { success: true }> {
@@ -342,16 +453,24 @@ export async function submitPageForm(input: {
   formId?: string | null;
   pageId?: string;
   blockId?: string;
-  fields: { label: string; value: string }[];
+  fields: { id?: string; label: string; value: string }[];
   honeypot?: string;
+  /** Cat a stat formularul pe ecran pana la trimitere, in ms (capcana pentru roboti). */
+  durata?: number;
 }): Promise<{ error: string } | { success: true }> {
   // Bot trap: a filled honeypot pretends to succeed without doing anything.
   if (input.honeypot && input.honeypot.trim() !== "") return { success: true };
+  /*
+   * A doua capcana (26.09.2026): un om nu completeaza un formular in sub o
+   * secunda. Robotul primeste „reusit”, ca sa nu invete ce l-a oprit, si nu se
+   * scrie nimic. Lipsa campului (un apelant vechi) nu e pedepsita.
+   */
+  if (typeof input.durata === "number" && input.durata >= 0 && input.durata < DURATA_MINIMA_MS) return { success: true };
 
-  const fields = (input.fields ?? [])
+  let fields = (input.fields ?? [])
     .filter((f) => f && typeof f.label === "string")
     .slice(0, 40)
-    .map((f) => ({ label: String(f.label).slice(0, 120), value: String(f.value ?? "").slice(0, 5000) }));
+    .map((f) => ({ id: typeof f.id === "string" ? f.id.slice(0, 80) : undefined, label: String(f.label).slice(0, 120), value: String(f.value ?? "").slice(0, 5000) }));
   if (fields.length === 0) return { error: "Formular gol." };
 
   /*
@@ -405,11 +524,34 @@ export async function submitPageForm(input: {
   let brevoEnabled = false;
   let klaviyoEnabled = false;
 
+  /*
+   * ⚠⚠ RASPUNSUL SE RECONSTRUIESTE DIN DEFINITIE (26.09.2026). Pana acum se scria
+   * ce trimitea browserul: campuri inventate, obligatorii lipsa, „email”-uri
+   * care nu erau email. Vezi `valideazaTrimitere`. Un formular sau un bloc care
+   * nu mai exista nu primeste nimic.
+   */
+  let definitie: FormField[] | null = null;
+
+  /*
+   * Pagina de pe care vine trimiterea (auditul din 26.09.2026): trebuie sa fie a
+   * ACESTUI magazin si publicata. Pana acum blocul simplu de pe o ciorna primea
+   * mesaje, iar `page_id` se scria asa cum venea, fara verificare.
+   */
+  let pagina: { blocks: unknown; title: string } | null = null;
+  if (input.pageId) {
+    const { data } = await admin
+      .from("custom_pages").select("blocks, title, is_published")
+      .eq("id", input.pageId).eq("business_id", biz.id).maybeSingle();
+    if (!data || !data.is_published) return { error: "Pagina nu mai este disponibilă. Reîncarcă pagina." };
+    pagina = data;
+  }
+
   if (input.formId) {
     const { data: form } = await admin
-      .from("forms").select("id, name, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
+      .from("forms").select("id, name, fields, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
       .eq("id", input.formId).eq("business_id", biz.id).single();
     if (form) {
+      definitie = Array.isArray(form.fields) ? (form.fields as unknown as FormField[]) : [];
       formId = form.id;
       title = form.name;
       emailEnabled = form.email_enabled;
@@ -418,23 +560,26 @@ export async function submitPageForm(input: {
       brevoEnabled = form.brevo_enabled ?? false;
       klaviyoEnabled = form.klaviyo_enabled ?? false;
     }
-  } else if (input.pageId && input.blockId) {
+  } else if (pagina && input.blockId) {
     // Built-in contact block: read its opt-in flag from the stored page (trusted).
-    const { data: page } = await admin
-      .from("custom_pages").select("blocks, title")
-      .eq("id", input.pageId).eq("business_id", biz.id).single();
-    const blocks = (page?.blocks as Array<Record<string, unknown>> | null) ?? [];
+    const page = pagina;
+    const blocks = (page.blocks as Array<Record<string, unknown>> | null) ?? [];
     const block = findRawBlockById(blocks, input.blockId);
+    if (block && block.type === "contact") definitie = campuriFormularSimplu(block as unknown as ContactBlock);
     if (block && block.emailEnabled === true) emailEnabled = true;
-    if (page?.title) title = page.title;
+    if (page.title) title = page.title;
   }
+  if (!definitie) return { error: "Formularul nu mai există pe pagină. Reîncarcă pagina." };
+  const verificat = valideazaTrimitere(definitie, fields);
+  if ("error" in verificat) return { error: verificat.error };
+  fields = verificat.campuri.map((c) => ({ id: undefined, ...c }));
 
   const { error } = await admin.from("page_form_submissions").insert({
     business_id: biz.id,
     page_id: input.pageId ?? null,
     block_id: input.blockId ?? null,
     form_id: formId,
-    data: { fields } as never,
+    data: { fields: fields.map(({ label, value }) => ({ label, value })) } as never,
   });
   if (error) {
     logError({ action: "submitPageForm", message: error.message, details: { businessId: input.businessId } });
@@ -476,22 +621,112 @@ export async function submitPageForm(input: {
   // rafala sa nu inunde cutia postala a comerciantului.
   if (emailEnabled && !pesteRafala) {
     try {
-      let to = emailTo || biz.email?.trim() || "";
-      if (!to) {
-        const { data: u } = await admin.auth.admin.getUserById(biz.user_id);
-        to = u.user?.email ?? "";
-      }
+      /*
+       * ⚠⚠ DESTINATARUL E AL MAGAZINULUI, NU ORICE ADRESA (25.09.2026).
+       *
+       * `email_to` se scria liber din panou (si direct prin PostgREST, fiindca
+       * politica RLS pe `forms` e `ALL`). Iar formularul e public: oricine putea
+       * face un magazin, pune adresa victimei si trimite, de pe expeditorul
+       * PLATFORMEI, ce text voia. Reputatia expeditorului e a tuturor
+       * magazinelor. Acum emailul pleaca numai la adresa magazinului sau la cea
+       * a contului; o adresa straina cade pe a magazinului.
+       * Masurat inainte: singurul formular cu adresa proprie folosea chiar
+       * emailul magazinului, deci nu se schimba nimic real.
+       */
+      const { data: u } = await admin.auth.admin.getUserById(biz.user_id);
+      const aleContului = [biz.email?.trim(), u.user?.email?.trim()].filter(Boolean).map((e) => e!.toLowerCase());
+      const ceruta = emailTo.toLowerCase();
+      const to = (ceruta && aleContului.includes(ceruta) ? emailTo : "") || biz.email?.trim() || u.user?.email || "";
       if (to) {
         const storeName = biz.store_name ?? biz.business_name;
-        const pageUrl = biz.custom_domain
+        const radacina = biz.custom_domain
           ? `https://${biz.custom_domain}`
           : `https://www.edinio.com/${biz.slug}`;
-        await sendPageFormEmail(to, { storeName, pageTitle: title, pageUrl, fields });
+        // „Vezi pagina” ducea la radacina magazinului; acum duce la pagina formularului.
+        let pageUrl = radacina;
+        if (input.pageId) {
+          const { data: pg } = await admin.from("custom_pages").select("slug").eq("id", input.pageId).eq("business_id", biz.id).maybeSingle();
+          if (pg?.slug) pageUrl = `${radacina}/${pg.slug}`;
+        }
+        // „Raspunde” din casuta comerciantului merge la omul care a scris, cand a lasat un email.
+        const replyTo = fields.find((f) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(f.value.trim()))?.value.trim();
+        await sendPageFormEmail(to, { storeName, pageTitle: title, pageUrl, fields: fields.map(({ label, value }) => ({ label, value })), replyTo });
       }
     } catch (e) {
       logError({ action: "submitPageForm.email", message: e instanceof Error ? e.message : "email failed", details: { businessId: input.businessId } });
     }
   }
 
+  return { success: true };
+}
+
+/* ─── Newsletter (blocul „Newsletter”, 25.09.2026) ─────────────────────────── */
+
+/**
+ * Abonarea din blocul de newsletter al unei pagini proprii, catre furnizorii
+ * conectati (Mailchimp, Brevo, Klaviyo), cu sursa „Formular”.
+ *
+ * ⚠ ACORDUL E OBLIGATORIU, si pe server. Formularele proprii sincronizau pana
+ * acum primul camp care arata a email fara nicio bifa; aici fara `acord: true`
+ * nu pleaca nimic nicaieri.
+ *
+ * ⚠ Ce anume se cere (nume, telefon) si eticheta se citesc din BLOCUL SALVAT,
+ * nu din cerere: altfel oricine ar fi pus orice eticheta in lista magazinului.
+ *
+ * ⚠ Abonarea se pastreaza si in „Mesaje”, ca sa existe o urma la noi chiar cand
+ * furnizorul raspunde cu eroare (sincronizarea e „fire-and-forget”).
+ */
+export async function aboneazaNewsletter(input: {
+  businessId: string;
+  pageId: string;
+  blockId: string;
+  email: string;
+  nume?: string;
+  telefon?: string;
+  acord: boolean;
+  honeypot?: string;
+}): Promise<{ error: string } | { success: true }> {
+  if (input.honeypot && input.honeypot.trim() !== "") return { success: true };
+  const email = String(input.email ?? "").trim().toLowerCase().slice(0, 200);
+  if (!/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(email)) return { error: "Adresa de email nu pare corectă." };
+  if (input.acord !== true) return { error: "Bifează acordul ca să te poți abona." };
+
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`newsletter:${ip}`, 5, 60_000)) return { error: "Prea multe încercări. Așteaptă un minut." };
+  if (!(await consumaLimita(`newsletter:ip:${ip}`, 30, 3600)).permis) return { error: "Prea multe încercări. Încearcă mai târziu." };
+
+  const admin = createAdminClient();
+  const { data: biz } = await admin.from("businesses").select("id, is_published").eq("id", input.businessId).single();
+  if (!biz || !biz.is_published) return { error: "Magazin indisponibil." };
+
+  const { data: page } = await admin
+    .from("custom_pages").select("blocks, is_published")
+    .eq("id", input.pageId).eq("business_id", biz.id).single();
+  const block = page?.is_published ? findRawBlockById((page.blocks as Array<Record<string, unknown>> | null) ?? [], input.blockId) : null;
+  if (!block || block.type !== "newsletter") return { error: "Formularul nu mai există pe pagină." };
+
+  const nume = block.askName === true ? String(input.nume ?? "").trim().slice(0, 120) : "";
+  const telefon = block.askPhone === true ? String(input.telefon ?? "").trim().slice(0, 40) : "";
+  const eticheta = typeof block.tag === "string" && block.tag.trim() ? block.tag.trim().slice(0, 60) : "Newsletter";
+
+  const campuri = [
+    { label: "Email", value: email },
+    ...(nume ? [{ label: "Nume", value: nume }] : []),
+    ...(telefon ? [{ label: "Telefon", value: telefon }] : []),
+    { label: "Acord newsletter", value: "Da" },
+  ];
+  const { error } = await admin.from("page_form_submissions").insert({
+    business_id: biz.id, page_id: input.pageId, block_id: input.blockId, form_id: null,
+    data: { fields: campuri, newsletter: true } as never,
+  });
+  if (error) {
+    logError({ action: "aboneazaNewsletter", message: error.message, details: { businessId: biz.id } });
+    return { error: "Nu am putut înregistra abonarea. Încearcă din nou." };
+  }
+
+  const comun = { businessId: biz.id, source: "forms" as const, email, name: nume || undefined, phone: telefon || undefined };
+  dupaRaspuns(() => maybeSyncMailchimpSubscriber({ ...comun, tags: [eticheta] }), "maybeSyncMailchimpSubscriber", biz.id);
+  dupaRaspuns(() => maybeSyncBrevoSubscriber(comun), "maybeSyncBrevoSubscriber", biz.id);
+  dupaRaspuns(() => maybeSyncKlaviyoSubscriber(comun), "maybeSyncKlaviyoSubscriber", biz.id);
   return { success: true };
 }

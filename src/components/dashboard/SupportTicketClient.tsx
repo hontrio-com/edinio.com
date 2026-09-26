@@ -1,15 +1,22 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
-  ArrowLeft, Loader2, Paperclip, X, Send, CheckCircle2,
-  RotateCcw, FileText, Download, User, XCircle,
+  ArrowLeft, CheckCircle2, Download, FileText, ImageIcon, LifeBuoy, Loader2, Paperclip,
+  Plus, Reply, RotateCcw, Send, X,
 } from "lucide-react";
+import { toast } from "sonner";
+
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
-import { toast } from "sonner";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import {
+  DESPRE_STARE, numarulTichetului, numeleCategoriei, numelePrioritatii, stareaTichetului,
+} from "@/lib/support/tichete";
+import { ACCEPT, CATE_FISIERE, ICONITA_CATEGORIEI, adaugaFisiere, incarcaFisiere, marimeaFisierului } from "./suport/atasamente";
 
 interface Ticket {
   id: string;
@@ -32,82 +39,68 @@ interface Message {
   attachments: { url: string; name: string }[] | null;
 }
 
-const STATUS_CONFIG = {
-  open: { label: "Deschis", color: "bg-info/10 text-info" },
-  in_progress: { label: "In lucru", color: "bg-warning/10 text-warning" },
-  resolved: { label: "Rezolvat", color: "bg-success/10 text-success" },
-  closed: { label: "Inchis", color: "bg-muted text-muted-foreground" },
-};
+const ora = (d: string) => new Date(d).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+const ziua = (d: string) => new Date(d).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" });
+const dataScurta = (d: string) => new Date(d).toLocaleDateString("ro-RO", { day: "numeric", month: "short", year: "numeric" });
 
-const PRIORITY_CONFIG = {
-  low: { label: "Scazuta", dot: "bg-muted-foreground/40" },
-  normal: { label: "Normala", dot: "bg-info" },
-  high: { label: "Mare", dot: "bg-warning" },
-  urgent: { label: "Urgenta", dot: "bg-destructive" },
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  technical: "Tehnic",
-  billing: "Facturare",
-  feature: "Cerere functionalitate",
-  other: "Altele",
-};
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "text/plain", "application/zip"];
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("ro-RO", {
-    day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
+function esteImagine(url: string) {
+  return /\.(jpe?g|png|gif|webp)$/i.test(url);
 }
 
-function isImage(url: string) {
-  return /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
-}
-
-function AttachmentItem({ att }: { att: { url: string; name: string } }) {
-  if (isImage(att.url)) {
+function Atasament({ a }: { a: { url: string; name: string } }) {
+  if (esteImagine(a.url)) {
     return (
-      <a href={att.url} target="_blank" rel="noopener noreferrer" className="block">
-        <Image src={att.url} alt={att.name} width={400} height={192} className="rounded-lg border border-border object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+      <a href={a.url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-lg ring-1 ring-foreground/10">
+        <Image src={a.url} alt={a.name} width={320} height={200} className="h-32 w-auto max-w-full object-cover transition-opacity hover:opacity-90" />
       </a>
     );
   }
   return (
     <a
-      href={att.url}
-      download={att.name}
+      href={a.url}
+      download={a.name}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-2 px-3 py-2 bg-background/60 border border-border rounded-lg text-xs text-foreground hover:bg-accent transition-colors"
+      className="flex max-w-xs items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
     >
       <FileText className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-      <span className="truncate flex-1">{att.name}</span>
+      <span className="min-w-0 flex-1 truncate">{a.name}</span>
       <Download className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
     </a>
   );
 }
 
-export function SupportTicketClient({ ticket: initialTicket, initialMessages, userId, userEmail }: {
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  UN TICHET                                                       (25.09.2026)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ⚠ CONVERSATIA SE CITESTE CA UN FIR, nu ca un chat. Bulele din stanga si din
+  dreapta taiau textele lungi (un pas cu pas de la suport, o eroare copiata) in
+  coloane de 75%, iar pe telefon ramanea un sfert din ecran pe rand. Acum
+  fiecare mesaj are toata latimea, cu cine l-a scris deasupra.
+
+  ⚠ Starea se socoteste AICI, din mesajele de pe ecran, cu aceeasi regula ca
+  in lista (`stareaTichetului`). Venita de pe server, n-ar fi aflat de un
+  raspuns sosit in timp ce pagina e deschisa.
+*/
+export function SupportTicketClient({ ticket: initialTicket, numeMagazin, initialMessages }: {
   ticket: Ticket;
+  numeMagazin: string | null;
   initialMessages: Message[];
-  userId: string;
-  userEmail: string;
 }) {
-  const router = useRouter();
   const [ticket, setTicket] = useState(initialTicket);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [reply, setReply] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [tras, setTras] = useState(false);
   const [sending, setSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Mark as read on mount if there are unread replies
+  // Marcat ca citit la deschidere, daca avea un raspuns necitit.
   useEffect(() => {
     if (initialTicket.has_unread_reply) {
       fetch(`/api/support/tickets/${initialTicket.id}`, {
@@ -115,11 +108,10 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ has_unread_reply: false }),
       }).catch(() => {});
-      setTicket((prev) => ({ ...prev, has_unread_reply: false }));
     }
   }, [initialTicket.id, initialTicket.has_unread_reply]);
 
-  // Real-time subscription for new messages
+  // Mesajele si starea noi, pe loc.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -129,107 +121,66 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
         { event: "INSERT", schema: "public", table: "support_messages", filter: `ticket_id=eq.${ticket.id}` },
         (payload) => {
           const newMsg = payload.new as Message;
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
+          setMessages((prev) => (prev.some((m) => m.id === newMsg.id) ? prev : [...prev, newMsg]));
           if (newMsg.sender_type === "agent") {
             setTicket((prev) => ({ ...prev, has_unread_reply: false, status: prev.status === "open" ? "in_progress" : prev.status }));
-            toast.success("Raspuns nou de la echipa de suport");
-            // Mark as read since we're on the page
+            toast.success("Echipa Edinio ți-a răspuns");
             fetch(`/api/support/tickets/${ticket.id}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ has_unread_reply: false }),
             }).catch(() => {});
           }
-        }
+        },
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "support_tickets", filter: `id=eq.${ticket.id}` },
-        (payload) => {
-          setTicket((prev) => ({ ...prev, ...(payload.new as Partial<Ticket>) }));
-        }
+        (payload) => setTicket((prev) => ({ ...prev, ...(payload.new as Partial<Ticket>) })),
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [ticket.id]);
 
-  // Scroll to bottom when messages change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
-  // Auto-resize textarea
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+    const t = textareaRef.current;
+    if (t) {
+      t.style.height = "auto";
+      t.style.height = `${Math.min(t.scrollHeight, 220)}px`;
     }
   }, [reply]);
 
-  function addFiles(newFiles: FileList | null) {
-    if (!newFiles) return;
-    const valid: File[] = [];
-    for (const f of Array.from(newFiles)) {
-      if (!ALLOWED_TYPES.includes(f.type)) { toast.error(`Tipul ${f.name} nu este permis`); continue; }
-      if (f.size > MAX_FILE_SIZE) { toast.error(`${f.name} depaseste 10MB`); continue; }
-      valid.push(f);
-    }
-    setFiles((prev) => [...prev, ...valid].slice(0, 5));
-  }
-
   const handleSend = useCallback(async () => {
-    if (!reply.trim() && files.length === 0) return;
-    if (ticket.status === "closed") return;
+    if (!reply.trim() || ticket.status === "closed" || sending) return;
     setSending(true);
     try {
-      let uploadedUrls: string[] = [];
-
-      if (files.length > 0) {
-        const { uploadImage } = await import("@/lib/upload");
-        const uploads = await Promise.all(
-          files.map(async (file) => {
-            const result = await uploadImage(file, "avatars", "support");
-            if ("error" in result) throw new Error(result.error);
-            return result.url;
-          })
-        );
-        uploadedUrls = uploads;
-      }
-
+      const adrese = await incarcaFisiere(files);
       const res = await fetch(`/api/support/tickets/${ticket.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: reply.trim(), attachment_urls: uploadedUrls }),
+        body: JSON.stringify({ content: reply.trim(), attachment_urls: adrese }),
       });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error ?? "Eroare");
-      }
-
-      const { message } = await res.json() as { message: Message };
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === message.id)) return prev;
-        return [...prev, message];
-      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: Message };
+      if (!res.ok || !data.message) throw new Error(data.error ?? "Mesajul nu a plecat. Încearcă din nou.");
+      const message = data.message;
+      setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
       setReply("");
       setFiles([]);
-      // If ticket was resolved, re-open it
-      if (ticket.status === "resolved") {
-        setTicket((prev) => ({ ...prev, status: "open" }));
-      }
+      // Baza redeschide singura un tichet rezolvat cand scrii (`handle_support_message_insert`).
+      if (ticket.status === "resolved") setTicket((prev) => ({ ...prev, status: "open" }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Eroare la trimiterea mesajului");
+      toast.error(err instanceof Error ? err.message : "Mesajul nu a plecat. Încearcă din nou.");
     } finally {
       setSending(false);
     }
-  }, [reply, files, ticket.id, ticket.status]);
+  }, [reply, files, ticket.id, ticket.status, sending]);
 
-  async function updateStatus(status: string) {
+  async function updateStatus(status: "resolved" | "open") {
     setUpdatingStatus(true);
     try {
       const res = await fetch(`/api/support/tickets/${ticket.id}`, {
@@ -239,229 +190,242 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
       });
       if (!res.ok) throw new Error();
       setTicket((prev) => ({ ...prev, status }));
-      toast.success(status === "resolved" ? "Tichetul a fost marcat ca rezolvat" : "Tichetul a fost redeschis");
+      toast.success(status === "resolved" ? "Tichetul e marcat ca rezolvat" : "Tichetul e redeschis");
     } catch {
-      toast.error("Eroare la actualizarea statusului");
+      toast.error("Starea tichetului nu s-a putut schimba. Încearcă din nou.");
     } finally {
       setUpdatingStatus(false);
     }
   }
 
-  const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.open;
-  const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.normal;
+  const ultimul = messages.at(-1);
+  const stare = stareaTichetului({
+    status: ticket.status,
+    ultimulMesajDe: ultimul ? (ultimul.sender_type === "agent" ? "agent" : "user") : null,
+  });
+  const despre = DESPRE_STARE[stare];
   const isClosed = ticket.status === "closed";
   const isResolved = ticket.status === "resolved";
+  const IconCategorie = ICONITA_CATEGORIEI[ticket.category] ?? LifeBuoy;
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-8rem)]">
-      {/* Back */}
-      <button
-        onClick={() => router.push("/dashboard/suport")}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-5 w-fit"
+    <>
+      <Link
+        href="/dashboard/suport"
+        className="mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        Inapoi la tichete
-      </button>
+        Toate tichetele
+      </Link>
 
-      {/* Ticket header */}
-      <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-5 mb-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-black text-foreground mb-2 leading-tight">{ticket.subject}</h1>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", statusConfig.color)}>
-                {statusConfig.label}
-              </span>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", priorityConfig.dot)} />
-                {priorityConfig.label}
-              </span>
-              <span className="text-xs text-muted-foreground">{CATEGORY_LABELS[ticket.category] ?? ticket.category}</span>
-              <span className="text-xs text-muted-foreground">#{ticket.id.slice(0, 8)}</span>
-            </div>
-          </div>
-
-          {/* Status actions */}
-          <div className="flex-shrink-0">
-            {!isClosed && !isResolved && (
-              <button
-                onClick={() => updateStatus("resolved")}
-                disabled={updatingStatus}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-success bg-success/10 hover:bg-success/20 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {updatingStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                Marcare rezolvat
-              </button>
-            )}
-            {isResolved && (
-              <button
-                onClick={() => updateStatus("open")}
-                disabled={updatingStatus}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {updatingStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                Redeschide
-              </button>
-            )}
-            {isClosed && (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-muted-foreground bg-muted rounded-lg">
-                <XCircle className="h-3.5 w-3.5" />
-                Inchis
-              </span>
-            )}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold leading-snug text-foreground">{ticket.subject}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+            <EtichetaStare ton={despre.ton} marime="mic" title={despre.explicatie}>{despre.text}</EtichetaStare>
+            <span className="inline-flex items-center gap-1.5">
+              <IconCategorie className="h-3.5 w-3.5" strokeWidth={1.75} />
+              {numeleCategoriei(ticket.category)}
+            </span>
+            <span className="font-mono">{numarulTichetului(ticket.id)}</span>
           </div>
         </div>
-
-        <p className="text-xs text-muted-foreground mt-3">
-          Deschis pe {formatDate(ticket.created_at)}
-        </p>
+        <div className="flex-shrink-0">
+          {!isClosed && !isResolved && (
+            <Button variant="outline" onClick={() => updateStatus("resolved")} disabled={updatingStatus}>
+              {updatingStatus ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+              Marchează rezolvat
+            </Button>
+          )}
+          {isResolved && (
+            <Button variant="outline" onClick={() => updateStatus("open")} disabled={updatingStatus}>
+              {updatingStatus ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+              Redeschide
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Messages thread */}
-      <div className="flex-1 space-y-4 mb-5">
-        {messages.map((msg) => {
-          const isUser = msg.sender_type === "user";
-          const atts = Array.isArray(msg.attachments) ? msg.attachments : [];
-          return (
-            <div key={msg.id} className={cn("flex gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
-              {/* Avatar */}
-              <div className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1",
-                isUser ? "bg-primary/10" : "bg-muted"
-              )}>
-                {isUser
-                  ? <User className="h-4 w-4 text-primary" />
-                  : <Image src="/logo.png" alt="Edinio" width={20} height={20} className="rounded-full object-cover" />
-                }
-              </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_17rem]">
+        {/* Conversatia */}
+        <div className="min-w-0">
+          <ol className="space-y-3">
+            {messages.map((m, i) => {
+              const eEchipa = m.sender_type === "agent";
+              const atasamente = Array.isArray(m.attachments) ? m.attachments : [];
+              const ziNoua = i === 0 || ziua(messages[i - 1].created_at) !== ziua(m.created_at);
+              return (
+                <Fragment key={m.id}>
+                  {ziNoua && (
+                    <li aria-hidden className="flex items-center gap-3 py-1">
+                      <span className="h-px flex-1 bg-border" />
+                      <span className="text-[11px] font-medium text-muted-foreground">{ziua(m.created_at)}</span>
+                      <span className="h-px flex-1 bg-border" />
+                    </li>
+                  )}
+                  <li
+                    className={cn(
+                      "rounded-xl p-4 ring-1 sm:p-5",
+                      eEchipa ? "bg-card ring-foreground/10" : "bg-muted/40 ring-transparent",
+                    )}
+                  >
+                    <div className="mb-2.5 flex items-center gap-2.5">
+                      {eEchipa ? (
+                        <span className="grid h-7 w-7 flex-shrink-0 place-items-center overflow-hidden rounded-full bg-background ring-1 ring-foreground/10">
+                          <Image src="/logo.png" alt="" width={18} height={18} className="object-contain" />
+                        </span>
+                      ) : (
+                        <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-full bg-foreground text-[11px] font-semibold text-background">
+                          Tu
+                        </span>
+                      )}
+                      <span className="text-sm font-medium text-foreground">{eEchipa ? "Echipa Edinio" : "Tu"}</span>
+                      <span className="text-xs text-muted-foreground">{ora(m.created_at)}</span>
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">{m.content}</p>
+                    {atasamente.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {atasamente.map((a, j) => <Atasament key={j} a={a} />)}
+                      </div>
+                    )}
+                  </li>
+                </Fragment>
+              );
+            })}
 
-              {/* Bubble */}
-              <div className={cn("max-w-[75%] space-y-1", isUser ? "items-end" : "items-start", "flex flex-col")}>
-                <div className={cn(
-                  "px-4 py-3 rounded-2xl text-sm leading-relaxed",
-                  isUser
-                    ? "bg-primary text-white rounded-tr-sm"
-                    : "bg-card border border-border text-foreground rounded-tl-sm"
-                )}>
-                  <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                </div>
+            {(isResolved || isClosed) && (
+              <li className="flex items-center gap-3 py-2">
+                <span className="h-px flex-1 bg-border" />
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {isResolved ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <X className="h-3.5 w-3.5" />}
+                  {isResolved ? "Tichet marcat ca rezolvat" : "Tichet închis"}
+                </span>
+                <span className="h-px flex-1 bg-border" />
+              </li>
+            )}
+          </ol>
+          <div ref={bottomRef} />
 
-                {/* Attachments */}
-                {atts.length > 0 && (
-                  <div className="space-y-1.5 w-full">
-                    {atts.map((att, i) => (
-                      <AttachmentItem key={i} att={att} />
+          {/* Raspunsul */}
+          {isClosed ? (
+            <div className="mt-5 rounded-xl bg-card p-5 text-center ring-1 ring-foreground/10">
+              <p className="text-sm text-muted-foreground">
+                Tichetul e închis. Dacă ai nevoie de ajutor cu altceva, deschide unul nou.
+              </p>
+              <Link href="/dashboard/suport?nou=1" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-3")}>
+                <Plus />
+                Tichet nou
+              </Link>
+            </div>
+          ) : (
+            <div className="sticky bottom-4 mt-5">
+              {stare === "raspunsul_tau" && (
+                <p className="mb-2 flex items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs font-medium text-foreground">
+                  <Reply className="h-3.5 w-3.5 flex-shrink-0 text-warning" />
+                  Echipa Edinio așteaptă răspunsul tău ca să meargă mai departe.
+                </p>
+              )}
+              <div
+                onDragOver={(e) => { e.preventDefault(); setTras(true); }}
+                onDragLeave={() => setTras(false)}
+                onDrop={(e) => { e.preventDefault(); setTras(false); setFiles((f) => adaugaFisiere(f, e.dataTransfer.files)); }}
+                className={cn(
+                  "rounded-xl bg-card shadow-[0_18px_32px_-24px_rgba(15,23,20,0.25)] ring-1 transition-colors",
+                  tras ? "ring-2 ring-primary" : "ring-foreground/10 focus-within:ring-foreground/25",
+                )}
+              >
+                <textarea
+                  ref={textareaRef}
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                  placeholder={isResolved ? "Scrie un mesaj și tichetul se redeschide…" : "Scrie răspunsul tău…"}
+                  aria-label="Răspunsul tău"
+                  rows={2}
+                  className="block w-full resize-none bg-transparent px-4 pt-3.5 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+                />
+
+                {files.length > 0 && (
+                  <ul className="flex flex-wrap gap-1.5 px-3 pt-2">
+                    {files.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center gap-1.5 rounded-md bg-muted/70 px-2 py-1 text-xs">
+                        {f.type.startsWith("image/")
+                          ? <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                          : <FileText className="h-3.5 w-3.5 text-muted-foreground" />}
+                        <span className="max-w-[140px] truncate">{f.name}</span>
+                        <span className="tabular-nums text-muted-foreground">{marimeaFisierului(f.size)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFiles((p) => p.filter((_, j) => j !== i))}
+                          aria-label={`Scoate ${f.name}`}
+                          className="text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
 
-                <span className="text-[11px] text-muted-foreground px-1">
-                  {isUser ? "Tu" : "Echipa Edinio"} &middot; {formatDate(msg.created_at)}
-                </span>
+                <div className="flex items-center justify-between gap-2 px-2.5 py-2.5">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    multiple
+                    accept={ACCEPT}
+                    className="hidden"
+                    onChange={(e) => { setFiles((f) => adaugaFisiere(f, e.target.files)); e.target.value = ""; }}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={files.length >= CATE_FISIERE}
+                    className="text-muted-foreground"
+                  >
+                    <Paperclip />
+                    <span className="hidden sm:inline">Atașează</span>
+                  </Button>
+                  <div className="flex items-center gap-3">
+                    <span className="hidden text-[11px] text-muted-foreground sm:inline">Ctrl + Enter</span>
+                    <Button type="button" size="sm" onClick={() => void handleSend()} disabled={sending || !reply.trim()}>
+                      {sending ? <Loader2 className="animate-spin" /> : <Send />}
+                      Trimite
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
-          );
-        })}
+          )}
+        </div>
 
-        {/* Resolved/Closed notice */}
-        {(isResolved || isClosed) && (
-          <div className="flex items-center justify-center gap-2 py-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground px-3 flex items-center gap-1.5">
-              {isResolved
-                ? <><CheckCircle2 className="h-3.5 w-3.5 text-success" /> Tichet marcat ca rezolvat</>
-                : <><XCircle className="h-3.5 w-3.5" /> Tichet inchis</>
-              }
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-        )}
-
-        <div ref={bottomRef} />
+        {/* Detaliile */}
+        <aside className="hidden lg:block">
+          <dl className="divide-y divide-border rounded-xl bg-card text-sm ring-1 ring-foreground/10 lg:sticky lg:top-6">
+            <Rand eticheta="Stare"><span title={despre.explicatie}>{despre.text}</span></Rand>
+            <Rand eticheta="Categorie">{numeleCategoriei(ticket.category)}</Rand>
+            <Rand eticheta="Prioritate">{numelePrioritatii(ticket.priority)}</Rand>
+            {numeMagazin && <Rand eticheta="Magazin">{numeMagazin}</Rand>}
+            <Rand eticheta="Deschis">{dataScurta(ticket.created_at)}</Rand>
+            <Rand eticheta="Mesaje">{messages.length}</Rand>
+          </dl>
+        </aside>
       </div>
+    </>
+  );
+}
 
-      {/* Reply box */}
-      {!isClosed ? (
-        <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-4 sticky bottom-4">
-          {isResolved && (
-            <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
-              <RotateCcw className="h-3.5 w-3.5" />
-              Trimiterea unui mesaj va redeschide tichetul automat.
-            </p>
-          )}
-
-          {/* Files preview */}
-          {files.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-3">
-              {files.map((file, i) => (
-                <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-accent rounded-lg text-xs">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="truncate max-w-[120px]">{file.name}</span>
-                  <button type="button" onClick={() => setFiles((p) => p.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-destructive transition-colors">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-end gap-3">
-            <textarea
-              ref={textareaRef}
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Scrie un mesaj... (Ctrl+Enter pentru a trimite)"
-              rows={1}
-              className="flex-1 px-3 py-2.5 rounded-xl border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-h-[42px]"
-            />
-
-            {/* Attach */}
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf,.txt,.zip"
-              className="hidden"
-              onChange={(e) => addFiles(e.target.files)}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={files.length >= 5}
-              className="p-2.5 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
-              title="Adauga fisier"
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
-
-            {/* Send */}
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={sending || (!reply.trim() && files.length === 0)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-muted/50 border border-border rounded-2xl p-4 text-center">
-          <p className="text-sm text-muted-foreground">Acest tichet este inchis. Deschide un tichet nou daca mai ai nevoie de ajutor.</p>
-          <button
-            onClick={() => router.push("/dashboard/suport")}
-            className="mt-2 text-sm font-semibold text-primary hover:underline"
-          >
-            Tichet nou
-          </button>
-        </div>
-      )}
+function Rand({ eticheta, children }: { eticheta: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+      <dt className="text-xs text-muted-foreground">{eticheta}</dt>
+      <dd className="min-w-0 truncate text-right text-[13px] font-medium text-foreground">{children}</dd>
     </div>
   );
 }

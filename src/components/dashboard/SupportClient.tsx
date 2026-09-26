@@ -1,473 +1,419 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Plus, LifeBuoy, ChevronRight, Clock, CheckCircle2, XCircle,
-  Loader2, Paperclip, X, AlertCircle, FileText, Phone, MessageCircle,
+  ArrowUpRight, CheckCircle2, ChevronRight, Hourglass, LifeBuoy, MessageCircle, Phone, Plus, Reply, Timer,
 } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
-import { toast } from "sonner";
 
-interface Ticket {
+import { cn } from "@/lib/utils/cn";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
+import {
+  CATEGORII, DESPRE_STARE, durataScurta, numarulTichetului, numeleCategoriei,
+  type CategorieTichet, type StareaTichetului,
+} from "@/lib/support/tichete";
+import { ICONITA_CATEGORIEI } from "./suport/atasamente";
+import { TichetNou } from "./suport/TichetNou";
+
+export type TichetDinLista = {
   id: string;
-  created_at: string;
-  updated_at: string;
   subject: string;
   category: string;
   priority: string;
-  status: string;
-  has_unread_reply: boolean;
   business_id: string | null;
-}
-
-interface Business {
-  id: string;
-  business_name: string;
-  store_name: string | null;
-}
-
-const STATUS_CONFIG = {
-  open: { label: "Deschis", color: "bg-info/10 text-info" },
-  in_progress: { label: "In lucru", color: "bg-warning/10 text-warning" },
-  resolved: { label: "Rezolvat", color: "bg-success/10 text-success" },
-  closed: { label: "Inchis", color: "bg-muted text-muted-foreground" },
-} as const;
-
-const PRIORITY_CONFIG = {
-  low: { label: "Scazuta", dot: "bg-muted-foreground/40" },
-  normal: { label: "Normala", dot: "bg-info" },
-  high: { label: "Mare", dot: "bg-warning" },
-  urgent: { label: "Urgenta", dot: "bg-destructive" },
-} as const;
-
-const CATEGORY_LABELS: Record<string, string> = {
-  technical: "Tehnic",
-  billing: "Facturare",
-  feature: "Cerere functionalitate",
-  other: "Altele",
+  has_unread_reply: boolean;
+  /** Starea asa cum o vede comerciantul, judecata pe server din ultimul mesaj. */
+  stare: StareaTichetului;
+  ultimulMesaj: string;
+  ultimulMesajDe: "user" | "agent" | null;
+  mesaje: number;
+  /** „acum 3 ore", scris pe server. */
+  cand: string;
 };
 
-function formatRelative(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "acum";
-  if (m < 60) return `acum ${m} min`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `acum ${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `acum ${d}z`;
-  return new Date(dateStr).toLocaleDateString("ro-RO", { day: "numeric", month: "short" });
+type Filtru = "toate" | "raspunsul_tau" | "la_noi" | "rezolvate";
+
+const FILTRE: { cheie: Filtru; eticheta: string }[] = [
+  { cheie: "toate", eticheta: "Toate" },
+  { cheie: "raspunsul_tau", eticheta: "Așteaptă răspunsul tău" },
+  { cheie: "la_noi", eticheta: "La echipa Edinio" },
+  { cheie: "rezolvate", eticheta: "Rezolvate" },
+];
+
+function seIncadreaza(t: TichetDinLista, f: Filtru) {
+  if (f === "toate") return true;
+  if (f === "rezolvate") return t.stare === "rezolvat" || t.stare === "inchis";
+  return t.stare === f;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf", "text/plain", "application/zip"];
+function filtruValid(v: string | null): Filtru {
+  return FILTRE.some((f) => f.cheie === v) ? (v as Filtru) : "toate";
+}
 
-export function SupportClient({ tickets, businesses, userEmail }: {
-  tickets: Ticket[];
-  businesses: Business[];
+const TELEFON = "0750 456 809";
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  SUPORT                                                          (25.09.2026)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Refacut pe linia celorlalte sectiuni (Discounturi, Clienti, Cosuri): aceleasi
+  `CardStatistica` in cap, aceeasi `EtichetaStare`, tabel pe desktop si carduri
+  pe telefon. Cerut de el: „simetrie intre sectiuni".
+
+  ⚠⚠ CIFRA DE SUS SPUNE UNDE E MINGEA, nu ce n-ai citit. „Raspunsuri noi"
+  numara `has_unread_reply`, care se stinge cand deschizi tichetul, chiar daca
+  nu raspunzi. „Asteapta raspunsul tau" numara tichetele la care echipa a scris
+  ultima si care nu sunt rezolvate. Vezi `stareaTichetului`.
+
+  ⚠ Filtrul sta in adresa (`?stare=`), ca la Discounturi: cardurile de sus duc
+  direct la lista filtrata, iar „inapoi" din tichet se intoarce la ce vedeai.
+*/
+export function SupportClient({
+  tichete,
+  timpRaspunsMs,
+  businesses,
+  userEmail,
+}: {
+  tichete: TichetDinLista[];
+  /** Mediana timpului pana la primul raspuns, pe tichetele care l-au primit. */
+  timpRaspunsMs: number | null;
+  businesses: { id: string; business_name: string; store_name: string | null }[];
   userEmail: string;
 }) {
   const router = useRouter();
-  const [showDialog, setShowDialog] = useState(false);
-  const [subject, setSubject] = useState("");
-  const [category, setCategory] = useState("technical");
-  const [priority, setPriority] = useState("normal");
-  const [content, setContent] = useState("");
-  const [businessId, setBusinessId] = useState(businesses[0]?.id ?? "");
-  const [files, setFiles] = useState<File[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const parametri = useSearchParams();
+  const filtru = filtruValid(parametri.get("stare"));
 
-  const open = tickets.filter((t) => t.status === "open").length;
-  const inProgress = tickets.filter((t) => t.status === "in_progress").length;
-  const resolved = tickets.filter((t) => t.status === "resolved" || t.status === "closed").length;
-  const unread = tickets.filter((t) => t.has_unread_reply).length;
+  const [formular, setFormular] = useState<{ categorie: CategorieTichet | null } | null>(
+    () => (parametri.get("nou") !== null ? { categorie: null } : null),
+  );
 
-  function addFiles(newFiles: FileList | null) {
-    if (!newFiles) return;
-    const valid: File[] = [];
-    for (const f of Array.from(newFiles)) {
-      if (!ALLOWED_TYPES.includes(f.type)) {
-        toast.error(`Tipul fisierului ${f.name} nu este permis`);
-        continue;
-      }
-      if (f.size > MAX_FILE_SIZE) {
-        toast.error(`Fisierul ${f.name} depaseste 10MB`);
-        continue;
-      }
-      valid.push(f);
-    }
-    setFiles((prev) => [...prev, ...valid].slice(0, 5));
+  const cate = {
+    raspunsul_tau: tichete.filter((t) => t.stare === "raspunsul_tau").length,
+    la_noi: tichete.filter((t) => t.stare === "la_noi").length,
+    rezolvate: tichete.filter((t) => t.stare === "rezolvat" || t.stare === "inchis").length,
+  };
+  const catePeFiltru: Record<Filtru, number> = { toate: tichete.length, ...cate };
+  const aratate = tichete.filter((t) => seIncadreaza(t, filtru));
+
+  const timp = timpRaspunsMs === null ? null : durataScurta(timpRaspunsMs);
+  const marime = marimeaRandului([
+    cate.raspunsul_tau, cate.la_noi, cate.rezolvate,
+    timp ? { valoare: timp.valoare, unitate: timp.unitate } : "–",
+  ]);
+
+  function alegeFiltrul(f: Filtru) {
+    const p = new URLSearchParams(parametri.toString());
+    if (f === "toate") p.delete("stare"); else p.set("stare", f);
+    const sir = p.toString();
+    router.replace(sir ? `?${sir}` : "?", { scroll: false });
   }
 
-  function removeFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!subject.trim() || !content.trim()) return;
-    setSubmitting(true);
-    try {
-      let uploadedUrls: string[] = [];
-
-      if (files.length > 0) {
-        const { uploadImage } = await import("@/lib/upload");
-        const uploads = await Promise.all(
-          files.map(async (file) => {
-            const result = await uploadImage(file, "avatars", "support");
-            if ("error" in result) throw new Error(result.error);
-            return result.url;
-          })
-        );
-        uploadedUrls = uploads;
-      }
-
-      const res = await fetch("/api/support/tickets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: subject.trim(),
-          category,
-          priority,
-          content: content.trim(),
-          business_id: businessId || null,
-          attachment_urls: uploadedUrls,
-        }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json() as { error?: string };
-        throw new Error(data.error ?? "Eroare");
-      }
-
-      const { ticket } = await res.json() as { ticket: { id: string } };
-      toast.success("Tichetul a fost creat cu succes");
-      setShowDialog(false);
-      resetForm();
-      router.push(`/dashboard/suport/${ticket.id}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Eroare la crearea tichetului");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function resetForm() {
-    setSubject("");
-    setCategory("technical");
-    setPriority("normal");
-    setContent("");
-    setBusinessId(businesses[0]?.id ?? "");
-    setFiles([]);
-  }
+  const deschide = (categorie: CategorieTichet | null = null) => setFormular({ categorie });
 
   return (
     <>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-foreground">Suport</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Deschide un tichet si echipa noastra te va ajuta
+          <h1 className="text-xl font-semibold text-foreground">Suport</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Scrie-ne când te blochează ceva. Îți răspundem aici și pe email.
           </p>
         </div>
-        <button
-          onClick={() => setShowDialog(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
+        <Button onClick={() => deschide()}>
+          <Plus />
           Tichet nou
-        </button>
+        </Button>
       </div>
 
-      {/* Urgent contact */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-5 py-4 bg-info/5 border border-info/20 rounded-xl mb-6">
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-info mb-0.5">Ai nevoie de ajutor urgent?</p>
-          <p className="text-xs text-muted-foreground">Pentru probleme urgente, contacteaza-ne direct prin telefon sau WhatsApp.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <a href="tel:0750456809"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-info bg-surface border border-info/20 rounded-lg hover:bg-info/10 transition-colors">
-            <Phone className="h-3.5 w-3.5" />
-            0750 456 809
-          </a>
-          <a href="https://wa.me/40750456809" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-success hover:bg-success/90 rounded-lg transition-colors">
-            <MessageCircle className="h-3.5 w-3.5" />
-            WhatsApp
-          </a>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        {[
-          { label: "Deschise", value: open, icon: AlertCircle, color: "text-info" },
-          { label: "In lucru", value: inProgress, icon: Loader2, color: "text-warning" },
-          { label: "Rezolvate", value: resolved, icon: CheckCircle2, color: "text-success" },
-          { label: "Raspunsuri noi", value: unread, icon: LifeBuoy, color: "text-primary" },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-card ring-1 ring-foreground/10 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Icon className={cn("h-4 w-4", color)} />
-              <span className="text-xs text-muted-foreground font-medium">{label}</span>
-            </div>
-            <p className="text-2xl font-black text-foreground">{value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Tickets list */}
-      {tickets.length === 0 ? (
-        <div className="text-center py-20 border border-dashed border-border rounded-2xl">
-          <LifeBuoy className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-foreground mb-1">Niciun tichet de suport</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Ai o problema sau o intrebare? Deschide un tichet si te ajutam.
-          </p>
-          <button
-            onClick={() => setShowDialog(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Deschide primul tichet
-          </button>
-        </div>
+      {tichete.length === 0 ? (
+        <EcranGol onAlege={deschide} />
       ) : (
-        <div className="space-y-2">
-          {tickets.map((ticket) => {
-            const status = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.open;
-            const priority = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.normal;
+        <>
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <CardStatistica
+              marime={marime}
+              icon={Reply}
+              label="Așteaptă răspunsul tău"
+              value={cate.raspunsul_tau}
+              empty={cate.raspunsul_tau === 0}
+              href={cate.raspunsul_tau > 0 ? "?stare=raspunsul_tau" : undefined}
+              subsol={cate.raspunsul_tau === 0 ? "Nimic de făcut acum" : "Echipa ți-a scris ultima"}
+              explicatie="Tichetele la care echipa Edinio ți-a scris ultima și care nu sunt rezolvate. Merg mai departe când răspunzi."
+            />
+            <CardStatistica
+              marime={marime}
+              icon={Hourglass}
+              label="La echipa Edinio"
+              value={cate.la_noi}
+              empty={cate.la_noi === 0}
+              href={cate.la_noi > 0 ? "?stare=la_noi" : undefined}
+              subsol="Ultimul mesaj e al tău"
+              explicatie="Tichetele deschise la care ai scris tu ultimul. Echipa se uită și îți răspunde aici și pe email."
+            />
+            <CardStatistica
+              marime={marime}
+              icon={CheckCircle2}
+              label="Rezolvate"
+              value={cate.rezolvate}
+              empty={cate.rezolvate === 0}
+              href={cate.rezolvate > 0 ? "?stare=rezolvate" : undefined}
+              subsol={`Din ${tichete.length} ${tichete.length === 1 ? "tichet" : "tichete"} în total`}
+              explicatie="Tichetele rezolvate sau închise. Un tichet rezolvat se redeschide dacă îi scrii din nou."
+            />
+            <CardStatistica
+              marime={marime}
+              icon={Timer}
+              label="Timp de răspuns"
+              value={timp ? timp.valoare : "–"}
+              unit={timp?.unitate}
+              empty={!timp}
+              subsol={timp ? "Pe tichetele tale, de obicei" : "Încă niciun răspuns"}
+              explicatie="Cât a trecut de la deschiderea tichetului până la primul răspuns al echipei. E mediana: jumătate din tichetele tale au primit răspuns mai repede de atât."
+            />
+          </div>
+
+          {tichete.length >= 4 && (
+            <div
+              role="tablist"
+              aria-label="Filtrează tichetele"
+              className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-muted/60 p-1 [scrollbar-width:none] sm:inline-flex"
+            >
+              {FILTRE.map((f) => (
+                <button
+                  key={f.cheie}
+                  type="button"
+                  role="tab"
+                  aria-selected={filtru === f.cheie}
+                  onClick={() => alegeFiltrul(f.cheie)}
+                  className={cn(
+                    "flex flex-shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all",
+                    filtru === f.cheie
+                      ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/10"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {f.eticheta}
+                  <span className={cn(
+                    "rounded-md px-1.5 text-[11px] tabular-nums",
+                    filtru === f.cheie ? "bg-muted text-foreground" : "text-muted-foreground",
+                  )}>
+                    {catePeFiltru[f.cheie]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {aratate.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border py-16 text-center">
+              <p className="font-medium text-foreground">Niciun tichet aici</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {filtru === "raspunsul_tau" ? "Nu ai niciun răspuns de dat. " : ""}
+                <button type="button" onClick={() => alegeFiltrul("toate")} className="font-medium text-foreground underline-offset-4 hover:underline">
+                  Vezi toate tichetele
+                </button>
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="hidden overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 sm:block">
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tichet</th>
+                      <th className="hidden w-44 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground lg:table-cell">Categorie</th>
+                      <th className="w-52 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Stare</th>
+                      <th className="hidden w-32 px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Actualizat</th>
+                      <th className="w-10" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {aratate.map((t) => (
+                      <tr
+                        key={t.id}
+                        onClick={() => router.push(`/dashboard/suport/${t.id}`)}
+                        className="group cursor-pointer transition-colors hover:bg-muted/30"
+                      >
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            {t.has_unread_reply && (
+                              <span className="h-2 w-2 flex-shrink-0 rounded-full bg-primary" aria-label="Mesaj necitit" />
+                            )}
+                            <Link
+                              href={`/dashboard/suport/${t.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className={cn("truncate text-foreground hover:underline", t.has_unread_reply ? "font-semibold" : "font-medium")}
+                            >
+                              {t.subject}
+                            </Link>
+                          </div>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            <span className="font-mono text-[11px]">{numarulTichetului(t.id)}</span>
+                            {t.ultimulMesaj && (
+                              <>
+                                <span className="mx-1.5">·</span>
+                                <span className="text-foreground/70">{t.ultimulMesajDe === "agent" ? "Edinio:" : "Tu:"}</span>{" "}
+                                {t.ultimulMesaj}
+                              </>
+                            )}
+                          </p>
+                        </td>
+                        <td className="hidden px-5 py-3.5 lg:table-cell">
+                          <Categorie cheie={t.category} />
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <EtichetaStare ton={DESPRE_STARE[t.stare].ton} marime="mic" title={DESPRE_STARE[t.stare].explicatie}>
+                            {DESPRE_STARE[t.stare].text}
+                          </EtichetaStare>
+                        </td>
+                        <td className="hidden whitespace-nowrap px-5 py-3.5 text-right text-xs text-muted-foreground md:table-cell">
+                          {t.cand}
+                        </td>
+                        <td className="pr-4">
+                          <ChevronRight className="h-4 w-4 text-muted-foreground/60 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <ul className="space-y-2 sm:hidden">
+                {aratate.map((t) => (
+                  <li key={t.id}>
+                    <Link
+                      href={`/dashboard/suport/${t.id}`}
+                      className="block rounded-xl bg-card p-3.5 ring-1 ring-foreground/10 transition-colors active:bg-muted/40"
+                    >
+                      <div className="flex items-start gap-2">
+                        {t.has_unread_reply && <span className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />}
+                        <p className={cn("min-w-0 flex-1 text-sm text-foreground", t.has_unread_reply ? "font-semibold" : "font-medium")}>
+                          {t.subject}
+                        </p>
+                      </div>
+                      {t.ultimulMesaj && (
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                          <span className="text-foreground/70">{t.ultimulMesajDe === "agent" ? "Edinio:" : "Tu:"}</span> {t.ultimulMesaj}
+                        </p>
+                      )}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <EtichetaStare ton={DESPRE_STARE[t.stare].ton} marime="mic">{DESPRE_STARE[t.stare].text}</EtichetaStare>
+                        <span className="text-[11px] text-muted-foreground">{numeleCategoriei(t.category)} · {t.cand}</span>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          <ContactDirect className="mt-6" />
+        </>
+      )}
+
+      {formular && (
+        <TichetNou
+          businesses={businesses}
+          userEmail={userEmail}
+          categorieInitiala={formular.categorie}
+          onClose={() => setFormular(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function Categorie({ cheie }: { cheie: string }) {
+  const Icon = ICONITA_CATEGORIEI[cheie] ?? LifeBuoy;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} />
+      <span className="truncate">{numeleCategoriei(cheie)}</span>
+    </span>
+  );
+}
+
+/*
+  ⚠ ECRANUL GOL E DRUMUL CEL MAI SCURT CATRE UN TICHET BUN. Cele opt categorii
+  stau direct pe pagina: apasarea deschide formularul cu categoria deja aleasa,
+  deci omul spune de la primul clic despre ce e vorba.
+*/
+function EcranGol({ onAlege }: { onAlege: (c: CategorieTichet) => void }) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl bg-card px-6 py-10 text-center ring-1 ring-foreground/10 sm:py-12">
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-primary/10">
+          <LifeBuoy className="h-6 w-6 text-primary" strokeWidth={1.75} />
+        </div>
+        <h2 className="text-base font-semibold text-foreground">Cu ce te putem ajuta?</h2>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+          Alege despre ce e vorba și scrie-ne. Îți răspundem în cel mult 24 de ore, aici și pe email.
+        </p>
+
+        <div className="mx-auto mt-7 grid max-w-3xl grid-cols-2 gap-2 text-left sm:grid-cols-4">
+          {CATEGORII.map((c) => {
+            const Icon = ICONITA_CATEGORIEI[c.cheie];
             return (
               <button
-                key={ticket.id}
-                onClick={() => router.push(`/dashboard/suport/${ticket.id}`)}
-                className="w-full flex items-center gap-4 bg-card border border-border rounded-xl p-4 hover:border-primary/30 hover:bg-accent/30 transition-all text-left group"
+                key={c.cheie}
+                type="button"
+                onClick={() => onAlege(c.cheie)}
+                className="group flex flex-col gap-2 rounded-xl border border-border p-3 transition-all hover:border-foreground/20 hover:bg-muted/40"
               >
-                {/* Unread dot */}
-                <div className="flex-shrink-0 w-2">
-                  {ticket.has_unread_reply && (
-                    <div className="w-2 h-2 rounded-full bg-primary" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={cn(
-                      "text-sm font-semibold text-foreground truncate",
-                      ticket.has_unread_reply && "font-bold"
-                    )}>
-                      {ticket.subject}
-                    </span>
-                    {ticket.has_unread_reply && (
-                      <span className="flex-shrink-0 text-[10px] font-semibold bg-primary text-white px-1.5 py-0.5 rounded-full">
-                        Raspuns nou
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", status.color)}>
-                      {status.label}
-                    </span>
-                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", priority.dot)} />
-                      {priority.label}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {CATEGORY_LABELS[ticket.category] ?? ticket.category}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Time */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatRelative(ticket.updated_at)}
+                <span className="flex items-center justify-between">
+                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
+                    <Icon className="h-4 w-4" strokeWidth={1.75} />
                   </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                </div>
+                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                </span>
+                <span>
+                  <span className="block text-[13px] font-medium text-foreground">{c.eticheta}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{c.descriere}</span>
+                </span>
               </button>
             );
           })}
         </div>
-      )}
+      </div>
 
-      {/* Create dialog */}
-      {showDialog && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-background border border-border rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-xl">
-            {/* Dialog header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <LifeBuoy className="h-5 w-5 text-primary" />
-                <h2 className="text-base font-bold text-foreground">Tichet nou de suport</h2>
-              </div>
-              <button
-                onClick={() => { setShowDialog(false); resetForm(); }}
-                className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+      <ContactDirect />
+    </div>
+  );
+}
 
-            {/* Dialog body */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-              <div className="p-5 space-y-4">
-                {/* Business select */}
-                {businesses.length > 1 && (
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1.5">Magazin</label>
-                    <select
-                      value={businessId}
-                      onChange={(e) => setBusinessId(e.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    >
-                      <option value="">Cont general</option>
-                      {businesses.map((b) => (
-                        <option key={b.id} value={b.id}>{b.store_name ?? b.business_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Subject */}
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Subiect <span className="text-destructive">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    placeholder="Descrie pe scurt problema ta"
-                    required
-                    maxLength={150}
-                    className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                </div>
-
-                {/* Category + Priority */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1.5">Categorie</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    >
-                      <option value="technical">Tehnic</option>
-                      <option value="billing">Facturare</option>
-                      <option value="feature">Cerere functionalitate</option>
-                      <option value="other">Altele</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground mb-1.5">Prioritate</label>
-                    <select
-                      value={priority}
-                      onChange={(e) => setPriority(e.target.value)}
-                      className="w-full h-9 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                    >
-                      <option value="low">Scazuta</option>
-                      <option value="normal">Normala</option>
-                      <option value="high">Mare</option>
-                      <option value="urgent">Urgenta</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Descriere <span className="text-destructive">*</span>
-                  </label>
-                  <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder="Explica in detaliu problema intampinata, pasii pentru a o reproduce si orice alte informatii relevante..."
-                    required
-                    rows={5}
-                    className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                </div>
-
-                {/* Attachments */}
-                <div>
-                  <label className="block text-xs font-semibold text-foreground mb-1.5">
-                    Atasamente <span className="text-muted-foreground font-normal">(optional, max 5 fisiere, 10MB fiecare)</span>
-                  </label>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    multiple
-                    accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.pdf,.txt,.zip"
-                    className="hidden"
-                    onChange={(e) => addFiles(e.target.files)}
-                  />
-                  {files.length < 5 && (
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-lg text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full justify-center"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                      Adauga fisier
-                    </button>
-                  )}
-                  {files.length > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      {files.map((file, i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2 bg-accent/50 rounded-lg">
-                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          <span className="text-xs text-foreground truncate flex-1">{file.name}</span>
-                          <span className="text-xs text-muted-foreground flex-shrink-0">
-                            {(file.size / 1024).toFixed(0)} KB
-                          </span>
-                          <button type="button" onClick={() => removeFile(i)} className="text-muted-foreground hover:text-destructive transition-colors">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Info box */}
-                <div className="flex items-start gap-2.5 p-3 bg-info/5 border border-info/20 rounded-xl">
-                  <LifeBuoy className="h-4 w-4 text-info flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-info leading-relaxed">
-                    Echipa noastra de suport raspunde in maxim <strong>24h</strong>. Vei primi un email la <strong>{userEmail}</strong> cand avem un raspuns.
-                  </p>
-                </div>
-              </div>
-
-              {/* Dialog footer */}
-              <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { setShowDialog(false); resetForm(); }}
-                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Anuleaza
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting || !subject.trim() || !content.trim()}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  {submitting ? "Se trimite..." : "Trimite tichetul"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </>
+function ContactDirect({ className }: { className?: string }) {
+  return (
+    <div className={cn(
+      "flex flex-col gap-3 rounded-xl bg-card px-5 py-4 ring-1 ring-foreground/10 sm:flex-row sm:items-center",
+      className,
+    )}>
+      <div className="flex-1">
+        <p className="text-sm font-medium text-foreground">Ai nevoie de ajutor pe loc?</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Când magazinul sau comenzile sunt oprite, sună-ne sau scrie-ne pe WhatsApp.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <a href="tel:0750456809" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Phone />
+          {TELEFON}
+        </a>
+        <a
+          href="https://wa.me/40750456809"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          <MessageCircle />
+          WhatsApp
+        </a>
+      </div>
+    </div>
   );
 }

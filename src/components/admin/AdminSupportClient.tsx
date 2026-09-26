@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, ChevronLeft, ChevronRight, LifeBuoy, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { toast } from "sonner";
+import { numeleCategoriei } from "@/lib/support/tichete";
 
 interface Ticket {
   id: string; subject: string; category: string; priority: string;
@@ -23,9 +24,6 @@ const PRIORITY_CONFIG: Record<string, { label: string; dot: string }> = {
   normal: { label: "Normala", dot: "bg-blue-500" },
   high: { label: "Mare", dot: "bg-orange-500" },
   urgent: { label: "Urgenta", dot: "bg-red-500" },
-};
-const CATEGORY_LABELS: Record<string, string> = {
-  technical: "Tehnic", billing: "Facturare", feature: "Functionalitate", other: "Altele",
 };
 
 const PAGE_SIZE = 25;
@@ -155,7 +153,7 @@ export function AdminSupportClient({ tickets: initialTickets }: { tickets: Ticke
                         <p className="text-xs text-zinc-400 hidden sm:block">{t.user_email}</p>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-zinc-500 hidden sm:table-cell">{CATEGORY_LABELS[t.category] ?? t.category}</td>
+                    <td className="px-4 py-3 text-sm text-zinc-500 hidden sm:table-cell">{numeleCategoriei(t.category)}</td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <span className="flex items-center gap-1.5 text-xs text-zinc-600">
                         <span className={cn("w-1.5 h-1.5 rounded-full", pc.dot)} />

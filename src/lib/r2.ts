@@ -70,7 +70,16 @@ export async function createPresignedPutUrl(
     ContentType: contentType,
     ...(contentLength !== undefined ? { ContentLength: contentLength } : {}),
   });
-  const uploadUrl = await getSignedUrl(s3, command, { expiresIn });
+  /*
+   * ⚠ `content-type` SE SEMNEAZA (25.09.2026). Presignerul AWS il scoate
+   * implicit din semnatura (`unsignableHeaders.add("content-type")`), deci
+   * adresa ceruta pentru `video/mp4` primea si un `PUT` cu `text/html`: un
+   * fisier HTML servit apoi de pe CDN-ul nostru. Verificat pe
+   * `X-Amz-SignedHeaders`: inainte `content-length;host`, acum
+   * `content-length;content-type;host`. Clientul trimitea deja exact tipul
+   * semnat (`putWithProgress`), deci incarcarile corecte nu simt nimic.
+   */
+  const uploadUrl = await getSignedUrl(s3, command, { expiresIn, signableHeaders: new Set(["content-type"]) });
   return { uploadUrl, publicUrl: `${PUBLIC_URL}/${key}` };
 }
 

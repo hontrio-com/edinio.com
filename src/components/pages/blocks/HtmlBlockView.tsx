@@ -1,26 +1,26 @@
 import { BlockShell } from "../BlockShell";
 import { SandboxEmbed } from "./SandboxEmbed";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
+import { cereIzolare, inchideCss } from "@/lib/pages/cod-personalizat";
 import type { HtmlBlock } from "@/lib/pages/blocks.types";
 
 /**
- * Custom-code block with two render modes:
- *  - js present (any user): isolated in a sandboxed iframe (SandboxEmbed).
- *  - safe HTML/CSS only:     injected inline (html is sanitized upstream for the
- *                            public route; in the editor it is the owner's own input).
+ * Custom-code block. Regimul il hotaraste `cereIzolare` (vezi
+ * `lib/pages/cod-personalizat.ts`):
+ *  - cod activ (JS, `<script>`, formulare, `on...=`): cadru izolat (SandboxEmbed);
+ *  - doar HTML/CSS: in pagina, cu HTML-ul curatat pe server si CSS-ul inchis in bloc.
  *
- * A EXISTAT si un al treilea regim, „raw aprobat de admin", care injecta HTML si
- * `<script>` nefiltrate direct in pagina publica. A fost ELIMINAT (04.08.2026):
- * poarta lui era `users_profile.role`, o coloana scriibila de orice utilizator,
- * deci un singur UPDATE transforma constructorul de pagini intr-un XSS stocat
- * catre toti cumparatorii magazinului. Codul personalizat ramane posibil, dar
- * numai prin SandboxEmbed. NU readauga aceasta ramura: chiar si HTML „doar
- * markup" executa `<img onerror=...>` cand e pus prin innerHTML.
+ * ⚠⚠ IN EDITOR, MEREU IZOLAT (25.09.2026). Previzualizarea punea HTML-ul
+ * NECURATAT direct in panou („e codul proprietarului”). Dar panoul il deschide
+ * si un administrator care intra in contul comerciantului: un `<img onerror>`
+ * ar fi rulat atunci in sesiunea administratorului. In cadrul izolat nu poate
+ * atinge nimic.
+ *
+ * A EXISTAT si un regim „raw aprobat de admin”, care injecta HTML si `<script>`
+ * nefiltrate direct in pagina publica. ELIMINAT (04.08.2026); nu se readauga.
  */
-export function HtmlBlockView({ block }: { block: HtmlBlock }) {
-  const hasJs = (block.js ?? "").trim().length > 0;
-
-  if (hasJs) {
+export function HtmlBlockView({ block, preview }: { block: HtmlBlock; preview?: boolean }) {
+  if (preview || cereIzolare(block.html, block.js)) {
     return (
       <BlockShell style={block.style}>
         <SandboxEmbed html={block.html} css={block.css} js={block.js} />
@@ -28,10 +28,12 @@ export function HtmlBlockView({ block }: { block: HtmlBlock }) {
     );
   }
 
+  const scop = `[data-cod="${block.id.replace(/[^\w-]/g, "")}"]`;
+  const css = block.css ? sanitizeCss(inchideCss(block.css, scop)) : "";
   return (
     <BlockShell style={block.style}>
-      {block.css ? <style dangerouslySetInnerHTML={{ __html: sanitizeCss(block.css) }} /> : null}
-      <div dangerouslySetInnerHTML={{ __html: block.html ?? "" }} />
+      {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
+      <div data-cod={block.id.replace(/[^\w-]/g, "")} dangerouslySetInnerHTML={{ __html: block.html ?? "" }} />
     </BlockShell>
   );
 }

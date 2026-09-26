@@ -10,7 +10,7 @@ import type { PageProduct } from "./blocks/ProductsBlock";
  * resolved by id; search queries the server (debounced, limited) so a catalog of
  * thousands/tens-of-thousands never loads into the editor.
  */
-export function ProductPicker({ businessId, selectedIds, onChange, reordonabil = false, maxim }: {
+export function ProductPicker({ businessId, selectedIds, onChange, reordonabil = false, maxim, doarPachete = false }: {
   businessId: string;
   selectedIds: string[];
   onChange: (ids: string[]) => void;
@@ -22,6 +22,8 @@ export function ProductPicker({ businessId, selectedIds, onChange, reordonabil =
    * o multime, iar doua sageti pe fiecare rand ar fi doar zgomot.
    */
   reordonabil?: boolean;
+  /** Numai pachete (produse cu `is_bundle`), pentru blocul „Pachete”. */
+  doarPachete?: boolean;
   /** Cate produse pot fi alese. Peste atat, butoanele de adaugare se sting. */
   maxim?: number;
 }) {
@@ -47,10 +49,10 @@ export function ProductPicker({ businessId, selectedIds, onChange, reordonabil =
     if (timer.current) clearTimeout(timer.current);
     if (!q.trim()) return;
     timer.current = setTimeout(() => {
-      start(async () => { setResults(await searchProductsForPicker(businessId, q)); });
+      start(async () => { setResults(await searchProductsForPicker(businessId, q, { doarPachete })); });
     }, 300);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [businessId, q]);
+  }, [businessId, q, doarPachete]);
 
   const plin = maxim != null && selectedIds.length >= maxim;
 

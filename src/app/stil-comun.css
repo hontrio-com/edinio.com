@@ -1762,6 +1762,146 @@
   .marquee-banda { animation: none !important; }
 }
 
+/* ─── Paginile proprii: animatii la aparitie (25.09.2026) ─────────────────────
+   Pornite de `SCRIPT_ANIMATII` (src/lib/pages/animatii.ts). Blocul se ascunde
+   NUMAI sub `[data-anim-pornit]`, atributul pus de script pe `<main>`: fara JavaScript sau cu
+   miscare redusa, totul se vede normal. */
+@keyframes edinio-anim-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes edinio-anim-fade-up { from { opacity: 0; transform: translate3d(0, 28px, 0); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-fade-down { from { opacity: 0; transform: translate3d(0, -28px, 0); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-fade-left { from { opacity: 0; transform: translate3d(36px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-fade-right { from { opacity: 0; transform: translate3d(-36px, 0, 0); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-zoom-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-zoom-out { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-blur-in { from { opacity: 0; filter: blur(12px); } to { opacity: 1; filter: none; } }
+@keyframes edinio-anim-flip-up { from { opacity: 0; transform: perspective(900px) rotateX(18deg) translate3d(0, 20px, 0); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-slide-up { from { transform: translate3d(0, 60px, 0); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes edinio-anim-rotate-in { from { opacity: 0; transform: rotate(-4deg) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes edinio-anim-bounce-in { 0% { opacity: 0; transform: scale(0.85); } 60% { opacity: 1; transform: scale(1.03); } 100% { transform: none; } }
+
+[data-anim-pornit] [data-anim]:not([data-anim-in]) { opacity: 0; }
+[data-anim-pornit] [data-anim][data-anim-in] {
+  animation-duration: var(--edinio-anim-d, 0.75s);
+  animation-delay: var(--edinio-anim-dl, 0ms);
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation-fill-mode: both;
+}
+[data-anim-pornit] [data-anim="fade"][data-anim-in] { animation-name: edinio-anim-fade; }
+[data-anim-pornit] [data-anim="fade-up"][data-anim-in] { animation-name: edinio-anim-fade-up; }
+[data-anim-pornit] [data-anim="fade-down"][data-anim-in] { animation-name: edinio-anim-fade-down; }
+[data-anim-pornit] [data-anim="fade-left"][data-anim-in] { animation-name: edinio-anim-fade-left; }
+[data-anim-pornit] [data-anim="fade-right"][data-anim-in] { animation-name: edinio-anim-fade-right; }
+[data-anim-pornit] [data-anim="zoom-in"][data-anim-in] { animation-name: edinio-anim-zoom-in; }
+[data-anim-pornit] [data-anim="zoom-out"][data-anim-in] { animation-name: edinio-anim-zoom-out; }
+[data-anim-pornit] [data-anim="blur-in"][data-anim-in] { animation-name: edinio-anim-blur-in; }
+[data-anim-pornit] [data-anim="flip-up"][data-anim-in] { animation-name: edinio-anim-flip-up; }
+[data-anim-pornit] [data-anim="slide-up"][data-anim-in] { animation-name: edinio-anim-slide-up; }
+[data-anim-pornit] [data-anim="rotate-in"][data-anim-in] { animation-name: edinio-anim-rotate-in; }
+[data-anim-pornit] [data-anim="bounce-in"][data-anim-in] { animation-name: edinio-anim-bounce-in; }
+[data-anim-speed="fast"] { --edinio-anim-d: 0.45s; }
+[data-anim-speed="slow"] { --edinio-anim-d: 1.15s; }
+[data-anim-delay="100"] { --edinio-anim-dl: 100ms; }
+[data-anim-delay="200"] { --edinio-anim-dl: 200ms; }
+[data-anim-delay="300"] { --edinio-anim-dl: 300ms; }
+[data-anim-delay="400"] { --edinio-anim-dl: 400ms; }
+[data-anim-delay="500"] { --edinio-anim-dl: 500ms; }
+[data-anim-delay="600"] { --edinio-anim-dl: 600ms; }
+[data-anim-delay="700"] { --edinio-anim-dl: 700ms; }
+[data-anim-delay="800"] { --edinio-anim-dl: 800ms; }
+[data-anim-delay="900"] { --edinio-anim-dl: 900ms; }
+[data-anim-delay="1000"] { --edinio-anim-dl: 1000ms; }
+[data-anim-delay="1100"] { --edinio-anim-dl: 1100ms; }
+[data-anim-delay="1200"] { --edinio-anim-dl: 1200ms; }
+[data-anim-delay="1300"] { --edinio-anim-dl: 1300ms; }
+[data-anim-delay="1400"] { --edinio-anim-dl: 1400ms; }
+[data-anim-delay="1500"] { --edinio-anim-dl: 1500ms; }
+
+/* Efectele noi ale butonului. `--fx-c` = culoarea butonului, pusa inline. */
+@keyframes edinio-fx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes edinio-fx-wobble { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(-3deg); } 80% { transform: rotate(3deg); } 85% { transform: rotate(-2deg); } 90% { transform: rotate(2deg); } }
+@keyframes edinio-fx-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fx-c, #07c527) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+@keyframes edinio-fx-shine { 0% { left: -60%; } 55%, 100% { left: 130%; } }
+.fx-float { animation: edinio-fx-float 2.6s ease-in-out infinite; }
+.fx-wobble { animation: edinio-fx-wobble 3.2s ease-in-out infinite; }
+.fx-ring { animation: edinio-fx-ring 1.8s ease-out infinite; }
+.fx-shine { position: relative; overflow: hidden; isolation: isolate; }
+.fx-shine::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent); animation: edinio-fx-shine 3s ease-in-out infinite; pointer-events: none; }
+.fx-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.fx-lift:hover { transform: translateY(-3px); box-shadow: 0 14px 28px -12px color-mix(in srgb, var(--fx-c, #000) 60%, transparent); }
+.fx-fill { transition: box-shadow 0.35s ease, color 0.35s ease; }
+.fx-fill:hover { box-shadow: inset 0 0 0 3em var(--fx-c, #07c527); color: #fff !important; }
+
+/* Efectele imaginii, la trecerea cursorului. */
+.img-fx { overflow: hidden; }
+.img-fx img { transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.4s ease; }
+.img-fx-zoom:hover img { transform: scale(1.06); }
+.img-fx-lift { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+.img-fx-lift:hover { transform: translateY(-4px); box-shadow: 0 22px 40px -22px rgba(0,0,0,0.45); }
+.img-fx-brighten:hover img { filter: brightness(1.1) saturate(1.08); }
+.img-fx-grayscale img { filter: grayscale(1); }
+.img-fx-grayscale:hover img { filter: none; }
+.img-fx-tilt:hover img { transform: rotate(-1.2deg) scale(1.03); }
+
+/* Textul unei pagini cu inaltimea de rand aleasa pe bloc: paragrafele o
+   mostenesc, in loc de 1.7 fix din `.policy-content p`. */
+.pg-text-rand p, .pg-text-rand li { line-height: inherit; }
+
+/*
+  Pragurile blocurilor de pagina (26.09.2026): `pg-sm:`, `pg-md:`, `pg-lg:`, `pg-xl:`.
+  Pe magazin sunt EXACT `sm:`/`md:`/`lg:`/`xl:` (aceleasi latimi de ecran). In
+  editor, in cadrul de telefon, NU se aplica niciodata: cadrul are 400px, dar
+  ecranul e de desktop, deci `md:grid-cols-3` punea trei coloane intr-un telefon
+  si blocurile aratau stricate doar in editor. ⚠ In `src/components/pages/blocks`
+  se scrie `pg-md:`, nu `md:` (proba din `pagini-mobil.test.ts` o cere).
+*/
+@custom-variant pg-sm { @media (width >= 40rem) { &:not([data-editor-device="mobile"] *) { @slot; } } }
+@custom-variant pg-md { @media (width >= 48rem) { &:not([data-editor-device="mobile"] *) { @slot; } } }
+@custom-variant pg-lg { @media (width >= 64rem) { &:not([data-editor-device="mobile"] *) { @slot; } } }
+@custom-variant pg-xl { @media (width >= 80rem) { &:not([data-editor-device="mobile"] *) { @slot; } } }
+
+/* Blocurile dintr-o coloana flexibila, pe telefon (26.09.2026): fiecare venea cu
+   spatiul unui bloc de pagina (`py-8` sus si jos, `px-4` in lateral), deci intre
+   titlul, textul si butonul aceleiasi coloane stateau 64px, iar marginea laterala
+   se dubla. Pe desktop nu se schimba nimic (paginile de azi raman cum sunt). */
+@media (max-width: 47.99rem) {
+  .pg-celula section.py-8 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .pg-celula section > .px-4 { padding-left: 0; padding-right: 0; }
+}
+[data-editor-device="mobile"] .pg-celula section.py-8 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+[data-editor-device="mobile"] .pg-celula section > .px-4 { padding-left: 0; padding-right: 0; }
+
+/* Previzualizarea din editor (`Previzualizare` in PageBuilder): blocul primeste
+   cursorul, dar cadrele nu, ca un clic pe ele sa selecteze blocul. */
+.pg-previzualizare iframe, .pg-previzualizare video { pointer-events: none; }
+.pg-previzualizare a, .pg-previzualizare button, .pg-previzualizare summary, .pg-previzualizare label { cursor: pointer; }
+
+/* Blocuri ascunse pe un dispozitiv (BlockStyle.hideOn). Pe magazin, dupa ecran. */
+@media (max-width: 767.98px) { .pg-ascuns-mobil { display: none !important; } }
+@media (min-width: 768px) { .pg-ascuns-desktop { display: none !important; } }
+/* In editor, dupa dispozitivul ALES, nu dupa ecran: blocul ramane pe pagina,
+   estompat si etichetat, ca sa se poata selecta si scoate din ascundere. */
+[data-editor-device] .pg-ascuns-mobil,
+[data-editor-device] .pg-ascuns-desktop { display: block !important; }
+[data-editor-device="mobile"] .pg-ascuns-mobil,
+[data-editor-device="desktop"] .pg-ascuns-desktop { opacity: 0.35; position: relative; }
+[data-editor-device="mobile"] .pg-ascuns-mobil::before,
+[data-editor-device="desktop"] .pg-ascuns-desktop::before {
+  position: absolute; top: 8px; left: 8px; z-index: 5; padding: 2px 8px; border-radius: 6px;
+  background: #111; color: #fff; font: 600 11px/1.6 system-ui, sans-serif; opacity: 1;
+}
+[data-editor-device="mobile"] .pg-ascuns-mobil::before { content: "Ascuns pe telefon"; }
+[data-editor-device="desktop"] .pg-ascuns-desktop::before { content: "Ascuns pe desktop"; }
+
+/* Hero: imaginea de fundal se apropie lent. */
+@keyframes edinio-ken-burns { from { transform: scale(1); } to { transform: scale(1.12); } }
+.hero-ken-burns { animation: edinio-ken-burns 22s ease-out infinite alternate; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-float, .fx-wobble, .fx-ring, .hero-ken-burns { animation: none; }
+  .fx-shine::after { animation: none; display: none; }
+  [data-anim-pornit] [data-anim] { animation: none !important; opacity: 1 !important; }
+}
+
 
 .scrollbar-hide {
   -ms-overflow-style: none;
@@ -1837,6 +1977,8 @@
 /* Policy HTML render (public page) */
 .policy-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1.2em 0 0.4em; }
 .policy-content h2 { font-size: 1.2rem; font-weight: 700; margin: 1em 0 0.35em; }
+/* „Titlu mare” dintr-un bloc de text al unei pagini: H2 in marcaj (H1 e unul singur), cu marimea lui H1. */
+.policy-content h2[data-h1] { font-size: 1.5rem; margin: 1.2em 0 0.4em; }
 .policy-content h3 { font-size: 1.05rem; font-weight: 600; margin: 0.9em 0 0.3em; }
 .policy-content p  { margin: 0.5em 0; line-height: 1.7; }
 .policy-content strong { font-weight: 700; }

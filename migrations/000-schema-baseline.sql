@@ -12909,6 +12909,7 @@ alter table public.brands add constraint brands_name_curat CHECK (((name = btrim
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));
+alter table public.custom_pages add constraint custom_pages_blocks_marime CHECK ((octet_length((blocks)::text) <= 1000000));
 alter table public.customer_segments add constraint customer_segments_fel_check CHECK ((fel = ANY (ARRAY['criterii'::text, 'lista'::text])));
 alter table public.discounts add constraint discounts_per_customer_limit_pozitiv CHECK (((per_customer_limit IS NULL) OR (per_customer_limit >= 1)));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
@@ -12944,7 +12945,7 @@ alter table public.stock_feed_sources add constraint stock_feed_sources_frequenc
 alter table public.stock_feed_sources add constraint stock_feed_sources_last_status_check CHECK ((last_status = ANY (ARRAY['ok'::text, 'error'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_run_hour_check CHECK (((run_hour >= 0) AND (run_hour <= 23)));
 alter table public.support_messages add constraint support_messages_sender_type_check CHECK ((sender_type = ANY (ARRAY['user'::text, 'agent'::text])));
-alter table public.support_tickets add constraint support_tickets_category_check CHECK ((category = ANY (ARRAY['technical'::text, 'billing'::text, 'feature'::text, 'other'::text])));
+alter table public.support_tickets add constraint support_tickets_category_check CHECK ((category = ANY (ARRAY['store_design'::text, 'products'::text, 'orders'::text, 'customers'::text, 'payments'::text, 'integrations'::text, 'account'::text, 'technical'::text, 'billing'::text, 'feature'::text, 'other'::text])));
 alter table public.support_tickets add constraint support_tickets_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text])));
 alter table public.support_tickets add constraint support_tickets_status_check CHECK ((status = ANY (ARRAY['open'::text, 'in_progress'::text, 'resolved'::text, 'closed'::text])));
 alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text, 'update'::text, 'delete'::text, 'dezarhivare'::text, 'livrare'::text])));
@@ -13038,6 +13039,7 @@ alter table public.emag_rma add constraint emag_rma_business_id_fkey FOREIGN KEY
 alter table public.emag_rma add constraint emag_rma_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.emag_sync_queue add constraint emag_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_sync_queue add constraint emag_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.email_automations add constraint email_automations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.email_marketing_coada add constraint email_marketing_coada_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.email_marketing_coada add constraint email_marketing_coada_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.error_logs add constraint error_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;

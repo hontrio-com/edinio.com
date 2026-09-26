@@ -5,8 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { uploadToR2, createPresignedPutUrl } from "@/lib/r2";
 import { ALLOWED_VIDEO_TYPES, MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_EXT_BY_TYPE } from "@/lib/pages/video-config";
 import { detectImageMime } from "@/lib/utils/file-signature";
+import { rateLimit } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 
-type UploadBucket = "logos" | "covers" | "gallery" | "products" | "avatars";
+const GALETI = ["logos", "covers", "gallery", "products", "avatars"] as const;
+type UploadBucket = (typeof GALETI)[number];
 
 export async function uploadImage(
   file: File,
@@ -16,6 +19,18 @@ export async function uploadImage(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
+
+  /*
+   * Auditul paginilor (26.09.2026): `bucket` si `folder` erau doar tipuri TypeScript,
+   * iar exportul e un capat public ("use server"). Acum se verifica si la rulare, iar
+   * incarcarile au o limita pe utilizator (ca videoclipurile), marginita larg.
+   */
+  if (!(GALETI as readonly string[]).includes(bucket)) return { error: "Destinatie necunoscuta." };
+  if (folder !== undefined && !/^[\w-]{1,40}$/.test(folder)) return { error: "Destinatie necunoscuta." };
+  if (!rateLimit(`imagine:${user.id}`, 60, 60_000)) return { error: "Prea multe imagini deodata. Asteapta un minut." };
+  if (!(await consumaLimita(`imagine:${user.id}`, 600, 3600)).permis) {
+    return { error: "Ai incarcat foarte multe imagini in ultima ora. Incearca din nou mai tarziu." };
+  }
 
   if (file.size > 5 * 1024 * 1024) {
     return { error: "Fisierul este prea mare. Limita este 5MB." };
@@ -72,6 +87,17 @@ export async function createVideoUpload(input: { contentType: string; size: numb
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Nu esti autentificat." };
+
+  /*
+   * ⚠ Plafon pe UTILIZATOR (25.09.2026). `/api/upload` are unul de la inceput;
+   * aici nu exista niciunul, deci orice cont putea cere in bucla adrese pentru
+   * cate 50 MB in galeata publica. 5 pe minut si 20 pe ora (1 GB) acopera un
+   * comerciant care isi urca videoclipurile de prezentare.
+   */
+  if (!rateLimit(`video:${user.id}`, 5, 60_000)) return { error: "Prea multe videoclipuri deodata. Asteapta un minut." };
+  if (!(await consumaLimita(`video:${user.id}`, 20, 3600)).permis) {
+    return { error: "Ai atins limita de videoclipuri pe ora. Incearca mai tarziu." };
+  }
 
   if (!(ALLOWED_VIDEO_TYPES as readonly string[]).includes(input.contentType)) {
     return { error: "Format video neacceptat. Foloseste MP4, WebM sau MOV." };

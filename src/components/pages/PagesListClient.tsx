@@ -7,8 +7,8 @@ import { toast } from "sonner";
 import {
   Plus, ExternalLink, Copy, Trash2, Pencil, ArrowUp, ArrowDown, X, Loader2,
   FileText, Menu as MenuIcon, Link2, Store, Home, } from "lucide-react";
-import { slugify } from "@/lib/utils/slugify";
-import { createPage, deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
+import { deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
+import { PaginaNoua } from "./PaginaNoua";
 import { meniuCuAcasa, newMenuItemId, type MenuItem } from "@/lib/pages/menu";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
 
@@ -52,8 +52,6 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
    */
   const menu = meniuCuAcasa(menuSalvat, faraAcasa);
   const [createOpen, setCreateOpen] = useState(false);
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const isInMenu = (s: string) => menu.some((m) => m.type === "page" && m.target === s);
@@ -71,8 +69,8 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
            dar starea locala a componentei ramane cea noua. Doar o reincarcare adevarata a paginii
            o reaseaza, si mesajul cere exact asta. */
         toast.error(
-          "Nu am primit raspuns de la server, deci nu stim daca meniul s-a salvat. Meniul de pe ecran arata cum l-ai lasat tu, "
-          + "nu neaparat cum il vad clientii: reincarca pagina ca sa vezi meniul adevarat.",
+          "Nu am primit răspuns de la server, deci nu știm dacă meniul s-a salvat. Meniul de pe ecran arată cum l-ai lăsat tu, "
+          + "nu neapărat cum îl văd clienții: reîncarcă pagina ca să vezi meniul adevărat.",
           { duration: 12000 },
         );
         return;
@@ -88,27 +86,6 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
     persistMenu(next);
   }
 
-  function handleCreate() {
-    if (title.trim().length < 2) { toast.error("Titlul paginii e prea scurt."); return; }
-    startTransition(async () => {
-      let res: Awaited<ReturnType<typeof createPage>>;
-      try {
-        res = await createPage({ businessId: business.id, title: title.trim(), slug: slug.trim() || undefined });
-      } catch {
-        /* ⚠ Se poate sa fi fost creata si totusi sa nu stim. A doua apasare ar face a doua pagina. */
-        toast.error(
-          "Nu am primit raspuns de la server, deci nu stim daca pagina s-a creat. Lista se reincarca: daca apare acolo, s-a facut. "
-          + "Uita-te intai, ca sa nu iasa doua.",
-          { duration: 12000 },
-        );
-        router.refresh();
-        return;
-      }
-      if ("error" in res) { toast.error(res.error); return; }
-      router.push(`/dashboard/pages/${res.pageId}/edit`);
-    });
-  }
-
   function handleDelete(p: PageRow) {
     if (!confirm(`Stergi pagina "${p.title}"? Aceasta actiune nu poate fi anulata.`)) return;
     startTransition(async () => {
@@ -118,7 +95,7 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
       } catch {
         /* ⚠ Stergere: nestiuta e doar scrierea la noi. */
         toast.error(
-          "Nu am primit raspuns de la server, deci nu stim daca pagina s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          "Nu am primit răspuns de la server, deci nu știm dacă pagina s-a șters. Lista se reîncarcă: dacă mai apare, nu s-a șters.",
           { duration: 12000 },
         );
         router.refresh();
@@ -126,7 +103,7 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
       }
       if ("error" in res) { toast.error(res.error); return; }
       if (isInMenu(p.slug)) persistMenu(menu.filter((m) => !(m.type === "page" && m.target === p.slug)));
-      toast.success("Pagina a fost stearsa.");
+      toast.success("Pagina a fost ștearsă.");
       router.refresh();
     });
   }
@@ -147,7 +124,7 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success("Pagina a fost duplicata.");
+      toast.success("Pagina a fost duplicată.");
       router.refresh();
     });
   }
@@ -201,11 +178,11 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
       <div className="flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">Pagini</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Creeaza pagini personalizate (Contact, Despre noi, FAQ) cu blocuri.</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Creează pagini personalizate (Contact, Despre noi, FAQ) cu blocuri.</p>
         </div>
-        <button type="button" onClick={() => { setTitle(""); setSlug(""); setCreateOpen(true); }}
+        <button type="button" onClick={() => setCreateOpen(true)}
           className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors shrink-0">
-          <Plus className="h-4 w-4" /> Pagina noua
+          <Plus className="h-4 w-4" /> Pagină nouă
         </button>
       </div>
 
@@ -221,8 +198,8 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
       {pages.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-border rounded-2xl">
           <FileText className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm font-medium text-foreground mb-1">Nicio pagina inca</p>
-          <p className="text-xs text-muted-foreground">Apasa „Pagina noua” pentru a incepe.</p>
+          <p className="text-sm font-medium text-foreground mb-1">Nicio pagină încă</p>
+          <p className="text-xs text-muted-foreground">Apasă „Pagină nouă” pentru a începe.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -237,25 +214,25 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
                 </div>
                 <p className="text-xs text-muted-foreground truncate mt-0.5">{publicBase(business)}/{p.slug}</p>
               </div>
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0" title="Afiseaza in meniu">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0" title="Afișează în meniu">
                 <input type="checkbox" checked={isInMenu(p.slug)} onChange={() => toggleInMenu(p)} className="w-4 h-4 rounded accent-green-600" />
-                <span className="hidden sm:inline">In meniu</span>
+                <span className="hidden sm:inline">În meniu</span>
               </label>
               <a href={`${publicBase(business)}/${p.slug}`} target="_blank" rel="noopener noreferrer" title="Vezi pagina"
                 className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors shrink-0">
                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
               </a>
-              <button type="button" onClick={() => handleDuplicate(p)} title="Duplica" disabled={isPending}
+              <button type="button" onClick={() => handleDuplicate(p)} title="Duplică" aria-label="Duplică pagina" disabled={isPending}
                 className="w-9 h-9 rounded-lg border border-border hidden sm:flex items-center justify-center hover:bg-muted transition-colors shrink-0">
                 <Copy className="h-4 w-4 text-muted-foreground" />
               </button>
-              <button type="button" onClick={() => handleDelete(p)} title="Sterge" disabled={isPending}
+              <button type="button" onClick={() => handleDelete(p)} title="Șterge" aria-label="Șterge pagina" disabled={isPending}
                 className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-colors">
                 <Trash2 className="h-4 w-4 text-red-500" />
               </button>
               <Link href={`/dashboard/pages/${p.id}/edit`}
                 className="flex items-center gap-1.5 px-3 h-9 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors">
-                <Pencil className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Editeaza</span>
+                <Pencil className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Editează</span>
               </Link>
             </div>
           ))}
@@ -266,9 +243,9 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
       <div className="mt-10 bg-surface border border-border rounded-2xl p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-1">
           <MenuIcon className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Meniu de navigare</h2>
+          <h2 className="text-sm font-semibold text-foreground">Meniul de navigare</h2>
         </div>
-        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede in header-ul magazinului (inline pe desktop, hamburger pe mobil). „Acasa” vine din start la orice magazin si duce la prima pagina; o poti sterge daca nu o vrei. „Magazin” = link catre produsele magazinului (pagina de Magazin daca e activata, altfel prima pagina); „link” = adresa externa.</p>
+        <p className="text-xs text-muted-foreground mb-4">Ordinea de aici se vede în antetul magazinului (pe un rând pe desktop, în meniul ascuns pe telefon). „Acasa” vine din start la orice magazin și duce la prima pagină; o poți șterge dacă nu o vrei. „Magazin” = legătură către produsele magazinului (pagina de Magazin dacă e activată, altfel prima pagină); „link” = o adresă externă.</p>
 
         <div className="space-y-2">
           {menu.map((m, i) => (
@@ -296,53 +273,24 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
 
         <div className="flex items-center gap-2 mt-4">
           {!menu.some((m) => m.type === "acasa") && (
-            <button type="button" onClick={addAcasa} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adauga in meniu un link catre prima pagina a magazinului">
-              <Home className="h-3.5 w-3.5" /> Adauga link catre Acasa
+            <button type="button" onClick={addAcasa} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title="Adaugă în meniu o legătură către prima pagină a magazinului">
+              <Home className="h-3.5 w-3.5" /> Adaugă legătura către Acasă
             </button>
           )}
           {!areLinkCatreMagazin && (
-            <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title={catalogPePagina ? "Adauga in meniu un link catre pagina cu toate produsele" : "Adauga in meniu un link catre pagina principala a magazinului"}>
-              <Store className="h-3.5 w-3.5" /> Adauga link catre magazin
+            <button type="button" onClick={addHome} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors" title={catalogPePagina ? "Adaugă în meniu o legătură către pagina cu toate produsele" : "Adaugă în meniu o legătură către pagina principală a magazinului"}>
+              <Store className="h-3.5 w-3.5" /> Adaugă legătura către magazin
             </button>
           )}
           <button type="button" onClick={addLink} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border border-border rounded-lg hover:bg-muted transition-colors">
-            <Link2 className="h-3.5 w-3.5" /> Adauga link
+            <Link2 className="h-3.5 w-3.5" /> Adaugă o legătură
           </button>
           {isPending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
       </div>
 
-      {/* Create modal */}
       {createOpen && (
-        <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={() => setCreateOpen(false)} />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-background rounded-2xl border border-border shadow-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-foreground">Pagina noua</h3>
-              <button type="button" onClick={() => setCreateOpen(false)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Titlu pagina</label>
-                <input autoFocus value={title} onChange={(e) => { setTitle(e.target.value); setSlug(slugify(e.target.value)); }} placeholder="Ex: Contact" className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Link (slug)</label>
-                <div className="flex items-center gap-1 text-sm">
-                  <span className="text-muted-foreground text-xs">{publicBase(business)}/</span>
-                  <input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} placeholder="contact" className={inputCls} />
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button type="button" onClick={() => setCreateOpen(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">Anuleaza</button>
-              <button type="button" onClick={handleCreate} disabled={isPending}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-60">
-                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Creeaza si editeaza
-              </button>
-            </div>
-          </div>
-        </>
+        <PaginaNoua businessId={business.id} adresaBaza={publicBase(business)} onClose={() => setCreateOpen(false)} />
       )}
     </div>
   );
@@ -393,7 +341,7 @@ function PaginiDeSistem({
       slug: prefixCatalog,
       activa: catalogPePagina,
       inactivInsigna: "PE ACASA",
-      inactivExplicatie: "Acum produsele stau pe pagina principala, sub celelalte sectiuni.",
+      inactivExplicatie: "Acum produsele stau pe pagina principală, sub celelalte secțiuni.",
     },
     {
       titlu: "Cos",

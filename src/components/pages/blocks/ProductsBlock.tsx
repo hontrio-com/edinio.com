@@ -23,6 +23,8 @@ export interface PageProduct {
    * insemna 92,80 lei pentru o geaca de 116.
    */
   price_range: PriceRange;
+  /** Stoc urmarit si zero: cardul scrie „Stoc epuizat” in loc de buton (altfel comanda cadea abia la final). */
+  epuizat?: boolean;
 }
 
 /**
@@ -48,17 +50,18 @@ export function ProductsBlockView({ block, products, color, basePath, storeSlug 
 }) {
   if (products.length === 0) return null;
   const columns = block.columns ?? 4;
-  const grid = columns === 2 ? "grid-cols-2" : columns === 3 ? "grid-cols-2 md:grid-cols-3" : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
-  const addToCart = !!block.showAddToCart && !!storeSlug;
+  const grid = columns === 2 ? "grid-cols-2" : columns === 3 ? "grid-cols-2 pg-md:grid-cols-3" : "grid-cols-2 pg-md:grid-cols-3 pg-lg:grid-cols-4";
+  // Pornit cand lipseste (implicitul din 25.09.2026); un `false` salvat ramane oprit.
+  const addToCart = block.showAddToCart !== false && !!storeSlug;
   return (
     <BlockShell style={block.style}>
       {block.title && (
-        <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground text-center mb-8">{block.title}</h2>
+        <h2 className="text-2xl pg-sm:text-3xl font-black tracking-tight text-foreground text-center mb-8">{block.title}</h2>
       )}
       {block.layout === "carousel" ? (
         <ProductCarousel products={products} color={color} basePath={basePath} storeSlug={storeSlug} columns={columns} addToCart={addToCart} />
       ) : (
-        <div className={`grid ${grid} gap-3 sm:gap-4 text-left`}>
+        <div className={`grid ${grid} gap-3 pg-sm:gap-4 text-left`}>
           {products.map((p) => (
             <PageProductCard key={p.id} p={p} color={color} basePath={basePath} storeSlug={storeSlug} addToCart={addToCart} />
           ))}

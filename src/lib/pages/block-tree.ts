@@ -21,7 +21,7 @@ export function isFlexibleColumns(block: ColumnsBlock): boolean {
 
 /** Width-ratio presets (single row). Kept here so editor + renderer agree. */
 const TPL_FR: Record<string, string> = {
-  "1-1": "1fr 1fr", "1-2": "1fr 2fr", "2-1": "2fr 1fr",
+  "1-1": "1fr 1fr", "1-2": "1fr 2fr", "2-1": "2fr 1fr", "1-3": "1fr 3fr", "3-1": "3fr 1fr",
   "1-1-1": "1fr 1fr 1fr", "2-1-1": "2fr 1fr 1fr", "1-2-1": "1fr 2fr 1fr", "1-1-2": "1fr 1fr 2fr",
 };
 

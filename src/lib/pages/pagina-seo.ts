@@ -128,5 +128,17 @@ export function curataSeoPagina(seo: PageSeo | null | undefined): PageSeo {
     const data = typeof brut === "string" ? brut.trim() : "";
     if (data && !Number.isNaN(new Date(data).getTime())) out.dataPublicarii = data;
   }
+  /*
+   * ⚠ Campurile din 25.09.2026 trec prin lista lor: lungimi, tipuri, iar adresa
+   * canonica numai `http(s)`. Ajung in `<head>`, deci nimic neverificat.
+   */
+  const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined);
+  out.focusKeyword = text(seo.focusKeyword, 80);
+  out.ogTitle = text(seo.ogTitle, 120);
+  out.ogDescription = text(seo.ogDescription, 300);
+  const canonica = text(seo.canonical, 500);
+  out.canonical = canonica && /^https?:\/\/[^\s"<>]+$/i.test(canonica) ? canonica : undefined;
+  out.nofollow = seo.nofollow === true ? true : undefined;
+  for (const k of ["focusKeyword", "ogTitle", "ogDescription", "canonical", "nofollow"] as const) if (out[k] === undefined) delete out[k];
   return out;
 }

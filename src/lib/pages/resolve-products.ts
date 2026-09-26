@@ -4,12 +4,20 @@ import type { Block, ProductsBlock } from "@/lib/pages/blocks.types";
 import { flattenBlocks } from "@/lib/pages/block-tree";
 import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 import { getProductPriceRange } from "@/lib/utils/product-price";
+import { slimPageSections } from "@/lib/storefront/catalog-slim";
 import { numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 
 type DB = SupabaseClient<Database>;
 
 const COLS = "id, name, slug, price, compare_at_price, images, category, is_featured, page_sections, is_bundle, track_inventory, stock_quantity";
 const MAX = 24;
+/*
+  Cate randuri se citesc inainte de filtrele de vizibilitate (26.09.2026, auditul
+  paginilor): se citeau exact 24 si abia apoi se scoteau cele din categorii stinse,
+  fara imagine sau fara stoc, deci blocul putea iesi scurt sau gol desi magazinul
+  avea destule produse vizibile. Tot marginit, ca la un catalog de 100k.
+*/
+const CITITE = 120;
 
 /**
  * Setarea de vizibilitate a catalogului (editor > Pagina magazin): ascunde
@@ -51,8 +59,12 @@ function toPageProduct(p: Record<string, unknown>): PageProduct {
     images: Array.isArray(p.images) ? (p.images as unknown[]).map(String).filter(Boolean) : [],
     category: (p.category as string | null) ?? null,
     is_featured: !!p.is_featured,
-    page_sections: p.page_sections ?? null,
+    // Slimuit (ca in catalogul magazinului): butonul de cos are nevoie doar de axe si de steaguri,
+    // nu de combinatii. Pretul se calculeaza mai jos din forma completa.
+    page_sections: slimPageSections(p.page_sections, Number(p.price)),
     price_range: getProductPriceRange(Number(p.price), p.page_sections ?? null),
+    // Aceeasi regula ca badge-ul „Stoc epuizat” din magazin; pachetele isi au stocul in componente.
+    epuizat: !p.is_bundle && !!p.track_inventory && p.stock_quantity === 0,
   };
 }
 
@@ -72,8 +84,16 @@ export async function resolveBlockProducts(supabase: DB, businessId: string, blo
     q = q.in("id", ids);
   }
 
-  const { data } = await q.order("is_featured", { ascending: false }).order("sort_order").limit(MAX);
+  const { data } = await q.order("is_featured", { ascending: false }).order("sort_order").limit(CITITE);
   let list = (data ?? []).filter((p) => isVisible(p, visibility)).map(toPageProduct);
+
+  /* „Recomandate” fara niciun produs recomandat: toate, ca in editor (`pickProducts`).
+     Altfel blocul se vedea in editor si disparea la publicare. */
+  if (block.mode === "featured" && list.length === 0) {
+    const { data: toate } = await supabase.from("products").select(COLS).eq("business_id", businessId).eq("is_active", true)
+      .order("sort_order").limit(CITITE);
+    list = (toate ?? []).filter((p) => isVisible(p, visibility)).map(toPageProduct);
+  }
 
   if (block.mode === "selected" && block.productIds) {
     const order = new Map(block.productIds.map((id, i) => [id, i]));

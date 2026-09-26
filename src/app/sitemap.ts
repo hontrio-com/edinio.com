@@ -612,9 +612,14 @@ export function intrariMagazin(
   }
 
   for (const pg of date.pagini) {
-    if (!pg.slug || (pg.seo as { noindex?: boolean } | null)?.noindex) continue;
+    // ⚠ Si pagina cu alta adresa canonica (25.09.2026): ea spune singura ca originalul e altundeva.
+    if (!pg.slug) continue;
+    const adresa = `${base}/${pg.slug}`;
+    // O adresa canonica egala cu a paginii insesi nu inseamna „originalul e altundeva” (auditul din 26.09.2026).
+    const canonica = (pg.seo as { canonical?: string } | null)?.canonical?.trim().replace(/\/+$/, "");
+    if (!anuntabil({ noindex: (pg.seo as { noindex?: boolean } | null)?.noindex, canonical_url: canonica && canonica !== adresa ? canonica : null })) continue;
     entries.push({
-      url: `${base}/${pg.slug}`,
+      url: adresa,
       ...dataDacaOStim(pg.updated_at),
     });
   }

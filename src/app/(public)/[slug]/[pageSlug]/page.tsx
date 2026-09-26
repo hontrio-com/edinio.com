@@ -26,9 +26,18 @@ import { BlockRenderer } from "@/components/pages/BlockRenderer";
 import { prepareBlocksForPublic } from "@/lib/pages/prepare-blocks";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
 import { resolveAllProductsBlocks } from "@/lib/pages/resolve-products";
+import { resolveAllBundlesBlocks } from "@/lib/pages/resolve-bundles";
+import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import type { PublicForm, FormField } from "@/lib/pages/forms.types";
 import { metadataMagazin, RandeazaMagazin } from "@/lib/storefront/catalog/pagina-magazin";
+import { flattenBlocks } from "@/lib/pages/block-tree";
+import { fundalulPaginii } from "@/lib/pages/fundal-pagina";
+import { fonturiDinBlocuri } from "@/lib/pages/fonturi";
+import { claseFonturi } from "@/components/pages/fonturi-incarcate";
+import { SCRIPT_ANIMATII } from "@/lib/pages/animatii";
+import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
+import { areTitluPrincipal, descriereDinBlocuri, titlulPrincipal } from "@/lib/pages/titlul-principal";
 import { felulSegmentului } from "@/lib/storefront/permalinkuri";
 import { adresaCurenta, setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
 
@@ -64,6 +73,14 @@ const loadPage = cache(async (slug: string, pageSlug: string) => {
   return { supabase, business, page };
 });
 
+/*
+  Blocurile curatate pentru public, o singura data pe cerere (26.09.2026, auditul
+  paginilor): `generateMetadata` si pagina le curatau fiecare (sanitize-html pe
+  tot textul, de doua ori). `loadPage` e deja memorata, deci `page.blocks` e
+  acelasi obiect in amandoua, iar `cache` il recunoaste.
+*/
+const blocuriPublice = cache((brut: unknown) => prepareBlocksForPublic((brut as Block[] | null) ?? []));
+
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug, pageSlug } = await params;
   if ((await felulCatalogului(slug, pageSlug))?.curent) return metadataMagazin({ slug, sp: await searchParams });
@@ -74,27 +91,44 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const title = `${seo.title || page.title} | ${business.store_name ?? business.business_name}`;
   const url = `${storeBaseUrl(business)}/${page.slug}`;
   const ogImage = seo.ogImage?.trim() || business.cover_url || undefined;
+  /*
+   * Descrierea lipsa cade pe primul paragraf al paginii. Pana acum lipsea cu
+   * totul, iar Google scotea singur un fragment, de obicei din meniu.
+   */
+  const descriere = seo.description?.trim() || descriereDinBlocuri(blocuriPublice(page.blocks)) || undefined;
   return {
     // `absolute` strips the root layout's "%s | Edinio" template.
     title: { absolute: title },
-    description: seo.description ?? undefined,
+    description: descriere,
     keywords: seo.keywords?.trim() || undefined,
-    alternates: { canonical: url },
+    // Adresa canonica aleasa de om (o copie a altei pagini), altfel adresa paginii.
+    alternates: { canonical: seo.canonical || url },
     // Cheia lipseste cand pagina e indexabila, ca sa mosteneasca layout-ul
     // magazinului (`noindex` pe platforma, `index` pe domeniul propriu).
     // `robots: undefined` ar fi STERS mostenirea, nu ar fi pastrat-o.
-    ...(seo.noindex ? { robots: { index: false, follow: false } } : {}),
+    ...(seo.noindex
+      ? { robots: { index: false, follow: false } }
+      /*
+        `nofollow` fara `noindex` (25.09.2026). Obiectul `robots` inlocuieste
+        INTREG mostenirea din layout, deci indexarea se scrie la loc, dupa
+        aceeasi regula: pe edinio.com vitrina e `noindex` (X-Robots-Tag), pe
+        domeniul propriu e indexabila. Un `index: true` fix ar fi contrazis
+        platforma.
+      */
+      : seo.nofollow
+        ? { robots: { index: esteDomeniulPropriu((await headers()).get("host"), business.custom_domain), follow: false } }
+        : {}),
     // `locale` si `siteName` se scriu explicit: obiectul asta inlocuieste in
     // intregime openGraph-ul radacinii, deci ce nu e aici nu se emite deloc, iar
     // og:site_name mostenit ar fi spus „Edinio" pe pagina magazinului.
-    openGraph: { title, description: seo.description ?? undefined, url, type: "website", locale: "ro_RO", siteName: business.store_name ?? business.business_name, ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
+    openGraph: { title: seo.ogTitle || title, description: seo.ogDescription || descriere, url, type: "website", locale: "ro_RO", siteName: business.store_name ?? business.business_name, ...(ogImage ? { images: [{ url: ogImage }] } : {}) },
     // Cardul de Twitter se emite mereu, imaginea doar cand exista: nedeclarat,
     // blocul se mostenea din layout-ul radacina si previzualizarea arata Edinio,
     // desi og:title si og:url de mai sus erau deja ale magazinului.
     twitter: {
       card: ogImage ? "summary_large_image" : "summary",
-      title,
-      description: seo.description ?? undefined,
+      title: seo.ogTitle || title,
+      description: seo.ogDescription || descriere,
       ...(ogImage ? { images: [ogImage] } : {}),
     },
   };
@@ -291,10 +325,22 @@ export default async function CustomPage({ params, searchParams }: Props) {
   // Page must exist; unpublished pages are visible only to the owner.
   if (!page || (!page.is_published && !isOwner)) notFound();
 
+  const blocks = blocuriPublice(page.blocks);
+  const toate = flattenBlocks(blocks);
+  /*
+   * ⚠ Formularele se citesc NUMAI cand pagina are un bloc de contact legat de
+   * unul, si numai acelea. Pana acum se aduceau toate formularele magazinului,
+   * cu campurile lor, la FIECARE vizita a oricarei pagini, chiar fara bloc de
+   * contact (masurat: 4 blocuri de contact in 34 de pagini).
+   */
+  const formulareFolosite = [...new Set(toate.flatMap((b) => (b.type === "contact" && b.formId ? [b.formId] : [])))];
+
   // store_settings (menu + logo size) and forms via service role — not anon-readable.
   const [{ data: storeSettings }, { data: formsRaw }] = await Promise.all([
     createAdminClient().from("store_settings").select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown").eq("business_id", business.id).single(),
-    createAdminClient().from("forms").select("id, name, fields, submit_label, success_message").eq("business_id", business.id),
+    formulareFolosite.length > 0
+      ? createAdminClient().from("forms").select("id, name, fields, submit_label, success_message").eq("business_id", business.id).in("id", formulareFolosite)
+      : Promise.resolve({ data: [] as { id: string; name: string; fields: unknown; submit_label: string; success_message: string }[] }),
   ]);
 
   const forms: PublicForm[] = (formsRaw ?? []).map((f) => ({
@@ -314,7 +360,6 @@ export default async function CustomPage({ params, searchParams }: Props) {
   const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
-  const blocks = prepareBlocksForPublic((page.blocks as unknown as Block[]) ?? []);
   /*
    * Datele structurate, dar NU pe ciorna.
    *
@@ -322,12 +367,22 @@ export default async function CustomPage({ params, searchParams }: Props) {
    * de mai jos). Ce descrie ea nu exista public, deci n-are ce sa ajunga la un
    * crawler care s-ar nimeri autentificat.
    */
-  const dateStructurate = page.is_published
-    ? await dateStructuratePagina(supabase, business, page, blocks)
-    : null;
+  // Pornite acum, asteptate mai jos impreuna cu categoriile de cautare (nu depind una de alta).
+  const dateStructuratePromise = page.is_published
+    ? dateStructuratePagina(supabase, business, page, blocks)
+    : Promise.resolve(null);
   const color = business.primary_color ?? "#07c527";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
+
+  /*
+   * Fonturile alese pe blocuri: se incarca NUMAI cele folosite (clasa
+   * `next/font` a fiecaruia), deci o pagina fara fonturi proprii nu descarca
+   * niciun font in plus.
+   */
+  const claseFont = claseFonturi(fonturiDinBlocuri(toate));
+  const areAnimatii = toate.some((b) => b.style?.anim && b.style.anim !== "none");
+  const h1Id = titlulPrincipal(blocks);
 
   // Acelasi design ca pagina de magazin: bara de anunt, header si footer vin din
   // aceeasi configuratie, ca alegerea comerciantului sa nu se opreasca la
@@ -339,7 +394,10 @@ export default async function CustomPage({ params, searchParams }: Props) {
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
-  const searchCategories = await loadSearchCategories(business.id, resolved.design);
+  const [searchCategories, dateStructurate] = await Promise.all([
+    loadSearchCategories(business.id, resolved.design),
+    dateStructuratePromise,
+  ]);
   const chrome = buildChromeData({
     searchCategories,
     business,
@@ -387,7 +445,16 @@ export default async function CustomPage({ params, searchParams }: Props) {
             Aceasta pagina este in modul ciorna (draft) si o vezi doar tu. Publica-o din panou pentru a o face vizibila.
           </div>
         )}
-        <main id={`edinio-page-${page.id}`} className="flex-1">
+        <main
+          id={`edinio-page-${page.id}`}
+          className={`flex-1 ${claseFont}`}
+          /* Alb, sau fundalul ales pentru magazin; acelasi ca in editor (`fundalulPaginii`). */
+          style={{ backgroundColor: fundalulPaginii(resolved.style.colors.background) }}
+          /* `data-anim-pornit` il pune scriptul animatiilor inainte de hidratare, dinadins. */
+          suppressHydrationWarning
+        >
+          {/* Niciun bloc nu poate fi H1: titlul paginii, ascuns vederii, dar citit de motoare si de cititoarele de ecran. */}
+          {!areTitluPrincipal(blocks) && <h1 className="sr-only">{page.title}</h1>}
           <Suspense fallback={<ScheletBlocuri />}>
             <BlocuriPagina
               supabase={supabase}
@@ -401,8 +468,16 @@ export default async function CustomPage({ params, searchParams }: Props) {
               social={social}
               forms={forms}
               pageId={page.id}
+              h1Id={h1Id}
             />
           </Suspense>
+          {/*
+            Scriptul animatiilor, IN AFARA lui Suspense: urmareste el blocurile
+            care sosesc pe flux (vezi `SCRIPT_ANIMATII`). Numai pe paginile care
+            au macar o animatie.
+          */}
+          {areAnimatii && <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANIMATII }} />}
+          {areAnimatii && <PornesteAnimatiile />}
         </main>
       </StorePageShell>
     </StorefrontThemeScope>
@@ -427,7 +502,7 @@ function ScheletBlocuri() {
 
 async function BlocuriPagina({
   supabase, businessId, blocks, hideNoImage, hideOutOfStock,
-  color, basePath, storeSlug, social, forms, pageId,
+  color, basePath, storeSlug, social, forms, pageId, h1Id,
 }: {
   supabase: SupabaseClient<Database>;
   businessId: string;
@@ -440,18 +515,28 @@ async function BlocuriPagina({
   social: Record<string, string>;
   forms: PublicForm[];
   pageId: string;
+  h1Id: string | null;
 }) {
   // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
   // Respecta setarea de vizibilitate a catalogului (ascunde fara imagini / fara stoc).
-  const productsByBlock = await resolveAllProductsBlocks(supabase, businessId, blocks, {
-    hideNoImage,
-    hideOutOfStock,
-  });
+  /*
+    Pachetele si integrarile se citesc NUMAI cand pagina are blocurile lor:
+    o pagina „Despre noi” nu plateste doua interogari in plus.
+  */
+  const tipuri = new Set(flattenBlocks(blocks).map((b) => b.type));
+  const [productsByBlock, bundlesByBlock, integrari] = await Promise.all([
+    resolveAllProductsBlocks(supabase, businessId, blocks, { hideNoImage, hideOutOfStock }),
+    tipuri.has("bundles") ? resolveAllBundlesBlocks(supabase, businessId, blocks) : Promise.resolve(undefined),
+    tipuri.has("payments") || tipuri.has("couriers") ? integrariPentruPagini(businessId) : Promise.resolve(null),
+  ]);
 
   return (
     <BlockRenderer
       blocks={blocks}
-      ctx={{ color, basePath, storeSlug, social, products: [], productsByBlock, forms, businessId, pageId }}
+      ctx={{
+        color, basePath, storeSlug, social, products: [], productsByBlock, forms, businessId, pageId, h1Id,
+        bundlesByBlock, plati: integrari?.plati, curieri: integrari?.curieri,
+      }}
     />
   );
 }

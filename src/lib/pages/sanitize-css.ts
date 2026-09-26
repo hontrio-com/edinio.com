@@ -10,5 +10,13 @@
  */
 export function sanitizeCss(css?: string | null): string {
   if (!css) return "";
-  return css.replace(/<\/?\s*(style|script|iframe|object|embed|!--|!doctype)\b/gi, "");
+  /*
+    ⚠⚠ 26.09.2026 (auditul paginilor): lista neagra de dinainte scotea `</style`,
+    `<!--` & co. INTR-O SINGURA TRECERE, deci scoaterea uneia le lipea pe cele din jur
+    intr-una noua: `</sty<!--le>` devenea `</style>`, iar markupul de dupa rula pe
+    originea platformei (cea a panoului). Acum NICIUN `<` nu mai ramane: devine
+    escaparea CSS `\3C `, care in textul CSS (`content: "<"`) se afiseaza la fel, dar
+    nu mai poate inchide eticheta `<style>`, oricum ar fi despicat.
+  */
+  return css.replace(/</g, "\\3C ");
 }

@@ -14,10 +14,10 @@ export default async function SupportTicketPage({ params }: { params: Promise<{ 
   const [{ data: ticket }, { data: messages }] = await Promise.all([
     supabase
       .from("support_tickets")
-      .select("*")
+      .select("*, businesses(business_name, store_name)")
       .eq("id", id)
       .eq("user_id", user.id)
-      .single(),
+      .maybeSingle(),
     supabase
       .from("support_messages")
       .select("*")
@@ -27,13 +27,14 @@ export default async function SupportTicketPage({ params }: { params: Promise<{ 
 
   if (!ticket) notFound();
 
+  const { businesses: magazin, ...tichet } = ticket;
+
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <SupportTicketClient
-        ticket={ticket}
+        ticket={tichet}
+        numeMagazin={magazin ? magazin.store_name ?? magazin.business_name : null}
         initialMessages={(messages ?? []).map((m) => ({ ...m, attachments: m.attachments as { url: string; name: string }[] | null }))}
-        userId={user.id}
-        userEmail={user.email ?? ""}
       />
     </div>
   );

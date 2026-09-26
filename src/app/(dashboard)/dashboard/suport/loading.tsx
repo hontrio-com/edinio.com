@@ -1,18 +1,28 @@
 export default function Loading() {
   return (
-    <div className="p-6 max-w-4xl mx-auto animate-pulse">
-      <div className="flex items-center justify-between mb-6">
-        <div className="h-8 w-32 bg-muted rounded-lg" />
-        <div className="h-9 w-32 bg-muted rounded-lg" />
+    <div className="p-6 max-w-6xl mx-auto animate-pulse">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <div className="h-6 w-24 rounded-md bg-muted" />
+          <div className="mt-2 h-4 w-72 rounded-md bg-muted" />
+        </div>
+        <div className="h-9 w-28 rounded-lg bg-muted" />
       </div>
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-20 bg-muted rounded-xl" />
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="min-h-[116px] rounded-xl bg-muted sm:min-h-[168px]" />
         ))}
       </div>
-      <div className="space-y-3">
+      <div className="overflow-hidden rounded-xl ring-1 ring-foreground/10">
+        <div className="h-11 bg-muted/60" />
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-20 bg-muted rounded-xl" />
+          <div key={i} className="flex items-center gap-4 border-t border-border px-5 py-4">
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-2/3 rounded-md bg-muted" />
+              <div className="h-3 w-1/2 rounded-md bg-muted" />
+            </div>
+            <div className="h-6 w-36 rounded-md bg-muted" />
+          </div>
         ))}
       </div>
     </div>

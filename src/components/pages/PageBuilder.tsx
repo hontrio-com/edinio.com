@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useTransition } from "react";
+import { useState, useEffect, useCallback, useRef, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -10,31 +10,51 @@ import {
   ArrowUp, ArrowDown, Copy, Trash2, Eye,
   Sparkles, Heading, Type, Image as ImageIcon, Images, MousePointerClick,
   Columns3, MoveVertical, Minus, Video, MapPin, MessageCircleQuestion,
-  ShieldCheck, Package, Share2, Mail, Code, Square,
+  ShieldCheck, Package, Share2, Mail, Code, Square, Boxes, MailPlus, CreditCard, Truck, Plug,
 } from "lucide-react";
 import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
-import { BlockSettings } from "./BlockSettings";
+import { BlockSettings, type IntegrariEditor } from "./BlockSettings";
+import type { PachetPagina } from "@/lib/pages/resolve-bundles";
+import type { MetodaAfisata } from "@/lib/pages/integrari-pagini";
 import { BlockShell } from "./BlockShell";
 import { updatePage } from "@/lib/actions/page.actions";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import {
-  createBlock, BLOCK_META, BLOCK_PALETTE_ORDER, TIPURI_PAGINA_PROPRIE,
+  createBlock, BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, TIPURI_PAGINA_PROPRIE,
   type Block, type BlockType, type ColumnsBlock, type PageSeo, type TipPaginaProprie,
 } from "@/lib/pages/blocks.types";
 import {
   findBlock, updateBlockInTree, removeBlockFromTree, moveBlockInTree,
   duplicateBlockInTree, insertAtTop, insertIntoColumn, columnBlocks,
-  columnsGridTemplate, isFlexibleColumns,
+  isFlexibleColumns,
 } from "@/lib/pages/block-tree";
+import { asezareColoane } from "./blocks/StaticBlocks";
 import type { PageProduct } from "./blocks/ProductsBlock";
 import type { FormDef } from "@/lib/pages/forms.types";
+import { FurnizorLegaturi, type DateLegaturi } from "./editor/CampLink";
+import { toateClaseleDeFont } from "./fonturi-incarcate";
+import { titlulPrincipal } from "@/lib/pages/titlul-principal";
+import { sugestiiSeo, type Nivel } from "@/lib/pages/sugestii-seo";
+import { cn } from "@/lib/utils/cn";
+import { RedaAnimatia } from "./editor/ControaleAspect";
+import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
+
+/**
+ * Cheia sub care se randeaza un bloc in editor. Include setarile animatiei (si
+ * un numar pentru „Reda animatia”), ca orice schimbare sa remonteze blocul si
+ * animatia sa se vada din nou, pe loc.
+ */
+function cheieAnimatie(b: Block, reluare: number): string {
+  const s = b.style;
+  return s?.anim && s.anim !== "none" ? `${b.id}:${s.anim}:${s.animSpeed ?? ""}:${s.animDelay ?? 0}:${reluare}` : b.id;
+}
 
 const ICONS: Record<string, React.ElementType> = {
   Sparkles, Heading, Type, Image: ImageIcon, Images, MousePointerClick, Columns3,
   MoveVertical, Minus, Video, MapPin, MessageCircleQuestion, ShieldCheck, Package,
-  Share2, Mail, Code,
+  Share2, Mail, Code, Boxes, MailPlus, CreditCard, Truck,
 };
 
 interface BuilderBusiness {
@@ -55,10 +75,21 @@ const COLUMN_EXCLUDED: BlockType[] = ["columns", "hero"];
 
 export function PageBuilder({
   pageId, initialTitle, initialSlug, initialPublished, initialBlocks, initialCss, initialSeo,
-  business, products, categories, forms, isAdmin,
+  initialVersiune, legaturi,
+  business, products, categories, forms, isAdmin, pachete, integrari, fundal,
 }: {
+  /** Fundalul paginii, acelasi ca pe magazin (`fundalulPaginii`): alb, sau cel ales pentru magazin. */
+  fundal: string;
+  /** Pachetele magazinului, pentru previzualizarea blocului „Pachete”. */
+  pachete: PachetPagina[];
+  /** Integrarile active: ce blocuri se pot adauga si ce arata cele de plati/curieri. */
+  integrari: { furnizori: string[]; plati: MetodaAfisata[]; curieri: MetodaAfisata[] };
   pageId: string; initialTitle: string; initialSlug: string; initialPublished: boolean;
   initialBlocks: Block[]; initialCss: string; initialSeo: PageSeo;
+  /** `updated_at` la incarcare: salvarea trece numai daca pagina n-a fost salvata intre timp din alta parte. */
+  initialVersiune: string;
+  /** Ce stie campul de link sa sugereze: paginile, categoriile, prefixele. */
+  legaturi: Omit<DateLegaturi, "businessId">;
   business: BuilderBusiness; products: PageProduct[]; categories: string[]; forms: FormDef[]; isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -68,10 +99,26 @@ export function PageBuilder({
   const [published, setPublished] = useState(initialPublished);
   const [css, setCss] = useState(initialCss);
   const [seo, setSeo] = useState<PageSeo>(initialSeo);
+  const versiune = useRef(initialVersiune);
+  /*
+   * ⚠ Numarul modificarii. Salvarea tine minte la ce numar a plecat si curata
+   * „nesalvat” NUMAI daca intre timp nu s-a mai scris nimic. Pana acum ce
+   * scriai in timpul unei salvari se marca „Salvat”, iar avertismentul de la
+   * inchidere nu mai aparea: munca se pierdea fara semn.
+   */
+  const revizie = useRef(0);
+  /* De cate ori s-a cerut „Reda animatia” pentru blocul selectat. */
+  const [reluare, setReluare] = useState(0);
+  const panza = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [tab, setTab] = useState<"block" | "page">("page");
   const [palette, setPalette] = useState<InsertTarget | null>(null);
+  // Paleta de blocuri ca dialog adevarat: Escape o inchide, focusul ramane in ea.
+  const cutiePaleta = useDialogAccesibil(palette !== null, () => setPalette(null));
+  /* Pe telefon (26.09.2026): setarile paginii (adresa, SEO, CSS) stateau numai in panoul
+     din dreapta, ascuns sub `lg`, deci pe telefon nu se puteau schimba deloc. */
+  const [setariPaginaMobil, setSetariPaginaMobil] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [isSaving, startSave] = useTransition();
 
@@ -81,9 +128,25 @@ export function PageBuilder({
   const ctx: BlockRendererCtx = {
     color, basePath: "", storeSlug: business.slug, social: business.social, products, forms,
     businessId: business.id, pageId, preview: true,
+    // Aceeasi regula ca pe pagina publica, ca editorul sa arate ce vede Google.
+    h1Id: titlulPrincipal(blocks),
+    bundles: pachete,
+    plati: integrari.plati,
+    curieri: integrari.curieri,
+  };
+  const integrariSetari: IntegrariEditor = {
+    furnizori: integrari.furnizori,
+    plati: integrari.plati.map((m) => m.nume),
+    curieri: integrari.curieri.map((m) => m.nume),
+  };
+  /* Un bloc de integrare se poate adauga numai cand integrarea lui e activa. */
+  const integrareActiva: Record<string, boolean> = {
+    newsletter: integrari.furnizori.length > 0,
+    payments: integrari.plati.length > 0,
+    couriers: integrari.curieri.length > 0,
   };
 
-  const mark = useCallback(() => setDirty(true), []);
+  const mark = useCallback(() => { revizie.current += 1; setDirty(true); }, []);
 
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -102,9 +165,24 @@ export function PageBuilder({
     return () => cancelAnimationFrame(id);
   }, []);
 
+  /*
+   * ⚠ ANIMATIILE IN EDITOR (25.09.2026). Pe magazin le porneste
+   * `SCRIPT_ANIMATII`; editorul nu-l are, deci animatia aleasa nu se vedea
+   * nicaieri pana la publicare. Aici: panza poarta `data-anim-pornit`, si
+   * fiecare bloc animat nou aparut (sau remontat de `cheieAnimatie`) se
+   * marcheaza imediat, deci animatia ruleaza pe loc.
+   */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      panza.current?.querySelectorAll("[data-anim]:not([data-anim-in])").forEach((el) => el.setAttribute("data-anim-in", ""));
+    });
+    return () => cancelAnimationFrame(id);
+  });
+
   function selectBlock(id: string | null) {
     setSelectedId(id);
     setTab(id ? "block" : "page");
+    if (id) setSetariPaginaMobil(false);
   }
 
   function patchBlock(id: string, patch: Partial<Block>) {
@@ -135,10 +213,11 @@ export function PageBuilder({
   }
 
   function save() {
+    const plecat = revizie.current;
     startSave(async () => {
       let res: Awaited<ReturnType<typeof updatePage>>;
       try {
-        res = await updatePage(pageId, { title, slug, blocks, page_css: css, seo, is_published: published });
+        res = await updatePage(pageId, { title, slug, blocks, page_css: css, seo, is_published: published, versiune: versiune.current });
       } catch {
         /* ⚠ MESAJUL NU CERE REINCARCAREA PAGINII: in editor sunt modificari nesalvate, iar o
            reincarcare le-ar sterge. `setSlug` si `setDirty(false)` au ramas DUPA `try`, deci
@@ -151,32 +230,44 @@ export function PageBuilder({
         );
         return;
       }
-      if ("error" in res) { toast.error(res.error); return; }
+      if ("error" in res) { toast.error(res.error, { duration: res.conflict ? 15000 : 6000 }); return; }
+      versiune.current = res.versiune;
       setSlug(res.slug);
-      setDirty(false);
+      if (revizie.current === plecat) setDirty(false);
       toast.success("Pagina a fost salvata.");
       router.refresh();
     });
   }
 
   const selected = findBlock(blocks, selectedId);
+  const cheie = (b: Block) => cheieAnimatie(b, b.id === selectedId ? reluare : 0);
 
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 lg:left-[var(--sidebar-width)] flex flex-col bg-muted/30 z-[60]">
+    <FurnizorLegaturi value={{ businessId: business.id, ...legaturi }}>
+    {/* ⚠ Toate clasele de font pe radacina: lista de fonturi se arata fiecare in fontul lui. */}
+    <div className={cn("fixed inset-0 lg:left-[var(--sidebar-width)] flex flex-col bg-muted/30 z-[60]", toateClaseleDeFont())}>
       {/* Top bar */}
       <div className="h-14 bg-background border-b border-border flex items-center gap-2 px-3 shrink-0">
-        <Link href="/dashboard/pages" className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted shrink-0">
+        {/* `beforeunload` nu prinde navigarea din aplicatie; pe telefon sageata e singura iesire. */}
+        <Link href="/dashboard/pages" aria-label="Înapoi la pagini"
+          onClick={(e) => { if (dirty && !window.confirm("Ai modificări nesalvate. Pleci fără să le salvezi?")) e.preventDefault(); }}
+          className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted shrink-0">
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <input value={title} onChange={(e) => { setTitle(e.target.value); mark(); }}
           className="font-semibold text-sm text-foreground bg-transparent focus:outline-none focus:bg-muted rounded px-2 py-1 min-w-0 flex-1 max-w-[240px]" />
 
         <div className="hidden sm:flex items-center gap-1 bg-muted rounded-lg p-0.5 ml-auto">
-          <button type="button" onClick={() => setDevice("desktop")} className={`w-8 h-7 rounded-md flex items-center justify-center ${device === "desktop" ? "bg-background shadow-sm" : ""}`}><Monitor className="h-4 w-4" /></button>
-          <button type="button" onClick={() => setDevice("mobile")} className={`w-8 h-7 rounded-md flex items-center justify-center ${device === "mobile" ? "bg-background shadow-sm" : ""}`}><Smartphone className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setDevice("desktop")} aria-label="Previzualizare pe desktop" aria-pressed={device === "desktop"} className={`w-8 h-7 rounded-md flex items-center justify-center ${device === "desktop" ? "bg-background shadow-sm" : ""}`}><Monitor className="h-4 w-4" /></button>
+          <button type="button" onClick={() => setDevice("mobile")} aria-label="Previzualizare pe telefon" aria-pressed={device === "mobile"} className={`w-8 h-7 rounded-md flex items-center justify-center ${device === "mobile" ? "bg-background shadow-sm" : ""}`}><Smartphone className="h-4 w-4" /></button>
         </div>
+
+        <button type="button" onClick={() => { selectBlock(null); setSetariPaginaMobil(true); }}
+          className="lg:hidden flex items-center h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-muted ml-auto sm:ml-0">
+          Pagină
+        </button>
 
         <a href={`${publicBase}/${slug}`} target="_blank" rel="noopener noreferrer"
           className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium hover:bg-muted sm:ml-0 ml-auto">
@@ -191,7 +282,7 @@ export function PageBuilder({
         <button type="button" onClick={save} disabled={isSaving || !dirty}
           className="flex items-center gap-1.5 h-9 px-4 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-50 shrink-0">
           {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {dirty ? "Salveaza" : "Salvat"}
+          {dirty ? "Salvează" : "Salvat"}
         </button>
       </div>
 
@@ -199,10 +290,16 @@ export function PageBuilder({
         {/* Canvas */}
         <div className="flex-1 overflow-y-auto" onClick={() => selectBlock(null)}>
           <div className={device === "mobile" ? "min-h-full flex justify-center items-start py-8 px-4" : "min-h-full"}>
-          <div className={`bg-background transition-all ${device === "mobile" ? "w-[400px] max-w-full rounded-[28px] border-4 border-gray-200 shadow-2xl overflow-hidden" : "max-w-full min-h-full"}`}>
+          <div
+            className={`transition-all ${device === "mobile" ? "w-[400px] max-w-full rounded-[28px] border-4 border-gray-200 shadow-2xl overflow-hidden" : "max-w-full min-h-full"}`}
+            ref={panza}
+            style={{ backgroundColor: fundal }}
+            data-editor-device={device}
+            data-anim-pornit=""
+          >
             <InsertButton onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: 0 }); }} />
             {blocks.map((block, i) => (
-              <div key={block.id}>
+              <div key={cheie(block)}>
                 <div
                   onClick={(e) => { e.stopPropagation(); selectBlock(block.id); }}
                   className={`relative group cursor-pointer ${selectedId === block.id ? "ring-2 ring-primary ring-inset" : "hover:ring-1 hover:ring-primary/40 ring-inset"}`}
@@ -212,6 +309,7 @@ export function PageBuilder({
                       block={block}
                       ctx={ctx}
                       selectedId={selectedId}
+                      cheie={cheie}
                       onSelectBlock={selectBlock}
                       onMoveNested={moveBlock}
                       onDuplicateNested={duplicateBlock}
@@ -219,9 +317,9 @@ export function PageBuilder({
                       onAddToColumn={(columnIndex, index) => setPalette({ kind: "column", columnBlockId: block.id, columnIndex, index })}
                     />
                   ) : (
-                    <div className="pointer-events-none">
+                    <Previzualizare onSelect={() => selectBlock(block.id)}>
                       <BlockRenderer blocks={[block]} ctx={ctx} />
-                    </div>
+                    </Previzualizare>
                   )}
                   {/* hover toolbar */}
                   <div className={`absolute top-2 right-2 z-10 flex items-center gap-1 bg-background border border-border rounded-lg shadow-sm p-0.5 ${selectedId === block.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}>
@@ -229,7 +327,7 @@ export function PageBuilder({
                     <ToolBtn title="Sus" onClick={(e) => { e.stopPropagation(); moveBlock(block.id, -1); }} disabled={i === 0}><ArrowUp className="h-3.5 w-3.5" /></ToolBtn>
                     <ToolBtn title="Jos" onClick={(e) => { e.stopPropagation(); moveBlock(block.id, 1); }} disabled={i === blocks.length - 1}><ArrowDown className="h-3.5 w-3.5" /></ToolBtn>
                     <ToolBtn title="Duplica" onClick={(e) => { e.stopPropagation(); duplicateBlock(block.id); }}><Copy className="h-3.5 w-3.5" /></ToolBtn>
-                    <ToolBtn title="Setari" onClick={(e) => { e.stopPropagation(); selectBlock(block.id); }}><Settings2 className="h-3.5 w-3.5" /></ToolBtn>
+                    <ToolBtn title="Setări" onClick={(e) => { e.stopPropagation(); selectBlock(block.id); }}><Settings2 className="h-3.5 w-3.5" /></ToolBtn>
                     <ToolBtn title="Sterge" onClick={(e) => { e.stopPropagation(); removeBlock(block.id); }}><Trash2 className="h-3.5 w-3.5 text-red-500" /></ToolBtn>
                   </div>
                 </div>
@@ -240,18 +338,18 @@ export function PageBuilder({
               <div className="p-5 flex justify-center border-t border-dashed border-border">
                 <button type="button" onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: blocks.length }); }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
-                  <Plus className="h-4 w-4" /> Adauga bloc
+                  <Plus className="h-4 w-4" /> Adaugă bloc
                 </button>
               </div>
             )}
             {blocks.length === 0 && (
               <div className="text-center py-24 px-4">
                 <Square className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                <p className="text-sm font-medium text-foreground mb-1">Pagina e goala</p>
-                <p className="text-xs text-muted-foreground mb-4">Adauga primul bloc ca sa incepi.</p>
+                <p className="text-sm font-medium text-foreground mb-1">Pagina e goală</p>
+                <p className="text-xs text-muted-foreground mb-4">Adaugă primul bloc ca să începi.</p>
                 <button type="button" onClick={(e) => { e.stopPropagation(); setPalette({ kind: "top", index: 0 }); }}
                   className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90">
-                  <Plus className="h-4 w-4" /> Adauga bloc
+                  <Plus className="h-4 w-4" /> Adaugă bloc
                 </button>
               </div>
             )}
@@ -267,10 +365,12 @@ export function PageBuilder({
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             {tab === "block" && selected ? (
-              <BlockSettings block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} />
+              <RedaAnimatia.Provider value={() => setReluare((n) => n + 1)}>
+                <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} />
+              </RedaAnimatia.Provider>
             ) : (
               <PageSettings
-                title={title} slug={slug} seo={seo} css={css} publicBase={publicBase}
+                title={title} slug={slug} seo={seo} css={css} publicBase={publicBase} blocks={blocks}
                 onTitle={(v) => { setTitle(v); mark(); }} onSlug={(v) => { setSlug(v); mark(); }}
                 onSeo={(v) => { setSeo(v); mark(); }} onCss={(v) => { setCss(v); mark(); }}
               />
@@ -279,14 +379,31 @@ export function PageBuilder({
         </div>
       </div>
 
+      {/* Setarile paginii, pe telefon */}
+      {setariPaginaMobil && !selected && (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 z-30 max-h-[80vh] overflow-y-auto bg-background border-t border-border rounded-t-2xl shadow-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold">Setările paginii</span>
+            <button type="button" onClick={() => setSetariPaginaMobil(false)} aria-label="Închide" className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
+          </div>
+          <PageSettings
+            title={title} slug={slug} seo={seo} css={css} publicBase={publicBase} blocks={blocks}
+            onTitle={(v) => { setTitle(v); mark(); }} onSlug={(v) => { setSlug(v); mark(); }}
+            onSeo={(v) => { setSeo(v); mark(); }} onCss={(v) => { setCss(v); mark(); }}
+          />
+        </div>
+      )}
+
       {/* Mobile settings drawer */}
       {selected && (
         <div className="lg:hidden fixed inset-x-0 bottom-0 z-30 max-h-[70vh] overflow-y-auto bg-background border-t border-border rounded-t-2xl shadow-2xl p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-semibold">{BLOCK_META[selected.type]?.label ?? selected.type}</span>
-            <button type="button" onClick={() => selectBlock(null)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={() => selectBlock(null)} aria-label="Închide" className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
           </div>
-          <BlockSettings block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} />
+          <RedaAnimatia.Provider value={() => setReluare((n) => n + 1)}>
+            <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} />
+          </RedaAnimatia.Provider>
         </div>
       )}
 
@@ -294,10 +411,11 @@ export function PageBuilder({
       {palette !== null && (
         <>
           <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setPalette(null)} />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 w-full max-w-lg max-h-[80vh] overflow-y-auto bg-background rounded-2xl border border-border shadow-2xl p-5">
+          <div ref={cutiePaleta} role="dialog" aria-modal="true" aria-labelledby="titlu-paleta" tabIndex={-1}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 w-[calc(100%-2rem)] max-w-lg max-h-[80vh] overflow-y-auto bg-background rounded-2xl border border-border shadow-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold">{palette.kind === "column" ? "Adauga in coloana" : "Adauga un bloc"}</h3>
-              <button type="button" onClick={() => setPalette(null)} className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
+              <h3 id="titlu-paleta" className="text-base font-semibold">{palette.kind === "column" ? "Adaugă în coloană" : "Adaugă un bloc"}</h3>
+              <button type="button" onClick={() => setPalette(null)} aria-label="Închide" className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {(palette.kind === "column" ? BLOCK_PALETTE_ORDER.filter((t) => !COLUMN_EXCLUDED.includes(t)) : BLOCK_PALETTE_ORDER).map((type) => {
@@ -312,10 +430,35 @@ export function PageBuilder({
                 );
               })}
             </div>
+            {/*
+              Blocurile din integrari (25.09.2026): apar mereu, ca omul sa stie ca
+              exista, dar se pot adauga doar cand integrarea e activa. Stinse,
+              spun ce trebuie conectat.
+            */}
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Plug className="h-3.5 w-3.5" /> Din integrările tale</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {BLOCURI_INTEGRARI.map((type) => {
+                  const meta = BLOCK_META[type];
+                  const Icon = ICONS[meta.icon] ?? Square;
+                  const activ = integrareActiva[type];
+                  const lipsa = type === "newsletter" ? "Conectează Mailchimp, Brevo sau Klaviyo" : type === "payments" ? "Nicio plată activă" : "Niciun curier pornit";
+                  return (
+                    <button key={type} type="button" disabled={!activ} onClick={() => addBlock(type, palette)} title={activ ? undefined : lipsa}
+                      className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 transition-colors hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-border disabled:hover:bg-transparent">
+                      <Icon className="h-5 w-5 text-foreground" />
+                      <span className="text-center text-xs font-medium text-foreground">{meta.label}</span>
+                      {!activ && <span className="text-center text-[10px] leading-tight text-muted-foreground">{lipsa}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </>
       )}
-    </div>,
+    </div>
+    </FurnizorLegaturi>,
     document.body,
   );
 }
@@ -345,7 +488,7 @@ function InsertButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
 function NestedInsert({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   return (
     <div className="relative h-0 group/ni">
-      <button type="button" onClick={onClick} title="Adauga aici"
+      <button type="button" onClick={onClick} title="Adaugă aici"
         className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center shadow opacity-0 group-hover/ni:opacity-100 hover:scale-110 transition-all">
         <Plus className="h-3.5 w-3.5" />
       </button>
@@ -361,8 +504,9 @@ function NestedInsert({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
  * "+" to add any block into that column.
  */
 function EditableColumns({
-  block, ctx, selectedId, onSelectBlock, onMoveNested, onDuplicateNested, onRemoveNested, onAddToColumn,
+  block, ctx, selectedId, cheie, onSelectBlock, onMoveNested, onDuplicateNested, onRemoveNested, onAddToColumn,
 }: {
+  cheie: (b: Block) => string;
   block: ColumnsBlock;
   ctx: BlockRendererCtx;
   selectedId: string | null;
@@ -375,41 +519,43 @@ function EditableColumns({
   // Classic columns keep the read-only preview; content is edited in the panel.
   if (!isFlexibleColumns(block)) {
     return (
-      <div className="pointer-events-none">
+      <Previzualizare onSelect={() => onSelectBlock(block.id)}>
         <BlockRenderer blocks={[block]} ctx={ctx} />
-      </div>
+      </Previzualizare>
     );
   }
 
-  const count = block.count ?? 2;
-  const fr = columnsGridTemplate(block);
-  const gap = block.gap === "sm" ? "gap-3" : block.gap === "lg" ? "gap-8" : "gap-6";
+  // Aceeasi asezare ca pe pagina publicata (`asezareColoane`): cardul, fundalul, alinierea, telefonul, ordinea.
+  const a = asezareColoane(block);
+  const { count } = a;
 
   return (
     <BlockShell style={block.style}>
-      <div className={`grid grid-cols-1 items-stretch ${gap} md:[grid-template-columns:var(--tpl)]`} style={{ "--tpl": fr } as React.CSSProperties}>
+      <div className={a.grila} style={a.stilGrila}>
         {Array.from({ length: count }).map((_, ci) => {
           const list = columnBlocks(block, ci);
+          const cel = a.celula(ci);
           return (
-            <div key={ci} className={`min-w-0 rounded-xl ${block.bordered ? "border border-border" : "border border-dashed border-border/70"}`}>
+            <div key={ci} style={cel.style}
+              className={`pg-celula min-w-0 rounded-xl ${block.bordered || block.cellCard ? "border border-border" : "border border-dashed border-border/70"} ${cel.className}`}>
               {list.length === 0 ? (
                 <button type="button" onClick={(e) => { e.stopPropagation(); onAddToColumn(ci, 0); }}
                   className="w-full min-h-[120px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-colors">
                   <Plus className="h-5 w-5" />
-                  <span className="text-xs font-medium">Adauga bloc</span>
+                  <span className="text-xs font-medium">Adaugă bloc</span>
                 </button>
               ) : (
                 <div className="py-1">
                   {list.map((nb, ni) => (
-                    <div key={nb.id}>
+                    <div key={cheie(nb)}>
                       <NestedInsert onClick={(e) => { e.stopPropagation(); onAddToColumn(ci, ni); }} />
                       <div
                         onClick={(e) => { e.stopPropagation(); onSelectBlock(nb.id); }}
                         className={`relative group/nested cursor-pointer ${selectedId === nb.id ? "ring-2 ring-primary ring-inset" : "hover:ring-1 hover:ring-primary/40 ring-inset"}`}
                       >
-                        <div className="pointer-events-none">
+                        <Previzualizare onSelect={() => onSelectBlock(nb.id)}>
                           <BlockRenderer blocks={[nb]} ctx={ctx} />
-                        </div>
+                        </Previzualizare>
                         <div className={`absolute top-1 right-1 z-10 flex items-center gap-0.5 bg-background border border-border rounded-md shadow-sm p-0.5 ${selectedId === nb.id ? "opacity-100" : "opacity-0 group-hover/nested:opacity-100"} transition-opacity`}>
                           <ToolBtn title="Sus" onClick={(e) => { e.stopPropagation(); onMoveNested(nb.id, -1); }} disabled={ni === 0}><ArrowUp className="h-3.5 w-3.5" /></ToolBtn>
                           <ToolBtn title="Jos" onClick={(e) => { e.stopPropagation(); onMoveNested(nb.id, 1); }} disabled={ni === list.length - 1}><ArrowDown className="h-3.5 w-3.5" /></ToolBtn>
@@ -422,7 +568,7 @@ function EditableColumns({
                   <div className="px-2 pb-2 pt-1">
                     <button type="button" onClick={(e) => { e.stopPropagation(); onAddToColumn(ci, list.length); }}
                       className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-primary border border-primary/30 rounded-lg hover:bg-primary/5 transition-colors">
-                      <Plus className="h-3.5 w-3.5" /> Adauga
+                      <Plus className="h-3.5 w-3.5" /> Adaugă
                     </button>
                   </div>
                 </div>
@@ -435,8 +581,8 @@ function EditableColumns({
   );
 }
 
-function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSeo, onCss }: {
-  title: string; slug: string; seo: PageSeo; css: string; publicBase: string;
+function PageSettings({ title, slug, seo, css, publicBase, blocks, onTitle, onSlug, onSeo, onCss }: {
+  title: string; slug: string; seo: PageSeo; css: string; publicBase: string; blocks: Block[];
   onTitle: (v: string) => void; onSlug: (v: string) => void; onSeo: (v: PageSeo) => void; onCss: (v: string) => void;
 }) {
   // `initialSeo` e un cast brut peste o coloana `Json`: o valoare veche sau
@@ -494,6 +640,14 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
           </div>
         )}
 
+        <SugestiiSeo title={title} slug={slug} seo={seo} blocks={blocks} />
+
+        <div className="mb-3">
+          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Cuvântul cheie principal (opțional)</label>
+          <input value={seo.focusKeyword ?? ""} onChange={(e) => onSeo({ ...seo, focusKeyword: e.target.value })} placeholder="Ex: lampadare din lemn" className={inputCls} />
+          <p className="text-[11px] text-muted-foreground mt-1">Căutarea pentru care vrei să apară pagina. Nu se afișează nicăieri; sugestiile de mai sus verifică dacă apare unde trebuie.</p>
+        </div>
+
         <div className="mb-3">
           <GooglePreview
             title={seo.title?.trim() || title || "Titlu pagina"}
@@ -518,7 +672,7 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
           <textarea value={seo.description ?? ""} onChange={(e) => onSeo({ ...seo, description: e.target.value })} placeholder="Descriere scurta pentru rezultatele Google..." rows={2} className={`${inputCls} resize-none`} />
         </div>
         <input value={seo.keywords ?? ""} onChange={(e) => onSeo({ ...seo, keywords: e.target.value })} placeholder="Cuvinte cheie (optional, separate prin virgula)" className={`${inputCls} mt-2`} />
-        <p className="text-[11px] text-muted-foreground mt-1">Cuvintele cheie sunt aproape ignorate de Google azi — conteaza mai mult titlul, descrierea si imaginea de mai jos.</p>
+        <p className="text-[11px] text-muted-foreground mt-1">Cuvintele cheie sunt aproape ignorate de Google azi: contează mai mult titlul, descrierea și imaginea de mai jos.</p>
         <div className="mt-3">
           <label className="block text-[11px] font-medium text-muted-foreground mb-1">Imagine la distribuire (Facebook/WhatsApp)</label>
           <SeoImageField value={seo.ogImage} onChange={(v) => onSeo({ ...seo, ogImage: v })} folder="pages-og" />
@@ -527,12 +681,85 @@ function PageSettings({ title, slug, seo, css, publicBase, onTitle, onSlug, onSe
           <input type="checkbox" checked={!!seo.noindex} onChange={(e) => onSeo({ ...seo, noindex: e.target.checked })} className="w-4 h-4 rounded accent-green-600" />
           Ascunde din motoarele de cautare (noindex)
         </label>
+        <details className="mt-3 rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-foreground">SEO avansat</summary>
+          <div className="mt-3 space-y-3">
+            <div>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Titlu la distribuire (Facebook, WhatsApp)</label>
+              <input value={seo.ogTitle ?? ""} onChange={(e) => onSeo({ ...seo, ogTitle: e.target.value })} placeholder={seo.title || title} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Descriere la distribuire</label>
+              <textarea value={seo.ogDescription ?? ""} onChange={(e) => onSeo({ ...seo, ogDescription: e.target.value })} rows={2} placeholder={seo.description || "Ca descrierea pentru Google"} className={`${inputCls} resize-none`} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Adresă canonică</label>
+              <input value={seo.canonical ?? ""} onChange={(e) => onSeo({ ...seo, canonical: e.target.value })} placeholder={`${publicBase}/${slug}`} className={inputCls} />
+              <p className="text-[11px] text-muted-foreground mt-1">Doar dacă pagina e o copie a alteia: spune-i lui Google care e originalul. Gol = adresa acestei pagini.</p>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
+              <input type="checkbox" checked={!!seo.nofollow} onChange={(e) => onSeo({ ...seo, nofollow: e.target.checked })} className="w-4 h-4 rounded accent-green-600" />
+              Google să nu urmeze legăturile de pe pagină (nofollow)
+            </label>
+          </div>
+        </details>
       </div>
       <div className="pt-2 border-t border-border">
         <label className="block text-xs font-semibold text-foreground mb-1.5">CSS personalizat (pagina)</label>
         <textarea value={css} onChange={(e) => onCss(e.target.value)} placeholder=".clasa { color: red; }" rows={5} className={`${inputCls} font-mono text-xs resize-none`} />
         <p className="text-[11px] text-muted-foreground mt-1">Se aplica doar pe aceasta pagina.</p>
       </div>
+    </div>
+  );
+}
+
+
+/* Sugestiile SEO ale paginii, cu scor. Se recalculeaza la fiecare modificare, fara nicio cerere. */
+const CULOARE_NIVEL: Record<Nivel, string> = { bine: "bg-success", atentie: "bg-warning", problema: "bg-destructive" };
+
+function SugestiiSeo(p: { title: string; slug: string; seo: PageSeo; blocks: Block[] }) {
+  const { scor, sugestii } = sugestiiSeo(p);
+  const ton = scor >= 80 ? "text-success" : scor >= 55 ? "text-warning" : "text-destructive";
+  const deRezolvat = sugestii.filter((x) => x.nivel !== "bine").length;
+  return (
+    <details className="mb-3 rounded-lg border border-border" open={deRezolvat > 0}>
+      <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5">
+        <span className="text-xs font-semibold text-foreground">Sugestii SEO</span>
+        <span className={`text-sm font-bold tabular-nums ${ton}`}>{scor}/100</span>
+      </summary>
+      <ul className="space-y-2 border-t border-border px-3 py-3">
+        {sugestii.map((x, i) => (
+          <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-foreground/85">
+            <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${CULOARE_NIVEL[x.nivel]}`} />
+            {x.text}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/*
+  Previzualizarea unui bloc in editor (26.09.2026). Pana acum era
+  `pointer-events-none`, deci cursorul nu ajungea la bloc si efectele „la
+  trecerea cursorului” nu se vedeau deloc in editor. Acum blocul primeste
+  cursorul, dar ORICE clic doar selecteaza blocul: nicio legatura urmata, niciun
+  produs pus in cos, niciun formular trimis, nicio bifa schimbata. Campurile nu
+  primesc focus. Cadrele (cod personalizat, harta, video) raman fara cursor
+  (`.pg-previzualizare` in `stil-comun.css`), altfel un clic pe ele n-ar mai
+  selecta blocul.
+*/
+function Previzualizare({ onSelect, children }: { onSelect: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      className="pg-previzualizare"
+      onClickCapture={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(); }}
+      onMouseDownCapture={(e) => {
+        if ((e.target as HTMLElement).closest("input, textarea, select, button, summary")) e.preventDefault();
+      }}
+      onSubmitCapture={(e) => e.preventDefault()}
+    >
+      {children}
     </div>
   );
 }

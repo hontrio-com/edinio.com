@@ -32,7 +32,7 @@ function toPageProduct(p: {
 }
 
 /** Owner-scoped product search for the page-builder picker (scales to large catalogs). */
-export async function searchProductsForPicker(businessId: string, query: string): Promise<PageProduct[]> {
+export async function searchProductsForPicker(businessId: string, query: string, optiuni?: { doarPachete?: boolean }): Promise<PageProduct[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -42,6 +42,8 @@ export async function searchProductsForPicker(businessId: string, query: string)
   let q = supabase.from("products").select(COLS).eq("business_id", businessId).eq("is_active", true);
   const term = query.trim();
   if (term) q = q.ilike("name", `%${term}%`);
+  // Blocul „Pachete” (25.09.2026) alege doar dintre pachete.
+  if (optiuni?.doarPachete === true) q = q.eq("is_bundle", true);
   const { data } = await q.order("is_featured", { ascending: false }).order("sort_order").limit(24);
   return (data ?? []).map(toPageProduct);
 }

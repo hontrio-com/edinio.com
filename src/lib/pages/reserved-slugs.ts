@@ -83,6 +83,15 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   // paginile de brand si numele lor apropiate (o pagina proprie „branduri” ar fi
   // fost crezuta lista brandurilor, si nu e).
   SEGMENT_BRAND, "branduri", "brands",
+  // ⚠ NUMELE paginilor de sistem, nu doar rutele lor (25.09.2026, cerut de el).
+  // Rutele erau toate rezervate, dar o pagina proprie „Acasa” primea `acasa`,
+  // una „Finalizare comanda” primea `finalizare-comanda`: adrese libere, cu un
+  // nume care in meniu arata ca pagina de sistem si nu era. Verificat pe
+  // PRODUCTIE inainte: niciuna dintre cele 34 de pagini nu poarta vreunul.
+  "acasa", "home", "homepage", "index", "pagina-principala", "prima-pagina",
+  "finalizare-comanda", "finalizeaza-comanda", "plasare-comanda",
+  "cos-de-cumparaturi", "cosul-meu", "cosul-tau", "toate-produsele",
+  "404", "eroare",
   // platform / framework
   "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
   // app sections that live at the root path
@@ -110,4 +119,19 @@ export function validatePageSlug(
   if (slug.length > 60) return { ok: false, error: "Linkul paginii e prea lung (maxim 60 de caractere)." };
   if (isReservedSlug(slug)) return { ok: false, error: `Linkul "${slug}" este rezervat. Alege alt link.` };
   return { ok: true, slug };
+}
+
+/**
+ * Titlul unei pagini noi nu poate fi numele unei pagini de sistem („Acasa”,
+ * „Cos”, „Finalizare comanda”, „Contul meu”...), chiar daca omul ii alege alt
+ * link: in meniu apare titlul, si arata ca pagina de sistem. Se compara forma
+ * fara diacritice si fara spatii (`slugify`), deci „Coș”, „COS” si „cos” sunt
+ * acelasi nume. Intoarce mesajul de refuz sau null.
+ */
+export function problemaTitlului(titlu: string): string | null {
+  const s = normalizePageSlug(titlu);
+  if (!s) return null;
+  return isReservedSlug(s)
+    ? `„${titlu.trim()}” e numele unei pagini de sistem a magazinului. Alege alt titlu.`
+    : null;
 }

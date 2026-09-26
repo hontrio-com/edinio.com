@@ -48,18 +48,26 @@ export default async function PageMessagesPage({
   ]);
   if (!business) redirect("/dashboard");
 
-  const { count } = await supabase
-    .from("page_form_submissions")
-    .select("id", { count: "exact", head: true })
-    .eq("business_id", business.id);
+  /* Filtrul „Necitite” (26.09.2026, auditul paginilor), in adresa, ca pagina. */
+  const doarNecitite = sp.doar === "necitite";
+  const [{ count }, { count: necitite }] = await Promise.all([
+    (() => {
+      let q = supabase.from("page_form_submissions").select("id", { count: "exact", head: true }).eq("business_id", business.id);
+      if (doarNecitite) q = q.eq("is_read", false);
+      return q;
+    })(),
+    supabase.from("page_form_submissions").select("id", { count: "exact", head: true }).eq("business_id", business.id).eq("is_read", false),
+  ]);
 
   const cateSunt = count ?? 0;
   const { pagina, pagini, deLa, panaLa } = fereastraPaginii(pageParam(sp.page), cateSunt, PE_PAGINA);
 
-  const { data: subs } = await supabase
+  let cerere = supabase
     .from("page_form_submissions")
-    .select("id, data, created_at, is_read")
-    .eq("business_id", business.id)
+    .select("id, data, created_at, is_read, form_id, page_id")
+    .eq("business_id", business.id);
+  if (doarNecitite) cerere = cerere.eq("is_read", false);
+  const { data: subs } = await cerere
     /* ⚠ `id` ca departajator: două completări din aceeași milisecundă (un robot
        trimite exact așa) s-ar fi putut așeza altfel de la o pagină la alta, deci
        un mesaj ar fi apărut de două ori și altul deloc. */
@@ -67,16 +75,40 @@ export default async function PageMessagesPage({
     .order("id", { ascending: false })
     .range(deLa, panaLa);
 
-  const list = (subs ?? []).map((s) => ({
-    id: s.id,
-    createdAt: s.created_at,
-    isRead: s.is_read,
-    fields: (((s.data as { fields?: SubField[] } | null)?.fields) ?? []) as SubField[],
-  }));
+  /*
+   * DE UNDE A VENIT fiecare mesaj: formularul, pagina sau newsletterul. Doua citiri
+   * mici, numai pentru randurile paginii curente.
+   */
+  const idForme = [...new Set((subs ?? []).map((s) => s.form_id).filter((x): x is string => !!x))];
+  const idPagini = [...new Set((subs ?? []).map((s) => s.page_id).filter((x): x is string => !!x))];
+  const [{ data: forme }, { data: paginiSursa }] = await Promise.all([
+    idForme.length ? supabase.from("forms").select("id, name").eq("business_id", business.id).in("id", idForme) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    idPagini.length ? supabase.from("custom_pages").select("id, title").eq("business_id", business.id).in("id", idPagini) : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+  ]);
+  const numeForma = new Map((forme ?? []).map((f) => [f.id, f.name]));
+  const titluPagina = new Map((paginiSursa ?? []).map((p) => [p.id, p.title]));
+  // Data scrisa pe server, la ora Romaniei: in browser, `toLocaleString` fara fus dadea alt text decat serverul.
+  const laOra = new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  const list = (subs ?? []).map((s) => {
+    const d = s.data as { fields?: SubField[]; newsletter?: boolean } | null;
+    const pagina = s.page_id ? titluPagina.get(s.page_id) : undefined;
+    const sursa = d?.newsletter ? `Newsletter${pagina ? ` · ${pagina}` : ""}`
+      : [s.form_id ? numeForma.get(s.form_id) ?? "Formular șters" : "Formular de contact", pagina].filter(Boolean).join(" · ");
+    return {
+      id: s.id,
+      cand: laOra.format(new Date(s.created_at)),
+      isRead: s.is_read,
+      sursa,
+      fields: (d?.fields ?? []) as SubField[],
+    };
+  });
 
   return (
     <MessagesClient
       submissions={list}
+      doarNecitite={doarNecitite}
+      necitite={necitite ?? 0}
       pagina={pagina}
       pagini={pagini}
       rezumat={rezumatulPaginii(cateSunt, pagina, PE_PAGINA, CUVINTELE_MESAJELOR)}

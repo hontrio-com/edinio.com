@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { numeleCategoriei } from "@/lib/support/tichete";
 
 interface Ticket {
   id: string; subject: string; category: string; priority: string;
@@ -24,9 +25,6 @@ const STATUS_CONFIG = {
   in_progress: { label: "In lucru", color: "bg-amber-100 text-amber-700" },
   resolved: { label: "Rezolvat", color: "bg-green-100 text-green-700" },
   closed: { label: "Inchis", color: "bg-zinc-100 text-zinc-500" },
-};
-const CATEGORY_LABELS: Record<string, string> = {
-  technical: "Tehnic", billing: "Facturare", feature: "Functionalitate", other: "Altele",
 };
 const PRIORITY_LABELS: Record<string, string> = {
   low: "Scazuta", normal: "Normala", high: "Mare", urgent: "Urgenta",
@@ -144,7 +142,7 @@ export function AdminSupportTicketClient({ ticket: initialTicket, initialMessage
             <div className="flex flex-wrap items-center gap-2">
               <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full", statusConf.color)}>{statusConf.label}</span>
               <span className="text-xs text-zinc-500">{PRIORITY_LABELS[ticket.priority] ?? ticket.priority}</span>
-              <span className="text-xs text-zinc-500">{CATEGORY_LABELS[ticket.category] ?? ticket.category}</span>
+              <span className="text-xs text-zinc-500">{numeleCategoriei(ticket.category)}</span>
               <span className="text-xs text-zinc-400">#{ticket.id.slice(0, 8)}</span>
             </div>
           </div>

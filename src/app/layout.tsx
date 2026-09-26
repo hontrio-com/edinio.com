@@ -7,7 +7,7 @@ import { cuVersiune } from "@/lib/brand/versiunea-siglei";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   display: "swap",
   /* Aceeasi socoteala ca la Inter, in `(website)/layout.tsx`: 29.288 de octeti
      ies din coada de dinaintea foii de stil, iar `swap` plus rezerva cu metrici
@@ -17,7 +17,7 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
   display: "swap",
   /*
     ⚠ NU SE PREÎNCARCĂ — 23.108 octeți pe fiecare pagină, pentru două pagini care

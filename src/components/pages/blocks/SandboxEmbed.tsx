@@ -55,7 +55,8 @@ ${js ? `<script>try{${js}}catch(e){if(window.console)console.error(e);}<\/script
       if (!ref.current || e.source !== ref.current.contentWindow) return;
       if (!data || data.__edinioEmbed !== nonce) return;
       const h = Number(data.height);
-      if (h > 0) setHeight(Math.max(minHeight, Math.ceil(h)));
+      /* Plafon: un cod care raporteaza o inaltime uriasa nu intinde pagina la nesfarsit. */
+      if (h > 0) setHeight(Math.min(20000, Math.max(minHeight, Math.ceil(h))));
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
@@ -68,6 +69,8 @@ ${js ? `<script>try{${js}}catch(e){if(window.console)console.error(e);}<\/script
       sandbox="allow-scripts allow-popups allow-forms"
       srcDoc={srcDoc}
       className="w-full block"
+      loading="lazy"
+      referrerPolicy="no-referrer"
       style={{ height, border: 0 }}
       scrolling="no"
     />

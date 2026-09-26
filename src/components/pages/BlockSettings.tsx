@@ -2,256 +2,37 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Upload, X, Loader2, Plus, AlertTriangle, Search } from "lucide-react";
+import { X, Plus, AlertTriangle, ImagePlus } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { MediaPicker } from "@/components/media/MediaPicker";
-import { uploadImage, uploadVideo } from "@/lib/upload";
 import { MAX_VIDEO_MB } from "@/lib/pages/video-config";
-import { PageIcon, PAGE_ICON_NAMES } from "./icon-registry";
 import { isFlexibleColumns, classicItemToBlocks, columnsPerRow, gridTemplateFor } from "@/lib/pages/block-tree";
+import { EFECTE_BUTON, EFECTE_IMAGINE } from "@/lib/pages/animatii";
 import type {
   Block, BlockStyle, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock,
   ButtonBlock, ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, FaqBlock,
-  TrustBlock, ProductsBlock, SocialBlock, ContactBlock, HtmlBlock, ColumnItem, GalleryItem,
+  TrustBlock, ProductsBlock, SocialBlock, ContactBlock, HtmlBlock, ColumnItem, GalleryItem, GreutateFont,
+  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock,
 } from "@/lib/pages/blocks.types";
 import { ProductPicker } from "./ProductPicker";
 import type { FormDef } from "@/lib/pages/forms.types";
+import { CampCuloare } from "./editor/CampCuloare";
+import { CampImagine } from "./editor/CampImagine";
+import { CampLink } from "./editor/CampLink";
+import { ControaleAnimatie, ControaleAspect } from "./editor/ControaleAspect";
+import { SetariHarta } from "./editor/SetariHarta";
+import { SetariFaq } from "./editor/SetariFaq";
+import { SetariBeneficii, SetariNewsletter, SetariPachete, SetariPlatiCurieri, StilFormular } from "./editor/SetariNoi";
+import { cereIzolare } from "@/lib/pages/cod-personalizat";
+import type { PachetPagina } from "@/lib/pages/resolve-bundles";
+import {
+  AlegeFont, Area, Field, Grup, IconPicker, Range, Segmentat, Select, Text, Toggle, inputCls,
+} from "./editor/campuri";
 
-const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
-const COLORS = ["#07c527", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2", "#000000", "#ffffff"];
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-foreground mb-1.5">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function Text({ label, value, onChange, placeholder }: { label: string; value?: string; onChange: (v: string) => void; placeholder?: string }) {
-  return <Field label={label}><input value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inputCls} /></Field>;
-}
-
-function Area({ label, value, onChange, placeholder, mono }: { label: string; value?: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean }) {
-  return <Field label={label}><textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={4} className={`${inputCls} resize-none ${mono ? "font-mono text-xs" : ""}`} /></Field>;
-}
-
-function Select<T extends string>({ label, value, options, onChange }: { label: string; value?: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
-  return (
-    <Field label={label}>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)} className={inputCls}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </Field>
-  );
-}
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="w-4 h-4 rounded accent-green-600" />
-      {label}
-    </label>
-  );
-}
-
-function ColorField({ label, value, onChange, allowEmpty }: { label: string; value?: string | null; onChange: (v: string | null) => void; allowEmpty?: boolean }) {
-  return (
-    <Field label={label}>
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {allowEmpty && (
-          <button type="button" onClick={() => onChange(null)} className={`w-7 h-7 rounded-md border flex items-center justify-center ${!value ? "border-primary" : "border-border"}`} title="Fara">
-            <X className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        )}
-        {COLORS.map((c) => (
-          <button key={c} type="button" onClick={() => onChange(c)}
-            className={`w-7 h-7 rounded-md border ${value === c ? "ring-2 ring-primary ring-offset-1" : "border-border"}`}
-            style={{ backgroundColor: c }} title={c} />
-        ))}
-        <input type="color" value={value ?? "#000000"} onChange={(e) => onChange(e.target.value)} className="w-7 h-7 rounded-md border border-border cursor-pointer p-0" />
-      </div>
-    </Field>
-  );
-}
-
-function Range({ label, value, onChange, min, max, step = 1, unit = "px" }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number; unit?: string }) {
-  return (
-    <Field label={`${label}: ${value}${unit}`}>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-green-600 cursor-pointer" />
-    </Field>
-  );
-}
-
-function IconPicker({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const list = q ? PAGE_ICON_NAMES.filter((n) => n.toLowerCase().includes(q.toLowerCase())) : PAGE_ICON_NAMES;
-  return (
-    <Field label="Pictograma">
-      <button type="button" onClick={() => setOpen((o) => !o)} className={`${inputCls} flex items-center gap-2 text-left`}>
-        <PageIcon name={value} className="h-4 w-4 text-foreground" />
-        <span className="text-muted-foreground truncate">{value || "Alege o pictograma"}</span>
-      </button>
-      {open && (
-        <div className="mt-2 border border-border rounded-lg p-2">
-          <div className="relative mb-2">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cauta..." className={`${inputCls} pl-7 py-1.5 text-xs`} />
-          </div>
-          <div className="grid grid-cols-6 gap-1.5 max-h-44 overflow-y-auto">
-            {list.map((n) => (
-              <button key={n} type="button" onClick={() => { onChange(n); setOpen(false); }} title={n}
-                className={`w-9 h-9 rounded-md flex items-center justify-center border ${value === n ? "border-primary bg-primary/10" : "border-transparent hover:bg-muted"}`}>
-                <PageIcon name={n} className="h-4 w-4 text-foreground" />
-              </button>
-            ))}
-            {list.length === 0 && <p className="col-span-6 text-xs text-muted-foreground p-2">Nimic gasit.</p>}
-          </div>
-        </div>
-      )}
-    </Field>
-  );
-}
-
-function ImageField({ label, value, onChange }: { label: string; value?: string | null; onChange: (v: string | null) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  async function onFile(file: File) {
-    setBusy(true);
-    const res = await uploadImage(file, "gallery", "pages");
-    setBusy(false);
-    if ("url" in res) onChange(res.url);
-  }
-  return (
-    <Field label={label}>
-      {value ? (
-        <div className="relative rounded-lg overflow-hidden border border-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={value} alt="" className="w-full max-h-40 object-cover" />
-          <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-border flex items-center justify-center"><X className="h-3 w-3" /></button>
-        </div>
-      ) : (
-        <label className="border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1.5 py-5 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <Upload className="h-4 w-4 text-muted-foreground" />}
-          <span className="text-xs text-muted-foreground">{busy ? "Se incarca..." : "Incarca imagine"}</span>
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
-        </label>
-      )}
-      <button type="button" onClick={() => setPickerOpen(true)} className="mt-2 text-xs font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
-      <input value={value ?? ""} onChange={(e) => onChange(e.target.value || null)} placeholder="sau lipeste un URL" className={`${inputCls} mt-2 text-xs`} />
-      <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} accept="image" bucket="gallery"
-        onSelect={(urls) => urls[0] && onChange(urls[0])} />
-    </Field>
-  );
-}
-
-function VideoUploadField({ value, onChange }: { value?: string | null; onChange: (v: string | null) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [pct, setPct] = useState(0);
-  const [err, setErr] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  async function onFile(file: File) {
-    setErr(null);
-    setBusy(true);
-    setPct(0);
-    const res = await uploadVideo(file, setPct);
-    setBusy(false);
-    if ("url" in res) onChange(res.url);
-    else setErr(res.error);
-  }
-  return (
-    <Field label="Videoclip">
-      {value ? (
-        <div className="relative rounded-lg overflow-hidden border border-border bg-black">
-          <video src={value} controls preload="metadata" className="w-full max-h-48" />
-          <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-border flex items-center justify-center z-10"><X className="h-3 w-3" /></button>
-        </div>
-      ) : (
-        <label className={`border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1.5 py-6 transition-colors ${busy ? "opacity-70" : "cursor-pointer hover:border-primary hover:bg-primary/5"}`}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <Upload className="h-4 w-4 text-muted-foreground" />}
-          <span className="text-xs text-muted-foreground">{busy ? `Se incarca... ${pct}%` : "Incarca videoclip"}</span>
-          {busy && <div className="w-3/4 h-1 rounded-full bg-muted overflow-hidden"><div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} /></div>}
-          <input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={busy} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
-        </label>
-      )}
-      <button type="button" onClick={() => setPickerOpen(true)} className="mt-2 text-xs font-medium text-primary hover:text-primary/80">Alege din Biblioteca Media</button>
-      <p className="text-[11px] text-muted-foreground mt-1.5">MP4, WebM sau MOV. Maxim {MAX_VIDEO_MB}MB. Pentru clipuri lungi, foloseste un link YouTube/Vimeo.</p>
-      {err && <p className="text-[11px] text-red-500 mt-1">{err}</p>}
-      <MediaPicker open={pickerOpen} onClose={() => setPickerOpen(false)} accept="video" bucket="gallery"
-        onSelect={(urls) => urls[0] && onChange(urls[0])} />
-    </Field>
-  );
-}
-
-function VideoSettings({ block, patch, setStyle }: { block: VideoBlock; patch: (p: Record<string, unknown>) => void; setStyle: (s: BlockStyle) => void }) {
-  const [mode, setMode] = useState<"upload" | "url">(block.url && !block.src ? "url" : "upload");
-  const tab = (m: "upload" | "url", label: string) => (
-    <button type="button" onClick={() => {
-      setMode(m);
-      if (m === "upload") patch({ url: "" });
-      else patch({ src: null, poster: null });
-    }} className={`py-1.5 text-xs font-medium rounded-md transition-colors ${mode === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground"}`}>{label}</button>
-  );
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-muted">
-        {tab("upload", "Incarca video")}
-        {tab("url", "Link YouTube / Vimeo")}
-      </div>
-      {mode === "upload" ? (
-        <>
-          <VideoUploadField value={block.src} onChange={(v) => patch({ src: v })} />
-          {block.src && <ImageField label="Imagine de coperta (optional)" value={block.poster} onChange={(v) => patch({ poster: v })} />}
-        </>
-      ) : (
-        <Text label="Link YouTube / Vimeo" value={block.url} onChange={(v) => patch({ url: v })} placeholder="https://youtube.com/watch?v=..." />
-      )}
-      <div className="space-y-2.5 pt-3 border-t border-border">
-        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Redare</p>
-        <Toggle label="Pornire automata" checked={!!block.autoplay} onChange={(v) => patch({ autoplay: v, muted: v ? true : block.muted })} />
-        {block.autoplay && <p className="text-[11px] text-muted-foreground -mt-1">Pornirea automata merge doar fara sunet (asa cer browserele).</p>}
-        <Toggle label="Redare in bucla" checked={!!block.loop} onChange={(v) => patch({ loop: v })} />
-        {!block.autoplay && <Toggle label="Fara sunet" checked={!!block.muted} onChange={(v) => patch({ muted: v })} />}
-        <Toggle label="Afiseaza controalele de redare" checked={block.controls !== false} onChange={(v) => patch({ controls: v })} />
-      </div>
-      <Select label="Raport de aspect" value={block.aspect ?? "16:9"} onChange={(v) => patch({ aspect: v })} options={[{ value: "16:9", label: "16:9 (orizontal)" }, { value: "9:16", label: "9:16 (vertical / reels)" }, { value: "1:1", label: "1:1 (patrat)" }]} />
-      {block.aspect === "9:16" && <p className="text-[11px] text-muted-foreground -mt-1">Pentru video vertical, micsoreaza latimea (ex: 40-60%) ca sa nu ocupe tot ecranul.</p>}
-      <Range label="Latime video" value={block.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
-      <Select label="Aliniere" value={block.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stanga" }, { value: "center", label: "Centru" }, { value: "right", label: "Dreapta" }]} />
-      <StyleControls style={block.style} onChange={setStyle} hide={["align"]} />
-    </div>
-  );
-}
-
-function StyleControls({ style, onChange, hide, showTextColor }: { style?: BlockStyle; onChange: (s: BlockStyle) => void; hide?: ("width" | "align" | "bg" | "padding")[]; showTextColor?: boolean }) {
-  const h = (k: string) => hide?.includes(k as never);
-  return (
-    <div className="space-y-3 pt-3 border-t border-border">
-      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Aspect</p>
-      {!h("padding") && (
-        <>
-          <Select label="Spatiere" value={style?.padding ?? "md"} onChange={(v) => onChange({ ...style, padding: v })}
-            options={[{ value: "none", label: "Fara" }, { value: "sm", label: "Mica" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }, { value: "xl", label: "Foarte mare" }, { value: "custom", label: "Personalizata" }]} />
-          {style?.padding === "custom" && (
-            <Range label="Spatiere sus/jos" value={style?.paddingCustom ?? 32} min={0} max={240} onChange={(v) => onChange({ ...style, paddingCustom: v })} />
-          )}
-        </>
-      )}
-      {!h("width") && (
-        <Select label="Latime" value={style?.width ?? "container"} onChange={(v) => onChange({ ...style, width: v })}
-          options={[{ value: "narrow", label: "Ingusta" }, { value: "container", label: "Standard" }, { value: "full", label: "Completa" }]} />
-      )}
-      {!h("align") && (
-        <Select label="Aliniere" value={style?.align ?? "left"} onChange={(v) => onChange({ ...style, align: v })}
-          options={[{ value: "left", label: "Stanga" }, { value: "center", label: "Centru" }, { value: "right", label: "Dreapta" }]} />
-      )}
-      {showTextColor && <ColorField label="Culoare text" value={style?.textColor} onChange={(v) => onChange({ ...style, textColor: v })} allowEmpty />}
-      {!h("bg") && <ColorField label="Fundal" value={style?.bg} onChange={(v) => onChange({ ...style, bg: v })} allowEmpty />}
-    </div>
-  );
-}
+const GREUTATI: { value: GreutateFont; label: string }[] = [
+  { value: "400", label: "Normal" }, { value: "500", label: "Mediu" }, { value: "600", label: "Semi-gros" },
+  { value: "700", label: "Gros" }, { value: "800", label: "Foarte gros" }, { value: "900", label: "Maxim" },
+];
 
 /* ─── Columns layout picker ────────────────────────────────────────────────── */
 
@@ -260,22 +41,27 @@ interface ColumnLayout { key: string; label: string; count: number; perRow: numb
 /** Preset arrangements. Single-row ratios + wrapping grids (e.g. 6 = 3 sus / 3 jos). */
 const COLUMN_LAYOUTS: ColumnLayout[] = [
   { key: "1-1",   label: "2 egale",        count: 2, perRow: 2, template: "1-1" },
-  { key: "1-2",   label: "Stanga mica",    count: 2, perRow: 2, template: "1-2" },
-  { key: "2-1",   label: "Dreapta mica",   count: 2, perRow: 2, template: "2-1" },
+  { key: "1-2",   label: "Stânga mică",    count: 2, perRow: 2, template: "1-2" },
+  { key: "2-1",   label: "Dreapta mică",   count: 2, perRow: 2, template: "2-1" },
+  { key: "1-3",   label: "Stânga îngustă", count: 2, perRow: 2, template: "1-3" },
+  { key: "3-1",   label: "Dreapta îngustă", count: 2, perRow: 2, template: "3-1" },
   { key: "1-1-1", label: "3 egale",        count: 3, perRow: 3, template: "1-1-1" },
-  { key: "2-1-1", label: "3: prima lata",  count: 3, perRow: 3, template: "2-1-1" },
+  { key: "2-1-1", label: "3: prima lată",  count: 3, perRow: 3, template: "2-1-1" },
   { key: "1-2-1", label: "3: mijloc lat",  count: 3, perRow: 3, template: "1-2-1" },
-  { key: "1-1-2", label: "3: ultima lata", count: 3, perRow: 3, template: "1-1-2" },
+  { key: "1-1-2", label: "3: ultima lată", count: 3, perRow: 3, template: "1-1-2" },
   { key: "4",     label: "4 egale",        count: 4, perRow: 4 },
-  { key: "2x2",   label: "2 x 2",          count: 4, perRow: 2 },
-  { key: "3x2",   label: "3 x 2 (6)",      count: 6, perRow: 3 },
-  { key: "2x3",   label: "2 x 3 (6)",      count: 6, perRow: 2 },
-  { key: "4x2",   label: "4 x 2 (8)",      count: 8, perRow: 4 },
+  { key: "5",     label: "5 egale",        count: 5, perRow: 5 },
+  { key: "6",     label: "6 egale",        count: 6, perRow: 6 },
+  { key: "2x2",   label: "2 × 2",          count: 4, perRow: 2 },
+  { key: "3x2",   label: "3 × 2 (6)",      count: 6, perRow: 3 },
+  { key: "2x3",   label: "2 × 3 (6)",      count: 6, perRow: 2 },
+  { key: "4x2",   label: "4 × 2 (8)",      count: 8, perRow: 4 },
+  { key: "3x3",   label: "3 × 3 (9)",      count: 9, perRow: 3 },
 ];
 
 function LayoutPreview({ count, perRow, template }: { count: number; perRow: number; template?: string }) {
   return (
-    <div className="w-full grid gap-0.5" style={{ gridTemplateColumns: gridTemplateFor(perRow, template) }}>
+    <div className="grid w-full gap-0.5" style={{ gridTemplateColumns: gridTemplateFor(perRow, template) }}>
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="h-2.5 rounded-[2px] bg-current opacity-30" />
       ))}
@@ -285,15 +71,15 @@ function LayoutPreview({ count, perRow, template }: { count: number; perRow: num
 
 function LayoutPicker({ current, onPick }: { current: string; onPick: (l: ColumnLayout) => void }) {
   return (
-    <Field label="Aspect coloane">
+    <Field label="Așezarea coloanelor">
       <div className="grid grid-cols-3 gap-2">
         {COLUMN_LAYOUTS.map((l) => {
           const active = l.key === current;
           return (
             <button key={l.key} type="button" onClick={() => onPick(l)} title={l.label}
-              className={`p-2 rounded-lg border flex flex-col items-center justify-between gap-1.5 min-h-[54px] transition-colors ${active ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground hover:border-primary/50"}`}>
+              className={`flex min-h-[54px] flex-col items-center justify-between gap-1.5 rounded-lg border p-2 transition-colors ${active ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground hover:border-primary/50"}`}>
               <LayoutPreview count={l.count} perRow={l.perRow} template={l.template} />
-              <span className="text-[10px] leading-tight text-center text-muted-foreground">{l.label}</span>
+              <span className="text-center text-[10px] leading-tight text-muted-foreground">{l.label}</span>
             </button>
           );
         })}
@@ -302,10 +88,30 @@ function LayoutPicker({ current, onPick }: { current: string; onPick: (l: Column
   );
 }
 
+function GalerieImagini({ items, onChange }: { items: GalleryItem[]; onChange: (items: GalleryItem[]) => void }) {
+  const [deschis, setDeschis] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setDeschis(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border py-4 text-xs font-medium text-foreground transition-colors hover:border-primary hover:bg-primary/5">
+        <ImagePlus className="h-4 w-4 text-muted-foreground" /> Adaugă imagini din Biblioteca Media
+      </button>
+      <MediaPicker open={deschis} onClose={() => setDeschis(false)} accept="image" bucket="gallery" multiple
+        excludeUrls={items.map((i) => i.src)}
+        onSelect={(urls) => onChange([...items, ...urls.map((src) => ({ src }))])} />
+    </>
+  );
+}
+
 /* ─── Main ─────────────────────────────────────────────────────────────────── */
 
-export function BlockSettings({ block, onChange, categories, forms, businessId, isAdmin }: {
+/** Ce stie editorul despre integrarile magazinului (doar nume, pentru explicatii). */
+export interface IntegrariEditor { furnizori: string[]; plati: string[]; curieri: string[] }
+
+export function BlockSettings({ block, onChange, categories, forms, businessId, isAdmin, integrari, pachete }: {
   block: Block; onChange: (patch: Partial<Block>) => void; categories: string[]; forms: FormDef[]; businessId: string; isAdmin: boolean;
+  integrari: IntegrariEditor;
+  pachete: PachetPagina[];
 }) {
   const patch = onChange as (p: Record<string, unknown>) => void;
   const setStyle = (style: BlockStyle) => patch({ style });
@@ -313,36 +119,90 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
   switch (block.type) {
     case "hero": {
       const b = block as HeroBlock;
+      const split = b.layout === "split-left" || b.layout === "split-right";
       return (
         <div className="space-y-4">
           <Text label="Titlu" value={b.title} onChange={(v) => patch({ title: v })} />
-          <Area label="Subtitlu" value={b.subtitle} onChange={(v) => patch({ subtitle: v })} />
-          <Text label="Text buton" value={b.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} placeholder="Ex: Vezi produsele" />
-          <Text label="Link buton" value={b.buttonHref} onChange={(v) => patch({ buttonHref: v })} placeholder="/produs sau https://" />
-          <ColorField label="Culoare buton" value={b.buttonColor} onChange={(v) => patch({ buttonColor: v })} allowEmpty />
-          <ColorField label="Culoare text buton" value={b.buttonTextColor} onChange={(v) => patch({ buttonTextColor: v })} allowEmpty />
-          <ImageField label="Imagine fundal" value={b.bgImage} onChange={(v) => patch({ bgImage: v })} />
-          <p className="text-[11px] text-muted-foreground -mt-2">Recomandat: imagine lata, 1600×900px (raport 16:9), sub 500KB.</p>
-          <ColorField label="Culoare fundal" value={b.bgColor} onChange={(v) => patch({ bgColor: v })} allowEmpty />
-          <ColorField label="Culoare text" value={b.textColor} onChange={(v) => patch({ textColor: v })} allowEmpty />
-          <Select label="Inaltime" value={b.height ?? "md"} onChange={(v) => patch({ height: v })} options={[{ value: "sm", label: "Mica" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }, { value: "custom", label: "Personalizata" }]} />
-          {b.height === "custom" && <Range label="Inaltime" value={b.heightCustom ?? 360} min={120} max={900} onChange={(v) => patch({ heightCustom: v })} />}
-          <Select label="Aliniere" value={b.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stanga" }, { value: "center", label: "Centru" }]} />
-          {b.bgImage && <Toggle label="Strat intunecat peste imagine" checked={b.overlay !== false} onChange={(v) => patch({ overlay: v })} />}
+          <Area label="Subtitlu" value={b.subtitle} onChange={(v) => patch({ subtitle: v })} rows={3} />
+          <CampImagine eticheta={split ? "Imagine" : "Imagine de fundal"} valoare={b.bgImage} onChange={(v) => patch({ bgImage: v })}
+            ajutor="Recomandat: lată, 1600 × 900 px, sub 500 KB." />
+          <Segmentat label="Așezare" value={b.layout ?? "overlay"} onChange={(v) => patch({ layout: v })}
+            options={[{ value: "overlay", label: "Text peste" }, { value: "split-left", label: "Imagine stânga" }, { value: "split-right", label: "Imagine dreapta" }]} />
+
+          <Grup titlu="Butoane" deschisImplicit>
+            <Text label="Text buton" value={b.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} placeholder="Ex: Vezi produsele" />
+            <CampLink eticheta="Link buton" valoare={b.buttonHref} onChange={(v) => patch({ buttonHref: v })} />
+            <CampCuloare eticheta="Culoare buton" valoare={b.buttonColor} onChange={(v) => patch({ buttonColor: v })} poateFiGol />
+            <CampCuloare eticheta="Culoare text buton" valoare={b.buttonTextColor} onChange={(v) => patch({ buttonTextColor: v })} poateFiGol />
+            <Text label="Al doilea buton (opțional)" value={b.secondLabel} onChange={(v) => patch({ secondLabel: v })} placeholder="Ex: Despre noi" />
+            {b.secondLabel && <CampLink eticheta="Link al doilea buton" valoare={b.secondHref} onChange={(v) => patch({ secondHref: v })} />}
+          </Grup>
+
+          <Grup titlu="Tipografie">
+            <AlegeFont label="Fontul titlului" value={b.titleFont ?? null} onChange={(v) => patch({ titleFont: v })} />
+            <AlegeFont label="Fontul subtitlului" value={b.subtitleFont ?? null} onChange={(v) => patch({ subtitleFont: v })} />
+            <Select label="Grosime" value={b.titleWeight ?? "900"} onChange={(v) => patch({ titleWeight: v })} options={GREUTATI} />
+            <Toggle label="Titlu cu majuscule" checked={b.titleTransform === "uppercase"} onChange={(v) => patch({ titleTransform: v ? "uppercase" : "none" })} />
+          </Grup>
+
+          <Grup titlu="Aspect">
+            <CampCuloare eticheta="Culoare fundal" valoare={b.bgColor} onChange={(v) => patch({ bgColor: v })} poateFiGol />
+            <CampCuloare eticheta="Culoare text" valoare={b.textColor} onChange={(v) => patch({ textColor: v })} poateFiGol />
+            <Select label="Înălțime" value={b.height ?? "md"} onChange={(v) => patch({ height: v })} options={[{ value: "sm", label: "Mică" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }, { value: "custom", label: "Personalizată" }]} />
+            {b.height === "custom" && <Range label="Înălțime" value={b.heightCustom ?? 360} min={120} max={900} onChange={(v) => patch({ heightCustom: v })} />}
+            {!split && <Segmentat label="Aliniere" value={b.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stânga" }, { value: "center", label: "Centru" }]} />}
+            {b.bgImage && !split && <Toggle label="Strat întunecat peste imagine" checked={b.overlay !== false} onChange={(v) => patch({ overlay: v })} />}
+            {b.bgImage && !split && b.overlay !== false && (
+              <Range label="Cât de întunecat" unit="%" value={b.overlayOpacity ?? 45} min={0} max={80} step={5} onChange={(v) => patch({ overlayOpacity: v })} />
+            )}
+            {b.bgImage && <Toggle label="Imaginea se apropie lent (Ken Burns)" checked={!!b.kenBurns} onChange={(v) => patch({ kenBurns: v })} />}
+            <Segmentat label="Se vede pe" value={b.style?.hideOn ?? "toate"}
+              onChange={(v) => setStyle({ ...b.style, hideOn: v === "toate" ? null : (v as "mobile" | "desktop") })}
+              options={[{ value: "toate", label: "Toate" }, { value: "mobile", label: "Doar desktop" }, { value: "desktop", label: "Doar telefon" }]} />
+          </Grup>
+          <ControaleAnimatie style={b.style} onChange={setStyle} />
         </div>
       );
     }
     case "heading": {
       const b = block as HeadingBlock;
+      const cuDegrade = !!b.gradient;
       return (
         <div className="space-y-4">
           <Text label="Text" value={b.text} onChange={(v) => patch({ text: v })} />
-          <Select label="Marime" value={b.size ?? "lg"} onChange={(v) => patch({ size: v })}
-            options={[{ value: "sm", label: "Mica" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }, { value: "xl", label: "Foarte mare" }, { value: "2xl", label: "Imensa" }, { value: "3xl", label: "Gigant" }, { value: "custom", label: "Personalizata" }]} />
-          {b.size === "custom" && <Range label="Marime text" value={b.sizeCustom ?? 32} min={12} max={120} onChange={(v) => patch({ sizeCustom: v })} />}
-          <ColorField label="Culoare text" value={b.color} onChange={(v) => patch({ color: v })} allowEmpty />
-          <Select label="Tip titlu (pentru SEO)" value={String(b.level ?? 2) as "1" | "2" | "3"} onChange={(v) => patch({ level: Number(v) as 1 | 2 | 3 })} options={[{ value: "1", label: "H1 (principal)" }, { value: "2", label: "H2" }, { value: "3", label: "H3" }]} />
-          <StyleControls style={b.style} onChange={setStyle} hide={["width"]} />
+          <Text label="Rând mic deasupra (opțional)" value={b.eyebrow} onChange={(v) => patch({ eyebrow: v })} placeholder="Ex: DESPRE NOI" />
+          <Text label="Subtitlu (opțional)" value={b.subtitle} onChange={(v) => patch({ subtitle: v })} />
+          <Select label="Mărime" value={b.size ?? "lg"} onChange={(v) => patch({ size: v })}
+            options={[{ value: "sm", label: "Mică" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }, { value: "xl", label: "Foarte mare" }, { value: "2xl", label: "Imensă" }, { value: "3xl", label: "Gigant" }, { value: "custom", label: "Personalizată" }]} />
+          {b.size === "custom" && <Range label="Mărime text" value={b.sizeCustom ?? 32} min={12} max={120} onChange={(v) => patch({ sizeCustom: v })} />}
+          <Select label="Tip titlu (pentru Google)" value={String(b.level ?? 2) as "1" | "2" | "3"} onChange={(v) => patch({ level: Number(v) as 1 | 2 | 3 })}
+            options={[{ value: "1", label: "H1 (titlul principal al paginii)" }, { value: "2", label: "H2 (secțiune)" }, { value: "3", label: "H3 (subsecțiune)" }]}
+            ajutor="Dacă pagina n-are niciun H1, primul titlu de pe ea devine automat H1." />
+
+          <Grup titlu="Tipografie" deschisImplicit>
+            <AlegeFont label="Font" value={b.font ?? null} onChange={(v) => patch({ font: v })} />
+            <Select label="Grosime" value={b.weight ?? "900"} onChange={(v) => patch({ weight: v })} options={GREUTATI} />
+            <Segmentat label="Spațiere între litere" value={b.spacing ?? "normal"} onChange={(v) => patch({ spacing: v })}
+              options={[{ value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "Foarte largă" }]} />
+            <Segmentat label="Litere" value={b.transform ?? "none"} onChange={(v) => patch({ transform: v })}
+              options={[{ value: "none", label: "Normale" }, { value: "uppercase", label: "MAJUSCULE" }, { value: "capitalize", label: "Fiecare Cuvânt" }]} />
+            <Toggle label="Cursiv (italic)" checked={!!b.italic} onChange={(v) => patch({ italic: v })} />
+          </Grup>
+
+          <Grup titlu="Culoare">
+            <Segmentat label="Culoare" value={cuDegrade ? "degrade" : "simpla"}
+              onChange={(v) => patch({ gradient: v === "degrade" ? { from: "#6D28D9", to: "#E11D48" } : null })}
+              options={[{ value: "simpla", label: "Simplă" }, { value: "degrade", label: "Degradé" }]} />
+            {cuDegrade ? (
+              <>
+                <CampCuloare eticheta="De la" valoare={b.gradient!.from} onChange={(v) => v && patch({ gradient: { ...b.gradient!, from: v } })} />
+                <CampCuloare eticheta="Până la" valoare={b.gradient!.to} onChange={(v) => v && patch({ gradient: { ...b.gradient!, to: v } })} />
+              </>
+            ) : (
+              <CampCuloare eticheta="Culoare text" valoare={b.color} onChange={(v) => patch({ color: v })} poateFiGol />
+            )}
+          </Grup>
+          <ControaleAspect style={b.style} onChange={setStyle} hide={["width"]} />
         </div>
       );
     }
@@ -350,8 +210,17 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       const b = block as TextBlock;
       return (
         <div className="space-y-4">
-          <Field label="Continut"><RichTextEditor content={b.html ?? ""} onChange={(html) => patch({ html })} /></Field>
-          <StyleControls style={b.style} onChange={setStyle} showTextColor />
+          <Field label="Conținut"><RichTextEditor content={b.html ?? ""} onChange={(html) => patch({ html })} /></Field>
+          <Grup titlu="Tipografie" deschisImplicit insigna={b.font ? "font propriu" : undefined}>
+            <AlegeFont label="Font" value={b.font ?? null} onChange={(v) => patch({ font: v })} gol="Fontul magazinului" />
+            <Range label="Mărime" value={b.fontSize ?? 16} min={12} max={32} onChange={(v) => patch({ fontSize: v })} />
+            <Select label="Grosime" value={b.weight ?? "400"} onChange={(v) => patch({ weight: v })} options={GREUTATI} />
+            <Segmentat label="Spațiu între rânduri" value={b.lineHeight ?? "relaxed"} onChange={(v) => patch({ lineHeight: v })}
+              options={[{ value: "tight", label: "Strâns" }, { value: "normal", label: "Normal" }, { value: "relaxed", label: "Aerisit" }, { value: "loose", label: "Larg" }]} />
+            <Segmentat label="Spațiere între litere" value={b.spacing ?? "normal"} onChange={(v) => patch({ spacing: v })}
+              options={[{ value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "F. largă" }]} />
+          </Grup>
+          <ControaleAspect style={b.style} onChange={setStyle} showTextColor />
         </div>
       );
     }
@@ -359,14 +228,22 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       const b = block as ImageBlock;
       return (
         <div className="space-y-4">
-          <ImageField label="Imagine" value={b.src} onChange={(v) => patch({ src: v })} />
-          <Text label="Text alternativ (alt)" value={b.alt} onChange={(v) => patch({ alt: v })} />
-          <Text label="Link (optional)" value={b.href} onChange={(v) => patch({ href: v })} />
+          <CampImagine eticheta="Imagine" valoare={b.src} onChange={(v) => patch({ src: v })} />
+          <Text label="Text alternativ (alt)" value={b.alt} onChange={(v) => patch({ alt: v })} ajutor="Ce se vede în imagine. Îl citesc Google și cititoarele de ecran." />
+          <CampLink eticheta="Link (opțional)" valoare={b.href} onChange={(v) => patch({ href: v })} />
+          {b.href && <Toggle label="Deschide în tab nou" checked={!!b.newTab} onChange={(v) => patch({ newTab: v })} />}
           <Text label="Descriere sub imagine" value={b.caption} onChange={(v) => patch({ caption: v })} />
-          <Range label="Latime imagine" value={b.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
-          <Select label="Aliniere" value={b.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stanga" }, { value: "center", label: "Centru" }, { value: "right", label: "Dreapta" }]} />
-          <Toggle label="Colturi rotunjite" checked={b.rounded !== false} onChange={(v) => patch({ rounded: v })} />
-          <StyleControls style={b.style} onChange={setStyle} hide={["align"]} />
+          <Grup titlu="Imaginea" deschisImplicit>
+            <Select label="Formă" value={b.aspect ?? "original"} onChange={(v) => patch({ aspect: v })}
+              options={[{ value: "original", label: "Originală" }, { value: "1:1", label: "Pătrat (1:1)" }, { value: "4:3", label: "4:3" }, { value: "3:4", label: "Portret (3:4)" }, { value: "16:9", label: "Lată (16:9)" }, { value: "21:9", label: "Panoramă (21:9)" }]} />
+            <Range label="Lățime imagine" value={b.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
+            <Segmentat label="Aliniere" value={b.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stânga" }, { value: "center", label: "Centru" }, { value: "right", label: "Dreapta" }]} />
+            <Toggle label="Colțuri rotunjite" checked={b.rounded !== false} onChange={(v) => patch({ rounded: v })} />
+            <Segmentat label="Umbră" value={b.shadow ?? "none"} onChange={(v) => patch({ shadow: v })}
+              options={[{ value: "none", label: "Fără" }, { value: "sm", label: "Fină" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }]} />
+            <Select label="La trecerea cursorului" value={b.hover ?? "none"} onChange={(v) => patch({ hover: v })} options={EFECTE_IMAGINE.map((e) => ({ value: e.cheie, label: e.nume }))} />
+          </Grup>
+          <ControaleAspect style={b.style} onChange={setStyle} hide={["align"]} />
         </div>
       );
     }
@@ -377,25 +254,39 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       const mode = b.captionMode ?? "none";
       return (
         <div className="space-y-4">
-          <Select label="Coloane" value={String(b.columns ?? 3) as "2" | "3" | "4"} onChange={(v) => patch({ columns: Number(v) as 2 | 3 | 4 })} options={[{ value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }]} />
-          <Select label="Distanta intre poze" value={b.gap ?? "md"} onChange={(v) => patch({ gap: v })} options={[{ value: "sm", label: "Mica" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }]} />
-          <Select label="Sub fiecare poza" value={mode} onChange={(v) => patch({ captionMode: v })} options={[{ value: "none", label: "Nimic" }, { value: "title", label: "Doar titlu" }, { value: "desc", label: "Doar descriere" }, { value: "both", label: "Titlu + descriere" }]} />
+          <GalerieImagini items={items} onChange={(n) => patch({ items: n })} />
           <div className="space-y-2">
             {items.map((it, i) => (
-              <div key={i} className="p-2 border border-border rounded-lg space-y-2">
+              <div key={i} className="space-y-2 rounded-lg border border-border p-2">
                 <div className="flex items-center gap-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={it.src} alt="" className="w-10 h-10 rounded object-cover border border-border shrink-0" />
-                  <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">{it.src}</span>
-                  <button type="button" onClick={() => patch({ items: items.filter((_, k) => k !== i) })} className="w-7 h-7 rounded border border-border flex items-center justify-center shrink-0"><X className="h-3.5 w-3.5 text-red-500" /></button>
+                  <img src={it.src} alt="" className="h-10 w-10 shrink-0 rounded border border-border object-cover" />
+                  <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{it.src.split("/").pop()}</span>
+                  <button type="button" onClick={() => patch({ items: items.filter((_, k) => k !== i) })} aria-label="Scoate imaginea" className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border"><X className="h-3.5 w-3.5 text-red-500" /></button>
                 </div>
-                {(mode === "title" || mode === "both") && <input value={it.title ?? ""} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Titlu poza" className={inputCls} />}
-                {(mode === "desc" || mode === "both") && <input value={it.desc ?? ""} onChange={(e) => setItem(i, { desc: e.target.value })} placeholder="Descriere poza" className={inputCls} />}
+                {(mode === "title" || mode === "both") && <input value={it.title ?? ""} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Titlu poză" className={inputCls} />}
+                {(mode === "desc" || mode === "both") && <input value={it.desc ?? ""} onChange={(e) => setItem(i, { desc: e.target.value })} placeholder="Descriere poză" className={inputCls} />}
               </div>
             ))}
           </div>
-          <ImageField label="Adauga imagine" value={null} onChange={(v) => { if (v) patch({ items: [...items, { src: v }] }); }} />
-          <StyleControls style={b.style} onChange={setStyle} hide={["align"]} />
+          <Grup titlu="Așezare" deschisImplicit>
+            <Segmentat label="Mod" value={b.layout ?? "grid"} onChange={(v) => patch({ layout: v })}
+              options={[{ value: "grid", label: "Grilă" }, { value: "masonry", label: "Zid (masonry)" }]} />
+            <Select label="Coloane pe desktop" value={String(b.columns ?? 3) as "2"} onChange={(v) => patch({ columns: Number(v) as 2 | 3 | 4 | 5 | 6 })}
+              options={["2", "3", "4", "5", "6"].map((n) => ({ value: n as "2", label: n }))} />
+            <Segmentat label="Pe telefon" value={String(b.mobileColumns ?? 2) as "1" | "2"} onChange={(v) => patch({ mobileColumns: Number(v) as 1 | 2 })}
+              options={[{ value: "1", label: "O coloană" }, { value: "2", label: "Două" }]} />
+            {b.layout !== "masonry" && (
+              <Select label="Forma pozelor" value={b.aspect ?? "1:1"} onChange={(v) => patch({ aspect: v })}
+                options={[{ value: "1:1", label: "Pătrat" }, { value: "4:3", label: "4:3" }, { value: "3:4", label: "Portret" }, { value: "16:9", label: "Lată" }]} />
+            )}
+            <Select label="Distanța între poze" value={b.gap ?? "md"} onChange={(v) => patch({ gap: v })} options={[{ value: "sm", label: "Mică" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }]} />
+            <Segmentat label="Colțuri" value={b.rounded ?? "md"} onChange={(v) => patch({ rounded: v })}
+              options={[{ value: "none", label: "Drepte" }, { value: "sm", label: "S" }, { value: "md", label: "M" }, { value: "lg", label: "L" }]} />
+            <Select label="La trecerea cursorului" value={b.hover ?? "none"} onChange={(v) => patch({ hover: v })} options={EFECTE_IMAGINE.map((e) => ({ value: e.cheie, label: e.nume }))} />
+            <Select label="Sub fiecare poză" value={mode} onChange={(v) => patch({ captionMode: v })} options={[{ value: "none", label: "Nimic" }, { value: "title", label: "Doar titlu" }, { value: "desc", label: "Doar descriere" }, { value: "both", label: "Titlu + descriere" }]} />
+          </Grup>
+          <ControaleAspect style={b.style} onChange={setStyle} hide={["align"]} />
         </div>
       );
     }
@@ -404,16 +295,34 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       return (
         <div className="space-y-4">
           <Text label="Text buton" value={b.label} onChange={(v) => patch({ label: v })} />
-          <Text label="Link" value={b.href} onChange={(v) => patch({ href: v })} placeholder="/produs sau https://" />
-          <Select label="Stil" value={b.variant ?? "solid"} onChange={(v) => patch({ variant: v })} options={[{ value: "solid", label: "Plin" }, { value: "outline", label: "Contur" }, { value: "soft", label: "Subtil" }, { value: "ghost", label: "Transparent" }]} />
-          <ColorField label="Culoare buton" value={b.color} onChange={(v) => patch({ color: v })} allowEmpty />
-          <ColorField label="Culoare text" value={b.textColor} onChange={(v) => patch({ textColor: v })} allowEmpty />
-          <Select label="Marime" value={b.size ?? "md"} onChange={(v) => patch({ size: v })} options={[{ value: "sm", label: "Mic" }, { value: "md", label: "Mediu" }, { value: "lg", label: "Mare" }]} />
-          <Select label="Colturi" value={b.rounded ?? "lg"} onChange={(v) => patch({ rounded: v })} options={[{ value: "sm", label: "Putin rotunjite" }, { value: "md", label: "Mediu" }, { value: "lg", label: "Mult" }, { value: "full", label: "Rotund (pastila)" }]} />
-          <Select label="Efect" value={b.effect ?? "none"} onChange={(v) => patch({ effect: v })} options={[{ value: "none", label: "Fara" }, { value: "pulse", label: "Puls" }, { value: "bounce", label: "Saltaret" }, { value: "shake", label: "Tremurat" }, { value: "glow", label: "Stralucire" }, { value: "heartbeat", label: "Batai de inima" }]} />
-          <Toggle label="Latime completa" checked={!!b.fullWidth} onChange={(v) => patch({ fullWidth: v })} />
-          <Toggle label="Deschide in tab nou" checked={!!b.newTab} onChange={(v) => patch({ newTab: v })} />
-          <StyleControls style={b.style} onChange={setStyle} hide={["width"]} />
+          <CampLink eticheta="Link" valoare={b.href} onChange={(v) => patch({ href: v })} />
+          <Toggle label="Deschide în tab nou" checked={!!b.newTab} onChange={(v) => patch({ newTab: v })} />
+          <Grup titlu="Stil" deschisImplicit>
+            <Select label="Stil" value={b.variant ?? "solid"} onChange={(v) => patch({ variant: v })} options={[{ value: "solid", label: "Plin" }, { value: "outline", label: "Contur" }, { value: "soft", label: "Subtil" }, { value: "ghost", label: "Transparent" }]} />
+            <CampCuloare eticheta="Culoare buton" valoare={b.color} onChange={(v) => patch({ color: v })} poateFiGol />
+            <CampCuloare eticheta="Culoare text" valoare={b.textColor} onChange={(v) => patch({ textColor: v })} poateFiGol />
+            <Segmentat label="Mărime" value={b.size ?? "md"} onChange={(v) => patch({ size: v })} options={[{ value: "sm", label: "Mic" }, { value: "md", label: "Mediu" }, { value: "lg", label: "Mare" }]} />
+            <Select label="Colțuri" value={b.rounded ?? "lg"} onChange={(v) => patch({ rounded: v })} options={[{ value: "sm", label: "Puțin rotunjite" }, { value: "md", label: "Mediu" }, { value: "lg", label: "Mult" }, { value: "full", label: "Rotund (pastilă)" }]} />
+            <IconPicker value={b.icon} onChange={(v) => patch({ icon: v })} poateFiGol />
+            {b.icon && <Segmentat label="Pictograma stă" value={b.iconPos ?? "left"} onChange={(v) => patch({ iconPos: v })} options={[{ value: "left", label: "Înainte" }, { value: "right", label: "După text" }]} />}
+            <Select label="Efect" value={b.effect ?? "none"} onChange={(v) => patch({ effect: v })} options={EFECTE_BUTON.map((e) => ({ value: e.cheie, label: e.nume }))} />
+            <Toggle label="Lățime completă" checked={!!b.fullWidth} onChange={(v) => patch({ fullWidth: v })} />
+          </Grup>
+          <Grup titlu="Tipografie">
+            <AlegeFont label="Font" value={b.font ?? null} onChange={(v) => patch({ font: v })} gol="Fontul magazinului" />
+            <Select label="Grosime" value={b.weight ?? "700"} onChange={(v) => patch({ weight: v })} options={GREUTATI} />
+            <Toggle label="Text cu majuscule" checked={b.transform === "uppercase"} onChange={(v) => patch({ transform: v ? "uppercase" : "none" })} />
+          </Grup>
+          <Grup titlu="Al doilea buton">
+            <Text label="Text" value={b.secondLabel} onChange={(v) => patch({ secondLabel: v })} placeholder="Lasă gol ca să nu apară" />
+            {b.secondLabel && (
+              <>
+                <CampLink eticheta="Link" valoare={b.secondHref} onChange={(v) => patch({ secondHref: v })} />
+                <Select label="Stil" value={b.secondVariant ?? "outline"} onChange={(v) => patch({ secondVariant: v })} options={[{ value: "solid", label: "Plin" }, { value: "outline", label: "Contur" }, { value: "soft", label: "Subtil" }, { value: "ghost", label: "Transparent" }]} />
+              </>
+            )}
+          </Grup>
+          <ControaleAspect style={b.style} onChange={setStyle} hide={["width"]} />
         </div>
       );
     }
@@ -441,31 +350,41 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       return (
         <div className="space-y-4">
           <LayoutPicker current={currentLayout} onPick={applyLayout} />
-          <Select label="Distanta" value={b.gap ?? "md"} onChange={(v) => patch({ gap: v })} options={[{ value: "sm", label: "Mica" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }]} />
-          <Select label="Aliniere verticala" value={b.verticalAlign ?? "top"} onChange={(v) => patch({ verticalAlign: v })} options={[{ value: "top", label: "Sus" }, { value: "center", label: "Centru" }]} />
-          <Toggle label="Contur coloane" checked={!!b.bordered} onChange={(v) => patch({ bordered: v })} />
+          <Grup titlu="Așezare" deschisImplicit>
+            <Select label="Distanța între coloane" value={b.gap ?? "md"} onChange={(v) => patch({ gap: v })} options={[{ value: "none", label: "Fără" }, { value: "sm", label: "Mică" }, { value: "md", label: "Medie" }, { value: "lg", label: "Mare" }, { value: "xl", label: "Foarte mare" }]} />
+            <Segmentat label="Aliniere verticală" value={b.verticalAlign ?? "top"} onChange={(v) => patch({ verticalAlign: v })}
+              options={[{ value: "top", label: "Sus" }, { value: "center", label: "Centru" }, { value: "bottom", label: "Jos" }, { value: "stretch", label: "Egale" }]} />
+            <Segmentat label="Pe telefon" value={String(b.mobileColumns ?? 1) as "1" | "2"} onChange={(v) => patch({ mobileColumns: Number(v) as 1 | 2 })}
+              options={[{ value: "1", label: "Una sub alta" }, { value: "2", label: "Câte două" }]} />
+            <Toggle label="Pe telefon, ordinea inversă" checked={!!b.reverseMobile} onChange={(v) => patch({ reverseMobile: v })} ajutor="Ex: la „imagine stânga, text dreapta”, pe telefon textul vine primul." />
+            <Toggle label="Fiecare coloană ca un card" checked={!!b.cellCard} onChange={(v) => patch({ cellCard: v })} />
+            {b.cellCard && <CampCuloare eticheta="Fundalul cardurilor" valoare={b.cellBg} onChange={(v) => patch({ cellBg: v })} poateFiGol />}
+            <Toggle label="Contur coloane" checked={!!b.bordered} onChange={(v) => patch({ bordered: v })} />
+          </Grup>
           {flex ? (
-            <div className="p-3 rounded-lg bg-muted/50 border border-border text-[11px] text-muted-foreground leading-relaxed">
-              Adauga continut direct in coloane: apasa <span className="font-semibold text-foreground">+ Adauga</span> in fiecare coloana, pe pagina. Poti pune text, imagine, buton, formular, produse si orice alt bloc.
+            <div className="rounded-lg border border-border bg-muted/50 p-3 text-[11px] leading-relaxed text-muted-foreground">
+              Adaugă conținut direct în coloane: apasă <span className="font-semibold text-foreground">+ Adaugă</span> în fiecare coloană, pe pagină. Poți pune text, imagine, buton, formular, produse și orice alt bloc.
             </div>
           ) : (
             <>
               {items.slice(0, count).map((it, i) => (
-                <div key={i} className="p-3 rounded-lg border border-border space-y-2">
+                <div key={i} className="space-y-2 rounded-lg border border-border p-3">
                   <p className="text-[11px] font-semibold text-muted-foreground">Coloana {i + 1}</p>
                   <input value={it.heading ?? ""} onChange={(e) => setItem(i, { heading: e.target.value })} placeholder="Titlu" className={inputCls} />
                   <RichTextEditor content={it.html ?? ""} onChange={(html) => setItem(i, { html })} />
-                  <ImageField label="Imagine" value={it.image} onChange={(v) => setItem(i, { image: v })} />
+                  <CampImagine eticheta="Imagine" valoare={it.image} onChange={(v) => setItem(i, { image: v })} />
+                  <input value={it.buttonLabel ?? ""} onChange={(e) => setItem(i, { buttonLabel: e.target.value })} placeholder="Text buton (opțional)" className={inputCls} />
+                  {it.buttonLabel && <CampLink eticheta="Link buton" valoare={it.buttonHref} onChange={(v) => setItem(i, { buttonHref: v })} />}
                 </div>
               ))}
               <button type="button" onClick={convertToFlexible}
-                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-primary border border-primary/40 rounded-lg hover:bg-primary/5 transition-colors">
-                <Plus className="h-3.5 w-3.5" /> Foloseste coloane flexibile
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 py-2.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/5">
+                <Plus className="h-3.5 w-3.5" /> Folosește coloane flexibile
               </button>
-              <p className="text-[11px] text-muted-foreground">Iti pastreaza continutul actual si iti permite sa adaugi formulare, produse, butoane si orice alt bloc direct in fiecare coloana.</p>
+              <p className="text-[11px] text-muted-foreground">Îți păstrează conținutul actual și îți permite să adaugi formulare, produse, butoane și orice alt bloc direct în fiecare coloană.</p>
             </>
           )}
-          <StyleControls style={b.style} onChange={setStyle} />
+          <ControaleAspect style={b.style} onChange={setStyle} />
         </div>
       );
     }
@@ -473,8 +392,8 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       const b = block as SpacerBlock;
       return (
         <div className="space-y-4">
-          <Select label="Inaltime spatiu" value={b.size ?? "md"} onChange={(v) => patch({ size: v })} options={[{ value: "sm", label: "Mic" }, { value: "md", label: "Mediu" }, { value: "lg", label: "Mare" }, { value: "xl", label: "Foarte mare" }, { value: "custom", label: "Personalizat" }]} />
-          {b.size === "custom" && <Range label="Inaltime" value={b.sizeCustom ?? 40} min={4} max={400} onChange={(v) => patch({ sizeCustom: v })} />}
+          <Select label="Înălțime spațiu" value={b.size ?? "md"} onChange={(v) => patch({ size: v })} options={[{ value: "sm", label: "Mic" }, { value: "md", label: "Mediu" }, { value: "lg", label: "Mare" }, { value: "xl", label: "Foarte mare" }, { value: "custom", label: "Personalizat" }]} />
+          {b.size === "custom" && <Range label="Înălțime" value={b.sizeCustom ?? 40} min={4} max={400} onChange={(v) => patch({ sizeCustom: v })} />}
         </div>
       );
     }
@@ -482,10 +401,11 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       const b = block as DividerBlock;
       return (
         <div className="space-y-4">
-          <Select label="Stil linie" value={b.lineStyle ?? "solid"} onChange={(v) => patch({ lineStyle: v })} options={[{ value: "solid", label: "Continua" }, { value: "dashed", label: "Intrerupta" }, { value: "dotted", label: "Punctata" }]} />
+          <Segmentat label="Stil linie" value={b.lineStyle ?? "solid"} onChange={(v) => patch({ lineStyle: v })} options={[{ value: "solid", label: "Continuă" }, { value: "dashed", label: "Întreruptă" }, { value: "dotted", label: "Punctată" }]} />
           <Range label="Grosime" value={b.thickness ?? 1} min={1} max={12} onChange={(v) => patch({ thickness: v })} />
-          <Range label="Latime" value={b.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
-          <ColorField label="Culoare" value={b.color} onChange={(v) => patch({ color: v })} allowEmpty />
+          <Range label="Lățime" value={b.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
+          <CampCuloare eticheta="Culoare" valoare={b.color} onChange={(v) => patch({ color: v })} poateFiGol />
+          <ControaleAnimatie style={b.style} onChange={setStyle} />
         </div>
       );
     }
@@ -495,81 +415,55 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
     }
     case "map": {
       const b = block as MapBlock;
-      return (
-        <div className="space-y-4">
-          <Text label="Adresa sau coordonate" value={b.query} onChange={(v) => patch({ query: v })} placeholder="Strada, oras" />
-          <Field label="Inaltime (px)"><input type="number" value={b.height ?? 320} onChange={(e) => patch({ height: Number(e.target.value) })} className={inputCls} /></Field>
-          <StyleControls style={b.style} onChange={setStyle} hide={["align"]} />
-        </div>
-      );
+      return <SetariHarta block={b} patch={patch} setStyle={setStyle} />;
     }
     case "faq": {
       const b = block as FaqBlock;
-      const items = b.items ?? [];
-      const setItem = (i: number, p: Partial<{ q: string; a: string }>) => patch({ items: items.map((it, k) => (k === i ? { ...it, ...p } : it)) });
-      return (
-        <div className="space-y-4">
-          <Text label="Titlu sectiune" value={b.title} onChange={(v) => patch({ title: v })} />
-          {items.map((it, i) => (
-            <div key={i} className="p-3 rounded-lg border border-border space-y-2">
-              <div className="flex items-center justify-between"><p className="text-[11px] font-semibold text-muted-foreground">Intrebare {i + 1}</p>
-                <button type="button" onClick={() => patch({ items: items.filter((_, k) => k !== i) })}><X className="h-3.5 w-3.5 text-red-500" /></button></div>
-              <input value={it.q} onChange={(e) => setItem(i, { q: e.target.value })} placeholder="Intrebare" className={inputCls} />
-              <textarea value={it.a} onChange={(e) => setItem(i, { a: e.target.value })} placeholder="Raspuns" rows={2} className={`${inputCls} resize-none`} />
-            </div>
-          ))}
-          <button type="button" onClick={() => patch({ items: [...items, { q: "", a: "" }] })} className="flex items-center gap-1.5 text-xs font-medium text-primary"><Plus className="h-3.5 w-3.5" /> Adauga intrebare</button>
-        </div>
-      );
+      return <SetariFaq block={b} patch={patch} setStyle={setStyle} />;
     }
     case "trust": {
       const b = block as TrustBlock;
-      const items = b.items ?? [];
-      const setItem = (i: number, p: Partial<{ icon: string; title: string; desc: string }>) => patch({ items: items.map((it, k) => (k === i ? { ...it, ...p } : it)) });
-      return (
-        <div className="space-y-4">
-          <Select label="Coloane" value={String(b.columns ?? 3) as "2" | "3" | "4"} onChange={(v) => patch({ columns: Number(v) as 2 | 3 | 4 })} options={[{ value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }]} />
-          <Select label="Aliniere continut" value={b.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "center", label: "Centru" }, { value: "left", label: "Stanga" }]} />
-          <Toggle label="Afiseaza fiecare ca un card" checked={b.card !== false} onChange={(v) => patch({ card: v })} />
-          {items.map((it, i) => (
-            <div key={i} className="p-3 rounded-lg border border-border space-y-2">
-              <div className="flex items-center justify-between"><p className="text-[11px] font-semibold text-muted-foreground">Beneficiu {i + 1}</p>
-                <button type="button" onClick={() => patch({ items: items.filter((_, k) => k !== i) })}><X className="h-3.5 w-3.5 text-red-500" /></button></div>
-              <IconPicker value={it.icon} onChange={(v) => setItem(i, { icon: v })} />
-              <input value={it.title} onChange={(e) => setItem(i, { title: e.target.value })} placeholder="Titlu" className={inputCls} />
-              <input value={it.desc} onChange={(e) => setItem(i, { desc: e.target.value })} placeholder="Descriere" className={inputCls} />
-            </div>
-          ))}
-          <button type="button" onClick={() => patch({ items: [...items, { icon: "Star", title: "", desc: "" }] })} className="flex items-center gap-1.5 text-xs font-medium text-primary"><Plus className="h-3.5 w-3.5" /> Adauga beneficiu</button>
-          <StyleControls style={b.style} onChange={setStyle} hide={["align"]} />
-        </div>
-      );
+      return <SetariBeneficii block={b} patch={patch} setStyle={setStyle} />;
     }
+    case "bundles":
+      return <SetariPachete block={block as BundlesBlock} patch={patch} setStyle={setStyle} businessId={businessId} pachete={pachete} />;
+    case "newsletter":
+      return <SetariNewsletter block={block as NewsletterBlock} patch={patch} setStyle={setStyle} furnizori={integrari.furnizori} />;
+    case "payments":
+      return <SetariPlatiCurieri block={block as PaymentsBlock} patch={patch} setStyle={setStyle} fel="plati" active={integrari.plati} />;
+    case "couriers":
+      return <SetariPlatiCurieri block={block as CouriersBlock} patch={patch} setStyle={setStyle} fel="curieri" active={integrari.curieri} />;
     case "products": {
       const b = block as ProductsBlock;
       return (
         <div className="space-y-4">
-          <Text label="Titlu sectiune" value={b.title} onChange={(v) => patch({ title: v })} />
-          <Select label="Afiseaza" value={b.mode ?? "featured"} onChange={(v) => patch({ mode: v })} options={[{ value: "featured", label: "Produse populare" }, { value: "all", label: "Toate" }, { value: "category", label: "Dintr-o categorie" }, { value: "selected", label: "Selectate manual" }]} />
+          <Text label="Titlu secțiune" value={b.title} onChange={(v) => patch({ title: v })} />
+          <Select label="Afișează" value={b.mode ?? "featured"} onChange={(v) => patch({ mode: v })} options={[{ value: "featured", label: "Produse populare" }, { value: "all", label: "Toate" }, { value: "category", label: "Dintr-o categorie" }, { value: "selected", label: "Selectate manual" }]} />
           {b.mode === "category" && (
-            <Select label="Categorie" value={b.category ?? ""} onChange={(v) => patch({ category: v })} options={[{ value: "", label: "Alege..." }, ...categories.map((c) => ({ value: c, label: c }))]} />
+            <Select label="Categorie" value={b.category ?? ""} onChange={(v) => patch({ category: v })} options={[{ value: "", label: "Alege…" }, ...categories.map((c) => ({ value: c, label: c }))]} />
           )}
           {b.mode === "selected" && (
             <Field label="Produse selectate">
               <ProductPicker businessId={businessId} selectedIds={b.productIds ?? []} onChange={(ids) => patch({ productIds: ids })} />
             </Field>
           )}
-          <Select label="Coloane" value={String(b.columns ?? 4) as "2" | "3" | "4"} onChange={(v) => patch({ columns: Number(v) as 2 | 3 | 4 })} options={[{ value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }]} />
-          <Select label="Aspect" value={b.layout ?? "grid"} onChange={(v) => patch({ layout: v })} options={[{ value: "grid", label: "Grila" }, { value: "carousel", label: "Carusel" }]} />
-          <Toggle label="Buton „Adauga in cos” pe produse" checked={!!b.showAddToCart} onChange={(v) => patch({ showAddToCart: v })} />
-          <Field label="Numar maxim de produse"><input type="number" min={1} max={24} value={b.limit ?? 8} onChange={(e) => patch({ limit: Math.min(24, Math.max(1, Number(e.target.value))) })} className={inputCls} /></Field>
-          <StyleControls style={b.style} onChange={setStyle} hide={["align"]} />
+          <Segmentat label="Coloane" value={String(b.columns ?? 4) as "2" | "3" | "4"} onChange={(v) => patch({ columns: Number(v) as 2 | 3 | 4 })} options={[{ value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }]} />
+          <Segmentat label="Așezare" value={b.layout ?? "grid"} onChange={(v) => patch({ layout: v })} options={[{ value: "grid", label: "Grilă" }, { value: "carousel", label: "Carusel" }]} />
+          <Toggle label="Buton „Adaugă în coș” pe produse" checked={!!b.showAddToCart} onChange={(v) => patch({ showAddToCart: v })} />
+          <Field label="Număr maxim de produse"><input type="number" min={1} max={24} value={b.limit ?? 8} onChange={(e) => patch({ limit: Math.min(24, Math.max(1, Number(e.target.value) || 1)) })} className={inputCls} /></Field>
+          <ControaleAspect style={b.style} onChange={setStyle} hide={["align"]} />
         </div>
       );
     }
     case "social": {
       const b = block as SocialBlock;
-      return <div className="space-y-4"><Text label="Titlu" value={b.title} onChange={(v) => patch({ title: v })} /><p className="text-xs text-muted-foreground">Linkurile retelelor se preiau din setarile magazinului.</p><StyleControls style={b.style} onChange={setStyle} hide={["width"]} /></div>;
+      return (
+        <div className="space-y-4">
+          <Text label="Titlu" value={b.title} onChange={(v) => patch({ title: v })} />
+          <p className="text-xs text-muted-foreground">Linkurile rețelelor se preiau din setările magazinului.</p>
+          <ControaleAspect style={b.style} onChange={setStyle} hide={["width"]} />
+        </div>
+      );
     }
     case "contact": {
       const b = block as ContactBlock;
@@ -577,55 +471,109 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       return (
         <div className="space-y-4">
           <Text label="Titlu (deasupra formularului)" value={b.title} onChange={(v) => patch({ title: v })} />
+          <Text label="Subtitlu (opțional)" value={b.subtitle} onChange={(v) => patch({ subtitle: v })} />
           <Select label="Formular" value={b.formId ?? ""} onChange={(v) => patch({ formId: v || null })}
             options={[{ value: "", label: "Contact simplu (implicit)" }, ...forms.map((f) => ({ value: f.id, label: f.name }))]} />
           {usingForm ? (
-            <div className="p-2.5 rounded-lg bg-muted/50 border border-border text-[11px] text-muted-foreground">
-              Campurile, mesajul de confirmare si trimiterea pe email pentru acest formular se configureaza in{" "}
-              <Link href="/dashboard/pages/forms" target="_blank" rel="noopener noreferrer" className="text-primary font-medium">sectiunea Formulare</Link>.
+            <div className="rounded-lg border border-border bg-muted/50 p-2.5 text-[11px] text-muted-foreground">
+              Câmpurile, mesajul de confirmare și trimiterea pe email pentru acest formular se configurează în{" "}
+              <Link href="/dashboard/pages/forms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary">secțiunea Formulare</Link>.
             </div>
           ) : (
             <>
               <Text label="Text buton" value={b.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} />
               <Text label="Mesaj de confirmare" value={b.successMessage} onChange={(v) => patch({ successMessage: v })} />
-              <Toggle label="Camp telefon" checked={b.showPhone !== false} onChange={(v) => patch({ showPhone: v })} />
-              <Toggle label="Camp mesaj" checked={b.showMessage !== false} onChange={(v) => patch({ showMessage: v })} />
-              <div className="pt-3 border-t border-border">
-                <Toggle label="Trimite-mi completarile pe email" checked={!!b.emailEnabled} onChange={(v) => patch({ emailEnabled: v })} />
-                <p className="text-[11px] text-muted-foreground mt-1">Emailul ajunge la adresa magazinului. Completarile apar mereu si in „Mesaje”.</p>
+              <Toggle label="Câmp telefon" checked={b.showPhone !== false} onChange={(v) => patch({ showPhone: v })} />
+              <Toggle label="Câmp mesaj" checked={b.showMessage !== false} onChange={(v) => patch({ showMessage: v })} />
+              <Toggle label="Bifă de acord cu prelucrarea datelor" checked={!!b.consent} onChange={(v) => patch({ consent: v })} />
+              {b.consent && <Text label="Textul bifei" value={b.consentText} onChange={(v) => patch({ consentText: v })} placeholder="Sunt de acord cu prelucrarea datelor mele pentru a primi un răspuns." />}
+              <div className="border-t border-border pt-3">
+                <Toggle label="Trimite-mi completările pe email" checked={!!b.emailEnabled} onChange={(v) => patch({ emailEnabled: v })} />
+                <p className="mt-1 text-[11px] text-muted-foreground">Emailul ajunge la adresa magazinului. Completările apar mereu și în „Mesaje”.</p>
               </div>
             </>
           )}
           {forms.length === 0 && (
-            <p className="text-[11px] text-muted-foreground">Vrei alte campuri? Creeaza-ti propriile formulare in sectiunea Formulare.</p>
+            <p className="text-[11px] text-muted-foreground">Vrei alte câmpuri? Creează-ți propriile formulare în secțiunea Formulare.</p>
           )}
+          <StilFormular block={b} patch={patch} />
+          <ControaleAspect style={b.style} onChange={setStyle} />
         </div>
       );
     }
     case "html": {
       const b = block as HtmlBlock;
-      const hasJs = (b.js ?? "").trim().length > 0;
+      const izolat = cereIzolare(b.html, b.js);
       return (
         <div className="space-y-4">
+          {/*
+            ⚠ Regimul se spune pe fata, dupa aceeasi regula ca randarea
+            (`cereIzolare`). Pana acum un cod de widget lipit in HTML era
+            curatat tacut, iar omul nu afla de ce nu merge.
+          */}
+          <div className={`rounded-lg border p-2.5 text-[11px] leading-relaxed ${izolat ? "border-blue-200 bg-blue-50 text-blue-800" : "border-border bg-muted/50 text-muted-foreground"}`}>
+            {izolat
+              ? <><span className="font-semibold">Rulează izolat.</span> Codul are JavaScript, formulare sau acțiuni, deci merge într-un cadru separat: funcționează, dar nu poate atinge coșul, contul clientului sau restul paginii.</>
+              : <><span className="font-semibold">Se pune direct în pagină.</span> Doar HTML și CSS: HTML-ul se curăță de orice cod, iar CSS-ul se aplică numai în interiorul acestui bloc.</>}
+          </div>
           <Area label="HTML" value={b.html} onChange={(v) => patch({ html: v })} mono placeholder="<div>...</div>" />
           <Area label="CSS" value={b.css} onChange={(v) => patch({ css: v })} mono placeholder=".clasa { ... }" />
-          <Area label="JavaScript" value={b.js} onChange={(v) => patch({ js: v })} mono placeholder="// codul tau" />
-          {hasJs && (
-            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-[11px] text-blue-700">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              JavaScript-ul ruleaza izolat intr-un cadru securizat (nu poate accesa cosul sau datele magazinului).
-            </div>
-          )}
+          <Area label="JavaScript" value={b.js} onChange={(v) => patch({ js: v })} mono placeholder="// codul tău" />
+          <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            În editor, codul rulează mereu izolat, ca să nu poată atinge panoul. Pe magazin arată ca în previzualizare.
+          </p>
           {/* Comutatorul „Mod raw (admin)" a fost ELIMINAT: randarea nu mai
               injecteaza cod nefiltrat in pagina publica, deci un comutator care
               promitea asta ar induce in eroare. Vezi HtmlBlockView.tsx. */}
           {!isAdmin && (
-            <p className="text-[11px] text-muted-foreground">HTML/CSS simplu este curatat automat pentru siguranta.</p>
+            <p className="text-[11px] text-muted-foreground">HTML/CSS simplu este curățat automat pentru siguranță.</p>
           )}
+          <ControaleAnimatie style={b.style} onChange={setStyle} />
         </div>
       );
     }
     default:
-      return <p className="text-xs text-muted-foreground">Acest bloc nu are setari.</p>;
+      return <p className="text-xs text-muted-foreground">Acest bloc nu are setări.</p>;
   }
+}
+
+function VideoSettings({ block, patch, setStyle }: { block: VideoBlock; patch: (p: Record<string, unknown>) => void; setStyle: (s: BlockStyle) => void }) {
+  const [mode, setMode] = useState<"upload" | "url">(block.url && !block.src ? "url" : "upload");
+  const tab = (m: "upload" | "url", label: string) => (
+    <button type="button" onClick={() => {
+      setMode(m);
+      if (m === "upload") patch({ url: "" });
+      else patch({ src: null, poster: null });
+    }} className={`rounded-md py-1.5 text-xs font-medium transition-colors ${mode === m ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground"}`}>{label}</button>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+        {tab("upload", "Din Biblioteca Media")}
+        {tab("url", "Link YouTube / Vimeo")}
+      </div>
+      {mode === "upload" ? (
+        <>
+          <CampImagine fel="video" eticheta="Videoclip" valoare={block.src} onChange={(v) => patch({ src: v })}
+            ajutor={`MP4, WebM sau MOV, cel mult ${MAX_VIDEO_MB} MB. Pentru clipuri lungi, folosește un link YouTube sau Vimeo.`} />
+          {block.src && <CampImagine eticheta="Imagine de copertă (opțional)" valoare={block.poster} onChange={(v) => patch({ poster: v })} />}
+        </>
+      ) : (
+        <Text label="Link YouTube / Vimeo" value={block.url} onChange={(v) => patch({ url: v })} placeholder="https://youtube.com/watch?v=..." />
+      )}
+      <Grup titlu="Redare" deschisImplicit>
+        <Toggle label="Pornire automată" checked={!!block.autoplay} onChange={(v) => patch({ autoplay: v, muted: v ? true : block.muted })}
+          ajutor={block.autoplay ? "Pornirea automată merge doar fără sunet (așa cer browserele)." : undefined} />
+        <Toggle label="Redare în buclă" checked={!!block.loop} onChange={(v) => patch({ loop: v })} />
+        {!block.autoplay && <Toggle label="Fără sunet" checked={!!block.muted} onChange={(v) => patch({ muted: v })} />}
+        <Toggle label="Afișează controalele de redare" checked={block.controls !== false} onChange={(v) => patch({ controls: v })} />
+      </Grup>
+      <Segmentat label="Raport de aspect" value={block.aspect ?? "16:9"} onChange={(v) => patch({ aspect: v })} options={[{ value: "16:9", label: "16:9" }, { value: "9:16", label: "9:16 (reels)" }, { value: "1:1", label: "1:1" }]} />
+      {block.aspect === "9:16" && <p className="-mt-2 text-[11px] text-muted-foreground">Pentru video vertical, micșorează lățimea (ex: 40-60%) ca să nu ocupe tot ecranul.</p>}
+      <Range label="Lățime video" value={block.widthPct ?? 100} min={10} max={100} step={5} unit="%" onChange={(v) => patch({ widthPct: v })} />
+      <Segmentat label="Aliniere" value={block.align ?? "center"} onChange={(v) => patch({ align: v })} options={[{ value: "left", label: "Stânga" }, { value: "center", label: "Centru" }, { value: "right", label: "Dreapta" }]} />
+      <ControaleAspect style={block.style} onChange={setStyle} hide={["align"]} />
+    </div>
+  );
 }

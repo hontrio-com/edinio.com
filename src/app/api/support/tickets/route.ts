@@ -4,6 +4,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { sendNewSupportTicketToAdmin } from "@/lib/email";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { esteCategorieDeAles, estePrioritate } from "@/lib/support/tichete";
 
 export async function POST(req: NextRequest) {
   const user = await getCachedUser();
@@ -30,10 +31,20 @@ export async function POST(req: NextRequest) {
     attachment_urls?: string[];
   };
 
-  const { subject, category = "other", priority = "normal", content, business_id, attachment_urls = [] } = body;
+  const { subject, category, priority = "normal", content, business_id, attachment_urls = [] } = body;
 
   if (!subject?.trim()) return NextResponse.json({ error: "Subiectul este obligatoriu" }, { status: 400 });
   if (!content?.trim()) return NextResponse.json({ error: "Descrierea este obligatorie" }, { status: 400 });
+  /*
+    ⚠ CATEGORIA SI PRIORITATEA SE VERIFICA AICI, nu doar in baza. Pana acum
+    orice sir ajungea la constrangerea CHECK si cadea cu 23514, adica un 500
+    „Eroare la crearea tichetului" pentru ceea ce e o greseala a apelantului.
+    ⚠ Si NU mai are o valoare implicita: `other` nu e una dintre cele opt
+    categorii (25.09.2026), iar un tichet fara categorie aleasa nu se poate
+    trimite nici din formular.
+  */
+  if (!esteCategorieDeAles(category)) return NextResponse.json({ error: "Alege o categorie pentru tichet." }, { status: 400 });
+  if (!estePrioritate(priority)) return NextResponse.json({ error: "Prioritate invalida." }, { status: 400 });
 
   const supabase = await createClient();
 

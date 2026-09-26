@@ -9,6 +9,7 @@ import type { BillingCompany } from "@/lib/billing/company";
 // Randurile de bani ale unei comenzi (Subtotal, extraoptiuni, reduceri, TVA) se
 // construiesc INTR-UN SINGUR LOC, pentru amandoua emailurile. Vezi acolo de ce.
 import { randuriDeBani, type BaniComanda } from "@/lib/email/order-totals";
+import { numeleCategoriei, numelePrioritatii } from "@/lib/support/tichete";
 
 /*
   ⚠ FUSUL SE SCRIE, NU SE PRESUPUNE.
@@ -465,7 +466,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
 /** Notify a merchant about a new submission from a custom-page contact form. */
 export async function sendPageFormEmail(
   to: string,
-  data: { storeName: string; pageTitle: string; pageUrl?: string; fields: { label: string; value: string }[] },
+  data: { storeName: string; pageTitle: string; pageUrl?: string; fields: { label: string; value: string }[]; replyTo?: string },
 ) {
   if (!process.env.RESEND_API_KEY) return;
   const rows = data.fields
@@ -488,6 +489,7 @@ export async function sendPageFormEmail(
     to,
     subject: `Mesaj nou de pe ${subiectSigur(data.storeName)}`,
     html: baseTemplate(content),
+    ...(data.replyTo ? { replyTo: data.replyTo } : {}),
   });
 }
 
@@ -977,12 +979,6 @@ export async function sendNewSupportTicketToAdmin(data: {
   content: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
-  const categoryLabel: Record<string, string> = {
-    technical: "Tehnic", billing: "Facturare", feature: "Cerere functionalitate", other: "Altele",
-  };
-  const priorityLabel: Record<string, string> = {
-    low: "Scazuta", normal: "Normala", high: "Mare", urgent: "Urgenta",
-  };
   const priorityColor: Record<string, string> = {
     low: "#71717a", normal: "#3b82f6", high: "#f97316", urgent: "#ef4444",
   };
@@ -1002,11 +998,11 @@ export async function sendNewSupportTicketToAdmin(data: {
             <tr>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Categorie</span>
-                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${categoryLabel[data.category] ?? esc(data.category)}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;color:#3f3f46;">${esc(numeleCategoriei(data.category))}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Prioritate</span>
-                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${priorityLabel[data.priority] ?? esc(data.priority)}</p>
+                <p style="margin:2px 0 0 0;font-size:13px;font-weight:600;color:${priorityColor[data.priority] ?? "#3f3f46"};">${esc(numelePrioritatii(data.priority))}</p>
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Client</span>

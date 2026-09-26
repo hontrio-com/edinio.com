@@ -1,5 +1,7 @@
 "use server";
 
+import { getStoreEmailSender } from "@/lib/email/sender";
+import { adreseleLui, destinatarFormular } from "@/lib/pages/destinatar-formular";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -622,21 +624,18 @@ export async function submitPageForm(input: {
   if (emailEnabled && !pesteRafala) {
     try {
       /*
-       * ⚠⚠ DESTINATARUL E AL MAGAZINULUI, NU ORICE ADRESA (25.09.2026).
+       * ⚠⚠ DESTINATARUL SI DRUMUL (25-26.09.2026), vezi `destinatarFormular`.
        *
-       * `email_to` se scria liber din panou (si direct prin PostgREST, fiindca
-       * politica RLS pe `forms` e `ALL`). Iar formularul e public: oricine putea
-       * face un magazin, pune adresa victimei si trimite, de pe expeditorul
-       * PLATFORMEI, ce text voia. Reputatia expeditorului e a tuturor
-       * magazinelor. Acum emailul pleaca numai la adresa magazinului sau la cea
-       * a contului; o adresa straina cade pe a magazinului.
-       * Masurat inainte: singurul formular cu adresa proprie folosea chiar
-       * emailul magazinului, deci nu se schimba nimic real.
+       * `email_to` se poate scrie si direct prin PostgREST (politica RLS pe `forms`
+       * e `ALL`), iar formularul e public: fara SMTP propriu, o adresa straina ar fi
+       * facut din expeditorul PLATFORMEI un releu de spam. Deci: fara SMTP, numai
+       * adresele lui (magazinul, contul); cu SMTP, orice adresa, dar numai prin
+       * SMTP-ul lui, fara rezerva pe Edinio. Adresa din tabel se verifica AICI din
+       * nou, nu doar la salvare.
        */
       const { data: u } = await admin.auth.admin.getUserById(biz.user_id);
-      const aleContului = [biz.email?.trim(), u.user?.email?.trim()].filter(Boolean).map((e) => e!.toLowerCase());
-      const ceruta = emailTo.toLowerCase();
-      const to = (ceruta && aleContului.includes(ceruta) ? emailTo : "") || biz.email?.trim() || u.user?.email || "";
+      const sender = await getStoreEmailSender(admin, biz.id);
+      const { to, liber } = destinatarFormular(emailTo, adreseleLui(biz.email, u.user?.email), !!sender?.smtp);
       if (to) {
         const storeName = biz.store_name ?? biz.business_name;
         const radacina = biz.custom_domain
@@ -650,7 +649,8 @@ export async function submitPageForm(input: {
         }
         // „Raspunde” din casuta comerciantului merge la omul care a scris, cand a lasat un email.
         const replyTo = fields.find((f) => /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(f.value.trim()))?.value.trim();
-        await sendPageFormEmail(to, { storeName, pageTitle: title, pageUrl, fields: fields.map(({ label, value }) => ({ label, value })), replyTo });
+        await sendPageFormEmail(to, { storeName, pageTitle: title, pageUrl, fields: fields.map(({ label, value }) => ({ label, value })), replyTo },
+          { sender, faraRezervaEdinio: liber });
       }
     } catch (e) {
       logError({ action: "submitPageForm.email", message: e instanceof Error ? e.message : "email failed", details: { businessId: input.businessId } });

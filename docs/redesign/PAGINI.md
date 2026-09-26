@@ -171,7 +171,7 @@ Probe noi: `securitate-pagini.test.ts`, `audit-pagini.test.ts`, plus cazuri in `
 | `uploadImage`: fara limita, `bucket`/`folder` numai tipuri TS | lista alba la rulare + 60/min si 600/ora pe utilizator |
 | formularele de pe ciorne primeau mesaje; `page_id` nescris verificat | pagina trebuie sa fie a magazinului si publicata |
 | numele formularului fara plafon | 120 |
-| ⚠ DESCHIS, de hotarat de el: emailul formularului poate merge pe `businesses.email`, scris de comerciant fara verificare (releu de spam posibil, ~480/ora/magazin). Productie: 1 formular + 3 blocuri cu email; 16 magazine au emailul magazinului diferit de cel al contului | nerezolvat |
+| emailul formularului: adresa aleasa de comerciant, dar pe expeditorul platformei (releu de spam posibil) | HOTARAT DE EL (26.09.2026): pleaca prin SMTP-ul magazinului cand il are, altfel de pe Edinio; fara SMTP numai la adresele lui (magazinul, contul), cu SMTP orice adresa, fara rezerva pe Edinio (`destinatar-formular.ts`) |
 
 ### Pagina publica
 Harta de peste (`z-[500]`) trecea peste antet si cos (`isolate`); produsele fara stoc aveau buton activ („Stoc

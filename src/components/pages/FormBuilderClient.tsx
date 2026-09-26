@@ -12,8 +12,12 @@ const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-su
 
 export function FormBuilderClient({
   formId, initialName, initialFields, initialSubmitLabel, initialSuccessMessage, initialEmailEnabled, initialEmailTo, initialMailchimpEnabled, initialBrevoEnabled, initialKlaviyoEnabled,
-  statistica, initialVersiune,
+  statistica, initialVersiune, adreseleLui, areSmtp,
 }: {
+  /** Emailul magazinului si al contului: fara SMTP propriu, singurele adrese de primire permise. */
+  adreseleLui: string[];
+  /** Magazinul are SMTP propriu: emailul pleaca de pe mailul lui, deci poate alege orice adresa. */
+  areSmtp: boolean;
   /** `updated_at` la incarcare: salvarea trece numai daca formularul n-a fost salvat intre timp din alt tab. */
   initialVersiune: string;
   /** Statisticile formularului, randate pe server (vezi `PanouStatistica`). */
@@ -236,9 +240,25 @@ export function FormBuilderClient({
             </label>
             {emailEnabled && (
               <div className="mt-2.5">
-                <input value={emailTo} onChange={(e) => { setEmailTo(e.target.value); mark(); }} type="email"
-                  placeholder="Adresa de email (gol = emailul magazinului)" className={inputCls} />
-                <p className="text-[11px] text-muted-foreground mt-1">Poate fi emailul magazinului sau cel al contului tău. Completările apar oricum în secțiunea „Mesaje”.</p>
+                {/* 26.09.2026: cu SMTP propriu, orice adresa; fara, se alege dintre adresele lui (vezi `destinatarFormular`). */}
+                {areSmtp ? (
+                  <>
+                    <input value={emailTo} onChange={(e) => { setEmailTo(e.target.value); mark(); }} type="email"
+                      placeholder="Adresa care primește mesajele (gol = emailul magazinului)" className={inputCls} />
+                    <p className="text-[11px] text-muted-foreground mt-1">Emailul pleacă prin serverul tău de email (SMTP), deci poate fi orice adresă. Completările apar oricum în „Mesaje”.</p>
+                  </>
+                ) : (
+                  <>
+                    <select value={adreseleLui.includes(emailTo.trim().toLowerCase()) ? emailTo.trim().toLowerCase() : ""}
+                      onChange={(e) => { setEmailTo(e.target.value); mark(); }} className={inputCls} aria-label="Adresa care primește mesajele">
+                      <option value="">Emailul magazinului{adreseleLui[0] ? ` (${adreseleLui[0]})` : ""}</option>
+                      {adreseleLui.slice(1).map((a) => <option key={a} value={a}>{a} (contul tău)</option>)}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Emailul pleacă de pe adresa Edinio, deci poate ajunge doar la adresele tale. Ca să alegi orice adresă, configurează serverul tău de email în Setări &gt; Email. Completările apar oricum în „Mesaje”.
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -4,6 +4,8 @@ import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
 import { deliverStoreEmail } from "@/lib/email/deliver";
+import { sendViaSmtp } from "@/lib/email/smtp";
+import { logError } from "@/lib/error-logger";
 import { renderTemplate } from "@/lib/email/templates";
 import type { BillingCompany } from "@/lib/billing/company";
 // Randurile de bani ale unei comenzi (Subtotal, extraoptiuni, reduceri, TVA) se
@@ -467,8 +469,13 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
 export async function sendPageFormEmail(
   to: string,
   data: { storeName: string; pageTitle: string; pageUrl?: string; fields: { label: string; value: string }[]; replyTo?: string },
+  /**
+   * Drumul (26.09.2026): prin SMTP-ul magazinului cand il are, ca celelalte emailuri
+   * ale lui, altfel de pe Edinio. `faraRezervaEdinio`: adresa nu e a comerciantului
+   * (vezi `destinatarFormular`), deci daca SMTP-ul pica NU se cade pe Edinio.
+   */
+  cale?: { sender?: StoreEmailSender; faraRezervaEdinio?: boolean },
 ) {
-  if (!process.env.RESEND_API_KEY) return;
   const rows = data.fields
     .map(
       (f) => `
@@ -484,10 +491,29 @@ export async function sendPageFormEmail(
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;padding:18px;">${rows}</div>
     ${data.pageUrl ? `<p style="margin:18px 0 0 0;font-size:13px;"><a href="${escapeUrl(data.pageUrl)}" style="color:#15803d;text-decoration:none;">Vezi pagina</a></p>` : ""}
   `;
+  const subiect = `Mesaj nou de pe ${subiectSigur(data.storeName)}`;
+  const smtp = cale?.sender?.smtp;
+  if (smtp && cale?.sender) {
+    try {
+      await sendViaSmtp(smtp, {
+        from: smtp.from_name ? `${smtp.from_name} <${smtp.from_email}>` : smtp.from_email,
+        to, subject: subiect, html: storeEmailShell(cale.sender.branding, content),
+        // „Raspunde” merge la omul care a completat formularul, nu la adresa de raspuns a magazinului.
+        replyTo: data.replyTo || smtp.reply_to || undefined,
+      });
+      return;
+    } catch (e) {
+      logError({ action: "email.formular.smtp", message: (e as Error).message, severity: "warning" });
+      if (cale.faraRezervaEdinio) return;
+    }
+  } else if (cale?.faraRezervaEdinio) {
+    return;
+  }
+  if (!process.env.RESEND_API_KEY) return;
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `Mesaj nou de pe ${subiectSigur(data.storeName)}`,
+    subject: subiect,
     html: baseTemplate(content),
     ...(data.replyTo ? { replyTo: data.replyTo } : {}),
   });

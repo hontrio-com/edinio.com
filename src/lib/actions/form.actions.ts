@@ -1,5 +1,7 @@
 "use server";
 
+import { getStoreEmailSender } from "@/lib/email/sender";
+import { adresaPermisa, adreseleLui } from "@/lib/pages/destinatar-formular";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -147,10 +149,14 @@ export async function updateForm(
        * actiune. Masurat: singurul formular cu adresa proprie folosea deja emailul
        * magazinului.
        */
+      /* 26.09.2026: cu SMTP propriu, orice adresa (pleaca de pe mailul lui); fara, numai
+         adresele lui. Aceeasi regula ca la trimitere, vezi `destinatarFormular`. */
       const { data: biz } = await supabase.from("businesses").select("email").eq("id", form.business_id).single();
-      const permise = [biz?.email?.trim(), user.email?.trim()].filter(Boolean).map((x) => x!.toLowerCase());
-      if (!permise.includes(e.toLowerCase())) {
-        return { error: "Mesajele pot merge doar pe emailul magazinului sau pe cel al contului tău. Lasă câmpul gol ca să ajungă pe emailul magazinului." };
+      const sender = await getStoreEmailSender(supabase, form.business_id);
+      if (!adresaPermisa(e, adreseleLui(biz?.email, user.email), !!sender?.smtp)) {
+        return { error: sender?.smtp
+          ? "Adresa de email nu pare corectă."
+          : "Fără server de email propriu, mesajele pot merge doar pe emailul magazinului sau pe cel al contului tău (pleacă de pe adresa Edinio). Configurează SMTP-ul în Setări > Email ca să alegi orice adresă." };
       }
     }
     update.email_to = e || null;

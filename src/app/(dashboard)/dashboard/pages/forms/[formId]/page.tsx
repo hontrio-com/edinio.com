@@ -5,6 +5,8 @@ import { FormBuilderClient } from "@/components/pages/FormBuilderClient";
 import type { FormField } from "@/lib/pages/forms.types";
 import { statisticiFormulare } from "@/lib/pages/statistici-formulare";
 import { PanouStatistica } from "@/components/pages/StatisticaFormular";
+import { getStoreEmailSender } from "@/lib/email/sender";
+import { adreseleLui } from "@/lib/pages/destinatar-formular";
 
 // Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
 export const metadata = { title: "Formular" };
@@ -19,10 +21,15 @@ export default async function FormEditorPage({ params }: { params: Promise<{ for
   if (!form) notFound();
 
   const { data: business } = await supabase
-    .from("businesses").select("id").eq("id", form.business_id).eq("user_id", user.id).single();
+    .from("businesses").select("id, email").eq("id", form.business_id).eq("user_id", user.id).single();
   if (!business) notFound(); // not the owner
 
-  const stat = (await statisticiFormulare(supabase, business.id, [form.id]))[form.id];
+  const [statistici, sender] = await Promise.all([
+    statisticiFormulare(supabase, business.id, [form.id]),
+    // Cu SMTP propriu, adresa de primire e la alegerea lui; fara, numai adresele lui (`destinatarFormular`).
+    getStoreEmailSender(supabase, business.id),
+  ]);
+  const stat = statistici[form.id];
 
   return (
     <FormBuilderClient
@@ -34,6 +41,8 @@ export default async function FormEditorPage({ params }: { params: Promise<{ for
       initialSuccessMessage={form.success_message}
       initialEmailEnabled={form.email_enabled}
       initialEmailTo={form.email_to ?? ""}
+      adreseleLui={adreseleLui(business.email, user.email)}
+      areSmtp={!!sender?.smtp}
       initialMailchimpEnabled={form.mailchimp_enabled}
       initialBrevoEnabled={form.brevo_enabled ?? false}
       initialKlaviyoEnabled={form.klaviyo_enabled ?? false}

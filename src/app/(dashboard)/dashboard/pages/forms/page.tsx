@@ -5,6 +5,9 @@ import { FormsListClient } from "@/components/pages/FormsListClient";
 import { statisticiFormulare } from "@/lib/pages/statistici-formulare";
 import { acumCatTimp } from "@/lib/utils/format";
 
+// Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
+export const metadata = { title: "Formulare" };
+
 export default async function FormsPage() {
   const supabase = await createClient();
   const user = await getCachedUser();

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SupportTicketClient } from "@/components/dashboard/SupportTicketClient";
 
-export const metadata = { title: "Tichet suport | Edinio" };
+export const metadata = { title: "Tichet suport" };
 
 export default async function SupportTicketPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

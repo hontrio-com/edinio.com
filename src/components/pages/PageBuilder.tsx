@@ -234,7 +234,7 @@ export function PageBuilder({
       versiune.current = res.versiune;
       setSlug(res.slug);
       if (revizie.current === plecat) setDirty(false);
-      toast.success("Pagina a fost salvata.");
+      toast.success("Pagina a fost salvată.");
       router.refresh();
     });
   }
@@ -247,7 +247,7 @@ export function PageBuilder({
   return createPortal(
     <FurnizorLegaturi value={{ businessId: business.id, ...legaturi }}>
     {/* ⚠ Toate clasele de font pe radacina: lista de fonturi se arata fiecare in fontul lui. */}
-    <div className={cn("fixed inset-0 lg:left-[var(--sidebar-width)] flex flex-col bg-muted/30 z-[60]", toateClaseleDeFont())}>
+    <div className={cn("fixed inset-0 lg:left-[var(--sidebar-width)] flex flex-col bg-white z-[60]", toateClaseleDeFont())}>
       {/* Top bar */}
       <div className="h-14 bg-background border-b border-border flex items-center gap-2 px-3 shrink-0">
         {/* `beforeunload` nu prinde navigarea din aplicatie; pe telefon sageata e singura iesire. */}

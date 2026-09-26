@@ -9,6 +9,9 @@ import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { Skeleton } from "@/components/ui/skeleton";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 
+// Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
+export const metadata = { title: "Pagini" };
+
 /** Identitatea magazinului, asa cum o cere lista de pagini. */
 type BusinessPagini = ComponentProps<typeof PagesListClient>["business"];
 

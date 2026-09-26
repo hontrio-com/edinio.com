@@ -6,6 +6,9 @@ import { pageParam } from "@/lib/orders/pagination";
 import { fereastraPaginii } from "@/lib/paginare";
 import { rezumatulPaginii } from "@/lib/dashboard/paginare";
 
+// Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
+export const metadata = { title: "Mesaje" };
+
 interface SubField { label: string; value: string }
 
 /**

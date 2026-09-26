@@ -6,6 +6,9 @@ import type { FormField } from "@/lib/pages/forms.types";
 import { statisticiFormulare } from "@/lib/pages/statistici-formulare";
 import { PanouStatistica } from "@/components/pages/StatisticaFormular";
 
+// Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
+export const metadata = { title: "Formular" };
+
 export default async function FormEditorPage({ params }: { params: Promise<{ formId: string }> }) {
   const { formId } = await params;
   const supabase = await createClient();

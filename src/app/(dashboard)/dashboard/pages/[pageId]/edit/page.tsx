@@ -19,6 +19,9 @@ import { shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveAllBundlesBlocks } from "@/lib/pages/resolve-bundles";
 import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
 
+// Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
+export const metadata = { title: "Editor de pagină" };
+
 export default async function EditCustomPage({ params }: { params: Promise<{ pageId: string }> }) {
   const { pageId } = await params;
   const supabase = await createClient();

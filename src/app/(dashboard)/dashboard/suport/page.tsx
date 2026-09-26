@@ -5,7 +5,7 @@ import { SupportClient, type TichetDinLista } from "@/components/dashboard/Suppo
 import { acumCatTimp } from "@/lib/utils/format";
 import { mediana, stareaTichetului, timpiDePrimRaspuns } from "@/lib/support/tichete";
 
-export const metadata = { title: "Suport | Edinio" };
+export const metadata = { title: "Suport" };
 
 /*
   ═══════════════════════════════════════════════════════════════════════════

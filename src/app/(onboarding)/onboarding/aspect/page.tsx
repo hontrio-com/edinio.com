@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { UrmaPasOnboarding } from "@/components/edinio-marketing/UrmaPalnie";
 import { CadruPas } from "@/components/onboarding/CadruPas";
-import { PreviewMagazinNou } from "@/components/onboarding/PreviewMagazinNou";
 import { ButonContinua, LinkInapoi } from "@/components/onboarding/campuri";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
@@ -16,8 +15,8 @@ import { cn } from "@/lib/utils/cn";
 /*
  * Pasul 2: cum arata magazinul (27.09.2026).
  *
- * Vine INAINTEA planului, anume: omul ajunge la pret dupa ce si-a vazut magazinul
- * cu numele si culoarea lui, nu inainte. Tot ce se alege aici se schimba si mai
+ * Vine INAINTEA planului, anume: omul ajunge la pret dupa ce si-a ales cum arata
+ * magazinul, nu inainte. Tot ce se alege aici se schimba si mai
  * tarziu, din „Editeaza magazinul" si din „Design sectiuni".
  */
 export default function OnboardingAspectPage() {
@@ -65,12 +64,7 @@ export default function OnboardingAspectPage() {
       <CadruPas
         pas={2}
         titlu="Alege cum arată"
-        descriere="Culoarea și stilul se văd pe loc în previzualizare. Le poți schimba oricând din panou."
-        previzualizare={
-          ciorna ? (
-            <PreviewMagazinNou nume={ciorna.business_name} culoare={culoare} stil={stil.id} slug={ciorna.slug} telefon={ciorna.phone} />
-          ) : null
-        }
+        descriere="Culoarea principală și stilul magazinului. Le poți schimba oricând din panou."
       >
         <fieldset>
           <legend className="mb-3 text-sm font-medium text-foreground">Culoarea principală</legend>
@@ -150,7 +144,7 @@ export default function OnboardingAspectPage() {
   );
 }
 
-/* O schita mica a antetului, ca stilurile sa se deosebeasca dintr-o privire si fara previzualizare (pe telefon). */
+/* O schita mica a antetului, ca stilurile sa se deosebeasca dintr-o privire. */
 function SchitaAntet({ stil, culoare }: { stil: StilMagazin; culoare: string }) {
   const linie = "h-1 rounded-full bg-foreground/15";
   return (

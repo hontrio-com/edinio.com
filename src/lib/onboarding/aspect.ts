@@ -4,8 +4,8 @@
  * ⚠ UN STIL E O PERECHE DE VARIANTE REALE (antet + subsol), nu un „tema" cu
  * fonturi. `StoreStyle` (fonturi, rotunjiri) exista in baza, dar magazinul
  * clasic aproape nu-l citeste: fonturile ajung doar in paginile de cont si in
- * meniul unor antete. Un pas care ar fi promis „alege fontul" ar fi aratat in
- * previzualizare ceva ce magazinul nu face. Variantele de antet si de subsol,
+ * meniul unor antete. Un pas care ar fi promis „alege fontul" ar fi promis ceva
+ * ce magazinul nu face. Variantele de antet si de subsol,
  * in schimb, sunt exact componentele din galeria editorului de design.
  *
  * ⚠ Fisier PUR: il citesc si pagina (client), si `createBusiness` (server), care

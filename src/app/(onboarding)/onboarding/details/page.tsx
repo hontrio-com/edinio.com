@@ -5,14 +5,13 @@ import { UrmaPasOnboarding } from "@/components/edinio-marketing/UrmaPalnie";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, X } from "lucide-react";
 import { CadruPas } from "@/components/onboarding/CadruPas";
-import { PreviewMagazinNou } from "@/components/onboarding/PreviewMagazinNou";
 import { campCls, ButonContinua } from "@/components/onboarding/campuri";
 import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import { citesteCiorna, scrieCiorna } from "@/lib/onboarding/ciorna";
-import { CULOARE_IMPLICITA, normalizeazaTelefon, STIL_IMPLICIT, telefonValid } from "@/lib/onboarding/aspect";
+import { normalizeazaTelefon, telefonValid } from "@/lib/onboarding/aspect";
 
 type StareAdresa = "idle" | "checking" | "available" | "taken";
 
@@ -25,7 +24,6 @@ export default function OnboardingDetailsPage() {
   const [slugAtins, setSlugAtins] = useState(false);
   const [stareAdresa, setStareAdresa] = useState<StareAdresa>("idle");
   const [erori, setErori] = useState<{ nume?: string; telefon?: string; slug?: string }>({});
-  const [ciorna, setCiorna] = useState<{ culoare?: string; stil?: string }>({});
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const verificaAdresa = useCallback((valoare: string) => {
@@ -64,7 +62,6 @@ export default function OnboardingDetailsPage() {
       if (c.business_name) setNume(c.business_name);
       if (c.phone) setTelefon(c.phone);
       if (c.slug) { setSlug(c.slug); setSlugAtins(true); verificaAdresa(c.slug); }
-      setCiorna({ culoare: c.culoare, stil: c.stil });
       /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [verificaAdresa]);
@@ -128,16 +125,7 @@ export default function OnboardingDetailsPage() {
       <CadruPas
         pas={1}
         titlu="Hai să-ți creăm magazinul"
-        descriere="Trei informații și îți vezi magazinul prinzând viață. Le poți schimba oricând din panou."
-        previzualizare={
-          <PreviewMagazinNou
-            nume={nume}
-            culoare={ciorna.culoare ?? CULOARE_IMPLICITA}
-            stil={ciorna.stil ?? STIL_IMPLICIT.id}
-            slug={slug}
-            telefon={normalizeazaTelefon(telefon)}
-          />
-        }
+        descriere="Trei informații și magazinul tău e aproape gata. Le poți schimba oricând din panou."
       >
         <form onSubmit={onSubmit} noValidate className="space-y-6">
           <div>

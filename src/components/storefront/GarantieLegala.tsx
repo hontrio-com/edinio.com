@@ -50,9 +50,9 @@ export function ButonGarantieLegala({
         aria-labelledby={idTitlu}
         /* Clic pe fundalul intunecat (in afara continutului) inchide fereastra. */
         onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}
-        className="m-auto w-[calc(100%-2rem)] max-w-[640px] max-h-[90vh] overflow-hidden rounded-2xl bg-white p-0 text-[#18181b] shadow-2xl backdrop:bg-black/60"
+        className="m-auto w-[calc(100%-1rem)] max-w-[760px] max-h-[92vh] overflow-hidden rounded-2xl bg-white p-0 text-[#18181b] shadow-2xl backdrop:bg-black/60"
       >
-        <div className="flex max-h-[90vh] flex-col">
+        <div className="flex max-h-[92vh] flex-col">
           <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
             <h2 id={idTitlu} className="text-base font-semibold">Garanția legală</h2>
             <button
@@ -65,7 +65,14 @@ export function ButonGarantieLegala({
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
-          <div ref={continutRef} className="overflow-y-auto p-4">
+          {/*
+            ⚠ LIZIBILA LA MARIMEA IMPLICITA (ghidul Comisiei, 2.3). Notificarea e o pagina A4:
+            micsorata la latimea unui telefon (~330 px), textul iesea de ~6 px. Sub 640 px imaginea
+            pastreaza 720 px (text de ~14 px) si se deruleaza in lateral; pe ecrane late fereastra
+            are 760 px, deci textul iese tot pe la 14 px, fara derulare laterala.
+          */}
+          <div ref={continutRef} className="overflow-auto p-4">
+            <p className="mb-2 text-xs text-black/60 sm:hidden">Derulează și în lateral ca să citești tot.</p>
             {deschisaOdata && (
               // eslint-disable-next-line @next/next/no-img-element -- fisierul oficial, fara conversie (vezi mai sus)
               <img
@@ -74,21 +81,33 @@ export function ButonGarantieLegala({
                 height={NOTIFICARE_GARANTIE.inaltime}
                 alt="Notificarea Uniunii Europene privind garanția legală de conformitate"
                 aria-describedby={idText}
-                className="h-auto w-full"
+                className="h-auto w-full min-w-[720px] max-w-none sm:min-w-0"
               />
             )}
             <div id={idText} className="sr-only">
               {TEXT_NOTIFICARE_GARANTIE.map((p) => <p key={p}>{p}</p>)}
             </div>
-            <a
-              href={NOTIFICARE_GARANTIE.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
-            >
-              Mai multe despre drepturile tale: {NOTIFICARE_GARANTIE.urlAfisat}
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6">
+              <a
+                href={NOTIFICARE_GARANTIE.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm font-medium underline underline-offset-4"
+              >
+                Mai multe despre drepturile tale: {NOTIFICARE_GARANTIE.urlAfisat}
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+              {/* Fisierul insusi, intr-o fila noua: acolo omul il poate mari cu degetele cat vrea. */}
+              <a
+                href={NOTIFICARE_GARANTIE.src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-black/70 underline underline-offset-4"
+              >
+                Deschide la mărime mare
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            </div>
           </div>
         </div>
       </dialog>

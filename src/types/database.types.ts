@@ -3608,6 +3608,9 @@ export type Database = {
           success: boolean
           template_id: string | null
           trigger_key: string
+          campaign_id: string | null
+          cost_eurocenti: number | null
+          verificat_la: string | null
         }
         Insert: {
           business_id: string
@@ -3625,6 +3628,9 @@ export type Database = {
           success?: boolean
           template_id?: string | null
           trigger_key: string
+          campaign_id?: string | null
+          cost_eurocenti?: number | null
+          verificat_la?: string | null
         }
         Update: {
           business_id?: string
@@ -3642,6 +3648,9 @@ export type Database = {
           success?: boolean
           template_id?: string | null
           trigger_key?: string
+          campaign_id?: string | null
+          cost_eurocenti?: number | null
+          verificat_la?: string | null
         }
         Relationships: [
           {
@@ -3649,6 +3658,13 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notice_sms_log_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "sms_campaigns"
             referencedColumns: ["id"]
           },
           {
@@ -5491,6 +5507,57 @@ export type Database = {
           },
         ]
       }
+      sms_campaign_destinatari: {
+        Row: {
+          business_id: string
+          campaign_id: string
+          eroare: string | null
+          id: number
+          luat_la: string | null
+          prenume: string | null
+          stare: string
+          telefon: string
+          trimis_la: string | null
+        }
+        Insert: {
+          business_id: string
+          campaign_id: string
+          eroare?: string | null
+          id?: never
+          luat_la?: string | null
+          prenume?: string | null
+          stare?: string
+          telefon: string
+          trimis_la?: string | null
+        }
+        Update: {
+          business_id?: string
+          campaign_id?: string
+          eroare?: string | null
+          id?: never
+          luat_la?: string | null
+          prenume?: string | null
+          stare?: string
+          telefon?: string
+          trimis_la?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_campaign_destinatari_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_campaign_destinatari_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "sms_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_campaigns: {
         Row: {
           business_id: string
@@ -5502,6 +5569,13 @@ export type Database = {
           recipient_count: number
           sent_count: number
           status: string
+          actualizata_la: string
+          cheie: string | null
+          cost_estimat_eurocenti: number | null
+          finalizata_la: string | null
+          motiv_oprire: string | null
+          sariti: number
+          segmente: number | null
         }
         Insert: {
           business_id: string
@@ -5513,6 +5587,13 @@ export type Database = {
           recipient_count?: number
           sent_count?: number
           status?: string
+          actualizata_la?: string
+          cheie?: string | null
+          cost_estimat_eurocenti?: number | null
+          finalizata_la?: string | null
+          motiv_oprire?: string | null
+          sariti?: number
+          segmente?: number | null
         }
         Update: {
           business_id?: string
@@ -5524,6 +5605,13 @@ export type Database = {
           recipient_count?: number
           sent_count?: number
           status?: string
+          actualizata_la?: string
+          cheie?: string | null
+          cost_estimat_eurocenti?: number | null
+          finalizata_la?: string | null
+          motiv_oprire?: string | null
+          sariti?: number
+          segmente?: number | null
         }
         Relationships: [
           {

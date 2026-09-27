@@ -29,6 +29,7 @@ create sequence if not exists public.emag_family_id_seq;
 create sequence if not exists public.emag_offers_emag_id_seq;
 create sequence if not exists public.email_marketing_coada_id_seq;
 create sequence if not exists public.order_number_seq;
+create sequence if not exists public.sms_campaign_destinatari_id_seq;
 
 -- ── FUNCTII ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION privat.cheie_integrari()
@@ -9898,6 +9899,191 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.sms_audienta_rezumat(p_business uuid, p_filtre jsonb)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with a as (select * from sms_audienta_toti(p_business, p_filtre))
+  select jsonb_build_object(
+    'primesc', (select count(*) from a where valid and not dezabonat),
+    'dezabonati', (select count(*) from a where valid and dezabonat),
+    'invalide', (select count(*) from a where not valid),
+    'exemple', coalesce((
+      select jsonb_agg(jsonb_build_object('prenume', e.prenume, 'telefon', e.telefon, 'comenzi', e.comenzi))
+      from (select * from a where valid and not dezabonat order by ultima desc nulls last limit 5) e
+    ), '[]'::jsonb)
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sms_audienta_toti(p_business uuid, p_filtre jsonb)
+ RETURNS TABLE(telefon text, prenume text, comenzi integer, ultima timestamp with time zone, valid boolean, dezabonat boolean)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with directe as (
+    select o.*
+    from orders o
+    where o.business_id = p_business
+      and not coalesce(o.order_source ? 'marketplace', false)
+      and o.shipping_address->>'source' is null
+      and coalesce(btrim(o.customer_phone), '') <> ''
+  ),
+  potrivite as (
+    select normalize_phone(d.customer_phone) as tel, d.customer_name, d.created_at
+    from directe d
+    where (p_filtre->>'date_from' is null or d.created_at >= (p_filtre->>'date_from')::date)
+      and (p_filtre->>'date_to' is null or d.created_at < (p_filtre->>'date_to')::date + 1)
+      and (p_filtre->>'min_amount' is null or d.total >= (p_filtre->>'min_amount')::numeric)
+      and (case
+            when jsonb_array_length(coalesce(p_filtre->'order_statuses', '[]'::jsonb)) > 0
+              then d.status in (select jsonb_array_elements_text(p_filtre->'order_statuses'))
+            else d.status not in ('cancelled', 'refunded')
+          end)
+      and (jsonb_array_length(coalesce(p_filtre->'counties', '[]'::jsonb)) = 0
+           or d.shipping_address->>'county' in (select jsonb_array_elements_text(p_filtre->'counties')))
+      and (coalesce(p_filtre->>'categorie', '') = '' or exists (
+            select 1
+            from jsonb_array_elements(case when jsonb_typeof(d.items) = 'array' then d.items else '[]'::jsonb end) it
+            join products p on p.id::text = it->>'product_id' and p.business_id = p_business
+            where p.category = p_filtre->>'categorie'))
+  ),
+  ultima_oricare as (
+    select normalize_phone(d.customer_phone) as tel, max(d.created_at) as ultima
+    from directe d
+    where d.status not in ('cancelled', 'refunded')
+    group by 1
+  ),
+  pe_om as (
+    select p.tel, count(*)::integer as comenzi,
+           (array_agg(p.customer_name order by p.created_at desc))[1] as nume
+    from potrivite p
+    group by p.tel
+  )
+  select po.tel,
+         nullif(split_part(btrim(coalesce(po.nume, '')), ' ', 1), ''),
+         po.comenzi,
+         u.ultima,
+         po.tel ~ '^7[0-9]{8}$',
+         exists (select 1 from sms_optout x where x.business_id = p_business and normalize_phone(x.phone) = po.tel)
+  from pe_om po
+  left join ultima_oricare u on u.tel = po.tel
+  where (p_filtre->>'min_comenzi' is null or po.comenzi >= (p_filtre->>'min_comenzi')::integer)
+    and (p_filtre->>'inactivi_zile' is null
+         or coalesce(u.ultima, 'epoch'::timestamptz) < now() - make_interval(days => (p_filtre->>'inactivi_zile')::integer))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sms_campanie_inchide_intrerupte(p_campaign uuid)
+ RETURNS integer
+ LANGUAGE sql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with u as (
+    update sms_campaign_destinatari
+    set stare = 'necunoscut', eroare = 'Trimitere întreruptă: nu știm dacă mesajul a plecat, deci nu îl retrimitem.'
+    where campaign_id = p_campaign and stare = 'in_lucru' and luat_la < now() - interval '10 minutes'
+    returning 1
+  )
+  select count(*)::integer from u
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sms_campanie_stare(p_campaign uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select jsonb_build_object(
+    'de_trimis', count(*) filter (where d.stare = 'de_trimis'),
+    'in_lucru', count(*) filter (where d.stare = 'in_lucru'),
+    'trimis', count(*) filter (where d.stare = 'trimis'),
+    'esuat', count(*) filter (where d.stare = 'esuat'),
+    'sarit', count(*) filter (where d.stare = 'sarit'),
+    'necunoscut', count(*) filter (where d.stare = 'necunoscut'),
+    'livrate', (select count(*) from notice_sms_log l where l.campaign_id = p_campaign and l.delivery_status = 'delivered'),
+    'nelivrate', (select count(*) from notice_sms_log l where l.campaign_id = p_campaign and l.delivery_status = 'failed' and l.success),
+    'cost_eurocenti', (select coalesce(sum(l.cost_eurocenti), 0) from notice_sms_log l where l.campaign_id = p_campaign)
+  )
+  from sms_campaign_destinatari d
+  where d.campaign_id = p_campaign
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sms_ia_lot(p_campaign uuid, p_n integer)
+ RETURNS TABLE(id bigint, telefon text, prenume text)
+ LANGUAGE sql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  update sms_campaign_destinatari d
+  set stare = 'in_lucru', luat_la = now()
+  where d.id in (
+    select x.id from sms_campaign_destinatari x
+    where x.campaign_id = p_campaign and x.stare = 'de_trimis'
+    order by x.id
+    limit greatest(1, least(coalesce(p_n, 25), 200))
+    for update skip locked
+  )
+  returning d.id, d.telefon, d.prenume
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sms_pregateste_campanie(p_campaign uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_biz uuid;
+  v_filtre jsonb;
+  v_n integer;
+  v_sariti integer;
+begin
+  select c.business_id, coalesce(c.filters, '{}'::jsonb) into v_biz, v_filtre
+  from sms_campaigns c where c.id = p_campaign;
+  if v_biz is null then raise exception 'campanie inexistenta: %', p_campaign; end if;
+
+  insert into sms_campaign_destinatari (campaign_id, business_id, telefon, prenume)
+  select p_campaign, v_biz, t.telefon, t.prenume
+  from sms_audienta_toti(v_biz, v_filtre) t
+  where t.valid and not t.dezabonat
+  on conflict (campaign_id, telefon) do nothing;
+  get diagnostics v_n = row_count;
+
+  select count(*) into v_sariti from sms_audienta_toti(v_biz, v_filtre) t where t.valid and t.dezabonat;
+
+  update sms_campaigns
+  set recipient_count = v_n, sariti = v_sariti, actualizata_la = now()
+  where id = p_campaign;
+  return v_n;
+end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sms_statistici(p_business uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select jsonb_build_object(
+    'luna_trimise', (select count(*) from notice_sms_log l where l.business_id = p_business and l.provider = 'smso' and l.success
+                      and l.trigger_key = 'campanie' and l.created_at >= date_trunc('month', now() at time zone 'Europe/Bucharest') at time zone 'Europe/Bucharest'),
+    'luna_cost_eurocenti', (select coalesce(sum(l.cost_eurocenti), 0) from notice_sms_log l where l.business_id = p_business and l.provider = 'smso'
+                      and l.trigger_key = 'campanie' and l.created_at >= date_trunc('month', now() at time zone 'Europe/Bucharest') at time zone 'Europe/Bucharest'),
+    'livrate_30', (select count(*) from notice_sms_log l where l.business_id = p_business and l.provider = 'smso' and l.trigger_key = 'campanie'
+                      and l.delivery_status = 'delivered' and l.created_at >= now() - interval '30 days'),
+    'nelivrate_30', (select count(*) from notice_sms_log l where l.business_id = p_business and l.provider = 'smso' and l.trigger_key = 'campanie'
+                      and l.success and l.delivery_status = 'failed' and l.created_at >= now() - interval '30 days'),
+    'dezabonati', (select count(*) from sms_optout x where x.business_id = p_business)
+  )
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.sterge_comanda(p_order_id uuid, p_business_id uuid DEFAULT NULL::uuid)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -11825,7 +12011,10 @@ create table if not exists public.notice_sms_log (
   provider_id text,
   delivery_status text,
   delivered_at timestamp with time zone,
-  provider text default 'notice'::text not null);
+  provider text default 'notice'::text not null,
+  campaign_id uuid,
+  cost_eurocenti numeric(10,2),
+  verificat_la timestamp with time zone);
 
 create table if not exists public.notifications (
   id uuid default gen_random_uuid() not null,
@@ -12339,6 +12528,17 @@ create table if not exists public.site_analytics (
   product_id uuid,
   valoare numeric);
 
+create table if not exists public.sms_campaign_destinatari (
+  id bigint generated always as identity not null,
+  campaign_id uuid not null,
+  business_id uuid not null,
+  telefon text not null,
+  prenume text,
+  stare text default 'de_trimis'::text not null,
+  luat_la timestamp with time zone,
+  trimis_la timestamp with time zone,
+  eroare text);
+
 create table if not exists public.sms_campaigns (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -12348,7 +12548,14 @@ create table if not exists public.sms_campaigns (
   failed_count integer default 0 not null,
   status text default 'sent'::text not null,
   filters jsonb,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  cheie text,
+  segmente integer,
+  cost_estimat_eurocenti numeric(12,2),
+  motiv_oprire text,
+  sariti integer default 0 not null,
+  actualizata_la timestamp with time zone default now() not null,
+  finalizata_la timestamp with time zone);
 
 create table if not exists public.sms_optout (
   id uuid default gen_random_uuid() not null,
@@ -12800,6 +13007,7 @@ alter table public.recovery_optout add constraint recovery_optout_pkey PRIMARY K
 alter table public.recovery_sends add constraint recovery_sends_pkey PRIMARY KEY (id);
 alter table public.return_requests add constraint return_requests_pkey PRIMARY KEY (id);
 alter table public.site_analytics add constraint site_analytics_pkey PRIMARY KEY (id);
+alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_pkey PRIMARY KEY (id);
 alter table public.sms_campaigns add constraint sms_campaigns_pkey PRIMARY KEY (id);
 alter table public.sms_optout add constraint sms_optout_pkey PRIMARY KEY (id);
 alter table public.sms_templates add constraint sms_templates_pkey PRIMARY KEY (id);
@@ -12861,6 +13069,7 @@ alter table public.pepita_articole add constraint pepita_articole_business_id_ar
 alter table public.pepita_articole add constraint pepita_articole_business_id_product_id_combinatie_key UNIQUE (business_id, product_id, combinatie);
 alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_external_order_id_key UNIQUE (business_id, external_order_id);
 alter table public.pepita_listari add constraint pepita_listari_business_id_product_id_key UNIQUE (business_id, product_id);
+alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_campaign_id_telefon_key UNIQUE (campaign_id, telefon);
 alter table public.sms_optout add constraint sms_optout_business_id_phone_key UNIQUE (business_id, phone);
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_business_id_claim_item_id_key UNIQUE (business_id, claim_item_id);
@@ -12940,7 +13149,8 @@ alter table public.recovery_optout add constraint recovery_optout_are_un_contact
 alter table public.recovery_sends add constraint recovery_sends_canal_check CHECK ((canal = ANY (ARRAY['email'::text, 'sms'::text])));
 alter table public.recovery_sends add constraint recovery_sends_sursa_check CHECK ((sursa = ANY (ARRAY['manual'::text, 'automatizare'::text])));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
-alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['in_curs'::text, 'sent'::text, 'partial'::text, 'failed'::text])));
+alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_stare_check CHECK ((stare = ANY (ARRAY['de_trimis'::text, 'in_lucru'::text, 'trimis'::text, 'esuat'::text, 'sarit'::text, 'necunoscut'::text])));
+alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['in_curs'::text, 'sent'::text, 'partial'::text, 'failed'::text, 'oprita'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_frequency_check CHECK ((frequency = ANY (ARRAY['hourly'::text, 'daily'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_last_status_check CHECK ((last_status = ANY (ARRAY['ok'::text, 'error'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_run_hour_check CHECK (((run_hour >= 0) AND (run_hour <= 23)));
@@ -13063,6 +13273,7 @@ alter table public.meta_comenzi_raportate add constraint meta_comenzi_raportate_
 alter table public.notice_inbox add constraint notice_inbox_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.notice_inbox add constraint notice_inbox_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.notice_sms_log add constraint notice_sms_log_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.notice_sms_log add constraint notice_sms_log_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES sms_campaigns(id) ON DELETE SET NULL;
 alter table public.notice_sms_log add constraint notice_sms_log_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.notifications add constraint notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.offers add constraint offers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -13101,6 +13312,8 @@ alter table public.recovery_sends add constraint recovery_sends_comanda_id_fkey 
 alter table public.return_requests add constraint return_requests_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.return_requests add constraint return_requests_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.site_analytics add constraint site_analytics_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES sms_campaigns(id) ON DELETE CASCADE;
 alter table public.sms_campaigns add constraint sms_campaigns_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.sms_optout add constraint sms_optout_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.sms_templates add constraint sms_templates_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -13413,9 +13626,11 @@ CREATE INDEX notice_inbox_business_idx ON public.notice_inbox USING btree (busin
 CREATE UNIQUE INDEX notice_inbox_furnizor_unic_idx ON public.notice_inbox USING btree (business_id, provider_id);
 CREATE INDEX notice_inbox_order_id_idx ON public.notice_inbox USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX notice_sms_log_business_created_idx ON public.notice_sms_log USING btree (business_id, created_at DESC);
+CREATE INDEX notice_sms_log_campaign ON public.notice_sms_log USING btree (campaign_id) WHERE (campaign_id IS NOT NULL);
 CREATE INDEX notice_sms_log_livrare_idx ON public.notice_sms_log USING btree (business_id, provider, provider_id);
 CREATE INDEX notice_sms_log_order_id_idx ON public.notice_sms_log USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX notice_sms_log_provider_id_idx ON public.notice_sms_log USING btree (provider_id) WHERE (provider_id IS NOT NULL);
+CREATE INDEX notice_sms_log_smso_de_verificat ON public.notice_sms_log USING btree (verificat_la NULLS FIRST, created_at) WHERE ((provider = 'smso'::text) AND (delivery_status = 'sent'::text) AND (provider_id IS NOT NULL));
 CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_id, is_active);
 CREATE INDEX offers_business_type_idx ON public.offers USING btree (business_id, type);
 CREATE INDEX olx_adverts_conflict_idx ON public.olx_adverts USING btree (business_id) WHERE (conflict_la IS NOT NULL);
@@ -13483,6 +13698,8 @@ CREATE INDEX return_requests_order_id_idx ON public.return_requests USING btree 
 CREATE INDEX return_requests_order_idx ON public.return_requests USING btree (order_id);
 CREATE INDEX site_analytics_sesiune ON public.site_analytics USING btree (business_id, session_id) WHERE (session_id IS NOT NULL);
 CREATE INDEX site_analytics_vizitator ON public.site_analytics USING btree (business_id, visitor_id, created_at DESC) WHERE (visitor_id IS NOT NULL);
+CREATE INDEX sms_campaign_destinatari_lot ON public.sms_campaign_destinatari USING btree (campaign_id, stare, id);
+CREATE UNIQUE INDEX sms_campaigns_cheie_unica ON public.sms_campaigns USING btree (business_id, cheie) WHERE (cheie IS NOT NULL);
 CREATE INDEX sms_optout_cautare_idx ON public.sms_optout USING btree (business_id, phone);
 CREATE INDEX stock_feed_sources_business_idx ON public.stock_feed_sources USING btree (business_id);
 CREATE INDEX stock_feed_sources_due_idx ON public.stock_feed_sources USING btree (enabled, last_run_at NULLS FIRST);
@@ -13732,6 +13949,7 @@ alter table public.recovery_optout enable row level security;
 alter table public.recovery_sends enable row level security;
 alter table public.return_requests enable row level security;
 alter table public.site_analytics enable row level security;
+alter table public.sms_campaign_destinatari enable row level security;
 alter table public.sms_campaigns enable row level security;
 alter table public.sms_optout enable row level security;
 alter table public.sms_templates enable row level security;
@@ -14038,6 +14256,9 @@ create policy owner_update_return_requests on public.return_requests as PERMISSI
 create policy "Owners can view own analytics" on public.site_analytics as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = site_analytics.business_id) AND (b.user_id = auth.uid())))));
+create policy "Owner reads sms_campaign_destinatari" on public.sms_campaign_destinatari as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid()))));
 create policy "Owner manages sms_campaigns" on public.sms_campaigns as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
@@ -15919,6 +16140,14 @@ grant SELECT on table public.site_analytics to service_role;
 grant TRIGGER on table public.site_analytics to service_role;
 grant TRUNCATE on table public.site_analytics to service_role;
 grant UPDATE on table public.site_analytics to service_role;
+grant SELECT on table public.sms_campaign_destinatari to authenticated;
+grant DELETE on table public.sms_campaign_destinatari to service_role;
+grant INSERT on table public.sms_campaign_destinatari to service_role;
+grant REFERENCES on table public.sms_campaign_destinatari to service_role;
+grant SELECT on table public.sms_campaign_destinatari to service_role;
+grant TRIGGER on table public.sms_campaign_destinatari to service_role;
+grant TRUNCATE on table public.sms_campaign_destinatari to service_role;
+grant UPDATE on table public.sms_campaign_destinatari to service_role;
 grant DELETE on table public.sms_campaigns to anon;
 grant INSERT on table public.sms_campaigns to anon;
 grant REFERENCES on table public.sms_campaigns to anon;
@@ -16809,6 +17038,13 @@ grant execute on function public.site_analytics_breakdown(bid uuid, t_from times
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to anon;
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to authenticated;
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to service_role;
+grant execute on function public.sms_audienta_rezumat(p_business uuid, p_filtre jsonb) to service_role;
+grant execute on function public.sms_audienta_toti(p_business uuid, p_filtre jsonb) to service_role;
+grant execute on function public.sms_campanie_inchide_intrerupte(p_campaign uuid) to service_role;
+grant execute on function public.sms_campanie_stare(p_campaign uuid) to service_role;
+grant execute on function public.sms_ia_lot(p_campaign uuid, p_n integer) to service_role;
+grant execute on function public.sms_pregateste_campanie(p_campaign uuid) to service_role;
+grant execute on function public.sms_statistici(p_business uuid) to service_role;
 grant execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) to service_role;
 grant execute on function public.stoc_combinatie(p_combinatie jsonb) to authenticated;
 grant execute on function public.stoc_combinatie(p_combinatie jsonb) to service_role;
@@ -17094,6 +17330,13 @@ revoke execute on function public.rezerva_operatie_externa(p_business_id uuid, p
 revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
+revoke execute on function public.sms_audienta_rezumat(p_business uuid, p_filtre jsonb) from public;
+revoke execute on function public.sms_audienta_toti(p_business uuid, p_filtre jsonb) from public;
+revoke execute on function public.sms_campanie_inchide_intrerupte(p_campaign uuid) from public;
+revoke execute on function public.sms_campanie_stare(p_campaign uuid) from public;
+revoke execute on function public.sms_ia_lot(p_campaign uuid, p_n integer) from public;
+revoke execute on function public.sms_pregateste_campanie(p_campaign uuid) from public;
+revoke execute on function public.sms_statistici(p_business uuid) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
 revoke execute on function public.stoc_combinatie(p_combinatie jsonb) from public;
 revoke execute on function public.trafic_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;

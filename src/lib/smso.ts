@@ -35,6 +35,10 @@ export interface SmsoSendResult {
    * la fel, intr-un `failedCount`.
    */
   status?: number;
+  /** Nu a plecat fiindca numarul e pe lista de dezabonati a magazinului (garda noastra, nu SMSO). */
+  dezabonat?: boolean;
+  /** Nu a plecat fiindca lista de dezabonati nu s-a putut citi: se reincearca, nu e un esec al numarului. */
+  nesigur?: boolean;
 }
 
 /** Numarul e dezabonat: ei ne-au spus-o, si nu se mai schimba. */
@@ -55,19 +59,27 @@ export function smsoOpresteTot(status: number | undefined): boolean {
 }
 
 const ERROR_MAP: Record<number, string> = {
-  400: "Cerere invalida.",
-  401: "Cheie API invalida.",
+  400: "Cerere invalidă.",
+  401: "Cheie API invalidă.",
   402: "Credit insuficient.",
-  403: "Continut blocat de SMSO.",
-  405: "Numar dezabonat.",
-  409: "Limita de trimitere depasita. Incearca mai tarziu.",
-  422: "SMS international restrictionat.",
+  403: "Conținut blocat de SMSO.",
+  405: "Număr dezabonat.",
+  409: "Limita de trimitere depășită. Încearcă mai târziu.",
+  422: "SMS internațional restricționat.",
 };
+
+/*
+  ⚠ Termen pe FIECARE apel (27.09.2026). Fara el, un singur apel agatat la ei oprea
+  tot lotul campaniei pana la plafonul functiei, iar mesajele din urma lui nu mai
+  plecau. 15 secunde: un raspuns normal vine in sub o secunda.
+*/
+const TERMEN_MS = 15_000;
 
 async function smsoGet(apiKey: string, path: string) {
   return fetch(`${SMSO_BASE}${path}`, {
     headers: { "X-Authorization": apiKey },
     cache: "no-store",
+    signal: AbortSignal.timeout(TERMEN_MS),
   });
 }
 
@@ -80,6 +92,7 @@ async function smsoPost(apiKey: string, path: string, params: Record<string, str
     },
     body: new URLSearchParams(params).toString(),
     cache: "no-store",
+    signal: AbortSignal.timeout(TERMEN_MS),
   });
 }
 
@@ -103,7 +116,7 @@ export async function stareaSmsului(
 ): Promise<{ status: string; delivered_at?: string | null } | { error: string }> {
   try {
     const res = await fetch(`${SMSO_BASE}/status?responseToken=${encodeURIComponent(responseToken)}`,
-      { cache: "no-store" });
+      { cache: "no-store", signal: AbortSignal.timeout(TERMEN_MS) });
     const data = await res.json() as {
       status: number;
       data?: { status?: string; delivered_at?: string | null };
@@ -114,7 +127,7 @@ export async function stareaSmsului(
     }
     return { status: data.data.status, delivered_at: data.data.delivered_at ?? null };
   } catch {
-    return { error: "Eroare de retea." };
+    return { error: "Eroare de rețea." };
   }
 }
 
@@ -127,7 +140,7 @@ export async function getSenders(apiKey: string): Promise<SmsoSender[] | { error
     }
     return data.data ?? [];
   } catch {
-    return { error: "Eroare de retea." };
+    return { error: "Eroare de rețea." };
   }
 }
 
@@ -140,7 +153,7 @@ export async function checkCredit(apiKey: string): Promise<{ credit: number } | 
     }
     return { credit: data.credit_value ?? 0 };
   } catch {
-    return { error: "Eroare de retea." };
+    return { error: "Eroare de rețea." };
   }
 }
 
@@ -211,11 +224,11 @@ export async function sendSms(
     return {
       success: false,
       status: typeof data.status === "number" ? data.status : res.status,
-      error: ERROR_MAP[data.status] ?? data.message ?? "Eroare necunoscuta.",
+      error: ERROR_MAP[data.status] ?? data.message ?? "Eroare necunoscută.",
     };
   } catch {
     /* ⚠ FARA `status`: o cadere de retea nu e un verdict al lor. Nu dezaboneaza pe nimeni si nu
        opreste campania, fiindca nu stim ce s-a intamplat de partea cealalta. */
-    return { success: false, error: "Eroare de retea." };
+    return { success: false, error: "Eroare de rețea." };
   }
 }

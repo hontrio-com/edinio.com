@@ -38,6 +38,8 @@ export interface SmsDeTrimis {
   /** De ce a plecat: `campanie`, `cos_abandonat`, `stare_comanda`, `test`. Intra in jurnal. */
   motiv: string;
   orderId?: string | null;
+  /** Campania din care face parte (27.09.2026): livrarile si costul se vad pe campanie. */
+  campaignId?: string | null;
 }
 
 /**
@@ -114,10 +116,10 @@ export async function trimiteSiLasaUrma(
      */
     const { oprit, nesigur } = await esteDezabonat(admin, m.businessId, m.phone);
     if (nesigur) {
-      return { success: false, error: "Nu am putut verifica lista de dezabonati, deci nu am trimis." };
+      return { success: false, nesigur: true, error: "Nu am putut verifica lista de dezabonati, deci nu am trimis." };
     }
     if (oprit) {
-      return { success: false, error: "Numarul s-a dezabonat de la mesajele de marketing." };
+      return { success: false, dezabonat: true, error: "Numarul s-a dezabonat de la mesajele de marketing." };
     }
   }
 
@@ -157,6 +159,9 @@ export async function trimiteSiLasaUrma(
     message: m.body,
     success: result.success,
     provider_id: result.responseToken ?? null,
+    campaign_id: m.campaignId ?? null,
+    // Costul spus de SMSO, in eurocenti (documentatia lor: „transaction_cost … in eurocents”).
+    cost_eurocenti: typeof result.transaction_cost === "number" ? result.transaction_cost : null,
     delivery_status: result.success ? "sent" : "failed",
     error: result.success ? null : (result.error ?? "Eroare necunoscuta"),
   } as never);

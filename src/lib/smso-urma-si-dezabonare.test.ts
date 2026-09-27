@@ -436,32 +436,60 @@ describe("Toate caile de trimitere trec prin locul care lasa urma", () => {
 });
 
 describe("Campania", () => {
+  /*
+   * ⚠ 27.09.2026: campania s-a despartit in doua (creare + loturi). Regulile de mai jos sunt ACELEASI,
+   * doar locul lor s-a mutat: creditul si publicul se hotarasc la creare, inainte de orice lot.
+   */
   const a = viu("src/lib/actions/sms.actions.ts");
+  const creare = a.slice(a.indexOf("export async function creeazaCampanie"), a.indexOf("export async function trimiteLot"));
+  const lot = a.slice(a.indexOf("export async function trimiteLot"), a.indexOf("export async function opresteCampania"));
+  const sql = viu("migrations/2026-09-27-sms-campanii-pe-loturi.sql");
 
   test("⚠⚠ intreaba CREDITUL inainte, nu afla mesaj cu mesaj", () => {
-    assert.match(a, /const credit = await checkCredit\(config\.api_key\);/, "creditul nu se mai verifica din start");
-    assert.ok(
-      a.indexOf("await checkCredit(config.api_key)") < a.indexOf("trimiteSiLasaUrma("),
-      "creditul se verifica dupa ce au plecat mesaje",
-    );
+    assert.match(creare, /const credit = await checkCredit\(config\.api_key\);/, "creditul nu se mai verifica din start");
+    assert.ok(!/trimiteSiLasaUrma\(/.test(creare), "crearea campaniei trimite deja mesaje");
+    assert.match(creare, /credit\.credit \* 100 < costEstimat && !input\.acceptaCostul/, "creditul nu se mai compara cu costul campaniei");
   });
 
-  test("⚠⚠ si se OPRESTE pe codurile fatale", () => {
-    assert.match(a, /if \(smsoOpresteTot\(result\.status\)\) \{/, "campania arde iar toata lista");
-    assert.match(a, /break;/);
+  test("⚠⚠ si se OPRESTE pe codurile fatale, cu ce n-a plecat intors in coada", () => {
+    assert.match(lot, /if \(smsoOpresteTot\(result\.status\) \|\| result\.nesigur\) \{/, "campania arde iar toata lista");
+    assert.match(lot, /update\(\{ stare: "de_trimis", luat_la: null \} as never\)\.in\("id", inapoi\)/, "randurile netrimise se pierd");
+    assert.match(lot, /status: "oprita"/);
+    assert.match(lot, /break lot;/);
   });
 
-  test("⚠⚠ dezabonatii se scot INAINTE de a cheltui vreun credit", () => {
-    assert.match(a, /opriti = await dezabonatii\(admin, businessId\);/);
-    assert.ok(
-      a.indexOf("await dezabonatii(admin, businessId)") < a.indexOf("trimiteSiLasaUrma("),
-      "lista se citeste dupa ce au plecat mesaje",
-    );
+  test("⚠⚠ dezabonatii se scot INAINTE de a cheltui vreun credit (in fotografia publicului)", () => {
+    assert.match(sql, /exists \(select 1 from sms_optout x where x\.business_id = p_business and normalize_phone\(x\.phone\) = po\.tel\)/);
+    assert.match(sql, /where t\.valid and not t\.dezabonat/, "dezabonatii intra in campanie");
+    /* Plasa ramane langa trimitere, pentru cine s-a dezabonat intre creare si lot. */
+    assert.match(lot, /trimiteSiLasaUrma\(admin, config\.api_key, \{/);
+    assert.match(lot, /result\.dezabonat \? "sarit"/);
   });
 
-  test("⚠⚠ iar daca lista nu se poate citi, NU se trimite nimic", () => {
-    /* Cu lista goala am fi sunat exact oamenii care au cerut sa nu mai fie sunati. */
-    assert.match(a, /Nu am putut citi lista de dezabonati, deci nu am trimis nimic/);
+  test("⚠⚠ iar daca lista nu se poate citi, NU se trimite: randul se intoarce in coada, nu se da drept esuat", () => {
+    assert.match(viu("src/lib/smso-urma.ts"), /return \{ success: false, nesigur: true,/);
+    assert.match(lot, /result\.nesigur/);
+  });
+
+  test("⚠⚠ marketplace-urile nu intra niciodata in public; anulatele doar la cerere", () => {
+    assert.match(sql, /and not coalesce\(o\.order_source \? 'marketplace', false\)/, "comenzile din marketplace intra in campanii");
+    assert.match(sql, /and o\.shipping_address->>'source' is null/);
+    assert.match(sql, /else d\.status not in \('cancelled', 'refunded'\)/);
+  });
+
+  test("⚠⚠ fiecare mesaj pleaca cu dezabonare si cu variabilele puse, pe acelasi drum ca previzualizarea", () => {
+    assert.match(lot, /body: textDeTrimis\(campanie\.message, \{ prenume: r\.prenume, magazin \}\)/);
+  });
+
+  test("⚠⚠ dublu-clic si doua file: aceeasi cheie intoarce aceeasi campanie; lotul nu ia de doua ori", () => {
+    assert.ok(creare.indexOf('.eq("cheie", cheie).maybeSingle()') < creare.indexOf('.from("sms_campaigns")\n    .insert('), "cheia se verifica dupa ce s-a creat");
+    assert.match(sql, /create unique index if not exists sms_campaigns_cheie_unica/);
+    assert.match(sql, /for update skip locked/);
+    assert.match(sql, /x\.stare = 'de_trimis'/, "un rand intrerupt (in_lucru) s-ar retrimite");
+  });
+
+  test("⚠ campaniile dinainte nu primesc cifre de zero peste ale lor", () => {
+    assert.match(lot, /if \(!campanie\.cheie\) return \{ error:/);
   });
 });
 
@@ -471,7 +499,7 @@ describe("Webhook-ul de livrare", () => {
   test("⚠⚠ adresa e singura paza, fiindca EI nu semneaza nimic", () => {
     /* Documentatia lor: „No authentifications is required". Niciun antet, niciun secret comun. */
     assert.match(w, /semnaturaCheii\(`smso-webhook:\$\{businessId\}`\)/, "adresa a devenit ghicibila");
-    assert.match(w, /if \(semnatura !== asteptat\)/, "semnatura din adresa nu se mai verifica");
+    assert.match(w, /if \(primita\.length !== corecta\.length \|\| !timingSafeEqual\(primita, corecta\)\) \{/, "semnatura din adresa nu se mai verifica (in timp constant)");
   });
 
   test("⚠⚠ un raport se potriveste pe (magazin, FURNIZOR, id-ul lor)", () => {

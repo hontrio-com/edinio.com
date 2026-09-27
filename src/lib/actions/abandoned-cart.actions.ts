@@ -1024,10 +1024,12 @@ export async function sendAbandonedCartSms(
 
   // Prefer notice.ro when the merchant enabled it for abandoned carts, else SMSO.
   if (cine.furnizor === "notice") {
-    const r = await sendNoticeAbandonedSms(supabase, notice, { businessId, phone: cart.phone, body });
+    // Clientul de serviciu (dreptul asupra magazinului e verificat mai sus): din 27.09.2026 jurnalul si
+    // lista de dezabonati sunt DOAR DE CITIT pentru proprietar, deci clientul lui n-ar mai putea scrie urma.
+    const r = await sendNoticeAbandonedSms(admin, notice, { businessId, phone: cart.phone, body });
     if (!r.success) return { error: r.error ?? "SMS-ul nu a putut fi trimis." };
   } else {
-    const res = await trimiteSiLasaUrma(supabase as never, smso!.api_key, {
+    const res = await trimiteSiLasaUrma(admin, smso!.api_key, {
       businessId, phone: cart.phone, sender: smso!.sender_id,
       body, type: "marketing", motiv: "cos_abandonat",
     });

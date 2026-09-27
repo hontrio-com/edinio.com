@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
@@ -53,7 +54,10 @@ export async function POST(request: NextRequest) {
     console.error("[smso/webhook] secretul de semnare lipseste");
     return ok();
   }
-  if (semnatura !== asteptat) {
+  // Comparatie in timp constant (27.09.2026): `!==` se opreste la primul caracter diferit.
+  const primita = Buffer.from(String(semnatura ?? ""));
+  const corecta = Buffer.from(asteptat);
+  if (primita.length !== corecta.length || !timingSafeEqual(primita, corecta)) {
     console.error("[smso/webhook] adresa nu corespunde magazinului", { businessId });
     return ok();
   }

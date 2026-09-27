@@ -76,6 +76,9 @@ export async function GET(req: NextRequest) {
     .not("provider_id", "is", null)
     .gte("created_at", de)
     .lte("created_at", pana)
+    /* ⚠ Intai ce n-am mai intrebat de cel mai mult timp (27.09.2026). Pe `created_at`, aceleasi 200
+       de randuri vechi, ramase `sent` la ei, se intrebau din ora in ora, iar cele noi nu apucau. */
+    .order("verificat_la", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
     .limit(MAX_MESAJE);
 
@@ -89,6 +92,12 @@ export async function GET(req: NextRequest) {
   }
 
   let intrebate = 0, livrate = 0, esuate = 0, neschimbate = 0, fara_raspuns = 0;
+
+  /* Se tine minte ca au fost intrebate, oricare le-ar fi raspunsul: la rularea urmatoare trec la coada. */
+  const intrebateAcum = ((randuri ?? []) as { id: string }[]).map((r) => r.id);
+  if (intrebateAcum.length) {
+    await admin.from("notice_sms_log").update({ verificat_la: new Date().toISOString() } as never).in("id", intrebateAcum);
+  }
 
   for (const r of (randuri ?? []) as { id: string; business_id: string; provider_id: string }[]) {
     intrebate++;

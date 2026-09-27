@@ -10,6 +10,7 @@ import { SectiuneMigrare } from "@/components/website/sections/migrare/SectiuneM
 import {
   SECTIUNE_CATEGORII,
   SECTIUNE_COMENZI,
+  ANCORA_FORMULAR,
   SECTIUNE_PRODUSE,
 } from "@/lib/website/migrare";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -117,13 +118,13 @@ function HeroMigrare() {
       }
       lead="Produse, categorii, clienți, comenzi și alte date importante pot fi transferate în Edinio pentru o trecere cât mai simplă."
       /*
-        ⚠ BUTOANELE NU SUNT DATE DE CLIENT — sunt aceleași două ca pe
-        „Optimizare", și de-aia se refolosesc: pe o pagină comercială, text de
-        buton inventat de mine ar fi o promisiune pe care n-a făcut-o nimeni.
-        Când vine formularul de migrare, cel principal are toate șansele să
-        devină „Cere migrarea", ca în panoul din meniu.
+        ⚠ BUTONUL PRINCIPAL DUCE LA FORMULARUL DE MIGRARE (27.09.2026), cerut de
+        el: pe pagina asta omul vrea sa-si mute magazinul, nu sa-si faca unul de
+        la zero. Aceeasi ancora ca butoanele „Începe migrarea" din sectiunile de
+        mai jos (`ANCORA_FORMULAR`), deci toate duc in acelasi loc. Cine vrea sa
+        incerce singur are banda de final, care duce la inscriere.
       */
-      cta={{ label: "Începe gratuit", href: "/register" }}
+      cta={{ label: "Migrează magazinul", href: ANCORA_FORMULAR }}
       secundara={{ label: "Vezi prețurile", href: "/preturi" }}
     />
   );

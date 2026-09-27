@@ -14179,9 +14179,7 @@ create policy owner_all_media_library on public.media_library as PERMISSIVE for 
 create policy "Owner manages notice_inbox" on public.notice_inbox as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
-create policy "Owner manages notice_sms_log" on public.notice_sms_log as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
+create policy "Owner reads notice_sms_log" on public.notice_sms_log as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
 create policy "Users can read own notifications" on public.notifications as PERMISSIVE for SELECT to public using ((auth.uid() = user_id));
@@ -14259,14 +14257,10 @@ create policy "Owners can view own analytics" on public.site_analytics as PERMIS
 create policy "Owner reads sms_campaign_destinatari" on public.sms_campaign_destinatari as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
-create policy "Owner manages sms_campaigns" on public.sms_campaigns as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
+create policy "Owner reads sms_campaigns" on public.sms_campaigns as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
-create policy "Owner manages sms_optout" on public.sms_optout as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
+create policy "Owner reads sms_optout" on public.sms_optout as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
 create policy "Owners manage sms_templates" on public.sms_templates as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id

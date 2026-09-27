@@ -575,7 +575,8 @@ function PlanPageContent() {
           );
         })}
         <div className="flex flex-col rounded-2xl border border-border bg-muted/30 p-5">
-          <h3 className="text-sm font-semibold text-foreground">Testare gratuită</h3>
+          <h3 className="text-sm font-semibold leading-snug text-foreground">Nu vrei să alegi un plan acum?</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Testează gratuit 15 zile.</p>
           <button
             type="button"
             onClick={() => handleCreate("free")}

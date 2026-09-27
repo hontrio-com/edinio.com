@@ -576,24 +576,11 @@ function PlanPageContent() {
         })}
         <div className="flex flex-col rounded-2xl border border-border bg-muted/30 p-5">
           <h3 className="text-sm font-semibold text-foreground">Testare gratuită</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">Ca să vezi platforma</p>
-          <p className="mt-4">
-            <span className="text-2xl font-semibold tracking-tight text-foreground">0</span>
-            <span className="ml-1 text-sm text-muted-foreground">lei, 15 zile</span>
-          </p>
-          <ul className="mt-4 space-y-1.5 text-xs text-muted-foreground">
-            {["Până la 10 produse", "Fără card"].map((t) => (
-              <li key={t} className="flex items-center gap-2">
-                <Check className="h-3.5 w-3.5 shrink-0 text-foreground/40" strokeWidth={2.5} />
-                {t}
-              </li>
-            ))}
-          </ul>
           <button
             type="button"
             onClick={() => handleCreate("free")}
             disabled={loading}
-            className="mt-5 flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-surface text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            className="mt-4 flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-surface text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
           >
             {seCreeazaGratuit && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {seCreeazaGratuit ? "Se creează…" : "Începe gratuit"}

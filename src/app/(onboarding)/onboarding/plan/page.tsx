@@ -325,7 +325,7 @@ function PlanPageContent() {
 
           ⚠ SCURT SI MARGINIT: doua reluari, la 600ms si 1800ms, cat omul vede
           „Iti cream magazinul" (din 27.09.2026 nu mai e o pauza cu confetti: se
-          merge direct la pasul „primul produs"). Ce nu se lamureste in atat ramane
+          merge direct in panou). Ce nu se lamureste in atat ramane
           nelamurit — nu inventam o conversie ca sa nu ne lipseasca.
         */
         const sid = searchParams.get("sid") ?? "";
@@ -371,12 +371,11 @@ function PlanPageContent() {
       }
 
       /*
-        ⚠ NU MAI MERGE DIRECT IN PANOU (27.09.2026), ci la pasul „primul produs".
-        Masurat: 26 din 41 de magazine noi n-au pus niciodata un produs. Incarcare
-        intreaga, nu `router.push`: poarta din middleware trebuie sa vada acum
-        `onboarding_completed`.
+        Direct in panou (pasul „primul produs" a existat o zi si a fost scos la cererea
+        lui, 27.09.2026). Incarcare intreaga, nu `router.push`: poarta din middleware
+        trebuie sa vada acum `onboarding_completed`.
       */
-      window.location.href = "/onboarding/primul-produs";
+      window.location.href = "/dashboard";
     } catch {
       toast.error("A aparut o eroare. Incearca din nou.");
       setCreating(false);

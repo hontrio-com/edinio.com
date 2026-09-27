@@ -2,13 +2,10 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 /*
- * Pasii inscrierii (27.09.2026): magazinul, aspectul, planul, primul produs.
- *
- * ⚠ AL PATRULEA E DUPA CREAREA MAGAZINULUI, nu inainte. Masurat in productie pe
- * 90 de zile: 26 din 41 de magazine noi n-au pus niciodata un produs. Pasul nu
- * blocheaza pe nimeni (are „Sar peste"), dar il intalneste pe fiecare.
+ * Pasii inscrierii (27.09.2026): magazinul, aspectul, planul. Un al patrulea,
+ * „primul produs" dupa creare, a existat o zi si a fost scos la cererea lui.
  */
-export const PASI_ONBOARDING = ["Magazinul", "Aspectul", "Planul", "Primul produs"] as const;
+export const PASI_ONBOARDING = ["Magazinul", "Aspectul", "Planul"] as const;
 
 export function OnboardingProgress({ currentStep }: { currentStep: number }) {
   return (

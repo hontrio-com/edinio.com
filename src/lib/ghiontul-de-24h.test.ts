@@ -73,11 +73,12 @@ test("cronul acopera `plan` si nu mai cauta valoarea inexistenta", () => {
   );
   assert.match(cron, /onboarding_step === "plan"/, "pasul `plan` nu mai e acoperit");
   assert.match(cron, /onboarding_step === "details"/, "s-a pierdut pasul `details`");
+  assert.match(cron, /onboarding_step === "aspect"/, "pasul `aspect` (27.09.2026) nu e acoperit: cine se opreste acolo nu primeste ghiontul");
   /* ⚠ Si ca pasul ajunge CHIAR in email, nu doar in conditie. */
   assert.match(cron, /emailOnboardingStuck\(name, pasOprit\)/, "emailul nu mai afla la ce pas s-a oprit omul");
 });
 
-test("martor: pasii cu putinta sunt intr-adevar doar doi", () => {
+test("martor: pasii cu putinta sunt intr-adevar doar trei", () => {
   /*
     Daca `trackOnboardingStep` primeste candva un al treilea pas, conditia de mai
     sus il rateaza in tacere — exact cum a ratat `plan` pana acum. Atunci proba
@@ -85,7 +86,7 @@ test("martor: pasii cu putinta sunt intr-adevar doar doi", () => {
   */
   const auth = citeste("src/lib/actions/auth.actions.ts");
   assert.match(
-    auth, /trackOnboardingStep\(step: "details" \| "plan"\)/,
+    auth, /trackOnboardingStep\(step: "details" \| "aspect" \| "plan"\)/,
     "pasii de onboarding s-au schimbat — reciteste conditia din cronul de emailuri",
   );
 });

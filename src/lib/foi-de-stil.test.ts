@@ -248,6 +248,8 @@ test("nicio altă pagină din `app/` nu importă direct o foaie de stil", () => 
       foaie peste alta, se aduce SINGURA. Vezi nota din chiar layout-ul acela.
     */
     "src/app/(public)/preview-sectiune/layout.tsx",
+    /* Previzualizarea din onboarding (27.09.2026): sora lui `preview-sectiune`, acelasi motiv. */
+    "src/app/(public)/previzualizare-magazin-nou/layout.tsx",
     "src/app/reactivare/layout.tsx",
   ]);
 

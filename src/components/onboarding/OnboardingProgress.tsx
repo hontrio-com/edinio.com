@@ -1,70 +1,42 @@
-"use client";
-
-import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-const STEPS = [
-  { number: 1, label: "Magazinul tau", shortLabel: "Magazin" },
-  { number: 2, label: "Alege planul", shortLabel: "Plan" },
-];
+/*
+ * Pasii inscrierii (27.09.2026): magazinul, aspectul, planul, primul produs.
+ *
+ * ⚠ AL PATRULEA E DUPA CREAREA MAGAZINULUI, nu inainte. Masurat in productie pe
+ * 90 de zile: 26 din 41 de magazine noi n-au pus niciodata un produs. Pasul nu
+ * blocheaza pe nimeni (are „Sar peste"), dar il intalneste pe fiecare.
+ */
+export const PASI_ONBOARDING = ["Magazinul", "Aspectul", "Planul", "Primul produs"] as const;
 
 export function OnboardingProgress({ currentStep }: { currentStep: number }) {
-  const progressPct = ((currentStep - 1) / (STEPS.length - 1)) * 100;
-
   return (
-    <div className="mb-8 select-none">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Pasul {currentStep} din {STEPS.length}
-        </span>
-        <span className="text-xs font-semibold text-primary">
-          {STEPS[currentStep - 1]?.label}
-        </span>
-      </div>
-
-      {/* Segmented bars */}
-      <div className="flex gap-2">
-        {STEPS.map((step) => {
-          const isDone = currentStep > step.number;
-          const isActive = currentStep === step.number;
+    <nav aria-label="Pașii configurării" className="mb-8 select-none">
+      <p className="mb-3 text-xs font-medium text-muted-foreground">
+        Pasul {currentStep} din {PASI_ONBOARDING.length}
+      </p>
+      <ol className="flex items-center gap-2">
+        {PASI_ONBOARDING.map((eticheta, i) => {
+          const numar = i + 1;
+          const gata = currentStep > numar;
+          const activ = currentStep === numar;
           return (
-            <div key={step.number} className="flex-1 relative h-1.5 rounded-full overflow-hidden bg-border">
-              {(isDone || isActive) && (
-                <motion.div
-                  className="absolute inset-y-0 left-0 rounded-full bg-primary"
-                  initial={{ width: "0%" }}
-                  animate={{ width: "100%" }}
-                  transition={{ duration: 0.4, ease: "easeInOut" }}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Dots + labels (desktop) */}
-      <div className="hidden sm:flex items-center justify-between mt-3">
-        {STEPS.map((step) => {
-          const isDone = currentStep > step.number;
-          const isActive = currentStep === step.number;
-          return (
-            <div key={step.number} className="flex items-center gap-1.5">
-              <div
+            <li key={eticheta} className="flex min-w-0 flex-1 flex-col gap-2" aria-current={activ ? "step" : undefined}>
+              <span className={cn("h-1 rounded-full transition-colors", gata || activ ? "bg-primary" : "bg-border")} />
+              <span
                 className={cn(
-                  "w-4 h-4 rounded-full flex items-center justify-center transition-all duration-300",
-                  isDone ? "bg-primary" : isActive ? "bg-primary ring-4 ring-primary/20" : "bg-border"
+                  "hidden items-center gap-1 truncate text-xs sm:flex",
+                  activ ? "font-semibold text-foreground" : "text-muted-foreground",
                 )}
               >
-                {isDone && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
-              </div>
-              <span className={cn("text-xs font-medium", isActive ? "text-foreground" : "text-muted-foreground")}>
-                {step.label}
+                {gata && <Check className="h-3 w-3 shrink-0 text-primary" strokeWidth={3} />}
+                {eticheta}
               </span>
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ol>
+    </nav>
   );
 }

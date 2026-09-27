@@ -120,7 +120,8 @@ test("pasii de onboarding se masoara, si fiecare o data", () => {
   const c = faraComentarii(citeste("src/components/edinio-marketing/UrmaPalnie.tsx"));
   assert.match(c, /if \(vazut\.current === pas\) return;/, "un pas s-ar putea numara de mai multe ori");
 
-  for (const [pas, idx] of [["details", 1], ["plan", 2]] as const) {
+  /* ⚠ Din 27.09.2026 sunt trei pasi inainte de crearea magazinului: `aspect` s-a asezat intre ei, iar planul a devenit al treilea. */
+  for (const [pas, idx] of [["details", 1], ["aspect", 2], ["plan", 3]] as const) {
     const pagina = citeste(`src/app/(onboarding)/onboarding/${pas}/page.tsx`);
     /*
       ⚠ FARA REGEX CONSTRUIT DINTR-UN SABLON. Prima forma folosea

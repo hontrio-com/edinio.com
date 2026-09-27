@@ -41,6 +41,8 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
   "onboarding", "admin", "api", "auth", "reactivare",
   // Previzualizarea unei sectiuni din editorul de design (src/app/(public)/preview-sectiune).
   "preview-sectiune",
+  // Magazinul viitor din onboarding (src/app/(public)/previzualizare-magazin-nou), 27.09.2026.
+  "previzualizare-magazin-nou",
   // Site de prezentare si paginile juridice.
   "despre", "preturi", "contact", "termeni", "cookies", "gdpr",
   "confidentialitate", "start", "migrare", "demo",

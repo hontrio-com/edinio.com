@@ -11,6 +11,10 @@ import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
+import { culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
+import { buildClassicDesign } from "@/lib/storefront/design/defaults";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import type { DesignContext } from "@/lib/storefront/design/types";
 import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /*
@@ -82,6 +86,11 @@ export async function createBusiness(data: {
   */
   sesiuneStripe?: string;
   /**
+   * Stilul ales la pasul „Aspectul" (`lib/onboarding/aspect.ts`). Venit din
+   * browser, deci trece prin `stilDupaId`: un id necunoscut da stilul clasic.
+   */
+  stil?: string;
+  /**
    * Firma verificata in ANAF de `/api/stripe/checkout`, cand omul a platit din
    * onboarding: acolo magazinul nu exista inca, deci datele n-aveau unde sa se
    * scrie. `business_name` de mai sus ramane numele afisat (`store_name`).
@@ -124,7 +133,8 @@ export async function createBusiness(data: {
       store_county: data.county || null,
       logo_url: data.logo_url || null,
       cover_url: data.cover_url || null,
-      primary_color: data.primary_color,
+      /* Text venit din browser, pus in CSS-ul magazinului: numai `#rrggbb`. */
+      primary_color: culoareValida(data.primary_color),
     })
     .select()
     .single();
@@ -139,6 +149,48 @@ export async function createBusiness(data: {
 
   // Create store settings
   await supabase.from("store_settings").insert({ business_id: business.id });
+
+  /*
+    ⚠ ASPECTUL ALES LA INSCRIERE (27.09.2026): antetul si subsolul stilului, plus
+    hero-ul cu numele magazinului, aprins. Fara el, un magazin nou n-avea hero
+    deloc (se aprinde doar cu bannere sau cu slogan, iar la inscriere nu exista
+    niciunul), deci pagina incepea direct cu o grila goala.
+
+    Se scrie un design INTREG, construit din cel clasic: `parseStoreDesign` il
+    impaca la fiecare citire cu datele magazinului, deci bannerele adaugate mai
+    tarziu schimba singure varianta hero-ului (n-are `variantOverride`), iar
+    sectiunile aprinse din „Editeaza magazinul" apar in continuare.
+
+    ⚠ NU OPRESTE CREAREA: magazinul exista deja. O scriere cazuta lasa designul
+    clasic, adica exact ce primea oricine pana azi.
+  */
+  {
+    const stil = stilDupaId(data.stil);
+    const ctx: DesignContext = {
+      primaryColor: business.primary_color ?? culoareValida(data.primary_color),
+      pageContent: {},
+      features: {},
+      coverUrl: null,
+      tagline: null,
+    };
+    const baza = buildClassicDesign(ctx);
+    const design = parseStoreDesign({
+      ...baza,
+      chrome: {
+        ...baza.chrome,
+        header: { ...baza.chrome.header, variant: stil.antet, variantOverride: stil.antet },
+        footer: { ...baza.chrome.footer, variant: stil.subsol, variantOverride: stil.subsol },
+      },
+      home: baza.home.map((sec) => (sec.kind === "hero" ? { ...sec, enabled: true, enabledOverride: true } : sec)),
+    }, ctx);
+    const { error: designError } = await supabase
+      .from("store_settings")
+      .update({ storefront_design: design as never, storefront_design_pub_at: new Date().toISOString() } as never)
+      .eq("business_id", business.id);
+    if (designError) {
+      await logError({ action: "createBusiness.design", message: designError.message, details: { code: designError.code, stil: stil.id }, userId: user.id });
+    }
+  }
 
   // Marcheaza onboarding-ul incheiat si acorda trialul gratuit.
   //

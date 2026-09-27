@@ -3,9 +3,7 @@
 import { Suspense, useEffect, useState, useRef } from "react";
 import { UrmaPasOnboarding } from "@/components/edinio-marketing/UrmaPalnie";
 import { useRouter, useSearchParams } from "next/navigation";
-import confetti from "canvas-confetti";
-import { motion } from "framer-motion";
-import { Check, Loader2, Crown, Zap, Rocket, Gift, ShieldCheck, Infinity as InfinityIcon } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
@@ -16,86 +14,32 @@ import { verificaPlataOnboarding } from "@/lib/actions/plata-onboarding.actions"
 import { type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS, PLAN_PRICES } from "@/lib/plans";
 import { conversiaDinPlata } from "@/lib/edinio-marketing/verdict-plata";
 import { usePlataAbonament } from "@/components/dashboard/PlataAbonament";
+import { ButonContinua, LinkInapoi } from "@/components/onboarding/campuri";
+import { citesteCiorna, ciornaCompleta, stergeCiorna } from "@/lib/onboarding/ciorna";
+import { culoareValida } from "@/lib/onboarding/aspect";
 import type { FirmaFacturare, FirmaManuala } from "@/lib/billing/firma-abonament";
 
+/*
+ * Planurile platite. Testarea gratuita NU mai e un card printre ele (27.09.2026):
+ * e drumul principal, cu buton propriu, iar planurile raman alternativa pentru cine
+ * stie deja ce vrea. Masurat pe 90 de zile: 33 din 41 de magazine noi au pornit pe
+ * testare, deci asta e alegerea pe care o face aproape oricine.
+ *
+ * Ce deosebeste planurile cu adevarat e numarul de produse si managerul dedicat;
+ * restul (comenzi nelimitate, suport 7 din 7, mentenanta) e la fel peste tot si se
+ * spune o singura data, sub carduri.
+ */
 const PLANS = [
-  {
-    id: "free",
-    name: "Testare gratuita",
-    price: 0,
-    priceSuffix: "15 zile",
-    description: "Testeaza platforma fara obligatii",
-    icon: Gift,
-    features: [
-      "Acces complet 15 zile",
-      "Pana la 10 produse",
-      "Comenzi nelimitate",
-      "Suport 7 zile din 7",
-    ],
-    color: "border-zinc-300 hover:border-zinc-400",
-    selectedColor: "border-primary bg-primary/5 ring-2 ring-primary/20",
-    badge: null,
-  },
-  {
-    id: "basic",
-    name: "Basic",
-    price: 99,
-    priceSuffix: "lei/luna",
-    description: "Pentru afaceri in crestere",
-    icon: Zap,
-    features: [
-      "Pana la 500 produse",
-      "Comenzi nelimitate",
-      "Suport 7 zile din 7",
-      "Mentenanta gratuita pe viata",
-    ],
-    color: "border-zinc-300 hover:border-blue-400",
-    selectedColor: "border-blue-500 bg-blue-50 ring-2 ring-blue-200",
-    badge: null,
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    price: 249,
-    priceSuffix: "lei/luna",
-    description: "Cel mai popular",
-    icon: Crown,
-    features: [
-      "Pana la 2.500 produse",
-      "Comenzi nelimitate",
-      "Suport 7 zile din 7",
-      "Mentenanta gratuita pe viata",
-      "Manager dedicat magazinului tau",
-    ],
-    color: "border-primary/30 hover:border-primary",
-    selectedColor: "border-primary bg-primary/5 ring-2 ring-primary/20",
-    badge: "Recomandat",
-  },
-  {
-    id: "ultra",
-    name: "Ultra",
-    price: 499,
-    priceSuffix: "lei/luna",
-    description: "Pentru afaceri mari",
-    icon: Rocket,
-    features: [
-      "Produse nelimitate",
-      "Comenzi nelimitate",
-      "Suport 7 zile din 7",
-      "Mentenanta gratuita pe viata",
-      "Manager dedicat magazinului tau",
-    ],
-    color: "border-zinc-300 hover:border-violet-400",
-    selectedColor: "border-violet-500 bg-violet-50 ring-2 ring-violet-200",
-    badge: null,
-  },
-];
+  { id: "basic", name: "Basic", price: 99, pentru: "Pentru început", puncte: ["Până la 500 de produse"] },
+  { id: "premium", name: "Premium", price: 249, pentru: "Recomandat", puncte: ["Până la 2.500 de produse", "Manager dedicat"] },
+  { id: "ultra", name: "Ultra", price: 499, pentru: "Pentru cataloage mari", puncte: ["Produse nelimitate", "Manager dedicat"] },
+] as const;
 
 export default function OnboardingPlanPage() {
   return (
     <Suspense fallback={
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-        <OnboardingProgress currentStep={2} />
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <OnboardingProgress currentStep={3} />
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -150,8 +94,7 @@ function PlanPageContent() {
 
   // On mount: validate sessionStorage data exists + handle preselected plan
   useEffect(() => {
-    const storedDetails = sessionStorage.getItem("onboarding_details");
-    if (!storedDetails) { router.replace("/onboarding/details"); return; }
+    if (!ciornaCompleta(citesteCiorna())) { router.replace("/onboarding/details"); return; }
 
     // If coming from a campaign with ?plan=basic (saved in register page)
     const preselected = sessionStorage.getItem("preselected_plan");
@@ -268,11 +211,10 @@ function PlanPageContent() {
   }, [isCancelled]);
 
   async function finalizeBusiness(plan: string) {
-    const storedDetails = sessionStorage.getItem("onboarding_details");
-    if (!storedDetails) return;
+    const details = citesteCiorna();
+    if (!ciornaCompleta(details)) return;
 
     try {
-      const details = JSON.parse(storedDetails);
 
       // `plan` NU se mai trimite: serverul decide singur (trial gratuit sau
       // planul platit scris de webhook-ul Stripe). Il pastram aici doar pentru
@@ -281,7 +223,9 @@ function PlanPageContent() {
         business_name: String(details.business_name ?? ""),
         phone: String(details.phone ?? ""),
         slug: String(details.slug ?? ""),
-        primary_color: "#07c527",
+        /* Culoarea si stilul alese la pasul 2. Serverul le verifica din nou: vin din browser. */
+        primary_color: culoareValida(details.culoare),
+        stil: details.stil,
         /*
           ⚠ ID-UL SESIUNII, ca serverul sa nu acorde un trial cuiva care a platit.
           Nu e un „am platit" pe cuvantul nostru: acolo se duce la Stripe si
@@ -298,7 +242,7 @@ function PlanPageContent() {
         return;
       }
 
-      sessionStorage.removeItem("onboarding_details");
+      stergeCiorna();
       sessionStorage.removeItem("onboarding_pending_plan");
       sessionStorage.removeItem("onboarding_pending_interval");
       sessionStorage.removeItem("onboarding_firma");
@@ -380,8 +324,9 @@ function PlanPageContent() {
           lui" sunt raspunsuri LIMPEZI — reincercate, ar da acelasi lucru si ar
           intarzia degeaba omul care tocmai a terminat.
 
-          ⚠ SCURT SI MARGINIT: doua reluari, la 600ms si 1800ms, adica sub timpul
-          in care oricum sta pagina cu confetti. Ce nu se lamureste in atat ramane
+          ⚠ SCURT SI MARGINIT: doua reluari, la 600ms si 1800ms, cat omul vede
+          „Iti cream magazinul" (din 27.09.2026 nu mai e o pauza cu confetti: se
+          merge direct la pasul „primul produs"). Ce nu se lamureste in atat ramane
           nelamurit — nu inventam o conversie ca sa nu ne lipseasca.
         */
         const sid = searchParams.get("sid") ?? "";
@@ -426,9 +371,13 @@ function PlanPageContent() {
         }
       }
 
-      toast.success("Magazinul tau a fost creat cu succes!");
-      confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
-      setTimeout(() => { window.location.href = "/dashboard"; }, 1800);
+      /*
+        ⚠ NU MAI MERGE DIRECT IN PANOU (27.09.2026), ci la pasul „primul produs".
+        Masurat: 26 din 41 de magazine noi n-au pus niciodata un produs. Incarcare
+        intreaga, nu `router.push`: poarta din middleware trebuie sa vada acum
+        `onboarding_completed`.
+      */
+      window.location.href = "/onboarding/primul-produs";
     } catch {
       toast.error("A aparut o eroare. Incearca din nou.");
       setCreating(false);
@@ -436,11 +385,12 @@ function PlanPageContent() {
     }
   }
 
-  async function handleCreate() {
-    if (!selectedPlan) return;
+  async function handleCreate(plan: string) {
+    if (!plan) return;
+    setSelectedPlan(plan);
     setLoading(true);
 
-    if (selectedPlan === "free") {
+    if (plan === "free") {
       // Free trial: create business directly (no payment needed)
       await finalizeBusiness("free");
       return;
@@ -448,10 +398,10 @@ function PlanPageContent() {
 
     // Paid plan: redirect to Stripe Checkout
     try {
-      sessionStorage.setItem("onboarding_pending_plan", selectedPlan);
+      sessionStorage.setItem("onboarding_pending_plan", plan);
       sessionStorage.setItem("onboarding_pending_interval", billingInterval);
 
-      const data = await plataAbonament.asteapta({ plan: selectedPlan, interval: billingInterval, return_to: "onboarding", ...firmaDeRetrimis() });
+      const data = await plataAbonament.asteapta({ plan, interval: billingInterval, return_to: "onboarding", ...firmaDeRetrimis() });
       if (!data?.url) {
         setLoading(false);
         return;
@@ -497,11 +447,11 @@ function PlanPageContent() {
       */
       urmareste({
         name: "begin_checkout",
-        plan_id: selectedPlan,
+        plan_id: plan,
         billing_period: billingInterval,
         value: billingInterval === "annual"
-          ? getAnnualPrice(selectedPlan)
-          : (PLAN_PRICES[selectedPlan] ?? 0),
+          ? getAnnualPrice(plan)
+          : (PLAN_PRICES[plan] ?? 0),
         currency: "RON",
       });
       window.location.href = data.url;
@@ -514,187 +464,136 @@ function PlanPageContent() {
   // Show loading state when returning from Stripe
   if (creating) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
-        <OnboardingProgress currentStep={2} />
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <OnboardingProgress currentStep={3} />
+        <div className="flex flex-col items-center justify-center gap-4 py-20" role="status">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Se creeaza magazinul tau...</p>
+          <p className="text-sm text-muted-foreground">Îți creăm magazinul…</p>
         </div>
       </div>
     );
   }
 
+  const seCreeazaGratuit = loading && selectedPlan === "free";
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10">
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       {plataAbonament.fereastra}
-      <UrmaPasOnboarding pas="plan" index={2} />
-      <OnboardingProgress currentStep={2} />
+      <UrmaPasOnboarding pas="plan" index={3} />
+      <OnboardingProgress currentStep={3} />
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight">
-            Alege planul potrivit
-          </h1>
-          <p className="mt-2 text-sm sm:text-base text-muted-foreground">
-            Poti incepe cu testarea gratuita si face upgrade oricand
-          </p>
-        </div>
+      <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-foreground sm:text-[32px]">
+        Pornește magazinul
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
+        Începi gratuit, fără card. Alegi un plan doar dacă rămâi.
+      </p>
 
-        {/* Toggle facturare lunar / anual */}
-        <div className="mb-6 flex justify-center">
-          <div className="inline-flex items-center gap-1 p-1 rounded-full border border-border bg-muted/40">
-            <button
-              type="button"
-              onClick={() => setBillingInterval("monthly")}
-              disabled={loading}
-              className={cn(
-                "px-4 sm:px-5 py-2 rounded-full text-sm font-semibold transition-colors disabled:opacity-60",
-                billingInterval === "monthly"
-                  ? "bg-surface text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Lunar
-            </button>
-            <button
-              type="button"
-              onClick={() => setBillingInterval("annual")}
-              disabled={loading}
-              className={cn(
-                "px-4 sm:px-5 py-2 rounded-full text-sm font-semibold transition-colors flex items-center gap-2 disabled:opacity-60",
-                billingInterval === "annual"
-                  ? "bg-surface text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Anual
-              <span className="px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wide">
-                {ANNUAL_FREE_MONTHS} luni gratis
-              </span>
-            </button>
+      {/* Drumul principal: testarea gratuita. */}
+      <section className="mt-8 rounded-2xl border border-primary/30 bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-8">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-primary">15 zile gratuit</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Testează tot, fără obligații</p>
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+              {["Toate funcțiile platformei", "Până la 10 produse", "Fără card de credit"].map((t) => (
+                <li key={t} className="flex items-center gap-2">
+                  <Check className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.5} />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="sm:w-60 sm:shrink-0">
+            <ButonContinua type="button" onClick={() => handleCreate("free")} seIncarca={seCreeazaGratuit} dezactivat={loading}>
+              {seCreeazaGratuit ? "Se creează…" : "Creează magazinul gratuit"}
+            </ButonContinua>
+            <p className="mt-2 text-center text-xs text-muted-foreground">Durează câteva secunde.</p>
           </div>
         </div>
+      </section>
 
-        <div className="grid sm:grid-cols-2 gap-4">
-          {PLANS.map((plan) => {
-            const isSelected = selectedPlan === plan.id;
-            const Icon = plan.icon;
-            const isFree = plan.price === 0;
-            const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
-            const annualTotal = getAnnualPrice(plan.id);
-            return (
+      {/* Alternativa: direct un plan platit. */}
+      <div className="mt-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Sau alege direct un plan</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Prețul tău rămâne fix pe viață. Anulezi oricând, fără costuri.</p>
+        </div>
+        <div className="inline-flex self-start rounded-lg border border-border bg-muted/50 p-1 sm:self-auto" role="radiogroup" aria-label="Perioada de facturare">
+          {(["monthly", "annual"] as const).map((interval) => (
+            <button
+              key={interval}
+              type="button"
+              role="radio"
+              aria-checked={billingInterval === interval}
+              onClick={() => setBillingInterval(interval)}
+              disabled={loading}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-60",
+                billingInterval === interval ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {interval === "monthly" ? "Lunar" : "Anual"}
+              {interval === "annual" && (
+                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+                  {ANNUAL_FREE_MONTHS} luni gratis
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {PLANS.map((plan) => {
+          const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
+          const seDuce = loading && selectedPlan === plan.id;
+          const recomandat = plan.id === "premium";
+          return (
+            <div
+              key={plan.id}
+              className={cn(
+                "flex flex-col rounded-xl border bg-surface p-5",
+                recomandat ? "border-foreground/25" : "border-border",
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">{plan.name}</h3>
+                <span className={cn("text-xs", recomandat ? "font-medium text-primary" : "text-muted-foreground")}>{plan.pentru}</span>
+              </div>
+              <p className="mt-3">
+                <span className="text-2xl font-semibold tracking-tight text-foreground">{perMonth}</span>
+                <span className="ml-1 text-sm text-muted-foreground">lei/lună</span>
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {billingInterval === "annual" ? `${getAnnualPrice(plan.id)} lei, facturat anual` : "Facturat lunar"}
+              </p>
+              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-muted-foreground">
+                {plan.puncte.map((t) => (
+                  <li key={t} className="flex items-center gap-2">
+                    <Check className="h-3.5 w-3.5 shrink-0 text-foreground/50" strokeWidth={2.5} />
+                    {t}
+                  </li>
+                ))}
+              </ul>
               <button
-                key={plan.id}
                 type="button"
-                onClick={() => setSelectedPlan(plan.id)}
+                onClick={() => handleCreate(plan.id)}
                 disabled={loading}
-                className={cn(
-                  "relative flex flex-col p-5 rounded-2xl border-2 text-left transition-all disabled:opacity-60",
-                  isSelected ? plan.selectedColor : plan.color
-                )}
+                className="mt-5 flex h-10 items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
               >
-                {plan.badge && (
-                  <span className="absolute -top-2.5 right-4 px-2.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-wider">
-                    {plan.badge}
-                  </span>
-                )}
-
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center",
-                    isSelected ? "bg-primary text-white" : "bg-muted text-muted-foreground"
-                  )}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
-                    <p className="text-xs text-muted-foreground">{plan.description}</p>
-                  </div>
-                </div>
-
-                <div className="mb-4 min-h-[68px]">
-                  {isFree ? (
-                    <>
-                      <span className="text-3xl font-bold text-foreground">Gratuit</span>
-                      <span className="text-sm text-muted-foreground ml-2">{plan.priceSuffix}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-3xl font-bold text-foreground">{perMonth}</span>
-                      <span className="text-sm text-muted-foreground ml-1">lei/luna</span>
-                      {billingInterval === "annual" ? (
-                        <p className="text-[11px] text-muted-foreground mt-1">
-                          Facturat anual: {annualTotal} lei.{" "}
-                          <span className="text-primary font-semibold">{ANNUAL_FREE_MONTHS} luni gratis</span>
-                        </p>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground mt-1">Facturat lunar</p>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <ul className="space-y-2 flex-1">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-sm">
-                      <Check className={cn(
-                        "h-4 w-4 flex-shrink-0 mt-0.5",
-                        isSelected ? "text-primary" : "text-muted-foreground"
-                      )} />
-                      <span className="text-muted-foreground">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className={cn(
-                  "mt-4 pt-3 border-t flex items-center justify-center gap-2 text-sm font-semibold transition-colors",
-                  isSelected ? "border-primary/20 text-primary" : "border-border text-muted-foreground"
-                )}>
-                  {isSelected ? (
-                    <>
-                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                        <Check className="h-3 w-3 text-white" strokeWidth={3} />
-                      </div>
-                      Selectat
-                    </>
-                  ) : (
-                    "Selecteaza"
-                  )}
-                </div>
+                {seDuce && <Loader2 className="h-4 w-4 animate-spin" />}
+                {seDuce ? "Te ducem la plată…" : `Alege ${plan.name}`}
               </button>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        Toate planurile au comenzi nelimitate, suport 7 zile din 7 și mentenanță gratuită. Plata se face securizat prin Stripe.
+      </p>
 
-        {/* Garantii */}
-        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-8 text-xs sm:text-sm text-muted-foreground">
-          <span className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-primary flex-shrink-0" />
-            Anulezi oricand, fara costuri
-          </span>
-          <span className="flex items-center gap-2">
-            <InfinityIcon className="h-4 w-4 text-primary flex-shrink-0" />
-            Pretul tau ramane fix pe viata
-          </span>
-        </div>
-
-        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 mt-8 pt-6 border-t border-border">
-          <button type="button" onClick={() => router.push("/onboarding/details")} disabled={loading}
-            className="py-3 sm:py-2.5 px-4 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors text-center sm:text-left disabled:opacity-40">
-            Inapoi
-          </button>
-          <button type="button" onClick={handleCreate} disabled={loading || !selectedPlan}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 sm:py-3 text-sm font-medium text-white rounded-lg
-              bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed transition-all">
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loading
-              ? (selectedPlan === "free" ? "Se creeaza..." : "Redirectionare catre plata...")
-              : (selectedPlan && selectedPlan !== "free"
-                ? "Plateste si creeaza magazinul"
-                : "Creeaza magazinul gratuit")}
-          </button>
-        </div>
-      </motion.div>
+      <LinkInapoi onClick={() => router.push("/onboarding/aspect")} />
     </div>
   );
 }

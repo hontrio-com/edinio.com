@@ -3,67 +3,51 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { UrmaPasOnboarding } from "@/components/edinio-marketing/UrmaPalnie";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { motion } from "framer-motion";
-import { Check, X, Loader2, Store } from "lucide-react";
-import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
+import { Check, Loader2, X } from "lucide-react";
+import { CadruPas } from "@/components/onboarding/CadruPas";
+import { PreviewMagazinNou } from "@/components/onboarding/PreviewMagazinNou";
+import { campCls, ButonContinua } from "@/components/onboarding/campuri";
 import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
+import { citesteCiorna, scrieCiorna } from "@/lib/onboarding/ciorna";
+import { CULOARE_IMPLICITA, normalizeazaTelefon, STIL_IMPLICIT, telefonValid } from "@/lib/onboarding/aspect";
 
-const schema = z.object({
-  business_name: z.string().min(2, "Minim 2 caractere").max(100),
-  phone: z.string().regex(/^07[0-9]{8}$/, "Format invalid: 07XXXXXXXX"),
-  slug: z
-    .string()
-    .min(3, "Minim 3 caractere")
-    .max(50, "Maxim 50 caractere")
-    .regex(/^[a-z0-9-]+$/, "Doar litere mici, cifre si liniute"),
-});
-
-type FormData = z.infer<typeof schema>;
-
-const inputCls = (invalid: boolean) =>
-  `w-full px-4 py-3.5 text-sm border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground transition-colors
-  focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
-  ${invalid ? "border-destructive ring-destructive/20" : "border-border"}`;
+type StareAdresa = "idle" | "checking" | "available" | "taken";
 
 export default function OnboardingDetailsPage() {
   const router = useRouter();
-  const [slugStatus, setSlugStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
-  const slugTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [nume, setNume] = useState("");
+  const [telefon, setTelefon] = useState("");
+  const [slug, setSlug] = useState("");
+  /* Cat timp omul n-a scris el adresa, ea urmeaza numele. Dupa ce a scris-o, nu i-o mai rescriem. */
+  const [slugAtins, setSlugAtins] = useState(false);
+  const [stareAdresa, setStareAdresa] = useState<StareAdresa>("idle");
+  const [erori, setErori] = useState<{ nume?: string; telefon?: string; slug?: string }>({});
+  const [ciorna, setCiorna] = useState<{ culoare?: string; stil?: string }>({});
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const {
-    register, handleSubmit, watch, setValue,
-    formState: { errors },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
-
-  const businessName = watch("business_name") ?? "";
-  const slug = watch("slug") ?? "";
+  const verificaAdresa = useCallback((valoare: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!valoare || valoare.length < 3 || !/^[a-z0-9-]+$/.test(valoare)) {
+      setStareAdresa("idle");
+      return;
+    }
+    setStareAdresa("checking");
+    timerRef.current = setTimeout(async () => {
+      const libera = await checkSlugAvailability(valoare);
+      setStareAdresa(libera ? "available" : "taken");
+    }, 500);
+  }, []);
 
   /*
     Track step + transfer plan from cookie (Google OAuth flow).
 
-    ═══ ⚠ AICI ERA UN `CompleteRegistration` TRIMIS A DOUA OARA ═══
-
-    Randurile scoase pe 01.09.2026 citeau `sessionStorage.platform_registered` si
-    trimiteau `CompleteRegistration` catre Meta si TikTok.
-
-    Dar acelasi cont nou e deja numarat de `UrmaContNou` (randat in layoutul
-    onboardingului), dintr-un jeton scris de SERVER in chiar actiunea care creeaza
-    contul — si de acolo pleaca `sign_up`, pe care adaptoarele il traduc tot in
-    `CompleteRegistration`.
-
-    Deci fiecare inregistrare pe email ajungea de DOUA ORI in contul de reclame.
-    Nu cadea nimic; numarul de inregistrari era pur si simplu dublu, iar costul pe
-    inregistrare parea la jumatate.
-
-    Drumul serverului e cel care ramane: are un `event_id` (deci se poate uni cu
-    trimiterea de pe server), si prinde si inscrierile prin Google, pe care
-    `sessionStorage` nu le prindea — nu supravietuieste intoarcerii de la Google.
+    ⚠ AICI ERA UN `CompleteRegistration` TRIMIS A DOUA OARA, scos pe 01.09.2026:
+    acelasi cont nou e numarat de `UrmaContNou` (layoutul onboardingului), dintr-un
+    jeton scris de SERVER in actiunea care creeaza contul. Drumul serverului are un
+    `event_id` si prinde si inscrierile prin Google.
   */
   useEffect(() => {
     trackOnboardingStep("details");
@@ -73,182 +57,170 @@ export default function OnboardingDetailsPage() {
       sessionStorage.setItem("preselected_plan", cookieMatch[1]);
       document.cookie = "preselected_plan=; path=/; max-age=0";
     }
-  }, []);
-
-  // Auto-generate slug from business name
-  useEffect(() => {
-    if (businessName) {
-      setValue("slug", slugify(businessName).slice(0, 50), { shouldValidate: false });
+    /* Cine se intoarce (buton „Inapoi", fila redeschisa) isi gaseste ce scrisese. */
+    const c = citesteCiorna();
+    if (c) {
+      /* eslint-disable react-hooks/set-state-in-effect -- citire unica din stocarea browserului, dupa montare */
+      if (c.business_name) setNume(c.business_name);
+      if (c.phone) setTelefon(c.phone);
+      if (c.slug) { setSlug(c.slug); setSlugAtins(true); verificaAdresa(c.slug); }
+      setCiorna({ culoare: c.culoare, stil: c.stil });
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
-  }, [businessName, setValue]);
+  }, [verificaAdresa]);
 
-  // Debounced slug check
-  const checkSlug = useCallback((value: string) => {
-    if (slugTimerRef.current) clearTimeout(slugTimerRef.current);
-    if (!value || value.length < 3 || !/^[a-z0-9-]+$/.test(value)) {
-      setSlugStatus("idle");
-      return;
+  function schimbaNume(v: string) {
+    setNume(v);
+    if (erori.nume) setErori((e) => ({ ...e, nume: undefined }));
+    if (!slugAtins) {
+      const s = slugify(v).slice(0, 50);
+      setSlug(s);
+      verificaAdresa(s);
     }
-    setSlugStatus("checking");
-    slugTimerRef.current = setTimeout(async () => {
-      const available = await checkSlugAvailability(value);
-      setSlugStatus(available ? "available" : "taken");
-    }, 600);
-  }, []);
+  }
 
-  useEffect(() => { checkSlug(slug); }, [slug, checkSlug]);
+  function schimbaAdresa(v: string) {
+    const s = v.toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 50);
+    setSlug(s);
+    setSlugAtins(true);
+    if (erori.slug) setErori((e) => ({ ...e, slug: undefined }));
+    verificaAdresa(s);
+  }
 
-  function onSubmit(data: FormData) {
-    if (slugStatus === "taken") return;
+  function valideaza() {
+    const e: typeof erori = {};
+    const n = nume.trim();
+    if (n.length < 2) e.nume = "Scrie numele magazinului (cel puțin 2 caractere).";
+    else if (n.length > 100) e.nume = "Numele poate avea cel mult 100 de caractere.";
+    if (!telefonValid(normalizeazaTelefon(telefon))) e.telefon = "Scrie un număr de telefon românesc, de exemplu 0722 123 456.";
+    if (slug.length < 3) e.slug = "Adresa trebuie să aibă cel puțin 3 caractere.";
+    else if (stareAdresa === "taken") e.slug = "Adresa e deja folosită de alt magazin. Încearcă alta.";
+    setErori(e);
+    return Object.keys(e).length === 0;
+  }
 
-    sessionStorage.setItem("onboarding_details", JSON.stringify({
-      business_name: data.business_name,
-      phone: data.phone,
-      slug: data.slug,
-    }));
+  function onSubmit(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (stareAdresa === "checking" || !valideaza()) return;
+
+    scrieCiorna({
+      business_name: nume.trim(),
+      phone: normalizeazaTelefon(telefon),
+      slug,
+    });
 
     /*
-      ═══ ⚠ NU MAI E `Lead`, SI ASTA SCHIMBA UN NUMAR DIN CONTUL DE RECLAME ═══
+      ═══ ⚠ NU MAI E `Lead` ═══
 
-      Randurile de aici trimiteau `Lead` (Meta) si `SubmitForm` (TikTok) — adica
-      EXACT numele sub care pleaca si o cerere de oferta din formularul de
-      contact sau de migrare.
-
-      Deci „Lead" insemna doua lucruri deosebite amestecate: cine ne-a scris, si
-      cine a completat al doilea pas din inscriere. Un raport pe leaduri nu putea
-      deosebi un client interesat de un cont pe jumatate creat.
-
-      Acum pasul se numeste ce este: `onboarding_step_complete`, adica anume
-      terminarea pasului cu datele magazinului. Catre Meta si TikTok nu pleaca nimic de aici
-      — nu fiindca ar fi neinteresant, ci fiindca urmeaza `begin_checkout`
-      (`InitiateCheckout`), care e un semnal de optimizare mai bun.
-
-      ⚠ RANDURILE DE MAI SUS AU FOST ADEVARATE PANA PE 03.09.2026, si le las
-      scrise ca sa nu para o scapare: `begin_checkout` se tragea la INTRAREA pe
-      pagina de planuri, deci „la o apasare distanta" era exact. Acum se trage la
-      apasarea catre plata — deci Meta nu mai vede trecerea details -> plan, ci
-      numai pe cei care chiar pornesc plata.
-
-      ⚠ DE CE E BINE ASA. Vechiul moment insemna „a deschis pagina de planuri" si
-      spunea catre Meta „a inceput cumpararea". Semnalul era des si neadevarat;
-      acum e rar si adevarat. Cine vrea inapoi un semnal aici sa puna unul care
-      spune ce este, nu `begin_checkout`.
-
-      ⚠ URMAREA: numarul de „Lead" din Meta va scadea. Nu s-a stricat nimic —
-      abia acum inseamna ce spune.
+      Randurile de aici trimiteau `Lead` (Meta) si `SubmitForm` (TikTok), adica
+      exact numele sub care pleaca si o cerere din formularul de contact, deci
+      „Lead" amesteca un client interesat cu un cont pe jumatate creat. Acum pasul
+      se numeste ce este: `onboarding_step_complete`. Catre Meta si TikTok nu pleaca
+      nimic de aici; `begin_checkout` pleaca la apasarea catre plata.
     */
     urmareste({ name: "onboarding_step_complete", onboarding_step: "details", onboarding_step_index: 1 });
-    router.push("/onboarding/plan");
+    router.push("/onboarding/aspect");
   }
 
   return (
     <>
       <UrmaPasOnboarding pas="details" index={1} />
-      <div className="max-w-lg mx-auto px-4 py-6 sm:py-10">
-      <OnboardingProgress currentStep={1} />
-
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Store className="h-7 w-7 text-primary" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
-            Creeaza-ti magazinul
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Doar 2 informatii si magazinul tau e online
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6 space-y-5">
-            {/* Numele magazinului */}
-            <div>
-              <label htmlFor="business_name" className="block text-sm font-semibold text-foreground mb-1.5">
-                Numele magazinului
-              </label>
-              <input
-                id="business_name"
-                type="text"
-                placeholder="ex: Floraria Mirei"
-                {...register("business_name")}
-                className={inputCls(!!errors.business_name)}
-                autoFocus
-              />
-              {errors.business_name && <p className="mt-1 text-xs text-destructive">{errors.business_name.message}</p>}
-            </div>
-
-            {/* Telefon */}
-            <div>
-              <label htmlFor="phone" className="block text-sm font-semibold text-foreground mb-1.5">
-                Numarul de telefon
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                placeholder="0712 345 678"
-                {...register("phone", { setValueAs: (v: string) => v.replace(/[\s\-().+]/g, "") })}
-                className={inputCls(!!errors.phone)}
-              />
-              {errors.phone && <p className="mt-1 text-xs text-destructive">{errors.phone.message}</p>}
-              <p className="mt-1 text-xs text-muted-foreground">Clientii te vor contacta la acest numar</p>
-            </div>
-          </div>
-
-          {/* Adresa magazin online */}
-          <div className="bg-surface border border-border rounded-2xl p-5 sm:p-6">
-            <label htmlFor="slug" className="block text-sm font-semibold text-foreground mb-1.5">
-              Adresa magazinului online
+      <CadruPas
+        pas={1}
+        titlu="Hai să-ți creăm magazinul"
+        descriere="Trei informații și îți vezi magazinul prinzând viață. Le poți schimba oricând din panou."
+        previzualizare={
+          <PreviewMagazinNou
+            nume={nume}
+            culoare={ciorna.culoare ?? CULOARE_IMPLICITA}
+            stil={ciorna.stil ?? STIL_IMPLICIT.id}
+            slug={slug}
+            telefon={normalizeazaTelefon(telefon)}
+          />
+        }
+      >
+        <form onSubmit={onSubmit} noValidate className="space-y-6">
+          <div>
+            <label htmlFor="business_name" className="mb-1.5 block text-sm font-medium text-foreground">
+              Numele magazinului
             </label>
-            <div className="relative">
+            <input
+              id="business_name"
+              type="text"
+              autoComplete="organization"
+              placeholder="De exemplu: Florăria Mirei"
+              value={nume}
+              onChange={(e) => schimbaNume(e.target.value)}
+              aria-invalid={!!erori.nume}
+              aria-describedby={erori.nume ? "eroare-nume" : undefined}
+              className={campCls(!!erori.nume)}
+              autoFocus
+            />
+            {erori.nume && <p id="eroare-nume" className="mt-1.5 text-xs text-destructive">{erori.nume}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="slug" className="mb-1.5 block text-sm font-medium text-foreground">
+              Adresa magazinului
+            </label>
+            <div
+              className={
+                "flex items-center overflow-hidden rounded-lg border bg-surface transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 " +
+                (erori.slug || stareAdresa === "taken" ? "border-destructive" : "border-border")
+              }
+            >
+              <span className="select-none border-r border-border bg-muted/50 px-3 py-3 text-sm text-muted-foreground">edinio.com/</span>
               <input
                 id="slug"
                 type="text"
-                {...register("slug")}
-                onChange={(e) => {
-                  const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "");
-                  setValue("slug", val, { shouldValidate: true });
-                }}
-                className={inputCls(!!errors.slug || slugStatus === "taken") + " pr-9"}
+                inputMode="url"
+                autoCapitalize="none"
+                spellCheck={false}
                 placeholder="magazinul-tau"
+                value={slug}
+                onChange={(e) => schimbaAdresa(e.target.value)}
+                aria-invalid={!!erori.slug || stareAdresa === "taken"}
+                aria-describedby="stare-adresa"
+                className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
               />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                {slugStatus === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                {slugStatus === "available" && <Check className="h-4 w-4 text-green-600" />}
-                {slugStatus === "taken" && <X className="h-4 w-4 text-destructive" />}
-              </div>
+              <span className="pr-3" aria-hidden>
+                {stareAdresa === "checking" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                {stareAdresa === "available" && <Check className="h-4 w-4 text-primary" />}
+                {stareAdresa === "taken" && <X className="h-4 w-4 text-destructive" />}
+              </span>
             </div>
-            {slug && (
-              <div className="mt-2 px-3 py-2 bg-muted rounded-lg">
-                <span className="text-xs font-mono text-muted-foreground">
-                  edinio.com/<span className="text-foreground font-semibold">{slug}</span>
-                </span>
-              </div>
-            )}
-            {errors.slug && <p className="mt-1 text-xs text-destructive">{errors.slug.message}</p>}
-            {slugStatus === "taken" && !errors.slug && (
-              <p className="mt-1 text-xs text-destructive">Aceasta adresa este deja folosita.</p>
-            )}
-            {slugStatus === "available" && (
-              <p className="mt-1 text-xs text-green-700">Adresa este disponibila!</p>
-            )}
+            <p id="stare-adresa" className={"mt-1.5 text-xs " + (erori.slug || stareAdresa === "taken" ? "text-destructive" : "text-muted-foreground")} aria-live="polite">
+              {erori.slug
+                ?? (stareAdresa === "taken" ? "Adresa e deja folosită de alt magazin. Încearcă alta."
+                  : stareAdresa === "available" ? "Adresa e liberă."
+                  : "Poți conecta mai târziu și un domeniu propriu, de exemplu magazinul-tau.ro.")}
+            </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={slugStatus === "taken" || slugStatus === "checking"}
-            className="w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all
-              bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Continua
-          </button>
+          <div>
+            <label htmlFor="phone" className="mb-1.5 block text-sm font-medium text-foreground">
+              Telefonul magazinului
+            </label>
+            <input
+              id="phone"
+              type="tel"
+              autoComplete="tel"
+              inputMode="tel"
+              placeholder="0722 123 456"
+              value={telefon}
+              onChange={(e) => { setTelefon(e.target.value); if (erori.telefon) setErori((x) => ({ ...x, telefon: undefined })); }}
+              aria-invalid={!!erori.telefon}
+              aria-describedby="ajutor-telefon"
+              className={campCls(!!erori.telefon)}
+            />
+            <p id="ajutor-telefon" className={"mt-1.5 text-xs " + (erori.telefon ? "text-destructive" : "text-muted-foreground")}>
+              {erori.telefon ?? "Apare pe magazin, ca să te poată contacta clienții."}
+            </p>
+          </div>
 
-          <p className="text-center text-xs text-muted-foreground">
-            Poti adauga logo, descriere si toate detaliile din dashboard dupa creare
-          </p>
+          <ButonContinua dezactivat={stareAdresa === "checking"}>Continuă</ButonContinua>
         </form>
-      </motion.div>
-    </div>
+      </CadruPas>
     </>
   );
 }

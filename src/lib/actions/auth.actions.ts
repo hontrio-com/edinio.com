@@ -731,13 +731,19 @@ export async function deleteAccount(parola?: string) {
   redirect("/login");
 }
 
-export async function trackOnboardingStep(step: "details" | "plan") {
+export async function trackOnboardingStep(step: "details" | "aspect" | "plan") {
+  /*
+    ⚠ „aspect" E PASUL NOU DIN 27.09.2026, intre date si plan. Ordinea de mai jos
+    tine pasul MAXIM atins, deci un om care revine la pasul 1 nu coboara. Valoarea
+    vine din browser (e Server Action), deci ce nu e in lista nu se scrie.
+  */
+  const stepOrder: Record<string, number> = { registered: 0, details: 1, aspect: 2, plan: 3, completed: 4 };
+  if (!(["details", "aspect", "plan"] as string[]).includes(step)) return;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
   const { createAdminClient: getAdmin } = await import("@/lib/supabase/admin");
   const admin = getAdmin();
-  const stepOrder: Record<string, number> = { registered: 0, details: 1, plan: 2, completed: 3 };
   const { data } = await admin.from("users_profile").select("onboarding_step").eq("id", user.id).single();
   const currentStep = (data as unknown as { onboarding_step?: string })?.onboarding_step ?? "registered";
   if (stepOrder[step] > (stepOrder[currentStep] ?? 0)) {

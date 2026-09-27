@@ -185,7 +185,8 @@ export async function GET(req: NextRequest) {
         Ei primeau A3 la trei zile si A4 la sapte; pierdut era doar cel de la 24h,
         adica exact cel de la care se intorc cei mai multi.
       */
-      const pasOprit = profile.onboarding_step === "details" || profile.onboarding_step === "plan"
+      /* ⚠ `aspect` e pasul nou din 27.09.2026 (intre date si plan): fara el, cine se oprea acolo n-ar fi primit ghiontul. */
+      const pasOprit = profile.onboarding_step === "details" || profile.onboarding_step === "aspect" || profile.onboarding_step === "plan"
         ? profile.onboarding_step
         : null;
       if (hoursOld >= 24 && pasOprit) {

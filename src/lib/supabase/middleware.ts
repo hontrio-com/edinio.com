@@ -173,8 +173,16 @@ export async function updateSession(request: NextRequest) {
   // Cookie flag: skip DB queries if onboarding already confirmed
   const onboardingDone = request.cookies.get("onboarding_done")?.value === "1";
 
+  /*
+    ⚠ `/onboarding/primul-produs` E PENTRU CINE A TERMINAT (27.09.2026): pasul vine
+    DUPA crearea magazinului, deci exact oamenii pe care regula de mai jos ii trimite
+    in panou. Nu deschide nimic in plus: pagina adauga un produs si publica magazinul,
+    ca panoul, cu aceleasi actiuni si aceleasi verificari de proprietar.
+  */
+  const dupaCreare = pathname === "/onboarding/primul-produs";
+
   // Authenticated on onboarding → redirect to dashboard if already completed
-  if (user && isOnboarding) {
+  if (user && isOnboarding && !dupaCreare) {
     if (onboardingDone) {
       return redirectTo("/dashboard");
     }

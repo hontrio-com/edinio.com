@@ -98,10 +98,10 @@ export function emailOnboardingNotStarted(name: string): AutomationEmail {
   cine ramasese la ALEGEREA PLANULUI — adica trecuse deja de detalii — ala e un
   buton care il duce INAPOI, la un pas pe care l-a terminat.
 
-  Acum calea urmeaza pasul. Cele doua sunt singurele cu putinta: `trackOnboardingStep`
-  primeste `"details" | "plan"`, si atat.
+  Acum calea urmeaza pasul. Cele trei sunt singurele cu putinta: `trackOnboardingStep`
+  primeste `"details" | "aspect" | "plan"`, si atat (`aspect` din 27.09.2026).
 */
-export function emailOnboardingStuck(name: string, pas: "details" | "plan"): AutomationEmail {
+export function emailOnboardingStuck(name: string, pas: "details" | "aspect" | "plan"): AutomationEmail {
   return {
     key: "onboarding_stuck_24h",
     subject: "Ai ramas la jumatate - magazinul tau te asteapta",
@@ -109,7 +109,7 @@ export function emailOnboardingStuck(name: string, pas: "details" | "plan"): Aut
       <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Continua de unde ai ramas</h2>
       <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Salut${name ? `, ${name}` : ""}!</p>
       <p style="margin:0 0 16px 0;font-size:14px;color:#3f3f46;line-height:1.6;">Am observat ca ai inceput sa iti configurezi magazinul pe Edinio dar nu ai finalizat. Nu iti face griji, progresul tau e salvat si poti continua exact de unde ai ramas.</p>
-      <p style="margin:0 0 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">${pas === "plan" ? "Ti-ai completat datele. Mai ramane doar sa alegi planul." : "Esti la un singur pas de a avea magazin online."}</p>
+      <p style="margin:0 0 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">${pas === "plan" ? "Ti-ai completat datele. Mai ramane doar sa alegi planul." : pas === "aspect" ? "Ti-ai completat datele. Mai ramane sa alegi cum arata magazinul, apoi planul." : "Esti la un singur pas de a avea magazin online."}</p>
       ${btn(pas === "plan" ? "Alege planul" : "Continua configurarea", `/onboarding/${pas}`)}
       ${CONTACT_BLOCK}
     `),

@@ -14,7 +14,7 @@ import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimta
 import { EtichetaGoogleAds } from "@/components/edinio-marketing/EtichetaGoogleAds";
 
 export const metadata: Metadata = {
-  title: "Configurare initiala",
+  title: "Creează-ți magazinul",
 };
 
 export default async function OnboardingLayout({
@@ -80,9 +80,18 @@ export default async function OnboardingLayout({
       <EdinioTikTokPixel />
       <EtichetaGoogleAds />
       <BannerConsimtamant />
+      {/* Aceeasi latime ca pasii (`CadruPas`), ca sigla sa stea deasupra formularului, nu intr-o coloana a ei. */}
       <header className="border-b border-border bg-surface">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Logo size="md" eager />
+          <a
+            href="/contact"
+            target="_blank"
+            rel="noopener"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Ai o întrebare? Scrie-ne
+          </a>
         </div>
       </header>
       <main>{children}</main>

@@ -27,6 +27,8 @@ export function ButonGarantieLegala({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const continutRef = useRef<HTMLDivElement>(null);
   const [deschisaOdata, setDeschisaOdata] = useState(false);
+  /* Pe telefon: intreaga (implicit) sau marita pentru citit, la o atingere. */
+  const [marita, setMarita] = useState(false);
   /* Butonul apare de mai multe ori pe aceeasi pagina (subsol + produs), deci id-urile nu pot fi fixe. */
   const id = useId();
   const idTitlu = `${id}-titlu`;
@@ -34,6 +36,7 @@ export function ButonGarantieLegala({
 
   function deschide() {
     setDeschisaOdata(true);
+    setMarita(false);
     dialogRef.current?.showModal();
     /* Mereu de sus: altfel fereastra redeschisa pastra derularea de data trecuta, iar omul intra la jumatatea notificarii. */
     requestAnimationFrame(() => { if (continutRef.current) continutRef.current.scrollTop = 0; });
@@ -66,23 +69,34 @@ export function ButonGarantieLegala({
             </button>
           </div>
           {/*
-            ⚠ LIZIBILA LA MARIMEA IMPLICITA (ghidul Comisiei, 2.3). Notificarea e o pagina A4:
-            micsorata la latimea unui telefon (~330 px), textul iesea de ~6 px. Sub 640 px imaginea
-            pastreaza 720 px (text de ~14 px) si se deruleaza in lateral; pe ecrane late fereastra
-            are 760 px, deci textul iese tot pe la 14 px, fara derulare laterala.
+            ⚠ INTREAGA SAU CITIBILA, PE TELEFON NU AMANDOUA. Notificarea e o pagina A4: la latimea
+            unui telefon (~330 px) textul iese de ~6 px. O zi s-a afisat marita (720 px, text de
+            ~14 px) cu derulare laterala; el a cerut s-o vada intreaga (28.09.2026). Acum porneste
+            intreaga, iar o atingere o mareste pentru citit (si inapoi). Pe ecrane late fereastra are
+            760 px: textul iese pe la 14 px, intreaga, fara nimic de apasat.
           */}
           <div ref={continutRef} className="overflow-auto p-4">
-            <p className="mb-2 text-xs text-black/60 sm:hidden">Derulează și în lateral ca să citești tot.</p>
+            <p className="mb-2 text-xs text-black/60 sm:hidden" aria-live="polite">
+              {marita ? "Atinge din nou ca s-o vezi întreagă." : "Atinge notificarea ca s-o mărești."}
+            </p>
             {deschisaOdata && (
-              // eslint-disable-next-line @next/next/no-img-element -- fisierul oficial, fara conversie (vezi mai sus)
-              <img
-                src={NOTIFICARE_GARANTIE.src}
-                width={NOTIFICARE_GARANTIE.latime}
-                height={NOTIFICARE_GARANTIE.inaltime}
-                alt="Notificarea Uniunii Europene privind garanția legală de conformitate"
-                aria-describedby={idText}
-                className="h-auto w-full min-w-[720px] max-w-none sm:min-w-0"
-              />
+              <button
+                type="button"
+                onClick={() => setMarita((m) => !m)}
+                aria-pressed={marita}
+                aria-label={marita ? "Arată notificarea întreagă" : "Mărește notificarea"}
+                className="block w-full cursor-zoom-in sm:pointer-events-none sm:cursor-default"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- fisierul oficial, fara conversie (vezi mai sus) */}
+                <img
+                  src={NOTIFICARE_GARANTIE.src}
+                  width={NOTIFICARE_GARANTIE.latime}
+                  height={NOTIFICARE_GARANTIE.inaltime}
+                  alt="Notificarea Uniunii Europene privind garanția legală de conformitate"
+                  aria-describedby={idText}
+                  className={`h-auto w-full ${marita ? "min-w-[720px] max-w-none sm:min-w-0" : ""}`}
+                />
+              </button>
             )}
             <div id={idText} className="sr-only">
               {TEXT_NOTIFICARE_GARANTIE.map((p) => <p key={p}>{p}</p>)}

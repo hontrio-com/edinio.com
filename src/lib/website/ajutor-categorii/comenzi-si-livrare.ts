@@ -516,6 +516,26 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           termeni: ["pagina de retur", "link retur magazin", "formular retragere contract", "retur produs storefront"],
         },
         {
+          slug: "unde-apare-notificarea-privind-garantia-legala",
+          titlu: "Unde apare notificarea privind garanția legală în magazinul tău",
+          rezumat: "Notificarea oficială a Uniunii Europene despre garanția legală apare automat în subsol, lângă butoanele de comandă, în checkout și în emailul de confirmare.",
+          intro: "Din 27 septembrie 2026, orice magazin care vinde bunuri trebuie să afișeze vizibil notificarea armonizată privind garanția legală de conformitate (OUG 34/2014, în forma dată de OUG 18/2026). Platforma o afișează pentru tine, fără nicio configurare.",
+          pasi: [
+            "Deschide magazinul tău public.",
+            "În subsol, la „Informatii legale”, apasă „Garanția legală”. Se deschide notificarea oficială, întreagă.",
+            "Pe pagina unui produs, sub butoanele de comandă, vezi linia „Drepturile tale privind garanția legală”. Ea deschide aceeași notificare.",
+            "Aceeași linie apare și sub butonul de plasare a comenzii, în checkout și în fereastra de comandă rapidă.",
+            "După o comandă, clientul găsește notificarea și la finalul emailului de confirmare.",
+          ],
+          detalii: [
+            { titlu: "E documentul oficial, nemodificat", text: "Imaginea e fișierul pus la dispoziție de Comisia Europeană, varianta color în limba română, exact cum cere Regulamentul (UE) 2025/1960. Nu se poate edita, iar lângă ea există mereu linkul europa.eu/youreurope/garanții, spre care duce și codul QR din notificare." },
+            { titlu: "Nu trebuie pusă pe fiecare produs", text: "Notificarea se afișează la nivel de magazin, nu produs cu produs. Ghidul Comisiei dă ca exemple chiar antetul sau subsolul, pagina de produs și checkoutul, cu notificarea întreagă la un clic." },
+            { titlu: "Nu se poate opri", text: "Nu există un comutator care s-o ascundă: obligația e a tuturor magazinelor care vând bunuri, iar lipsa ei se amendează cu 7.000 până la 35.000 de lei." },
+            { titlu: "Eticheta GARAN e altceva", text: "GARAN e eticheta pentru o garanție comercială de durabilitate oferită gratuit de producător, pe mai mult de doi ani. Se afișează doar la produsele care o au și nu înlocuiește notificarea privind garanția legală." },
+          ],
+          termeni: ["garanție legală", "notificare armonizată", "OUG 18/2026", "garanție de conformitate", "GARAN", "ANPC"],
+        },
+        {
           slug: "cum-completeaza-clientul-cererea-de-retur",
           titlu: "Cum completează clientul cererea de retur",
           rezumat: "Formularul are doi pași, identificarea comenzii și alegerea produselor, iar la final cererea ajunge în panoul tău.",

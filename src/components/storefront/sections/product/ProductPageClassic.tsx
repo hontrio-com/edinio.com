@@ -1,5 +1,6 @@
 "use client";
 
+import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -997,6 +998,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
             {adaugatInCos ? <Check size={18} /> : <ShoppingCart size={18} />}
             {editare.activ ? "Salveaza modificarile" : adaugatInCos ? "Adaugat in cos" : "Adauga in cos"}
           </button>
+        )}
+
+        {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
+        {!editare.activ && (
+          <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
         )}
         {/*
           ⚠ ANULAREA TREBUIE SA FIE LA FEL DE USOARA CA SALVAREA. Fara ea, singura iesire era

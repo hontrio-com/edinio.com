@@ -10,6 +10,7 @@ import { cdnImage } from "@/lib/cdn-image";
 import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { ButonSetariCookie } from "./ButonSetariCookie";
+import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 
 /**
  * Blocul legal obligatoriu din footer. NU e optional si nu are setare de ascundere.
@@ -157,6 +158,8 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
             className={t.linkTare}>
             Retrage-te din contract
           </a>
+          {/* Notificarea armonizata privind garantia legala, obligatorie din 27.09.2026 (OUG 18/2026). */}
+          <ButonGarantieLegala className={`${t.linkTare} text-left`} eticheta="Garanția legală" />
           {POLICY_LINKS.map(({ slug, label }) => (
             <a key={slug} href={`${basePath}/politici/${slug}`}
               className={t.link}>

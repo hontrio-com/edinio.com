@@ -1,5 +1,6 @@
 "use client";
 
+import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { legaturaBrand } from "@/lib/storefront/brand-href";
 import Image from "next/image";
@@ -1061,6 +1062,10 @@ export function ProductPageDetailed({
                 </a>
               )}
               <p aria-live="polite" className="sr-only">{adaugat ? "Produsul a fost adaugat in cos" : ""}</p>
+              {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
+              {!editare.activ && (
+                <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
+              )}
               {/*
                 SETUL, LANGA PRET. Se vede doar daca oferta chiar cere asezarea asta;
                 implicita ramane banda lata de mai jos, deci ofertele care exista nu se muta.

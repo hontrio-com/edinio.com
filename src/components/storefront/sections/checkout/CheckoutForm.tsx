@@ -1,5 +1,6 @@
 "use client";
 
+import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useId } from "react";
 import {
   X, Phone,
@@ -556,6 +557,8 @@ export function CheckoutForm({
               ? "Platesti cash curierului - Fara card necesar"
               : "Vei fi redirectionat pentru plata securizata"}
           </p>
+          {/* Notificarea armonizata privind garantia legala, inainte de plasarea comenzii (OUG 18/2026). */}
+          <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
         </form>
     </>
   );

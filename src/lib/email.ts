@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { ETICHETA_GARANTIE, NOTIFICARE_GARANTIE } from "@/lib/storefront/garantie-legala";
 import { formatPrice, pluralRo } from "@/lib/utils/format";
 import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
@@ -168,6 +169,24 @@ export function baseTemplateForTest(from: string): string {
   `);
 }
 
+/*
+ * Notificarea armonizata privind garantia legala, la finalul confirmarii de comanda
+ * (28.09.2026). Ghidul Comisiei o cere si in emailul de confirmare, langa afisarea din
+ * magazin; regulile sunt in `lib/storefront/garantie-legala.ts`. Imaginea e fisierul
+ * oficial de pe domeniul platformei, iar linkul duce unde duce si codul QR din ea.
+ */
+function blocGarantieLegala(): string {
+  const src = `${SITE_URL}${NOTIFICARE_GARANTIE.src}`;
+  return `
+    <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e4e4e7;">
+      <p style="margin:0 0 12px 0;font-size:13px;color:#71717a;">${ETICHETA_GARANTIE}</p>
+      <a href="${NOTIFICARE_GARANTIE.url}" style="display:block;">
+        <img src="${src}" width="560" alt="Notificarea UE privind garanția legală de conformitate" style="display:block;width:100%;max-width:560px;height:auto;border:0;" />
+      </a>
+      <p style="margin:12px 0 0 0;font-size:12px;color:#71717a;">Mai multe despre drepturile tale: <a href="${NOTIFICARE_GARANTIE.url}" style="color:#18181b;text-decoration:underline;">${NOTIFICARE_GARANTIE.urlAfisat}</a></p>
+    </div>`;
+}
+
 export async function sendOrderConfirmationToCustomer(
   to: string,
   order: BaniComanda & {
@@ -269,6 +288,7 @@ export async function sendOrderConfirmationToCustomer(
     ${order.cont_url ? `<div style="border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
       <p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.6;">Urmaresti comanda, livrarea si factura din <a href="${escapeUrl(order.cont_url)}" style="color:#18181b;font-weight:600;text-decoration:underline;">contul tau</a>. Intri cu adresa asta de email, iar daca nu ai inca un cont, il creezi in cateva secunde.</p>
     </div>` : ""}
+    ${blocGarantieLegala()}
   `;
 
   await sendStoreOrEdinio(sender, to, subject, content);

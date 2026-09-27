@@ -1,5 +1,6 @@
 "use client";
 
+import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useEffect, useId, useRef, useTransition } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -2017,6 +2018,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   ? "Platesti cash curierului la primire - fara card necesar"
                   : "Plata securizata - vei fi redirectionat catre procesatorul de plati"}
               </p>
+              {/* Notificarea armonizata privind garantia legala, inainte de plasarea comenzii (OUG 18/2026). */}
+              <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
             </form>
           </motion.div>
         </>

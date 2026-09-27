@@ -21,8 +21,8 @@ import type { FirmaFacturare, FirmaManuala } from "@/lib/billing/firma-abonament
 
 /*
  * Planurile platite, DRUMUL PRINCIPAL (27.09.2026, cerut de el: majoritatea sa
- * activeze direct un plan). Testarea gratuita nu mai e un card printre ele, ci un
- * link discret sub carduri.
+ * activeze direct un plan). Testarea gratuita e ultimul chenar, mai mic si fara
+ * accent de culoare.
  *
  * Ce deosebeste planurile cu adevarat e numarul de produse si managerul dedicat;
  * comenzile nelimitate si suportul 7 din 7 sunt la toate, iar mentenanta se spune
@@ -476,7 +476,7 @@ function PlanPageContent() {
   const seCreeazaGratuit = loading && selectedPlan === "free";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
       {plataAbonament.fereastra}
       <UrmaPasOnboarding pas="plan" index={3} />
       <div className="mx-auto max-w-3xl">
@@ -519,9 +519,10 @@ function PlanPageContent() {
       {/*
         ⚠ PLANURILE PLATITE SUNT DRUMUL PRINCIPAL (27.09.2026), cerut de el: vrea ca
         majoritatea sa activeze direct un plan. Premium iese in fata (recomandat),
-        iar testarea gratuita e un link discret sub carduri, nu un card al ei.
+        iar testarea gratuita e ULTIMUL chenar, mai mic decat planurile si fara
+        accent de culoare: se vede, dar nu concureaza cu ele.
       */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-3 sm:items-stretch">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_0.8fr] lg:items-center">
         {PLANS.map((plan) => {
           const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
           const seDuce = loading && selectedPlan === plan.id;
@@ -573,26 +574,35 @@ function PlanPageContent() {
             </div>
           );
         })}
-      </div>
-      <p className="mt-5 text-center text-xs text-muted-foreground">
-        Mentenanță gratuită pe viață la toate planurile. Plata se face securizat prin Stripe.
-      </p>
-
-      <div className="mt-10 border-t border-border pt-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          Vrei să încerci mai întâi?{" "}
+        <div className="flex flex-col rounded-2xl border border-border bg-muted/30 p-5">
+          <h3 className="text-sm font-semibold text-foreground">Testare gratuită</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">Ca să vezi platforma</p>
+          <p className="mt-4">
+            <span className="text-2xl font-semibold tracking-tight text-foreground">0</span>
+            <span className="ml-1 text-sm text-muted-foreground">lei, 15 zile</span>
+          </p>
+          <ul className="mt-4 space-y-1.5 text-xs text-muted-foreground">
+            {["Până la 10 produse", "Fără card"].map((t) => (
+              <li key={t} className="flex items-center gap-2">
+                <Check className="h-3.5 w-3.5 shrink-0 text-foreground/40" strokeWidth={2.5} />
+                {t}
+              </li>
+            ))}
+          </ul>
           <button
             type="button"
             onClick={() => handleCreate("free")}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 font-medium text-foreground underline underline-offset-4 transition-colors hover:text-primary disabled:opacity-50"
+            className="mt-5 flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-surface text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
           >
             {seCreeazaGratuit && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {seCreeazaGratuit ? "Îți creăm magazinul…" : "Testează 15 zile gratuit"}
+            {seCreeazaGratuit ? "Se creează…" : "Începe gratuit"}
           </button>
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">Fără card, până la 10 produse.</p>
+        </div>
       </div>
+      <p className="mt-5 text-center text-xs text-muted-foreground">
+        Mentenanță gratuită pe viață la toate planurile. Plata se face securizat prin Stripe.
+      </p>
 
       <LinkInapoi onClick={() => router.push("/onboarding/aspect")} />
     </div>

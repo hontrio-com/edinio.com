@@ -422,7 +422,7 @@ export async function sendWelcomeEmail(
   const dashboardUrl = `${SITE_URL}/dashboard`;
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Felicitari${data.name ? `, ${esc(data.name)}` : ""}!</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${esc(data.business_name)}</strong> a fost creat cu succes si este acum live pe Edinio.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Magazinul tau <strong>${esc(data.business_name)}</strong> a fost creat cu succes pe Edinio.</p>
 
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
       <p style="margin:0;font-size:13px;color:#16a34a;font-weight:600;">Magazinul tau este online</p>

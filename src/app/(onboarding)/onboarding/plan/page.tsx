@@ -30,7 +30,7 @@ import type { FirmaFacturare, FirmaManuala } from "@/lib/billing/firma-abonament
  */
 const PLANS = [
   { id: "basic", name: "Basic", price: 99, pentru: "Pentru început", puncte: ["Până la 500 de produse"] },
-  { id: "premium", name: "Premium", price: 249, pentru: "Recomandat", puncte: ["Până la 2.500 de produse", "Manager dedicat"] },
+  { id: "premium", name: "Premium", price: 249, pentru: "Pentru magazine în creștere", puncte: ["Până la 2.500 de produse", "Manager dedicat"] },
   { id: "ultra", name: "Ultra", price: 499, pentru: "Pentru cataloage mari", puncte: ["Produse nelimitate", "Manager dedicat"] },
 ] as const;
 
@@ -134,7 +134,7 @@ function PlanPageContent() {
           }
           else { setLoading(false); }
         })
-        .catch(() => { toast.error("Eroare la plata"); setLoading(false); });
+        .catch(() => { toast.error("Nu am putut porni plata. Încearcă din nou."); setLoading(false); });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
@@ -202,7 +202,7 @@ function PlanPageContent() {
   // Show toast if payment was cancelled
   useEffect(() => {
     if (isCancelled) {
-      toast.error("Plata a fost anulata. Selecteaza un plan pentru a continua.");
+      toast.error("Plata a fost anulată. Alege un plan ca să continui.");
       // Restore previously selected plan
       const storedPlan = sessionStorage.getItem("onboarding_pending_plan");
       if (storedPlan) setSelectedPlan(storedPlan);
@@ -211,7 +211,17 @@ function PlanPageContent() {
 
   async function finalizeBusiness(plan: string) {
     const details = citesteCiorna();
-    if (!ciornaCompleta(details)) return;
+    /*
+      Fara ciorna (alt browser, stocare golita) nu avem din ce crea magazinul. Nu
+      lasam rotita sa se invarta la nesfarsit: omul reia pasul 1. Daca tocmai a
+      platit, planul e deja scris de webhook, iar crearea de dupa nu-i mai da trial.
+    */
+    if (!ciornaCompleta(details)) {
+      setCreating(false);
+      setLoading(false);
+      router.replace("/onboarding/details");
+      return;
+    }
 
     try {
 
@@ -377,7 +387,7 @@ function PlanPageContent() {
       */
       window.location.href = "/dashboard";
     } catch {
-      toast.error("A aparut o eroare. Incearca din nou.");
+      toast.error("A apărut o eroare. Încearcă din nou.");
       setCreating(false);
       setLoading(false);
     }
@@ -454,7 +464,7 @@ function PlanPageContent() {
       });
       window.location.href = data.url;
     } catch {
-      toast.error("Eroare la initializarea platii. Incearca din nou.");
+      toast.error("Nu am putut porni plata. Încearcă din nou.");
       setLoading(false);
     }
   }
@@ -521,7 +531,7 @@ function PlanPageContent() {
         iar testarea gratuita e ULTIMUL chenar, mai mic decat planurile si fara
         accent de culoare: se vede, dar nu concureaza cu ele.
       */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_0.8fr] lg:items-center">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_0.8fr]">
         {PLANS.map((plan) => {
           const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
           const seDuce = loading && selectedPlan === plan.id;
@@ -573,7 +583,7 @@ function PlanPageContent() {
             </div>
           );
         })}
-        <div className="flex flex-col rounded-2xl border border-border bg-muted/30 p-5">
+        <div className="flex flex-col rounded-2xl border border-border bg-muted/30 p-5 lg:self-center">
           <h3 className="text-sm font-semibold leading-snug text-foreground">Nu vrei să alegi un plan acum?</h3>
           <p className="mt-1 text-sm text-muted-foreground">Testează gratuit 15 zile.</p>
           <button

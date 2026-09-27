@@ -30,6 +30,8 @@ interface User {
 const STEP_LABELS: Record<string, { label: string; color: string }> = {
   registered: { label: "Doar cont creat", color: "text-red-500" },
   details: { label: "Blocat la detalii", color: "text-orange-500" },
+  // Pasul nou din 27.09.2026 (culoare + stil). Fara randul asta, cine se oprea aici aparea „Doar cont creat".
+  aspect: { label: "Blocat la aspect", color: "text-amber-500" },
   customize: { label: "Blocat la personalizare", color: "text-amber-500" },
   plan: { label: "Blocat la alegere plan", color: "text-blue-500" },
   completed: { label: "Finalizat", color: "text-green-600" },

@@ -10,27 +10,26 @@ import { toast } from "sonner";
 import { registerSchema, type RegisterInput } from "@/lib/validations/auth";
 import { register as registerAction } from "@/lib/actions/auth.actions";
 import { GoogleAuthButton } from "@/components/ui/GoogleAuthButton";
-import { stergeCiorna } from "@/lib/onboarding/ciorna";
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
-    { label: "Cel puțin 8 caractere", valid: password.length >= 8 },
-    { label: "O literă mare", valid: /[A-Z]/.test(password) },
-    { label: "O cifră", valid: /[0-9]/.test(password) },
+    { label: "Minim 8 caractere", valid: password.length >= 8 },
+    { label: "O litera mare", valid: /[A-Z]/.test(password) },
+    { label: "Un numar", valid: /[0-9]/.test(password) },
   ];
 
   if (!password) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+    <div className="mt-2 space-y-1">
       {checks.map((c) => (
         <div key={c.label} className="flex items-center gap-1.5 text-xs">
           {c.valid ? (
-            <Check className="h-3 w-3 text-primary" />
+            <Check className="h-3 w-3 text-green-600" />
           ) : (
             <X className="h-3 w-3 text-muted-foreground" />
           )}
-          <span className={c.valid ? "text-foreground" : "text-muted-foreground"}>
+          <span className={c.valid ? "text-green-700" : "text-muted-foreground"}>
             {c.label}
           </span>
         </div>
@@ -56,14 +55,13 @@ function RegisterForm() {
     formState: { errors },
   } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
+    defaultValues: { terms: false },
   });
 
   const password = watch("password") ?? "";
 
   async function onSubmit(data: RegisterInput) {
     setLoading(true);
-    /* Un cont nou nu mosteneste inscrierea neterminata a altcuiva de pe acelasi calculator (nume, telefon). */
-    stergeCiorna();
     if (preselectedPlan && ["basic", "premium", "ultra"].includes(preselectedPlan)) {
       sessionStorage.setItem("preselected_plan", preselectedPlan);
     }
@@ -86,22 +84,11 @@ function RegisterForm() {
     <>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-          Creează-ți contul
+          Creeaza cont gratuit
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          15 zile gratuit, fără card. În câteva minute ai magazinul online.
+          Incepe sa construiesti prezenta ta online
         </p>
-      </div>
-
-      {/*
-        ⚠ GOOGLE PRIMUL (27.09.2026): e drumul cu un singur clic, deci sta deasupra
-        formularului, nu sub el, unde ajungea doar cine derula dupa ce il citise.
-      */}
-      <GoogleAuthButton label="Continuă cu Google" preselectedPlan={preselectedPlan} />
-      <div className="relative my-5 flex items-center gap-3">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-xs text-muted-foreground">sau cu email</span>
-        <div className="h-px flex-1 bg-border" />
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -110,7 +97,7 @@ function RegisterForm() {
             htmlFor="full_name"
             className="block text-sm font-medium text-foreground mb-1.5"
           >
-            Numele tău
+            Numele tau complet
           </label>
           <input
             id="full_name"
@@ -163,7 +150,7 @@ function RegisterForm() {
               id="password"
               type={showPassword ? "text" : "password"}
               autoComplete="new-password"
-              placeholder="Alege o parolă"
+              placeholder="Alege o parola sigura"
               {...register("password")}
               className="w-full px-3 py-2.5 text-sm border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground pr-10 transition-colors
                 border-border focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
@@ -174,7 +161,7 @@ function RegisterForm() {
               type="button"
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? "Ascunde parola" : "Arată parola"}
+              aria-label={showPassword ? "Ascunde parola" : "Arata parola"}
             >
               {showPassword ? (
                 <EyeOff className="h-4 w-4" />
@@ -189,6 +176,53 @@ function RegisterForm() {
           )}
         </div>
 
+        <div>
+          <label
+            htmlFor="confirm_password"
+            className="block text-sm font-medium text-foreground mb-1.5"
+          >
+            Confirma parola
+          </label>
+          <input
+            id="confirm_password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Repeta parola"
+            {...register("confirm_password")}
+            className="w-full px-3 py-3 text-sm border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground transition-colors
+              border-border focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20
+              aria-[invalid=true]:border-destructive"
+            aria-invalid={!!errors.confirm_password}
+          />
+          {errors.confirm_password && (
+            <p className="mt-1 text-xs text-destructive">
+              {errors.confirm_password.message}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-start gap-2.5 pt-1">
+          <input
+            id="terms"
+            type="checkbox"
+            {...register("terms")}
+            className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer"
+          />
+          <label htmlFor="terms" className="text-sm text-muted-foreground leading-snug cursor-pointer">
+            Sunt de acord cu{" "}
+            <Link href="/termeni" className="text-primary hover:underline">
+              Termenii si conditiile
+            </Link>{" "}
+            si{" "}
+            <Link href="/confidentialitate" className="text-primary hover:underline">
+              Politica de confidentialitate
+            </Link>
+          </label>
+        </div>
+        {errors.terms && (
+          <p className="text-xs text-destructive">{errors.terms.message}</p>
+        )}
+
         <button
           type="submit"
           disabled={loading}
@@ -196,26 +230,25 @@ function RegisterForm() {
             bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {loading ? "Se creează contul…" : "Creează contul"}
+          {loading ? "Se creeaza contul..." : "Creeaza cont gratuit"}
         </button>
-
-        {/*
-          ⚠ ACORDUL E O PROPOZITIE, NU O BIFA (27.09.2026). Bifa nu se pastra nicaieri:
-          `register` nu primea `terms`, deci era un pas in plus fara nicio urma. Textul
-          sta langa buton, unde se citeste inainte de apasare.
-        */}
-        <p className="text-center text-xs leading-relaxed text-muted-foreground">
-          Creând contul, ești de acord cu{" "}
-          <Link href="/termeni" className="underline underline-offset-2 hover:text-foreground">Termenii și condițiile</Link>{" "}
-          și cu{" "}
-          <Link href="/confidentialitate" className="underline underline-offset-2 hover:text-foreground">Politica de confidențialitate</Link>.
-        </p>
       </form>
+
+      <div className="mt-5">
+        <div className="relative flex items-center gap-3 my-1">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-xs text-muted-foreground">sau</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+        <div className="mt-3">
+          <GoogleAuthButton label="Inregistrare cu Google" preselectedPlan={preselectedPlan} />
+        </div>
+      </div>
 
       <p className="mt-5 text-center text-sm text-muted-foreground">
         Ai deja cont?{" "}
         <Link href="/login" className="text-primary font-medium hover:underline">
-          Conectează-te
+          Conecteaza-te
         </Link>
       </p>
     </>

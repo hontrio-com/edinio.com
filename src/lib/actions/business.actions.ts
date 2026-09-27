@@ -12,8 +12,7 @@ import { logError } from "@/lib/error-logger";
 import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 import { culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
-import { buildClassicDesign } from "@/lib/storefront/design/defaults";
-import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { designInitial } from "@/lib/onboarding/design-initial";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
@@ -173,16 +172,7 @@ export async function createBusiness(data: {
       coverUrl: null,
       tagline: null,
     };
-    const baza = buildClassicDesign(ctx);
-    const design = parseStoreDesign({
-      ...baza,
-      chrome: {
-        ...baza.chrome,
-        header: { ...baza.chrome.header, variant: stil.antet, variantOverride: stil.antet },
-        footer: { ...baza.chrome.footer, variant: stil.subsol, variantOverride: stil.subsol },
-      },
-      home: baza.home.map((sec) => (sec.kind === "hero" ? { ...sec, enabled: true, enabledOverride: true } : sec)),
-    }, ctx);
+    const design = designInitial(stil.id, ctx);
     const { error: designError } = await supabase
       .from("store_settings")
       .update({ storefront_design: design as never, storefront_design_pub_at: new Date().toISOString() } as never)

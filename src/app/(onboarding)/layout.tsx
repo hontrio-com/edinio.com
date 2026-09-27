@@ -1,4 +1,6 @@
 import "../globals.css";
+import { fontAplicatie } from "../fonturi";
+import { PazaCiorna } from "@/components/onboarding/PazaCiorna";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
@@ -37,7 +39,11 @@ export default async function OnboardingLayout({
   if (user && (await sesiuneCurentaNeconfirmata(user.id))) redirect("/login/mfa");
 
   return (
-    <div className="min-h-screen bg-background">
+    /*
+      Acelasi invelis ca panoul (`zona-aplicatie`): fundal alb si fontul aplicatiei.
+      Cerut pe 27.09.2026: onboardingul era gri, iar panoul in care ajunge omul e alb.
+    */
+    <div className={`${fontAplicatie.variable} zona-aplicatie min-h-screen bg-background`}>
       {/*
         ⚠ MASURAREA NOASTRA, nu a comerciantilor. Vezi
         `lib/edinio-marketing/` si granita probata in `lib/granita-tracking.test.ts`.
@@ -94,6 +100,7 @@ export default async function OnboardingLayout({
           </a>
         </div>
       </header>
+      {user && <PazaCiorna cont={user.id} />}
       <main>{children}</main>
       <NotificariToast />
     </div>

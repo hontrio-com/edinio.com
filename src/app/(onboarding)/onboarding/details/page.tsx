@@ -149,7 +149,7 @@ export default function OnboardingDetailsPage() {
 
           <div>
             <label htmlFor="slug" className="mb-1.5 block text-sm font-medium text-foreground">
-              Adresa magazinului
+              Adresa web (URL) a magazinului
             </label>
             <div
               className={
@@ -198,12 +198,10 @@ export default function OnboardingDetailsPage() {
               value={telefon}
               onChange={(e) => { setTelefon(e.target.value); if (erori.telefon) setErori((x) => ({ ...x, telefon: undefined })); }}
               aria-invalid={!!erori.telefon}
-              aria-describedby="ajutor-telefon"
+              aria-describedby={erori.telefon ? "eroare-telefon" : undefined}
               className={campCls(!!erori.telefon)}
             />
-            <p id="ajutor-telefon" className={"mt-1.5 text-xs " + (erori.telefon ? "text-destructive" : "text-muted-foreground")}>
-              {erori.telefon ?? "Apare pe magazin, ca să te poată contacta clienții."}
-            </p>
+            {erori.telefon && <p id="eroare-telefon" className="mt-1.5 text-xs text-destructive">{erori.telefon}</p>}
           </div>
 
           <ButonContinua dezactivat={stareAdresa === "checking"}>Continuă</ButonContinua>

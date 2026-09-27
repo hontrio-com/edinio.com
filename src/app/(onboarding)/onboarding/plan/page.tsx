@@ -20,14 +20,13 @@ import { culoareValida } from "@/lib/onboarding/aspect";
 import type { FirmaFacturare, FirmaManuala } from "@/lib/billing/firma-abonament";
 
 /*
- * Planurile platite. Testarea gratuita NU mai e un card printre ele (27.09.2026):
- * e drumul principal, cu buton propriu, iar planurile raman alternativa pentru cine
- * stie deja ce vrea. Masurat pe 90 de zile: 33 din 41 de magazine noi au pornit pe
- * testare, deci asta e alegerea pe care o face aproape oricine.
+ * Planurile platite, DRUMUL PRINCIPAL (27.09.2026, cerut de el: majoritatea sa
+ * activeze direct un plan). Testarea gratuita nu mai e un card printre ele, ci un
+ * link discret sub carduri.
  *
  * Ce deosebeste planurile cu adevarat e numarul de produse si managerul dedicat;
- * restul (comenzi nelimitate, suport 7 din 7, mentenanta) e la fel peste tot si se
- * spune o singura data, sub carduri.
+ * comenzile nelimitate si suportul 7 din 7 sunt la toate, iar mentenanta se spune
+ * o singura data, sub carduri.
  */
 const PLANS = [
   { id: "basic", name: "Basic", price: 99, pentru: "Pentru început", puncte: ["Până la 500 de produse"] },
@@ -477,49 +476,22 @@ function PlanPageContent() {
   const seCreeazaGratuit = loading && selectedPlan === "free";
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
       {plataAbonament.fereastra}
       <UrmaPasOnboarding pas="plan" index={3} />
-      <OnboardingProgress currentStep={3} />
+      <div className="mx-auto max-w-3xl">
+        <OnboardingProgress currentStep={3} />
+      </div>
 
-      <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-foreground sm:text-[32px]">
-        Pornește magazinul
-      </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
-        Începi gratuit, fără card. Alegi un plan doar dacă rămâi.
-      </p>
+      <div className="text-center">
+        <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-foreground sm:text-[32px]">
+          Alege planul magazinului
+        </h1>
+        <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
+          Prețul tău rămâne fix pe viață. Anulezi oricând, fără costuri.
+        </p>
 
-      {/* Drumul principal: testarea gratuita. */}
-      <section className="mt-8 rounded-2xl border border-primary/30 bg-surface p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04)] sm:p-8">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-primary">15 zile gratuit</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Testează tot, fără obligații</p>
-            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              {["Toate funcțiile platformei", "Până la 10 produse", "Fără card de credit"].map((t) => (
-                <li key={t} className="flex items-center gap-2">
-                  <Check className="h-4 w-4 shrink-0 text-primary" strokeWidth={2.5} />
-                  {t}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="sm:w-60 sm:shrink-0">
-            <ButonContinua type="button" onClick={() => handleCreate("free")} seIncarca={seCreeazaGratuit} dezactivat={loading}>
-              {seCreeazaGratuit ? "Se creează…" : "Creează magazinul gratuit"}
-            </ButonContinua>
-            <p className="mt-2 text-center text-xs text-muted-foreground">Durează câteva secunde.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Alternativa: direct un plan platit. */}
-      <div className="mt-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Sau alege direct un plan</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Prețul tău rămâne fix pe viață. Anulezi oricând, fără costuri.</p>
-        </div>
-        <div className="inline-flex self-start rounded-lg border border-border bg-muted/50 p-1 sm:self-auto" role="radiogroup" aria-label="Perioada de facturare">
+        <div className="mt-6 inline-flex rounded-lg border border-border bg-muted/50 p-1" role="radiogroup" aria-label="Perioada de facturare">
           {(["monthly", "annual"] as const).map((interval) => (
             <button
               key={interval}
@@ -529,7 +501,7 @@ function PlanPageContent() {
               onClick={() => setBillingInterval(interval)}
               disabled={loading}
               className={cn(
-                "flex items-center gap-2 rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-60",
+                "flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-60",
                 billingInterval === interval ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -544,7 +516,12 @@ function PlanPageContent() {
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      {/*
+        ⚠ PLANURILE PLATITE SUNT DRUMUL PRINCIPAL (27.09.2026), cerut de el: vrea ca
+        majoritatea sa activeze direct un plan. Premium iese in fata (recomandat),
+        iar testarea gratuita e un link discret sub carduri, nu un card al ei.
+      */}
+      <div className="mt-8 grid gap-4 sm:grid-cols-3 sm:items-stretch">
         {PLANS.map((plan) => {
           const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
           const seDuce = loading && selectedPlan === plan.id;
@@ -553,25 +530,28 @@ function PlanPageContent() {
             <div
               key={plan.id}
               className={cn(
-                "flex flex-col rounded-xl border bg-surface p-5",
-                recomandat ? "border-foreground/25" : "border-border",
+                "relative flex flex-col rounded-2xl border bg-surface p-6",
+                recomandat ? "border-primary shadow-[0_12px_32px_-12px_rgb(0_0_0/0.18)] ring-1 ring-primary" : "border-border",
               )}
             >
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">{plan.name}</h3>
-                <span className={cn("text-xs", recomandat ? "font-medium text-primary" : "text-muted-foreground")}>{plan.pentru}</span>
-              </div>
-              <p className="mt-3">
-                <span className="text-2xl font-semibold tracking-tight text-foreground">{perMonth}</span>
+              {recomandat && (
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground">
+                  Recomandat
+                </span>
+              )}
+              <h3 className="text-base font-semibold text-foreground">{plan.name}</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">{plan.pentru}</p>
+              <p className="mt-5">
+                <span className="text-4xl font-semibold tracking-tight text-foreground">{perMonth}</span>
                 <span className="ml-1 text-sm text-muted-foreground">lei/lună</span>
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {billingInterval === "annual" ? `${getAnnualPrice(plan.id)} lei, facturat anual` : "Facturat lunar"}
               </p>
-              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-muted-foreground">
-                {plan.puncte.map((t) => (
+              <ul className="mt-5 flex-1 space-y-2 text-sm text-muted-foreground">
+                {[...plan.puncte, "Comenzi nelimitate", "Suport 7 zile din 7"].map((t) => (
                   <li key={t} className="flex items-center gap-2">
-                    <Check className="h-3.5 w-3.5 shrink-0 text-foreground/50" strokeWidth={2.5} />
+                    <Check className={cn("h-4 w-4 shrink-0", recomandat ? "text-primary" : "text-foreground/50")} strokeWidth={2.5} />
                     {t}
                   </li>
                 ))}
@@ -580,7 +560,12 @@ function PlanPageContent() {
                 type="button"
                 onClick={() => handleCreate(plan.id)}
                 disabled={loading}
-                className="mt-5 flex h-10 items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                className={cn(
+                  "mt-6 flex h-11 items-center justify-center gap-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50",
+                  recomandat
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "border border-foreground/80 bg-surface text-foreground hover:bg-muted",
+                )}
               >
                 {seDuce && <Loader2 className="h-4 w-4 animate-spin" />}
                 {seDuce ? "Te ducem la plată…" : `Alege ${plan.name}`}
@@ -589,9 +574,25 @@ function PlanPageContent() {
           );
         })}
       </div>
-      <p className="mt-4 text-center text-xs text-muted-foreground">
-        Toate planurile au comenzi nelimitate, suport 7 zile din 7 și mentenanță gratuită. Plata se face securizat prin Stripe.
+      <p className="mt-5 text-center text-xs text-muted-foreground">
+        Mentenanță gratuită pe viață la toate planurile. Plata se face securizat prin Stripe.
       </p>
+
+      <div className="mt-10 border-t border-border pt-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Vrei să încerci mai întâi?{" "}
+          <button
+            type="button"
+            onClick={() => handleCreate("free")}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 font-medium text-foreground underline underline-offset-4 transition-colors hover:text-primary disabled:opacity-50"
+          >
+            {seCreeazaGratuit && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {seCreeazaGratuit ? "Îți creăm magazinul…" : "Testează 15 zile gratuit"}
+          </button>
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Fără card, până la 10 produse.</p>
+      </div>
 
       <LinkInapoi onClick={() => router.push("/onboarding/aspect")} />
     </div>

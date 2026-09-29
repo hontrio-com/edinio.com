@@ -12348,7 +12348,9 @@ create table if not exists public.orders (
   curiera_status_label text,
   curiera_status_at timestamp with time zone,
   curiera_status_checked_at timestamp with time zone,
-  curiera_evenimente_semnalate jsonb);
+  curiera_evenimente_semnalate jsonb,
+  curiera_partener text,
+  curiera_partener_awb text);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,

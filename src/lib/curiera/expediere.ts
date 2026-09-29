@@ -90,6 +90,27 @@ export type DateExpediereCuriera = {
 export type DateAwbCuriera = Omit<DateExpediereCuriera, "referinta">;
 
 /**
+ * Ce precompleteaza fereastra AWB din configurarea Curiera.
+ *
+ * ⚠ Nu configul intreg: el poarta cheia API, iar tot ce primeste o componenta de client
+ * pleaca in browser. Paginile (comanda si lista de comenzi) aleg pe server doar campurile
+ * astea, prin `optiuniAwbCuriera`, ca cele doua ferestre sa porneasca la fel.
+ */
+export type OptiuniAwbCuriera = {
+  asigurare: boolean;
+  serviciiExtra: string[];
+  continutImplicit: string;
+};
+
+export function optiuniAwbCuriera(config: CurieraConfig | null | undefined): OptiuniAwbCuriera {
+  return {
+    asigurare: config?.asigurare === true,
+    serviciiExtra: Array.isArray(config?.servicii_extra) ? config.servicii_extra.map(String) : [],
+    continutImplicit: (config?.continut_implicit ?? "").trim(),
+  };
+}
+
+/**
  * Textul in ASCII curat.
  *
  * Intai regula romaneasca (`stripDiacritics`, care stie si formele cu sedila), apoi orice alt

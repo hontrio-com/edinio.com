@@ -1558,12 +1558,13 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "Verifici datele în fereastra Generează AWB Curiera și emiți. Eticheta se cere de la Curiera la fiecare descărcare, iar anularea merge doar până ridică curierul coletul.",
           pasi: [
             "Intră în Comenzi > Toate comenzile și deschide comanda.",
-            "În panoul Expediere apasă Creează AWB Curiera.",
+            "În panoul Expediere apasă Creează AWB Curiera. Sau, fără să intri în comandă, apasă Creează AWB pe rândul ei, în coloana AWB Curiera.",
             "În fereastra Generează AWB Curiera verifică destinatarul, greutatea, numărul de colete și rambursul.",
             "Apasă Generează AWB.",
             "Apasă Descarcă eticheta.",
           ],
           detalii: [
+            { titlu: "Direct din lista de comenzi", text: "În Comenzi > Toate comenzile, coloana AWB Curiera are pe fiecare rând butonul Creează AWB, care deschide aceeași fereastră fără să intri în comandă. După emitere, în coloană apare numărul AWB; apăsând pe el redeschizi fereastra, de unde descarci eticheta. Coloana nu se vede pe ecranele mici. Pentru mai multe comenzi deodată le bifezi și apeși Generează AWB în bara de sus; cu mai mulți curieri conectați, alegi întâi Curiera din listă." },
             { titlu: "Când clientul a ales un punct de ridicare", text: "Coletul pleacă la punctul ales. Localitatea, județul și codul poștal trimise sunt ale punctului, nu ale clientului, iar Curiera pune pe etichetă adresa punctului. Rambursul merge și la punct, iar emailul clientului nu e obligatoriu." },
             { titlu: "Ce se verifică înainte de emitere", text: "Numele, telefonul, localitatea și județul destinatarului, adresa la livrarea la adresă, greutatea și numărul de colete, plus adresa de ridicare din configurare. Dimensiunile coletului se trimit doar dacă sunt completate toate trei." },
             { titlu: "Rambursul", text: "Suma pleacă pe AWB așa cum e în fereastră. Felul în care îți vin banii, în cont sau în numerar, ține de contractul tău Curiera și nu se alege din panou. După emitere suma nu se mai poate schimba: dacă s-a schimbat, anulezi AWB-ul și emiți altul." },

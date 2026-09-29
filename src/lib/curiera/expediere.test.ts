@@ -8,6 +8,7 @@ import {
   adresaCuSector,
   ascii,
   lipsuriExpediereCuriera,
+  optiuniAwbCuriera,
   parametriExpediereCuriera,
   referintaCuriera,
   type DateExpediereCuriera,
@@ -230,6 +231,19 @@ describe("lockerul FANbox", () => {
 
   test("pragul e acelasi cu al checkoutului (FANBOX_MAX_WEIGHT_KG)", () => {
     assert.equal(GREUTATE_MAXIMA_LOCKER_KG, FANBOX_MAX_WEIGHT_KG);
+  });
+});
+
+describe("optiunile ferestrei AWB", () => {
+  test("⚠ numai cele trei campuri: cheia API nu pleaca in browser", () => {
+    const o = optiuniAwbCuriera({ ...CONFIG, api_key: "secret", asigurare: true, servicii_extra: ["443"], continut_implicit: "  Haine " });
+    assert.deepEqual(Object.keys(o).sort(), ["asigurare", "continutImplicit", "serviciiExtra"]);
+    assert.deepEqual(o, { asigurare: true, serviciiExtra: ["443"], continutImplicit: "Haine" });
+    assert.ok(!JSON.stringify(o).includes("secret"));
+  });
+
+  test("fara configurare, totul stins si gol", () => {
+    assert.deepEqual(optiuniAwbCuriera(null), { asigurare: false, serviciiExtra: [], continutImplicit: "" });
   });
 });
 

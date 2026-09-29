@@ -224,6 +224,14 @@ S-au adaugat doua lucruri:
   `test_connection` da doar numele, iar `list_addresses` a intors o lista GOALA pe contul de test,
   deci forma unui rand nu e cunoscuta si nu se citeste.
 
+Tot atunci el a cerut butonul de AWB direct in lista „Comenzi”, fara intrat in fiecare comanda.
+Curiera nu avea coloana acolo, desi o aveau cei 9 curieri mai vechi. Acum are coloana „AWB Curiera”:
+pe fiecare rand e fie „Creeaza AWB”, trecut prin aceeasi garda ca ceilalti, fie numarul AWB-ului,
+care redeschide fereastra pentru eticheta. Optiunile ferestrei vin din `optiuniAwbCuriera`, aceeasi
+functie pe care o foloseste si pagina comenzii. Recensamantul butoanelor pazite a urcat de la 9 la
+10; cu garda scoasa de pe butonul Curiera, pica. Emiterea pe lot (bifezi si apesi „Genereaza AWB”)
+exista deja si il includea pe Curiera.
+
 Probat pe serverul local legat de baza demo, prin ruta reala. Casa Lumen, fara Curiera, vine cu
 numele, telefonul, emailul, adresa, orasul si „Municipiul Bucuresti”. Floraria Mirei, cu Curiera
 salvat, isi pastreaza valorile, fara nota.

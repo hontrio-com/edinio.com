@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Download, Loader2, MapPin, Package, Truck, X } from "lucide-react";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { createCurieraAwbAction, getCurieraEtichetaAction } from "@/lib/actions/curiera.actions";
-import { GREUTATE_MAXIMA_LOCKER_KG, type DateAwbCuriera } from "@/lib/curiera/expediere";
+import { GREUTATE_MAXIMA_LOCKER_KG, type DateAwbCuriera, type OptiuniAwbCuriera } from "@/lib/curiera/expediere";
 import { ePunctFanbox } from "@/lib/curiera/puncte";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
@@ -35,17 +35,7 @@ type ShippingAddress = {
   locker_post_code?: string;
 };
 
-/**
- * Ce precompleteaza fereastra din configurarea Curiera.
- *
- * ⚠ Nu configul intreg: el poarta cheia API, iar tot ce primeste o componenta de client
- * pleaca in browser. Pagina comenzii alege pe server doar campurile astea.
- */
-export type OptiuniAwbCuriera = {
-  asigurare: boolean;
-  serviciiExtra: string[];
-  continutImplicit: string;
-};
+export type { OptiuniAwbCuriera } from "@/lib/curiera/expediere";
 
 /**
  * Numele serviciilor extra ale platformei Curiera, citite din `list_services?type=extra` pe

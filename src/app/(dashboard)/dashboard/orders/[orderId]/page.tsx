@@ -18,6 +18,7 @@ import type { PallExConfig } from "@/lib/pallex/client";
 import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
+import { optiuniAwbCuriera } from "@/lib/curiera/expediere";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday/client";
@@ -99,12 +100,8 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   const cu = settings?.curiera_config as CurieraConfig | null;
   const curieraEnabled = curieraGata(cu);
   /* ⚠ Numai ce precompleteaza fereastra, NU configul intreg: el poarta cheia API, iar tot ce
-     primeste o componenta de client pleaca in browser. */
-  const curieraOptiuni = {
-    asigurare: cu?.asigurare === true,
-    serviciiExtra: Array.isArray(cu?.servicii_extra) ? cu.servicii_extra.map(String) : [],
-    continutImplicit: (cu?.continut_implicit ?? "").trim(),
-  };
+     primeste o componenta de client pleaca in browser. Aceeasi functie ca in lista. */
+  const curieraOptiuni = optiuniAwbCuriera(cu);
   /* Aceeasi regula ca in `packetaGata` si in features/page.tsx: parola API si
      eticheta de expeditor. `eshop` intra in ea desi nu e credentiala — un nume
      gresit CREEAZA tacut un expeditor nou la ei si strica facturarea. */

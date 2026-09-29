@@ -28,6 +28,7 @@ import { CargusPickupModal } from "@/components/dashboard/CargusPickupModal";
 import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
+import { CurieraAwbModal, type OptiuniAwbCuriera } from "@/components/dashboard/CurieraAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
@@ -88,7 +89,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, curieraOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -112,6 +113,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   pallexEnabled?: boolean;
   postaEnabled?: boolean;
   curieraEnabled?: boolean;
+  /** Ce precompleteaza fereastra AWB Curiera. Fara cheia API: vezi pagina. */
+  curieraOptiuni?: OptiuniAwbCuriera;
   packetaEnabled?: boolean;
   smartshipEnabled?: boolean;
   shipoEnabled?: boolean;
@@ -148,6 +151,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [dpdPickupOpen, setDpdPickupOpen] = useState(false);
   const [cargusPickupOpen, setCargusPickupOpen] = useState(false);
   const [samedayModalOrder, setSamedayModalOrder] = useState<Order | null>(null);
+  const [curieraModalOrder, setCurieraModalOrder] = useState<Order | null>(null);
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
@@ -785,6 +789,20 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           onSuccess={() => { setSamedayModalOrder(null); router.refresh(); }}
         />
       )}
+      {/*
+        ⚠ Fereastra Curiera RAMANE DESCHISA dupa emitere, cu butonul de eticheta (tine AWB-ul
+        in starea ei), ca pe pagina comenzii. Deci `onSuccess` doar reimprospateaza lista.
+      */}
+      {curieraModalOrder && businessId && (
+        <CurieraAwbModal
+          open={!!curieraModalOrder}
+          onClose={() => setCurieraModalOrder(null)}
+          order={curieraModalOrder}
+          businessId={businessId}
+          optiuni={curieraOptiuni}
+          onSuccess={() => router.refresh()}
+        />
+      )}
       {/* Header */}
       <div className="flex flex-col gap-3 mb-5">
         <div className="flex items-center justify-between">
@@ -1221,6 +1239,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     {coleteEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Colete</th>
                     )}
+                    {curieraEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Curiera</th>
+                    )}
                     {oblioEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Oblio</th>
                     )}
@@ -1582,6 +1603,36 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setColeteModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {curieraEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {order.curiera_awb_number ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setCurieraModalOrder(order); }}
+                                title={order.curiera_status_label ?? undefined}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {order.curiera_awb_number}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setCurieraModalOrder(order)); }}
                                 aria-disabled={!!refuzAwbLista}
                                 className={cn(
                                   "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",

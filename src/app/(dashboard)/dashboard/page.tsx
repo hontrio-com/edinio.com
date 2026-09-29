@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { ShoppingCart, Wallet, Receipt, Target } from "lucide-react";
@@ -38,6 +39,8 @@ import {
   citesteDateCarduri, cresterePosibila, rataConversie, valoareMedie, zileScurt,
 } from "@/lib/panou-carduri";
 import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
+import { AjutorConfigurare } from "@/components/dashboard/AjutorConfigurare";
+import { COOKIE_AJUTOR_ASCUNS, esteContNou } from "@/lib/dashboard/ajutor-configurare";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -65,6 +68,10 @@ export default async function DashboardPage() {
     ? `https://${business.custom_domain}`
     : platformUrl;
 
+  // Oferta de ajutor la configurare: doar conturilor noi, pana o inchid.
+  const arataAjutor = esteContNou(user.created_at)
+    && (await cookies()).get(COOKIE_AJUTOR_ASCUNS)?.value !== "1";
+
   /*
    * Bara de stare pleaca IMEDIAT; cifrele curg dupa ea.
    *
@@ -87,7 +94,7 @@ export default async function DashboardPage() {
         domainHealthy={business.custom_domain_healthy}
       />
       <Suspense fallback={<ScheletPanou />}>
-        <ContinutPanou business={business} userId={user.id} publicUrl={publicUrl} />
+        <ContinutPanou business={business} userId={user.id} publicUrl={publicUrl} arataAjutor={arataAjutor} />
       </Suspense>
     </div>
   );
@@ -111,8 +118,8 @@ type BusinessPanou = {
 };
 
 async function ContinutPanou({
-  business, userId, publicUrl,
-}: { business: BusinessPanou; userId: string; publicUrl: string }) {
+  business, userId, publicUrl, arataAjutor,
+}: { business: BusinessPanou; userId: string; publicUrl: string; arataAjutor: boolean }) {
   const supabase = await createClient();
 
   /*
@@ -255,6 +262,8 @@ async function ContinutPanou({
         planExpiresAt={dashProfile?.plan_expires_at ?? null}
         publicUrl={publicUrl}
       />
+
+      {arataAjutor && <AjutorConfigurare />}
 
       <StocScazutRand
         businessId={business.id}

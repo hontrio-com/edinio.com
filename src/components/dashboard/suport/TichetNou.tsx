@@ -31,8 +31,8 @@ const etichetaCls = "mb-1.5 block text-xs font-semibold uppercase tracking-wide 
   butonul de trimitere asteapta pana alegi. Ruta refuza si ea un tichet fara
   categorie.
 
-  ⚠ Categoria se poate primi gata aleasa (`categorieInitiala`): placile din
-  ecranul gol duc aici cu ea pusa.
+  ⚠ Categoria se poate primi gata aleasa (`categorieInitiala`): cardul de ajutor
+  din panou (`?nou=store_design`) duce aici cu ea pusa.
 */
 export function TichetNou({
   businesses,

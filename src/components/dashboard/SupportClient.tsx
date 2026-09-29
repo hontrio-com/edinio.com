@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowUpRight, CheckCircle2, ChevronRight, Hourglass, LifeBuoy, MessageCircle, Phone, Plus, Reply, Timer,
+  CheckCircle2, ChevronRight, Hourglass, LifeBuoy, MessageCircle, Phone, Plus, Reply, Timer,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils/cn";
@@ -90,7 +90,13 @@ export function SupportClient({
   const filtru = filtruValid(parametri.get("stare"));
 
   const [formular, setFormular] = useState<{ categorie: CategorieTichet | null } | null>(
-    () => (parametri.get("nou") !== null ? { categorie: null } : null),
+    () => {
+      // `?nou` deschide formularul; `?nou=<categorie>` o si alege (cardul de ajutor din panou).
+      const nou = parametri.get("nou");
+      if (nou === null) return null;
+      const categorie = CATEGORII.find((c) => c.cheie === nou)?.cheie ?? null;
+      return { categorie };
+    },
   );
 
   const cate = {
@@ -132,7 +138,7 @@ export function SupportClient({
       </div>
 
       {tichete.length === 0 ? (
-        <EcranGol onAlege={deschide} />
+        <EcranGol onNou={() => deschide()} />
       ) : (
         <>
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -344,42 +350,27 @@ function Categorie({ cheie }: { cheie: string }) {
   stau direct pe pagina: apasarea deschide formularul cu categoria deja aleasa,
   deci omul spune de la primul clic despre ce e vorba.
 */
-function EcranGol({ onAlege }: { onAlege: (c: CategorieTichet) => void }) {
+/*
+  Ecranul fara niciun tichet.
+
+  ⚠ Spune intai CE E AICI (nimic, inca), nu pune o grila de categorii in fata.
+  Grila de dinainte arata ca un formular si omul nu intelegea ca pagina e lista
+  tichetelor lui (cerut de el pe 29.09.2026). Categoria se alege oricum in
+  formularul de tichet nou.
+*/
+function EcranGol({ onNou }: { onNou: () => void }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-card px-6 py-10 text-center ring-1 ring-foreground/10 sm:py-12">
-        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-primary/10">
-          <LifeBuoy className="h-6 w-6 text-primary" strokeWidth={1.75} />
-        </div>
-        <h2 className="text-base font-semibold text-foreground">Cu ce te putem ajuta?</h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
-          Alege despre ce e vorba și scrie-ne. Îți răspundem în cel mult 24 de ore, aici și pe email.
+      <div className="rounded-xl bg-card px-6 py-14 text-center ring-1 ring-foreground/10">
+        <MessageCircle className="mx-auto h-6 w-6 text-muted-foreground" strokeWidth={1.75} />
+        <h2 className="mt-3 text-sm font-semibold text-foreground">Nu ai niciun tichet</h2>
+        <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted-foreground">
+          Când ne scrii, tichetul apare aici. Îți răspundem în cel mult 24 de ore, aici și pe email.
         </p>
-
-        <div className="mx-auto mt-7 grid max-w-3xl grid-cols-2 gap-2 text-left sm:grid-cols-4">
-          {CATEGORII.map((c) => {
-            const Icon = ICONITA_CATEGORIEI[c.cheie];
-            return (
-              <button
-                key={c.cheie}
-                type="button"
-                onClick={() => onAlege(c.cheie)}
-                className="group flex flex-col gap-2 rounded-xl border border-border p-3 transition-all hover:border-foreground/20 hover:bg-muted/40"
-              >
-                <span className="flex items-center justify-between">
-                  <span className="grid h-8 w-8 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
-                    <Icon className="h-4 w-4" strokeWidth={1.75} />
-                  </span>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
-                </span>
-                <span>
-                  <span className="block text-[13px] font-medium text-foreground">{c.eticheta}</span>
-                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{c.descriere}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <Button variant="outline" size="sm" className="mt-5" onClick={onNou}>
+          <Plus />
+          Deschide un tichet
+        </Button>
       </div>
 
       <ContactDirect />

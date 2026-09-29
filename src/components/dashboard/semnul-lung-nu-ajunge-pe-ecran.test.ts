@@ -14,7 +14,7 @@ import { test } from "node:test";
  *
  * ⚠ LISTA NU E "TOATE PANOURILE DE CURIER"
  *
- * E "cele al caror nume incepe cu unul din 17 prefixe", plus trei numite pe
+ * E "cele al caror nume incepe cu unul din 18 prefixe", plus trei numite pe
  * litere. Nu e acelasi lucru, si diferenta a costat: `EmagAwbModal` emite AWB-uri
  * adevarate fara sa inceapa cu vreun prefix, `ShippingRulesEditor` avea DOUA
  * semne chiar pe ecran, iar `useGreutateaAwb` e `.ts` intr-o scanare de `.tsx`,
@@ -60,7 +60,7 @@ const SEMN = "—";
 const CURIERI = [
   "Cargus", "Colete", "Gls", "Packeta", "Ups", "Woot", "Pallex", "Shipo",
   "Ecolet", "Dhl", "Fedex", "Posta", "Sameday", "Dpd", "FanCourier",
-  "Innoship", "Smartship",
+  "Innoship", "Smartship", "Curiera",
 ];
 
 /* Panouri de expediere pe care prefixele le sar prin constructie. */

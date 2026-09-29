@@ -14,6 +14,23 @@ import {
   adresaDhl, judetDhl, orasDhl, sectorPentruAdresa as sectorDhl,
 } from "@/lib/dhl/expediere";
 import { localitateSameday, normalizeLocalityName } from "@/lib/utils/ro-address";
+import { parametriExpediereCuriera } from "@/lib/curiera/expediere";
+import type { CurieraConfig } from "@/lib/curiera/client";
+
+/** Cererea Curiera pentru o adresa, cu o configurare minima (expeditorul nu conteaza aici). */
+function curiera(a: { oras: string; judet: string; strada?: string }) {
+  const config: CurieraConfig = {
+    enabled: true, api_key: "k",
+    expeditor: { nume: "Magazin", telefon: "0721000001", adresa: "Str. Depozit 1", oras: "Cluj-Napoca", judet: "Cluj" },
+  };
+  return parametriExpediereCuriera(config, {
+    destinatar: {
+      nume: ADRESA.nume, telefon: ADRESA.telefon,
+      adresa: a.strada ?? `${ADRESA.strada} ${ADRESA.numar}`, oras: a.oras, judet: a.judet,
+    },
+    greutateKg: 1, colete: 1, referinta: "EDN-TEST-1",
+  });
+}
 
 /**
  * ═══ O COMANDA DIN BUCURESTI, PAISPREZECE CURIERI, DOUA ADEVARURI ═══
@@ -214,6 +231,33 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
   });
 
   /*
+   * ⚠ Curiera e in tabara CEA MARE: nomenclatorul lor (`list_cities`) are „BUCURESTI" ca o
+   * singura localitate. Dar sectorul NU pleaca in `to_sector`: langa `to_address` se PIERDE,
+   * nu apare nici in raspuns, nici pe eticheta (masurat pe 29.09.2026). Deci se scrie in linia
+   * de adresa, si numai cand nu e deja acolo. Iar totul pleaca in ASCII: „ș" le iese „?".
+   */
+  test("CURIERA primeste „Bucuresti”, iar sectorul pleaca IN linia de adresa", () => {
+    const p = curiera({ oras: ADRESA.oras, judet: ADRESA.judet });
+    assert.equal(p.to_city, "Bucuresti");
+    assert.equal(p.to_address, "Calea Victoriei 12, Sector 3");
+    assert.equal("to_sector" in p, false, "campul lor de sector se pierde, deci nu se trimite");
+  });
+
+  test("CURIERA nu scrie al doilea sector cand strada il are deja (comenzile din marketplace)", () => {
+    const p = curiera({ oras: "Bucuresti", judet: "Bucuresti", strada: "Str. Lunga 5, Sector 2" });
+    assert.equal(p.to_city, "Bucuresti");
+    assert.equal(p.to_address, "Str. Lunga 5, Sector 2");
+  });
+
+  test("CURIERA nu inventeaza un sector in afara Bucurestiului, si nici cand nu scrie nicaieri", () => {
+    const cluj = curiera({ oras: "Cluj-Napoca", judet: "Cluj" });
+    assert.equal(cluj.to_city, "Cluj-Napoca");
+    assert.equal(cluj.to_address.toLowerCase().includes("sector"), false);
+    const faraSector = curiera({ oras: "Bucuresti", judet: "Bucuresti" });
+    assert.equal(faraSector.to_address, "Calea Victoriei 12");
+  });
+
+  /*
    * Proba care conteaza cel mai mult: cele doua reguli trebuie sa ramana
    * DIFERITE. O egalitate aici ar insemna ca unul dintre cele doua feluri de
    * curieri a fost stricat — si ar fi stricat tacut, la livrare.
@@ -230,6 +274,11 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
       localitateSameday(ADRESA.oras, ADRESA.judet),
       orasDhl(ADRESA.oras, ADRESA.judet),
     );
+    /* Curiera nici ea: trece textul prin `ascii` inainte de pliere. */
+    assert.notEqual(
+      localitateSameday(ADRESA.oras, ADRESA.judet),
+      curiera({ oras: ADRESA.oras, judet: ADRESA.judet }).to_city,
+    );
   });
 
   test("in afara Bucurestiului toti primesc acelasi lucru", () => {
@@ -240,6 +289,7 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     assert.equal(localitatePosta(cluj.oras), "Cluj-Napoca");
     assert.equal(orasFedex(cluj.oras, cluj.judet), "Cluj-Napoca");
     assert.equal(orasDhl(cluj.oras, cluj.judet), "Cluj-Napoca");
+    assert.equal(curiera(cluj).to_city, "Cluj-Napoca");
   });
 
   test("diacriticele cad peste tot, nu doar pe unde ne-am amintit", () => {
@@ -249,5 +299,9 @@ describe("Bucuresti: fiecare curier primeste forma LUI", () => {
     assert.equal(localitateSameday(iasi.oras, iasi.judet), "Iasi");
     assert.equal(orasFedex(iasi.oras, iasi.judet), "Iasi");
     assert.equal(orasDhl(iasi.oras, iasi.judet), "Iasi");
+    const p = curiera({ oras: iasi.oras, judet: iasi.judet, strada: "Strada Ștefan cel Mare 3" });
+    assert.equal(p.to_city, "Iasi");
+    assert.equal(p.to_county, "Iasi");
+    assert.equal(p.to_address, "Strada Stefan cel Mare 3");
   });
 });

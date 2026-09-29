@@ -525,15 +525,20 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
   /* ⚠ Si la Sameday, din 15.09.2026: un Sameday Point e o tejghea intr-un magazin partener, nu
      un dulap. „Selecteaza un locker" l-ar pune pe om sa caute acolo un dulap care nu exista. */
   const laPunctSameday = selectedOpt?.courier === "sameday" && selectedOpt.samedayPointNet === "pudo";
+  /* ⚠ Si la Curiera (29.09.2026): o singura lista amesteca dulapuri FANbox, puncte pudo si
+     oficii, deci niciun substantiv mai ingust n-ar fi adevarat pentru toate. */
+  const laCuriera = selectedOpt?.courier === "curiera";
   const punctul =
     laOficiuPostal ? "oficiu poștal"
     : laPunctSameday ? "punct Sameday"
+    : laCuriera ? "punct de ridicare"
     : reteaFan === "paypoint" ? "punct PayPoint"
     : reteaFan === "office" ? "oficiu FAN Courier"
     : "locker";
   const punctele =
     laOficiuPostal ? "oficii poștale"
     : laPunctSameday ? "puncte Sameday"
+    : laCuriera ? "puncte de ridicare"
     : reteaFan === "paypoint" ? "puncte PayPoint"
     : reteaFan === "office" ? "oficii FAN Courier"
     : "lockere";
@@ -618,7 +623,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
               <p className="text-sm font-semibold text-foreground">{opt.courierLabel}</p>
               {/* Per OPTIUNE, nu dupa cea selectata: randul asta se vede si inainte de a alege. */}
               <p className="text-xs text-muted-foreground">
-                {opt.courier === "posta" ? "Ridicare de la oficiu poștal" : "Ridicare din locker"}
+                {opt.courier === "posta" ? "Ridicare de la oficiu poștal"
+                  : opt.courier === "curiera" ? "Ridicare din locker sau punct"
+                  : "Ridicare din locker"}
               </p>
               {opt.rambursIndisponibil && (
                 <p className="text-xs text-warning">

@@ -48,6 +48,7 @@ import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
 import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
 import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
 import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
+import { CurieraAwbModal, type OptiuniAwbCuriera } from "@/components/dashboard/CurieraAwbModal";
 import { PacketaAwbModal } from "@/components/dashboard/PacketaAwbModal";
 import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
 import { ShipoAwbModal } from "@/components/dashboard/ShipoAwbModal";
@@ -380,6 +381,8 @@ export function OrderDetailClient({
   pallexZile,
   ecoletEnabled,
   postaEnabled,
+  curieraEnabled,
+  curieraOptiuni,
   packetaEnabled,
   smartshipEnabled,
   shipoEnabled,
@@ -435,6 +438,9 @@ export function OrderDetailClient({
   pallexZile?: { ridicare: number; livrare: number };
   ecoletEnabled?: boolean;
   postaEnabled?: boolean;
+  curieraEnabled?: boolean;
+  /** Ce precompleteaza fereastra AWB Curiera. Fara cheia API: vezi pagina. */
+  curieraOptiuni?: OptiuniAwbCuriera;
   packetaEnabled?: boolean;
   smartshipEnabled?: boolean;
   shipoEnabled?: boolean;
@@ -563,6 +569,7 @@ export function OrderDetailClient({
   const [pallexModalOpen, setPallexModalOpen] = useState(false);
   const [ecoletModalOpen, setEcoletModalOpen] = useState(false);
   const [postaModalOpen, setPostaModalOpen] = useState(false);
+  const [curieraModalOpen, setCurieraModalOpen] = useState(false);
   const [packetaModalOpen, setPacketaModalOpen] = useState(false);
   const [smartshipModalOpen, setSmartshipModalOpen] = useState(false);
   const [shipoModalOpen, setShipoModalOpen] = useState(false);
@@ -598,13 +605,14 @@ export function OrderDetailClient({
 
   // ── Couriers (Expediere card) ──
   /*
-   * ⚠ `stare` E OPTIONALA, si azi o poarta UN SINGUR curier.
+   * ⚠ `stare` E OPTIONALA, si azi o poarta DOI curieri: Woot si Curiera.
    *
    * Cele paisprezece cronuri de urmarire scriu de mult coloane de stare pe comanda, dar niciuna
    * n-a fost VREODATA aratata comerciantului: ele hranesc doar tranzitia comenzii si semnalele
    * din jurnal. La Woot nu se poate face tranzitie, fiindca ei nu documenteaza nicaieri ce
    * inseamna numerele lor de stare (vezi `@/lib/shipping/statusuri-woot`), iar eticheta lor e
    * scrisa in romana. Deci aici se arata chiar propozitia LOR, fara sa-i dam vreun inteles.
+   * La Curiera `curiera_status_label` e denumirea din `descriereStare`, scrisa de cronul ei.
    *
    * Tipul e scris pe fata, nu dedus: fara el, un singur camp pus la o singura intrare ar face
    * din lista o reuniune de forme, iar `shippedCourier.stare` n-ar mai exista pentru `tsc`.
@@ -626,6 +634,9 @@ export function OrderDetailClient({
     /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
        `shipping_address.courier` — vezi nota de la Pall-Ex. */
     { id: "posta", name: "Poșta Română", logo: "/integrations/posta_romana.svg", enabled: !!postaEnabled, awb: (order.posta_awb_number as string | null) ?? null, open: () => setPostaModalOpen(true) },
+    /* ⚠ `id` trebuie sa fie sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (vezi
+       nota de la Shipo). `stare` e ultima stare citita de cronul de urmarire. */
+    { id: "curiera", name: "Curiera", logo: "/integrations/curiera.webp", enabled: !!curieraEnabled, awb: order.curiera_awb_number ?? null, stare: order.curiera_status_label ?? null, open: () => setCurieraModalOpen(true) },
     { id: "innoship", name: "Innoship", logo: "/integrations/innoship.svg", enabled: !!innoshipEnabled, awb: (order.innoship_awb_number as string | null) ?? null, open: () => setInnoshipModalOpen(true) },
     /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
        `shipping_address.courier` — vezi nota de la Pall-Ex. */
@@ -2421,6 +2432,11 @@ export function OrderDetailClient({
       )}
       {postaEnabled && (
         <PostaAwbModal zilePrezentare={postaZilePrezentare} open={postaModalOpen} onClose={() => setPostaModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setPostaModalOpen(false); router.refresh(); }} />
+      )}
+      {/* ⚠ La reusita fereastra RAMANE deschisa, cu „Descarca eticheta”; pagina doar se
+          reimprospateaza dedesubt, ca butonul de emitere sa dispara de pe comanda. */}
+      {curieraEnabled && (
+        <CurieraAwbModal optiuni={curieraOptiuni} open={curieraModalOpen} onClose={() => setCurieraModalOpen(false)} order={order} businessId={businessId} onSuccess={() => router.refresh()} />
       )}
       {shipoEnabled && (
         <ShipoAwbModal open={shipoModalOpen} onClose={() => setShipoModalOpen(false)} order={order} businessId={businessId} onSuccess={() => { setShipoModalOpen(false); router.refresh(); }} />

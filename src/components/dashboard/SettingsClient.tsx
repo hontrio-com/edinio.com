@@ -244,6 +244,9 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   { id: "pallex",       label: "Pall-Ex",           logo: "/integrations/pallex.avif",      defaultPrice: 150 },
   { id: "ecolet",       label: "eColet",            logo: "/integrations/ecolet.png",       defaultPrice: 18 },
   { id: "posta",        label: "Posta Romana",      logo: "/integrations/posta_romana.svg", defaultPrice: 16 },
+  /* ⚠ Curiera nu coteaza live (vezi `FARA_PRET_AUTOMAT`), deci tariful fix ESTE pretul din
+     checkout: un implicit apropiat de al curierilor locali, nu zero. */
+  { id: "curiera",      label: "Curiera",           logo: "/integrations/curiera.webp",     defaultPrice: 17 },
   { id: "packeta",      label: "Packeta",           logo: "/integrations/packeta.png", defaultPrice: 15 },
   { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
   { id: "smartship",    label: "SmartShip",         logo: "/integrations/smartship.png",    defaultPrice: 17 },
@@ -283,6 +286,9 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
      substituentul aratat comerciantului, iar daca cele doua se despart, campul
      gol promite un text si checkout-ul afiseaza altul. */
   posta: "Livrare prin Poșta Română",
+  /* ⚠ Sir-cu-sir egal cu rezerva lui `addrLabel` din ramura Curiera a checkoutului
+     (shipping.actions.ts), NU cu `COURIER_LABELS.curiera`, care e doar numele. */
+  curiera: "Livrare prin Curiera",
   packeta: "Livrare la adresa prin Packeta",
   innoship: "Innoship",
   smartship: "SmartShip",
@@ -311,7 +317,10 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
  */
 /* ⚠ Packeta e aici fiindca API-ul lor n-are NICIO metoda de tarif: pretul vine din
    contract, ca la Posta si GLS. */
-const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta", "packeta"]);
+/* ⚠ Curiera e aici prin HOTARARE, nu din lipsa metodei: `get_price` exista, dar pe contul de
+   test a intors 0 lei pe orice cerere, iar un 0 in checkout inseamna livrare GRATUITA. Pana
+   se dovedeste un pret real (si daca e cu TVA), Curiera vinde pe tariful fix. */
+const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta", "packeta", "curiera"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};

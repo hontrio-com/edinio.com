@@ -57,7 +57,7 @@ const PANOURI = "src/components/dashboard";
 const CURIERI = [
   "Cargus", "Colete", "Gls", "Packeta", "Ups", "Woot", "Pallex", "Shipo",
   "Ecolet", "Dhl", "Fedex", "Posta", "Sameday", "Dpd", "FanCourier",
-  "Innoship", "Smartship",
+  "Innoship", "Smartship", "Curiera",
 ];
 
 function panouriDeCurier(): string[] {
@@ -157,6 +157,9 @@ test("nicio grila de doua coloane fara prag in panourile de curier, in afara cel
  *   * una e „Strada / Numar" din `ColeteAwbModal`, unde strada ia doua treimi si numarul una,
  *     tocmai ca sa NU fie egale. Locul e deja numit in harta de copii de mai sus.
  *
+ * Pe 29.09.2026 s-a adaugat a paisprezecea, tot un triplet de dimensiuni cu eticheta
+ * `text-xs`: cele optionale din `CurieraAwbModal`.
+ *
  * ⚠ DEFECTUL PE CARE PLASA IL APARA E ALTUL, si el chiar exista in alta parte a casei: o
  * grila de trei cu CAMPURI CU ETICHETA LUNGA, unde la 360px eticheta se rupe pe doua randuri
  * si campul ramane sub 70px. In ziua in care cineva scrie una intr-un panou de curier, harta
@@ -165,6 +168,7 @@ test("nicio grila de doua coloane fara prag in panourile de curier, in afara cel
 const GRILE_DE_TREI_CARE_RAMAN: Record<string, number> = {
   "CargusAwbModal.tsx": 1,         // L / l / H, etichete de doua caractere
   "ColeteAwbModal.tsx": 2,         // Strada pe doua treimi + Numar, si Lung./Lat./Inalt.
+  "CurieraAwbModal.tsx": 1,        // Lungime / Latime / Inaltime, `text-xs`, optionale
   "DhlConfigClient.tsx": 1,        // Lungime/Latime/Inaltime implicite, `text-xs`
   "DpdAwbModal.tsx": 1,            // L / l / H
   "FanCourierAwbModal.tsx": 1,     // L / l / H
@@ -184,7 +188,7 @@ function grileDeTreiFaraPrag(text: string): number {
     .length;
 }
 
-test("nicio grila de TREI coloane fara prag in afara celor treisprezece numite", () => {
+test("nicio grila de TREI coloane fara prag in afara celor paisprezece numite", () => {
   assert.deepEqual(
     harta(grileDeTreiFaraPrag),
     GRILE_DE_TREI_CARE_RAMAN,

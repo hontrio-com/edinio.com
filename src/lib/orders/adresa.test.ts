@@ -170,7 +170,8 @@ test("⚠ rutele de plata nu decid pe o singura familie de campuri", () => {
  * ⚠ Forma s-a masurat in payloadul fiecarei ferestre, nu s-a presupus:
  *
  *   un singur camp, plecat intreg      -> `liniaAdresei`
- *     Cargus (`recipientAddress`), Woot (`address`), Sameday (`recipientAddress`)
+ *     Cargus (`recipientAddress`), Woot (`address`), Sameday (`recipientAddress`),
+ *     Curiera (`adresa`, plecata in `to_address`: `to_str` pune singur „Str. " in fata)
  *   un singur camp „Strada", fara numar -> `stradaCuNumar`
  *     GLS si Pall-Ex trimit doar `strada`, fara niciun camp `numar`
  *   strada si numarul, separat          -> `stradaDestinatarului`
@@ -184,6 +185,7 @@ const AJUTORUL_FERESTREI: Record<string, "liniaAdresei" | "stradaCuNumar" | "str
   "CargusAwbModal.tsx": "liniaAdresei",
   "WootAwbModal.tsx": "liniaAdresei",
   "SamedayAwbModal.tsx": "liniaAdresei",
+  "CurieraAwbModal.tsx": "liniaAdresei",
   "GlsAwbModal.tsx": "stradaCuNumar",
   "PallexAwbModal.tsx": "stradaCuNumar",
   "ColeteAwbModal.tsx": "stradaDestinatarului",

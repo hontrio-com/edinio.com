@@ -33,6 +33,8 @@ import { livrareaEDusaDeMarketplace } from "./origin";
 export const COLOANA_AWB = {
   cargus: "cargus_awb_number",
   colete: "colete_awb_number",
+  /* `data.no` din create_shipment: la mai multe colete e liderul grupului (`<awb>/2` sunt membrii). */
+  curiera: "curiera_awb_number",
   dhl: "dhl_awb_number",
   dpd: "dpd_awb_number",
   ecolet: "ecolet_awb_number",
@@ -136,7 +138,7 @@ export function numarDeUrmarire(rand: Record<string, unknown>): { curier: string
 
 /** Numele aratat omului: la refuz, si in notificarea de expediere. */
 export const NUME_CURIER: Record<CurierPropriu, string> = {
-  cargus: "Cargus", colete: "Colete Online", dhl: "DHL Express", dpd: "DPD",
+  cargus: "Cargus", colete: "Colete Online", curiera: "Curiera", dhl: "DHL Express", dpd: "DPD",
   ecolet: "eColet", fancourier: "FAN Courier", fedex: "FedEx", gls: "GLS",
   innoship: "Innoship", packeta: "Packeta", pallex: "Pall-Ex", posta: "Poșta Română",
   sameday: "Sameday", shipo: "Shipo", smartship: "SmartShip", ups: "UPS", woot: "Woot",
@@ -233,7 +235,7 @@ export function deCeNuSePoateAwbPropriu(o: ComandaLaPoartaAwb, curier?: CurierPr
     if (alt === curier || !numar) continue;
     /*
      * ⚠ MESAJUL SPUNE SI IESIREA, fiindca „anuleaza-l intai" trimite catre un buton care
-     * la doisprezece curieri din saptesprezece poate raspunde doar „nu": pe un colet deja
+     * la treisprezece curieri din optsprezece poate raspunde doar „nu": pe un colet deja
      * preluat, anularea la curier cade, si coloana ramane pe comanda. Fara randul al
      * doilea, comanda parea fara nicio miscare de facut.
      */

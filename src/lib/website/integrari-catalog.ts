@@ -34,6 +34,9 @@
  *      (`shipping.actions.ts`). Arătat clientului, el a cerut „lasă doar
  *      intern", deci au căzut două cuvinte.
  *
+ * ⚠ `curiera` (29.09.2026) NU e în lista lui deloc: a venit după ea. Vezi nota de
+ * la intrarea ei.
+ *
  * ⚠ DESCRIEREA INTRĂ ȘI ÎN CĂUTAREA DE PE PAGINĂ (`textDeCautare`), nu doar sub
  * siglă: un cuvânt scos din ea scoate integrarea de la căutarea aceea. Textul
  * nou al lui TBI nu mai conține „rate", nici cel al lui EuPlătesc, deci niciunul
@@ -166,6 +169,15 @@ export const INTEGRARI: Integrare[] = [
     categorie: "curieri",
     stare: "activa",
     descriere: "Folosești serviciile Poștei Române pentru expedieri interne.",
+  },
+  /* ⚠ Textul NU e din lista clientului: integrarea a venit dupa ea (29.09.2026). E scris dupa
+     regulile probelor si asteapta sa-l dea el. Fara „urmărirea": cuvantul sta in sinonime,
+     fiindca proba cere `urmarire` exact pe curierii cu cron. */
+  {
+    cheie: "curiera",
+    categorie: "curieri",
+    stare: "activa",
+    descriere: "Generezi AWB-uri Curiera din comenzi, cu ramburs și livrare la adresă sau în lockere FANbox.",
   },
   {
     cheie: "packeta",
@@ -519,10 +531,10 @@ export const INTEGRARI: Integrare[] = [
  * Trei curieri NU au ramburs și nu-l primesc: DHL (`dhl/servicii.ts`: „EXISTA CA
  * SI COD, SI NU SE VINDE DIN ROMANIA"), FedEx (`fedex/client.ts`
  * `RAMBURS_INDISPONIBIL`, care chiar oprește emiterea) și Pall-Ex
- * (`pallex/client.ts`: „nu exista ramburs. Niciun camp"). Cinci n-au urmărire,
- * deci n-o primesc: FAN Courier, DPD, Cargus, Woot, Colete Online. Cei
- * doisprezece care o au sunt exact cei cu cron în `vercel.json` și cu coloană
- * `*_status_checked_at` în schemă.
+ * (`pallex/client.ts`: „nu exista ramburs. Niciun camp"). Urmărirea o primesc
+ * exact cei cu cron în `vercel.json`, iar azi (29.09.2026) sunt toți cei
+ * optsprezece. Când s-a scris rândul ăsta, cinci n-o aveau (FAN Courier, DPD,
+ * Cargus, Woot, Colete Online); au primit-o de atunci, fiecare cu cronul lui.
  *
  * ⚠ NIMIC PE „ÎN CURÂND". O integrare nelivrată n-are cod, deci n-are cum să
  * aibă dovadă: acolo un sinonim ar descrie o promisiune. Sinonimele ei se adaugă
@@ -533,7 +545,7 @@ export const INTEGRARI: Integrare[] = [
  * clientului. Dar „curierat" NU e subșir în „curieri", deci trebuie scris.
  */
 export const SINONIME_CATEGORIE: Record<CategorieId, string[]> = {
-  /* Toate trei sunt adevărate despre toți cei 17, Pall-Ex inclusiv. „colet" NU
+  /* Toate trei sunt adevărate despre toți cei 18, Pall-Ex inclusiv. „colet" NU
      intră: Pall-Ex e rețea de marfă PALETIZATĂ, nu curier de colete. Nici „awb":
      un cuvânt de rubrică trebuie să fie adevărat la TOȚI, iar Pall-Ex scoate
      borderou de paleți. */
@@ -580,9 +592,9 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      `locker`/`punct`/`ridicare`: numai cei din `CURIERI_CU_LOCKERE`
      (`shipping.actions.ts`), adică acolo unde CUMPĂRĂTORUL alege punctul la
      checkout. Woot are puncte, dar le alege comerciantul după comandă, deci nu.
-     `urmarire`/`tracking`: numai cei CINCISPREZECE cu cron de tracking. FAN s-a adăugat
-     pe 13.09.2026 (`api/cron/fancourier-tracking`) și Woot pe 15.09.2026, iar proba de mai
-     jos a cerut cuvântul de fiecare dată, cum își promisese. */
+     `urmarire`/`tracking`: numai cei cu cron de tracking, azi toți OPTSPREZECE. FAN s-a
+     adăugat pe 13.09.2026 (`api/cron/fancourier-tracking`), Woot pe 15.09.2026 și Curiera
+     pe 29.09.2026, iar proba de mai jos a cerut cuvântul de fiecare dată, cum își promisese. */
   /* ⚠ FĂRĂ `tracking`, și e singurul curier căruia îi lipsește: descrierea LUI conține deja
      cuvântul („de la AWB până la tracking"), deci sinonimul s-ar găsi și fără el. Proba
      „niciun sinonim nu repetă ce se găsește deja" l-a și prins, în ziua în care l-am pus.
@@ -610,6 +622,10 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      diferite. Vezi nota din `getLockers`. */
   smartship: ["ramburs", "awb", "urmarire", "tracking", "locker", "easybox", "fanbox", "punct", "ridicare"],
   shipo: ["ramburs", "urmarire", "tracking", "locker", "punct", "ridicare"],
+  /* Doar ce lipsește din descriere: „AWB", „ramburs", „lockere" și „FANbox" sunt deja în
+     ea. `punct`/`ridicare`: e în `CURIERI_CU_LOCKERE`, cu toate cele trei feluri de punct
+     (FANbox, pudo, oficiu), dintr-o singură rețea. `urmarire`: cronul `curiera-tracking`. */
+  curiera: ["urmarire", "tracking", "punct", "ridicare"],
 
   /* ── Plăți online ──────────────────────────────────────────────────────────
      Doar cele CINCI livrate. `card` lipsește la Stripe (e deja în descriere) și

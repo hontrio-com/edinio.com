@@ -7,11 +7,11 @@ import { awburiDinRand, deCeNuSePoateAwbPropriu, type CurierPropriu } from "./aw
    POARTA CARE REFUZA CU ADEVARAT AWB-UL PROPRIU
    ═══════════════════════════════════════════════════════════════════════════
 
-   ⚠ DE CE O POARTA SINGURA, SI NU CATE UN `if` IN FIECARE ACTIUNE. Sunt saisprezece curieri.
-   O regula copiata de saisprezece ori se dezbina la primul curier nou: cine il adauga copiaza
+   ⚠ DE CE O POARTA SINGURA, SI NU CATE UN `if` IN FIECARE ACTIUNE. Sunt optsprezece curieri.
+   O regula copiata de optsprezece ori se dezbina la primul curier nou: cine il adauga copiaza
    fisierul de langa, si daca acela e cel fara `if`, poarta lipseste tacut exact acolo.
    `poarta-awb.test.ts` cere ca fiecare actiune de emitere sa cheme functia asta, deci uitarea
-   nu mai e cu putinta — nici azi, nici la al saptesprezecelea curier.
+   nu mai e cu putinta: nici azi, nici la al nouasprezecelea curier.
 
    ⚠ SI DE CE ISI CITESTE SINGURA COMANDA, desi apelantul o are deja in mana.
    Fiindca fiecare curier isi are propriul `select`, iar cel din generarea in MASA nici nu cerea
@@ -31,7 +31,7 @@ import { awburiDinRand, deCeNuSePoateAwbPropriu, type CurierPropriu } from "./aw
 /**
  * ⚠ `curier` E OPTIONAL, si nu din comoditate.
  *
- * Cei saptesprezece curieri proprii se prezinta cu cheia lor, ca poarta sa nu-i
+ * Cei optsprezece curieri proprii se prezinta cu cheia lor, ca poarta sa nu-i
  * blocheze pe propriul lor AWB (altfel anularea si reemiterea ar fi imposibile).
  * Dar exista si emitatori care NU au coloana pe `orders`: eMAG isi tine AWB-ul in
  * tabelul lui (`emag_awb`) si scrie pe comanda doar `tracking_number`, camp comun
@@ -68,16 +68,16 @@ export async function poartaAwbPropriu(
  *
  * ⚠ CE COSTA O COLOANA GRESITA AICI. PostgREST nu ignora un nume necunoscut: pica INTREAGA
  * interogare, cu `42703`. Poarta cade inchis dinadins, deci raspunsul devine „Comanda nu
- * s-a putut verifica acum" la TOTI cei saptesprezece curieri deodata, nu doar la cel nou.
+ * s-a putut verifica acum" la TOTI cei optsprezece curieri deodata, nu doar la cel nou.
  * Exact incidentul din 03.09.2026 pentru care s-a scris unealta.
  *
  * ⚠ SI NU E O A DOUA SURSA DE ADEVAR. `poarta-awb.test.ts` compara lista de aici cu
- * `coloanelePortii()`, adica exact cu harta curierilor: daca cineva adauga al optsprezecelea
+ * `coloanelePortii()`, adica exact cu harta curierilor: daca cineva adauga al nouasprezecelea
  * curier si uita randul de aici, proba cade inainte de push.
  */
 const COLOANE_POARTA =
   "order_source, payment_status, status, "
-  + "cargus_awb_number, colete_awb_number, dhl_awb_number, dpd_awb_number, "
+  + "cargus_awb_number, colete_awb_number, curiera_awb_number, dhl_awb_number, dpd_awb_number, "
   + "ecolet_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, "
   + "innoship_awb_number, packeta_packet_id, pallex_awb_number, posta_awb_number, "
   + "sameday_awb_number, shipo_awb_number, smartship_awb_number, ups_awb_number, "

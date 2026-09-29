@@ -144,8 +144,9 @@ test("se potrivesc CUVINTELE, nu fraza", () => {
   /* Un cuvânt care chiar nu există nu găsește nimic, oricâte altele ar fi bune. */
   assert.deepEqual(gaseste("plati qwerty"), []);
 
-  /* Rubrica trage după ea toată familia. */
-  assert.equal(gaseste("curieri").length, 17);
+  /* Rubrica trage după ea toată familia. 29.09.2026: Curiera e al optsprezecelea; numărul
+     se urcă odată cu livrarea, nu se slăbește în „cel puțin". */
+  assert.equal(gaseste("curieri").length, 18);
   /* Căutarea goală nu filtrează nimic. */
   assert.equal(gaseste("   ").length, INTEGRARI.length);
   /* Iar exemplele din placeholder trebuie să funcționeze toate trei. */
@@ -196,8 +197,10 @@ test("numărătoarea de active și de anunțate e cea din panou", () => {
   */
   /* ⚠ 08.09.2026: Pepita a trecut din „in curand" in „activa". Numerele se mișcă ODATĂ cu
      livrarea, de mână: asta e chiar rostul lor. */
+  /* ⚠ 29.09.2026: Curiera a intrat direct „activa", fără să fi fost anunțată: activele
+     urcă 41 -> 42, anunțatele rămân 24. */
   assert.equal(NUMAR_IN_CURAND, 24);
-  assert.equal(NUMAR_ACTIVE, 41);
+  assert.equal(NUMAR_ACTIVE, 42);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {
@@ -353,8 +356,8 @@ test("niciun sinonim nu repetă ce se găsește deja", () => {
 
 test("un cuvânt de rubrică e adevărat la TOȚI membrii ei, deci nu se repetă pe integrare", () => {
   /*
-    Rostul deosebirii: „curierat" e adevărat despre toți cei 17, deci stă pe
-    rubrică. „awb" e adevărat la 16 din 17 (Pall-Ex scoate borderou de paleți),
+    Rostul deosebirii: „curierat" e adevărat despre toți cei 18, deci stă pe
+    rubrică. „awb" e adevărat la 17 din 18 (Pall-Ex scoate borderou de paleți),
     deci stă pe integrare. Dacă cineva urcă un cuvânt de pe integrări pe rubrică
     fără să verifice, îl dă și celui care nu-l merită.
   */
@@ -395,7 +398,7 @@ test("rambursul nu ajunge la cei trei curieri care nu-l au", () => {
       `„${cheie}" iese la căutarea „ramburs", dar nu încasează la livrare`,
     );
   }
-  /* Și, în sens invers, ceilalți paisprezece chiar ies: altfel proba ar trece și
+  /* Și, în sens invers, ceilalți cincisprezece chiar ies: altfel proba ar trece și
      pe un tabel golit de tot. */
   const curieri = INTEGRARI.filter((i) => i.categorie === "curieri");
   assert.equal(iesLaRamburs.length, curieri.length - FARA_RAMBURS.length);
@@ -428,12 +431,15 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     tacă. Până atunci, „tracking" se găsea doar PRIN DESCRIEREA clientului („de la AWB
     până la tracking"), o promisiune pe care platforma încă n-o ținea; acum o ținem, și
     cuvântul îl dăm și noi, prin sinonim.
+
+    ⚠ Curiera a intrat pe 29.09.2026, al optsprezecelea, cu cronul din prima zi
+    (`api/cron/curiera-tracking`), deci și cu cuvântul din prima zi.
   */
   const CRON_LA_CHEIE: Record<string, LogoKey> = {
     dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
     innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
     dpd: "dpd", sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
-    cargus: "cargus", colete: "coleteOnline",
+    cargus: "cargus", colete: "coleteOnline", curiera: "curiera",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(
@@ -462,7 +468,7 @@ test("punct de ridicare arată exact curierii unde cumpărătorul chiar alege pu
   const ID_LA_CHEIE: Record<string, LogoKey> = {
     sameday: "sameday", "fan-courier": "fanCourier", dpd: "dpd", cargus: "cargus",
     gls: "gls", posta: "postaRomana", innoship: "innoship", packeta: "packeta",
-    smartship: "smartship", shipo: "shipo", ups: "ups",
+    smartship: "smartship", shipo: "shipo", ups: "ups", curiera: "curiera",
   };
   const sursa = readFileSync(
     join(AICI, "..", "..", "lib", "actions", "shipping.actions.ts"),
@@ -488,10 +494,10 @@ test("căutările care cădeau la ZERO după textele noi întorc iar ce trebuie"
   */
   const gaseste = (q: string) => INTEGRARI.filter((i) => potrivire(i, q)).map((i) => i.cheie);
 
-  /* Cădeau la zero de tot. */
-  assert.equal(gaseste("ramburs").length, 14);
-  assert.equal(gaseste("curierat").length, 17);
-  assert.equal(gaseste("expediere").length, 17);
+  /* Cădeau la zero de tot. 29.09.2026: cu Curiera, 15 cu ramburs și 18 curieri în total. */
+  assert.equal(gaseste("ramburs").length, 15);
+  assert.equal(gaseste("curierat").length, 18);
+  assert.equal(gaseste("expediere").length, 18);
   assert.deepEqual(gaseste("whatsapp"), ["notice"]);
   assert.deepEqual(gaseste("shopping"), ["googleMerchant"]);
   assert.equal(gaseste("newsletter").length, 3);
@@ -511,7 +517,7 @@ test("căutările care cădeau la ZERO după textele noi întorc iar ce trebuie"
   /* Se subțiaseră fără să cadă de tot. */
   assert.ok(gaseste("card").includes("netopia"));
   assert.ok(gaseste("awb").includes("ecolet"));
-  assert.ok(gaseste("livrare").length === 17);
+  assert.ok(gaseste("livrare").length === 18);
 });
 
 test("cuvintele de legătură nu taie rezultate", () => {

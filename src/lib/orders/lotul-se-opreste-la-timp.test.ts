@@ -71,7 +71,7 @@ test("⚠⚠ bugetul lotului sta SUB `maxDuration`, cu marja de scriere", () => 
     "src/lib/dhl/client.ts", "src/lib/fedex/client.ts", "src/lib/ecolet/client.ts",
     "src/lib/innoship/client.ts", "src/lib/smartship/client.ts", "src/lib/shipo/client.ts",
     "src/lib/posta/client.ts", "src/lib/pallex/client.ts", "src/lib/sameday/client.ts",
-    "src/lib/cargus.ts", "src/lib/dpd.ts", "src/lib/colete.ts",
+    "src/lib/cargus.ts", "src/lib/dpd.ts", "src/lib/colete.ts", "src/lib/curiera/client.ts",
   ];
   let celMaiLungApelMs = 0;
   let deLa = "";

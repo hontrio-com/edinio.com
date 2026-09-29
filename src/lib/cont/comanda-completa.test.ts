@@ -32,6 +32,9 @@ test("urmarire: curierii directi, cu tiparele lor", () => {
   assert.equal(href({ curier: "packeta", awb: "Z123" }), "https://tracking.packeta.com/ro/?id=Z123");
   assert.equal(href({ curier: "ecolet", awb: "E1" }), "https://panel.ecolet.ro/track/E1");
   assert.equal(href({ curier: "shipo", awb: "S1" }), "https://shipo.ro/servicii-curierat/urmarire-colet?awb_track=S1");
+  /* Curiera: GET pe `awbno`, verificat pe 29.09.2026. */
+  assert.equal(href({ curier: "curiera", awb: "710915533" }), "https://app.curiera.ro/cscourier/Main?tracking=true&appcont=4416&awbno=710915533");
+  assert.equal(urmareste({ curier: "curiera", awb: "710915533" })?.fel, "direct");
   assert.equal(href({ curier: "fancourier", awb: "  " }), null);
   /* Colete Online: ruta lor nu e documentata si n-a fost probata pe o expediere reala. */
   assert.equal(urmareste({ curier: "colete", awb: "C1" }), null);
@@ -66,6 +69,7 @@ test("⚠⚠ urmarire: adresa salvata de curier trece NUMAI daca e https", () =>
 test("urmarire: AWB-ul se codifica, nu se lipeste", () => {
   assert.equal(href({ curier: "cargus", awb: "1&x=2" }), "https://www.cargus.ro/personal/urmareste-coletul/?tracking_number=1%26x%3D2");
   assert.equal(href({ curier: "woot", curierReal: "DPD", awb: "1/../x" }), "https://awb.woot.ro/urmarire-colet-dpd/1%2F..%2Fx");
+  assert.equal(href({ curier: "curiera", awb: "1&appcont=9" }), "https://app.curiera.ro/cscourier/Main?tracking=true&appcont=4416&awbno=1%26appcont%3D9");
 });
 
 test("curierul real se recunoaste dupa PRIMUL cuvant, pe o harta explicita", () => {

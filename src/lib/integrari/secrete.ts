@@ -40,6 +40,11 @@
 export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
   cargus_config: ["password", "subscription_key"],
   colete_config: ["client_secret", "token"],
+  /* Curiera: o singura cheie de API, trimisa in ANTET la fiecare cerere. Restul configurarii
+     NU e secret: adresa de ridicare, serviciile si marimea etichetei trebuie sa se vada in
+     formular, ca omul sa stie de unde pleaca marfa si ce plateste pe fiecare colet.
+     ⚠ Numele `api_key` e IDENTIC in `CurieraConfig` si in `privat.campuri_secrete`. */
+  curiera_config: ["api_key"],
   /* DHL Express (MyDHL API): autentificare HTTP `Basic`, deci parola pleaca la fiecare
      cerere. `username` NU intra aici, desi e prima jumatate a acreditarii: singur nu
      deschide nimic, iar comerciantul trebuie sa-l poata reciti ca sa stie CE CONT a

@@ -44,7 +44,7 @@ test("⚠ lista de rute nu se poate goli in tacere", () => {
   assert.ok(ruteDeUrmarire().length >= 17, "nu mai gasesc toate cronurile de urmarire");
 });
 
-test("⚠⚠ SAISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
+test("⚠⚠ SAPTESPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
   /*
    * ⚠ NUMERELE SUNT MASURATE, NU ROTUNJITE. Tentatia era sa cer cate cronuri sunt, dar
    * `innoship-tracking` nu scrie starea el insusi: o scrie prin `aplica-urmarire.ts`, drumul comun
@@ -57,9 +57,9 @@ test("⚠⚠ SAISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO di
     (faraComentarii(cale).includes("scrieUrmarirea(admin, {") ? cu : fara).push(cale);
   }
   /* ⚠ Numarul URCA odata cu fiecare curier care isi capata urmarirea: 14 pana pe 15.09.2026,
-     15 de cand Cargus si-a capatat-o pe a lui, 16 de cand a intrat si Colete Online. Se urca,
-     nu se slabeste in „cel putin". */
-  assert.equal(cu.length, 16, `scriu prin ajutor ${cu.length} cronuri, nu saisprezece`);
+     15 de cand Cargus si-a capatat-o pe a lui, 16 de cand a intrat si Colete Online, 17 de cand
+     a intrat Curiera (29.09.2026). Se urca, nu se slabeste in „cel putin". */
+  assert.equal(cu.length, 17, `scriu prin ajutor ${cu.length} cronuri, nu saptesprezece`);
   assert.deepEqual(fara.map((c) => c.split("/")[4]), ["innoship-tracking"],
     "alt cron decat `innoship` a ramas fara ajutor, ori `innoship` a inceput sa scrie singur");
 
@@ -91,6 +91,7 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
     "sameday-tracking": ["sameday_awb_number", "sameday_return_awb_number"],
     "cargus-tracking": "cargus_awb_number",
     "colete-tracking": "colete_awb_number",
+    "curiera-tracking": "curiera_awb_number",
     "shipo-tracking": "shipo_awb_number",
     "smartship-tracking": "smartship_awb_number",
     "ups-tracking": "ups_awb_number",

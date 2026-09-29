@@ -15,22 +15,23 @@ import { getInnoshipLabelAction } from "@/lib/actions/innoship.actions";
 import { etichetaGlsPentruComanda } from "@/lib/gls/eticheta-sursa";
 import { etichetaEcoletPentruComanda } from "@/lib/ecolet/eticheta-sursa";
 import { etichetaPallexPentruComanda } from "@/lib/pallex/eticheta-sursa";
+import { etichetaCuriera, type CurieraConfig } from "@/lib/curiera/client";
 import { NUMELE_CURIERULUI, NU_INTRA_IN_DOCUMENT, type CurierEticheta } from "./etichete-lot";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * OCTETII UNEI ETICHETE, DE LA ORICARE DINTRE CEI SAISPREZECE   (21.09.2026)
+ * OCTETII UNEI ETICHETE, DE LA ORICARE DINTRE CEI SAPTESPREZECE  (21.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Un singur loc care stie „cum se cere eticheta comenzii asteia". Pana acum stia
  * fiecare ruta in parte, si numai pentru curierul ei.
  *
- * ⚠ NU SE CHEAMA RUTELE, SI NU SE COPIAZA CE FAC ELE. Cele sase drumuri simple merg
- * la aceeasi functie de biblioteca pe care o cheama si ruta; cele sapte cu actiune
- * proprie cheama CHIAR actiunea pe care o apasa omul in fereastra; iar cele trei cu
- * copie in CDN (GLS, eColet, Pall-Ex) si-au mutat ajutorul din ruta intr-un fisier de
- * biblioteca, pe care il folosesc acum si ruta, si lotul. Asa nu exista nicaieri doua
- * socoteli care se pot departa una de alta.
+ * ⚠ NU SE CHEAMA RUTELE, SI NU SE COPIAZA CE FAC ELE. Cele sapte drumuri simple merg
+ * la aceeasi functie de biblioteca pe care o cheama si ruta (la Curiera, actiunea
+ * ferestrei); cele sapte cu actiune proprie cheama CHIAR actiunea pe care o apasa
+ * omul in fereastra; iar cele trei cu copie in CDN (GLS, eColet, Pall-Ex) si-au mutat
+ * ajutorul din ruta intr-un fisier de biblioteca, pe care il folosesc acum si ruta, si
+ * lotul. Asa nu exista nicaieri doua socoteli care se pot departa una de alta.
  *
  * ⚠ CE E PDF SE HOTARASTE DIN OCTETI, NU DIN CE SPUNE CURIERUL. UPS trimite GIF, GLS
  * si eColet pot trimite ZPL, iar un curier picat trimite o pagina HTML de eroare cu
@@ -189,6 +190,23 @@ async function adu(
       if (!c?.client_id || !c?.client_secret) return null;
       const token = await getCOToken(c.client_id, c.client_secret);
       return octetiiExacti(await getCOOrderAwb(token, c.sandbox ?? false, sir("colete_order_id"), format));
+    }
+
+    case "curiera": {
+      /*
+       * ⚠ Configul se citeste AICI, pe service role, nu in `COLOANELE_DE_CONFIG`: o coloana
+       * lipsa acolo ar fi golit setarile TUTUROR curierilor din lot (PostgREST pica intreaga
+       * interogare), aici pica doar etichetele Curiera. Proprietatea a dovedit-o ruta.
+       *
+       * Marimea e cea ceruta pentru document, nu cea din configurare: paginile lipite trebuie
+       * sa aiba aceeasi marime. La mai multe colete `print` da tot grupul, o pagina pe colet.
+       */
+      const { data, error } = await createAdminClient()
+        .from("store_settings").select("curiera_config").eq("business_id", businessId).maybeSingle();
+      if (error) throw new Error(`configurarea nu s-a putut citi (${error.message})`);
+      const c = (data?.curiera_config ?? null) as CurieraConfig | null;
+      if (!c || !(c.api_key ?? "").trim()) return null;
+      return octetiiExacti(await etichetaCuriera(c, sir("curiera_awb_number"), format === "A4" ? "a4" : "a6"));
     }
 
     /* ── Cele cu copie in CDN, prin ajutorul comun cu ruta lor ──────────── */

@@ -28,6 +28,7 @@ import { deleteShipoAwbAction } from "@/lib/actions/shipo.actions";
 import { deleteFedexAwbAction } from "@/lib/actions/fedex.actions";
 import { deleteUpsAwbAction } from "@/lib/actions/ups.actions";
 import { dezleagaDhlAwbAction } from "@/lib/actions/dhl.actions";
+import { dezleagaCurieraAwbAction } from "@/lib/actions/curiera.actions";
 /* ⚠ Actiunea EXISTA de la integrarea Packeta, dar nu era chemata de nicaieri: „Detaseaza
    AWB" pe o comanda Packeta cadea pe `else`-ul final, adica pe detasarea Colete Online.
    Vezi comentariul lung din `handleCancelAwb`. */
@@ -400,6 +401,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        daca ajunge pe un colet ea intra in reteaua lor. De aia mesajul actiunii cere
        distrugerea ei, si de aia butonul spune „Detaseaza AWB", nu „Anuleaza AWB". */
     if (order.dhl_awb_number) list.push({ key: "dhl", label: "DHL Express", awb: order.dhl_awb_number as string, manualOnly: true });
+    /* ⚠ Curiera ARE anulare in API, deci fara `manualOnly`, dar cheia de client anuleaza
+       numai pana la ridicare. Dupa ea refuzul e MEREU, iar comanda ar ramane inghetata;
+       de aceea actiunea DEZLEAGA (ca la FAN) si spune in `mesaj` ce ramane viu la Curiera. */
+    if (order.curiera_awb_number) list.push({ key: "curiera", label: "Curiera", awb: order.curiera_awb_number });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -707,7 +712,9 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       /* ⚠ `mesaj` nu e decor: la SmartShip el spune ce mai are de facut omul cand
          slotul din registru n-a putut fi eliberat („apasa Verifica inainte sa
          emiti din nou"). Inghitit, blocajul ar parea inexplicabil. */
-      let res: { success?: boolean; error?: string; mesaj?: string };
+      /* `anulatLaCuriera`: numai Curiera il trimite. `false` inseamna ca AWB-ul a fost scos de pe
+         comanda, dar coletul RAMANE viu la ei (refuz dupa ridicare): se arata ca avertisment. */
+      let res: { success?: boolean; error?: string; mesaj?: string; anulatLaCuriera?: boolean };
       /*
        * ⚠ In `try` DOAR lantul de apeluri, ramificarea AFARA. Vezi
        * `callbackul-de-tranzitie-prinde-caderea`: un `toast` sau un `router.refresh()`
@@ -742,6 +749,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
            ridicarea daca exista, apoi dezleaga comanda; `mesaj` spune ce a mers si ce a
            ramas de facut de mana, deci NU se inghite. */
         else if (key === "dhl") res = await dezleagaDhlAwbAction(businessId, order.id);
+        /* ⚠ DEZLEGARE, ca la FAN: anularea se incearca intai; dupa ridicare Curiera o refuza
+           MEREU, si atunci comanda se dezleaga oricum, iar `mesaj` spune ca AWB-ul ramane viu
+           in contul lor. La „nu stim" actiunea se opreste. Fara ramura asta, `else`-ul final
+           ar fi chemat detasarea Colete Online si ar fi raportat succes. */
+        else if (key === "curiera") res = await dezleagaCurieraAwbAction(businessId, order.id);
         /* ⚠⚠ REPARATIE. Ramura asta LIPSEA, exact defectul descris mai sus la Shipo: fara
            ea, „Detaseaza AWB" pe o comanda Packeta cadea pe `else`-ul final si chema
            detasarea de COLETE ONLINE. Pe o comanda Packeta acolo nu e nimic de detasat,
@@ -786,6 +798,13 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         setCancellingKey(null);
       }
       if (res.error) { toast.error(res.error); return; }
+      /* ⚠ Un colet care ramane viu la curier NU e o reusita, chiar daca numarul a iesit de pe
+         comanda: in verde, omul ar emite al doilea AWB si ar pleca doua colete. */
+      if (res.anulatLaCuriera === false) {
+        toast.warning(res.mesaj ?? "Numarul a fost scos de pe comanda, dar coletul poate fi inca viu la curier.", { duration: 16000 });
+        router.refresh();
+        return;
+      }
       toast.success(
         res.mesaj
         /* ⚠ Colete Online isi spune singur ce s-a intamplat, prin `mesaj`: anularea la ei

@@ -252,6 +252,10 @@ export const PROVIDER_LOGOS = {
   innoship: { name: "Innoship", src: `${I}/innoship.svg`, ratio: 2.6, ink: 0.67 },
   smartship: { name: "SmartShip", src: `${I}/smartship-mic.webp`, ratio: 4.72, ink: 0.84 },
   shipo: { name: "Shipo.ro", src: `${I}/shipo.ro.svg`, ratio: 1.81 },
+  /* Masurat pe 29.09.2026, rasterizat cu `sharp`, nu in browser: la un raster cutia e chiar
+     marimea fisierului, 280x212. Desenul, cu marginile taiate (alfa peste zero), are 271x205,
+     deci 94% cerneala. ⚠ Fisierul NU e taiat strans pe contur, desi pare. */
+  curiera: { name: "Curiera", src: `${I}/curiera.webp`, ratio: 1.32, ink: 0.94 },
 
   /* ── Facturare ─────────────────────────────────────────────────────────── */
   saga: { name: "SAGA", src: `${I}/saga.svg`, ratio: 5.97 },

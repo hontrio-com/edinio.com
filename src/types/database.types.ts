@@ -4048,6 +4048,14 @@ export type Database = {
           colete_service_name: string | null
           colete_unique_id: string | null
           created_at: string
+          curiera_awb_at: string | null
+          curiera_awb_number: string | null
+          curiera_evenimente_semnalate: Json | null
+          curiera_reference: string | null
+          curiera_status_at: string | null
+          curiera_status_checked_at: string | null
+          curiera_status_code: string | null
+          curiera_status_label: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string
@@ -4275,6 +4283,14 @@ export type Database = {
           colete_service_name?: string | null
           colete_unique_id?: string | null
           created_at?: string
+          curiera_awb_at?: string | null
+          curiera_awb_number?: string | null
+          curiera_evenimente_semnalate?: Json | null
+          curiera_reference?: string | null
+          curiera_status_at?: string | null
+          curiera_status_checked_at?: string | null
+          curiera_status_code?: string | null
+          curiera_status_label?: string | null
           customer_email?: string | null
           customer_name: string
           customer_phone: string
@@ -4502,6 +4518,14 @@ export type Database = {
           colete_service_name?: string | null
           colete_unique_id?: string | null
           created_at?: string
+          curiera_awb_at?: string | null
+          curiera_awb_number?: string | null
+          curiera_evenimente_semnalate?: Json | null
+          curiera_reference?: string | null
+          curiera_status_at?: string | null
+          curiera_status_checked_at?: string | null
+          curiera_status_code?: string | null
+          curiera_status_label?: string | null
           customer_email?: string | null
           customer_name?: string
           customer_phone?: string
@@ -5780,6 +5804,7 @@ export type Database = {
           cont_client_config: Json | null
           cookie_banner_config: Json | null
           created_at: string
+          curiera_config: Json | null
           currency: string
           default_shipping_cost: number
           dhl_config: Json | null
@@ -5859,6 +5884,7 @@ export type Database = {
           cont_client_config?: Json | null
           cookie_banner_config?: Json | null
           created_at?: string
+          curiera_config?: Json | null
           currency?: string
           default_shipping_cost?: number
           dhl_config?: Json | null
@@ -5938,6 +5964,7 @@ export type Database = {
           cont_client_config?: Json | null
           cookie_banner_config?: Json | null
           created_at?: string
+          curiera_config?: Json | null
           currency?: string
           default_shipping_cost?: number
           dhl_config?: Json | null

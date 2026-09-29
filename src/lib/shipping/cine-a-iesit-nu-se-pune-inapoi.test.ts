@@ -55,14 +55,19 @@ function ramura(s: string, curier: string): string {
   return s.slice(start, urmatoarea ?? s.length);
 }
 
-test("⚠ fiecare dintre cei trei isi RETINE iesirea, pe ramura lui", () => {
+test("⚠ fiecare dintre cei patru isi RETINE iesirea, pe ramura lui", () => {
   /*
    * ⚠ PE RAMURA, nu o numaratoare globala. Un `3` global ar fi trecut si daca unul dintre ei ar fi
    * pierdut randul iar altul l-ar fi capatat de doua ori: ar fi spus „sunt trei" si ar fi lasat un
    * curier descoperit, exact cel mai scump de gresit.
    */
   const s = sursaCurata();
-  for (const curier of ["fedex", "ups", "dhl"]) {
+  /*
+   * ⚠ CURIERA e a patra (29.09.2026), si cu alt motiv decat primii trei: nu iese pe ramburs, iese
+   * cand NU e configurata complet. Zona poate ramane pornita dupa „Deconecteaza", iar vanduta mai
+   * departe la pretul zonei, ar lua bani pe un transport pentru care nu se poate emite niciun AWB.
+   */
+  for (const curier of ["fedex", "ups", "dhl", "curiera"]) {
     assert.match(
       ramura(s, curier),
       /iesitiDinLista\.add\(courierId\);/,
@@ -71,7 +76,7 @@ test("⚠ fiecare dintre cei trei isi RETINE iesirea, pe ramura lui", () => {
   }
 });
 
-test("⚠ si sunt EXACT trei: un al patrulea cere hotarare, nu tacere", () => {
+test("⚠ si sunt EXACT patru: al cincilea cere hotarare, nu tacere", () => {
   /*
    * Egalitate, nu „cel putin". Cine adauga maine un curier care iese dinadins trebuie sa treaca si
    * pe aici: altfel plasa ar spune ca pazeste trei si ar pazi patru pe jumatate. Iar cine STERGE
@@ -79,7 +84,7 @@ test("⚠ si sunt EXACT trei: un al patrulea cere hotarare, nu tacere", () => {
    */
   const s = sursaCurata();
   const cate = (s.match(/iesitiDinLista\.add\(courierId\);/g) ?? []).length;
-  assert.equal(cate, 3, `sunt ${cate} iesiri retinute, nu trei`);
+  assert.equal(cate, 4, `sunt ${cate} iesiri retinute, nu patru`);
 });
 
 test("⚠ multimea se declara INAINTEA buclei de curieri", () => {

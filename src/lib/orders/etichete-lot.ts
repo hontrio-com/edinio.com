@@ -11,7 +11,7 @@
  *
  * ⚠ AICI NU E NICIO CERERE CATRE CURIER, dinadins. Fisierul asta hotaraste DOAR
  * „a cui e eticheta comenzii" si „de ce nu se poate lua", ca regulile sa poata fi
- * probate fara sa mimez saptesprezece API-uri. Aducerea octetilor sta in
+ * probate fara sa mimez optsprezece API-uri. Aducerea octetilor sta in
  * `eticheta-sursa.ts`, lipirea lor in ruta.
  */
 
@@ -19,7 +19,7 @@
 export type CurierEticheta =
   | "woot" | "cargus" | "sameday" | "fancourier" | "dpd" | "colete"
   | "gls" | "ecolet" | "pallex" | "innoship" | "packeta" | "smartship"
-  | "shipo" | "fedex" | "ups" | "dhl";
+  | "shipo" | "fedex" | "ups" | "dhl" | "curiera";
 
 /** Numele omenesc, pentru mesajele catre comerciant. */
 export const NUMELE_CURIERULUI: Record<CurierEticheta, string> = {
@@ -27,6 +27,7 @@ export const NUMELE_CURIERULUI: Record<CurierEticheta, string> = {
   dpd: "DPD", colete: "Colete Online", gls: "GLS", ecolet: "eColet",
   pallex: "Pall-Ex", innoship: "Innoship", packeta: "Packeta",
   smartship: "SmartShip", shipo: "Shipo", fedex: "FedEx", ups: "UPS", dhl: "DHL",
+  curiera: "Curiera",
 };
 
 /**
@@ -60,6 +61,8 @@ export const COLOANA_EXPEDIERII: Record<CurierEticheta, string> = {
   fedex: "fedex_awb_number",
   ups: "ups_awb_number",
   dhl: "dhl_awb_number",
+  /* Liderul grupului, la mai multe colete: `print` pe el scoate tot grupul, o pagina pe colet. */
+  curiera: "curiera_awb_number",
 };
 
 /**
@@ -75,7 +78,7 @@ export const COLOANA_EXPEDIERII: Record<CurierEticheta, string> = {
  */
 export const ORDINEA_CAUTARII: CurierEticheta[] = [
   "woot", "dpd", "sameday", "cargus", "fancourier", "gls", "colete", "ecolet",
-  "pallex", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl",
+  "pallex", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera",
 ];
 
 /** Cine tine eticheta comenzii, sau `null` daca n-are niciuna. */

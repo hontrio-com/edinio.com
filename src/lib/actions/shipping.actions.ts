@@ -79,9 +79,12 @@ import {
   lipsuriConfigurare as lipsuriConfigurareDhl, lipsuriExpediere as lipsuriDhl,
 } from "@/lib/dhl/expediere";
 import { etichetaOferta as etichetaDhl, ofertePosibile as oferteDhl } from "@/lib/dhl/preturi";
+/* ⚠ Curiera NU importa nimic de tarif, dinadins: pretul vine din zona. Vezi ramura si
+   `FARA_API_DE_TARIF`. Normalizatorul poarta sufixul, ca sa nu se ciocneasca cu `normalizeazaPuncte`. */
+import { curieraGata, puncteCuriera, type CurieraConfig } from "@/lib/curiera/client";
+import { normalizeazaPuncteCuriera } from "@/lib/curiera/puncte";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
-import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { semneazaPunctul } from "@/lib/shipping/punctul-ales-e-semnat";
@@ -90,23 +93,15 @@ import { punctulPoateIncasa } from "@/lib/shipping/plata-in-punct-cargus";
 import { potrivesteJudetulWoot, potrivesteLocalitateaWoot } from "@/lib/shipping/localitatea-woot";
 import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
+import { orasulSePotriveste } from "@/lib/shipping/orasul-punctului";
 
 /**
- * Diacritics-insensitive locality match ("București"/"Sector 3" find
- * "Bucuresti"). Sameday keeps Sector 1-6 as separate cities, so the match
- * also runs with the raw (unfolded) needle and with the locker city folded —
- * covering every pairing of "Sector X" and "Bucuresti" on either side.
+ * Potrivirea orasului unui punct cu ce a scris cumparatorul. Regula sta in
+ * `orasulSePotriveste` (fisier pur, probat pe perechi reale: diacritice, sectoare, si
+ * cratima fata de spatiu, „Piatra Neamț" fata de „Piatra-Neamt").
  */
 function cityMatches(lockerCity: string, needle: string): boolean {
-  const haystack = stripDiacritics(lockerCity).toLowerCase();
-  const haystackFolded = normalizeLocalityName(lockerCity).toLowerCase();
-  const foldedNeedle = normalizeLocalityName(needle).toLowerCase();
-  const rawNeedle = stripDiacritics(needle).trim().toLowerCase();
-  return (
-    haystack.includes(foldedNeedle) ||
-    (rawNeedle !== foldedNeedle && haystack.includes(rawNeedle)) ||
-    haystackFolded.includes(foldedNeedle)
-  );
+  return orasulSePotriveste(lockerCity, needle);
 }
 
 /**
@@ -131,7 +126,7 @@ async function alertaPlafonMagazin(actiune: string, businessId: string, mesaj: s
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ShippingOption = {
-  courier: string;        // "sameday" | "fan-courier" | "cargus" | "dpd" | "colete" | "woot" | "own" | "pickup"
+  courier: string;        // "sameday" | "fan-courier" | "cargus" | "dpd" | "colete" | "woot" | "curiera" | "own" | "pickup"
   courierLabel: string;   // Display name
   deliveryType: "address" | "locker";
   price: number;
@@ -338,6 +333,7 @@ const COURIER_LABELS: Record<string, string> = {
   /* Numele comercial complet: „DHL" singur inseamna si DHL Parcel, si DHL eCommerce,
      care sunt alte retele, cu alte conturi si alte API-uri. */
   dhl: "DHL Express",
+  curiera: "Curiera",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -471,7 +467,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat, shipping_enabled")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat, shipping_enabled")
     .eq("business_id", businessId)
     .single();
 
@@ -2032,6 +2028,58 @@ export async function getShippingOptions(
        *
        * Scrie asta si in pagina de configurare a DHL, ca omul sa nu caute comutatorul.
        */
+    } else if (courierId === "curiera") {
+      /*
+       * ⚠ CURIERA NU COTEAZA LIVE, desi are `get_price` (29.09.2026).
+       *
+       * Pe contul de test raspunde 0 lei la ORICE cerere, si goala, si cu un oras inventat, deci
+       * nici tariful, nici regimul lui de TVA nu se pot dovedi. Pretul e cel din zona, ramura e
+       * SINCRONA, fara nimic in `promises`, si `curiera` sta in `FARA_API_DE_TARIF`, ca la GLS si
+       * Posta. Fara ramura asta, `else`-ul generic de mai jos ar fi dat doar livrarea la adresa,
+       * fara punct, si nimic nu s-ar fi plans.
+       *
+       * ⚠ Si nu face `return` sau `continue`: optiunile ajung la semnarea unica de la sfarsit.
+       */
+      /*
+       * ⚠ Fara Curiera GATA (cheie + adresa de ridicare) nu se vinde nimic, nici la adresa. Zona
+       * poate ramane pornita dupa „Deconecteaza", iar Setari o arata atunci stinsa si blocata:
+       * vanduta mai departe, cumparatorul ar plati un transport pentru care nu se poate emite
+       * niciun AWB, desi ecranul si articolul de ajutor spun ca metoda nu apare in checkout.
+       * Iesirea se RETINE (`iesitiDinLista`), altfel plasa de la plafonul de 25 s o pune inapoi.
+       */
+      const curieraCfg = settings.curiera_config as CurieraConfig | null;
+      if (!curieraGata(curieraCfg)) {
+        iesitiDinLista.add(courierId);
+      } else {
+        options.push({
+          courier: "curiera",
+          courierLabel: addrLabel(zone.label, "Livrare prin Curiera"),
+          deliveryType: "address",
+          price: zone.price,
+        });
+
+        /*
+         * Punctul se ofera doar cu lockerele pornite de comerciant. O singura retea (FANbox, pudo si
+         * oficii, id-uri unice intre ele), deci nimic in plan.
+         *
+         * ⚠ Si NU peste greutatea unui FANbox (`FANBOX_MAX_WEIGHT_KG`, aceleasi dulapuri ca la FAN):
+         * Curiera nu refuza la emitere un colet care nu incape (nu valideaza nimic, masurat), deci
+         * clientul ar alege dulapul, ar plati, iar coletul n-ar intra fizic. Limitele pudo si ale
+         * oficiilor lor nu sunt publicate, asa ca pragul e al celui mai mic dintre ele pe care il stim.
+         */
+        if (curieraCfg.lockere && weight <= FANBOX_MAX_WEIGHT_KG) {
+          options.push({
+            courier: "curiera",
+            /* ⚠ Numele pus de comerciant primeste „(locker sau punct)", nu „(locker)": lista are si
+               pudo si oficii, iar eticheta ajunge in cotatia semnata, in email si pe factura. */
+            courierLabel: (zone.label ?? "").trim()
+              ? `${(zone.label ?? "").trim()} (locker sau punct)`
+              : "Curiera: locker sau punct de ridicare",
+            deliveryType: "locker",
+            price: zone.price,
+          });
+        }
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -3302,7 +3350,7 @@ async function citesteSetarileLockerelor(businessId: string) {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config, curiera_config")
     .eq("business_id", businessId)
     .single();
   return data;
@@ -3335,7 +3383,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups", "curiera"]);
 
 /**
  * Un punct de ridicare, cu fisa lui semnata de server.
@@ -3350,16 +3398,17 @@ export type PunctSemnat = LockerItem & { token: string };
  *
  * ═══ ⚠ DE CE E UN INVELIS SUBTIRE, SI NU SE SEMNEAZA IN RAMURI ═══
  *
- * Fiindca `puncteleDeLaCurier` are PATRUZECI de puncte de iesire, din care DOUASPREZECE pot duce
- * puncte: unsprezece ramuri de curier plus iesirea din cache, care nu apartine niciunei ramuri si
- * care serveste marea majoritate a cererilor. Numarate una cate una, nu estimate.
+ * Fiindca `puncteleDeLaCurier` are PATRUZECI SI TREI de puncte de iesire, din care TREISPREZECE pot
+ * duce puncte: douasprezece ramuri de curier plus iesirea din cache, care nu apartine niciunei ramuri
+ * si care serveste marea majoritate a cererilor. Numarate una cate una, nu estimate (recensamant
+ * refacut pe 29.09.2026, la intrarea Curiera: era 40 si 12).
  *
- * ⚠ Cablata ramura cu ramura, ar fi fost douasprezece copii ale aceleiasi chemari, iar prima iesire
+ * ⚠ Cablata ramura cu ramura, ar fi fost treisprezece copii ale aceleiasi chemari, iar prima iesire
  * noua scrisa de altcineva ar fi plecat NESEMNATA. Exact defectul consemnat mai sus la cotatii,
  * pentru care s-a scris `semneazaOptiuni`, si care acolo chiar se intamplase o data.
  *
  * ⚠ SI DE CE NU IN `filtreazaOras`, care pare palnia. Fiindca nu e: steagul `filtreaza` il sare la
- * UPS si la Shipo, deci ar fi ratat trei din cele douasprezece drumuri. Si nu oricare trei, ci
+ * UPS si la Shipo, deci ar fi ratat trei din cele treisprezece drumuri. Si nu oricare trei, ci
  * tocmai curierii la care punctul bucurestean isi scrie orasul cum vrea, adica singurii la care
  * verificarea de la comanda n-ar avea nici macar potrivirea de oras drept plasa de rezerva.
  *
@@ -3368,7 +3417,7 @@ export type PunctSemnat = LockerItem & { token: string };
  * iesire, cache-ul ramane o lista curata si fiecare cumparator primeste un token proaspat.
  *
  * ⚠ SI DE CE AICI, IN AFARA TUTUROR LUI `try`. `secret()` ARUNCA fara cheie, dinadins. Pusa
- * inauntrul unei ramuri, aruncarea ar fi fost inghitita de `catch`-ul de acolo (sunt unsprezece) si
+ * inauntrul unei ramuri, aruncarea ar fi fost inghitita de `catch`-ul de acolo (sunt douasprezece) si
  * s-ar fi facut `return []`, adica un raspuns care arata exact ca „magazinul asta n-are puncte".
  *
  * ⚠ SI CE NU SE SCHIMBA, ca sa nu promita randul de mai sus mai mult decat face: CUMPARATORUL vede
@@ -4086,6 +4135,44 @@ async function puncteleDeLaCurier(
       return toate;
     } catch (e) {
       console.error("[shipping] Shipo puncte failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "curiera") {
+    /*
+     * ⚠ O SINGURA LISTA, TOATA TARA (peste 4.200 de puncte, ~2,2 MB): FANbox, pudo si oficii, cu
+     * id-uri ale LOR (nu ale FAN), unice intre tipuri. Normalizata INAINTE de cache (`can_pickup`,
+     * trim, coordonate), filtrata pe oras DUPA, ca la GLS si Posta: orasul lor e „Bucuresti", pe
+     * care `cityMatches` il potriveste si cu „Sector 3" din formular.
+     *
+     * ⚠ `id` ramane SIR NEATINS („16478"): e chiar `to_delivery_location` la emitere. Nu `Number(...)`.
+     * `postCode` si `program` doar cand exista (16 puncte fara cod postal, masurat pe 29.09.2026):
+     * aceeasi forma ca fisa semnata, care arunca oricum sirul gol inainte de comanda.
+     */
+    const config = settings.curiera_config as CurieraConfig | null;
+    if (!curieraGata(config) || !config.lockere) return [];
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () =>
+          normalizeazaPuncteCuriera(await puncteCuriera(config)).map((p) => ({
+            id: p.id,
+            name: p.nume,
+            address: [p.adresa, p.oras].filter(Boolean).join(", "),
+            city: p.oras,
+            county: p.judet,
+            ...(p.codPostal ? { postCode: p.codPostal } : {}),
+            lat: p.lat,
+            lng: p.lng,
+            ...(p.program ? { program: p.program } : {}),
+          })),
+        (v) => v.length === 0,
+        60_000,
+      );
+      return filtreazaOras(toate, city);
+    } catch (e) {
+      console.error("[shipping] Curiera puncte failed:", (e as Error).message);
       return [];
     }
   }

@@ -71,6 +71,7 @@ const COLOANE_AWB: { coloana: string; curier: string }[] = [
   { coloana: "shipo_awb_number", curier: "Shipo" },
   { coloana: "smartship_awb_number", curier: "SmartShip" },
   { coloana: "innoship_awb_number", curier: "Innoship" },
+  { coloana: "curiera_awb_number", curier: "Curiera" },
   { coloana: "tracking_number", curier: "curierul magazinului" },
 ];
 

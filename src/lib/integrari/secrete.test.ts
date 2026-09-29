@@ -103,6 +103,7 @@ describe("acoperire", () => {
     const CURIERI_CU_PAROLA = [
       "cargus_config",
       "colete_config",
+      "curiera_config",
       "dpd_config",
       "ecolet_config",
       "fan_courier_config",

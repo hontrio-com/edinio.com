@@ -43,6 +43,8 @@ import { createUpsAwbAction } from "@/lib/actions/ups.actions";
 import { upsGata, type UpsConfig } from "@/lib/ups/client";
 import { createDhlAwbAction } from "@/lib/actions/dhl.actions";
 import { dhlGata, type DhlConfig } from "@/lib/dhl/client";
+import { createCurieraAwbAction } from "@/lib/actions/curiera.actions";
+import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
 
@@ -95,8 +97,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -104,6 +106,8 @@ interface ShippingAddr {
   /* Localitatea, judetul si codul postal ALE PUNCTULUI de ridicare. La livrarea
      in punct adresa de livrare e a lui, nu a clientului. */
   locker_city?: string; locker_county?: string; locker_post_code?: string;
+  /* Adresa punctului, cum a semnat-o checkoutul (o foloseste Curiera la punct). */
+  locker_address?: string;
   /* ⚠ Care retea FAN, cand punctul e al lor: FANbox, PayPoint sau oficiu. Decide
      serviciul si optiunea de pe AWB, deci nu se poate deduce din id. */
   fan_point_type?: string;
@@ -170,6 +174,8 @@ function cleanIds(orderIds: string[]): { ids: string[] } | { error: string } {
  *     GLS        60s emiterea (`gls/client.ts`) + 10s cautarea codului postal (`gls/puncte.ts`)
  *     Packeta    60s pe flux (`packeta/client.ts`)
  *     restul     45s la emitere (DHL, FedEx, eColet, Innoship, SmartShip, Shipo, Posta, Pall-Ex)
+ *     Curiera    45s emiterea + 20s cautarea dupa referinta, numai cand raspunsul s-a pierdut
+ *                (`curiera/client.ts`, `lamuresteDupaReferinta` din curiera.actions.ts)
  *
  * Deci un lucrator pornit in ultima clipa ducea functia pana pe la 340s, peste `maxDuration`
  * de 300. Atunci platforma o taie si actiunea nu mai intoarce NIMIC, desi serverul stia exact
@@ -364,7 +370,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -380,6 +386,7 @@ export async function bulkGenerateAwbs(
   const fx = settings?.fedex_config as FedexConfig | null;
   const up = settings?.ups_config as UpsConfig | null;
   const dh = settings?.dhl_config as DhlConfig | null;
+  const cu = (settings?.curiera_config ?? null) as CurieraConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -427,6 +434,9 @@ export async function bulkGenerateAwbs(
        de expeditie cu cod postal. Fara ea, fiecare comanda ar fi refuzata de actiune
        oricum — adica 50 de esecuri in loc de un mesaj limpede. */
     dhl: dhlGata(dh),
+    /* Aceeasi regula ca in `curieraGata`: cheia SI adresa de ridicare. Fara adresa, Curiera nu
+       refuza, face ciorne care nu pleaca; actiunea le opreste oricum, cate una pe comanda. */
+    curiera: curieraGata(cu),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -445,7 +455,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number")
     .eq("business_id", businessId).in("id", ids);
   if (eCitireComenzi) return { error: `Nu am putut citi comenzile selectate: ${eCitireComenzi.message}` };
 
@@ -460,6 +470,8 @@ export async function bulkGenerateAwbs(
   const peRezerva: string[] = [];
   /** Comenzile sarite fiindca transportul lor e in fluxul marketplace-ului. Se spun la sfarsit. */
   const duseDeEi: string[] = [];
+  /* Avertismentele AWB-urilor emise (mesaj -> comenzi), aratate sub bara ca si motivele. */
+  const avertizate = new Map<string, string[]>();
   /**
    * Comenzile sarite fiindca lotul de fata nu le poate emite: curierul ales de cumparator nu
    * e intre cei din lot, sau nu e conectat. ⚠ ELE SUNT SINGURELE CARE CER O MISCARE, deci se
@@ -488,6 +500,8 @@ export async function bulkGenerateAwbs(
        `shipping_address.courier` — vezi `CourierSelector`. Lipsa, modul „AWB dupa
        client" ar sari TACUT peste comenzile DHL si le-ar raporta „sarite". */
     dhl: "dhl",
+    /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
+    curiera: "curiera",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -530,6 +544,9 @@ export async function bulkGenerateAwbs(
          reemite pe o comanda care are deja AWB la DHL — al doilea colet platit, pe
          care nimeni nu-l mai poate sterge. */
       : target === "dhl" ? row.dhl_awb_number
+      /* ⚠ Fara randul asta, un lot Curiera ar fi cazut pe `dpd_shipment_id` si ar fi reemis pe
+         comenzile care au deja AWB la Curiera. */
+      : target === "curiera" ? row.curiera_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; dejaAreAwb++; return; }
 
@@ -561,14 +578,33 @@ export async function bulkGenerateAwbs(
     if (target !== "gls" && !greutate.dinCatalog) peRezerva.push(o.order_number);
 
     try {
-      const res = await createAwbForOrder(target, businessId, o, greutate.kg);
+      const res = await createAwbForOrder(target, businessId, o, greutate.kg, cu);
       if (isErr(res)) { result.failed++; result.errors.push({ order: o.order_number, message: res.error }); }
-      else result.done++;
+      else {
+        result.done++;
+        /* ⚠ Un AWB emis CU avertisment (Curiera: expediere pornita in ciorna, sau legata dupa un
+           raspuns pierdut) nu e o reusita tacuta: in lot, omul altfel n-ar afla ca trebuie sa
+           confirme ciornele in contul curierului, iar comenzile ar parea plecate. */
+        const av = (res as { avertismente?: unknown }).avertismente;
+        if (Array.isArray(av)) {
+          for (const m of av) {
+            if (typeof m !== "string" || !m.trim()) continue;
+            const lista = avertizate.get(m) ?? [];
+            lista.push(o.order_number);
+            avertizate.set(m, lista);
+          }
+        }
+      }
     } catch (e) {
       result.failed++;
       result.errors.push({ order: o.order_number, message: (e as Error).message });
     }
   }, AWB_CONCURRENCY);
+
+  /* Cate un rand pe avertisment, cu toate comenzile lui, nu cate unul pe comanda. */
+  for (const [message, comenzi] of avertizate) {
+    result.errors.push({ order: comenzi.join(", "), message });
+  }
 
   if (duseDeEi.length > 0) {
     /* ⚠ Se SPUNE ce s-a sarit: „sarite" fara motiv arata ca un lot care a mers pe jumatate. */
@@ -645,8 +681,12 @@ type BulkOrderRow = {
 // `weightKg` e parametru OBLIGATORIU, nu optional cu implicit 1: asa `tsc`
 // enumera apelantii daca mai apare unul, in loc sa-l lase sa mosteneasca tacut
 // kilogramul fix care era chiar defectul.
+//
+// `configCuriera` e tot obligatoriu, din acelasi motiv: la Curiera asigurarea si serviciile
+// extra vin din CONFIGURARE (fereastra le propune din ea), nu le hotaraste actiunea.
 async function createAwbForOrder(
   courier: Exclude<BulkCourier, "auto">, businessId: string, order: unknown, weightKg: number,
+  configCuriera: CurieraConfig | null,
 ): Promise<{ error: string } | Record<string, unknown>> {
   const o = order as BulkOrderRow;
   const addr = (o.shipping_address ?? {}) as ShippingAddr;
@@ -1227,6 +1267,49 @@ async function createAwbForOrder(
         productCode: produs,
         productName: ales.dhl_product_name ?? null,
         localProductCode: (ales.dhl_local_product_code ?? "").trim() || null,
+      });
+    }
+    case "curiera": {
+      /*
+       * ⚠ Datele se compun EXACT ca in `CurieraAwbModal`, ca lotul si emiterea pe bucata sa
+       * trimita acelasi lucru la Curiera.
+       *
+       * ⚠ Adresa intr-un SINGUR camp (`liniaAdresei`): `to_str` le pune singuri „Str." in fata,
+       * deci o linie intreaga ar iesi „Str. Strada X" (masurat, vezi `curiera/expediere.ts`).
+       *
+       * ⚠ La punct, orasul, judetul si codul postal sunt ALE PUNCTULUI, iar id-ul ramane SIR:
+       * id-urile lor sunt numere lungi, iar `Number()` le-ar putea strica. Ramburs la punct
+       * merge (masurat), deci nu se opreste nimic aici.
+       *
+       * ⚠ Un singur colet: lotul de etichete presupune o pagina pe comanda, iar la mai multe
+       * colete Curiera face un GRUP (`<awb>/2`...). Cine vrea mai multe emite din fereastra.
+       */
+      const laPunct = (addr.courier ?? "").toLowerCase().trim() === "curiera"
+        && addr.delivery_type === "locker"
+        && !!String(addr.locker_id ?? "").trim();
+      /* Numele produselor, cand exista; altfel pleaca `continut_implicit` din configurare. */
+      const numeProduse = items.map((i) => i?.name).filter(Boolean).join(", ").slice(0, 100);
+
+      return createCurieraAwbAction(businessId, o.id, {
+        destinatar: {
+          nume: o.customer_name,
+          telefon: o.customer_phone,
+          email: email || null,
+          /* La punct pleaca adresa PUNCTULUI, ca in fereastra: Curiera o rescrie oricum cu a lui,
+             iar cererea trebuie sa spuna acelasi lucru ca eticheta (masurat, `expediere.ts`). */
+          adresa: (laPunct ? (addr.locker_address ?? "").trim() : addressLine) || null,
+          oras: (laPunct ? addr.locker_city : "") || city,
+          judet: (laPunct ? addr.locker_county : "") || county,
+          codPostal: ((laPunct ? addr.locker_post_code : "") || zip) || null,
+        },
+        punctId: laPunct ? String(addr.locker_id ?? "").trim() : null,
+        greutateKg: weight,
+        colete: 1,
+        ramburs: cod,
+        /* Asigurarea se declara NUMAI daca omul a cerut-o in configurare: se plateste per colet. */
+        valoareAsigurata: configCuriera?.asigurare ? (Number(o.total) || 0) : null,
+        continut: numeProduse || null,
+        serviciiExtra: configCuriera?.servicii_extra ?? [],
       });
     }
     default:

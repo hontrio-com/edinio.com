@@ -73,7 +73,7 @@ test("⚠ un camp de config NOU schimba si el cheia", () => {
   /*
    * Amprenta se ia pe INTREGUL rand, nu pe campul curierului cerut. Afirmatia asta apara alegerea
    * de maine: cine ar inlocui amprenta cu o harta curier -> camp ar face-o sa cada aici. O harta ar
-   * fi a doua sursa de adevar langa cele unsprezece ramuri care isi citesc fiecare configul, iar o
+   * fi a doua sursa de adevar langa cele douasprezece ramuri care isi citesc fiecare configul, iar o
    * potrivire gresita ar fi luat amprenta ALTUI curier, tacut.
    */
   const cuAltCurier = { ...CONFIG, dpd_config: { user: "x" } };

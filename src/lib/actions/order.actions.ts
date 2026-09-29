@@ -3121,7 +3121,7 @@ export async function updateOrderDetails(orderId: string, data: {
     // jos compara datele NOI cu cele din baza, ca sa stie daca destinatarul chiar s-a
     // schimbat. Necerute, ar fi venit `undefined`, comparatia ar fi raspuns „s-a schimbat" la
     // fiecare salvare, si comerciantul n-ar mai fi putut salva nimic pe o comanda Pepita.
-    .select("id, business_id, status, payment_status, payment_method, customer_name, customer_phone, customer_email, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
+    .select("id, business_id, status, payment_status, payment_method, customer_name, customer_phone, customer_email, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -3239,7 +3239,9 @@ export async function updateOrderDetails(orderId: string, data: {
        nici macar anuland eticheta, fiindca eticheta nu se poate anula. Ce se poate
        face e `dezleagaDhlAwbAction` — anuleaza ridicarea, daca a fost ceruta, si
        scoate numerele de pe comanda; coletul ramane insa emis la DHL. */
-    || order.dhl_awb_number);
+    || order.dhl_awb_number
+    /* Curiera anuleaza doar pana la ridicare; dupa, `dezleagaCurieraAwbAction` scoate numarul. */
+    || order.curiera_awb_number);
   if (cereModificari && areAwb) {
     return { error: "Comanda are AWB emis. Anuleaza-l intai (butoanele sunt in aceeasi fereastra), apoi scoate sau schimba liniile si genereaza un AWB nou." };
   }
@@ -3958,7 +3960,7 @@ export async function deleteOrder(orderId: string) {
   if (!user) return { error: "Neautorizat" };
 
   /*
-   * ⚠ TOATE CELE 17 COLOANE DE AWB, NU UNA.
+   * ⚠ TOATE CELE 18 COLOANE DE AWB, NU UNA.
    *
    * Pana pe 14.09.2026 se citea `gls_awb_number` si atat, adica exact curierul cu ZERO
    * expedieri in productie. Cele 211 de AWB-uri Woot si cele 5 DPD treceau nevazute, si
@@ -3968,7 +3970,7 @@ export async function deleteOrder(orderId: string) {
    * din `coloanelePortii()`. Un curier nou adaugat in `COLOANA_AWB` si uitat aici pica
    * suita, nu productia.
    */
-  const { data: order } = await supabase.from("orders").select("business_id, discount_code, order_source, status, cargus_awb_number, colete_awb_number, dhl_awb_number, dpd_awb_number, ecolet_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, innoship_awb_number, packeta_packet_id, pallex_awb_number, posta_awb_number, sameday_awb_number, shipo_awb_number, smartship_awb_number, ups_awb_number, woot_awb_number, ecolet_order_to_send_id").eq("id", orderId).single();
+  const { data: order } = await supabase.from("orders").select("business_id, discount_code, order_source, status, cargus_awb_number, colete_awb_number, curiera_awb_number, dhl_awb_number, dpd_awb_number, ecolet_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, innoship_awb_number, packeta_packet_id, pallex_awb_number, posta_awb_number, sameday_awb_number, shipo_awb_number, smartship_awb_number, ups_awb_number, woot_awb_number, ecolet_order_to_send_id").eq("id", orderId).single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();

@@ -17,6 +17,7 @@ import type { GlsConfig } from "@/lib/gls/client";
 import type { PallExConfig } from "@/lib/pallex/client";
 import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
+import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday/client";
@@ -53,7 +54,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -93,6 +94,17 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   const po = settings?.posta_config as PostaConfig | null;
   const postaEnabled = !!(po?.enabled && po?.username && po?.cod_trimitere);
   const postaZilePrezentare = po?.zile_pana_la_prezentare ?? 0;
+  /* `curieraGata` insasi, aceeasi functie ca in lista de comenzi, in hub si in lot: cere si
+     adresa de ridicare, fiindca fara ea fiecare AWB iese ciorna refuzata. */
+  const cu = settings?.curiera_config as CurieraConfig | null;
+  const curieraEnabled = curieraGata(cu);
+  /* ⚠ Numai ce precompleteaza fereastra, NU configul intreg: el poarta cheia API, iar tot ce
+     primeste o componenta de client pleaca in browser. */
+  const curieraOptiuni = {
+    asigurare: cu?.asigurare === true,
+    serviciiExtra: Array.isArray(cu?.servicii_extra) ? cu.servicii_extra.map(String) : [],
+    continutImplicit: (cu?.continut_implicit ?? "").trim(),
+  };
   /* Aceeasi regula ca in `packetaGata` si in features/page.tsx: parola API si
      eticheta de expeditor. `eshop` intra in ea desi nu e credentiala — un nume
      gresit CREEAZA tacut un expeditor nou la ei si strica facturarea. */
@@ -263,6 +275,8 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       pallexEnabled={pallexEnabled}
       ecoletEnabled={ecoletEnabled}
       postaEnabled={postaEnabled}
+      curieraEnabled={curieraEnabled}
+      curieraOptiuni={curieraOptiuni}
       packetaEnabled={packetaEnabled}
       smartshipEnabled={smartshipEnabled}
       shipoEnabled={shipoEnabled}

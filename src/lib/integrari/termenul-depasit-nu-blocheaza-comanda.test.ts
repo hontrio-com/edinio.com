@@ -220,6 +220,9 @@ test("⚠ fiecare client caruia i s-au pus termene isi clasifica si esecurile", 
     "src/lib/cargus.ts": 2,
     "src/lib/woot.ts": 2,
     "src/lib/colete.ts": 2,
+    /* Masurat pe 29.09.2026: la Curiera TOATE cererile trec printr-un singur `cerere()`, deci o
+       singura chemare le clasifica pe toate (scriere = `necunoscut`, citire = refuz). */
+    "src/lib/curiera/client.ts": 1,
   };
 
   for (const [cale, prag] of Object.entries(PRAG)) {

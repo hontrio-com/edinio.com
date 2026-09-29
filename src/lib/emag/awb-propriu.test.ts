@@ -51,6 +51,21 @@ test("⚠ numele venit de la furnizor bate eticheta noastra", () => {
   );
 });
 
+test("un AWB Curiera ajunge si el la eMAG, cu numele curierului", () => {
+  /* Adaugat la coada curierilor, inaintea campului generic: ordinea celor vechi nu se misca. */
+  assert.deepEqual(
+    awbPropriuAlComenzii({ curiera_awb_number: " 710915533 " }),
+    { awb: "710915533", curier: "Curiera" },
+  );
+  assert.deepEqual(
+    awbPropriuAlComenzii({ curiera_awb_number: "710915533", tracking_number: "X1" }),
+    { awb: "710915533", curier: "Curiera" },
+    "curierul cunoscut bate campul generic",
+  );
+  /* Deja urcat: nu se mai alege a doua oara. */
+  assert.equal(awbPropriuAlComenzii({ curiera_awb_number: "710915533" }, ["710915533"]), null);
+});
+
 test("⚠ `tracking_number` sta la URMA", () => {
   /* E campul generic, in care se poate scrie orice de mana — deci cel mai putin sigur. Dar
      ramane in lista: un comerciant care si-a trecut numarul acolo tot vrea sa ajunga. */

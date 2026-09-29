@@ -1,4 +1,5 @@
 import { NUME_CURIER, type CurierPropriu } from "@/lib/orders/awb-propriu";
+import { adresaUrmarireCuriera } from "@/lib/curiera/client";
 import { stripDiacritics } from "@/lib/utils/ro-address";
 
 /**
@@ -69,6 +70,9 @@ const DIRECT: Partial<Record<string, (awb: string) => string>> = {
   ecolet: (n) => `https://panel.ecolet.ro/track/${COD(n)}`,
   /* Formularul GET al paginii Shipo, publicat si ca SearchAction in JSON-LD-ul lor. */
   shipo: (n) => `https://shipo.ro/servicii-curierat/urmarire-colet?awb_track=${COD(n)}`,
+  /* Pagina lor publica, cu GET pe `awbno`; verificata pe 29.09.2026 (arata istoricul AWB-ului).
+     Tiparul sta in client, langa `appcont`, ca sa nu existe doua copii ale adresei. */
+  curiera: (n) => adresaUrmarireCuriera(n),
 };
 
 /** Slugurile paginii publice Woot (awb.woot.ro/urmarire-colet-<slug>/<awb>). */

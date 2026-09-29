@@ -37,8 +37,16 @@
  * apelabila; Pall-Ex la fel (OpenAPI 1.0.5 n-are nicio metoda de tarif). `pickup` si `own`
  * nu ies niciodata din casa. Pentru toti acestia `price` din zona E pretul, nu o rezerva,
  * deci regula de mai jos nu-i priveste: un `pickup` la 0 lei e chiar ce a vrut omul.
+ *
+ * ⚠ Curiera ARE metoda de tarif (`get_price`), si totusi sta aici, dinadins (29.09.2026): pe
+ * contul de test raspunde 0 lei la ORICE cerere, si goala, si cu un oras inventat, deci nu se
+ * poate dovedi nici ca tariful e adevarat, nici daca e cu TVA. Pana la un cont cu grila reala,
+ * pretul e cel din zona si nu se cheama nimeni. Scoasa de aici, o zona Curiera la 0 lei ar fi
+ * taiata de regula de mai jos ca „rezerva esuata" (Curiera ar disparea din checkout), iar
+ * `atingeApiPlatit` ar consuma plafoanele de cotare pentru un apel care nu pleaca.
+ * ⚠ In pas cu `FARA_PRET_AUTOMAT` din `SettingsClient.tsx`.
  */
-export const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta", "packeta"]);
+export const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta", "packeta", "curiera"]);
 
 /**
  * Se pastreaza optiunea asta de rezerva?

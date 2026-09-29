@@ -30,7 +30,7 @@ lor), `src/lib/actions/curiera.actions.ts`, cronul `src/app/api/cron/curiera-tra
 
 | ce | cat |
 | --- | --- |
-| Magazine cu Curiera configurat | **ZERO** (integrare noua) |
+| Magazine cu Curiera configurat | **ZERO** (integrare noua, in productie din 29.09.2026) |
 | AWB-uri emise in productie | **ZERO** |
 | AWB-uri de proba pe contul de test | 15 (plus doi membri de grup), **toate anulate**, verificat cu `get_shipments`; doua erau ciorne, anulate prin `change_status` |
 
@@ -192,6 +192,25 @@ portii) spun ce face codul. Productia a fost verificata inainte doar citind: cor
 `cont_comanda_mea` identic cu cel din migratie fara randul Curiera (md5), migratia aplicata intr-o
 tranzactie ANULATA a trecut fara exceptie.
 
+## In productie, 29.09.2026
+
+Migratia 68 a fost aplicata pe `rtefdpioqmowkdiybwrr` la 10:02 UTC, INAINTEA codului. Au urmat
+verificarile. Pe `orders` sunt 8 coloane `curiera_*`, iar `curiera_config` apare in vedere si in
+declansator. Secretul e trecut. Indexul exista. Registrul are 'curiera' si pastreaza 'emag'.
+`cont_comanda_mea` nu e deschisa lui `anon`/`authenticated`. Drepturile pe coloane sunt identice cu
+GLS. Nu exista niciun AWB si nicio configurare. Jurnalul bazei nu arata nicio eroare „does not
+exist".
+
+Schema de referinta a fost regenerata din productie. Diferenta e exact migratia, iar `--check` iese
+egal. `tipuri-db --check` arata 0 fantome, `verifica:coloane` 408/408, iar suita 10315/10315.
+Commitul a mers in acelasi push cu codul (`6d76019d`, `6bafedd8`, `55466597`).
+CI-ul pe `55466597` a trecut toate cele 4 verificari: restaurarea pe o baza goala, Git = productie,
+tipurile, apoi teste si build. Deploy-ul `dpl_TLdJF5cJ3JWeWVyZD8iUHNXu3RgU` e READY pe edinio.com si
+pe domeniile magazinelor. Proba pe productie: `/api/cron/curiera-tracking` raspunde 401 fara
+secret, pe ruta lui (`x-matched-path`), iar catalogul `/integrari` arata Curiera la Curieri. In
+primele minute, paginile care citesc coloanele noi (comenzi, pagina comenzii, Setari) si vitrinele au
+avut 0 raspunsuri 5xx si 0 erori in jurnal.
+
 ---
 
 ## Ce ramane deschis, si de ce
@@ -211,5 +230,5 @@ tranzactie ANULATA a trecut fara exceptie.
 
 ## Nota, cinstit
 
-Nescrisa inca: integrarea e noua si n-a emis niciun AWB real. Se noteaza dupa prima trecere cu trafic
+Nescrisa inca: integrarea e in productie din 29.09.2026, dar n-a emis niciun AWB real. Se noteaza dupa prima trecere cu trafic
 adevarat, ca la ceilalti saptesprezece.

@@ -92,6 +92,8 @@ export default async function OrdersPage({
   /* Aceeasi regula ca in `postaGata` si ca in pagina comenzii. */
   const po = settings?.posta_config as PostaConfig | null;
   const postaEnabled = !!(po?.enabled && po?.username && po?.cod_trimitere);
+  /* Ce precompleteaza fereastra Posta deschisa din lista; aceeasi valoare ca in pagina comenzii. */
+  const postaZilePrezentare = po?.zile_pana_la_prezentare ?? 0;
   /* `curieraGata` insasi, aceeasi functie ca in pagina comenzii, in hub si in lot. */
   const curieraEnabled = curieraGata(settings?.curiera_config as CurieraConfig | null);
   /* Ce precompleteaza fereastra AWB deschisa din lista; aceeasi functie ca in pagina comenzii. */
@@ -158,7 +160,7 @@ export default async function OrdersPage({
   const integrari: Integrari = {
     smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled,
     cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
-    curieraOptiuni,
+    curieraOptiuni, postaZilePrezentare,
     fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
   };
 
@@ -203,6 +205,7 @@ type Integrari = {
   fanCourierEnabled: boolean;
   samedayEnabled: boolean;
   curieraOptiuni: OptiuniAwbCuriera;
+  postaZilePrezentare: number;
   fanPickup: { lastDate: string | null; lastId: string | null };
 };
 
@@ -322,6 +325,6 @@ async function ListaComenzi({
    * AWB-uri, si de aia se numara toate trei locurile la fiecare curier nou.
    */
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

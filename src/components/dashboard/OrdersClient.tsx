@@ -29,6 +29,14 @@ import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { CurieraAwbModal, type OptiuniAwbCuriera } from "@/components/dashboard/CurieraAwbModal";
+import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
+import { PacketaAwbModal } from "@/components/dashboard/PacketaAwbModal";
+import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
+import { ShipoAwbModal } from "@/components/dashboard/ShipoAwbModal";
+import { FedexAwbModal } from "@/components/dashboard/FedexAwbModal";
+import { UpsAwbModal } from "@/components/dashboard/UpsAwbModal";
+import { DhlAwbModal } from "@/components/dashboard/DhlAwbModal";
+import { InnoshipAwbModal } from "@/components/dashboard/InnoshipAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
@@ -89,7 +97,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, curieraOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -112,6 +120,8 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   glsEnabled?: boolean;
   pallexEnabled?: boolean;
   postaEnabled?: boolean;
+  /** Zilele pana la prezentare din configurarea Posta; aceeasi valoare ca pe pagina comenzii. */
+  postaZilePrezentare?: number;
   curieraEnabled?: boolean;
   /** Ce precompleteaza fereastra AWB Curiera. Fara cheia API: vezi pagina. */
   curieraOptiuni?: OptiuniAwbCuriera;
@@ -152,6 +162,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [cargusPickupOpen, setCargusPickupOpen] = useState(false);
   const [samedayModalOrder, setSamedayModalOrder] = useState<Order | null>(null);
   const [curieraModalOrder, setCurieraModalOrder] = useState<Order | null>(null);
+  const [postaModalOrder, setPostaModalOrder] = useState<Order | null>(null);
+  const [packetaModalOrder, setPacketaModalOrder] = useState<Order | null>(null);
+  const [smartshipModalOrder, setSmartshipModalOrder] = useState<Order | null>(null);
+  const [shipoModalOrder, setShipoModalOrder] = useState<Order | null>(null);
+  const [fedexModalOrder, setFedexModalOrder] = useState<Order | null>(null);
+  const [upsModalOrder, setUpsModalOrder] = useState<Order | null>(null);
+  const [dhlModalOrder, setDhlModalOrder] = useState<Order | null>(null);
+  const [innoshipModalOrder, setInnoshipModalOrder] = useState<Order | null>(null);
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
@@ -803,6 +821,78 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           onSuccess={() => router.refresh()}
         />
       )}
+      {postaModalOrder && businessId && (
+        <PostaAwbModal zilePrezentare={postaZilePrezentare}
+          open={!!postaModalOrder}
+          onClose={() => setPostaModalOrder(null)}
+          order={postaModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPostaModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {packetaModalOrder && businessId && (
+        <PacketaAwbModal
+          open={!!packetaModalOrder}
+          onClose={() => setPacketaModalOrder(null)}
+          order={packetaModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPacketaModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {smartshipModalOrder && businessId && (
+        <SmartshipAwbModal
+          open={!!smartshipModalOrder}
+          onClose={() => setSmartshipModalOrder(null)}
+          order={smartshipModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setSmartshipModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {shipoModalOrder && businessId && (
+        <ShipoAwbModal
+          open={!!shipoModalOrder}
+          onClose={() => setShipoModalOrder(null)}
+          order={shipoModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setShipoModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {fedexModalOrder && businessId && (
+        <FedexAwbModal
+          open={!!fedexModalOrder}
+          onClose={() => setFedexModalOrder(null)}
+          order={fedexModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setFedexModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {upsModalOrder && businessId && (
+        <UpsAwbModal
+          open={!!upsModalOrder}
+          onClose={() => setUpsModalOrder(null)}
+          order={upsModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setUpsModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {dhlModalOrder && businessId && (
+        <DhlAwbModal
+          open={!!dhlModalOrder}
+          onClose={() => setDhlModalOrder(null)}
+          order={dhlModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setDhlModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {innoshipModalOrder && businessId && (
+        <InnoshipAwbModal
+          open={!!innoshipModalOrder}
+          onClose={() => setInnoshipModalOrder(null)}
+          order={innoshipModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setInnoshipModalOrder(null); router.refresh(); }}
+        />
+      )}
       {/* Header */}
       <div className="flex flex-col gap-3 mb-5">
         <div className="flex items-center justify-between">
@@ -1242,6 +1332,30 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     {curieraEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Curiera</th>
                     )}
+                    {postaEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Poșta Română</th>
+                    )}
+                    {packetaEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Colet Packeta</th>
+                    )}
+                    {smartshipEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB SmartShip</th>
+                    )}
+                    {shipoEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Shipo.ro</th>
+                    )}
+                    {fedexEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB FedEx</th>
+                    )}
+                    {upsEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB UPS</th>
+                    )}
+                    {dhlEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB DHL Express</th>
+                    )}
+                    {innoshipEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Innoship</th>
+                    )}
                     {oblioEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Oblio</th>
                     )}
@@ -1633,6 +1747,238 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setCurieraModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {postaEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["posta_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPostaModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["posta_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setPostaModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {packetaEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["packeta_packet_id"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setPacketaModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["packeta_packet_id"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setPacketaModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {smartshipEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["smartship_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setSmartshipModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["smartship_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setSmartshipModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {shipoEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["shipo_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setShipoModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["shipo_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setShipoModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {fedexEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["fedex_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setFedexModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["fedex_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setFedexModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {upsEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["ups_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setUpsModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["ups_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setUpsModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {dhlEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["dhl_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setDhlModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["dhl_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setDhlModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {innoshipEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {(order as unknown as Record<string, unknown>)["innoship_awb_number"] ? (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); setInnoshipModalOrder(order); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                              >
+                                <Package className="h-3 w-3" />
+                                {String((order as unknown as Record<string, unknown>)["innoship_awb_number"])}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setInnoshipModalOrder(order)); }}
                                 aria-disabled={!!refuzAwbLista}
                                 className={cn(
                                   "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",

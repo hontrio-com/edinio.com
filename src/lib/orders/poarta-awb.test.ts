@@ -328,8 +328,9 @@ test("⚠ si LISTA de comenzi, care a primit aceeasi regula si n-o apara nimeni"
   assert.match(sursa, /awburiDinRand\(/, "fara `awburiDinRand`, lista nu vede coletul altui curier");
 
   /*
-   * ⚠ SE NUMARA. Masurat pe 13.09.2026: noua butoane trecute prin garda; zece din 29.09.2026,
-   * cu Curiera (cerut de el: butonul de AWB pe fiecare rand, fara intrat in comanda).
+   * ⚠ SE NUMARA. Masurat pe 13.09.2026: noua butoane trecute prin garda. Din 29.09.2026 sunt
+   * optsprezece: cerut de el, butonul de AWB pe fiecare rand, la TOTI curierii conectati
+   * (Curiera, Posta, Packeta, SmartShip, Shipo, FedEx, UPS, DHL, Innoship veneau fara el).
    * Un `assert.match` simplu ar fi ramas verde dupa ce opt din noua si-o pierdeau,
    * exact greseala prinsa in aceeasi zi la plasa de termene.
    *
@@ -339,7 +340,7 @@ test("⚠ si LISTA de comenzi, care a primit aceeasi regula si n-o apara nimeni"
    */
   const garzi = (sursa.match(/apasaAwb\(refuzAwbLista,/g) ?? []).length;
   const marcaje = (sursa.match(/aria-disabled=\{!!refuzAwbLista\}/g) ?? []).length;
-  assert.ok(garzi >= 10, `doar ${garzi} din 10 butoane de emitere mai trec prin garda`);
+  assert.ok(garzi >= 18, `doar ${garzi} din 18 butoane de emitere mai trec prin garda`);
   assert.equal(marcaje, garzi, "un buton pazit trebuie sa spuna si cititorului de ecran ca e refuzat");
 
   assert.match(

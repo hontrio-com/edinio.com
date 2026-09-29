@@ -232,6 +232,13 @@ functie pe care o foloseste si pagina comenzii. Recensamantul butoanelor pazite 
 10; cu garda scoasa de pe butonul Curiera, pica. Emiterea pe lot (bifezi si apesi „Genereaza AWB”)
 exista deja si il includea pe Curiera.
 
+La cererea lui („adauga la toti buton daca il au conectat”), butonul l-au primit si ceilalti 8 fara
+el: Posta, Packeta, SmartShip, Shipo, FedEx, UPS, DHL si Innoship. Acum sunt 18 butoane pazite.
+Proba `src/lib/orders/lista-are-butonul-fiecarui-curier.test.ts` cere doua lucruri: ca fiecare
+curier din meniul lotului sa aiba si coloana lui, si ca ordinea coloanelor sa fie aceeasi in capul
+tabelului si pe randuri. Cu coloana DHL scoasa de pe randuri, pica. Pe demo, Casa Lumen (toti 8
+conectati) arata toate coloanele noi.
+
 Probat pe serverul local legat de baza demo, prin ruta reala. Casa Lumen, fara Curiera, vine cu
 numele, telefonul, emailul, adresa, orasul si „Municipiul Bucuresti”. Floraria Mirei, cu Curiera
 salvat, isi pastreaza valorile, fara nota.

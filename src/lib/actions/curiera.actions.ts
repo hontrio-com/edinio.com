@@ -17,11 +17,13 @@ import {
   creeazaExpediereaCuriera,
   curieraGata,
   etichetaCuriera,
+  partenerCuriera,
   probaConexiuneCuriera,
   stariCuriera,
   type AwbGasit,
   type CurieraConfig,
   type ExpediereCreata,
+  type PartenerCuriera,
   type RezultatProbaCuriera,
 } from "@/lib/curiera/client";
 import { etichetaPeA5 } from "@/lib/curiera/eticheta-a5";
@@ -238,7 +240,7 @@ export async function createCurieraAwbAction(
   businessId: string,
   orderId: string,
   date: DateAwbCuriera,
-): Promise<{ awb: string; avertismente: string[] } | { error: string }> {
+): Promise<{ awb: string; avertismente: string[]; partener: PartenerCuriera | null } | { error: string }> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
 
@@ -289,7 +291,7 @@ export async function createCurieraAwbAction(
         if (verdictFurnizor(e) !== "necunoscut") throw e;
         const gasit = await lamuresteDupaReferinta(admin, config, businessId, cheie, referinta, clipaEmiterii);
         if (!gasit) throw e;
-        creata = { awb: gasit.awb, stare: gasit.stare, pret: null, pretCuTva: null, numere: [gasit.awb] };
+        creata = { awb: gasit.awb, stare: gasit.stare, pret: null, pretCuTva: null, numere: [gasit.awb], partener: null };
         lamurita = true;
       }
       return {
@@ -306,7 +308,7 @@ export async function createCurieraAwbAction(
           ramburs: Number(parametri.ramburs ?? 0),
           lamuritaDupaReferinta: lamurita,
         } as Json,
-        valoare: { awb: creata.awb, stare: creata.stare, lamurita },
+        valoare: { awb: creata.awb, stare: creata.stare, lamurita, partener: creata.partener },
       };
     },
     /* Clientul marcheaza singur verdictul: `failed` si ciorna refuzata = `esuat`, restul `necunoscut`. */
@@ -366,12 +368,22 @@ export async function createCurieraAwbAction(
    * veche l-ar fi scos pe cel nou din urmarire, iar memoria semnalarilor l-ar fi facut mut.
    * `null`, nu `[]`, la memorie: „n-am inregistrat nimic" e chiar starea coletului nou.
    */
+  /*
+   * AWB-ul transportatorului partener (de ex. DPD), cand Curiera preda coletul mai departe. Vine de
+   * obicei chiar in raspunsul la emitere; altfel se cere o data, cu buna-credinta: o citire picata
+   * nu are voie sa strice o emitere reusita, iar cronul de urmarire il completeaza.
+   */
+  let partener = r.fel === "facut" ? r.valoare.partener : null;
+  if (!partener) partener = await partenerCuriera(config, awb).catch(() => null);
+
   const acum = new Date().toISOString();
   const { error: eScriere, data: randuri } = await supabase.from("orders").update({
     curiera_awb_number: awb,
     /* Ancora ferestrei cronului de urmarire si a contului cumparatorului. */
     curiera_awb_at: acum,
     curiera_reference: referinta,
+    curiera_partener: partener?.nume ?? null,
+    curiera_partener_awb: partener?.awb ?? null,
     curiera_status_code: null,
     curiera_status_label: null,
     curiera_status_at: null,
@@ -398,7 +410,7 @@ export async function createCurieraAwbAction(
     dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
   }
 
-  return { awb, avertismente };
+  return { awb, avertismente, partener };
 }
 
 // ─── Dezlegarea AWB-ului ──────────────────────────────────────────────────────
@@ -479,6 +491,8 @@ export async function dezleagaCurieraAwbAction(
     curiera_awb_number: null,
     curiera_awb_at: null,
     curiera_reference: null,
+    curiera_partener: null,
+    curiera_partener_awb: null,
     curiera_status_code: null,
     curiera_status_label: null,
     curiera_status_at: null,

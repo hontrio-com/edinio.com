@@ -1734,15 +1734,23 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                         {curieraEnabled && (
                           <td className="px-5 py-3.5 hidden lg:table-cell">
                             {order.curiera_awb_number ? (
-                              <button
-                                type="button"
-                                onClick={e => { e.stopPropagation(); setCurieraModalOrder(order); }}
-                                title={order.curiera_status_label ?? undefined}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
-                              >
-                                <Package className="h-3 w-3" />
-                                {order.curiera_awb_number}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); setCurieraModalOrder(order); }}
+                                  title={order.curiera_status_label ?? undefined}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                                >
+                                  <Package className="h-3 w-3" />
+                                  {order.curiera_awb_number}
+                                </button>
+                                {/* AWB-ul partenerului (de ex. DPD), cand Curiera preda coletul mai departe. */}
+                                {order.curiera_partener_awb && (
+                                  <div className="mt-1 whitespace-nowrap font-mono text-[10px] text-muted-foreground">
+                                    {(order.curiera_partener ?? "").trim() || "partener"} {order.curiera_partener_awb}
+                                  </div>
+                                )}
+                              </>
                             ) : (
                               <button
                                 type="button"

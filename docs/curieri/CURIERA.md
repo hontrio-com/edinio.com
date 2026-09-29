@@ -243,6 +243,30 @@ Probat pe serverul local legat de baza demo, prin ruta reala. Casa Lumen, fara C
 numele, telefonul, emailul, adresa, orasul si „Municipiul Bucuresti”. Floraria Mirei, cu Curiera
 salvat, isi pastreaza valorile, fara nota.
 
+## AWB-ul partenerului (DPD), 29.09.2026
+
+Cerut de el, pentru un magazin care lucreaza cu DPD prin Curiera: comerciantul vrea sa vada si
+AWB-ul Curiera, si pe cel DPD. Curiera (CourierManager) preda coletul unui „franchisor”.
+Masurat pe primul AWB real (magazinul `jhbijuterii`, 710918525): `get_info` → `info` are
+`franchisor_type: "DPD"`, `franchisor_no: "81376952082"` (AWB-ul DPD) si `franchisor_no_canon`
+(codul de bare lung DPD). DPD l-a preluat in aceeasi secunda. ⚠ `get_status` NU le are. Pe
+contul de test campurile exista, dar goale.
+
+Se tine in `orders.curiera_partener` si `curiera_partener_awb` (migratia 69). Vine din raspunsul
+la emitere, altfel dintr-un `get_info` cerut o data. Daca lipseste si asa, cronul il completeaza
+in primele 3 zile (`ZILE_PARTENER`). Dezlegarea le goleste, ca pe restul coloanelor. Se arata in
+trei locuri: in panoul Expediere al comenzii (cu legatura `tracking.dpd.ro`), sub numarul Curiera
+din coloana listei si in fereastra de emitere. Cumparatorul vede in continuare AWB-ul Curiera si
+pagina de urmarire Curiera.
+
+`partenerCuriera` rulat pe AWB-ul real al magazinului (o citire, cu cheia lui) a intors
+`{"nume":"DPD","awb":"81376952082"}`. Pe serverul local legat de demo, comanda cu partener a
+aratat legatura DPD pe pagina comenzii si „DPD 81376952082” in lista.
+
+Tot atunci: AWB-ul 710918525 a fost anulat in afara Edinio (registrul are doar emiterea), iar
+comanda #0007 a fost anulata separat, deci numarul a ramas pe ea. Nu e un defect: urmarirea nu
+mai verifica comenzile anulate.
+
 ## Eticheta A5, 29.09.2026
 
 Ceruta de el. ⚠ Curiera NU stie A5: `print` accepta `a4|a6`. Masurat pe un AWB de test emis si

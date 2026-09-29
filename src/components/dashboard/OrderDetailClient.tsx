@@ -49,6 +49,7 @@ import { PallexAwbModal } from "@/components/dashboard/PallexAwbModal";
 import { EcoletAwbModal } from "@/components/dashboard/EcoletAwbModal";
 import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
 import { CurieraAwbModal, type OptiuniAwbCuriera } from "@/components/dashboard/CurieraAwbModal";
+import { curierulReal, urmareste } from "@/lib/cont/urmarire";
 import { PacketaAwbModal } from "@/components/dashboard/PacketaAwbModal";
 import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
 import { ShipoAwbModal } from "@/components/dashboard/ShipoAwbModal";
@@ -617,9 +618,29 @@ export function OrderDetailClient({
    * Tipul e scris pe fata, nu dedus: fara el, un singur camp pus la o singura intrare ar face
    * din lista o reuniune de forme, iar `shippedCourier.stare` n-ar mai exista pentru `tsc`.
    */
+  /*
+   * AWB-ul transportatorului partener (de ex. DPD), cand Curiera preda coletul mai departe: omul
+   * il cauta la DPD, iar cumparatorul primeste SMS-ul de la DPD. Legatura numai catre o pagina
+   * care chiar deschide coletul (`direct`), nu catre una de cautare.
+   */
+  const partenerCurieraAwb = (order.curiera_partener_awb ?? "").trim();
+  const urmarirePartener = partenerCurieraAwb
+    ? urmareste({ curier: curierulReal(order.curiera_partener) ?? "", awb: partenerCurieraAwb })
+    : null;
+  const partenerCurieraAfisat = partenerCurieraAwb
+    ? {
+        nume: (order.curiera_partener ?? "").trim() || "partener",
+        awb: partenerCurieraAwb,
+        href: urmarirePartener?.fel === "direct" ? urmarirePartener.href : null,
+      }
+    : null;
+
   const couriers: {
     id: string; name: string; logo: string; enabled: boolean;
-    awb: string | null; stare?: string | null; ramburs?: string | null; open: () => void;
+    awb: string | null; stare?: string | null; ramburs?: string | null;
+    /** AWB-ul la transportatorul partener, la brokerii care predau coletul (azi: Curiera). */
+    partener?: { nume: string; awb: string; href: string | null } | null;
+    open: () => void;
   }[] = [
     { id: "sameday", name: "Sameday", logo: "/integrations/sameday.webp", enabled: !!samedayEnabled, awb: (order.sameday_awb_number as string | null) ?? null, open: () => setSamedayModalOpen(true) },
     { id: "fan-courier", name: "FAN Courier", logo: "/integrations/fan-courier.svg", enabled: !!fanCourierEnabled, awb: (order.fan_courier_awb_number as string | null) ?? null, open: () => setFanCourierModalOpen(true) },
@@ -636,7 +657,7 @@ export function OrderDetailClient({
     { id: "posta", name: "Poșta Română", logo: "/integrations/posta_romana.svg", enabled: !!postaEnabled, awb: (order.posta_awb_number as string | null) ?? null, open: () => setPostaModalOpen(true) },
     /* ⚠ `id` trebuie sa fie sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (vezi
        nota de la Shipo). `stare` e ultima stare citita de cronul de urmarire. */
-    { id: "curiera", name: "Curiera", logo: "/integrations/curiera.webp", enabled: !!curieraEnabled, awb: order.curiera_awb_number ?? null, stare: order.curiera_status_label ?? null, open: () => setCurieraModalOpen(true) },
+    { id: "curiera", name: "Curiera", logo: "/integrations/curiera.webp", enabled: !!curieraEnabled, awb: order.curiera_awb_number ?? null, stare: order.curiera_status_label ?? null, partener: partenerCurieraAfisat, open: () => setCurieraModalOpen(true) },
     { id: "innoship", name: "Innoship", logo: "/integrations/innoship.svg", enabled: !!innoshipEnabled, awb: (order.innoship_awb_number as string | null) ?? null, open: () => setInnoshipModalOpen(true) },
     /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
        `shipping_address.courier` — vezi nota de la Pall-Ex. */
@@ -2165,6 +2186,23 @@ export function OrderDetailClient({
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-success">Expediat cu {shippedCourier.name}</p>
                         <p className="text-sm font-mono font-bold text-success truncate">AWB: {shippedCourier.awb}</p>
+                        {shippedCourier.partener && (
+                          <p className="text-xs font-mono text-success truncate">
+                            AWB {shippedCourier.partener.nume}:{" "}
+                            {shippedCourier.partener.href ? (
+                              <a
+                                href={shippedCourier.partener.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-semibold underline underline-offset-2"
+                              >
+                                {shippedCourier.partener.awb}
+                              </a>
+                            ) : (
+                              <span className="font-semibold">{shippedCourier.partener.awb}</span>
+                            )}
+                          </p>
+                        )}
                         {/*
                           ⚠ CHIAR PROPOZITIA CURIERULUI, nu o talmacire de-a noastra. Vine din
                           cronul de urmarire si se arata doar cand el chiar a aflat ceva.

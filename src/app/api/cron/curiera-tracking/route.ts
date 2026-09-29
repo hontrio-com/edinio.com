@@ -5,6 +5,7 @@ import {
   curieraGata,
   felulEroriiCuriera,
   istoricCuriera,
+  partenerCuriera,
   stariCuriera,
   type CurieraConfig,
   type EvenimentCuriera,
@@ -90,6 +91,17 @@ const MIN_NECUNOSCUTE_ALARMA = 1;
 
 const ACTIUNE = "curiera-tracking";
 
+/**
+ * Cat timp dupa emitere se mai intreaba de AWB-ul partenerului (DPD etc.), daca n-a venit la
+ * emitere. Masurat: la DPD vine in aceeasi secunda, deci pragul e plasa, nu calea obisnuita.
+ */
+const ZILE_PARTENER = 3;
+
+function proaspatPentruPartener(awbAt: string | null): boolean {
+  const t = awbAt ? Date.parse(awbAt) : NaN;
+  return Number.isFinite(t) && Date.now() - t < ZILE_PARTENER * 86400000;
+}
+
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -103,7 +115,7 @@ export async function GET(req: NextRequest) {
 
   const { data: comenzi, error: eComenzi } = await admin
     .from("orders")
-    .select("id, business_id, status, order_number, payment_status, created_at, curiera_awb_number, curiera_awb_at, curiera_status_code, curiera_status_at, curiera_status_checked_at, curiera_evenimente_semnalate")
+    .select("id, business_id, status, order_number, payment_status, created_at, curiera_awb_number, curiera_awb_at, curiera_status_code, curiera_status_at, curiera_status_checked_at, curiera_evenimente_semnalate, curiera_partener_awb")
     .not("curiera_awb_number", "is", null)
     .neq("curiera_awb_number", "")
     /* ⚠ O comanda anulata isi pastreaza AWB-ul: fara filtrul pe status s-ar potrivi la nesfarsit. */
@@ -164,7 +176,7 @@ export async function GET(req: NextRequest) {
   const proprietari = await proprietariiMagazinelor(admin, bizIds);
 
   const termen = Date.now() + BUGET_MS;
-  let verificate = 0, mutate = 0, semnalate = 0, esuate = 0, necunoscute = 0;
+  let verificate = 0, mutate = 0, semnalate = 0, esuate = 0, necunoscute = 0, parteneri = 0;
   let incheiate = 0, faraConfig = 0, ramase = 0, sarite = 0, istoricPicat = 0;
   let exempluIstoric = "";
   /* ⚠ Starile pe care nu le stim, stranse pe nume: din ele creste harta din `statusuri.ts`. */
@@ -382,6 +394,27 @@ export async function GET(req: NextRequest) {
             orderNumber: o.order_number,
           });
         }
+
+        /*
+         * AWB-ul partenerului (de ex. DPD), cand n-a venit la emitere. ⚠ Doar in primele
+         * ZILE_PARTENER zile: o expediere dusa chiar de Curiera n-are partener, iar fara prag ar fi
+         * intrebata la fiecare tura, pana iese din fereastra. O citire picata nu opreste nimic.
+         */
+        if (!o.curiera_partener_awb && proaspatPentruPartener(o.curiera_awb_at) && Date.now() < termen) {
+          try {
+            const p = await partenerCuriera(cfg, awb, ASTEPTARE_MS);
+            if (p) {
+              const { error: eP } = await admin.from("orders")
+                .update({ curiera_partener: p.nume, curiera_partener_awb: p.awb })
+                .eq("id", o.id).eq("business_id", businessId)
+                .eq("curiera_awb_number", o.curiera_awb_number!);
+              if (eP) console.error(`[${ACTIUNE}] partener`, awb, eP.message);
+              else parteneri++;
+            }
+          } catch (e) {
+            console.error(`[${ACTIUNE}] partener`, awb, (e as Error).message);
+          }
+        }
       }
     }
   }
@@ -427,7 +460,7 @@ export async function GET(req: NextRequest) {
     + `necunoscute ${necunoscute}, incheiate ${incheiate}, faraConfig ${faraConfig}, ramase ${ramase}, sarite ${sarite}`,
   );
   return NextResponse.json({
-    ok: true, verificate, mutate, semnalate, esuate, necunoscute, incheiate, faraConfig, ramase, sarite, istoricPicat,
+    ok: true, verificate, mutate, semnalate, esuate, necunoscute, incheiate, faraConfig, ramase, sarite, istoricPicat, parteneri,
     stariNoi: [...stariNoi],
   });
 }

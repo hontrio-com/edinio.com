@@ -107,6 +107,11 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
 
   const [awbEmis, setAwbEmis] = useState<string | null>(null);
   const awb = awbEmis ?? order.curiera_awb_number ?? null;
+  /* AWB-ul la partener (de ex. DPD): intai cel intors de emitere, apoi cel de pe comanda. */
+  const [partenerEmis, setPartenerEmis] = useState<{ nume: string; awb: string } | null>(null);
+  const partener = partenerEmis ?? (order.curiera_partener_awb
+    ? { nume: (order.curiera_partener ?? "").trim() || "partener", awb: order.curiera_partener_awb }
+    : null);
 
   const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({
     open: true, hasAwb: !!awb, businessId, orderId: order.id,
@@ -223,7 +228,8 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
 
     for (const av of r.avertismente) toast.warning(av, { duration: 14000 });
     setAwbEmis(r.awb);
-    toast.success(`AWB Curiera ${r.awb} emis`);
+    setPartenerEmis(r.partener);
+    toast.success(`AWB Curiera ${r.awb} emis${r.partener ? ` (AWB ${r.partener.nume}: ${r.partener.awb})` : ""}`);
     /* Pagina se reimprospateaza dedesubt; fereastra ramane, cu butonul de eticheta. */
     onSuccess();
   }
@@ -288,6 +294,11 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
             <div className="rounded-lg border border-success/20 bg-success/5 p-3">
               <p className="text-xs text-muted-foreground">Numar AWB</p>
               <p className="font-mono text-sm font-semibold text-foreground">{awb}</p>
+              {partener && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  AWB {partener.nume}: <span className="font-mono font-semibold text-foreground">{partener.awb}</span>
+                </p>
+              )}
               {order.curiera_status_label && (
                 <p className="mt-1 text-xs text-muted-foreground">Stare la curier: {order.curiera_status_label}</p>
               )}

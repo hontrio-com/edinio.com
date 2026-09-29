@@ -13,6 +13,8 @@ import {
   felulEroriiCuriera,
   istoricCuriera,
   motiveleCiornei,
+  partenerCuriera,
+  partenerDinRand,
   probaConexiuneCuriera,
   puncteCuriera,
   serviciiCuriera,
@@ -254,6 +256,43 @@ describe("emiterea", () => {
     assert.deepEqual(motiveleCiornei("a\nb\r\n\n c "), ["a", "b", "c"]);
     assert.deepEqual(motiveleCiornei(""), []);
     assert.deepEqual(motiveleCiornei(null), []);
+  });
+});
+
+describe("transportatorul partener", () => {
+  /*
+   * Forma masurata pe 29.09.2026 pe primul AWB REAL (un magazin care lucreaza cu DPD prin Curiera):
+   * `get_info` → `{ no, status, info: { ...98 de campuri } }`, cu `franchisor_type: "DPD"` si
+   * `franchisor_no: "81376952082"`. Pe contul de test campurile exista, dar goale.
+   */
+  test("numarul DPD se citeste din `info` al lui get_info", async () => {
+    raspunde(json({ status: "done", data: { no: "710918525", status: "neridicat", info: {
+      franchisor_type: "DPD", franchisor_no: "81376952082", franchisor_no_canon: "1000813769520829140009073018",
+    } } }));
+    assert.deepEqual(await partenerCuriera(CONFIG, " 710918525 "), { nume: "DPD", awb: "81376952082" });
+    assert.ok(cereri[0].url.endsWith("/get_info"));
+    assert.equal(cereri[0].corp.get("awbno"), "710918525");
+  });
+
+  test("fara numar la partener nu exista partener, chiar daca tipul e scris (contul de test)", () => {
+    assert.equal(partenerDinRand({ franchisor_type: "fan", franchisor_no: "" }), null);
+    assert.equal(partenerDinRand(null), null);
+    assert.equal(partenerDinRand("text"), null);
+  });
+
+  test("numele partenerului: cele cunoscute frumos, restul cum vine, nimic ghicit", () => {
+    assert.equal(partenerDinRand({ franchisor_type: "fan", franchisor_no: "123" })?.nume, "FAN Courier");
+    assert.equal(partenerDinRand({ franchisor_type: "Nemo Express", franchisor_no: "9" })?.nume, "Nemo Express");
+    assert.equal(partenerDinRand({ franchisor_type: "", franchisor_no: "9" })?.nume, "partener");
+    assert.equal(partenerDinRand({ franchisor_type: "constructor", franchisor_no: "9" })?.nume, "constructor");
+  });
+
+  test("emiterea il ia din acelasi rand, cand vine deja", async () => {
+    raspunde(json({ status: "done", message: "AWB was created", data: {
+      no: "710918525", status: "neridicat", errors: "", franchisor_type: "DPD", franchisor_no: "81376952082",
+    } }));
+    const r = await creeazaExpediereaCuriera(CONFIG, {});
+    assert.deepEqual(r.partener, { nume: "DPD", awb: "81376952082" });
   });
 });
 

@@ -416,6 +416,45 @@ export async function puncteCuriera(config: Pick<CurieraConfig, "api_key">): Pro
   return apelLista(config, "list_delivery_locations", { country: "RO" });
 }
 
+// ─── Transportatorul partener ────────────────────────────────────────────────
+
+/**
+ * Cine duce efectiv coletul (`franchisor` la CourierManager) si AWB-ul lui.
+ *
+ * Masurat pe 29.09.2026, pe primul AWB real (un magazin care lucreaza cu DPD prin Curiera):
+ * Curiera l-a predat la DPD in aceeasi secunda, iar `get_info` → `info` purta
+ * `franchisor_type: "DPD"`, `franchisor_no: "81376952082"` (AWB-ul DPD) si `franchisor_no_canon`
+ * (codul de bare lung al coletului DPD). Acelasi rand de 98 de campuri vine si din
+ * `create_shipment`. ⚠ `get_status` NU le are. Pe contul de test campurile exista, dar goale:
+ * expedierile de proba nu pleaca la nimeni.
+ */
+export type PartenerCuriera = { nume: string; awb: string };
+
+const NUME_PARTENERI: Record<string, string> = {
+  dpd: "DPD", fan: "FAN Courier", fancourier: "FAN Courier", cargus: "Cargus", sameday: "Sameday", gls: "GLS",
+};
+
+/** Partenerul dintr-un rand de expediere, sau `null` cand AWB-ul lui nu exista (inca). */
+export function partenerDinRand(rand: unknown): PartenerCuriera | null {
+  if (!rand || typeof rand !== "object") return null;
+  const r = rand as Record<string, unknown>;
+  const awb = sir(r.franchisor_no);
+  if (!awb) return null;
+  const tip = sir(r.franchisor_type);
+  const cheie = tip.toLowerCase().replace(/[^a-z]/g, "");
+  return { nume: (Object.hasOwn(NUME_PARTENERI, cheie) ? NUME_PARTENERI[cheie] : tip) || "partener", awb };
+}
+
+/** `get_info`, o citire pura. Arunca daca cererea pica; `null` = expedierea n-are (inca) partener. */
+export async function partenerCuriera(
+  config: Pick<CurieraConfig, "api_key">,
+  awb: string,
+  asteptareMs: number = ASTEPTARE_MS,
+): Promise<PartenerCuriera | null> {
+  const date = await apelPlic(config, "get_info", { awbno: awb.trim() }, "citire", asteptareMs) as Record<string, unknown> | null;
+  return partenerDinRand(date?.info);
+}
+
 // ─── Emiterea ─────────────────────────────────────────────────────────────────
 
 export type ExpediereCreata = {
@@ -427,6 +466,8 @@ export type ExpediereCreata = {
   pretCuTva: number | null;
   /** Numerele grupului, la mai multe colete (`XXX`, `XXX/2`, ...). */
   numere: string[];
+  /** Transportatorul partener si AWB-ul lui, daca raspunsul le poarta deja. */
+  partener: PartenerCuriera | null;
 };
 
 /** Motivele din `data.errors`, cate unul pe rand (ei le despart cu `\n`). */
@@ -515,6 +556,7 @@ export async function creeazaExpediereaCuriera(
     pret: numar(date?.price),
     pretCuTva: numar(date?.price_with_vat),
     numere,
+    partener: partenerDinRand(date),
   };
 }
 

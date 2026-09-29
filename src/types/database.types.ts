@@ -4051,6 +4051,8 @@ export type Database = {
           curiera_awb_at: string | null
           curiera_awb_number: string | null
           curiera_evenimente_semnalate: Json | null
+          curiera_partener: string | null
+          curiera_partener_awb: string | null
           curiera_reference: string | null
           curiera_status_at: string | null
           curiera_status_checked_at: string | null
@@ -4286,6 +4288,8 @@ export type Database = {
           curiera_awb_at?: string | null
           curiera_awb_number?: string | null
           curiera_evenimente_semnalate?: Json | null
+          curiera_partener?: string | null
+          curiera_partener_awb?: string | null
           curiera_reference?: string | null
           curiera_status_at?: string | null
           curiera_status_checked_at?: string | null
@@ -4521,6 +4525,8 @@ export type Database = {
           curiera_awb_at?: string | null
           curiera_awb_number?: string | null
           curiera_evenimente_semnalate?: Json | null
+          curiera_partener?: string | null
+          curiera_partener_awb?: string | null
           curiera_reference?: string | null
           curiera_status_at?: string | null
           curiera_status_checked_at?: string | null

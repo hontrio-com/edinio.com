@@ -35,7 +35,7 @@ const GREEN_TEXT = VERDE_CITIBIL;
 /*
   Impartirea in doua benzi: pozitiile PARE sus, cele IMPARE jos.
 
-  `ALL_LOGOS` vine grupat pe categorii (intai cei sase curieri, apoi cele cinci
+  `ALL_LOGOS` vine grupat pe categorii (intai cei sapte curieri, apoi cele cinci
   plati, s.a.m.d.). Taiat pur si simplu in doua jumatati, randul de sus ar fi
   fost „curieri + plati" si cel de jos „marketplace + pixeli" — adica doua benzi
   cu caracter diferit, iar cine se uita doar la una ar fi crezut ca atat facem.

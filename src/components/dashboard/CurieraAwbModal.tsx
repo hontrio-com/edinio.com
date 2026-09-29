@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Download, Loader2, MapPin, Package, Truck, X } from "lucide-react";
+import { Download, Loader2, MapPin, Package, Truck, X } from "lucide-react";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { createCurieraAwbAction, getCurieraEtichetaAction } from "@/lib/actions/curiera.actions";
 import { GREUTATE_MAXIMA_LOCKER_KG, type DateAwbCuriera, type OptiuniAwbCuriera } from "@/lib/curiera/expediere";
@@ -419,14 +419,6 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
               <span className="mb-1 block text-muted-foreground">Observatii pentru curier</span>
               <input className={campClasa} value={observatii} onChange={(e) => setObservatii(e.target.value)} />
             </label>
-
-            <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-              <p className="text-muted-foreground">
-                AWB-ul e <strong>real si facturat</strong> de Curiera. Diacriticele se scot la
-                trimitere, fiindca pe eticheta lor ar iesi semne de intrebare.
-              </p>
-            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={onClose} disabled={creating}>Renunta</Button>

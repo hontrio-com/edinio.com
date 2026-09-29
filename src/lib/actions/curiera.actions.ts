@@ -24,6 +24,7 @@ import {
   type ExpediereCreata,
   type RezultatProbaCuriera,
 } from "@/lib/curiera/client";
+import { etichetaPeA5 } from "@/lib/curiera/eticheta-a5";
 import {
   lipsuriExpediereCuriera,
   parametriExpediereCuriera,
@@ -539,7 +540,7 @@ export async function dezleagaCurieraAwbAction(
 export async function getCurieraEtichetaAction(
   businessId: string,
   orderId: string,
-): Promise<{ ok: true; base64: string; nume: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; base64: string; nume: string; avertisment?: string } | { ok: false; error: string }> {
   const ctx = await proprietar(businessId);
   if (!ctx.ok) return { ok: false, error: ctx.error };
 
@@ -568,10 +569,26 @@ export async function getCurieraEtichetaAction(
     };
   }
 
+  const nume = `AWB-Curiera-${awb.replace(/[^A-Za-z0-9_-]/g, "")}.pdf`;
+  let pdf: Buffer;
   try {
-    const pdf = await etichetaCuriera(config, awb, config.dimensiune_eticheta === "a4" ? "a4" : "a6");
-    return { ok: true, base64: pdf.toString("base64"), nume: `AWB-Curiera-${awb.replace(/[^A-Za-z0-9_-]/g, "")}.pdf` };
+    /* ⚠ `a5` NU se trimite la Curiera: il ignora tacut si da A6. Se cere A6 si se mareste aici. */
+    pdf = await etichetaCuriera(config, awb, config.dimensiune_eticheta === "a4" ? "a4" : "a6");
   } catch (e) {
     return { ok: false, error: (e as Error).message };
+  }
+  if (config.dimensiune_eticheta !== "a5") return { ok: true, base64: pdf.toString("base64"), nume };
+
+  try {
+    return { ok: true, base64: (await etichetaPeA5(pdf)).toString("base64"), nume };
+  } catch (e) {
+    /* Eticheta A6 e buna si e deja aici: o marire picata nu are voie sa lase coletul fara ea.
+       Dar se SPUNE, ca omul sa nu tipareasca pe A5 crezand ca e marita. */
+    return {
+      ok: true,
+      base64: pdf.toString("base64"),
+      nume,
+      avertisment: `Eticheta nu s-a putut mari pe A5 (${(e as Error).message}), deci ai primit-o in A6, cum o da Curiera.`,
+    };
   }
 }

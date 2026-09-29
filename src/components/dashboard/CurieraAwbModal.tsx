@@ -248,7 +248,9 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
     if (!descarca(r.base64, r.nume || `eticheta-curiera-${awb}.pdf`)) {
       toast.error("Curiera nu a trimis un PDF. Incearca din nou peste cateva minute.");
+      return;
     }
+    if (r.avertisment) toast.warning(r.avertisment, { duration: 12000 });
   }
 
   /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de

@@ -243,6 +243,22 @@ Probat pe serverul local legat de baza demo, prin ruta reala. Casa Lumen, fara C
 numele, telefonul, emailul, adresa, orasul si „Municipiul Bucuresti”. Floraria Mirei, cu Curiera
 salvat, isi pastreaza valorile, fara nota.
 
+## Eticheta A5, 29.09.2026
+
+Ceruta de el. ⚠ Curiera NU stie A5: `print` accepta `a4|a6`. Masurat pe un AWB de test emis si
+anulat anume: `format=a5` (si `A5`) primeste 200 si pagina A6 (295,2 x 417,6 pt), identica cu
+`a6`. Deci A5 se cere ca A6 si se mareste la noi (`src/lib/curiera/eticheta-a5.ts`, `pdf-lib`
+incarcat la cerere): proportia se pastreaza, pagina e centrata, iar fiecare colet ramane pe
+pagina lui. Probat pe o eticheta reala de 2 colete (AWB 710918435, anulat): 2 pagini de
+419,5 x 595,3 pt, iar imaginile codurilor de bare (396 x 50 si 462 x 50 px) sunt in fisier
+neatinse, doar asezate mai mare.
+
+⚠ Codul de bare se mareste de ~1,42 ori, iar `lipeste-pdf.ts` nu scaleaza nimic tocmai pentru
+ca un cod scalat poate fi citit gresit. De aceea configurarea si ajutorul spun sa fie tiparita
+si scanata o eticheta inainte de folosire. N-a fost scanata inca de un cititor adevarat. Daca
+marirea pica, omul primeste eticheta A6 cu un avertisment. Pe lot, marimea ramane cea a
+documentului (A4 sau eticheta mica), ca paginile lipite sa aiba aceeasi marime.
+
 ---
 
 ## Ce ramane deschis, si de ce

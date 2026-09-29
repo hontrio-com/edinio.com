@@ -49,6 +49,7 @@ import { aPropusCeva, type ExpeditorPropus } from "@/lib/curiera/precompletare";
 
 const MARIMI: { valoare: DimensiuneEticheta; eticheta: string }[] = [
   { valoare: "a6", eticheta: "A6 (eticheta compacta, imprimante de etichete)" },
+  { valoare: "a5", eticheta: "A5 (eticheta A6 marita de Edinio)" },
   { valoare: "a4", eticheta: "A4 (foaie intreaga)" },
 ];
 
@@ -466,7 +467,12 @@ export function CurieraConfigClient({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Marimea etichetei">
+          <Field
+            label="Marimea etichetei"
+            hint={marime === "a5"
+              ? "Curiera nu face A5: Edinio ia eticheta A6 si o mareste pe A5, cu tot cu codul de bare. Tipareste una si verifica daca se scaneaza inainte sa trimiti colete."
+              : undefined}
+          >
             <select
               value={marime}
               onChange={(ev) => setMarime(ev.target.value as DimensiuneEticheta)}

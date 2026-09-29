@@ -77,7 +77,11 @@ export type ExpeditorCuriera = {
   cod_postal?: string;
 };
 
-export type DimensiuneEticheta = "a4" | "a6";
+/** Ce accepta `print` la ei: `a4|a6`. ⚠ `a5` e ignorat TACUT si iese A6 (masurat 29.09.2026). */
+export type FormatCuriera = "a4" | "a6";
+
+/** Marimea aleasa in configurare. `a5` o face Edinio din eticheta A6 (`eticheta-a5.ts`). */
+export type DimensiuneEticheta = FormatCuriera | "a5";
 
 export type CurieraConfig = {
   enabled: boolean;
@@ -101,7 +105,7 @@ export type CurieraConfig = {
   servicii_extra?: string[];
   /** Se declara valoarea comenzii ca asigurare (`insurance`). Stins, nu se trimite nimic. */
   asigurare?: boolean;
-  /** Marimea etichetei PDF. Necompletat = A6, implicitul lor. */
+  /** Marimea etichetei PDF. Necompletat = A6, implicitul lor. A5 = A6 marita de noi. */
   dimensiune_eticheta?: DimensiuneEticheta;
   /** Continutul scris pe eticheta cand comanda nu da unul mai bun. */
   continut_implicit?: string;
@@ -740,7 +744,7 @@ export async function anuleazaExpediereaCuriera(
 export async function etichetaCuriera(
   config: Pick<CurieraConfig, "api_key">,
   awb: string,
-  dimensiune: DimensiuneEticheta = "a6",
+  dimensiune: FormatCuriera = "a6",
 ): Promise<Buffer> {
   const r = await cerere(config, "print", { awbno: awb.trim(), type: "pdf", format: dimensiune }, "citire", ASTEPTARE_MS);
   if (r.octeti.subarray(0, 5).toString("latin1") === "%PDF-") return r.octeti;

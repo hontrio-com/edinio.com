@@ -211,6 +211,23 @@ secret, pe ruta lui (`x-matched-path`), iar catalogul `/integrari` arata Curiera
 primele minute, paginile care citesc coloanele noi (comenzi, pagina comenzii, Setari) si vitrinele au
 avut 0 raspunsuri 5xx si 0 erori in jurnal.
 
+## Dupa prima conectare in productie, 29.09.2026
+
+Primul comerciant (el, cu contul de test) a apasat „Testeaza conexiunea”, a dat refresh si a pierdut
+tot. Din acelasi motiv nu vedea butonul de AWB la comenzi: in productie nu era salvata nicio
+configurare Curiera. Proba nu salveaza, intentionat si la fel ca la ceilalti 17. Asta ramane.
+S-au adaugat doua lucruri:
+
+- dupa o proba reusita, fara nimic salvat, pagina spune ca nu e salvat nimic si ce lipseste;
+- adresa de ridicare vine precompletata din datele magazinului, cat timp nu e salvata niciuna
+  (`src/lib/curiera/precompletare.ts`, regula casei `adresaPublica`). De la Curiera nu vine nimic:
+  `test_connection` da doar numele, iar `list_addresses` a intors o lista GOALA pe contul de test,
+  deci forma unui rand nu e cunoscuta si nu se citeste.
+
+Probat pe serverul local legat de baza demo, prin ruta reala. Casa Lumen, fara Curiera, vine cu
+numele, telefonul, emailul, adresa, orasul si „Municipiul Bucuresti”. Floraria Mirei, cu Curiera
+salvat, isi pastreaza valorile, fara nota.
+
 ---
 
 ## Ce ramane deschis, si de ce
@@ -225,6 +242,8 @@ avut 0 raspunsuri 5xx si 0 erori in jurnal.
   conta pentru ramburs). Se afla din primul colet real.
 - **Rambursul dupa plata online**: `update_shipment` accepta doar `cnt`, `client`, `sender_id`,
   `recipient_id`, deci suma de ramburs nu se poate stinge dupa emitere (GLS are `ModifyCOD`).
+- **Adresa de ridicare din contul Curiera** (`list_addresses`): de citit abia dupa ce vedem un rand
+  real, de pe un cont care are adrese definite la ei.
 - **Codurile de motiv** sunt text liber pe cont (26 pe contul de test). Nu misca nimic; apar in
   descrierea starii.
 

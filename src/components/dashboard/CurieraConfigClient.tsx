@@ -28,6 +28,7 @@ import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
+import { aPropusCeva, type ExpeditorPropus } from "@/lib/curiera/precompletare";
 
 /**
  * Configurarea Curiera.
@@ -71,9 +72,12 @@ function optiuni(lista: ServiciuCuriera[], ales: string): ServiciuCuriera[] {
 export function CurieraConfigClient({
   businessId,
   initialConfig,
+  propunere = null,
 }: {
   businessId: string;
   initialConfig: CurieraConfig | null;
+  /** Adresa de ridicare din datele magazinului; vine numai cat timp nu e salvata niciuna. */
+  propunere?: ExpeditorPropus | null;
 }) {
   const router = useRouter();
   const [testing, setTesting] = useState(false);
@@ -83,13 +87,15 @@ export function CurieraConfigClient({
 
   const [cheie, setCheie] = useState("");
   const e = initialConfig?.expeditor ?? {};
-  const [nume, setNume] = useState(e.nume ?? "");
+  /* Propunerea umple doar ce e gol; pagina o trimite numai cand nu e salvat niciun camp. */
+  const p = propunere;
+  const [nume, setNume] = useState((e.nume ?? "") || (p?.nume ?? ""));
   const [contact, setContact] = useState(e.persoana_contact ?? "");
-  const [telefon, setTelefon] = useState(e.telefon ?? "");
-  const [email, setEmail] = useState(e.email ?? "");
-  const [adresa, setAdresa] = useState(e.adresa ?? "");
-  const [oras, setOras] = useState(e.oras ?? "");
-  const [judet, setJudet] = useState(e.judet ?? "");
+  const [telefon, setTelefon] = useState((e.telefon ?? "") || (p?.telefon ?? ""));
+  const [email, setEmail] = useState((e.email ?? "") || (p?.email ?? ""));
+  const [adresa, setAdresa] = useState((e.adresa ?? "") || (p?.adresa ?? ""));
+  const [oras, setOras] = useState((e.oras ?? "") || (p?.oras ?? ""));
+  const [judet, setJudet] = useState((e.judet ?? "") || (p?.judet ?? ""));
   const [codPostal, setCodPostal] = useState(e.cod_postal ?? "");
 
   const [serviciuAdresa, setServiciuAdresa] = useState(
@@ -280,6 +286,22 @@ export function CurieraConfigClient({
           </div>
         )}
 
+        {/*
+          ⚠ Proba nu salveaza nimic (o cheie gresita nu are voie sa o inlocuiasca pe cea buna),
+          deci dupa o proba reusita se spune pe fata ca nu s-a pastrat nimic. Altfel un refresh
+          pierde tot, iar butonul de AWB nu apare la comenzi (cerut de el, 29.09.2026).
+        */}
+        {proba && !isActive && (
+          <Callout variant="info" icon={Info}>
+            {"Cheia merge, dar nimic nu e salvat inca. Completeaza adresa de ridicare de la pasul 2 si apasa „Salveaza”, jos. Pana atunci Curiera nu apare la comenzi si nici in checkout."}
+          </Callout>
+        )}
+        {proba && isActive && cheie.trim() !== "" && (
+          <Callout variant="info" icon={Info}>
+            {"Cheia noua merge, dar nu e salvata: pana apesi „Salveaza”, ramane cea veche."}
+          </Callout>
+        )}
+
         {/* ⚠ O cheie de angajat raspunde la proba, dar emiterea ar cere si contul clientului. */}
         {proba?.cheieDeClient === false && (
           <Callout variant="warning" icon={AlertTriangle}>
@@ -294,6 +316,13 @@ export function CurieraConfigClient({
           De aici ridica Curiera coletele. Se trimite la fiecare AWB; diacriticele se scot la
           trimitere, fiindca pe eticheta lor ar iesi semne de intrebare.
         </p>
+
+        {/* ⚠ De la Curiera nu vine nicio adresa (vezi `precompletare.ts`), deci sursa e magazinul. */}
+        {aPropusCeva(propunere) && (
+          <Callout variant="info" icon={Info}>
+            {"Am completat ce stiam din datele magazinului (Setari). Verifica-le: aici trebuie adresa de unde ridica Curiera coletele, iar ce lipseste completezi tu."}
+          </Callout>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nume expeditor" required>

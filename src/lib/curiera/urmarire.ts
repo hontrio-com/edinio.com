@@ -1,5 +1,5 @@
 import { stareaSaSchimbat } from "@/lib/orders/semnalarea-ajunge-la-om";
-import type { EvenimentCuriera, FelEroareCuriera, StareCuriera } from "./client";
+import { adresaUrmarireCuriera, type EvenimentCuriera, type FelEroareCuriera, type StareCuriera } from "./client";
 import {
   cheieStare,
   descriereEveniment,
@@ -132,7 +132,8 @@ export function semnalareCuriera(p: {
   const cate = ce.length === 1 ? "un eveniment care cere" : `${ce.length} evenimente care cer`;
   return {
     titlu: "Expediere Curiera care cere atentie",
-    mesaj: `${comanda}: expedierea ${p.awb} are ${cate} o decizie: ${lista}. Deschide comanda pentru istoricul complet.`,
+    /* ⚠ Panoul nu arata istoricul coletului, doar ultima stare: legatura trimite la pagina lor. */
+    mesaj: `${comanda}: expedierea ${p.awb} are ${cate} o decizie: ${lista}. Istoricul complet: ${adresaUrmarireCuriera(p.awb)}`,
   };
 }
 
@@ -169,7 +170,7 @@ export type Alarma = { severity: "critical" | "warning"; fel: string; mesaj: str
  */
 export function alarmaMagazinului(
   g: Galeata,
-  praguri: { autentificare: number; esecuri: number; necunoscute: number },
+  praguri: { autentificare: number; refuz: number; esecuri: number; necunoscute: number },
 ): Alarma | null {
   if (g.reusite > 0) return null;
   if (g.autentificare >= praguri.autentificare) {
@@ -180,7 +181,9 @@ export function alarmaMagazinului(
     };
   }
   const altele = g.indisponibil + g.refuz;
-  if (altele >= praguri.esecuri) {
+  /* ⚠ Refuzul (alt cod decat BAD_LOGIN, 4xx) e determinist, ca BAD_LOGIN: la un magazin cu 1-2
+     colete, un prag de 3 l-ar fi lasat sa taca pentru totdeauna. Caderile trecatoare raman la 3. */
+  if (g.refuz >= praguri.refuz || altele >= praguri.esecuri) {
     return {
       severity: "warning",
       fel: "indisponibil",

@@ -3,6 +3,13 @@ import { normalizeCountyName, normalizeLocalityName, sectorBucuresti, stripDiacr
 import { serviciuAdresa, serviciuPunct, type CurieraConfig } from "./client";
 
 /**
+ * Cat primeste un dulap FANbox. Egal cu `FANBOX_MAX_WEIGHT_KG` (pragul din checkout), tinut aici
+ * ca literal fiindca `fancourier.ts` nu are ce cauta in fereastra de client; egalitatea o apara
+ * `expediere.test.ts`.
+ */
+export const GREUTATE_MAXIMA_LOCKER_KG = 30;
+
+/**
  * Cererea `create_shipment`, construita dintr-un singur loc.
  *
  * ═══ ⚠ TOT TEXTUL PLEACA IN ASCII ═══
@@ -53,6 +60,11 @@ export type DateExpediereCuriera = {
   };
   /** Id-ul punctului de ridicare (`to_delivery_location`). Cu el, serviciul e cel de punct. */
   punctId?: string | null;
+  /**
+   * Punctul e un dulap FANbox (numele lui incepe cu „FANbox", masurat pe toate cele 3.229). Atunci
+   * coletul trebuie sa incapa: vezi `lipsuriExpediereCuriera`. Pudo si oficiile n-au limite publicate.
+   */
+  punctLocker?: boolean;
   /** Greutatea TOTALA, in kg. Se imparte egal pe colete. */
   greutateKg: number;
   /** Numarul de colete (`cnt`). Peste 1, Curiera face un GRUP cu un singur AWB-lider. */
@@ -164,6 +176,18 @@ export function lipsuriExpediereCuriera(config: CurieraConfig, date: DateExpedie
   if (!ascii(d.oras)) lipsuri.push("localitatea destinatarului");
   if (!ascii(d.judet)) lipsuri.push("judetul destinatarului");
   if (punct && !/^\d+$/.test(punct)) lipsuri.push("un punct de ridicare valid");
+  /*
+   * ⚠ LA DULAP: un singur colet, de cel mult 30 kg. Curiera nu refuza la emitere un colet care nu
+   * incape (nu valideaza nimic, masurat), iar checkoutul opreste punctul peste 30 kg; fara plasa
+   * asta, o cantarire mai mare sau doua colete ar pleca spre un dulap in care nu intra. Aceleasi
+   * dulapuri si aceeasi regula ca la FAN (`FANBOX_MAX_WEIGHT_KG`, „un singur colet").
+   */
+  if (punct && date.punctLocker) {
+    if (date.colete > 1) lipsuri.push("un singur colet (la un locker FANbox nu merg mai multe)");
+    if (Number(date.greutateKg) > GREUTATE_MAXIMA_LOCKER_KG) {
+      lipsuri.push(`o greutate de cel mult ${GREUTATE_MAXIMA_LOCKER_KG} kg (atat primeste un locker FANbox)`);
+    }
+  }
 
   if (!(Number(date.greutateKg) > 0)) lipsuri.push("greutatea coletului");
   if (!Number.isInteger(date.colete) || date.colete < 1) lipsuri.push("numarul de colete");

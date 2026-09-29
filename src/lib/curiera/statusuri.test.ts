@@ -147,6 +147,23 @@ describe("evenimentele din istoric", () => {
       "motivul sub avizat se spune; codul de sub in_curs nu");
   });
 
+  test("⚠ un cod din ACEEASI clipa cu iesirea din avizat ia starea noua, oricare ar fi ordinea", () => {
+    /* Reluarea livrarii (in_curs + „Iesire din depozit") nu e o problema, chiar daca istoricul
+       pune codul inaintea schimbarii de stare. */
+    const istoric = [
+      ev("StatusChanged:avizat", 3, "avizat"),
+      ev("CodeChanged:Iesire din depozit Curiera", 5, "", "Iesire din depozit Curiera"),
+      ev("StatusChanged:in_curs", 5, "in_curs"),
+    ];
+    const r = evenimenteDeSemnalat(istoric, null);
+    assert.deepEqual(r.noi.map((e) => e.tip), ["StatusChanged:avizat"]);
+  });
+
+  test("⚠ o stare NECUNOSCUTA nu mosteneste problema de dinainte", () => {
+    const r = evenimenteDeSemnalat([ev("StatusChanged:avizat", 1, "avizat"), ev("StatusChanged:in_depozit", 2, "in_depozit")], null);
+    assert.deepEqual(r.noi.map((e) => e.tip), ["StatusChanged:avizat"]);
+  });
+
   test("starile in engleza se citesc la fel", () => {
     const r = evenimenteDeSemnalat([ev("StatusChanged:returned", 7, "returned")], []);
     assert.equal(r.noi.length, 1);

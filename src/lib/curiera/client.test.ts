@@ -355,6 +355,13 @@ describe("anularea", () => {
     assert.equal(cereri[2].corp.get("status"), "anulat");
   });
 
+  test("⚠ „forbidden” urmat de o citire PICATA e „nu stim”, nu refuz", async () => {
+    /* Luata drept refuz, dezlegarea ar fi scos de pe comanda un AWB despre care nu stim nimic. */
+    raspunde(text("forbidden"), text(""));
+    const e = await anuleazaExpediereaCuriera(CONFIG, "5").then(() => null, (x) => x);
+    assert.equal(verdictFurnizor(e), "necunoscut");
+  });
+
   test("„forbidden” pe un colet ridicat e refuz, cu starea lor", async () => {
     raspunde(text("forbidden"), json({ status: "done", data: { no: "5", request_no: "5", status: "in_curs", date: 2 } }));
     assert.deepEqual(await anuleazaExpediereaCuriera(CONFIG, "5"), { fel: "refuzat", stare: "in_curs" });

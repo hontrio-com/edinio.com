@@ -19,6 +19,14 @@
 
 export type TipPunctCuriera = "locker" | "pudo" | "office";
 
+/**
+ * Punctul e un dulap FANbox? Dupa NUME, fiindca tipul punctului nu ajunge pe comanda: toate cele
+ * 3.229 de lockere ale lor se numesc „FANbox ..." (masurat pe 29.09.2026), pudo si oficiile nu.
+ */
+export function ePunctFanbox(numePunct: string | null | undefined): boolean {
+  return /^\s*fanbox\b/i.test(numePunct ?? "");
+}
+
 export type PunctCuriera = {
   id: string;
   nume: string;

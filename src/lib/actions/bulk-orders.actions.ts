@@ -45,6 +45,7 @@ import { createDhlAwbAction } from "@/lib/actions/dhl.actions";
 import { dhlGata, type DhlConfig } from "@/lib/dhl/client";
 import { createCurieraAwbAction } from "@/lib/actions/curiera.actions";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
+import { ePunctFanbox } from "@/lib/curiera/puncte";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
 
@@ -106,8 +107,9 @@ interface ShippingAddr {
   /* Localitatea, judetul si codul postal ALE PUNCTULUI de ridicare. La livrarea
      in punct adresa de livrare e a lui, nu a clientului. */
   locker_city?: string; locker_county?: string; locker_post_code?: string;
-  /* Adresa punctului, cum a semnat-o checkoutul (o foloseste Curiera la punct). */
+  /* Adresa si numele punctului, cum le-a semnat checkoutul (le foloseste Curiera la punct). */
   locker_address?: string;
+  locker_name?: string;
   /* ⚠ Care retea FAN, cand punctul e al lor: FANbox, PayPoint sau oficiu. Decide
      serviciul si optiunea de pe AWB, deci nu se poate deduce din id. */
   fan_point_type?: string;
@@ -1303,6 +1305,8 @@ async function createAwbForOrder(
           codPostal: ((laPunct ? addr.locker_post_code : "") || zip) || null,
         },
         punctId: laPunct ? String(addr.locker_id ?? "").trim() : null,
+        /* ⚠ La un locker FANbox, un colet prea greu e refuzat pe comanda asta, cu motivul in bara. */
+        punctLocker: laPunct && ePunctFanbox(addr.locker_name),
         greutateKg: weight,
         colete: 1,
         ramburs: cod,

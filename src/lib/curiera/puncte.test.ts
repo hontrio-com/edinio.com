@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { describe, test } from "node:test";
 
-import { normalizeazaPuncteCuriera, rezumaProgramCuriera } from "./puncte";
+import { ePunctFanbox, normalizeazaPuncteCuriera, rezumaProgramCuriera } from "./puncte";
 
 const ZI = (start: number, end: number) => [{ start, end }];
 const SAPTAMANA = (z: unknown, s: unknown = z, d: unknown = z) => ({
@@ -48,6 +48,16 @@ describe("punctele", () => {
   test("ce nu e lista da lista goala", () => {
     assert.deepEqual(normalizeazaPuncteCuriera({ status: "failed" }), []);
     assert.deepEqual(normalizeazaPuncteCuriera(null), []);
+  });
+});
+
+describe("lockerul FANbox, dupa nume", () => {
+  test("toate lockerele lor se numesc FANbox; pudo si oficiile nu", () => {
+    assert.ok(ePunctFanbox("FANbox Kaufland Theodor Pallady"));
+    assert.ok(ePunctFanbox(" fanbox Lidl"));
+    assert.ok(!ePunctFanbox("Sediul FAN Alesd"));
+    assert.ok(!ePunctFanbox("_Nir Team Nineteen SRL"));
+    assert.ok(!ePunctFanbox(undefined));
   });
 });
 

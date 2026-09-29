@@ -176,6 +176,22 @@ pune si pe un singur AWB, „oficiu FAN". Registrul productiei: migratia 68.
 Lasat: editorul regulilor de transport (`ShippingRulesEditor`, `COURIER_OPTIONS`) nu tinteste Curiera,
 si nici pe ceilalti 11 curieri noi; e o hotarare pentru toti, nu pentru unul.
 
+## A doua verificare, inainte de productie (3 recenzenti, 17 constatari)
+
+Doua erau ordinea livrarii (migratia 68 INAINTEA codului, schema de referinta regenerata in acelasi
+push), deci chiar planul. Restul, reparate: ⚠⚠ „Deconecteaza" lasa zona pornita, iar la un magazin care
+avea NUMAI Curiera checkoutul ramanea fara nicio livrare si comanda nu se mai putea plasa (acum
+deconectarea stinge si zona); o stare FINALA cu istoricul picat nu se mai amana (comanda iesea din coada
+cu cardul pe „In curs de livrare"); un `StatusChanged` necunoscut nu mai mosteneste problema de dinainte,
+iar un cod din aceeasi clipa cu iesirea din avizat ia starea noua; un refuz determinist alarmeaza de la
+primul; dupa „forbidden", o citire picata a starii e „nu stim" (numarul ramane pe comanda); la locker
+FANbox, un singur colet de cel mult 30 kg si la emitere (fereastra si lot); fereastra nu mai ofera
+servicii extra cablate din contul de test; notificarea duce la pagina lor de urmarire; textele (de unde
+vine cheia, serviciul gresit, ce pierzi la deconectare, statusul mutat de urmarire, butonul din refuzul
+portii) spun ce face codul. Productia a fost verificata inainte doar citind: corpul lui
+`cont_comanda_mea` identic cu cel din migratie fara randul Curiera (md5), migratia aplicata intr-o
+tranzactie ANULATA a trecut fara exceptie.
+
 ---
 
 ## Ce ramane deschis, si de ce

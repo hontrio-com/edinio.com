@@ -132,6 +132,12 @@ describe("ce se spune omului", () => {
     assert.match(r.mesaj, /Anuleaza AWB/);
   });
 
+  test("notificarea duce la istoricul real, pe pagina lor de urmarire", () => {
+    /* Panoul arata doar ultima stare: „deschide comanda pentru istoric" ar fi trimis omul in gol. */
+    const r = semnalareCuriera({ orderNumber: "#0001", awb: "710915533", cheie: "avizat|A2", eticheta: "x", evenimente: null });
+    assert.match(r.mesaj, /Istoricul complet: https:\/\/app\.curiera\.ro\/cscourier\/Main\?tracking=true&appcont=4416&awbno=710915533/);
+  });
+
   test("O SINGURA notificare, cu toate evenimentele noi, pe limba omului", () => {
     const r = semnalareCuriera({
       orderNumber: "1002", awb: "8", cheie: "in_curs", eticheta: "In curs de livrare",
@@ -150,7 +156,7 @@ describe("ce se spune omului", () => {
 
 describe("alarma magazinului", () => {
   /* Pragurile cronului: vezi `MIN_*_ALARMA` din curiera-tracking/route.ts. */
-  const PRAGURI = { autentificare: 1, esecuri: 3, necunoscute: 1 };
+  const PRAGURI = { autentificare: 1, refuz: 1, esecuri: 3, necunoscute: 1 };
   const g = (p: Partial<ReturnType<typeof galeataGoala>>) => ({ ...galeataGoala(), ...p });
 
   test("⚠⚠ numai BAD_LOGIN primeste „verifica cheia”, si e critica", () => {
@@ -175,6 +181,12 @@ describe("alarma magazinului", () => {
        din clipa emiterii, masurat). Cu praguri de 3 si 5, un magazin cu 1-2 colete tacea mereu. */
     assert.equal(alarmaMagazinului(g({ autentificare: 1 }), PRAGURI)?.fel, "autentificare");
     assert.match(alarmaMagazinului(g({ necunoscute: 1 }), PRAGURI)!.mesaj, /altui cont/);
+  });
+
+  test("⚠ un refuz care nu e BAD_LOGIN alarmeaza si el de la primul, fara sfatul de cheie", () => {
+    const a = alarmaMagazinului(g({ refuz: 1, exemplu: "FORBIDDEN" }), PRAGURI);
+    assert.equal(a?.severity, "warning");
+    assert.match(a!.mesaj, /nu schimba cheia/);
   });
 
   test("⚠ caderile trecatoare au prag, iar macar o reusita opreste orice alarma", () => {

@@ -167,7 +167,8 @@ test("⚠⚠ ordinea: tranzitie, apoi semnalare, apoi starea", () => {
   assert.match(s, /prelucrat = rez !== "reincearca";/);
   assert.match(s, /if \(prelucrat && !amanaStarea && \(c\.schimbata \|\| memorie !== null\)\) \{\s*await scrieUrmarirea\(admin, \{/);
   /* ⚠ Istoricul picat nu scrie cheia cand starea nu cere atentie: tura urmatoare il reia. */
-  assert.match(s, /const amanaStarea = istoricPicatAici && !trebuieSemnalat\(c\.cheie\);/);
+  assert.match(s, /const amanaStarea = istoricPicatAici && !trebuieSemnalat\(c\.cheie\) && !eStareFinala\(c\.cheie\);/,
+    "o stare finala amanata nu s-ar mai scrie niciodata: comanda iese din coada");
 });
 
 test("⚠ semnalarea ajunge la om, o data, cu tipul curierului", () => {
@@ -201,7 +202,8 @@ test("⚠⚠ facturarea automata se ASTEAPTA, in try, si nu doar la livrat", () 
 test("⚠ alarmele se ridica PE MAGAZIN, plus alarma de coada", () => {
   const s = viu(CRON);
   const b = bloc(s, "for (const [bizId, g] of galeti) {");
-  assert.match(b, /alarmaMagazinului\(g, \{\s*autentificare: MIN_AUTENTIFICARE_ALARMA, esecuri: MIN_ESECURI_ALARMA, necunoscute: MIN_NECUNOSCUTE_ALARMA,\s*\}\)/);
+  assert.match(b, /alarmaMagazinului\(g, \{\s*autentificare: MIN_AUTENTIFICARE_ALARMA, refuz: MIN_REFUZ_ALARMA, esecuri: MIN_ESECURI_ALARMA,\s*necunoscute: MIN_NECUNOSCUTE_ALARMA,\s*\}\)/);
+  assert.match(s, /const MIN_REFUZ_ALARMA = 1;/);
   /* ⚠ Deterministe la Curiera, deci de la PRIMUL: altfel un magazin mic tacea pentru totdeauna. */
   assert.match(s, /const MIN_AUTENTIFICARE_ALARMA = 1;/);
   assert.match(s, /const MIN_NECUNOSCUTE_ALARMA = 1;/);

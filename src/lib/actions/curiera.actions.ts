@@ -117,8 +117,31 @@ export async function disconnectCuriera(
   const ctx = await proprietar(businessId);
   if (!ctx.ok) return { error: ctx.error };
 
+  /*
+   * ⚠ ZONA SE STINGE ODATA CU CONFIGURAREA. Checkoutul nu mai vinde Curiera fara configurare
+   * (`curieraGata`), dar zona ramanea pornita: la un magazin care o avea SINGURA, lista de livrare
+   * iesea goala, iar formularul cerea totusi o metoda, deci nu se mai putea plasa nicio comanda.
+   * Setari o arata stinsa si blocata (nu mai e integrata), iar blocul „Curierii" din pagini o
+   * arata mai departe. Stinsa aici, toate trei spun acelasi lucru; la reconectare se porneste din
+   * nou din Setari > Livrare, cum spune si ghidul.
+   */
+  const { data: rand, error: eCitire } = await ctx.supabase
+    .from("store_settings").select("shipping_zones").eq("business_id", businessId).maybeSingle();
+  if (eCitire) return { error: `Setarile de livrare nu s-au putut citi (${eCitire.message}). Nu am deconectat nimic.` };
+  const zone = rand?.shipping_zones;
+  const curieraPornita = !!zone && typeof zone === "object" && !Array.isArray(zone)
+    && ((zone as Record<string, { enabled?: unknown } | undefined>).curiera?.enabled === true);
+
   const { error } = await ctx.supabase.from("store_settings").update({
     curiera_config: null,
+    ...(curieraPornita
+      ? {
+          shipping_zones: {
+            ...(zone as Record<string, unknown>),
+            curiera: { ...((zone as Record<string, Record<string, unknown>>).curiera), enabled: false },
+          } as unknown as Json,
+        }
+      : {}),
     updated_at: new Date().toISOString(),
   }).eq("business_id", businessId);
 

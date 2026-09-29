@@ -241,7 +241,8 @@ export function deCeNuSePoateAwbPropriu(o: ComandaLaPoartaAwb, curier?: CurierPr
      */
     return `Comanda are deja AWB la ${NUME_CURIER[alt]} (${numar}). Anulează-l întâi: `
       + "două etichete pe același colet înseamnă două transporturi plătite și rambursul cerut de două ori. "
-      + "Dacă acel curier refuză anularea, fiindcă a preluat deja coletul, folosește „Detașează AWB” "
+      + "Dacă acel curier refuză anularea, fiindcă a preluat deja coletul, folosește „Anulează AWB” "
+      + "(la FAN Courier și Curiera scoate numărul și după refuz) sau „Detașează AWB” "
       + "din fereastra de editare a comenzii.";
   }
 

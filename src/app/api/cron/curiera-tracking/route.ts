@@ -83,6 +83,8 @@ const BUGET_MS = maxDuration * 1000 - ASTEPTARE_MS - MARJA_MS;
  * totdeauna fara ca nimeni sa afle. Caderile trecatoare (retea, 5xx) raman la 3.
  */
 const MIN_AUTENTIFICARE_ALARMA = 1;
+/* Un refuz care nu e BAD_LOGIN (alt cod in plic, 4xx) e si el determinist: de la primul. */
+const MIN_REFUZ_ALARMA = 1;
 const MIN_ESECURI_ALARMA = 3;
 const MIN_NECUNOSCUTE_ALARMA = 1;
 
@@ -359,7 +361,10 @@ export async function GET(req: NextRequest) {
         /* ⚠ Istoricul picat NU scrie cheia cand starea curenta nu cere atentie: scrisa, cheia n-ar
            mai diferi la tura urmatoare, istoricul nu s-ar mai cere, iar un „avizat" petrecut intre
            doua treceri s-ar pierde definitiv. Tranzitia de mai sus e idempotenta, deci ramane. */
-        const amanaStarea = istoricPicatAici && !trebuieSemnalat(c.cheie);
+        /* ⚠ Dar NU pe o stare FINALA: dupa `livrat` comanda iese din coada (statusul ei nu mai e
+           urmarit), deci o cheie amanata n-ar mai fi scrisa niciodata, iar cardul ar ramane pe
+           „In curs de livrare" la o comanda Livrata. */
+        const amanaStarea = istoricPicatAici && !trebuieSemnalat(c.cheie) && !eStareFinala(c.cheie);
         if (prelucrat && !amanaStarea && (c.schimbata || memorie !== null)) {
           await scrieUrmarirea(admin, {
             orderId: o.id,
@@ -384,7 +389,8 @@ export async function GET(req: NextRequest) {
   /* ⚠ Alarmele PE MAGAZIN: un magazin sanatos nu are voie sa ascunda cheia expirata a vecinului. */
   for (const [bizId, g] of galeti) {
     const alarma = alarmaMagazinului(g, {
-      autentificare: MIN_AUTENTIFICARE_ALARMA, esecuri: MIN_ESECURI_ALARMA, necunoscute: MIN_NECUNOSCUTE_ALARMA,
+      autentificare: MIN_AUTENTIFICARE_ALARMA, refuz: MIN_REFUZ_ALARMA, esecuri: MIN_ESECURI_ALARMA,
+      necunoscute: MIN_NECUNOSCUTE_ALARMA,
     });
     if (!alarma) continue;
     await logError({

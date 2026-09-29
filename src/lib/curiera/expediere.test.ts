@@ -2,7 +2,9 @@ import { strict as assert } from "node:assert";
 import { describe, test } from "node:test";
 
 import type { CurieraConfig } from "./client";
+import { FANBOX_MAX_WEIGHT_KG } from "@/lib/fancourier";
 import {
+  GREUTATE_MAXIMA_LOCKER_KG,
   adresaCuSector,
   ascii,
   lipsuriExpediereCuriera,
@@ -208,6 +210,26 @@ describe("lipsurile, singura plasa", () => {
   test("doua dimensiuni din trei nu trec", () => {
     const l = lipsuriExpediereCuriera(CONFIG, { ...DATE, dimensiuni: { lungime: 10, latime: 10, inaltime: 0 } });
     assert.ok(l.some((x) => x.includes("dimensiunile")));
+  });
+});
+
+describe("lockerul FANbox", () => {
+  const LA_LOCKER: DateExpediereCuriera = {
+    ...DATE, punctId: "16478", punctLocker: true, destinatar: { ...DATE.destinatar, adresa: "" },
+  };
+
+  test("⚠ un singur colet, de cel mult 30 kg, si la emitere (checkoutul opreste doar cosul)", () => {
+    assert.deepEqual(lipsuriExpediereCuriera(CONFIG, LA_LOCKER), []);
+    assert.ok(lipsuriExpediereCuriera(CONFIG, { ...LA_LOCKER, colete: 2 }).some((l) => l.includes("un singur colet")));
+    assert.ok(lipsuriExpediereCuriera(CONFIG, { ...LA_LOCKER, greutateKg: 34 }).some((l) => l.includes("30 kg")));
+  });
+
+  test("pudo si oficiile (fara steag) n-au limita publicata, deci nu se opresc", () => {
+    assert.deepEqual(lipsuriExpediereCuriera(CONFIG, { ...LA_LOCKER, punctLocker: false, colete: 2, greutateKg: 40 }), []);
+  });
+
+  test("pragul e acelasi cu al checkoutului (FANBOX_MAX_WEIGHT_KG)", () => {
+    assert.equal(GREUTATE_MAXIMA_LOCKER_KG, FANBOX_MAX_WEIGHT_KG);
   });
 });
 

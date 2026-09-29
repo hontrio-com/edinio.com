@@ -233,7 +233,7 @@ export function CurieraConfigClient({
           action={
             <ButonDeconectare
               nume="Curiera"
-              cePierzi="Se sterge toata configurarea Curiera din Edinio: cheia API, adresa de ridicare si serviciile alese. Cheia nu se mai poate citi din Edinio, deci ca sa te intorci o copiezi din nou din contul Curiera. AWB-urile deja emise raman pe comenzi si in contul Curiera."
+              cePierzi="Se sterge toata configurarea Curiera din Edinio: cheia API, adresa de ridicare si serviciile alese. Cheia nu se mai poate citi din Edinio, deci ca sa te intorci o iei din nou din contul Curiera. AWB-urile deja emise raman pe comenzi si in contul Curiera, dar urmarirea lor se opreste, iar etichetele le descarci de acum din contul Curiera. Metoda Curiera se opreste si in Setari -> Livrare."
               pending={disconnecting}
               onConfirma={handleDisconnect}
             />
@@ -253,7 +253,7 @@ export function CurieraConfigClient({
 
       <Panel step={1} title="Cheia API">
         <p className="text-xs text-muted-foreground">
-          Cheia se genereaza din contul tau Curiera. E singura credentiala: cine o are poate
+          Cheia API o gasesti in contul tau Curiera sau o ceri de la Curiera. E singura credentiala: cine o are poate
           emite si anula AWB-uri pe contul tau.
         </p>
 
@@ -284,7 +284,7 @@ export function CurieraConfigClient({
         {proba?.cheieDeClient === false && (
           <Callout variant="warning" icon={AlertTriangle}>
             Cheia nu apartine unui cont de client Curiera, deci emiterea AWB-urilor nu va merge.
-            Genereaza cheia din contul tau de client.
+            Foloseste cheia contului tau de client (o gasesti in contul Curiera sau o ceri de la ei).
           </Callout>
         )}
       </Panel>
@@ -334,7 +334,7 @@ export function CurieraConfigClient({
         {!proba && (
           <Callout variant="info" icon={Info}>
             {"Apasa „Testeaza conexiunea” ca sa alegi serviciile din lista contului tau."}
-            {" Un serviciu scris gresit nu e refuzat pe loc: Curiera pune expedierea in ciorna."}
+            {" Un serviciu scris gresit face ca emiterea sa fie refuzata (Curiera nu il respinge pe loc, deci l-ai afla abia la primul AWB). Alege-l din lista."}
           </Callout>
         )}
 
@@ -422,7 +422,7 @@ export function CurieraConfigClient({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Se platesc per colet, deci pornesc nebifate. Le poti schimba si la fiecare AWB.
+            Se platesc per colet, deci pornesc nebifate. Cele bifate aici vin bifate pe fiecare AWB, si le poti scoate la un AWB anume.
           </p>
         </div>
 

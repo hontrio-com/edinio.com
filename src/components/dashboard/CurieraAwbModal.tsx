@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { AlertTriangle, Download, Loader2, MapPin, Package, Truck, X } from "lucide-react";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { createCurieraAwbAction, getCurieraEtichetaAction } from "@/lib/actions/curiera.actions";
-import type { DateAwbCuriera } from "@/lib/curiera/expediere";
+import { GREUTATE_MAXIMA_LOCKER_KG, type DateAwbCuriera } from "@/lib/curiera/expediere";
+import { ePunctFanbox } from "@/lib/curiera/puncte";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { liniaAdresei } from "@/lib/orders/adresa";
@@ -146,7 +147,9 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
     optiuni?.asigurare && Number(order.total) > 0 ? Number(order.total).toFixed(2) : "",
   );
   const extraDinConfig = optiuni?.serviciiExtra ?? [];
-  const extraDeAratat = [...new Set([...extraDinConfig, ...Object.keys(NUME_EXTRA)])];
+  /* ⚠ Numai cele alese in configurare: lista serviciilor e a CONTULUI fiecarui comerciant, iar o
+     lista cablata (a contului de test) ar fi oferit casute platite pe care contul lui poate nu le are. */
+  const extraDeAratat = extraDinConfig;
   const [extra, setExtra] = useState<string[]>(extraDinConfig);
   const [continut, setContinut] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
@@ -190,6 +193,8 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
       },
       /* ⚠ Id-ul punctului ramane SIR: `Number()` ar taia zerourile din fata unui id. */
       punctId: laPunct ? String(addr.locker_id).trim() : null,
+      /* ⚠ Dulapul FANbox primeste un singur colet de cel mult 30 kg; serverul refuza altfel. */
+      punctLocker: laPunct && ePunctFanbox(addr.locker_name),
       greutateKg: kg,
       colete: nrColete,
       dimensiuni: cateDim === 3 ? { lungime: dim[0], latime: dim[1], inaltime: dim[2] } : null,
@@ -323,6 +328,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
                     {addr.locker_city ? ` · ${addr.locker_city}` : ""}
                   </p>
                   <p className="mt-1 text-muted-foreground">
+                    {ePunctFanbox(addr.locker_name) ? `Locker FANbox: un singur colet, de cel mult ${GREUTATE_MAXIMA_LOCKER_KG} kg. ` : ""}
                     Clientul ridica singur coletul de acolo. Localitatea si judetul de mai jos sunt ale punctului.
                   </p>
                 </div>
@@ -397,8 +403,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
               </div>
             </div>
 
-            {/* Cele alese in configurare vin bifate; oricare se poate pune sau scoate pentru un
-                singur colet (configurarea promite asta). Se arata si cele cunoscute ale platformei. */}
+            {/* Cele alese in configurare vin bifate; aici se pot scoate pentru un singur colet. */}
             {extraDeAratat.length > 0 ? (
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">Servicii extra (se platesc per colet)</p>

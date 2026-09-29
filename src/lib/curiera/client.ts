@@ -697,8 +697,26 @@ export async function anuleazaExpediereaCuriera(
     );
   }
 
-  /* „forbidden" sau un plic `failed` care nu e de autentificare: se afla din stare. */
-  const [stare] = await stariCuriera(config, [numarAwb]);
+  /*
+   * „forbidden" sau un plic `failed` care nu e de autentificare: se afla din stare.
+   *
+   * ⚠ O citire PICATA aici e „nu stim", nu refuz: altfel dezlegarea ar scoate de pe comanda un
+   * AWB despre care nu stim nimic (poate viu, poate ciorna) si ar elibera slotul. Pe `necunoscut`
+   * dezlegarea se opreste si numarul ramane, cum promite si ghidul.
+   */
+  let stari: StareCuriera[];
+  try {
+    stari = await stariCuriera(config, [numarAwb]);
+  } catch (e) {
+    throw cuFel(
+      eroareNesigura(
+        `Curiera a refuzat anularea AWB-ului ${numarAwb}, iar starea lui nu s-a putut citi (${(e as Error).message}). `
+        + "Verifica-l in contul Curiera.",
+      ),
+      "indisponibil",
+    );
+  }
+  const [stare] = stari;
   if (!stare || !stare.no) return { fel: "negasit" };
   const s = stare.status.toLowerCase();
   if (ANULAT.has(s)) return { fel: "deja_anulat" };

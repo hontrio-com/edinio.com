@@ -214,12 +214,28 @@ export function evenimenteDeSemnalat(
    * schimbari de stare, deci un motiv nou („avizat|A3" dupa „avizat|A2") ar fi fost aruncat tocmai
    * cand istoricul s-a citit, iar caderea pe starea curenta nu mai intervine atunci.
    */
+  /*
+   * ⚠ Doua capcane ale mostenirii, amandoua inchise aici:
+   *   - un `StatusChanged` spre o stare NECUNOSCUTA nu mosteneste starea-problema de dinainte:
+   *     starea lui e necunoscuta, deci nu se semnaleaza;
+   *   - un `CodeChanged` din ACEEASI clipa cu o iesire din avizat (ordinea lor in lista nu e
+   *     masurata) ia starea NOUA din clipa lui, nu pe cea veche: altfel reluarea livrarii ar suna
+   *     ca o problema.
+   */
+  const stareLaClipa = new Map<number, StatusCuriera | null>();
+  for (const ev of istoric) {
+    if (/^StatusChanged:/i.test(ev.tip.trim()) && ev.data !== null) stareLaClipa.set(ev.data, stareaEvenimentului(ev));
+  }
   let stareaCurenta: StatusCuriera | null = null;
   for (const ev of istoric) {
     const tip = ev.tip.trim();
-    if (/^StatusChanged:/i.test(tip)) stareaCurenta = stareaEvenimentului(ev) ?? stareaCurenta;
-    if (!/^(StatusChanged|CodeChanged):/i.test(tip)) continue;
-    const stare = stareaEvenimentului(ev) ?? stareaCurenta;
+    const eStare = /^StatusChanged:/i.test(tip);
+    if (eStare) stareaCurenta = stareaEvenimentului(ev);
+    if (!eStare && !/^CodeChanged:/i.test(tip)) continue;
+    const stare = eStare
+      ? stareaCurenta
+      : stareaEvenimentului(ev)
+        ?? (ev.data !== null && stareLaClipa.has(ev.data) ? stareLaClipa.get(ev.data) ?? null : stareaCurenta);
     if (!stare || STARI[stare].semnaleaza !== true) continue;
     const cheie = cheieEveniment(ev);
     if (vazute.has(cheie)) continue;

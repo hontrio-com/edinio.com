@@ -26,7 +26,28 @@ export function StorefrontThemeScope({
   children: ReactNode;
 }) {
   const fonts = fontSetup(style.fontHeading, style.fontBody);
-  const vars = { ...styleToCssVars(style), ...fonts.vars, backgroundColor: "var(--st-bg)" };
+  /*
+    ⚠ Fonturile ALESE se pun si pe utilitarele Tailwind (01.10.2026).
+
+    `--st-font-*` le citeau doar meniul si contul clientului: textul paginii lua
+    fontul de pe `<html>` (calculat acolo, deci mostenit gata rezolvat), iar
+    titlurile regula globala `font-heading`. Asa ca:
+      - `fontFamily` aici, ca textul de dedesubt sa-l mosteneasca;
+      - `--font-app` (textul) si `--font-app-heading` (titlurile), pe care le
+        citesc `font-sans`, `font-heading` si regula titlurilor din `stil-comun.css`.
+
+    Pe Geist nu se pune nimic: vitrinele care n-au ales niciun font raman
+    exact cum erau, pana la ultimul atribut.
+  */
+  const fonturiAlese = style.fontHeading !== "geist" || style.fontBody !== "geist";
+  const vars = {
+    ...styleToCssVars(style),
+    ...fonts.vars,
+    ...(fonturiAlese
+      ? { "--font-app": fonts.vars["--st-font-body"], "--font-app-heading": fonts.vars["--st-font-heading"], fontFamily: "var(--st-font-body)" }
+      : {}),
+    backgroundColor: "var(--st-bg)",
+  };
 
   return (
     <div

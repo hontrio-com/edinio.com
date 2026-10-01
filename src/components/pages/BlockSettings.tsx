@@ -12,8 +12,9 @@ import type {
   Block, BlockStyle, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock,
   ButtonBlock, ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, FaqBlock,
   TrustBlock, ProductsBlock, SocialBlock, ContactBlock, HtmlBlock, ColumnItem, GalleryItem, GreutateFont,
-  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock,
+  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock, AcasaBlock,
 } from "@/lib/pages/blocks.types";
+import { SECTIUNI_ACASA, VARIANTE_HERO } from "@/lib/pages/pagina-acasa";
 import { ProductPicker } from "./ProductPicker";
 import type { FormDef } from "@/lib/pages/forms.types";
 import { CampCuloare } from "./editor/CampCuloare";
@@ -108,10 +109,12 @@ function GalerieImagini({ items, onChange }: { items: GalleryItem[]; onChange: (
 /** Ce stie editorul despre integrarile magazinului (doar nume, pentru explicatii). */
 export interface IntegrariEditor { furnizori: string[]; plati: string[]; curieri: string[] }
 
-export function BlockSettings({ block, onChange, categories, forms, businessId, isAdmin, integrari, pachete }: {
+export function BlockSettings({ block, onChange, categories, forms, businessId, isAdmin, integrari, pachete, randuriProduse = [] }: {
   block: Block; onChange: (patch: Partial<Block>) => void; categories: string[]; forms: FormDef[]; businessId: string; isAdmin: boolean;
   integrari: IntegrariEditor;
   pachete: PachetPagina[];
+  /** Randurile de produse din „Editeaza magazinul", pentru blocul „Rand de produse". */
+  randuriProduse?: { id: string; titlu: string; oprit: boolean }[];
 }) {
   const patch = onChange as (p: Record<string, unknown>) => void;
   const setStyle = (style: BlockStyle) => patch({ style });
@@ -452,6 +455,45 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
           <Toggle label="Buton „Adaugă în coș” pe produse" checked={!!b.showAddToCart} onChange={(v) => patch({ showAddToCart: v })} />
           <Field label="Număr maxim de produse"><input type="number" min={1} max={24} value={b.limit ?? 8} onChange={(e) => patch({ limit: Math.min(24, Math.max(1, Number(e.target.value) || 1)) })} className={inputCls} /></Field>
           <ControaleAspect style={b.style} onChange={setStyle} hide={["align"]} />
+        </div>
+      );
+    }
+    case "acasa": {
+      /*
+        Sectiunile paginii principale: aici se alege DOAR care si cum. Continutul
+        lor (bannere, recenzii, beneficii) ramane in „Editeaza magazinul", ca sa
+        nu existe doua locuri din care se schimba acelasi lucru.
+      */
+      const b = block as AcasaBlock;
+      const sectiune = SECTIUNI_ACASA.find((s) => s.cheie === b.sectiune);
+      return (
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground">{sectiune?.eticheta ?? "Sectiune"}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{sectiune?.descriere}</p>
+          </div>
+          {b.sectiune === "hero" && (
+            <Select label="Designul bannerelor" value={b.varianta ?? "banners"} onChange={(v) => patch({ varianta: v })}
+              options={VARIANTE_HERO.map((v) => ({ value: v.valoare, label: v.eticheta }))} />
+          )}
+          {b.sectiune === "product_row" && (
+            <Select label="Ce rand" value={b.rand ?? "featured"} onChange={(v) => patch({ rand: v })}
+              options={[
+                { value: "featured", label: "Recomandate" },
+                ...randuriProduse.map((r) => ({ value: r.id, label: r.oprit ? `${r.titlu || "Fara titlu"} (oprit)` : (r.titlu || "Fara titlu") })),
+              ]} />
+          )}
+          {b.sectiune === "product_row" && randuriProduse.some((r) => r.id === b.rand && r.oprit) && (
+            <p className="text-xs text-amber-700">Randul e oprit in Editeaza magazinul. Porneste-l acolo ca sa apara.</p>
+          )}
+          {b.sectiune === "catalog" && (
+            <Toggle label="Bara de cautare si filtre" checked={b.cuBara !== false} onChange={(v) => patch({ cuBara: v })} />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Continutul se editeaza din{" "}
+            <Link href="/dashboard/editor" className="font-medium text-primary hover:underline">Editeaza magazinul</Link>.
+            {" "}Fiecare sectiune poate aparea o singura data pe pagina.
+          </p>
         </div>
       );
     }

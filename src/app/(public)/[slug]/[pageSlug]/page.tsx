@@ -22,14 +22,11 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
-import { BlockRenderer } from "@/components/pages/BlockRenderer";
+import { BlocuriPagina } from "@/components/pages/BlocuriPagina";
+import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { prepareBlocksForPublic } from "@/lib/pages/prepare-blocks";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
-import { resolveAllProductsBlocks } from "@/lib/pages/resolve-products";
-import { resolveAllBundlesBlocks } from "@/lib/pages/resolve-bundles";
-import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
-import type { PublicForm, FormField } from "@/lib/pages/forms.types";
 import { metadataMagazin, RandeazaMagazin } from "@/lib/storefront/catalog/pagina-magazin";
 import { flattenBlocks } from "@/lib/pages/block-tree";
 import { fundalulPaginii } from "@/lib/pages/fundal-pagina";
@@ -327,29 +324,10 @@ export default async function CustomPage({ params, searchParams }: Props) {
 
   const blocks = blocuriPublice(page.blocks);
   const toate = flattenBlocks(blocks);
-  /*
-   * ⚠ Formularele se citesc NUMAI cand pagina are un bloc de contact legat de
-   * unul, si numai acelea. Pana acum se aduceau toate formularele magazinului,
-   * cu campurile lor, la FIECARE vizita a oricarei pagini, chiar fara bloc de
-   * contact (masurat: 4 blocuri de contact in 34 de pagini).
-   */
-  const formulareFolosite = [...new Set(toate.flatMap((b) => (b.type === "contact" && b.formId ? [b.formId] : [])))];
 
-  // store_settings (menu + logo size) and forms via service role — not anon-readable.
-  const [{ data: storeSettings }, { data: formsRaw }] = await Promise.all([
-    createAdminClient().from("store_settings").select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown").eq("business_id", business.id).single(),
-    formulareFolosite.length > 0
-      ? createAdminClient().from("forms").select("id, name, fields, submit_label, success_message").eq("business_id", business.id).in("id", formulareFolosite)
-      : Promise.resolve({ data: [] as { id: string; name: string; fields: unknown; submit_label: string; success_message: string }[] }),
-  ]);
-
-  const forms: PublicForm[] = (formsRaw ?? []).map((f) => ({
-    id: f.id,
-    name: f.name,
-    fields: Array.isArray(f.fields) ? (f.fields as unknown as FormField[]) : [],
-    submit_label: f.submit_label,
-    success_message: f.success_message,
-  }));
+  // store_settings (menu + logo size) via service role — not anon-readable.
+  // Formularele blocurilor de contact le citeste `BlocuriPagina`.
+  const { data: storeSettings } = await createAdminClient().from("store_settings").select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown").eq("business_id", business.id).single();
 
   // Meniul si marimile de logo se citesc acum in buildChromeData, dintr-un
   // singur loc pentru toate paginile publice.
@@ -359,6 +337,15 @@ export default async function CustomPage({ params, searchParams }: Props) {
   const headersList = await headers();
   const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
+
+  /*
+   * Pagina aleasa ca pagina principala are o singura adresa: radacina magazinului.
+   * Altfel acelasi continut ar fi stat la doua adrese. Ciorna nu: o pagina
+   * nepublicata nu se deschide la radacina (vezi pagina principala).
+   */
+  if (page.is_published && citestePaginaAcasa(pageContent) === page.id) {
+    permanentRedirect(basePath || "/");
+  }
 
   /*
    * Datele structurate, dar NU pe ciorna.
@@ -466,7 +453,6 @@ export default async function CustomPage({ params, searchParams }: Props) {
               basePath={basePath}
               storeSlug={business.slug}
               social={social}
-              forms={forms}
               pageId={page.id}
               h1Id={h1Id}
             />
@@ -497,46 +483,5 @@ function ScheletBlocuri() {
         <SkeletonRanduri randuri={3} inaltime="h-28" className="mt-6" />
       </div>
     </div>
-  );
-}
-
-async function BlocuriPagina({
-  supabase, businessId, blocks, hideNoImage, hideOutOfStock,
-  color, basePath, storeSlug, social, forms, pageId, h1Id,
-}: {
-  supabase: SupabaseClient<Database>;
-  businessId: string;
-  blocks: Block[];
-  hideNoImage: boolean;
-  hideOutOfStock: boolean;
-  color: string;
-  basePath: string;
-  storeSlug: string;
-  social: Record<string, string>;
-  forms: PublicForm[];
-  pageId: string;
-  h1Id: string | null;
-}) {
-  // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
-  // Respecta setarea de vizibilitate a catalogului (ascunde fara imagini / fara stoc).
-  /*
-    Pachetele si integrarile se citesc NUMAI cand pagina are blocurile lor:
-    o pagina „Despre noi” nu plateste doua interogari in plus.
-  */
-  const tipuri = new Set(flattenBlocks(blocks).map((b) => b.type));
-  const [productsByBlock, bundlesByBlock, integrari] = await Promise.all([
-    resolveAllProductsBlocks(supabase, businessId, blocks, { hideNoImage, hideOutOfStock }),
-    tipuri.has("bundles") ? resolveAllBundlesBlocks(supabase, businessId, blocks) : Promise.resolve(undefined),
-    tipuri.has("payments") || tipuri.has("couriers") ? integrariPentruPagini(businessId) : Promise.resolve(null),
-  ]);
-
-  return (
-    <BlockRenderer
-      blocks={blocks}
-      ctx={{
-        color, basePath, storeSlug, social, products: [], productsByBlock, forms, businessId, pageId, h1Id,
-        bundlesByBlock, plati: integrari?.plati, curieri: integrari?.curieri,
-      }}
-    />
   );
 }

@@ -48,6 +48,8 @@ interface ProductData {
     specifications?: { label: string; value: string }[];
     quantity_tiers?: { enabled: boolean; tier2_price: number; tier2_badge: string; tier3_price: number; tier3_badge: string };
     stock_status?: string;
+    /** Termenul de livrare la precomanda (vezi `lib/storefront/precomanda.ts`). */
+    termen_precomanda?: string | null;
     low_stock_threshold?: number | null;
     dimensions?: { length: number; width: number; height: number };
     seo?: { title: string; description: string };

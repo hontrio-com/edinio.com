@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, useTransition } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, useDeferredValue, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, X } from "lucide-react";
@@ -46,6 +46,7 @@ import { meniuCuAcasa } from "@/lib/pages/menu";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
+import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { headerAreCautare, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { useDesignPreview } from "@/components/storefront/useDesignPreview";
 import { cuSemnePastrate } from "@/lib/storefront/preview-sticky";
@@ -135,6 +136,16 @@ interface Props {
    * `preview-protocol.ts`.
    */
   editorDesign?: boolean;
+  /**
+   * Pagina principala e o pagina din „Pagini" (01.10.2026). `design.home` vine
+   * deja facut din blocurile ei, iar blocurile obisnuite sosesc aici randate pe
+   * server, in `sloturi`. Vezi `lib/storefront/design/pagina-acasa.ts`.
+   */
+  paginaProprie?: {
+    sloturi: Record<string, ReactNode>;
+    /** Blocurile paginii au deja titlul principal: fara H1-ul ascuns al magazinului. */
+    areTitlu: boolean;
+  };
   /**
    * Pagina e deschisa in iframe-ul UNUI editor — cel vechi sau cel de design.
    *
@@ -272,10 +283,19 @@ interface Props {
   samanta?: number;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, paginaBrand, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, paginaBrand, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer, paginaProprie }: Props) {
   const { produs: prefixProdus, magazin: prefixCatalog } = usePermalinkuri();
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
-  const { design, style: designStyle } = useDesignPreview(designProp, designStyleProp, editorDesign);
+  const { design: designDinEditor, style: designStyle } = useDesignPreview(designProp, designStyleProp, editorDesign);
+  /*
+    Cu o pagina proprie ca pagina principala, lista de sectiuni e a PAGINII.
+    Editorul de design trimite live designul lui, cu sectiunile clasice: luate
+    de acolo, previzualizarea ar fi aratat alta pagina principala decat cea reala.
+  */
+  const design = useMemo(
+    () => (paginaProprie ? { ...designDinEditor, home: designProp.home } : designDinEditor),
+    [paginaProprie, designDinEditor, designProp.home],
+  );
   // Cosul si formularul de comanda nu sunt sectiuni de pagina, deci nu trec prin
   // `SectionRenderer`: sunt panouri conduse de starea de aici, cu zece props.
   // Dispecerul lor sta la locul de montare; variantele viitoare intra in cele
@@ -676,7 +696,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Pe pagina de catalog H1-ul il emite chiar varianta aleasa, deci fallback-ul
   // ascuns n-are ce cauta acolo; scanarea listei paginii principale n-ar fi
   // gasit-o oricum, fiindca slotul e in afara lui `design.home`.
-  const areTitluDePagina = surface === "shop"
+  const areTitluDePagina = paginaProprie?.areTitlu ? true : surface === "shop"
     ? variantMeta("shop_page", design.shop.page.variant)?.providesH1 === true
     : sectiuniDeAcasa.some((s) => s.enabled && variantMeta(s.kind, s.variant)?.providesH1 === true);
   const showCategoryBadges = pageContent.show_category_badges !== false; // category chip on product cards
@@ -1657,7 +1677,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings} />
         </main>
       ) : (
-        <SectionRenderer sections={sectiuniDeAcasa} />
+        <FurnizorSloturiBlocuri sloturi={paginaProprie?.sloturi}>
+          <SectionRenderer sections={sectiuniDeAcasa} />
+        </FurnizorSloturiBlocuri>
       )}
 
       <ChromeSection section={design.chrome.footer} />

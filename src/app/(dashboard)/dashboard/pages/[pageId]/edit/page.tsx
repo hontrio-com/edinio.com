@@ -18,6 +18,9 @@ import { curataHtmlPentruEditor } from "@/lib/pages/prepare-blocks";
 import { shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveAllBundlesBlocks } from "@/lib/pages/resolve-bundles";
 import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
+import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
+import { aplicaPaginaAcasa } from "@/lib/storefront/design/pagina-acasa";
+import { parseProductSections } from "@/lib/store-sections";
 
 // Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
 export const metadata = { title: "Editor de pagină" };
@@ -72,7 +75,8 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
 
   const pc = (ss?.page_content ?? {}) as Record<string, unknown>;
   const permalinkuri = permalinkuriDin(pc);
-  const catalogPePagina = shopOnPage(parseStoreDesign(ss?.storefront_design, { primaryColor: business.primary_color ?? "#07c527", pageContent: pc, features: {} }));
+  // Cu o pagina proprie ca pagina principala, catalogul are pagina lui (`aplicaPaginaAcasa`).
+  const catalogPePagina = shopOnPage(aplicaPaginaAcasa(parseStoreDesign(ss?.storefront_design, { primaryColor: business.primary_color ?? "#07c527", pageContent: pc, features: {} }), pc));
   // Acelasi fundal ca pe magazin (vezi `fundalulPaginii`).
   const fundal = fundalulPaginii(resolveDesign(ss?.storefront_design, { primaryColor: business.primary_color ?? "#07c527", pageContent: pc, features: {} }).style.colors.background);
 
@@ -145,6 +149,8 @@ export default async function EditCustomPage({ params }: { params: Promise<{ pag
       isAdmin={isAdmin}
       pachete={pacheteMap.editor ?? []}
       integrari={{ furnizori, plati: integrari.plati, curieri: integrari.curieri }}
+      estePaginaAcasa={citestePaginaAcasa(pc) === page.id}
+      randuriProduse={parseProductSections(pc.product_sections).map((r) => ({ id: r.id, titlu: r.title, oprit: !r.enabled }))}
     />
   );
 }

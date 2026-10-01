@@ -28,6 +28,7 @@ import { createCategory } from "@/lib/actions/category.actions";
 import { flattenCategoryForest } from "@/lib/categories/tree";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { formatPrice } from "@/lib/utils/format";
+import { curataTermenPrecomanda, TERMEN_PRECOMANDA_MAX } from "@/lib/storefront/precomanda";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -115,6 +116,8 @@ interface FormState {
   stock_quantity: string;
   low_stock_threshold: string;
   stock_status: "in_stock" | "out_of_stock" | "preorder";
+  /** Doar la precomanda: termenul de livrare aratat clientului. Vezi `lib/storefront/precomanda.ts`. */
+  termen_precomanda: string;
   is_featured: boolean;
   is_active: boolean;
   specifications: SpecRow[];
@@ -261,6 +264,7 @@ const EMPTY_FORM: FormState = {
   category: "", shipping_class: "", sku: "", images: [],
   track_inventory: false, stock_quantity: "", low_stock_threshold: "",
   stock_status: "in_stock",
+  termen_precomanda: "",
   is_featured: false, is_active: true,
   specifications: [],
   quantity_tiers: { ...EMPTY_TIERS },
@@ -287,6 +291,7 @@ type PageSections = {
   specifications?: SpecRow[];
   quantity_tiers?: { enabled: boolean; mode?: string; tier2_price: number; tier2_percent?: number; tier2_badge: string; tier3_price: number; tier3_percent?: number; tier3_badge: string };
   stock_status?: string;
+  termen_precomanda?: string;
   low_stock_threshold?: number;
   dimensions?: { length: number; width: number; height: number };
   short_description?: string;
@@ -334,6 +339,7 @@ function productToForm(p: Product): FormState {
     // se pierdea la prima redeschidere a produsului.
     low_stock_threshold: ps.low_stock_threshold != null ? String(ps.low_stock_threshold) : "",
     stock_status: (ps.stock_status as FormState["stock_status"]) ?? "in_stock",
+    termen_precomanda: typeof ps.termen_precomanda === "string" ? ps.termen_precomanda : "",
     is_featured: p.is_featured,
     is_active: p.is_active,
     specifications: ps.specifications ?? [],
@@ -1043,6 +1049,9 @@ export function ProductForm({ businessId, product, categories, brands = [], back
           tier3_badge: form.quantity_tiers.tier3_badge,
         },
         stock_status: form.stock_status,
+        // Se pastreaza si cand produsul iese din precomanda: daca revine, termenul e tot acolo.
+        // Pagina il arata numai in precomanda (`termenPrecomanda`).
+        termen_precomanda: curataTermenPrecomanda(form.termen_precomanda),
         low_stock_threshold: form.track_inventory && form.low_stock_threshold ? parseInt(form.low_stock_threshold) : null,
         dimensions: {
           length: parseFloat(form.dimensions.length) || 0,
@@ -1424,6 +1433,27 @@ export function ProductForm({ businessId, product, categories, brands = [], back
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
+                  {form.stock_status === "preorder" && (
+                    <div className="mt-3 space-y-1.5">
+                      <label htmlFor="produs-termen-precomanda" className="block text-sm font-medium text-foreground">Termen de livrare</label>
+                      <input id="produs-termen-precomanda" type="text" value={form.termen_precomanda}
+                        onChange={(e) => set("termen_precomanda", e.target.value)}
+                        maxLength={TERMEN_PRECOMANDA_MAX} placeholder="ex: Livrare in 3-4 saptamani" className={inputCls} />
+                      <p className="text-xs text-muted-foreground">
+                        Apare pe pagina produsului, langa „Precomanda”, in locul estimarii generale de livrare a magazinului.
+                      </p>
+                      {/*
+                        ⚠ Pagina produsului pune „Epuizat” inaintea precomenzii: cu stocul
+                        urmarit si zero bucati, butonul ar fi fost stins. Se spune aici,
+                        nu se descopera pe magazin.
+                      */}
+                      {form.track_inventory && (parseInt(form.stock_quantity) || 0) <= 0 && !form.variants.enabled && (
+                        <p className="text-xs text-amber-700">
+                          Ai urmarirea stocului pornita si stoc 0, deci produsul apare „Stoc epuizat”, nu „Precomanda”. Opreste urmarirea stocului sau pune cate bucati poti livra.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

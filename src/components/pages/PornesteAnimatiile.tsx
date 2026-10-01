@@ -15,7 +15,9 @@ import { pornesteAnimatiile } from "@/lib/pages/animatii";
 export function PornesteAnimatiile() {
   const semn = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    pornesteAnimatiile(semn.current?.closest("main") ?? null);
+    // Parintele, ca scriptul din pagina (`SCRIPT_ANIMATII`): pe ruta paginilor e `<main>`,
+    // pe pagina principala proprie e invelisul fiecarui grup de blocuri.
+    pornesteAnimatiile(semn.current?.parentElement ?? null);
   }, []);
   return <span ref={semn} hidden />;
 }

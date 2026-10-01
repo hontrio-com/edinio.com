@@ -21,6 +21,7 @@ import { BenefitsClassic } from "./sections/content/BenefitsClassic";
 import { ContactClassic } from "./sections/content/ContactClassic";
 import { GalleryClassic } from "./sections/content/GalleryClassic";
 import { ReviewsClassic } from "./sections/content/ReviewsClassic";
+import { SlotBlocuri } from "./SloturiBlocuri";
 
 /**
  * Variantele care nu sunt „classic" se incarca la cerere.
@@ -170,6 +171,9 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
       return <AboutClassic />;
     case "contact":
       return <ContactClassic />;
+    case "rich_blocks":
+      // Blocurile paginii alese ca pagina principala, randate pe server.
+      return <SlotBlocuri cheie={String(section.settings.slot ?? "")} />;
     default:
       return null;
   }

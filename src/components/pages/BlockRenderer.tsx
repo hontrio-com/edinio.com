@@ -13,6 +13,7 @@ import type { PublicForm } from "@/lib/pages/forms.types";
 import { BundlesBlockView } from "./blocks/BundlesBlock";
 import { NewsletterBlockView } from "./blocks/NewsletterBlock";
 import { CouriersBlockView, PaymentsBlockView } from "./blocks/IntegrariBlocks";
+import { AcasaBlockPreview } from "./blocks/AcasaBlockPreview";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
 import type { MetodaAfisata } from "@/lib/pages/integrari-pagini";
 
@@ -43,6 +44,8 @@ export interface BlockRendererCtx {
   /** Metodele de plata si curierii activi, pentru blocurile de integrari. */
   plati?: MetodaAfisata[];
   curieri?: MetodaAfisata[];
+  /** Editor: pagina e cea aleasa ca pagina principala (blocurile „Din pagina principala" chiar apar). */
+  estePaginaAcasa?: boolean;
 }
 
 /**
@@ -89,6 +92,12 @@ function BlockOne({ block, ctx }: { block: Block; ctx: BlockRendererCtx }) {
     case "newsletter": return <NewsletterBlockView block={block} color={ctx.color} businessId={ctx.businessId} pageId={ctx.pageId} disabled={ctx.preview} />;
     case "payments": return <PaymentsBlockView block={block} metode={ctx.plati ?? []} />;
     case "couriers": return <CouriersBlockView block={block} curieri={ctx.curieri ?? []} />;
+    /*
+      Pe magazin, sectiunile paginii principale le randeaza pagina principala, nu
+      blocurile (vezi `lib/storefront/design/pagina-acasa.ts`). Pe orice alta
+      pagina nu au ce arata: n-au catalog, cos si produse in spate.
+    */
+    case "acasa":    return ctx.preview ? <AcasaBlockPreview block={block} estePaginaAcasa={ctx.estePaginaAcasa === true} /> : null;
     default:         return null;
   }
 }

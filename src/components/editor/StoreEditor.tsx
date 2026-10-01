@@ -8,6 +8,9 @@ import {
   Layout, Smartphone, Tablet, Monitor, Paintbrush2, Home, ClipboardList, LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AlegeFonturi } from "./AlegeFonturi";
+import { fontDinPageContent } from "@/lib/storefront/design/fonturi-magazin";
+import type { FontKey } from "@/lib/storefront/design/types";
 import { cn } from "@/lib/utils/cn";
 import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
 import { SUPRAFETE, caleaSuprafetei, motivSuprafataIndisponibila, type CheieSuprafata, type SuprafeteDisponibile } from "@/components/editor/suprafete-preview";
@@ -97,6 +100,9 @@ interface PageContent {
   hero_show_content?: boolean;
   hero_banners?: string[];
   hero_banner_links?: string[];
+  /** Fonturile magazinului (01.10.2026). Lipsa = Geist. Vezi `fonturi-magazin.ts`. */
+  font_titluri?: FontKey;
+  font_text?: FontKey;
 }
 
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -623,6 +629,8 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     footer_logo_size: rawPageContent.footer_logo_size ?? 36,
     favicon_url: rawPageContent.favicon_url ?? null,
     hero_show_content: rawPageContent.hero_show_content ?? false,
+    font_titluri: fontDinPageContent(rawPageContent.font_titluri),
+    font_text: fontDinPageContent(rawPageContent.font_text),
   });
 
   /**
@@ -1016,6 +1024,13 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
                 className="w-28 px-2 py-1.5 text-xs border border-border rounded-lg bg-surface font-mono focus:outline-none focus:border-primary" />
             </div>
           </div>
+          <hr className="border-border" />
+          <AlegeFonturi
+            titluri={pageContent.font_titluri}
+            text={pageContent.font_text}
+            onTitluri={(v) => setPageContent((p) => ({ ...p, font_titluri: v }))}
+            onText={(v) => setPageContent((p) => ({ ...p, font_text: v }))}
+          />
           <SaveBtn loading={saving === "branding"} saved={saved === "branding"} onSave={saveBranding} />
         </div>
       ),

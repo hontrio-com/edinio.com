@@ -1,5 +1,6 @@
 "use client";
 
+import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
 import Image from "next/image";
@@ -472,6 +473,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
      */
     || (product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
+  /* Termenul propriu al precomenzii; cand exista, inlocuieste estimarea generala (vezi `precomanda.ts`). */
+  const termenPreco = isPreorder ? termenPrecomanda(pageSections) : null;
   /*
    * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
    * altfel din produs. Pana acum se citea mereu stocul produsului INTREG, deci
@@ -862,7 +865,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           </div>
         )}
 
-        {deliveryDates && (
+        {deliveryDates && !termenPreco && (
           <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
             <Calendar size={16} className="flex-shrink-0" style={{ color }} />
             <div>
@@ -919,7 +922,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {isPreorder && (
           <div className="flex items-center gap-2 rounded-xl px-3 py-2 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
             <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-            <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
+            <div className="min-w-0">
+              <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
+              {termenPreco && <p className="text-xs text-muted-foreground">{termenPreco}</p>}
+            </div>
           </div>
         )}
         {!isOutOfStock && !isPreorder && stocRamas !== null && stocRamas > 0 && stocRamas <= 10 && (

@@ -1,4 +1,5 @@
 import { resolveHeroBanners } from "./hero-banners";
+import { CHEIE_FONT_TEXT, CHEIE_FONT_TITLURI, fontDinPageContent } from "./fonturi-magazin";
 import {
   DESIGN_VERSION,
   type DesignContext,
@@ -70,8 +71,9 @@ export function resolveStyle(style: StoreStyle | undefined, ctx: DesignContext):
   }
   return {
     colors,
-    fontHeading: style?.fontHeading ?? "geist",
-    fontBody: style?.fontBody ?? "geist",
+    // Designul castiga; altfel alegerea din „Editeaza magazinul" (vezi `fonturi-magazin.ts`).
+    fontHeading: style?.fontHeading ?? fontDinPageContent(ctx.pageContent?.[CHEIE_FONT_TITLURI]) ?? "geist",
+    fontBody: style?.fontBody ?? fontDinPageContent(ctx.pageContent?.[CHEIE_FONT_TEXT]) ?? "geist",
     fontScale: style?.fontScale ?? "md",
     radius: style?.radius ?? "md",
     container: style?.container ?? "normal",

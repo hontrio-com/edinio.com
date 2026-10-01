@@ -69,7 +69,8 @@ test("detectorul prinde formele vechi, nu si comentariile", () => {
 
 test("editorul nu mai poate scrie prefixele: updatePageContent arunca cheia", () => {
   const s = readFileSync("src/lib/actions/store.actions.ts", "utf8");
-  assert.match(s, /const \{ permalinks: _permalinksIgnorate, \.\.\.faraPermalinks \} = pageContent;/);
+  // Si `pagina_acasa` (01.10.2026), din acelasi motiv: o scrie numai `seteazaPaginaAcasa`.
+  assert.match(s, /const \{ permalinks: _permalinksIgnorate, pagina_acasa: _paginaAcasaIgnorata, \.\.\.faraPermalinks \} = pageContent;/);
   assert.match(s, /\.\.\.faraPermalinks \};/);
 });
 

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   Plus, ExternalLink, Copy, Trash2, Pencil, ArrowUp, ArrowDown, X, Loader2,
   FileText, Menu as MenuIcon, Link2, Store, Home, } from "lucide-react";
-import { deletePage, duplicatePage, updateStoreMenu } from "@/lib/actions/page.actions";
+import { deletePage, duplicatePage, seteazaPaginaAcasa, updateStoreMenu } from "@/lib/actions/page.actions";
 import { PaginaNoua } from "./PaginaNoua";
 import { meniuCuAcasa, newMenuItemId, type MenuItem } from "@/lib/pages/menu";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
@@ -26,7 +26,7 @@ function adresa(b: Business, slug: string): string {
   return slug ? `${publicBase(b)}/${slug}` : publicBase(b);
 }
 
-export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial, catalogPePagina, cosPePagina, comandaPePagina, prefixCatalog = SEGMENT_MAGAZIN }: {
+export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial, catalogPePagina, cosPePagina, comandaPePagina, prefixCatalog = SEGMENT_MAGAZIN, paginaAcasaId = null }: {
   business: Business;
   pages: PageRow[];
   initialMenu: MenuItem[];
@@ -38,6 +38,8 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
   comandaPePagina: boolean;
   /** Prefixul catalogului (Setari > Permalink-uri). */
   prefixCatalog?: string;
+  /** Pagina proprie care se deschide la adresa magazinului; null = pagina cu sectiuni. */
+  paginaAcasaId?: string | null;
 }) {
   const router = useRouter();
   const [menuSalvat, setMenu] = useState<MenuItem[]>(initialMenu);
@@ -104,6 +106,26 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
       if ("error" in res) { toast.error(res.error); return; }
       if (isInMenu(p.slug)) persistMenu(menu.filter((m) => !(m.type === "page" && m.target === p.slug)));
       toast.success("Pagina a fost ștearsă.");
+      router.refresh();
+    });
+  }
+
+  /*
+   * Ce se deschide la adresa magazinului: pagina cu sectiuni (null) sau o pagina
+   * de aici. Vezi `lib/pages/pagina-acasa.ts`.
+   */
+  function alegePaginaAcasa(pageId: string | null) {
+    startTransition(async () => {
+      let res: Awaited<ReturnType<typeof seteazaPaginaAcasa>>;
+      try {
+        res = await seteazaPaginaAcasa(business.id, pageId);
+      } catch {
+        toast.error("Nu am primit raspuns de la server. Lista se reincarca: uita-te ce scrie la Acasa inainte sa incerci din nou.");
+        router.refresh();
+        return;
+      }
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(pageId ? "Pagina principala a fost schimbata." : "Pagina principala e din nou cea cu sectiuni.");
       router.refresh();
     });
   }
@@ -192,7 +214,8 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
         <Link href="/dashboard/pages/messages" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors">Mesaje</Link>
       </div>
 
-      <PaginiDeSistem business={business} catalogPePagina={catalogPePagina} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} prefixCatalog={prefixCatalog} />
+      <PaginiDeSistem business={business} catalogPePagina={catalogPePagina} cosPePagina={cosPePagina} comandaPePagina={comandaPePagina} prefixCatalog={prefixCatalog}
+        pagini={pages} paginaAcasaId={paginaAcasaId} onAlegeAcasa={alegePaginaAcasa} ocupat={isPending} />
 
       {/* Pages list */}
       {pages.length === 0 ? (
@@ -211,14 +234,23 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.is_published ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                     {p.is_published ? "Publicat" : "Ciorna"}
                   </span>
+                  {p.id === paginaAcasaId && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                      <Home className="h-3 w-3" /> PAGINA PRINCIPALA
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{publicBase(business)}/{p.slug}</p>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                  {p.id === paginaAcasaId
+                    ? (p.is_published ? publicBase(business) : "Cat timp e ciorna, la adresa magazinului se vede pagina cu sectiuni.")
+                    : `${publicBase(business)}/${p.slug}`}
+                </p>
               </div>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none shrink-0" title="Afișează în meniu">
                 <input type="checkbox" checked={isInMenu(p.slug)} onChange={() => toggleInMenu(p)} className="w-4 h-4 rounded accent-green-600" />
                 <span className="hidden sm:inline">În meniu</span>
               </label>
-              <a href={`${publicBase(business)}/${p.slug}`} target="_blank" rel="noopener noreferrer" title="Vezi pagina"
+              <a href={p.id === paginaAcasaId && p.is_published ? publicBase(business) : `${publicBase(business)}/${p.slug}`} target="_blank" rel="noopener noreferrer" title="Vezi pagina"
                 className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors shrink-0">
                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
               </a>
@@ -313,13 +345,22 @@ function PaginiDeSistem({
   cosPePagina,
   comandaPePagina,
   prefixCatalog,
+  pagini,
+  paginaAcasaId,
+  onAlegeAcasa,
+  ocupat,
 }: {
   business: Business;
   catalogPePagina: boolean;
   cosPePagina: boolean;
   comandaPePagina: boolean;
   prefixCatalog: string;
+  pagini: PageRow[];
+  paginaAcasaId: string | null;
+  onAlegeAcasa: (pageId: string | null) => void;
+  ocupat: boolean;
 }) {
+  const paginaAcasa = paginaAcasaId ? pagini.find((p) => p.id === paginaAcasaId) ?? null : null;
   const randuri = [
     {
       /*
@@ -342,6 +383,8 @@ function PaginiDeSistem({
       activa: catalogPePagina,
       inactivInsigna: "PE ACASA",
       inactivExplicatie: "Acum produsele stau pe pagina principală, sub celelalte secțiuni.",
+      /* Pagina principala proprie muta catalogul aici; nu se poate intoarce cat timp ea e aleasa. */
+      nota: paginaAcasa ? "Cu o pagina proprie ca pagina principala, produsele au mereu pagina lor." : "",
     },
     {
       titlu: "Cos",
@@ -375,6 +418,28 @@ function PaginiDeSistem({
               <p className="text-xs text-muted-foreground truncate mt-0.5">
                 {r.activa ? adresa(business, r.slug) : r.inactivExplicatie}
               </p>
+              {"nota" in r && r.nota ? <p className="text-xs text-muted-foreground mt-0.5">{r.nota}</p> : null}
+              {r.slug === "" && (
+                /*
+                  Ce se deschide la adresa magazinului (01.10.2026). Doar paginile
+                  publicate: o ciorna nu se vede de clienti. Cea aleasa ramane in
+                  lista si daca a fost trecuta pe ciorna intre timp, ca sa se vada.
+                */
+                <label className="mt-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0">Se deschide:</span>
+                  <select
+                    value={paginaAcasaId ?? ""}
+                    disabled={ocupat}
+                    onChange={(e) => onAlegeAcasa(e.target.value || null)}
+                    className="w-full sm:w-auto max-w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary"
+                  >
+                    <option value="">Pagina cu sectiuni (din Editeaza magazinul)</option>
+                    {pagini.filter((p) => p.is_published || p.id === paginaAcasaId).map((p) => (
+                      <option key={p.id} value={p.id}>{p.title}{p.is_published ? "" : " (ciorna)"}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
 
             {r.activa && (

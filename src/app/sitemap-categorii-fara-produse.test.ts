@@ -347,7 +347,8 @@ describe("citesteDateMagazin, rulata pe baza de proba", () => {
   test("restul citirilor raman ce erau: produsele cu slug, paginile publicate; niciun produs la magazinul cu unul singur", async () => {
     const d = await citesteDateMagazin(biz(B_ESAFE, { hide_out_of_stock_products: true }), vizitator());
     assert.deepEqual(d.produse, [{ slug: "bocanci-s3", updated_at: "2026-08-20T00:00:00.000Z" }]);
-    assert.deepEqual(d.pagini, [{ slug: "despre", updated_at: null, seo: {} }]);
+    // `id` din 01.10.2026: pagina aleasa ca pagina principala iese din sitemap dupa el.
+    assert.deepEqual(d.pagini, [{ id: "g1", slug: "despre", updated_at: null, seo: {} }]);
     const de = jurnal.length;
     const unul = await citesteDateMagazin(biz(B_UN_PRODUS, { store_mode: "one_product", one_product_id: "p3" }, DESIGN_FARA_CATALOG), vizitator());
     assert.deepEqual(unul.produse, []);

@@ -21,6 +21,8 @@ export type SectionBlock =
 
 /** `full` se intinde pe toata latimea; `contained` primeste containerul paginii. */
 export function sectionLayout(section: SectionInstance): "contained" | "full" {
+  // Blocurile unei pagini proprii isi aleg singure latimea (vezi `pagina-acasa.ts`).
+  if (section.kind === "rich_blocks") return "full";
   return variantMeta(section.kind, section.variant)?.layout ?? "contained";
 }
 

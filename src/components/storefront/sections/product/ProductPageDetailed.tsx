@@ -1,5 +1,6 @@
 "use client";
 
+import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { legaturaBrand } from "@/lib/storefront/brand-href";
@@ -486,6 +487,8 @@ export function ProductPageDetailed({
      */
     || (product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
+  /* Termenul propriu al precomenzii; cand exista, inlocuieste estimarea generala (vezi `precomanda.ts`). */
+  const termenPreco = isPreorder ? termenPrecomanda(pageSections) : null;
   // Nu doar „titlul e complet", ci si „combinatia exista si e activa": altfel
   // linia intra in cos cu pretul de baza, iar serverul o respinge la comanda.
   const needsVariant = !!variantsData && !selectedCombo;
@@ -785,7 +788,7 @@ export function ProductPageDetailed({
   const codProdus = (selectedCombo?.sku || product.sku || "").trim();
   // Blocul de detalii se randeaza doar daca are macar un rand de aratat: un
   // chenar cu titlu si nimic dedesubt arata a eroare, nu a informatie.
-  const areDetalii = !!dateLivrare || codProdus !== "" || ean !== "" || categorie !== ""
+  const areDetalii = !!dateLivrare || !!termenPreco || codProdus !== "" || ean !== "" || categorie !== ""
     || etichete.length > 0 || !!product.weight_grams;
 
   const insigneIncredere = [
@@ -959,7 +962,10 @@ export function ProductPageDetailed({
               {isOutOfStock ? (
                 <span className="font-medium text-muted-foreground">Stoc epuizat</span>
               ) : isPreorder ? (
-                <span className="font-medium" style={{ color }}>Disponibil la precomanda</span>
+                <span className="font-medium" style={{ color }}>
+                  Disponibil la precomanda
+                  {termenPreco && <span className="block text-[13px] font-normal text-muted-foreground">{termenPreco}</span>}
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 font-medium" style={{ color }}>
                   <Check size={15} />
@@ -1145,7 +1151,10 @@ export function ProductPageDetailed({
                 Detalii produs
               </p>
               <div className="flex flex-col gap-2 px-4 py-3.5">
-                {dateLivrare && (
+                {termenPreco && (
+                  <RandMeta eticheta="Livrare (precomanda)">{termenPreco}</RandMeta>
+                )}
+                {dateLivrare && !termenPreco && (
                   <RandMeta eticheta={deliveryEstimate?.text || "Livrare estimata"}>
                     <span className="inline-flex items-center gap-1.5">
                       <Calendar size={13} className="text-muted-foreground" />

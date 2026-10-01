@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { aplicaPaginaAcasa } from "@/lib/storefront/design/pagina-acasa";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo, storeBaseUrl, type StoreSeo } from "@/lib/seo";
 import { metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
@@ -340,10 +341,10 @@ export async function metadataPaginiiPrincipale(a: {
   // Designul PUBLICAT: daca exista pagina de catalog, iar pentru adresele filtrate si
   // subtitlul si sortarea ei. Contextul e minimal: `shop.page` nu depinde de culori
   // sau de bannere.
-  const designPtSeo = parseStoreDesign(
+  const designPtSeo = aplicaPaginaAcasa(parseStoreDesign(
     settings?.storefront_design ?? null,
     { primaryColor: "#07c527", pageContent: {}, features: {} },
-  );
+  ), settings?.page_content);
 
   const displayName = business.store_name ?? business.business_name;
   const title = seo.title || deriveStoreTitle(displayName, business.store_city);

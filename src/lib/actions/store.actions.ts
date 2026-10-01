@@ -266,8 +266,10 @@ export async function updatePageContent(businessId: string, pageContent: Record<
   // sa-si schimbe prefixele in Setari > Permalink-uri le-ar fi scris inapoi pe cele
   // vechi, tacut, cu tot istoricul lor de redirectionari. Cheia o scrie numai
   // `salveazaPermalinkurile`.
-  const { permalinks: _permalinksIgnorate, ...faraPermalinks } = pageContent;
+  // Acelasi motiv pentru `pagina_acasa`: o scrie numai `seteazaPaginaAcasa`.
+  const { permalinks: _permalinksIgnorate, pagina_acasa: _paginaAcasaIgnorata, ...faraPermalinks } = pageContent;
   void _permalinksIgnorate;
+  void _paginaAcasaIgnorata;
   const merged = { ...((existing?.page_content as Record<string, unknown>) ?? {}), ...faraPermalinks };
 
   let error;

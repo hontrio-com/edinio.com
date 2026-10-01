@@ -35,7 +35,9 @@ export type BlockType =
   | "bundles"
   | "newsletter"
   | "payments"
-  | "couriers";
+  | "couriers"
+  /* 01.10.2026: o sectiune a paginii principale, pusa pe pagina aleasa ca pagina principala. */
+  | "acasa";
 
 /**
  * Animatia la aparitie (25.09.2026). Se aplica pe orice bloc, prin `BlockShell`,
@@ -522,11 +524,35 @@ export interface HtmlBlock extends BaseBlock {
   rawApprovedBy?: string | null;
 }
 
+/**
+ * Sectiunile paginii principale care se pot pune ca blocuri (01.10.2026).
+ *
+ * ⚠ Nu sunt copii ale sectiunilor: blocul spune DOAR care sectiune si unde. Se
+ * randeaza chiar sectiunea magazinului, cu datele si aspectul ei, iar continutul
+ * (bannerele, recenziile, beneficiile) se editeaza tot din „Editeaza magazinul".
+ * De aceea apar numai pe pagina aleasa ca pagina principala: acolo exista
+ * catalogul, cosul si produsele de care au nevoie. Vezi `lib/pages/pagina-acasa.ts`.
+ */
+export type SectiuneAcasa =
+  | "hero" | "usp_strip" | "category_nav" | "shipping_progress" | "product_row"
+  | "catalog" | "benefits" | "reviews" | "gallery" | "about" | "contact";
+
+export interface AcasaBlock extends BaseBlock {
+  type: "acasa";
+  sectiune: SectiuneAcasa;
+  /** Doar la `hero`: designul bannerelor (`banners` | `overlay` | `categories`). */
+  varianta?: string;
+  /** Doar la `product_row`: id-ul randului din „Editeaza magazinul", sau `featured` pentru Recomandate. */
+  rand?: string;
+  /** Doar la `catalog`: bara de cautare si filtre deasupra produselor. Implicit da. */
+  cuBara?: boolean;
+}
+
 export type Block =
   | HeroBlock | HeadingBlock | TextBlock | ImageBlock | GalleryBlock
   | ButtonBlock | ColumnsBlock | SpacerBlock | DividerBlock | VideoBlock
   | MapBlock | FaqBlock | TrustBlock | ProductsBlock | SocialBlock | ContactBlock | HtmlBlock
-  | BundlesBlock | NewsletterBlock | PaymentsBlock | CouriersBlock;
+  | BundlesBlock | NewsletterBlock | PaymentsBlock | CouriersBlock | AcasaBlock;
 
 /**
  * Ce fel de pagina e, pentru datele structurate.
@@ -616,6 +642,7 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   social:   { type: "social",   label: "Social",          icon: "Share2",       category: "content" },
   contact:  { type: "contact",  label: "Formular contact", icon: "Mail",        category: "content" },
   html:     { type: "html",     label: "Cod personalizat", icon: "Code",        category: "advanced", advanced: true },
+  acasa:    { type: "acasa",    label: "Din pagina principala", icon: "Home",   category: "store" },
 };
 
 /** Order shown in the "add block" palette. */
@@ -654,6 +681,11 @@ export function createBlock(type: BlockType, opts?: { inColumn?: boolean }): Blo
     block.style = { ...(block.style ?? {}), padding: "sm", width: "full" };
   }
   return block;
+}
+
+/** Un bloc nou care aduce o sectiune a paginii principale (vezi `AcasaBlock`). */
+export function createBlockAcasa(sectiune: SectiuneAcasa): AcasaBlock {
+  return { id: newBlockId(), type: "acasa", sectiune, ...(sectiune === "product_row" ? { rand: "featured" } : {}) };
 }
 
 function buildBlock(id: string, type: BlockType): Block {
@@ -702,6 +734,8 @@ function buildBlock(id: string, type: BlockType): Block {
       return { id, type, title: "Contacteaza-ne", buttonLabel: "Trimite mesajul", successMessage: "Multumim! Mesajul tau a fost trimis.", showPhone: true, showMessage: true, style: { padding: "lg", width: "narrow" } };
     case "html":
       return { id, type, html: "<!-- Scrie codul tau aici -->", css: "", js: "", style: { padding: "md" } };
+    case "acasa":
+      return { id, type, sectiune: "hero" };
     default:
       return { id, type: "text", html: "" } as Block;
   }

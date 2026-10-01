@@ -10,8 +10,9 @@ import {
   ArrowUp, ArrowDown, Copy, Trash2, Eye,
   Sparkles, Heading, Type, Image as ImageIcon, Images, MousePointerClick,
   Columns3, MoveVertical, Minus, Video, MapPin, MessageCircleQuestion,
-  ShieldCheck, Package, Share2, Mail, Code, Square, Boxes, MailPlus, CreditCard, Truck, Plug,
+  ShieldCheck, Package, Share2, Mail, Code, Square, Boxes, MailPlus, CreditCard, Truck, Plug, Home,
 } from "lucide-react";
+import { SECTIUNI_ACASA } from "@/lib/pages/pagina-acasa";
 import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 import { BlockSettings, type IntegrariEditor } from "./BlockSettings";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
@@ -22,8 +23,8 @@ import { SeoImageField } from "@/components/dashboard/SeoImageField";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import {
-  createBlock, BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, TIPURI_PAGINA_PROPRIE,
-  type Block, type BlockType, type ColumnsBlock, type PageSeo, type TipPaginaProprie,
+  createBlock, createBlockAcasa, BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, TIPURI_PAGINA_PROPRIE,
+  type Block, type BlockType, type ColumnsBlock, type PageSeo, type SectiuneAcasa, type TipPaginaProprie,
 } from "@/lib/pages/blocks.types";
 import {
   findBlock, updateBlockInTree, removeBlockFromTree, moveBlockInTree,
@@ -54,7 +55,7 @@ function cheieAnimatie(b: Block, reluare: number): string {
 const ICONS: Record<string, React.ElementType> = {
   Sparkles, Heading, Type, Image: ImageIcon, Images, MousePointerClick, Columns3,
   MoveVertical, Minus, Video, MapPin, MessageCircleQuestion, ShieldCheck, Package,
-  Share2, Mail, Code, Boxes, MailPlus, CreditCard, Truck,
+  Share2, Mail, Code, Boxes, MailPlus, CreditCard, Truck, Home,
 };
 
 interface BuilderBusiness {
@@ -71,13 +72,18 @@ type InsertTarget =
   | { kind: "column"; columnBlockId: string; columnIndex: number; index: number };
 
 /** Blocks that don't belong inside a column (no columns-in-columns; hero is full-bleed). */
-const COLUMN_EXCLUDED: BlockType[] = ["columns", "hero"];
+const COLUMN_EXCLUDED: BlockType[] = ["columns", "hero", "acasa"];
 
 export function PageBuilder({
   pageId, initialTitle, initialSlug, initialPublished, initialBlocks, initialCss, initialSeo,
   initialVersiune, legaturi,
   business, products, categories, forms, isAdmin, pachete, integrari, fundal,
+  estePaginaAcasa = false, randuriProduse = [],
 }: {
+  /** Pagina e cea aleasa ca pagina principala (Pagini > Acasa). */
+  estePaginaAcasa?: boolean;
+  /** Randurile de produse din „Editeaza magazinul", pentru blocul „Rand de produse". */
+  randuriProduse?: { id: string; titlu: string; oprit: boolean }[];
   /** Fundalul paginii, acelasi ca pe magazin (`fundalulPaginii`): alb, sau cel ales pentru magazin. */
   fundal: string;
   /** Pachetele magazinului, pentru previzualizarea blocului „Pachete”. */
@@ -133,6 +139,7 @@ export function PageBuilder({
     bundles: pachete,
     plati: integrari.plati,
     curieri: integrari.curieri,
+    estePaginaAcasa,
   };
   const integrariSetari: IntegrariEditor = {
     furnizori: integrari.furnizori,
@@ -194,6 +201,15 @@ export function PageBuilder({
     setBlocks((bs) => target.kind === "top"
       ? insertAtTop(bs, target.index, nb)
       : insertIntoColumn(bs, target.columnBlockId, target.columnIndex, target.index, nb));
+    setPalette(null);
+    selectBlock(nb.id);
+    mark();
+  }
+  /** Un bloc „Din pagina principala": numai sus, nu in coloane (sectiunile au latimea lor). */
+  function addBlockAcasa(sectiune: SectiuneAcasa, target: InsertTarget) {
+    if (target.kind !== "top") return;
+    const nb = createBlockAcasa(sectiune);
+    setBlocks((bs) => insertAtTop(bs, target.index, nb));
     setPalette(null);
     selectBlock(nb.id);
     mark();
@@ -366,7 +382,7 @@ export function PageBuilder({
           <div className="flex-1 overflow-y-auto p-4">
             {tab === "block" && selected ? (
               <RedaAnimatia.Provider value={() => setReluare((n) => n + 1)}>
-                <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} />
+                <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} randuriProduse={randuriProduse} />
               </RedaAnimatia.Provider>
             ) : (
               <PageSettings
@@ -402,7 +418,7 @@ export function PageBuilder({
             <button type="button" onClick={() => selectBlock(null)} aria-label="Închide" className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
           </div>
           <RedaAnimatia.Provider value={() => setReluare((n) => n + 1)}>
-            <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} />
+            <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} randuriProduse={randuriProduse} />
           </RedaAnimatia.Provider>
         </div>
       )}
@@ -430,6 +446,29 @@ export function PageBuilder({
                 );
               })}
             </div>
+            {/*
+              Sectiunile paginii principale (01.10.2026). Numai sus, nu in
+              coloane. Apar mereu, cu o nota cand pagina nu e cea principala.
+            */}
+            {palette.kind === "top" && (
+              <div className="mt-5 border-t border-border pt-4">
+                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Home className="h-3.5 w-3.5" /> Din pagina principală</p>
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  {estePaginaAcasa
+                    ? "Secțiunile magazinului, cu conținutul din Editează magazinul."
+                    : "Apar doar când pagina e setată ca pagina principală (Pagini > Acasa)."}
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {SECTIUNI_ACASA.map((s) => (
+                    <button key={s.cheie} type="button" onClick={() => addBlockAcasa(s.cheie, palette)} title={s.descriere}
+                      className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 transition-colors hover:border-primary hover:bg-primary/5">
+                      <Home className="h-5 w-5 text-foreground" />
+                      <span className="text-center text-xs font-medium text-foreground">{s.eticheta}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {/*
               Blocurile din integrari (25.09.2026): apar mereu, ca omul sa stie ca
               exista, dar se pot adauga doar cand integrarea e activa. Stinse,

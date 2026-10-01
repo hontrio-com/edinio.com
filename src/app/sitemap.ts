@@ -1,4 +1,6 @@
 import type { MetadataRoute } from "next";
+import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
+import { aplicaPaginaAcasa } from "@/lib/storefront/design/pagina-acasa";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -70,9 +72,13 @@ const SITEMAP_URL_LIMIT = 50000;
  * principale.
  */
 function designPublicat(storeSettings: unknown) {
-  const ss = storeSettings as { storefront_design?: unknown } | { storefront_design?: unknown }[] | null;
-  const brut = ss ? (Array.isArray(ss) ? ss[0] : ss)?.storefront_design : null;
-  return parseStoreDesign(brut, { primaryColor: "#07c527", pageContent: {}, features: {} });
+  const ss = storeSettings as { storefront_design?: unknown; page_content?: unknown } | { storefront_design?: unknown; page_content?: unknown }[] | null;
+  const rand = ss ? (Array.isArray(ss) ? ss[0] : ss) : null;
+  // ⚠ Cu pagina proprie ca pagina principala, catalogul are pagina lui (`aplicaPaginaAcasa`).
+  return aplicaPaginaAcasa(
+    parseStoreDesign(rand?.storefront_design ?? null, { primaryColor: "#07c527", pageContent: {}, features: {} }),
+    rand?.page_content,
+  );
 }
 
 function pcDinRand(row: { store_settings?: unknown }): unknown {
@@ -493,7 +499,7 @@ export type DateMagazinPentruSitemap = {
    */
   categoriiCuProduse: readonly string[] | null;
   produse: { slug: string | null; updated_at: string | null }[];
-  pagini: { slug: string | null; updated_at: string | null; seo: unknown }[];
+  pagini: { id?: string; slug: string | null; updated_at: string | null; seo: unknown }[];
   /**
    * Paginile de brand (`/brand/<segment>`), din `branduriMagazin`: produsele VIZIBILE
    * ale fiecaruia. Lipsa sau `null` (citire picata) = nicio pagina de brand anuntata;
@@ -611,9 +617,11 @@ export function intrariMagazin(
     });
   }
 
+  // Pagina aleasa ca pagina principala se deschide la radacina; adresa ei proprie redirectioneaza.
+  const idPaginaAcasa = citestePaginaAcasa(pcDinRand(biz));
   for (const pg of date.pagini) {
     // ⚠ Si pagina cu alta adresa canonica (25.09.2026): ea spune singura ca originalul e altundeva.
-    if (!pg.slug) continue;
+    if (!pg.slug || (idPaginaAcasa && pg.id === idPaginaAcasa)) continue;
     const adresa = `${base}/${pg.slug}`;
     // O adresa canonica egala cu a paginii insesi nu inseamna „originalul e altundeva” (auditul din 26.09.2026).
     const canonica = (pg.seo as { canonical?: string } | null)?.canonical?.trim().replace(/\/+$/, "");
@@ -704,7 +712,7 @@ export async function citesteDateMagazin(
     fetchAllRowsStrict("sitemap.store.pages", (from, to) =>
       supabase
         .from("custom_pages")
-        .select("slug, updated_at, seo")
+        .select("id, slug, updated_at, seo")
         .eq("business_id", biz.id)
         .eq("is_published", true)
         .order("id")

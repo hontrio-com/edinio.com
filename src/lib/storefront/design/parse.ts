@@ -1,4 +1,5 @@
 import { buildClassicDesign, newSectionId, resolveStyle, section } from "./defaults";
+import { aplicaPaginaAcasa } from "./pagina-acasa";
 import { firstVariant, sectionMeta, variantMeta, type Field } from "./registry";
 import {
   BUTTON_RADIUS_KEYS,
@@ -674,7 +675,12 @@ export interface ResolvedDesign {
 }
 
 export function resolveDesign(raw: unknown, ctx: DesignContext): ResolvedDesign {
-  const design = parseStoreDesign(raw, ctx);
+  /*
+    ⚠ Pagina proprie ca pagina principala muta catalogul pe pagina lui, dar numai
+    la CITIRE: editorul de design foloseste `parseStoreDesign`, deci ce salveaza
+    el ramane ce a ales comerciantul. Vezi `pagina-acasa.ts`.
+  */
+  const design = aplicaPaginaAcasa(parseStoreDesign(raw, ctx), ctx.pageContent);
   return { design, style: resolveStyle(design.style, ctx) };
 }
 

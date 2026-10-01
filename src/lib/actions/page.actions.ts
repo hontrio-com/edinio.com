@@ -27,6 +27,7 @@ import { sendPageFormEmail } from "@/lib/email";
 import type { Database } from "@/types/database.types";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
 import { FELURI_PERMALINK, permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { CHEIE_PAGINA_ACASA, citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 
 type DB = SupabaseClient<Database>;
 
@@ -357,8 +358,71 @@ export async function deletePage(pageId: string): Promise<{ error: string } | { 
   if (error) return { error: "Eroare la stergerea paginii." };
   if (!sterse || sterse.length === 0) return { error: "Neautorizat" };
 
+  /*
+   * Pagina stearsa nu mai poate fi pagina principala. Randarea ar fi cazut oricum
+   * pe pagina cu sectiuni, dar alegerea ramasa in setari ar fi reaparut tacut la
+   * o pagina noua cu acelasi id (nu se intampla) sau ar fi incurcat lista.
+   */
+  await scoateAlegereaPaginiiAcasa(supabase, page.business_id, pageId);
+
   revalidatePage(ctx.slug, page.slug);
   return { success: true };
+}
+
+/**
+ * Alege pagina care se deschide la adresa magazinului, sau `null` pentru pagina
+ * principala cu sectiuni (cea de pana acum). Vezi `lib/pages/pagina-acasa.ts`.
+ *
+ * ⚠ Singurul loc care scrie `page_content.pagina_acasa`. `updatePageContent` il
+ * ignora dinadins: editorul magazinului trimite `page_content` dintr-o copie
+ * facuta la deschidere si ar fi scris inapoi alegerea veche.
+ */
+export async function seteazaPaginaAcasa(
+  businessId: string,
+  pageId: string | null,
+): Promise<{ error: string } | { success: true }> {
+  const supabase = await createClient();
+  const ctx = await getUserAndBusiness(supabase, businessId);
+  if (!ctx) return { error: "Neautorizat" };
+
+  if (pageId) {
+    const { data: page } = await supabase
+      .from("custom_pages").select("id, is_published").eq("id", pageId).eq("business_id", businessId).maybeSingle();
+    if (!page) return { error: "Pagina negasita" };
+    // O ciorna nu se vede de clienti; la adresa magazinului ar fi ramas pagina veche, fara nicio explicatie.
+    if (!page.is_published) return { error: "Publica pagina inainte sa o faci pagina principala." };
+  }
+
+  const { data: existing } = await supabase
+    .from("store_settings").select("page_content").eq("business_id", businessId).maybeSingle();
+  const pc = { ...((existing?.page_content as Record<string, unknown> | null) ?? {}) };
+  if (pageId) pc[CHEIE_PAGINA_ACASA] = pageId;
+  else delete pc[CHEIE_PAGINA_ACASA];
+
+  const { error } = existing
+    ? await supabase.from("store_settings").update({ page_content: pc as never, updated_at: new Date().toISOString() }).eq("business_id", businessId)
+    : await supabase.from("store_settings").insert({ business_id: businessId, page_content: pc as never });
+  if (error) {
+    logError({ action: "seteazaPaginaAcasa", message: error.message, details: { businessId, pageId }, userId: ctx.userId });
+    return { error: "Eroare la salvare." };
+  }
+  // Toata vitrina: catalogul se muta (sau se intoarce) de pe pagina principala, deci se schimba linkurile de peste tot.
+  if (ctx.slug) revalidatePath(`/${ctx.slug}`, "layout");
+  revalidatePath("/dashboard/pages");
+  return { success: true };
+}
+
+/** Scoate alegerea paginii principale, daca e chiar pagina asta. Nu e exportata (fisier "use server"). */
+async function scoateAlegereaPaginiiAcasa(supabase: DB, businessId: string, pageId: string) {
+  const { data } = await supabase.from("store_settings").select("page_content").eq("business_id", businessId).maybeSingle();
+  const pc = (data?.page_content ?? null) as Record<string, unknown> | null;
+  if (!pc || citestePaginaAcasa(pc) !== pageId) return;
+  const { [CHEIE_PAGINA_ACASA]: _scoasa, ...rest } = pc;
+  void _scoasa;
+  const { error } = await supabase.from("store_settings")
+    .update({ page_content: rest as never, updated_at: new Date().toISOString() })
+    .eq("business_id", businessId);
+  if (error) logError({ action: "deletePage.paginaAcasa", message: error.message, details: { businessId, pageId } });
 }
 
 export async function duplicatePage(pageId: string): Promise<{ error: string } | { success: true; pageId: string }> {

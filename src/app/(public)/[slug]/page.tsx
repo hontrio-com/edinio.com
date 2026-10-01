@@ -44,6 +44,20 @@ import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/
 import { normalizeazaDefinitia } from "@/lib/customization/definitie";
 import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/permis-incarcare";
 import { setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
+import { Suspense, type ReactNode } from "react";
+import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
+import { sectiuniDinBlocuri } from "@/lib/storefront/design/pagina-acasa";
+import { variantMeta } from "@/lib/storefront/design/registry";
+import { prepareBlocksForPublic } from "@/lib/pages/prepare-blocks";
+import { flattenBlocks } from "@/lib/pages/block-tree";
+import { titlulPrincipal } from "@/lib/pages/titlul-principal";
+import { fonturiDinBlocuri } from "@/lib/pages/fonturi";
+import { claseFonturi } from "@/components/pages/fonturi-incarcate";
+import { sanitizeCss } from "@/lib/pages/sanitize-css";
+import { SCRIPT_ANIMATII } from "@/lib/pages/animatii";
+import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
+import { BlocuriPagina } from "@/components/pages/BlocuriPagina";
+import type { Block } from "@/lib/pages/blocks.types";
 
 /*
  * `sort`, `pmin`, `pmax` si `stoc` sunt aici fiindca grila paginii principale are
@@ -250,13 +264,54 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * acelasi rand: ochiul din editorul de design marca „Recomandate" vizibila si
    * nu se intampla nimic, fiindca serverul nu ceruse produsele.
    */
-  const resolved = resolveDesign(designDeRandat, {
+  const resolvedMagazin = resolveDesign(designDeRandat, {
     primaryColor: business.primary_color ?? "#07c527",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
     tagline: business.tagline,
   });
+
+  /*
+   * O pagina din „Pagini" aleasa ca pagina principala (01.10.2026).
+   *
+   * Se citeste AICI, inaintea produselor: lista de sectiuni a paginii decide ce
+   * randuri de produse cere serverul, la fel ca designul. Magazinul „un singur
+   * produs" ramane mai tare: acolo pagina principala e chiar produsul.
+   *
+   * ⚠ Numai publicata. O pagina trecuta pe ciorna nu lasa magazinul fara pagina
+   * principala: se intoarce cea cu sectiuni, pana o publica din nou.
+   */
+  const idPaginaAcasa = parseStoreMode((storeSettings?.page_content as Json) ?? null).mode === "one_product"
+    ? null
+    : citestePaginaAcasa(storeSettings?.page_content);
+  const paginaAcasa = idPaginaAcasa
+    ? (await supabase.from("custom_pages").select("id, title, blocks, page_css")
+      .eq("id", idPaginaAcasa).eq("business_id", business.id).eq("is_published", true).maybeSingle()).data
+    : null;
+  const blocuriAcasa = paginaAcasa ? prepareBlocksForPublic((paginaAcasa.blocks as unknown as Block[] | null) ?? []) : [];
+  const caSectiuni = paginaAcasa ? sectiuniDinBlocuri(blocuriAcasa, resolvedMagazin.design) : null;
+  /*
+   * Grila ramane acasa DOAR daca pagina are blocul de catalog. Fara el, adresele
+   * grilei (`?cat=`, `?page=`) pleaca la pagina de catalog, prin redirectarea de
+   * mai jos, ca la orice magazin care si-a mutat produsele.
+   */
+  const resolved = caSectiuni
+    ? {
+      ...resolvedMagazin,
+      design: {
+        ...resolvedMagazin.design,
+        home: caSectiuni.home,
+        shop: {
+          ...resolvedMagazin.design.shop,
+          page: {
+            ...resolvedMagazin.design.shop.page,
+            settings: { ...resolvedMagazin.design.shop.page.settings, pastreazaGrilaAcasa: caSectiuni.areCatalog },
+          },
+        },
+      },
+    }
+    : resolvedMagazin;
 
   const setariDeTrimis = storeSettings
     ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
@@ -681,6 +736,56 @@ export default async function SlugPage({ params, searchParams }: Props) {
    */
   const storeJsonLd = graf(magazinJsonLd(business, canonicalUrl));
 
+  /*
+   * Blocurile obisnuite ale paginii proprii, randate AICI, pe server, cate un
+   * grup intre doua sectiuni ale magazinului. Ajung in `MiniStoreRenderer` gata
+   * facute (vezi `SloturiBlocuri`).
+   *
+   * ⚠ Un singur H1. Daca o sectiune a magazinului il da deja (hero-ul cu text),
+   * blocurile nu mai promoveaza niciun titlu.
+   */
+  let paginaProprie: { sloturi: Record<string, ReactNode>; areTitlu: boolean } | undefined;
+  let stilPagina: { css: string } | null = null;
+  if (paginaAcasa && caSectiuni) {
+    const toateBlocurile = flattenBlocks(blocuriAcasa);
+    const sectiuneCuH1 = caSectiuni.home.some((s) => variantMeta(s.kind, s.variant)?.providesH1 === true);
+    const h1Id = sectiuneCuH1 ? null : titlulPrincipal(blocuriAcasa);
+    const claseFont = claseFonturi(fonturiDinBlocuri(toateBlocurile));
+    const pc = (storeSettings?.page_content ?? {}) as Record<string, unknown>;
+    const animatii = toateBlocurile.some((b) => b.style?.anim && b.style.anim !== "none");
+    paginaProprie = {
+      areTitlu: h1Id !== null,
+      sloturi: Object.fromEntries(Object.entries(caSectiuni.grupuri).map(([cheie, grup]) => [
+        cheie,
+        /*
+          ⚠ Scriptul animatiilor porneste pe PARINTELE lui si ii pune
+          `data-anim-pornit` inainte de hidratare, deci invelisul il ignora la
+          comparare. Pus langa `MiniStoreRenderer`, parintele era `<body>`.
+        */
+        <div key={cheie} className={claseFont || undefined} suppressHydrationWarning>
+          <Suspense fallback={null}>
+            <BlocuriPagina
+              supabase={supabase}
+              businessId={business.id}
+              blocks={grup}
+              hideNoImage={pc.hide_products_without_images === true}
+              hideOutOfStock={pc.hide_out_of_stock_products === true}
+              color={business.primary_color ?? "#07c527"}
+              basePath={basePath}
+              storeSlug={business.slug}
+              social={(business.social ?? {}) as Record<string, string>}
+              pageId={paginaAcasa.id}
+              h1Id={h1Id}
+            />
+          </Suspense>
+          {animatii && <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANIMATII }} />}
+          {animatii && <PornesteAnimatiile />}
+        </div>,
+      ])),
+    };
+    stilPagina = { css: sanitizeCss(paginaAcasa.page_css) };
+  }
+
   return (
     <>
       {storeJsonLd ? (
@@ -689,7 +794,9 @@ export default async function SlugPage({ params, searchParams }: Props) {
           dangerouslySetInnerHTML={{ __html: jsonLdSafe(storeJsonLd) }}
         />
       ) : null}
+      {stilPagina?.css ? <style dangerouslySetInnerHTML={{ __html: stilPagina.css }} /> : null}
       <MiniStoreRenderer
+        paginaProprie={paginaProprie}
         business={pentruBrowser(business)}
         products={products}
         /*

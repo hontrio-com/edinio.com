@@ -6,7 +6,7 @@ import {
 } from "@/lib/emag/etichete";
 import {
   AlertTriangle, Ban, Check, CheckCircle, ClipboardCheck, Clock, Copy, Download,
-  EyeOff, HelpCircle, Hourglass, Layers, Link2, Loader2, PackagePlus, PackageX,
+  EyeOff, FilePen, HelpCircle, Hourglass, Layers, Link2, Loader2, PackagePlus, PackageX,
   PauseCircle, RefreshCw, ShieldAlert, ShoppingCart, Tag, XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -65,6 +65,7 @@ const TARI: { valoare: "ro" | "bg" | "hu"; eticheta: string }[] = [
 const ORDINEA_STARILOR = [
   "Respins de eMAG",
   "În validare la eMAG",
+  "Ciornă la eMAG",
   "Scoasă din vânzare la eMAG",
   "Oprită la eMAG",
   "Preț neacceptat de eMAG",
@@ -103,6 +104,10 @@ const DESPRE_STARE: Record<
   "În validare la eMAG": {
     scurt: "În validare", icon: Hourglass,
     explicatie: "eMAG se uită chiar acum la ele: așteaptă marketplace-ul, marca sau documentația. Nu ai nimic de făcut.",
+  },
+  "Ciornă la eMAG": {
+    scurt: "Ciorne la eMAG", icon: FilePen,
+    explicatie: "Produse noi cu fișa incompletă (de obicei fără caracteristici). eMAG le ține ca ciornă și nu le trimite la validare până nu le completezi. Ce lipsește se vede pe rândul fiecăruia.",
   },
   "Scoasă din vânzare la eMAG": {
     scurt: "Scoase din vânzare", icon: Ban,

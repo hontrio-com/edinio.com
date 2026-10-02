@@ -212,6 +212,8 @@ export type EmagStatusOferta = 0 | 1 | 2;
  * ⚠ Valorile 7 lipseste din enumerarea lor, dinadins. Nu se inventeaza.
  */
 export const EMAG_VALIDARE: Record<number, string> = {
+  /* „Draft” in raspunsul lor brut: fisa incompleta, nu pleaca la validare. Vezi `de-ce-nu-se-vinde.ts`. */
+  0: "Ciornă (fișă incompletă)",
   1: "Așteaptă validarea eMAG",
   2: "Așteaptă validarea mărcii",
   3: "Așteaptă validarea EAN",

@@ -2080,6 +2080,7 @@ export async function listaOferteEmag(
       status_la_ei: r.status_la_ei,
       stoc_la_ei: r.stoc_la_ei,
       doc_errors: normalizeazaDocErrors(r.doc_errors),
+      creat_de_edinio: r.creat_de_edinio,
     });
     return {
       id: r.id,

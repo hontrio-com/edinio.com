@@ -40,6 +40,32 @@ export const EMAG_OFERTA_SCOASA = 2;
  */
 export const EMAG_VALIDARE_IN_CURS: readonly number[] = [1, 2, 4] as const;
 
+/*
+ * ═══ ⚠ `0` ESTE „DRAFT”, SI NU SE MISCA SINGUR (02.10.2026) ═══
+ *
+ * Mai jos scria ca `0` „nu exista in enumul lor”. Raspunsul lor brut il numeste insa
+ * chiar asa: `validation_status: [{ value: 0, description: "Draft" }]`. Iar documentatia
+ * (v4.4.4, §2.4.1) spune ce inseamna: un produs nou care n-are fisa completa (descriere,
+ * imagini, caracteristici, categorie) e salvat ca ciorna si „won't be sent to eMAG
+ * Catalogue team for validation”. Deci nu asteapta nimic: sta acolo pana il completeaza
+ * cineva.
+ *
+ * ⚠ Masurat pe 02.10.2026: 100 de oferte in starea asta (OKXI si Yvelle), NICIUNA cu
+ * `part_number_key`, adica niciuna cu pagina de produs la eMAG. Cele 45 ale OKXI create
+ * de noi stateau asa din 24-25 august, toate fara nicio caracteristica in fisa. Ecranul
+ * le spunea „Trimis” sau „Stare necunoscuta”, deci nimeni nu stia ce lipseste.
+ *
+ * ⚠ Se spune INAINTEA starii ofertei: o oferta pornita pe un produs ciorna tot nu se
+ * vinde, iar ce e de reparat e fisa, nu oferta.
+ */
+export const EMAG_VALIDARE_CIORNA = 0;
+
+/** Ce are de facut omul cand fisa trimisa de Edinio a ramas ciorna. Il spune si trimiterea. */
+export const INDRUMARE_CIORNA_EDINIO =
+  "eMAG a salvat fișa ca ciornă (Draft) și n-o trimite la validare până nu e completă. "
+  + "De obicei lipsesc caracteristicile: completează „Specificații produs” (de ex. Culoare, Material) "
+  + "sau fixează-le pe categorie, în Integrări > eMAG, la maparea categoriei. Apoi trimite din nou produsul.";
+
 export interface StareaLaEmag {
   validation_status: number | null;
   offer_validation_status: number | null;
@@ -47,6 +73,11 @@ export interface StareaLaEmag {
   stoc_la_ei: number | null;
   /** Ce ne-au spus ei, dacă ne-au spus ceva. */
   doc_errors: string[];
+  /**
+   * Fisa a facut-o Edinio (`emag_offers.creat_de_edinio`)? Schimba DOAR indrumarea la
+   * ciorna: pe a noastra o repara din Edinio, pe a lui din panoul eMAG.
+   */
+  creat_de_edinio?: boolean | null;
 }
 
 export interface MotivulOpririi {
@@ -106,6 +137,18 @@ export function deCeNuSeVinde(o: StareaLaEmag): MotivulOpririi {
     return {
       eticheta: "În validare la eMAG",
       indrumare: "Validarea lor e făcută de oameni și poate dura. Nu ai nimic de făcut.",
+      seVinde: false,
+    };
+  }
+
+  /* ⚠ 2b. Ciorna la ei: fisa incompleta, nu pleaca la validare. Vezi `EMAG_VALIDARE_CIORNA`. */
+  if (o.validation_status === EMAG_VALIDARE_CIORNA) {
+    return {
+      eticheta: "Ciornă la eMAG",
+      indrumare: o.creat_de_edinio === false
+        ? "eMAG ține fișa produsului ca ciornă (Draft) și n-o trimite la validare până nu e completă. "
+          + "Fișa a fost făcută în contul tău eMAG: o completezi acolo (descriere, imagini, caracteristici)."
+        : INDRUMARE_CIORNA_EDINIO,
       seVinde: false,
     };
   }

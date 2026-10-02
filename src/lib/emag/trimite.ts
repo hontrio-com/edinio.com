@@ -20,6 +20,7 @@
  * Ultimele doua sunt lectii scrise cu pretul lor in `src/lib/trendyol/sync.ts:81`.
  */
 
+import { INDRUMARE_CIORNA_EDINIO } from "./de-ce-nu-se-vinde";
 import {
   potrivesteCaracteristici, type Nepotrivire, type Specificatie,
 } from "./caracteristici";
@@ -634,6 +635,23 @@ async function duTotul(
      foarte bine fara ea, dar comerciantul trebuie sa afle: la eMAG, o poza lipsa nu da
      nicio eroare, produsul apare pur si simplu fara ea. */
   for (const x of nereusite) observatii.push(`Imaginea ${x.adresa} n-a plecat: ${x.motiv}.`);
+
+  /*
+   * ═══ ⚠ PRODUS NOU FARA NICIO CARACTERISTICA = CIORNA LA EI (02.10.2026) ═══
+   *
+   * eMAG primeste fisa, raspunde fara eroare, si o pune „Draft”: nu pleaca la validare
+   * pana nu e completa (documentatia lor, §2.4.1). Masurat: toate cele 54 de fise facute
+   * de noi si ramase ciorna (45 OKXI din august, 9 Yvelle) plecasera fara NICIO
+   * caracteristica. Nimic nu-i spunea omului; vedea „trimis” si astepta.
+   *
+   * ⚠ Nu opreste trimiterea: la unele categorii validarea trece si asa, iar oferta tot se
+   * creeaza. Dar se spune ACUM, cu ce e de facut, nu peste o luna.
+   * Numai la produsele NOI: o oferta legata de o pagina existenta la ei nu trimite fisa.
+   */
+  const produsNouLaEi = cuCheie.some((r) => !r.part_number_key);
+  if (produsNouLaEi && potrivite.caracteristici.length === 0) {
+    observatii.push(`Fișa pleacă fără nicio caracteristică. ${INDRUMARE_CIORNA_EDINIO}`);
+  }
 
   if (observatii.length > 0 && (r.verdict === "reusit" || r.verdict === "reusit_cu_observatii")) {
     return { ...r, verdict: "reusit_cu_observatii", mesaj: [r.mesaj, ...observatii].filter(Boolean).join(" · ") };

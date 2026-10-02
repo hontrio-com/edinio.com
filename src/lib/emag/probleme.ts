@@ -53,6 +53,8 @@ export interface GrupProbleme {
  * Puse aici, un catalog sanatos ar fi aratat sute de „probleme" care nu sunt.
  */
 export const VALIDARE_RA: Record<number, string> = {
+  /* 02.10.2026: ciorna sta pe loc pana o completeaza cineva. Vezi `de-ce-nu-se-vinde.ts`. */
+  0: "Ciornă la eMAG: fișa e incompletă (de obicei fără caracteristici) și nu pleacă la validare",
   2: "Așteaptă aprobarea mărcii",
   /*
    * ═══ ⚠ `3` A IEȘIT DE AICI (24.08.2026) ═══

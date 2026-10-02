@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import { deCeNuSeVinde, EMAG_OFERTA_OPRITA, EMAG_OFERTA_SCOASA } from "./de-ce-nu-se-vinde";
 
@@ -82,7 +82,15 @@ test("functia din baza foloseste ACELEASI cuvinte ca verdictul", () => {
    * regula sta scrisa in doua locuri. Deci se compara: o litera schimbata intr-unul din
    * ele, si cartonasul arata zero pentru o galeata plina.
    */
-  const sql = readFileSync("migrations/2026-10-06-panoul-emag-adevarat.sql", "utf8");
+  /* ⚠ ULTIMA migratie care o rescrie, nu una anume: pe 02.10.2026 a venit „Ciornă”, iar o
+     proba legata de fisierul vechi ar fi verificat o functie care nu mai ruleaza. */
+  const fisier = readdirSync("migrations")
+    .filter((f) => /^\d{4}-\d{2}-\d{2}-.*\.sql$/.test(f))
+    .sort()
+    .filter((f) => /create or replace function public\.numara_ofertele_emag/i.test(readFileSync(`migrations/${f}`, "utf8")))
+    .at(-1);
+  assert.ok(fisier, "nicio migratie nu defineste functia");
+  const sql = readFileSync(`migrations/${fisier}`, "utf8");
   for (const eticheta of toateEtichetele()) {
     assert.ok(sql.includes(`'${eticheta}'`), `functia din baza nu da niciodata „${eticheta}”`);
   }
@@ -98,7 +106,7 @@ test("necitit NU se numara ca vandut", () => {
   assert.equal(r.eticheta, "Încă necitit de la eMAG");
 });
 
-test("o stare din afara enumului lor NU inseamna „in validare, nimic de facut”", () => {
+test("`0` e ciorna la ei: nici „in validare”, nici „oprita”, ci fisa de completat", () => {
   /*
    * ═══ 42 DE OFERTE OPRITE CARORA LE SPUNEAM SA ASTEPTE ═══
    *
@@ -110,23 +118,34 @@ test("o stare din afara enumului lor NU inseamna „in validare, nimic de facut�
    *
    * Aveau ce face: o apasare in panoul eMAG. Altfel asteptau la nesfarsit.
    */
+  /*
+   * ⚠ 02.10.2026: `0` nu era necunoscut. Raspunsul lor brut il numeste „Draft”, iar
+   * documentatia spune ca o ciorna nu pleaca la validare. Niciuna din cele 100 masurate
+   * n-avea pagina de produs la ei, deci pornirea ofertei nu le-ar fi ajutat: de reparat
+   * e fisa. Si tot nu e „in validare, nimic de facut”.
+   */
   const oprita = deCeNuSeVinde({
     validation_status: 0, offer_validation_status: 1,
     status_la_ei: EMAG_OFERTA_OPRITA, stoc_la_ei: 5, doc_errors: [],
   });
-  assert.equal(oprita.eticheta, "Oprită la eMAG", "starea necunoscuta n-are voie sa acopere „oprita”");
-  assert.match(oprita.indrumare, /panoul lor/);
+  assert.equal(oprita.eticheta, "Ciornă la eMAG");
+  assert.match(oprita.indrumare, /caracteristic/);
+  const aLui = deCeNuSeVinde({
+    validation_status: 0, offer_validation_status: 1, status_la_ei: 1, stoc_la_ei: 5, doc_errors: [],
+    creat_de_edinio: false,
+  });
+  assert.match(aLui.indrumare, /contul tău eMAG/, "fisa facuta de el se completeaza la ei, nu in Edinio");
 });
 
 test("o stare necunoscuta pe care nimic n-o explica se spune ca atare", () => {
   /* ⚠ Trecuta drept „se vinde", ar fi aratat verde pe ceva despre care nu stim nimic.
      Sunt 19 asa, active, pe contul real. */
   const r = deCeNuSeVinde({
-    validation_status: 0, offer_validation_status: 1, status_la_ei: 1, stoc_la_ei: 5, doc_errors: [],
+    validation_status: 7, offer_validation_status: 1, status_la_ei: 1, stoc_la_ei: 5, doc_errors: [],
   });
   assert.equal(r.seVinde, false);
   assert.equal(r.eticheta, "Stare necunoscută la eMAG");
-  assert.match(r.indrumare, /0/, "se spune CE valoare au trimis, nu doar ca e necunoscuta");
+  assert.match(r.indrumare, /7/, "se spune CE valoare au trimis, nu doar ca e necunoscuta");
 });
 
 test("starile documentate ca fiind in validare raman „in validare”", () => {

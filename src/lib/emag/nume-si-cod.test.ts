@@ -89,3 +89,19 @@ test("numele lor chiar ajunge pana la hotarare", () => {
   const m = readFileSync("src/lib/emag/mapping.ts", "utf8");
   assert.match(m, /numeLaEi: ident\?\.nume_emag \?\? null,/, "si ajunge pe oferta");
 });
+
+test("⚠ diacriticele scoase de eMAG NU inseamna „nume schimbat” (bucla Yvelle, 02.10.2026)", () => {
+  /*
+   * eMAG tine numele fara diacritice. Comparat litera cu litera, „Geantă de mână” fata de
+   * „Geanta de mana” parea schimbat la fiecare trecere: codul se omitea, produsul se repunea
+   * in coada, reconcilierea scria la loc forma lor — 133 de trimiteri intr-o ora pentru 9
+   * produse. Aceeasi ruta si pentru `ş`/`ţ` cu sedila.
+   */
+  assert.equal(schimbaSiNumele({ titlu: "Geantă de mână roșie", numeLaEi: "Geanta de mana rosie" }), false);
+  assert.equal(schimbaSiNumele({ titlu: "Genți de damă", numeLaEi: "Genti de dama" }), false);
+  assert.equal(schimbaSiNumele({ titlu: "Ştampilă ţesută", numeLaEi: "Stampila tesuta" }), false);
+  /* Spatiile duble raman la ei, deci raman si in comparatie. */
+  assert.equal(schimbaSiNumele({ titlu: "Geantă  de umăr", numeLaEi: "Geanta  de umar" }), false);
+  /* O schimbare adevarata se vede in continuare. */
+  assert.equal(schimbaSiNumele({ titlu: "Geantă de mână neagră", numeLaEi: "Geanta de mana rosie" }), true);
+});

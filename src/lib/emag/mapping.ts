@@ -984,7 +984,27 @@ export function schimbaSiNumele(a: { titlu: string; numeLaEi?: string | null }):
   const laEi = (a.numeLaEi ?? "").trim();
   /* ⚠ Nu stim ce au: nu se hotaraste nimic, se trimite ca pana acum. */
   if (!laEi) return false;
-  return taiat(a.titlu, LIMITE_EMAG.nume).trim() !== laEi;
+  /*
+   * ═══ ⚠ FARA DIACRITICE, FIINDCA ASA LE TINE eMAG (02.10.2026) ═══
+   *
+   * eMAG scoate diacriticele din nume: trimis „Geantă de mână”, la ei ramane „Geanta de
+   * mana”. Comparat litera cu litera, orice produs cu diacritice parea MEREU „cu nume
+   * schimbat”: codul se omitea, `maiTrebuieOTrecere` il repunea in coada, reconcilierea
+   * scria la loc numele lor fara diacritice, si de la capat — o trimitere pe minut, pe
+   * fiecare produs, la nesfarsit. Masurat la Yvelle: 133 de trimiteri intr-o ora pentru
+   * 9 genti, toate „reusit”.
+   */
+  return faraDiacritice(taiat(a.titlu, LIMITE_EMAG.nume).trim()) !== faraDiacritice(laEi);
+}
+
+/** Textul fara semne diacritice, cu majusculele si spatiile pastrate (asa compara eMAG). */
+export function faraDiacritice(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    /* ⚠ `ş` si `ţ` cu sedila (folosite gresit, dar des) nu se descompun: se traduc anume. */
+    .replace(/[şţŞŢ]/g, (c) => ({ "ş": "s", "ţ": "t", "Ş": "S", "Ţ": "T" })[c] ?? c)
+    .normalize("NFC");
 }
 
 export interface IdentitateUsoara {

@@ -25,6 +25,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
 import { continutTikTok } from "@/lib/tiktok/continut";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
+import { rambursulDeCotat } from "@/lib/shipping/recotarea";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
 import { JUDETE } from "@/lib/ro/judete";
 import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
@@ -1655,7 +1656,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   color={color}
                   country={isIntl ? form.country : undefined}
                   postCode={isIntl ? form.postCode : undefined}
-                  cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
+                  /* ⚠ Marfa SI extraoptiunile: serverul le confrunta pe amandoua. Vezi `rambursulDeCotat`. */
+                  cod={paymentMethod === "cash_on_delivery" ? rambursulDeCotat(subtotal, extrasTotal) : 0}
                   cart={[
                     /*
                      * ⚠ Linia principala isi duce si personalizarea, fiindca de ea atarna cat

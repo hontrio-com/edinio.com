@@ -31,6 +31,34 @@
  */
 export const TOLERANTA_RAMBURS_LEI = 1;
 
+/**
+ * Suma de ramburs pe care o cer cotarii cele doua formulare din magazin.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠ EXTRAOPTIUNILE INTRA IN SUMA, altfel comanda e refuzata    (04.10.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La comanda, serverul confrunta suma semnata cu `subtotal + extrasTotal - discountAmount`.
+ * Formularele trimiteau doar marfa, fara extraoptiuni, deci orice comanda cu ramburs care bifa o
+ * extraoptiune mai scumpa decat `TOLERANTA_RAMBURS_LEI` iesea „subdeclarata" si era refuzata cu
+ * „Suma incasata la livrare nu mai e cea...". Reincarcarea nu ajuta: browserul cerea din nou
+ * aceeasi suma. Masurat pe productie: JHBijuterii („Deschidere colet la livrare", 5 lei) si
+ * Suporti-Numar („Comanda cu Prioritate", 5 lei), diferenta de exact 5 lei la fiecare refuz.
+ *
+ * ⚠ DE CE PAREA INTAMPLATOR. Podeaua din catalog (`subtotalMaximDinCatalog`) socoteste produsele
+ * la pretul de lista. La pret pe trepte (2 x 45 fata de 2 x 50) ea acoperea extraoptiunea si
+ * comanda trecea; la o singura bucata cadea. Un cupon de cativa lei o ascundea la fel.
+ *
+ * ⚠ REDUCEREA NU SE SCADE AICI, dinadins. Serverul o scade din marfa lui, deci o suma care n-o
+ * scade iese doar mai MARE, si directia aceea trece mereu. Scazuta pe client, o reducere socotita
+ * altfel decat pe server ar fi refuzat comenzi cinstite pe cativa bani.
+ */
+export function rambursulDeCotat(marfa: number, extraoptiuni: number): number {
+  const m = Number.isFinite(marfa) ? Math.max(0, marfa) : 0;
+  const e = Number.isFinite(extraoptiuni) ? Math.max(0, extraoptiuni) : 0;
+  return Math.round((m + e) * 100) / 100;
+}
+
 /** Cauzele pentru care o comanda nu se poate incheia cu cotatia pe care o poarta. */
 export type CauzaRecotarii = "greutate" | "fara-tarif" | "plan" | "ramburs";
 

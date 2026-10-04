@@ -10,6 +10,7 @@ import {
 import { formatPrice } from "@/lib/utils/format";
 import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { CourierSelector } from "@/components/ministore/CourierSelector";
+import { rambursulDeCotat } from "@/lib/shipping/recotarea";
 import { CompanyFields } from "@/components/ministore/CompanyFields";
 import { OferteDinFormular } from "@/components/ministore/OrderBump";
 import { JUDETE } from "@/lib/ro/judete";
@@ -81,6 +82,7 @@ export function CheckoutForm({
     emailField,
     errors,
     extras,
+    extrasTotal,
     form,
     goodsTotal,
     grandTotal,
@@ -111,7 +113,6 @@ export function CheckoutForm({
     setShowDiscountField,
     showDiscountField,
     toggleBump,
-    total,
   } = motor;
   const inFormular = suprafata === "modal";
   // Prefix propriu: acelasi formular poate fi randat de doua ori pe pagina
@@ -285,7 +286,8 @@ export function CheckoutForm({
               color={color}
               country={isIntl ? form.country : undefined}
               postCode={isIntl ? form.postCode : undefined}
-              cod={paymentMethod === "cash_on_delivery" ? total : 0}
+              /* ⚠ Marfa SI extraoptiunile: serverul le confrunta pe amandoua. Vezi `rambursulDeCotat`. */
+              cod={paymentMethod === "cash_on_delivery" ? rambursulDeCotat(goodsTotal, extrasTotal) : 0}
               // Bump-urile acceptate intra si ele in cotatie: sunt produse
               // reale in comanda, cu greutatea si volumul lor. Modalul le
               // trimitea deja; pagina de checkout nu, deci acelasi cos dadea

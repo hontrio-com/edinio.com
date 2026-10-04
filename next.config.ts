@@ -365,7 +365,14 @@ const nextConfig: NextConfig = {
       "media-src 'self' blob: https:",
       "font-src 'self' data: https:",
       "connect-src 'self' https: wss:",
-      "frame-src 'self' https:",
+      /*
+        ⚠ `blob:` E PENTRU „PRINTEAZA" DE LA AWB (04.10.2026). Eticheta se incarca intr-un
+        cadru nevazut dintr-o adresa `blob:` si i se cere `print()`. Fara `blob:` aici, Chrome
+        blocheaza cadrul, `print()` arunca si butonul cadea pe ramura de rezerva (tab nou):
+        masurat in productie, la Suporti-Numar. O adresa `blob:` e legata de originea care a
+        facut-o, deci nu deschide incadrarea catre nicio alta gazda. Vezi `printeaza-eticheta.ts`.
+      */
+      "frame-src 'self' blob: https:",
       "worker-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",

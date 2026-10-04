@@ -47,6 +47,17 @@ test("⚠ cadrul de printare NU e `display: none`, altfel Chrome printeaza o pag
   assert.doesNotMatch(stil[1], /display:\s*none|visibility:\s*hidden|width:\s*0|height:\s*0/);
 });
 
+test("⚠⚠ CSP-ul lasa cadrul `blob:`, altfel Chrome il blocheaza si printarea cade pe tab nou", () => {
+  /*
+   * Asa a iesit prima varianta in productie: probata local fara CSP, mergea; pe edinio.com,
+   * `frame-src 'self' https:` bloca cadrul si omul primea un tab nou in loc de printare.
+   */
+  const config = readFileSync("next.config.ts", "utf8");
+  const frame = config.match(/"frame-src ([^"]+)"/);
+  assert.ok(frame, "nu mai gasesc `frame-src` in CSP");
+  assert.match(frame[1], /(^|\s)blob:(\s|$)/, "`frame-src` nu mai permite `blob:`: printarea directa cade pe tab nou");
+});
+
 /* ═══ Fiecare fereastra de AWB are butonul ═══ */
 
 /** Ferestrele care NU dau eticheta deloc, deci n-au ce printa. Fiecare cu motivul ei. */

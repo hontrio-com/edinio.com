@@ -4,6 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { AlertCircle, CheckCircle, Download, Loader2, Package, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import {
   descarcaEtichetaAwbEmag, emiteAwbEmag, pregatireAwbEmag, type PregatireAwbEmag,
 } from "@/lib/actions/emag.actions";
@@ -273,6 +275,19 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
                   <Download className="h-4 w-4" />
                   Etichetă A6
                 </button>
+                {(["A4", "A6"] as const).map((format) => (
+                  <ButonPrinteaza
+                    key={format}
+                    className="h-auto rounded-lg px-3 py-2 text-sm"
+                    disabled={seTrimite}
+                    aduce={async () => {
+                      const r = await descarcaEtichetaAwbEmag(businessId, order.id, format);
+                      return "error" in r ? r.error : dinBase64(r.base64);
+                    }}
+                  >
+                    {`Printează ${format}`}
+                  </ButonPrinteaza>
+                ))}
               </div>
             )}
 

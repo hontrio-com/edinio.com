@@ -14,6 +14,7 @@ import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutat
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { numeServiciuEcolet } from "@/lib/ecolet/preturi";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -230,10 +231,12 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     else toast.info("Inca se prelucreaza la eColet. Mai incearca peste un minut.");
   }
 
+  const urlEticheta = `/api/ecolet/awb?orderId=${order.id}&businessId=${businessId}`;
+
   async function descarcaEticheta() {
     setDescarca(true);
     try {
-      const res = await fetch(`/api/ecolet/awb?orderId=${order.id}&businessId=${businessId}`);
+      const res = await fetch(urlEticheta);
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: string } | null;
         toast.error(j?.error ?? "Eticheta nu a putut fi descarcata");
@@ -297,6 +300,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               {descarca ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               Descarca eticheta
             </Button>
+            <ButonPrinteaza size="sm" className="ml-2" aduce={() => fetch(urlEticheta)}>Printeaza eticheta</ButonPrinteaza>
           </div>
         )}
 

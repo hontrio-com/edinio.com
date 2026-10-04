@@ -9,6 +9,7 @@ import type { COReceiver, COParcel } from "@/lib/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
 
@@ -245,9 +246,11 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     });
   }
 
+  const urlEticheta = (format: "A4" | "A6") =>
+    `/api/colete/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
+
   function handleDownload(format: "A4" | "A6") {
-    const url = `/api/colete/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
-    window.open(url, "_blank");
+    window.open(urlEticheta(format), "_blank");
   }
 
   /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
@@ -294,7 +297,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               </div>
 
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Descarca AWB</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Descarca sau printeaza AWB</p>
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" size="lg" onClick={() => handleDownload("A4")} className="w-full">
                     <Download />
@@ -304,6 +307,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <Download />
                     Format A6
                   </Button>
+                  <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta("A4"))}>Printeaza A4</ButonPrinteaza>
+                  <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta("A6"))}>Printeaza A6</ButonPrinteaza>
                 </div>
               </div>
 

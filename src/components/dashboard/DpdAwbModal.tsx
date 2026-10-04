@@ -9,6 +9,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
 
@@ -189,11 +190,13 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
   }
 
+  const urlEticheta = (format: "A4" | "A6") =>
+    `/api/dpd/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
+
   async function handleDownload(format: "A4" | "A6") {
     setDownloadingFormat(format);
     try {
-      const url = `/api/dpd/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
-      const res = await fetch(url);
+      const res = await fetch(urlEticheta(format));
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error((data as { error?: string }).error ?? "Eroare la descarcarea PDF");
@@ -263,6 +266,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   {downloadingFormat === "A6" ? <Loader2 className="animate-spin" /> : <Download />}
                   Eticheta A6
                 </Button>
+                <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta("A4"))}>Printeaza A4</ButonPrinteaza>
+                <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta("A6"))}>Printeaza A6</ButonPrinteaza>
               </div>
 
               <a

@@ -9,6 +9,7 @@ import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createFanCourierAwbAction, deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -293,11 +294,12 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
   }
 
+  const urlEticheta = () => `/api/fancourier/awb?orderId=${order.id}&businessId=${businessId}`;
+
   async function handleDownload() {
     setDownloading(true);
     try {
-      const url = `/api/fancourier/awb?orderId=${order.id}&businessId=${businessId}`;
-      const res = await fetch(url);
+      const res = await fetch(urlEticheta());
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error((data as { error?: string }).error ?? "Eroare la descarcarea PDF");
@@ -360,6 +362,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {downloading ? <Loader2 className="animate-spin" /> : <Download />}
                 {downloading ? "Se descarca..." : "Descarca eticheta PDF"}
               </Button>
+              <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta())}>
+                Printeaza eticheta
+              </ButonPrinteaza>
 
               <a
                 href={`https://www.fancourier.ro/awb-tracking/?tracking=${encodeURIComponent(orderData.fan_courier_awb_number ?? "")}`}

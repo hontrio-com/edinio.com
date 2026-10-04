@@ -14,6 +14,8 @@ import { cheiaOfertei, etichetaOferta, explicatieTva } from "@/lib/ups/preturi";
 import { GREUTATE_MAXIMA_PUNCT_KG, type PunctAles } from "@/lib/ups/expediere";
 import type { OfertaUps, PunctUps } from "@/lib/ups/client";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -383,6 +385,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               {descarcand ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               Descarca eticheta
             </Button>
+            <ButonPrinteaza
+              className="ml-2"
+              aduce={async () => {
+                const r = await getUpsEtichetaAction(businessId, order.id);
+                if (!r.ok) return r.error;
+                /* ⚠ Caseta de semnatura si documentul de ramburs se tiparesc odata cu eticheta. */
+                if (r.semnatura || r.documentRamburs) {
+                  toast.info("Printarea scoate doar eticheta. Caseta de semnatura UPS"
+                    + (r.documentRamburs ? " si documentul de ramburs" : "")
+                    + " se iau cu Descarca eticheta.", { duration: 15000 });
+                }
+                return dinBase64(r.base64);
+              }}
+            >
+              Printeaza eticheta
+            </ButonPrinteaza>
             <p className="text-[11px] text-muted-foreground">
               ⚠ Eticheta o pastram noi de la emitere: documentatia UPS se contrazice daca reimprimarea merge
               si pentru expedierile normale, nu doar pentru retururi. Daca s-a pierdut, o cerem totusi de la

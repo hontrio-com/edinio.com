@@ -12,6 +12,8 @@ import {
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -271,6 +273,17 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {eticheta ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4 mr-1" />}
                 Eticheta
               </Button>
+              <ButonPrinteaza
+                size="sm"
+                aduce={async () => {
+                  const r = await getPacketaLabelAction(businessId, order.id);
+                  if ("error" in r) return r.error;
+                  if (r.avertisment) toast.warning(r.avertisment, { duration: 12000 });
+                  return dinBase64(r.pdf);
+                }}
+              >
+                Printeaza
+              </ButonPrinteaza>
               <Button variant="outline" size="sm" onClick={handleStari} disabled={incarcStari}>
                 {incarcStari ? <Loader2 className="h-4 w-4 animate-spin" /> : "Istoric"}
               </Button>

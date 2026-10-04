@@ -15,6 +15,8 @@ import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutat
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { cheiaOfertei, etichetaOferta, termenLivrare, textRamburs, type OfertaAratata } from "@/lib/smartship/preturi";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { OfertaTransport } from "@/lib/smartship/client";
 import type { Database } from "@/types/database.types";
 
@@ -553,6 +555,15 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {descarcand ? <Loader2 className="animate-spin" /> : <FileDown />}
                 {descarcand ? "Se descarca..." : "Eticheta PDF"}
               </Button>
+              <ButonPrinteaza
+                className="flex-1"
+                aduce={async () => {
+                  const r = await getSmartshipLabelAction(businessId, order.id);
+                  return r.ok ? dinBase64(r.pdfBase64) : r.error;
+                }}
+              >
+                Printeaza
+              </ButonPrinteaza>
               <Button variant="outline" onClick={handleStari} disabled={incarcStari} className="flex-1">
                 {incarcStari ? <Loader2 className="animate-spin" /> : <Package />}
                 {incarcStari ? "Se cere..." : "Unde e coletul"}

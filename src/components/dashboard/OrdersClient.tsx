@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Download, Package, CheckSquare } from "lucide-react";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Download, Package, CheckSquare, Printer } from "lucide-react";
+import { printeazaEticheta } from "@/lib/orders/printeaza-eticheta";
 import { WootBulkModal } from "./WootBulkModal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
@@ -349,7 +350,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
    * ⚠ E o CITIRE: nu creeaza nimic la curier si nu cheltuie nimic, deci nu cere
    * confirmare si se poate relua oricand. Fix pe dos fata de butonul de alaturi.
    */
-  async function descarcaEtichetele() {
+  async function descarcaEtichetele(mod: "descarca" | "printeaza" = "descarca") {
     const ids = [...selected];
     setEticheteBusy(true);
     let raspuns: Response;
@@ -386,22 +387,38 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     } catch { /* Fisierul e bun si fara rezumat; nu se opreste descarcarea pentru el. */ }
 
     const blob = await raspuns.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = numeDinAntet(raspuns) ?? "etichete.pdf";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    /* ⚠ Se elibereaza, altfel fiecare lot lasa in memorie un PDF pana la reincarcare. */
-    URL.revokeObjectURL(url);
+    /*
+     * ⚠ „Printeaza" deschide documentul direct in fereastra de printare, fara fisier pe disc.
+     * Daca nu se poate (nu e PDF, sau browserul a blocat tabul), se DESCARCA, ca inainte:
+     * lotul a fost deja adus, si nu se pierde din cauza drumului de afisare.
+     */
+    let printat = false;
+    if (mod === "printeaza") {
+      const rezultat = await printeazaEticheta(blob).catch(() => false as const);
+      printat = rezultat === "printare" || rezultat === "tab-nou";
+      if (rezultat === "blocat") {
+        toast.error("Browserul a blocat deschiderea etichetelor, așa că le-am descărcat. Permite ferestrele pop-up pentru acest site ca să se deschidă direct.", { duration: 12000 });
+      }
+    }
+    if (!printat) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = numeDinAntet(raspuns) ?? "etichete.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      /* ⚠ Se elibereaza, altfel fiecare lot lasa in memorie un PDF pana la reincarcare. */
+      URL.revokeObjectURL(url);
+    }
+    const verb = printat ? "trimise la printare" : "descărcate";
 
     setEticheteSarite(rezumat.sarite ?? []);
     setEticheteInPlus(rezumat.inPlus ?? 0);
     const cate = rezumat.incluse ?? 0;
     if (rezumat.oprit) {
       toast.warning(
-        `${cate} etichete descărcate. Lotul s-a oprit la timp, restul nu au fost cerute: `
+        `${cate} etichete ${verb}. Lotul s-a oprit la timp, restul nu au fost cerute: `
         + "selectează-le din nou și reia. E o citire, nu se întâmplă nimic de două ori.",
         { duration: 12000 },
       );
@@ -409,7 +426,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
       const sarite = (rezumat.sarite?.length ?? 0) + (rezumat.inPlus ?? 0);
       toast.warning(`${cate} etichete în document, ${sarite} sărite.`, { duration: 10000 });
     } else {
-      toast.success(`${cate} ${cate === 1 ? "etichetă descărcată" : "etichete descărcate"}.`);
+      toast.success(cate === 1
+        ? `1 etichetă ${printat ? "trimisă la printare" : "descărcată"}.`
+        : `${cate} etichete ${verb}.`);
     }
   }
 
@@ -1165,6 +1184,17 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     : <Download className="h-3.5 w-3.5" />}
                   Descarcă etichetele
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void descarcaEtichetele("printeaza")}
+                  disabled={eticheteBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {eticheteBusy
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Printer className="h-3.5 w-3.5" />}
+                  Printează etichetele
                 </button>
               </div>
             )}

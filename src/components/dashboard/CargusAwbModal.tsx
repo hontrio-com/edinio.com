@@ -11,6 +11,7 @@ import { getCargusServiceId } from "@/lib/cargus";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
@@ -205,11 +206,13 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
   }
 
+  const urlEticheta = (format: 0 | 1) =>
+    `/api/cargus/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
+
   async function handleDownload(format: 0 | 1) {
     setDownloadingFormat(format);
     try {
-      const url = `/api/cargus/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
-      const res = await fetch(url);
+      const res = await fetch(urlEticheta(format));
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error((data as { error?: string }).error ?? "Eroare la descarcarea PDF");
@@ -279,6 +282,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   {downloadingFormat === 1 ? <Loader2 className="animate-spin" /> : <ExternalLink />}
                   Eticheta 10x14
                 </Button>
+                <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta(0))}>Printeaza A4</ButonPrinteaza>
+                <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta(1))}>Printeaza 10x14</ButonPrinteaza>
               </div>
 
               <a

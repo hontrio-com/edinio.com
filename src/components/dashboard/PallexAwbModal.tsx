@@ -16,6 +16,7 @@ import { JUDETE, potrivesteJudet } from "@/lib/ro/judete";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaCuNumar } from "@/lib/orders/adresa";
 
@@ -164,10 +165,13 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   const [borderou, setBorderou] = useState<{ id: number; validat: number; partide: number } | null>(null);
   const [borderouCerut, setBorderouCerut] = useState(false);
 
+  const urlDocument = (fel: "label" | "note") =>
+    `/api/pallex/document?orderId=${order.id}&businessId=${businessId}&fel=${fel}`;
+
   async function descarca(fel: "label" | "note") {
     setSeDescarca(fel);
     try {
-      const res = await fetch(`/api/pallex/document?orderId=${order.id}&businessId=${businessId}&fel=${fel}`);
+      const res = await fetch(urlDocument(fel));
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: string } | null;
         toast.error(j?.error ?? "Documentul nu a putut fi descarcat");
@@ -403,6 +407,8 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
                 {seDescarca === "note" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                 Aviz de transport
               </Button>
+              <ButonPrinteaza size="sm" aduce={() => fetch(urlDocument("label"))}>Printeaza eticheta</ButonPrinteaza>
+              <ButonPrinteaza size="sm" aduce={() => fetch(urlDocument("note"))}>Printeaza avizul</ButonPrinteaza>
             </div>
 
             {/*

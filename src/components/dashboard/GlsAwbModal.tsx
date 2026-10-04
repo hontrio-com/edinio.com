@@ -7,6 +7,7 @@ import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { createGlsAwbAction, type DateAwbGls } from "@/lib/actions/gls.actions";
 import { MAX_COLETE } from "@/lib/gls/expediere";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaCuNumar } from "@/lib/orders/adresa";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
@@ -131,10 +132,12 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    * ⚠ Ruta NU cheama niciodata `PrintLabels`: acela ar crea un al doilea colet
    * real si facturat.
    */
+  const urlEticheta = `/api/gls/awb?orderId=${order.id}&businessId=${businessId}`;
+
   async function descarcaSalvata() {
     setSeDescarca(true);
     try {
-      const res = await fetch(`/api/gls/awb?orderId=${order.id}&businessId=${businessId}`);
+      const res = await fetch(urlEticheta);
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: string } | null;
         toast.error(j?.error ?? "Eticheta nu a putut fi descarcata");
@@ -290,6 +293,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               {seDescarca ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               Descarca eticheta
             </Button>
+            <ButonPrinteaza size="sm" className="ml-2" aduce={() => fetch(urlEticheta)}>Printeaza eticheta</ButonPrinteaza>
           </div>
         )}
 
@@ -307,6 +311,13 @@ Am salvat-o si noi, deci o poti descarca oricand din comanda. Butonul de mai
               <Download className="h-4 w-4" />
               Descarca eticheta {awbEmis}
             </Button>
+            <ButonPrinteaza
+              size="sm"
+              className="ml-2"
+              aduce={async () => Uint8Array.from(atob(eticheta), (c) => c.charCodeAt(0))}
+            >
+              Printeaza eticheta
+            </ButonPrinteaza>
           </div>
         )}
 

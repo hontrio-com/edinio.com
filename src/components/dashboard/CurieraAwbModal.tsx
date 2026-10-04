@@ -11,6 +11,8 @@ import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutat
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { liniaAdresei } from "@/lib/orders/adresa";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -308,6 +310,17 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
               {descarcand ? <Loader2 className="animate-spin" /> : <Download className="h-4 w-4" />}
               Descarca eticheta
             </Button>
+            <ButonPrinteaza
+              className="w-full"
+              aduce={async () => {
+                const r = await getCurieraEtichetaAction(businessId, order.id);
+                if (!r.ok) return r.error;
+                if (r.avertisment) toast.warning(r.avertisment, { duration: 12000 });
+                return dinBase64(r.base64);
+              }}
+            >
+              Printeaza eticheta
+            </ButonPrinteaza>
 
             <p className="text-xs text-muted-foreground">
               Eticheta se cere de la Curiera la fiecare descarcare, deci o poti lua oricand din

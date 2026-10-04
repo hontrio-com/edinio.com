@@ -13,6 +13,7 @@ import { ETICHETE_COLET, potrivesteTipul } from "@/lib/sameday/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
 
@@ -380,11 +381,13 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
   }
 
+  const urlEticheta = () =>
+    `/api/sameday/awb?orderId=${order.id}&businessId=${businessId}&format=${labelFormat}`;
+
   async function handleDownload() {
     setDownloading(true);
     try {
-      const url = `/api/sameday/awb?orderId=${order.id}&businessId=${businessId}&format=${labelFormat}`;
-      const res = await fetch(url);
+      const res = await fetch(urlEticheta());
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast.error((data as { error?: string }).error ?? "Eroare la descarcarea PDF");
@@ -599,6 +602,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {downloading ? <Loader2 className="animate-spin" /> : <Download />}
                 {downloading ? "Se descarca..." : `Descarca eticheta ${labelFormat} PDF`}
               </Button>
+              <ButonPrinteaza size="lg" className="w-full" aduce={() => fetch(urlEticheta())}>
+                {`Printeaza eticheta ${labelFormat}`}
+              </ButonPrinteaza>
 
               <a
                 href={`https://sameday.ro/#awb=${encodeURIComponent(orderData.sameday_awb_number ?? "")}`}

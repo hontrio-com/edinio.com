@@ -14,6 +14,8 @@ import { cheiaOfertei, etichetaOferta, explicatieTva } from "@/lib/dhl/preturi";
 import { avertismenteColet, DIMENSIUNI_IMPLICITE } from "@/lib/dhl/expediere";
 import type { OfertaDhl } from "@/lib/dhl/client";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -533,6 +535,19 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {descarcand ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                 Descarca eticheta
               </Button>
+              <ButonPrinteaza
+                aduce={async () => {
+                  const r = await getDhlEtichetaAction(businessId, order.id);
+                  if (!r.ok) return r.error;
+                  /* ⚠ Factura comerciala nu e optionala la vama: printarea scoate doar eticheta. */
+                  if (r.factura) {
+                    toast.info("Factura comerciala nu se printeaza de aici. Apasa Descarca eticheta ca s-o ai si pe ea; fara ea coletul se opreste in vama.", { duration: 15000 });
+                  }
+                  return dinBase64(r.base64);
+                }}
+              >
+                Printeaza eticheta
+              </ButonPrinteaza>
               <Button variant="outline" onClick={handleDovada} disabled={descarcandDovada}>
                 {descarcandDovada ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
                 Dovada livrarii

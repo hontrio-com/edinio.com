@@ -13,6 +13,8 @@ import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { cheiaOfertei, etichetaOferta, type OfertaShipo } from "@/lib/shipo/preturi";
 import type { PunctAratat } from "@/lib/shipo/puncte";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -330,6 +332,15 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               {descarcand ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               Descarca eticheta
             </Button>
+            <ButonPrinteaza
+              className="ml-2"
+              aduce={async () => {
+                const r = await getShipoEtichetaAction(businessId, order.id);
+                return r.ok ? dinBase64(r.base64) : r.error;
+              }}
+            >
+              Printeaza eticheta
+            </ButonPrinteaza>
           </div>
         ) : (
           <div className="space-y-4">

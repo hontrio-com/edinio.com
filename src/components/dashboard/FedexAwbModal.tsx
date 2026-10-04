@@ -12,6 +12,8 @@ import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { cheiaOfertei, etichetaOferta, EXPLICATIE_TVA } from "@/lib/fedex/preturi";
 import type { OfertaFedex } from "@/lib/fedex/client";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
+import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -343,6 +345,15 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               {descarcand ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
               Descarca eticheta
             </Button>
+            <ButonPrinteaza
+              className="ml-2"
+              aduce={async () => {
+                const r = await getFedexEtichetaAction(businessId, order.id);
+                return r.ok ? dinBase64(r.base64) : r.error;
+              }}
+            >
+              Printeaza eticheta
+            </ButonPrinteaza>
             <p className="text-[11px] text-muted-foreground">
               ⚠ FedEx nu permite reimprimarea prin API, deci eticheta o pastram noi de la emitere.
               Daca s-a pierdut, o gasesti si in contul FedEx dupa numarul AWB.

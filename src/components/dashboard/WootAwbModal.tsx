@@ -19,6 +19,7 @@ import { potrivesteJudetulWoot, potrivesteLocalitateaWoot } from "@/lib/shipping
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
+import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
 
@@ -387,8 +388,11 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     });
   }
 
+  const urlEticheta = (format: "A4" | "A6") =>
+    `/api/woot/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`;
+
   function handleDownload(format: "A4" | "A6") {
-    window.open(`/api/woot/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`, "_blank");
+    window.open(urlEticheta(format), "_blank");
   }
 
   /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
@@ -448,6 +452,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <Download />
                     Descarca A6
                   </Button>
+                  <ButonPrinteaza aduce={() => fetch(urlEticheta("A4"))}>Printeaza A4</ButonPrinteaza>
+                  <ButonPrinteaza aduce={() => fetch(urlEticheta("A6"))}>Printeaza A6</ButonPrinteaza>
                   <Button variant="destructive" onClick={handleCancel} disabled={cancelling} className="ml-auto">
                     {cancelling ? <Loader2 className="animate-spin" /> : <Trash2 />}
                     Anuleaza AWB

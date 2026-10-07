@@ -338,11 +338,22 @@ export function RuntimeMarketing() {
           const prag = el.dataset.analyticsScroll;
           if (prag) {
             const p = Number(prag) as 25 | 50 | 75 | 90;
-            if (!praguriTrase.has(p)) {
-              praguriTrase.add(p);
-              urmareste({ name: "scroll_depth", percent: p });
+            /*
+              ⚠ Si pragurile de SUB el: la o derulare rapida, un reper de 1px poate fi sarit intre
+              doua cadre (masurat: 75% sarit, 90% prins), iar raportul ar fi aratat oameni ajunsi
+              la 90% fara sa fi trecut de 75%.
+            */
+            for (const q of PRAGURI) {
+              if (q > p || praguriTrase.has(q)) continue;
+              praguriTrase.add(q);
+              urmareste({ name: "scroll_depth", percent: q });
+              const reper = repere.find((r) => Number(r.dataset.analyticsScroll) === q);
+              if (reper) { obs.unobserve(reper); reper.remove(); }
             }
             obs.unobserve(el);
+            /* ⚠ Si SCOS din pagina, nu doar din observator: lasat acolo, un reper absolut tinea
+               documentul lung dupa ce pagina scadea (vezi `inaltimeaContinutului`). */
+            el.remove();
             continue;
           }
 
@@ -447,8 +458,22 @@ export function RuntimeMarketing() {
       goale, la 25/50/75/90% din inaltimea documentului. Asa nu exista niciun
       ascultator de `scroll`, si masuratoarea costa cat costa un observator.
     */
+    /*
+      ═══ ⚠ INALTIMEA CONTINUTULUI, NU `scrollHeight` (07.10.2026) ═══
+
+      `scrollHeight` include chiar reperele, care sunt absolute. Cat timp pagina doar CRESTE nu
+      se vede nimic. Cand SCADE (pe /integrari, rubrica „Curieri" taie lista de la 67 de carduri
+      la 19, pagina de la 6991px la ~3750px), reperele ramase la vechile pozitii tineau documentul
+      lung: sub footer se putea derula ~2500px de gol (raportat de el). Iar mutarea se socotea din
+      `scrollHeight`, care le includea tot pe ele, deci pagina nu se mai strangea niciodata.
+
+      Marginea de jos a lui `<body>` nu tine cont de copiii absoluti, deci reperele n-o pot
+      lungi: masurata de aici, nicio asezare a lor nu mai poate schimba inaltimea pe care o
+      masoara. Asta inchide si bucla de care se temea marginea de 2% de mai jos.
+    */
+    const inaltimeaContinutului = () => Math.round(document.body.getBoundingClientRect().bottom + window.scrollY);
     const repere: HTMLElement[] = [];
-    let inaltime = document.documentElement.scrollHeight;
+    let inaltime = inaltimeaContinutului();
     if (inaltime > window.innerHeight * 1.5) {
       for (const p of PRAGURI) {
         const r = document.createElement("div");
@@ -490,13 +515,13 @@ export function RuntimeMarketing() {
       si repetata din alta parte n-are de ce sa ne puna la treaba.
     */
     const aseazaReperele = () => {
-      const acum = document.documentElement.scrollHeight;
+      const acum = inaltimeaContinutului();
       if (acum <= 0 || Math.abs(acum - inaltime) < inaltime * 0.02) return;
       inaltime = acum;
       for (const r of repere) {
-        /* Cele trase deja au fost scoase din observator; mutarea lor n-ar mai conta. */
+        /* Cele trase deja au fost scoase din pagina (`el.remove()` din observator). */
         const p = Number(r.dataset.analyticsScroll);
-        if (praguriTrase.has(p)) continue;
+        if (praguriTrase.has(p) || !r.isConnected) continue;
         r.style.top = `${Math.round((acum * p) / 100)}px`;
       }
     };

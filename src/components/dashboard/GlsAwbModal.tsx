@@ -13,6 +13,7 @@ import { stradaCuNumar } from "@/lib/orders/adresa";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -85,6 +86,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "gls");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   /*
    * Livrarea la punct GLS aleasa de client in checkout.
@@ -106,7 +109,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [strada, setStrada] = useState(
     punctStrain ? punctStrain.linieAcasa : stradaCuNumar(addr),
   );
-  const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || "");
+  const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || detaliiAwb.codPostal);
   const [numarColete, setNumarColete] = useState("1");
   /*
    * Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online

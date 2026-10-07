@@ -131,3 +131,27 @@ export async function conturilePornite(businessId: string): Promise<boolean | nu
   if (error) return null;
   return curataContClientConfig(data?.cont_client_config).enabled;
 }
+
+/** Contul din care s-a plasat (sau de care s-a legat) o comanda. */
+export type ContulComenzii = { contId: string; nume: string | null; email: string | null; temei: string };
+
+/**
+ * Contul fiecarei comenzi dintre `orderIds`: comanda -> cont. Comenzile fara cont lipsesc din harta.
+ *
+ * ⚠ Un client cu cont poate comanda pentru mai multe persoane: numele si emailul de pe comanda
+ * sunt ale destinatarului, iar contul e singurul lucru care le leaga. Vezi migratia
+ * `2026-10-07-contul-comenzilor.sql`. Id-urile vin dintr-o pagina sau dintr-un export (cel mult
+ * cateva sute), deci un singur apel.
+ */
+export async function conturileComenzilor(businessId: string, orderIds: string[]): Promise<Record<string, ContulComenzii>> {
+  const ids = orderIds.filter(esteUuid);
+  if (ids.length === 0) return {};
+  const { data, error } = await createAdminClient()
+    .rpc("cont_panou_conturile_comenzilor", { p_business: businessId, p_orders: ids });
+  if (error) throw error;
+  const harta: Record<string, ContulComenzii> = {};
+  for (const r of data ?? []) {
+    harta[r.order_id] = { contId: r.cont_id, nume: r.nume ?? null, email: r.email ?? null, temei: r.temei };
+  }
+  return harta;
+}

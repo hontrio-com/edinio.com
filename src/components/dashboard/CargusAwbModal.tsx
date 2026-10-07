@@ -17,6 +17,7 @@ import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -66,6 +67,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress | null;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "cargus");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   // Delivery to a Cargus Ship & Go point: the AWB carries DeliveryPudoPoint +
   // ServiceId 38 (resolved server-side from the order).
@@ -91,7 +94,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   );
   const [openPackage, setOpenPackage] = useState(false);
   const [saturdayDelivery, setSaturdayDelivery] = useState(false);
-  const [observations, setObservations] = useState("");
+  const [observations, setObservations] = useState(detaliiAwb.observatii);
   const [packageContent, setPackageContent] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
     return items.map((i) => i?.name).filter(Boolean).join(", ").slice(0, 100);
@@ -103,7 +106,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
   const [recipientAddress, setRecipientAddress] = useState(punctStrain ? punctStrain.linieAcasa : liniaAdresei(addr));
-  const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code ?? "");
+  const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code || detaliiAwb.codPostal);
 
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);

@@ -105,7 +105,7 @@ create index if not exists orders_epacket_urmarire_idx
     and status = any (array['pending', 'confirmed', 'processing', 'shipped']);
 
 -- ---------------------------------------------------------------------------
--- 5. Contul cumparatorului: AWB-ul e-packet, cu curierul REAL
+-- 5. Contul cumparatorului: AWB-ul e-packet, cu curierul REAL (si Curiera: numarul partenerului)
 -- ---------------------------------------------------------------------------
 -- Corpul e cel din productie (schema de referinta, 07.10.2026), cu UN rand nou in VALUES. Tipul
 -- intors e acelasi, deci `create or replace` ajunge. ⚠ `curier_real` poarta NUMELE curierului de
@@ -218,7 +218,11 @@ language sql stable security definer set search_path = '' as $fn$
       from (values
         ('cargus', o.cargus_awb_number, null::text, o.cargus_awb_at, null::text),
         ('colete', o.colete_awb_number, null::text, o.colete_awb_at, null::text),
-        ('curiera', o.curiera_awb_number, null::text, o.curiera_awb_at, null::text),
+        -- Curiera e broker: cumparatorul primeste numarul PARTENERULUI (DPD), cu care il cauta
+        -- curierul care chiar livreaza; fara el, numarul Curiera, ca pana acum.
+        ('curiera',
+          coalesce(nullif(btrim(o.curiera_partener_awb), ''), o.curiera_awb_number), null::text, o.curiera_awb_at,
+          case when nullif(btrim(o.curiera_partener_awb), '') is not null then nullif(btrim(o.curiera_partener), '') end),
         ('dhl', o.dhl_awb_number, o.dhl_tracking_url, o.dhl_awb_at, null::text),
         ('dpd', o.dpd_awb_number, null::text, o.dpd_awb_at, null::text),
         ('ecolet', o.ecolet_awb_number, null::text, o.ecolet_awb_at, null::text),

@@ -16,6 +16,7 @@ import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -100,6 +101,8 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "curiera");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   /*
    * Livrarea la punct aleasa de client in checkout.
@@ -131,7 +134,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
   /* ⚠ La punct: localitatea, judetul si codul postal ALE PUNCTULUI (vezi tipul de sus). */
   const [oras, setOras] = useState((laPunct ? addr.locker_city : "") || addr.city || "");
   const [judet, setJudet] = useState((laPunct ? addr.locker_county : "") || addr.county || "");
-  const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || "");
+  const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || detaliiAwb.codPostal);
   const [colete, setColete] = useState("1");
   const [lungime, setLungime] = useState("");
   const [latime, setLatime] = useState("");
@@ -157,7 +160,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
     const dinComanda = items.map((i) => i?.name).filter(Boolean).join(", ").slice(0, 100);
     return dinComanda || optiuni?.continutImplicit || "";
   });
-  const [observatii, setObservatii] = useState("");
+  const [observatii, setObservatii] = useState(detaliiAwb.observatii);
 
   const [creating, setCreating] = useState(false);
   const [descarcand, setDescarcand] = useState(false);

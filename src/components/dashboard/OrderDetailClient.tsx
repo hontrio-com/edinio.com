@@ -777,6 +777,8 @@ export function OrderDetailClient({
       subject: `Comanda ${orderNumber} a fost expediata`,
       body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost predata curierului si este pe drum. O vei primi in cel mai scurt timp.`
         + (expedierePeComanda ? `\n\nCurier: ${expedierePeComanda.curier}\nNumar AWB: ${expedierePeComanda.awb}` : "")
+        /* La broker (Curiera), numarul de sus e al curierului care livreaza; al brokerului ramane alaturi. */
+        + (expedierePeComanda?.prin ? `\nAWB ${expedierePeComanda.prin.curier}: ${expedierePeComanda.prin.awb}` : "")
         + `\n\nMultumim!`,
     },
     delivered: { label: "Comanda livrata", subject: `Comanda ${orderNumber} a fost livrata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost livrata. Speram sa te bucuri de produse!\n\nDaca ai intrebari, suntem aici pentru tine.` },

@@ -245,3 +245,14 @@ test("documentul se citeste defensiv", () => {
   assert.equal(d?.stornoDescarcabil, false);
   assert.equal(d && stareaDocumentului(d).text, "Emisa");
 });
+
+test("⚠⚠ urmarire: la Curiera cumparatorul primeste numarul si pagina PARTENERULUI (DPD)", () => {
+  /* `cont_comanda_mea` da numarul DPD si „DPD" in `curier_real` cand il are (migratia 70). */
+  assert.equal(href({ curier: "curiera", curierReal: "DPD", awb: "80000000001" }), href({ curier: "dpd", awb: "80000000001" }));
+  assert.equal(numeleCurierului("curiera", "DPD"), "DPD");
+  /* Partener fara pagina in harta: nicio legatura, fiindca pagina Curiera nu-i cunoaste numarul. */
+  assert.equal(urmareste({ curier: "curiera", curierReal: "Curier Nou SRL", awb: "1" }), null);
+  /* Fara partener, totul ramane al Curierei, ca inainte. */
+  assert.equal(urmareste({ curier: "curiera", curierReal: null, awb: "710915533" })?.fel, "direct");
+  assert.equal(numeleCurierului("curiera", null), "Curiera");
+});

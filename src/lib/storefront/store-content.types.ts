@@ -36,11 +36,13 @@ export interface StorePageContent {
       type: "text" | "textarea" | "select" | "checkbox";
       options?: string;
       required: boolean;
-      placeholder?: string;
+      placeholder?: string; pe_awb?: boolean;
     }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string }>;
     hidden_fields?: string[];
     email_field?: { enabled: boolean; required: boolean };
+    /** Codul postal la comenzile din Romania (pana acum doar la livrarea internationala). */
+    postal_field?: { enabled: boolean; required: boolean };
     /**
      * Comenzi pe firma: selectorul „persoana fizica / persoana juridica" plus
      * campul de CUI cu preluare din ANAF. Implicit OPRIT — pentru un magazin

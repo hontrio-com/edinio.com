@@ -13,6 +13,7 @@ import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -88,6 +89,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress | null;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "fan-courier" || c === "fancourier");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   /*
    * Livrarea intr-un punct FAN cere id-ul punctului: AWB-ul poarta `pickupLocationId` si
@@ -121,7 +124,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     () => rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2),
   );
   const [content, setContent] = useState("");
-  const [observation, setObservation] = useState("");
+  const [observation, setObservation] = useState(detaliiAwb.observatii);
 
   const [recipientName, setRecipientName] = useState(order.customer_name);
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
@@ -134,7 +137,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   );
   const [recipientStreet, setRecipientStreet] = useState(punctStrain ? punctStrain.linieAcasa : stradaDestinatarului(addr));
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
-  const [recipientZipCode, setRecipientZipCode] = useState(addr?.postal_code ?? "");
+  const [recipientZipCode, setRecipientZipCode] = useState(addr?.postal_code || detaliiAwb.codPostal);
 
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);

@@ -1,5 +1,6 @@
 "use client";
 
+import { CAMP_COD_POSTAL_OPRIT, codPostalDeTrimis, eroareCodPostalRo } from "@/lib/orders/cod-postal-checkout";
 import { useState, useEffect, useTransition, useRef } from "react";
 import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
@@ -112,6 +113,8 @@ export function useCheckoutOrder({
   // Discount code is OFF by default — same semantics as the editor toggle and OrderModal.
   const hiddenFields = checkoutConfig?.hidden_fields ?? ["discount"];
   const emailFieldBrut = checkoutConfig?.email_field ?? emailFieldConfig;
+  /* Codul postal in Romania, cand magazinul il cere. Regula: `cod-postal-checkout.ts`. */
+  const campCodPostal = checkoutConfig?.postal_field ?? CAMP_COD_POSTAL_OPRIT;
   // Comenzi pe firma. Implicit oprit: un magazin care nu a pornit reglajul arata
   // exact formularul de pana acum, fara niciun camp in plus.
   const companyFieldsOn = checkoutConfig?.company_fields?.enabled === true;
@@ -654,6 +657,8 @@ export function useCheckoutOrder({
       if (form.postCode.trim().length < 3) e.postCode = "Introduceti codul postal";
     } else {
       if (!form.county) e.county = "Selectati judetul";
+      const eroareCod = eroareCodPostalRo(campCodPostal, form.postCode);
+      if (eroareCod) e.postCode = eroareCod;
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     /*
@@ -769,7 +774,7 @@ export function useCheckoutOrder({
         customer_county: form.county,
         customer_city: form.city,
         customer_country: isIntl ? form.country : undefined,
-        customer_postal_code: isIntl ? form.postCode.trim() : undefined,
+        customer_postal_code: codPostalDeTrimis(isIntl, campCodPostal, form.postCode),
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
@@ -988,6 +993,7 @@ export function useCheckoutOrder({
     discountError,
     discountInput,
     emailField,
+    campCodPostal,
     errors,
     extras,
     extrasTotal,

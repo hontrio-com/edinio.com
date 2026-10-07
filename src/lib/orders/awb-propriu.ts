@@ -129,11 +129,35 @@ const COLOANA_URMARIRE: Partial<Record<CurierPropriu, string>> = {
   ecolet: "ecolet_awb_number",
 };
 
-export function numarDeUrmarire(rand: Record<string, unknown>): { curier: string; awb: string } | null {
+/**
+ * ⚠ Curiera e un broker: coletul il duce DPD (sau alt partener), iar cumparatorul primeste SMS-ul si
+ * cauta coletul la EL, cu numarul LUI. Numarul partenerului se scrie la emitere si il completeaza
+ * cronul (`curiera_partener_awb`); masurat pe 07.10.2026 la un magazin cu 90 de AWB-uri Curiera,
+ * 88 il aveau, iar cumparatorul nu-l vedea nicaieri. Numarul Curiera ramane alaturi (`prin`).
+ */
+const PARTENER: Partial<Record<CurierPropriu, { awb: string; nume: string }>> = {
+  curiera: { awb: "curiera_partener_awb", nume: "curiera_partener" },
+};
+
+export type NumarDeUrmarire = {
+  curier: string;
+  awb: string;
+  /** Brokerul prin care a plecat, cand numarul de sus e al partenerului lui. */
+  prin?: { curier: string; awb: string };
+};
+
+export function numarDeUrmarire(rand: Record<string, unknown>): NumarDeUrmarire | null {
   for (const curier of Object.keys(COLOANA_AWB) as CurierPropriu[]) {
     const coloane = [COLOANA_URMARIRE[curier], COLOANA_AWB[curier]].filter((c): c is string => !!c);
     const v = coloane.map((c) => rand[c]).find(areValoare);
-    if (v !== undefined) return { curier: NUME_CURIER[curier], awb: String(v) };
+    if (v === undefined) continue;
+    const p = PARTENER[curier];
+    const awbPartener = p ? rand[p.awb] : undefined;
+    const numePartener = p ? String(rand[p.nume] ?? "").trim() : "";
+    if (p && areValoare(awbPartener) && numePartener) {
+      return { curier: numePartener, awb: String(awbPartener).trim(), prin: { curier: NUME_CURIER[curier], awb: String(v) } };
+    }
+    return { curier: NUME_CURIER[curier], awb: String(v) };
   }
   return null;
 }

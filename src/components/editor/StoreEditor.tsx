@@ -60,10 +60,12 @@ interface PageContent {
   benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string; }>; };
   reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string; image?: string; }>; };
   checkout_config?: {
-    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
+    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; pe_awb?: boolean; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
     hidden_fields?: string[];
     email_field?: { enabled: boolean; required: boolean };
+    /** Codul postal la comenzile din Romania (pana acum doar la livrarea internationala). */
+    postal_field?: { enabled: boolean; required: boolean };
     company_fields?: { enabled: boolean };
   };
   how_it_works_section?: { enabled: boolean; title: string; steps: Array<{ title: string; desc: string; }>; };
@@ -2054,6 +2056,39 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               );
             })()}
 
+            {/* Codul postal, la comenzile din Romania */}
+            {(() => {
+              const postalField = pageContent.checkout_config?.postal_field ?? { enabled: false, required: false };
+              return (
+                <div className="border border-border rounded-xl p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-foreground">Camp Cod postal</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">Clientul isi scrie codul postal (6 cifre). Ajunge in campul de cod postal al AWB-ului, la toti curierii</p>
+                    </div>
+                    <button type="button"
+                      onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, postal_field: { ...postalField, enabled: !postalField.enabled } } }))}
+                      className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", postalField.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
+                      <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", postalField.enabled ? "translate-x-4" : "translate-x-0")} />
+                    </button>
+                  </div>
+                  {postalField.enabled && (
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <div>
+                        <p className="text-xs font-medium text-foreground">Obligatoriu</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">Daca e dezactivat, campul apare ca optional</p>
+                      </div>
+                      <button type="button"
+                        onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, postal_field: { ...postalField, required: !postalField.required } } }))}
+                        className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", postalField.required ? "bg-primary" : "bg-muted-foreground/30")}>
+                        <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", postalField.required ? "translate-x-4" : "translate-x-0")} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Comenzi pe firma */}
             {(() => {
               const companyFields = pageContent.checkout_config?.company_fields ?? { enabled: false };
@@ -2116,6 +2151,16 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
                     </label>
                   </div>
                 </div>
+                {/* Ce scrie clientul aici apare la Observatii pe AWB (la curierii care au campul). */}
+                <label className="flex items-start gap-1.5 text-xs text-foreground cursor-pointer">
+                  <input type="checkbox" checked={field.pe_awb === true}
+                    onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, pe_awb: e.target.checked } : f) } }))}
+                    className="rounded mt-0.5" />
+                  <span>
+                    Pune pe AWB
+                    <span className="block text-[10px] text-muted-foreground">Ce scrie clientul apare la Observatii pentru curier</span>
+                  </span>
+                </label>
                 {field.type === "select" && (
                   <div>
                     <label className="text-[10px] text-muted-foreground">Optiuni (separate prin virgula)</label>

@@ -7529,6 +7529,16 @@ export type Database = {
           total: number
         }[]
       }
+      cont_panou_conturile_comenzilor: {
+        Args: { p_business: string; p_orders: string[] }
+        Returns: {
+          cont_id: string
+          email: string | null
+          nume: string | null
+          order_id: string
+          temei: string
+        }[]
+      }
       cont_panou_dezleaga_comanda: {
         Args: { p_business: string; p_cont: string; p_order: string }
         Returns: string

@@ -80,6 +80,7 @@ export function CheckoutForm({
     discountError,
     discountInput,
     emailField,
+    campCodPostal,
     errors,
     extras,
     extrasTotal,
@@ -277,6 +278,19 @@ export function CheckoutForm({
             </FieldWrap>
             {errors.address && <p id={`${uid}-address-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
           </div>
+          {/* Codul postal in Romania, cand magazinul il cere (`postal_field`). La internationala
+              campul e mai sus, obligatoriu. */}
+          {!isIntl && campCodPostal.enabled && (
+            <div>
+              <label htmlFor={`${uid}-postCodeRo`} className="block text-sm font-semibold text-foreground mb-1">
+                Cod postal {campCodPostal.required && <span className="text-red-500">*</span>}
+              </label>
+              <FieldWrap icon={MapPin} error={!!errors.postCode}>
+                <input id={`${uid}-postCodeRo`} name="postCode" autoComplete="postal-code" inputMode="numeric" maxLength={7} aria-invalid={errors.postCode ? true : undefined} aria-describedby={errors.postCode ? `${uid}-postCodeRo-err` : undefined} value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))} placeholder="6 cifre" className={fieldCls} />
+              </FieldWrap>
+              {errors.postCode && <p id={`${uid}-postCodeRo-err`} role="alert" className="text-xs text-red-500 mt-0.5">{errors.postCode}</p>}
+            </div>
+          )}
           {/* Courier selection */}
           {hasCouriers && (
             <CourierSelector

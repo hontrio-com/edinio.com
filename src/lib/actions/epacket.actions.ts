@@ -27,6 +27,7 @@ import { rezolvaLocalitatea, type RezultatLocalitate } from "@/lib/epacket/local
 import { codPostalPentru, type SursaCodPostal } from "@/lib/epacket/puncte";
 import { cautaLocalitati, puncteDinLocalitate } from "@/lib/epacket/nomenclator";
 import { livrareaComenzii, type AdresaCuPunct } from "@/lib/epacket/livrare";
+import { campuriDinConfigurare, detaliiPentruAwb } from "@/lib/orders/detalii-pentru-awb";
 import { hotarareaDezlegarii, type CitireaStarii } from "@/lib/epacket/dezlegare";
 import { descriereStare, normalizeazaStatus } from "@/lib/epacket/statusuri";
 import type { Json } from "@/types/database.types";
@@ -265,7 +266,7 @@ async function configSiComanda(businessId: string, orderId: string) {
   /* ⚠ Configul pe SERVICE ROLE: vederea nu decripteaza cheia pentru `authenticated`. */
   const admin = createAdminClient();
   const [{ data: setari, error: eSetari }, { data: order }] = await Promise.all([
-    admin.from("store_settings").select("epacket_config").eq("business_id", businessId).maybeSingle(),
+    admin.from("store_settings").select("epacket_config, checkout:page_content->checkout_config").eq("business_id", businessId).maybeSingle(),
     supabase.from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single(),
   ]);
 
@@ -281,7 +282,9 @@ async function configSiComanda(businessId: string, orderId: string) {
         + "(prenume, nume, telefon, email, localitate, cod postal, strada, numar).",
     };
   }
-  return { supabase, admin, config, order };
+  /* Campurile de checkout: codul postal scris de client intr-un camp vechi (`detalii-pentru-awb.ts`). */
+  const campuri = campuriDinConfigurare((setari as { checkout?: unknown } | null)?.checkout);
+  return { supabase, admin, config, order, campuri };
 }
 
 // ─── Pregatirea ferestrei ─────────────────────────────────────────────────────
@@ -350,7 +353,8 @@ export async function pregatesteAwbEpacketAction(
   }
 
   /* ⚠ Codul scris de om (in comanda sau chiar in linia de adresa) bate pe cel dedus. */
-  const scris = (addr.postal_code ?? addr.postalCode ?? "").toString() || adresa.codPostal;
+  const scris = (addr.postal_code ?? addr.postalCode ?? "").toString() || adresa.codPostal
+    || detaliiPentruAwb(order.notes, ctx.campuri).codPostal;
   const codPostal = localitate.fel === "gasita"
     ? await codulLocalitatii(config, localitate.localitate.id, scris)
     : codPostalPentru({ dinComanda: scris });

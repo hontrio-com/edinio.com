@@ -1,5 +1,6 @@
 "use server";
 
+import { codPostalRoCurat } from "@/lib/orders/cod-postal-checkout";
 import { after } from "next/server";
 import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
@@ -2083,8 +2084,10 @@ export async function placeOrder(data: {
        */
       ...(!data.customer_country || data.customer_country === "RO"
         ? (() => {
-            const cod = (data.customer_postal_code ?? "").trim();
-            return cod ? { postal_code: cod } : {};
+            /* ⚠ In Romania, numai 6 cifre (`cod-postal-checkout.ts`): actiunea e un capat public,
+               iar `postal_code` il citesc ca atare ferestrele de AWB ale tuturor curierilor. */
+            const cod = codPostalRoCurat(data.customer_postal_code);
+            return /^\d{6}$/.test(cod) ? { postal_code: cod } : {};
           })()
         : {}),
       /*
@@ -5102,8 +5105,10 @@ export async function placeCartOrder(data: {
        */
       ...(!data.customer_country || data.customer_country === "RO"
         ? (() => {
-            const cod = (data.customer_postal_code ?? "").trim();
-            return cod ? { postal_code: cod } : {};
+            /* ⚠ In Romania, numai 6 cifre (`cod-postal-checkout.ts`): actiunea e un capat public,
+               iar `postal_code` il citesc ca atare ferestrele de AWB ale tuturor curierilor. */
+            const cod = codPostalRoCurat(data.customer_postal_code);
+            return /^\d{6}$/.test(cod) ? { postal_code: cod } : {};
           })()
         : {}),
       /*

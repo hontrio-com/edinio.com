@@ -17,6 +17,7 @@ import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -68,6 +69,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "packeta");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   const packetId = comanda.packeta_packet_id ?? null;
   const [emitere, setEmitere] = useState(false);
@@ -141,7 +144,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
            acolo, nu acasa la client. Aceeasi regula ca la GLS si Posta. */
         oras: (laPunct ? addr.locker_city : "") || addr.city || "",
         judet: ((laPunct ? addr.locker_county : "") || addr.county) || null,
-        codPostal: ((laPunct ? addr.locker_post_code : "") || addr.postal_code) || null,
+        codPostal: ((laPunct ? addr.locker_post_code : "") || addr.postal_code || detaliiAwb.codPostal) || null,
         telefon: order.customer_phone,
         email: order.customer_email,
       },

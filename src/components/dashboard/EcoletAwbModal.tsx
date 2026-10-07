@@ -18,6 +18,7 @@ import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -76,6 +77,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "ecolet");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   /* Starea locala a emiterii: fereastra nu se inchide dupa trimitere. */
   const [emisa, setEmisa] = useState<{ stare: string; awb: string | null; eroare: string | null } | null>(null);
@@ -118,7 +121,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
     return (items.map((i) => i?.name).filter(Boolean).join(", ") || "Produse").slice(0, 100);
   });
-  const [observatii, setObservatii] = useState("");
+  const [observatii, setObservatii] = useState(detaliiAwb.observatii);
 
   const [oferte, setOferte] = useState<OfertaAratata[] | null>(null);
   const [ales, setAles] = useState<string>(addr.ecolet_service_slug ?? "");

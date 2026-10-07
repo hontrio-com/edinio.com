@@ -14,6 +14,7 @@ import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -62,6 +63,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as (ShippingAddress & { country?: string; postal_code?: string }) | null;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "dpd");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
   // International order? The destination service is auto-discovered server-side.
   const intlCountry = euCountryByIso2(addr?.country);
   // Delivery to a DPD pickup point (office/locker): the AWB carries
@@ -87,7 +90,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       ? "0"
       : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2)
   ));
-  const [shipmentNote, setShipmentNote] = useState("");
+  const [shipmentNote, setShipmentNote] = useState(detaliiAwb.observatii);
   const [content, setContent] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
     const names = items.map((i) => i?.name).filter(Boolean).join(", ");

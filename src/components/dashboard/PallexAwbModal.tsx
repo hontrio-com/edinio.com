@@ -21,6 +21,7 @@ import type { Database } from "@/types/database.types";
 import { stradaCuNumar } from "@/lib/orders/adresa";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -91,6 +92,8 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "pallex");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   /*
    * ⚠ Partida tocmai emisa se tine LOCAL, si fereastra NU se inchide dupa emitere.
@@ -122,7 +125,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   /* Judetul se potriveste pe lista noastra: Pall-Ex il vrea ca ISO auto, iar
      un text liber („Jud. Brasov") n-ar avea cum sa fie tradus. */
   const [judet, setJudet] = useState(potrivesteJudet(addr.county) ?? "");
-  const [codPostal, setCodPostal] = useState(addr.postal_code ?? "");
+  const [codPostal, setCodPostal] = useState(addr.postal_code || detaliiAwb.codPostal);
   const [strada, setStrada] = useState(
     punctStrain ? punctStrain.linieAcasa : stradaCuNumar(addr),
   );
@@ -153,7 +156,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   const [inSediu, setInSediu] = useState(false);
   const [asistare, setAsistare] = useState(false);
   const [asigurare, setAsigurare] = useState(false);
-  const [observatii, setObservatii] = useState("");
+  const [observatii, setObservatii] = useState(detaliiAwb.observatii);
 
   /*
    * ⚠ Suma se ia dupa BANI, nu dupa metoda de plata: o comanda cu plata online

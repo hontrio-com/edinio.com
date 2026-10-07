@@ -14,6 +14,7 @@ import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -78,6 +79,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "colete");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
   // Ramburs dupa BANI, nu dupa metoda: o comanda cu plata online ramasa neplatita
   // pleca altfel fara nicio cale de incasare. Vezi `rambursDeIncasat`.
   const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
@@ -98,7 +101,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
      numarul de doua ori. Ce lipsea era semanarea numarului, mai jos. */
   const [receiverStreet, setReceiverStreet] = useState(punctStrain ? punctStrain.linieAcasa : stradaDestinatarului(addr));
   const [receiverStreetNumber, setReceiverStreetNumber] = useState((addr.street_no ?? "").trim());
-  const [receiverPostalCode, setReceiverPostalCode] = useState(addr.postal_code ?? "");
+  const [receiverPostalCode, setReceiverPostalCode] = useState(addr.postal_code || detaliiAwb.codPostal);
 
   // Parcel state
   const [parcelType, setParcelType] = useState<"package" | "envelope">("package");

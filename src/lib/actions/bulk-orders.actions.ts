@@ -53,6 +53,7 @@ import { cautaLocalitati, puncteDinLocalitate } from "@/lib/epacket/nomenclator"
 import { ORDER_STATUS } from "@/lib/orders/status";
 import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { campuriDinConfigurare, detaliiPentruAwb, type CampCheckoutAwb } from "@/lib/orders/detalii-pentru-awb";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
 export interface BulkResult {
@@ -404,8 +405,9 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config, epacket_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config, epacket_config, checkout:page_content->checkout_config")
     .eq("business_id", businessId).single();
+  const campuriCheckout = campuriDinConfigurare((settings as { checkout?: unknown } | null)?.checkout);
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
   const fc = settings?.fan_courier_config as FanCourierConfig | null;
@@ -493,7 +495,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number, epacket_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, notes, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number, epacket_awb_number")
     .eq("business_id", businessId).in("id", ids);
   if (eCitireComenzi) return { error: `Nu am putut citi comenzile selectate: ${eCitireComenzi.message}` };
 
@@ -597,7 +599,7 @@ export async function bulkGenerateAwbs(
     if (target !== "gls" && !greutate.dinCatalog) peRezerva.push(o.order_number);
 
     try {
-      const res = await createAwbForOrder(target, businessId, o, greutate.kg, cu, ep);
+      const res = await createAwbForOrder(target, businessId, o, greutate.kg, cu, ep, campuriCheckout);
       if (isErr(res)) { result.failed++; result.errors.push({ order: o.order_number, message: res.error }); }
       else {
         result.done++;
@@ -692,6 +694,8 @@ type BulkOrderRow = {
    */
   order_source: unknown;
   shipping_address: unknown; items: unknown;
+  /* Campurile de checkout (JSON cheiat pe id-ul campului): observatiile si codul postal vechi. */
+  notes: string | null;
 };
 
 // Build a courier-specific default AWB input from the order and call the existing
@@ -707,6 +711,9 @@ async function createAwbForOrder(
   courier: Exclude<BulkCourier, "auto">, businessId: string, order: unknown, weightKg: number,
   configCuriera: CurieraConfig | null,
   configEpacket: EpacketConfig | null,
+  /* ⚠ Obligatoriu, ca `tsc` sa enumere orice apelant nou: fara el, lotul ar fi plecat fara
+     observatiile pe care fereastra le pune. */
+  campuriCheckout: ReadonlyArray<CampCheckoutAwb>,
 ): Promise<{ error: string } | Record<string, unknown>> {
   const o = order as BulkOrderRow;
   const addr = (o.shipping_address ?? {}) as ShippingAddr;
@@ -737,7 +744,9 @@ async function createAwbForOrder(
   const street = stradaDestinatarului(addr);
   const streetNo = (addr.street_no ?? "").trim();
   const addressLine = liniaAdresei(addr);
-  const zip = (addr.postal_code ?? "").trim();
+  /* Ce a scris clientul in formular: aceleasi reguli ca fereastra (`detalii-pentru-awb.ts`). */
+  const detalii = detaliiPentruAwb(o.notes, campuriCheckout);
+  const zip = (addr.postal_code ?? "").trim() || detalii.codPostal;
   const email = o.customer_email ?? "";
   // Greutatea calculata din produsele comenzii (`greutateaColetului`). Pana la
   // 2026-08-03 aici sta un `const weight = 1` fix: cotatia cerea pretul pe
@@ -751,14 +760,14 @@ async function createAwbForOrder(
         recipientName: o.customer_name, recipientPhone: o.customer_phone, recipientEmail: email,
         recipientCounty: county, recipientCity: city, recipientAddress: addressLine, recipientPostalCode: zip,
         parcels: 1, envelopes: 0, totalWeightKg: weight, cashRepayment: cod, openPackage: false, saturdayDelivery: false,
-        observations: "", packageContent: content, customString: o.order_number, parcelsDetails: [{ weight }],
+        observations: detalii.observatii, packageContent: content, customString: o.order_number, parcelsDetails: [{ weight }],
       });
     case "sameday":
       return createSamedayAwbAction(businessId, o.id, {
         recipientName: o.customer_name, recipientPhone: o.customer_phone,
         recipientCounty: county, recipientCity: city, recipientAddress: addressLine, recipientPostalCode: zip,
         packageType: 0, packageNumber: 1, weightKg: weight, cashOnDelivery: cod, insuredValue: 0,
-        observation: "", clientInternalReference: o.order_number,
+        observation: detalii.observatii, clientInternalReference: o.order_number,
       });
     case "fancourier": {
       const laPunctFan = (addr.courier ?? "").toLowerCase().includes("fan") && addr.delivery_type === "locker" && !!addr.locker_id;
@@ -774,7 +783,7 @@ async function createAwbForOrder(
       return createFanCourierAwbAction(businessId, o.id, {
         recipientName: o.customer_name, recipientPhone: o.customer_phone, recipientEmail: email,
         recipientCounty: county, recipientLocality: city, recipientStreet: street, recipientStreetNo: streetNo,
-        recipientZipCode: zip, parcels: 1, weightKg: weight, cod, content, observation: "",
+        recipientZipCode: zip, parcels: 1, weightKg: weight, cod, content, observation: detalii.observatii,
         /*
          * ⚠ Dimensiunile NU se paseaza de aici, si nu din uitare: `createFanCourierAwbAction`
          * isi citeste singur configul magazinului (`getConfigAndOrder`), din aceeasi coloana
@@ -791,7 +800,7 @@ async function createAwbForOrder(
       return createDpdShipmentAction(businessId, o.id, {
         recipientName: o.customer_name, recipientPhone: o.customer_phone, recipientEmail: email,
         recipientCity: city, recipientCounty: county || undefined, recipientStreet: street, recipientStreetNo: streetNo,
-        recipientAddressNote: "", weightKg: weight, cashOnDelivery: cod, ref1: o.order_number, shipmentNote: "", content,
+        recipientAddressNote: "", weightKg: weight, cashOnDelivery: cod, ref1: o.order_number, shipmentNote: detalii.observatii, content,
       });
     case "gls": {
       /*
@@ -1344,6 +1353,7 @@ async function createAwbForOrder(
         valoareAsigurata: configCuriera?.asigurare ? (Number(o.total) || 0) : null,
         continut: numeProduse || null,
         serviciiExtra: configCuriera?.servicii_extra ?? [],
+        observatii: detalii.observatii || null,
       });
     }
     case "epacket": {
@@ -1353,7 +1363,9 @@ async function createAwbForOrder(
        * motivul. Un AWB e-packet se taxeaza si nu se anuleaza prin API.
        */
       if (!configEpacket) return { error: "e-packet nu e configurat." };
-      const pregatit = await dateEpacketPentruLot(configEpacket, o, weight, cod, {
+      /* Codul postal din formular (comenzile vechi), cand comanda n-are unul: aceeasi regula ca fereastra. */
+      const comandaLot = zip && !(addr.postal_code ?? "").trim() ? { ...o, shipping_address: { ...addr, postal_code: zip } } : o;
+      const pregatit = await dateEpacketPentruLot(configEpacket, comandaLot, weight, cod, {
         cauta: (q, j, ms) => cautaLocalitati(configEpacket, q, j, ms),
         puncte: (c, id, ms) => puncteDinLocalitate(configEpacket, c, id, ms),
       });

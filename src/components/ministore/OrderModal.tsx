@@ -1,5 +1,6 @@
 "use client";
 
+import { CAMP_COD_POSTAL_OPRIT, codPostalDeTrimis, eroareCodPostalRo } from "@/lib/orders/cod-postal-checkout";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useEffect, useId, useRef, useTransition } from "react";
 import Image from "next/image";
@@ -60,10 +61,12 @@ export type { QuantityTier };
 export type CustomizationFieldDef = CampPersonalizare;
 
 interface CheckoutConfig {
-  custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
+  custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; pe_awb?: boolean; }>;
   extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
   hidden_fields?: string[];
   email_field?: { enabled: boolean; required: boolean };
+  /** Codul postal la comenzile din Romania (pana acum doar la livrarea internationala). */
+  postal_field?: { enabled: boolean; required: boolean };
   company_fields?: { enabled: boolean };
 }
 
@@ -216,6 +219,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Discount code is OFF by default (hidden unless the merchant enabled it in the editor).
   const hiddenFields = liveCheckoutConfig?.hidden_fields ?? ["discount"];
   const emailFieldBrut = liveCheckoutConfig?.email_field ?? { enabled: true, required: false };
+  /* Codul postal in Romania, cand magazinul il cere. Aceeasi regula ca pe pagina: `cod-postal-checkout.ts`. */
+  const campCodPostal = liveCheckoutConfig?.postal_field ?? CAMP_COD_POSTAL_OPRIT;
   // Comenzi pe firma — acelasi reglaj si acelasi carlig ca in formularul pe cos,
   // ca validarea CUI-ului sa nu poata diverge intre cele doua cai de comanda.
   const companyFieldsOn = liveCheckoutConfig?.company_fields?.enabled === true;
@@ -971,6 +976,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       if (form.postCode.trim().length < 3) e.postCode = "Introduceti codul postal";
     } else {
       if (!form.county) e.county = "Selectati judetul";
+      const eroareCod = eroareCodPostalRo(campCodPostal, form.postCode);
+      if (eroareCod) e.postCode = eroareCod;
     }
     if (form.city.trim().length < 2) e.city = "Introduceti orasul";
     /* ⚠ Aceeasi regula ca in checkout-ul de pagina (`checkout-core.ts`). Cele
@@ -1082,7 +1089,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_county: form.county,
         customer_city: form.city,
         customer_country: isIntl ? form.country : undefined,
-        customer_postal_code: isIntl ? form.postCode.trim() : undefined,
+        customer_postal_code: codPostalDeTrimis(isIntl, campCodPostal, form.postCode),
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
@@ -1646,6 +1653,20 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </IconInput>
                 {errors.address && <p className="text-xs text-red-500 mt-0.5">{errors.address}</p>}
               </div>
+
+              {/* Codul postal in Romania, cand magazinul il cere (vezi `CheckoutForm.tsx`). */}
+              {!isIntl && campCodPostal.enabled && (
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1">
+                    Cod postal {campCodPostal.required && <span className="text-red-500">*</span>}
+                  </label>
+                  <IconInput icon={MapPin} error={!!errors.postCode}>
+                    <input value={form.postCode} onChange={e => setForm(f => ({ ...f, postCode: e.target.value }))}
+                      inputMode="numeric" maxLength={7} autoComplete="postal-code" placeholder="6 cifre" className={inputCls} />
+                  </IconInput>
+                  {errors.postCode && <p className="text-xs text-red-500 mt-0.5">{errors.postCode}</p>}
+                </div>
+              )}
 
               {/* Courier selection */}
               {hasCouriers && (

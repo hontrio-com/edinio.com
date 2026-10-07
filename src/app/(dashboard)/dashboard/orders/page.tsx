@@ -1,9 +1,13 @@
 import { Suspense } from "react";
+import { CampuriCheckoutProvider } from "@/components/dashboard/DetaliiCheckoutAwb";
+import { campuriDinConfigurare } from "@/lib/orders/detalii-pentru-awb";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
 import { Skeleton } from "@/components/ui/skeleton";
+import { conturileComenzilor } from "@/lib/cont/panou";
+import { aplicaFiltreleListei } from "@/lib/orders/filtrele-listei";
 import { ORDERS_PAGE_SIZE, firstParam, pageParam, orSafeTerm } from "@/lib/orders/pagination";
 import { MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
 import { ORDER_STATUS } from "@/lib/orders/status";
@@ -270,34 +274,7 @@ async function ListaComenzi({
     .from("orders")
     .select("*", { count: "exact" })
     .eq("business_id", businessId);
-  if (status !== "all") listQuery = listQuery.eq("status", status);
-  /*
-   * Filtrarea dupa sursa se face in SQL, pe `order_source->>marketplace`, nu in
-   * pagina: altfel „doar Trendyol" ar filtra numai comenzile paginii curente si
-   * ar arata gol chiar cand exista comenzi Trendyol mai jos.
-   *
-   * „Magazin" inseamna „fara marker de marketplace" — inclusiv comenzile vechi,
-   * de dinainte de atribuire, care n-au deloc `order_source`.
-   */
-  if (source === "store") listQuery = listQuery.is("order_source->>marketplace", null);
-  else if (source !== "all") listQuery = listQuery.eq("order_source->>marketplace", source);
-  const term = orSafeTerm(q);
-  if (term) {
-    // Denumirea firmei si CUI-ul intra si ele in cautare: lista le AFISEAZA pe
-    // comenzile pe persoana juridica, iar un camp care se vede pe ecran dar nu se
-    // poate cauta arata ca o comanda disparuta.
-    //
-    // In baza, CUI-ul e numai cifre; panoul, emailul si factura il scriu insa cu
-    // „RO" in fata la platitorii de TVA. Comerciantul copiaza fix ce vede, deci
-    // prefixul se taie pentru ramura de CUI — si NUMAI pentru ea: o firma se poate
-    // numi „Rodbun", iar cautarea dupa nume n-are de ce sa piarda primele doua
-    // litere.
-    const termCui = term.replace(/^ro(?=\d)/i, "");
-    listQuery = listQuery.or(
-      `order_number.ilike.%${term}%,customer_name.ilike.%${term}%,customer_phone.ilike.%${term}%,` +
-      `billing_company->>company_name.ilike.%${term}%,billing_company->>cui.ilike.%${termCui}%`
-    );
-  }
+  listQuery = aplicaFiltreleListei(listQuery, { status, source, q });
   const fromIdx = (page - 1) * ORDERS_PAGE_SIZE;
 
   const [{ data: orders, count: totalCount }, { data: statusRows }] = await Promise.all([
@@ -320,6 +297,16 @@ async function ListaComenzi({
     surseCount[cheie] = count ?? 0;
   }));
 
+  /*
+   * Contul din care s-a plasat fiecare comanda a paginii (coloana „Cont"). ⚠ O eroare aici nu
+   * strica lista: coloana ramane goala, iar comenzile se vad mai departe.
+   */
+  const [conturi, { data: setariCheckout }] = await Promise.all([
+    conturileComenzilor(businessId, (orders ?? []).map((o) => o.id)).catch(() => ({})),
+    /* Campurile de checkout, pentru observatiile si codul postal din ferestrele de AWB. */
+    supabase.from("store_settings").select("checkout:page_content->checkout_config").eq("business_id", businessId).maybeSingle(),
+  ]);
+
   const statusCounts: Record<string, number> = {};
   for (const r of statusRows ?? []) statusCounts[r.status] = Number(r.cnt);
   const pendingCount = statusCounts.pending ?? 0;
@@ -332,6 +319,8 @@ async function ListaComenzi({
    * AWB-uri, si de aia se numara toate trei locurile la fiecare curier nou.
    */
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <CampuriCheckoutProvider campuri={campuriDinConfigurare((setariCheckout as { checkout?: unknown } | null)?.checkout)}>
+    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    </CampuriCheckoutProvider>
   );
 }

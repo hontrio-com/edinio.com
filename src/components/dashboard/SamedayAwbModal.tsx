@@ -18,6 +18,7 @@ import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
 import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 import { PunctAltuiCurier } from "./PunctAltuiCurier";
+import { useDetaliiPentruAwb } from "./DetaliiCheckoutAwb";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -67,6 +68,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress | null;
   /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
   const punctStrain = punctulAltuiCurier(addr, (c) => c === "sameday");
+  /* Ce a scris clientul in formular si a bifat comerciantul „Pune pe AWB" (`detalii-pentru-awb.ts`). */
+  const detaliiAwb = useDetaliiPentruAwb(order);
 
   // Easybox delivery: only for Sameday locker orders (a DPD/Cargus locker id
   // must never leak into a Sameday AWB). The AWB runs on the LN service with
@@ -133,7 +136,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   /* ⚠ Valoarea asigurata e valoarea MARFII, nu suma de incasat: o comanda deja platita
      calatoreste cu aceeasi marfa, deci se declara la fel. */
   const [insuredValue, setInsuredValue] = useState(() => (Number(order.total) || 0).toFixed(2));
-  const [observation, setObservation] = useState("");
+  const [observation, setObservation] = useState(detaliiAwb.observatii);
 
   const [recipientName, setRecipientName] = useState(order.customer_name);
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
@@ -143,7 +146,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
      se aprindea niciodata: `street_no` nu e scris de nimeni in `shipping_address` (zero
      randuri din cele 425 din productie), deci ramanea doar strada fara numar. */
   const [recipientAddress, setRecipientAddress] = useState(punctStrain ? punctStrain.linieAcasa : liniaAdresei(addr));
-  const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code ?? "");
+  const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code || detaliiAwb.codPostal);
   const [labelFormat, setLabelFormat] = useState<"A6" | "A4">("A6");
 
   const [creating, setCreating] = useState(false);

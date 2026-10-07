@@ -1,4 +1,6 @@
 import { notFound, redirect } from "next/navigation";
+import { CampuriCheckoutProvider } from "@/components/dashboard/DetaliiCheckoutAwb";
+import { campuriDinConfigurare } from "@/lib/orders/detalii-pentru-awb";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { expediereInRegistru } from "@/lib/operatii/registru";
@@ -57,7 +59,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -259,6 +261,8 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   const expediereComenzii = await expediereInRegistru(createAdminClient(), biz.id, order.id as string);
 
   return (
+    /* Campurile de checkout, pentru observatiile si codul postal din ferestrele de AWB. */
+    <CampuriCheckoutProvider campuri={campuriDinConfigurare((settings as { checkout?: unknown } | null)?.checkout)}>
     <OrderDetailClient
       order={order}
       businessId={biz.id}
@@ -296,5 +300,6 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       smsoEnabled={smsoEnabled}
       adresaListei={adresaListei}
     />
+    </CampuriCheckoutProvider>
   );
 }

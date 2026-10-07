@@ -6,6 +6,9 @@ import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck
 import { printeazaEticheta } from "@/lib/orders/printeaza-eticheta";
 import { WootBulkModal } from "./WootBulkModal";
 import { toast } from "sonner";
+import { exportaComenzileAction } from "@/lib/actions/export-comenzi.actions";
+import { foaiaExportului } from "@/lib/orders/export-comenzi";
+import type { SheetData } from "write-excel-file/browser";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
@@ -46,6 +49,7 @@ import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { ORDERS_PAGE_SIZE, adresaDetaliuluiComenzii } from "@/lib/orders/pagination";
 import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
+import type { ContulComenzii } from "@/lib/cont/panou";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -100,9 +104,14 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
+  /**
+   * Contul din care s-a plasat fiecare comanda a paginii (comanda -> cont). ⚠ Optional, cu `{}`
+   * implicit: lipsa lui inseamna doar o coloana goala, nu o lista rupta.
+   */
+  conturi?: Record<string, ContulComenzii>;
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
   totalCount: number;
   /** Comenzi per status, pe tot magazinul (pentru tab-uri). */
@@ -184,6 +193,37 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   // ── Bulk selection ──
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  /* Exportul .xlsx: o citire, deci steag separat, ca la descarcarea etichetelor. */
+  const [exportBusy, setExportBusy] = useState(false);
+
+  /**
+   * Descarca .xlsx: comenzile bifate, sau, fara bifa, toate comenzile filtrului de pe ecran.
+   * Tabelul il face serverul (`exportaComenzileAction`), fisierul browserul; biblioteca se
+   * incarca abia la apasare.
+   */
+  async function descarcaExcel(peSelectie: boolean) {
+    if (!businessId || exportBusy) return;
+    setExportBusy(true);
+    try {
+      const r = await exportaComenzileAction(
+        businessId,
+        peSelectie ? { ids: [...selected] } : { filtre: { status: statusFilter, source: sourceFilter, q: searchQuery } },
+      );
+      if (!r.ok) { toast.error(r.error); return; }
+      const { default: writeExcelFile } = await import("write-excel-file/browser");
+      const foaia: SheetData = foaiaExportului(r.tabel);
+      await writeExcelFile(foaia, {
+        sheet: "Comenzi",
+        columns: r.tabel.latimi.map((width) => ({ width })),
+        stickyRowsCount: 1,
+      }).toFile(`comenzi-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success(`${r.tabel.randuri.length} ${r.tabel.randuri.length === 1 ? "comanda exportata" : "comenzi exportate"}`);
+    } catch {
+      toast.error("Fisierul nu s-a putut face. Incearca din nou.");
+    } finally {
+      setExportBusy(false);
+    }
+  }
   const [bulkResult, setBulkResult] = useState<{ title: string; result: BulkResult } | null>(null);
   const [invoiceProvider, setInvoiceProvider] = useState<InvoiceProvider>("auto");
   const [awbCourier, setAwbCourier] = useState<BulkCourier>("auto");
@@ -1067,6 +1107,21 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
         </p>
       )}
 
+      {/* Fara bifa: exportul tuturor comenzilor din filtrul de acum. */}
+      {selected.size === 0 && businessId && totalCount > 0 && (
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => void descarcaExcel(false)}
+            disabled={exportBusy}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {exportBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            Descarcă .xlsx ({totalCount} {totalCount === 1 ? "comandă" : "comenzi"} din filtru)
+          </button>
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div className="sticky top-2 z-20 mb-3 rounded-xl border border-primary/30 bg-surface shadow-sm">
@@ -1104,6 +1159,18 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                 Aplică
               </button>
             </div>
+
+            {/* Export .xlsx al comenzilor bifate */}
+            {businessId && (
+              <button
+                type="button"
+                onClick={() => void descarcaExcel(true)}
+                disabled={exportBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                {exportBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Descarcă .xlsx
+              </button>
+            )}
 
             {/* Bulk invoices */}
             {anyInvoice && businessId && (
@@ -1341,6 +1408,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     </th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Comanda</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Client</th>
+                    {/* ⚠ Ordinea din <thead> si din <tbody> trebuie sa fie aceeasi (vezi nota de mai jos). */}
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Email</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Cont</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                     {arataSursa && (
@@ -1475,6 +1545,25 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : null;
                           })()}
                           <div className="text-xs">{order.customer_phone}</div>
+                        </td>
+                        <td className="px-5 py-3.5 text-xs text-muted-foreground hidden md:table-cell max-w-[14rem] truncate" title={order.customer_email ?? undefined}>
+                          {order.customer_email || <span className="text-muted-foreground/60">-</span>}
+                        </td>
+                        {/* Contul din care s-a plasat comanda: un client cu cont poate comanda pentru mai
+                            multe persoane, iar numele si emailul de pe comanda sunt ale destinatarului.
+                            Legatura duce la fisa contului, cu toate comenzile lui. */}
+                        <td className="px-5 py-3.5 text-xs hidden md:table-cell max-w-[14rem]" onClick={(e) => e.stopPropagation()}>
+                          {conturi[order.id] ? (
+                            <a
+                              href={`/dashboard/customers/conturi/${conturi[order.id].contId}`}
+                              className="block truncate font-medium text-primary hover:underline"
+                              title={`ID cont: ${conturi[order.id].contId}`}
+                            >
+                              {conturi[order.id].email || conturi[order.id].nume || "Cont client"}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground/60">-</span>
+                          )}
                         </td>
                         <td
                           className={cn(

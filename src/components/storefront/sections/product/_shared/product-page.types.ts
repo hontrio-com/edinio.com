@@ -48,8 +48,11 @@ export interface PageContent {
   show_quality_badge?: boolean;
   footer_logo_size?: number;
   checkout_config?: {
-    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; }>;
+    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; pe_awb?: boolean; }>;
     extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
+    email_field?: { enabled: boolean; required: boolean };
+    /** Codul postal la comenzile din Romania (pana acum doar la livrarea internationala). */
+    postal_field?: { enabled: boolean; required: boolean };
     company_fields?: { enabled: boolean };
   };
 }

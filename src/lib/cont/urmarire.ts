@@ -131,6 +131,16 @@ export function urmareste(p: {
     const tipar = real ? DIRECT[real] : undefined;
     return tipar ? { href: tipar(numar), fel: "direct" } : null;
   }
+  /*
+   * ⚠ La Curiera, `cont_comanda_mea` da numarul PARTENERULUI (DPD) si numele lui in `curier_real`,
+   * cand il are. Atunci adresa e a partenerului; un partener fara pagina in harta nu primeste nicio
+   * legatura, fiindca pagina Curiera nu-i cunoaste numarul. Fara partener, numarul e al Curierei.
+   */
+  if (p.curier === "curiera" && (p.curierReal ?? "").trim()) {
+    const real = curierulReal(p.curierReal);
+    const tipar = real ? DIRECT[real] : undefined;
+    return tipar ? { href: tipar(numar), fel: "direct" } : null;
+  }
 
   const direct = DIRECT[p.curier];
   if (direct) return { href: direct(numar), fel: "direct" };
@@ -152,6 +162,6 @@ function numeDinHarta(cheie: string): string {
  */
 export function numeleCurierului(curier: string | null | undefined, curierReal?: string | null): string | null {
   if (!curier) return null;
-  const real = ["woot", "innoship", "shipo", "smartship", "epacket"].includes(curier) ? curierulReal(curierReal) : null;
+  const real = ["woot", "innoship", "shipo", "smartship", "epacket", "curiera"].includes(curier) ? curierulReal(curierReal) : null;
   return numeDinHarta(real ?? curier);
 }

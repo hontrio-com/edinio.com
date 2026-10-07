@@ -1242,7 +1242,7 @@ export async function pollOrders(
  *
  * ⚠ CE LIPSESTE E O HOTARARE DE ECRAN, nu cod: care linii se aleg, ce confirmare cere o anulare
  * (e ireversibila), si de unde vine AWB-ul de retur — `returnOrderNow` il cere ca argument, iar
- * din cei 18 curieri unul singur are azi asa ceva. Alea sunt hotarari ale comerciantului, nu ale
+ * din cei 19 curieri unul singur are azi asa ceva. Alea sunt hotarari ale comerciantului, nu ale
  * mele, deci nu le iau in locul lui.
  */
 export async function cancelOrderNow(

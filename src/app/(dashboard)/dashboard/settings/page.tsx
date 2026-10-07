@@ -16,6 +16,7 @@ import { parseStoreMode } from "@/lib/storefront/store-mode";
 import type { Database } from "@/types/database.types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
+import { epacketGata, type EpacketConfig } from "@/lib/epacket/client";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string; sectiune?: string }>;
@@ -134,7 +135,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -277,6 +278,8 @@ async function ContinutSetari({
     /* `curieraGata` insasi, nu o copie: aceeasi functie hotaraste in checkout, deci metoda
        nu poate aparea aici pornibila si lipsi de acolo. Cere si adresa de ridicare. */
     ...(curieraGata(storeSettings?.curiera_config as CurieraConfig | null) ? ["curiera"] : []),
+    /* `epacketGata` insasi: aceeasi functie hotaraste in checkout (cheia si adresa de ridicare). */
+    ...(epacketGata(storeSettings?.epacket_config as EpacketConfig | null) ? ["epacket"] : []),
     /* Aceeasi regula ca in `innoshipGata`: cheia si id-ul depozitului. */
     ...(io?.enabled && io?.api_key && io?.external_client_location ? ["innoship"] : []),
     /*

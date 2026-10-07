@@ -55,7 +55,7 @@ function ramura(s: string, curier: string): string {
   return s.slice(start, urmatoarea ?? s.length);
 }
 
-test("⚠ fiecare dintre cei patru isi RETINE iesirea, pe ramura lui", () => {
+test("⚠ fiecare dintre cei cinci isi RETINE iesirea, pe ramura lui", () => {
   /*
    * ⚠ PE RAMURA, nu o numaratoare globala. Un `3` global ar fi trecut si daca unul dintre ei ar fi
    * pierdut randul iar altul l-ar fi capatat de doua ori: ar fi spus „sunt trei" si ar fi lasat un
@@ -67,7 +67,11 @@ test("⚠ fiecare dintre cei patru isi RETINE iesirea, pe ramura lui", () => {
    * cand NU e configurata complet. Zona poate ramane pornita dupa „Deconecteaza", iar vanduta mai
    * departe la pretul zonei, ar lua bani pe un transport pentru care nu se poate emite niciun AWB.
    */
-  for (const curier of ["fedex", "ups", "dhl", "curiera"]) {
+  /*
+   * ⚠ E-PACKET e a cincea (07.10.2026), cu motivul Curierei: iese cand NU e configurat complet,
+   * fiindca fiecare AWB ar fi refuzat (422), iar zona poate ramane pornita dupa deconectare.
+   */
+  for (const curier of ["fedex", "ups", "dhl", "curiera", "epacket"]) {
     assert.match(
       ramura(s, curier),
       /iesitiDinLista\.add\(courierId\);/,
@@ -76,7 +80,7 @@ test("⚠ fiecare dintre cei patru isi RETINE iesirea, pe ramura lui", () => {
   }
 });
 
-test("⚠ si sunt EXACT patru: al cincilea cere hotarare, nu tacere", () => {
+test("⚠ si sunt EXACT cinci: al saselea cere hotarare, nu tacere", () => {
   /*
    * Egalitate, nu „cel putin". Cine adauga maine un curier care iese dinadins trebuie sa treaca si
    * pe aici: altfel plasa ar spune ca pazeste trei si ar pazi patru pe jumatate. Iar cine STERGE
@@ -84,7 +88,7 @@ test("⚠ si sunt EXACT patru: al cincilea cere hotarare, nu tacere", () => {
    */
   const s = sursaCurata();
   const cate = (s.match(/iesitiDinLista\.add\(courierId\);/g) ?? []).length;
-  assert.equal(cate, 4, `sunt ${cate} iesiri retinute, nu patru`);
+  assert.equal(cate, 5, `sunt ${cate} iesiri retinute, nu cinci`);
 });
 
 test("⚠ multimea se declara INAINTEA buclei de curieri", () => {

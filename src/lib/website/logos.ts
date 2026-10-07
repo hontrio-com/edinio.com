@@ -256,6 +256,9 @@ export const PROVIDER_LOGOS = {
   packeta: { name: "Packeta", src: `${I}/packeta-mic.webp`, ratio: 0.96, ink: 0.86 },
   innoship: { name: "Innoship", src: `${I}/innoship.svg`, ratio: 2.6, ink: 0.67 },
   smartship: { name: "SmartShip", src: `${I}/smartship-mic.webp`, ratio: 4.72, ink: 0.84 },
+  /* Masurat pe 07.10.2026, rasterizat cu `sharp` la densitate 144: cutia 1070x318 (raport 3,36),
+     desenul 1051x272, deci 84% cerneala (viewBox-ul lasa aer sus si jos, nu in laturi). */
+  epacket: { name: "e-packet", src: `${I}/e-packet.svg`, ratio: 3.36, ink: 0.84 },
   shipo: { name: "Shipo.ro", src: `${I}/shipo.ro.svg`, ratio: 1.81 },
 
   /* ── Facturare ─────────────────────────────────────────────────────────── */

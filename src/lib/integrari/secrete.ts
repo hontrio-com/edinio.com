@@ -58,6 +58,11 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      fara nicio explicatie — de aia formularul le numeste „Utilizator MyDHL API" si
      „Parola MyDHL API", nu „cheie". */
   dhl_config: ["password"],
+  /* e-packet: o singura cheie (`epk_live_…` / `epk_test_…`), trimisa ca `Bearer` la fiecare
+     cerere. Restul NU e secret: adresa de ridicare, contul de ramburs si curierii alesi trebuie
+     sa se vada in formular. ⚠ Numele `api_key` e IDENTIC in `EpacketConfig` si in
+     `privat.campuri_secrete`. ⚠ IBAN-ul de ramburs nu e secret: e tiparit pe facturi. */
+  epacket_config: ["api_key"],
   dpd_config: ["password"],
   /* eMAG Marketplace: autentificare HTTP `Basic`, deci parola pleaca la fiecare
      cerere. `username` NU intra aici, desi e prima jumatate a acreditarii: singur

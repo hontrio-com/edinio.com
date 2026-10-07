@@ -172,6 +172,10 @@
       "schedule": "31 */2 * * *"
     },
     {
+      "path": "/api/cron/epacket-tracking",
+      "schedule": "37 */2 * * *"
+    },
+    {
       "path": "/api/cron/fancourier-settlements",
       "schedule": "27 5 * * *"
     },

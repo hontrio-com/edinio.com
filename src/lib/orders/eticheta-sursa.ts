@@ -16,19 +16,20 @@ import { etichetaGlsPentruComanda } from "@/lib/gls/eticheta-sursa";
 import { etichetaEcoletPentruComanda } from "@/lib/ecolet/eticheta-sursa";
 import { etichetaPallexPentruComanda } from "@/lib/pallex/eticheta-sursa";
 import { etichetaCuriera, type CurieraConfig } from "@/lib/curiera/client";
+import { etichetaEpacket, type EpacketConfig } from "@/lib/epacket/client";
 import { NUMELE_CURIERULUI, NU_INTRA_IN_DOCUMENT, type CurierEticheta } from "./etichete-lot";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * OCTETII UNEI ETICHETE, DE LA ORICARE DINTRE CEI SAPTESPREZECE  (21.09.2026)
+ * OCTETII UNEI ETICHETE, DE LA ORICARE DINTRE CEI OPTSPREZECE   (21.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Un singur loc care stie „cum se cere eticheta comenzii asteia". Pana acum stia
  * fiecare ruta in parte, si numai pentru curierul ei.
  *
- * ⚠ NU SE CHEAMA RUTELE, SI NU SE COPIAZA CE FAC ELE. Cele sapte drumuri simple merg
- * la aceeasi functie de biblioteca pe care o cheama si ruta (la Curiera, actiunea
- * ferestrei); cele sapte cu actiune proprie cheama CHIAR actiunea pe care o apasa
+ * ⚠ NU SE CHEAMA RUTELE, SI NU SE COPIAZA CE FAC ELE. Cele opt drumuri simple merg
+ * la aceeasi functie de biblioteca pe care o cheama si ruta (la Curiera si e-packet,
+ * actiunea ferestrei); cele sapte cu actiune proprie cheama CHIAR actiunea pe care o apasa
  * omul in fereastra; iar cele trei cu copie in CDN (GLS, eColet, Pall-Ex) si-au mutat
  * ajutorul din ruta intr-un fisier de biblioteca, pe care il folosesc acum si ruta, si
  * lotul. Asa nu exista nicaieri doua socoteli care se pot departa una de alta.
@@ -207,6 +208,20 @@ async function adu(
       const c = (data?.curiera_config ?? null) as CurieraConfig | null;
       if (!c || !(c.api_key ?? "").trim()) return null;
       return octetiiExacti(await etichetaCuriera(c, sir("curiera_awb_number"), format === "A4" ? "a4" : "a6"));
+    }
+
+    case "epacket": {
+      /*
+       * ⚠ Ca la Curiera: configul se citeste AICI, pe service role, ca o coloana lipsa sa nu
+       * goleasca setarile tuturor curierilor din lot. Marimea e cea ceruta pentru document; la FAN
+       * iese A4 oricum, la Dragon Star si TCE eticheta curierului (scris de ei).
+       */
+      const { data, error } = await createAdminClient()
+        .from("store_settings").select("epacket_config").eq("business_id", businessId).maybeSingle();
+      if (error) throw new Error(`configurarea nu s-a putut citi (${error.message})`);
+      const c = (data?.epacket_config ?? null) as EpacketConfig | null;
+      if (!c || !(c.api_key ?? "").trim()) return null;
+      return octetiiExacti((await etichetaEpacket(c, sir("epacket_awb_number"), format === "A4" ? "A4" : "A6")).pdf);
     }
 
     /* ── Cele cu copie in CDN, prin ajutorul comun cu ruta lor ──────────── */

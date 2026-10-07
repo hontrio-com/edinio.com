@@ -4471,8 +4471,8 @@ export async function shipOrderNow(admin: Db, ctx: AboutYouSyncContext, orderId:
    * chiar in casa: Sameday are camp separat de retur (`sameday_return_awb_number`), semn ca
    * returul NU e mereu acelasi document.
    *
-   * ⚠ DAR NU SE POATE CERE UNUL ADEVARAT LA TOTI. Din cei 18 curieri din `CURIERI_ABOUTYOU`, unul
-   * singur are azi AWB de retur. Oprita expedierea pana cand exista, s-ar fi blocat 17 din 18,
+   * ⚠ DAR NU SE POATE CERE UNUL ADEVARAT LA TOTI. Din cei 19 curieri din `CURIERI_ABOUTYOU`, unul
+   * singur are azi AWB de retur. Oprita expedierea pana cand exista, s-ar fi blocat 18 din 19,
    * mult mai rau decat eticheta gresita pe care o reparam.
    *
    * ═══ ⚠ NUMARUL DE TUR NU MAI PLEACA DREPT RETUR, NICIODATA (27.08.2026, seara) ═══

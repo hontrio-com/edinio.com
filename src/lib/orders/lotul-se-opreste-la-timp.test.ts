@@ -72,6 +72,8 @@ test("⚠⚠ bugetul lotului sta SUB `maxDuration`, cu marja de scriere", () => 
     "src/lib/innoship/client.ts", "src/lib/smartship/client.ts", "src/lib/shipo/client.ts",
     "src/lib/posta/client.ts", "src/lib/pallex/client.ts", "src/lib/sameday/client.ts",
     "src/lib/cargus.ts", "src/lib/dpd.ts", "src/lib/colete.ts", "src/lib/curiera/client.ts",
+    /* e-packet: in lot drumul e pregatire + emitere, socotit in `ASTEPTARE_DRUM_LOT_MS`. */
+    "src/lib/epacket/client.ts", "src/lib/epacket/lot.ts",
   ];
   let celMaiLungApelMs = 0;
   let deLa = "";

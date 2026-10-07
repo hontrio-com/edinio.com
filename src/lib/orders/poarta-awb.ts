@@ -78,7 +78,7 @@ export async function poartaAwbPropriu(
 const COLOANE_POARTA =
   "order_source, payment_status, status, "
   + "cargus_awb_number, colete_awb_number, curiera_awb_number, dhl_awb_number, dpd_awb_number, "
-  + "ecolet_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, "
+  + "ecolet_awb_number, epacket_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, "
   + "innoship_awb_number, packeta_packet_id, pallex_awb_number, posta_awb_number, "
   + "sameday_awb_number, shipo_awb_number, smartship_awb_number, ups_awb_number, "
   + "woot_awb_number, ecolet_order_to_send_id";

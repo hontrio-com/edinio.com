@@ -29,6 +29,7 @@ import { deleteFedexAwbAction } from "@/lib/actions/fedex.actions";
 import { deleteUpsAwbAction } from "@/lib/actions/ups.actions";
 import { dezleagaDhlAwbAction } from "@/lib/actions/dhl.actions";
 import { dezleagaCurieraAwbAction } from "@/lib/actions/curiera.actions";
+import { dezleagaEpacketAwbAction } from "@/lib/actions/epacket.actions";
 /* ⚠ Actiunea EXISTA de la integrarea Packeta, dar nu era chemata de nicaieri: „Detaseaza
    AWB" pe o comanda Packeta cadea pe `else`-ul final, adica pe detasarea Colete Online.
    Vezi comentariul lung din `handleCancelAwb`. */
@@ -405,6 +406,9 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
        numai pana la ridicare. Dupa ea refuzul e MEREU, iar comanda ar ramane inghetata;
        de aceea actiunea DEZLEAGA (ca la FAN) si spune in `mesaj` ce ramane viu la Curiera. */
     if (order.curiera_awb_number) list.push({ key: "curiera", label: "Curiera", awb: order.curiera_awb_number });
+    /* ⚠ e-packet primeste `manualOnly`, ca DHL si Packeta: API-ul lor NU are anulare. Actiunea
+       citeste starea, scoate numarul de pe comanda si spune in `mesaj` ce ramane viu si platit. */
+    if (order.epacket_awb_number) list.push({ key: "epacket", label: "e-packet", awb: order.epacket_awb_number, manualOnly: true });
     if (order.colete_awb_number) list.push({ key: "colete", label: "Colete Online", awb: order.colete_awb_number, manualOnly: true });
     return list;
   }, [order]);
@@ -754,6 +758,9 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
            in contul lor. La „nu stim" actiunea se opreste. Fara ramura asta, `else`-ul final
            ar fi chemat detasarea Colete Online si ar fi raportat succes. */
         else if (key === "curiera") res = await dezleagaCurieraAwbAction(businessId, order.id);
+        /* ⚠ e-packet: fara anulare in API. Fara ramura asta, `else`-ul final ar fi chemat
+           detasarea Colete Online si ar fi raportat succes. */
+        else if (key === "epacket") res = await dezleagaEpacketAwbAction(businessId, order.id);
         /* ⚠⚠ REPARATIE. Ramura asta LIPSEA, exact defectul descris mai sus la Shipo: fara
            ea, „Detaseaza AWB" pe o comanda Packeta cadea pe `else`-ul final si chema
            detasarea de COLETE ONLINE. Pe o comanda Packeta acolo nu e nimic de detasat,

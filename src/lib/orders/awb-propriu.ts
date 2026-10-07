@@ -38,6 +38,8 @@ export const COLOANA_AWB = {
   dhl: "dhl_awb_number",
   dpd: "dpd_awb_number",
   ecolet: "ecolet_awb_number",
+  /* `awb_number` din POST /awb: chiar numarul curierului de dedesubt (DPD, Sameday...). */
+  epacket: "epacket_awb_number",
   fancourier: "fan_courier_awb_number",
   fedex: "fedex_awb_number",
   gls: "gls_awb_number",
@@ -139,7 +141,7 @@ export function numarDeUrmarire(rand: Record<string, unknown>): { curier: string
 /** Numele aratat omului: la refuz, si in notificarea de expediere. */
 export const NUME_CURIER: Record<CurierPropriu, string> = {
   cargus: "Cargus", colete: "Colete Online", curiera: "Curiera", dhl: "DHL Express", dpd: "DPD",
-  ecolet: "eColet", fancourier: "FAN Courier", fedex: "FedEx", gls: "GLS",
+  ecolet: "eColet", epacket: "e-packet", fancourier: "FAN Courier", fedex: "FedEx", gls: "GLS",
   innoship: "Innoship", packeta: "Packeta", pallex: "Pall-Ex", posta: "Poșta Română",
   sameday: "Sameday", shipo: "Shipo", smartship: "SmartShip", ups: "UPS", woot: "Woot",
 };

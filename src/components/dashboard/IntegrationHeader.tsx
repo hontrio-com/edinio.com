@@ -30,6 +30,8 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   posta: { src: "/integrations/posta_romana.svg", alt: "Poșta Română" },
   /* Transparenta, verde si galben pe fond gol: nu cere `filter`. */
   curiera: { src: "/integrations/curiera.webp", alt: "Curiera" },
+  /* Albastru inchis si rosu, pe fond gol: nu cere `filter`. */
+  epacket: { src: "/integrations/e-packet.svg", alt: "e-packet" },
   packeta: { src: "/integrations/packeta.png", alt: "Packeta" },
   innoship: { src: "/integrations/innoship.svg", alt: "Innoship" },
   smartship: { src: "/integrations/smartship.png", alt: "SmartShip.ro" },

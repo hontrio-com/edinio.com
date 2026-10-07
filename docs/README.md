@@ -12,7 +12,7 @@ Git pastrata (`git mv`).
 
 | Folder | Ce contine |
 | --- | --- |
-| `curieri/` | Cei 18 curieri, cate un fisier: CARGUS, COLETE-ONLINE, CURIERA, DHL, DPD, ECOLET, FAN, FEDEX, GLS, INNOSHIP, PACKETA, PALLEX, POSTA, SAMEDAY, SHIPO, SMARTSHIP, UPS, WOOT |
+| `curieri/` | Cei 19 curieri, cate un fisier: CARGUS, COLETE-ONLINE, CURIERA, DHL, DPD, ECOLET, EPACKET (+ `EPACKET-openapi.json`, specificatia lor), FAN, FEDEX, GLS, INNOSHIP, PACKETA, PALLEX, POSTA, SAMEDAY, SHIPO, SMARTSHIP, UPS, WOOT |
 | `facturare/` | SmartBill, Oblio, fGO |
 | `plati/` | Netopia, Stripe, Revolut, Klarna, iPay |
 | `marketing/` | Integrarile de marketing ale COMERCIANTILOR: Facebook (Meta Pixel, CAPI, catalog), TikTok, Google Ads, Google Analytics, Google Merchant, email marketing (Mailchimp, Brevo, Klaviyo), SMS (notice.ro, SMSO) |

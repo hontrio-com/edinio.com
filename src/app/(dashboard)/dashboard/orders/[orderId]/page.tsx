@@ -19,6 +19,8 @@ import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import { optiuniAwbCuriera } from "@/lib/curiera/expediere";
+import { epacketGata, type EpacketConfig } from "@/lib/epacket/client";
+import { optiuniAwbEpacket } from "@/lib/epacket/expediere";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday/client";
@@ -55,7 +57,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat")
       .eq("business_id", order.business_id)
       .single(),
   ]);
@@ -102,6 +104,10 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   /* ⚠ Numai ce precompleteaza fereastra, NU configul intreg: el poarta cheia API, iar tot ce
      primeste o componenta de client pleaca in browser. Aceeasi functie ca in lista. */
   const curieraOptiuni = optiuniAwbCuriera(cu);
+  /* `epacketGata` insasi, si numai optiunile ferestrei (FARA cheia API), ca la Curiera. */
+  const ep = settings?.epacket_config as EpacketConfig | null;
+  const epacketEnabled = epacketGata(ep);
+  const epacketOptiuni = optiuniAwbEpacket(ep);
   /* Aceeasi regula ca in `packetaGata` si in features/page.tsx: parola API si
      eticheta de expeditor. `eshop` intra in ea desi nu e credentiala — un nume
      gresit CREEAZA tacut un expeditor nou la ei si strica facturarea. */
@@ -274,6 +280,8 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       postaEnabled={postaEnabled}
       curieraEnabled={curieraEnabled}
       curieraOptiuni={curieraOptiuni}
+      epacketEnabled={epacketEnabled}
+      epacketOptiuni={epacketOptiuni}
       packetaEnabled={packetaEnabled}
       smartshipEnabled={smartshipEnabled}
       shipoEnabled={shipoEnabled}

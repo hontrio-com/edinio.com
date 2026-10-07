@@ -60,7 +60,7 @@ const SEMN = "—";
 const CURIERI = [
   "Cargus", "Colete", "Gls", "Packeta", "Ups", "Woot", "Pallex", "Shipo",
   "Ecolet", "Dhl", "Fedex", "Posta", "Sameday", "Dpd", "FanCourier",
-  "Innoship", "Smartship", "Curiera",
+  "Innoship", "Smartship", "Curiera", "Epacket",
 ];
 
 /* Panouri de expediere pe care prefixele le sar prin constructie. */

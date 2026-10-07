@@ -120,8 +120,13 @@ export function urmareste(p: {
     const slug = real ? SLUG_WOOT[real] : undefined;
     return slug ? { href: `https://awb.woot.ro/urmarire-colet-${slug}/${COD(numar)}`, fel: "direct" } : null;
   }
-  /* La Innoship AWB-ul e al curierului real (courierShipmentId); adresa lor salvata a castigat deja mai sus. */
-  if (p.curier === "innoship") {
+  /*
+   * La Innoship AWB-ul e al curierului real (courierShipmentId); adresa lor salvata a castigat deja
+   * mai sus. ⚠ La e-packet la fel: `awb_number` e chiar numarul DPD/Sameday/Cargus/FAN, iar
+   * `curier_real` il scrie `cont_comanda_mea` din codul lor. Dragon Star si TCE n-au pagina in harta,
+   * deci acolo nu se arata nicio legatura (mai bine decat una gresita).
+   */
+  if (p.curier === "innoship" || p.curier === "epacket") {
     const real = curierulReal(p.curierReal);
     const tipar = real ? DIRECT[real] : undefined;
     return tipar ? { href: tipar(numar), fel: "direct" } : null;
@@ -147,6 +152,6 @@ function numeDinHarta(cheie: string): string {
  */
 export function numeleCurierului(curier: string | null | undefined, curierReal?: string | null): string | null {
   if (!curier) return null;
-  const real = ["woot", "innoship", "shipo", "smartship"].includes(curier) ? curierulReal(curierReal) : null;
+  const real = ["woot", "innoship", "shipo", "smartship", "epacket"].includes(curier) ? curierulReal(curierReal) : null;
   return numeDinHarta(real ?? curier);
 }

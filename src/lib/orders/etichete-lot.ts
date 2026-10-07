@@ -19,7 +19,7 @@
 export type CurierEticheta =
   | "woot" | "cargus" | "sameday" | "fancourier" | "dpd" | "colete"
   | "gls" | "ecolet" | "pallex" | "innoship" | "packeta" | "smartship"
-  | "shipo" | "fedex" | "ups" | "dhl" | "curiera";
+  | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket";
 
 /** Numele omenesc, pentru mesajele catre comerciant. */
 export const NUMELE_CURIERULUI: Record<CurierEticheta, string> = {
@@ -28,6 +28,7 @@ export const NUMELE_CURIERULUI: Record<CurierEticheta, string> = {
   pallex: "Pall-Ex", innoship: "Innoship", packeta: "Packeta",
   smartship: "SmartShip", shipo: "Shipo", fedex: "FedEx", ups: "UPS", dhl: "DHL",
   curiera: "Curiera",
+  epacket: "e-packet",
 };
 
 /**
@@ -63,6 +64,8 @@ export const COLOANA_EXPEDIERII: Record<CurierEticheta, string> = {
   dhl: "dhl_awb_number",
   /* Liderul grupului, la mai multe colete: `print` pe el scoate tot grupul, o pagina pe colet. */
   curiera: "curiera_awb_number",
+  /* Numarul curierului de dedesubt; `GET /label` da tot expedierea, o pagina pe colet. */
+  epacket: "epacket_awb_number",
 };
 
 /**
@@ -78,7 +81,7 @@ export const COLOANA_EXPEDIERII: Record<CurierEticheta, string> = {
  */
 export const ORDINEA_CAUTARII: CurierEticheta[] = [
   "woot", "dpd", "sameday", "cargus", "fancourier", "gls", "colete", "ecolet",
-  "pallex", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera",
+  "pallex", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera", "epacket",
 ];
 
 /** Cine tine eticheta comenzii, sau `null` daca n-are niciuna. */

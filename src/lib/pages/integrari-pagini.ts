@@ -56,6 +56,8 @@ const CURIERI: MetodaAfisata[] = [
   { cheie: "posta", nume: "Poșta Română", logo: "/integrations/posta_romana.svg" },
   /* Sigla contine numele scris, deci fara `arataNumele`. */
   { cheie: "curiera", nume: "Curiera", logo: "/integrations/curiera.webp" },
+  /* Sigla contine numele scris, deci fara `arataNumele`. */
+  { cheie: "epacket", nume: "e-packet", logo: "/integrations/e-packet.svg" },
   { cheie: "packeta", nume: "Packeta", logo: "/integrations/packeta.png" },
   { cheie: "dhl", nume: "DHL", logo: "/integrations/dhl.svg" },
   { cheie: "ups", nume: "UPS", logo: "/integrations/ups.svg" },

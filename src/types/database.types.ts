@@ -4095,6 +4095,16 @@ export type Database = {
           ecolet_service_slug: string | null
           ecolet_status_checked_at: string | null
           ecolet_status_code: string | null
+          epacket_awb_at: string | null
+          epacket_awb_number: string | null
+          epacket_curier: string | null
+          epacket_reference: string | null
+          epacket_status_at: string | null
+          epacket_status_checked_at: string | null
+          epacket_status_code: string | null
+          epacket_status_label: string | null
+          epacket_test: boolean | null
+          epacket_tip_livrare: string | null
           fan_courier_awb_at: string | null
           fan_courier_awb_client_id: number | null
           fan_courier_awb_number: string | null
@@ -4332,6 +4342,16 @@ export type Database = {
           ecolet_service_slug?: string | null
           ecolet_status_checked_at?: string | null
           ecolet_status_code?: string | null
+          epacket_awb_at?: string | null
+          epacket_awb_number?: string | null
+          epacket_curier?: string | null
+          epacket_reference?: string | null
+          epacket_status_at?: string | null
+          epacket_status_checked_at?: string | null
+          epacket_status_code?: string | null
+          epacket_status_label?: string | null
+          epacket_test?: boolean | null
+          epacket_tip_livrare?: string | null
           fan_courier_awb_at?: string | null
           fan_courier_awb_client_id?: number | null
           fan_courier_awb_number?: string | null
@@ -4569,6 +4589,16 @@ export type Database = {
           ecolet_service_slug?: string | null
           ecolet_status_checked_at?: string | null
           ecolet_status_code?: string | null
+          epacket_awb_at?: string | null
+          epacket_awb_number?: string | null
+          epacket_curier?: string | null
+          epacket_reference?: string | null
+          epacket_status_at?: string | null
+          epacket_status_checked_at?: string | null
+          epacket_status_code?: string | null
+          epacket_status_label?: string | null
+          epacket_test?: boolean | null
+          epacket_tip_livrare?: string | null
           fan_courier_awb_at?: string | null
           fan_courier_awb_client_id?: number | null
           fan_courier_awb_number?: string | null
@@ -5818,6 +5848,7 @@ export type Database = {
           ecolet_config: Json | null
           emag_config: Json
           email_config: Json
+          epacket_config: Json | null
           fan_courier_config: Json | null
           facebook_feeds: Json | null
           meta_capi_config: Json | null
@@ -5898,6 +5929,7 @@ export type Database = {
           ecolet_config?: Json | null
           emag_config?: Json
           email_config?: Json
+          epacket_config?: Json | null
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
           meta_capi_config?: Json | null
@@ -5978,6 +6010,7 @@ export type Database = {
           ecolet_config?: Json | null
           emag_config?: Json
           email_config?: Json
+          epacket_config?: Json | null
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
           meta_capi_config?: Json | null

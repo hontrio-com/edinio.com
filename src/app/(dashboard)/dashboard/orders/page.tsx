@@ -20,6 +20,8 @@ import type { EcoletConfig } from "@/lib/ecolet/client";
 import type { PostaConfig } from "@/lib/posta/client";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import { optiuniAwbCuriera, type OptiuniAwbCuriera } from "@/lib/curiera/expediere";
+import { epacketGata, type EpacketConfig } from "@/lib/epacket/client";
+import { optiuniAwbEpacket, type OptiuniAwbEpacket } from "@/lib/epacket/expediere";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday/client";
@@ -56,7 +58,7 @@ export default async function OrdersPage({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config)")
+    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config)")
     .eq("user_id", user.id)
     .eq("type", "ministore")
     .limit(1)
@@ -98,6 +100,9 @@ export default async function OrdersPage({
   const curieraEnabled = curieraGata(settings?.curiera_config as CurieraConfig | null);
   /* Ce precompleteaza fereastra AWB deschisa din lista; aceeasi functie ca in pagina comenzii. */
   const curieraOptiuni = optiuniAwbCuriera(settings?.curiera_config as CurieraConfig | null);
+  /* `epacketGata` insasi, si optiunile ferestrei FARA cheia API (aceleasi ca in pagina comenzii). */
+  const epacketEnabled = epacketGata(settings?.epacket_config as EpacketConfig | null);
+  const epacketOptiuni = optiuniAwbEpacket(settings?.epacket_config as EpacketConfig | null);
   /* Aceeasi regula ca in `packetaGata`: parola API si eticheta de expeditor. */
   const pk = settings?.packeta_config as { enabled?: boolean; api_password?: string; eshop?: string } | null;
   const packetaEnabled = !!(pk?.enabled && pk?.api_password && pk?.eshop);
@@ -159,8 +164,8 @@ export default async function OrdersPage({
 
   const integrari: Integrari = {
     smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled,
-    cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
-    curieraOptiuni, postaZilePrezentare,
+    cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, epacketEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
+    curieraOptiuni, epacketOptiuni, postaZilePrezentare,
     fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
   };
 
@@ -193,6 +198,7 @@ type Integrari = {
   pallexEnabled: boolean;
   postaEnabled: boolean;
   curieraEnabled: boolean;
+  epacketEnabled: boolean;
   packetaEnabled: boolean;
   smartshipEnabled: boolean;
   shipoEnabled: boolean;
@@ -205,6 +211,7 @@ type Integrari = {
   fanCourierEnabled: boolean;
   samedayEnabled: boolean;
   curieraOptiuni: OptiuniAwbCuriera;
+  epacketOptiuni: OptiuniAwbEpacket;
   postaZilePrezentare: number;
   fanPickup: { lastDate: string | null; lastId: string | null };
 };
@@ -325,6 +332,6 @@ async function ListaComenzi({
    * AWB-uri, si de aia se numara toate trei locurile la fiecare curier nou.
    */
   return (
-    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
   );
 }

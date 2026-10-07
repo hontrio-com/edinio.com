@@ -30,6 +30,8 @@ import { SamedayAwbModal } from "@/components/dashboard/SamedayAwbModal";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { CurieraAwbModal, type OptiuniAwbCuriera } from "@/components/dashboard/CurieraAwbModal";
+import { NUME_CURIER_EPACKET } from "@/lib/epacket/client";
+import { EpacketAwbModal, type OptiuniAwbEpacket } from "@/components/dashboard/EpacketAwbModal";
 import { PostaAwbModal } from "@/components/dashboard/PostaAwbModal";
 import { PacketaAwbModal } from "@/components/dashboard/PacketaAwbModal";
 import { SmartshipAwbModal } from "@/components/dashboard/SmartshipAwbModal";
@@ -98,7 +100,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /** Total comenzi pentru filtrul+cautarea curenta (count exact din DB). */
@@ -126,6 +128,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   curieraEnabled?: boolean;
   /** Ce precompleteaza fereastra AWB Curiera. Fara cheia API: vezi pagina. */
   curieraOptiuni?: OptiuniAwbCuriera;
+  epacketEnabled?: boolean;
+  /** Ce precompleteaza fereastra AWB e-packet. Fara cheia API: vezi pagina. */
+  epacketOptiuni?: OptiuniAwbEpacket;
   packetaEnabled?: boolean;
   smartshipEnabled?: boolean;
   shipoEnabled?: boolean;
@@ -163,6 +168,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [cargusPickupOpen, setCargusPickupOpen] = useState(false);
   const [samedayModalOrder, setSamedayModalOrder] = useState<Order | null>(null);
   const [curieraModalOrder, setCurieraModalOrder] = useState<Order | null>(null);
+  const [epacketModalOrder, setEpacketModalOrder] = useState<Order | null>(null);
   const [postaModalOrder, setPostaModalOrder] = useState<Order | null>(null);
   const [packetaModalOrder, setPacketaModalOrder] = useState<Order | null>(null);
   const [smartshipModalOrder, setSmartshipModalOrder] = useState<Order | null>(null);
@@ -244,6 +250,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (pallexEnabled) list.push({ key: "pallex", label: "Pall-Ex" });
     if (postaEnabled) list.push({ key: "posta", label: "Poșta Română" });
     if (curieraEnabled) list.push({ key: "curiera", label: "Curiera" });
+    if (epacketEnabled) list.push({ key: "epacket", label: "e-packet" });
     if (packetaEnabled) list.push({ key: "packeta", label: "Packeta" });
     if (smartshipEnabled) list.push({ key: "smartship", label: "SmartShip" });
     if (shipoEnabled) list.push({ key: "shipo", label: "Shipo.ro" });
@@ -256,7 +263,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
        nicio eroare: `useMemo` pastreaza lista veche, deci meniul „Genereaza AWB" pe lot
        ramane fara DHL pana la urmatoarea rerandare care schimba altceva din vector.
        Comerciantul vede o optiune care lipseste fara motiv si crede ca nu e configurat. */
-  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, curieraEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled]);
+  }, [cargusEnabled, samedayEnabled, fanCourierEnabled, dpdEnabled, glsEnabled, pallexEnabled, postaEnabled, curieraEnabled, epacketEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled]);
   const anyAwb = awbCouriers.length > 0;
 
   const pageOrderIds = useMemo(() => orders.map((o) => o.id), [orders]);
@@ -840,6 +847,17 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
           onSuccess={() => router.refresh()}
         />
       )}
+      {/* La fel ca Curiera: fereastra ramane deschisa dupa emitere, cu eticheta. */}
+      {epacketModalOrder && businessId && (
+        <EpacketAwbModal
+          open={!!epacketModalOrder}
+          onClose={() => setEpacketModalOrder(null)}
+          order={epacketModalOrder}
+          businessId={businessId}
+          optiuni={epacketOptiuni}
+          onSuccess={() => router.refresh()}
+        />
+      )}
       {postaModalOrder && businessId && (
         <PostaAwbModal zilePrezentare={postaZilePrezentare}
           open={!!postaModalOrder}
@@ -1362,6 +1380,9 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     {curieraEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Curiera</th>
                     )}
+                    {epacketEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB e-packet</th>
+                    )}
                     {postaEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">AWB Poșta Română</th>
                     )}
@@ -1785,6 +1806,45 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                               <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setCurieraModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
+                              >
+                                <Package className="h-3 w-3" />
+                                Creeaza AWB
+                              </button>
+                            )}
+                          </td>
+                        )}
+                        {epacketEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {order.epacket_awb_number ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); setEpacketModalOrder(order); }}
+                                  title={order.epacket_status_label ?? undefined}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-info/10 text-info hover:bg-info/20 transition-colors"
+                                >
+                                  <Package className="h-3 w-3" />
+                                  {order.epacket_awb_number}
+                                </button>
+                                {/* Curierul de dedesubt: AWB-ul e chiar al lui. */}
+                                {order.epacket_curier && (
+                                  <div className="mt-1 whitespace-nowrap text-[10px] text-muted-foreground">
+                                    {NUME_CURIER_EPACKET[order.epacket_curier as keyof typeof NUME_CURIER_EPACKET] ?? order.epacket_curier}
+                                    {order.epacket_test ? " · test" : ""}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setEpacketModalOrder(order)); }}
                                 aria-disabled={!!refuzAwbLista}
                                 className={cn(
                                   "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",

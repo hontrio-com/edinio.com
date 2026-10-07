@@ -46,6 +46,10 @@ import { dhlGata, type DhlConfig } from "@/lib/dhl/client";
 import { createCurieraAwbAction } from "@/lib/actions/curiera.actions";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import { ePunctFanbox } from "@/lib/curiera/puncte";
+import { createEpacketAwbAction } from "@/lib/actions/epacket.actions";
+import { epacketGata, type EpacketConfig } from "@/lib/epacket/client";
+import { dateEpacketPentruLot } from "@/lib/epacket/lot";
+import { cautaLocalitati, puncteDinLocalitate } from "@/lib/epacket/nomenclator";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
 
@@ -98,8 +102,8 @@ const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
-export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera";
-const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera"];
+export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket";
+const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera", "epacket"];
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -178,6 +182,8 @@ function cleanIds(orderIds: string[]): { ids: string[] } | { error: string } {
  *     restul     45s la emitere (DHL, FedEx, eColet, Innoship, SmartShip, Shipo, Posta, Pall-Ex)
  *     Curiera    45s emiterea + 20s cautarea dupa referinta, numai cand raspunsul s-a pierdut
  *                (`curiera/client.ts`, `lamuresteDupaReferinta` din curiera.actions.ts)
+ *     e-packet   cel mult 18s de pregatire (localitate, cod postal) + o citire de 6s + 45s
+ *                emiterea = 69s (`ASTEPTARE_DRUM_LOT_MS` din `epacket/lot.ts`)
  *
  * Deci un lucrator pornit in ultima clipa ducea functia pana pe la 340s, peste `maxDuration`
  * de 300. Atunci platforma o taie si actiunea nu mai intoarce NIMIC, desi serverul stia exact
@@ -372,7 +378,7 @@ export async function bulkGenerateAwbs(
   const admin = createAdminClient();
   const { data: settings } = await admin
     .from("store_settings")
-    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config")
+    .select("cargus_config, sameday_config, fan_courier_config, dpd_config, gls_config, pallex_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config, epacket_config")
     .eq("business_id", businessId).single();
   const cg = settings?.cargus_config as CargusConfig | null;
   const sg = settings?.sameday_config as SamedayConfig | null;
@@ -389,6 +395,7 @@ export async function bulkGenerateAwbs(
   const up = settings?.ups_config as UpsConfig | null;
   const dh = settings?.dhl_config as DhlConfig | null;
   const cu = (settings?.curiera_config ?? null) as CurieraConfig | null;
+  const ep = (settings?.epacket_config ?? null) as EpacketConfig | null;
   const enabled: Record<Exclude<BulkCourier, "auto">, boolean> = {
     cargus: !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id),
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
@@ -439,6 +446,9 @@ export async function bulkGenerateAwbs(
     /* Aceeasi regula ca in `curieraGata`: cheia SI adresa de ridicare. Fara adresa, Curiera nu
        refuza, face ciorne care nu pleaca; actiunea le opreste oricum, cate una pe comanda. */
     curiera: curieraGata(cu),
+    /* Aceeasi regula ca in `epacketGata`: cheia SI adresa de ridicare intreaga. Fara ea,
+       e-packet refuza fiecare AWB (422), deci 50 de esecuri in loc de un mesaj. */
+    epacket: epacketGata(ep),
   };
 
   if (courier !== "auto" && !enabled[courier]) return { error: "Curierul selectat nu este configurat." };
@@ -457,7 +467,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number, epacket_awb_number")
     .eq("business_id", businessId).in("id", ids);
   if (eCitireComenzi) return { error: `Nu am putut citi comenzile selectate: ${eCitireComenzi.message}` };
 
@@ -504,6 +514,8 @@ export async function bulkGenerateAwbs(
     dhl: "dhl",
     /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
     curiera: "curiera",
+    /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
+    epacket: "epacket",
   };
 
   await runPool(orders ?? [], async (o) => {
@@ -549,6 +561,9 @@ export async function bulkGenerateAwbs(
       /* ⚠ Fara randul asta, un lot Curiera ar fi cazut pe `dpd_shipment_id` si ar fi reemis pe
          comenzile care au deja AWB la Curiera. */
       : target === "curiera" ? row.curiera_awb_number
+      /* ⚠ La e-packet randul asta e cel mai scump: AWB-ul se TAXEAZA la emitere si nu se anuleaza
+         prin API. Cazut pe `dpd_shipment_id`, lotul ar reemite pe comenzile care il au deja. */
+      : target === "epacket" ? row.epacket_awb_number
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; dejaAreAwb++; return; }
 
@@ -580,7 +595,7 @@ export async function bulkGenerateAwbs(
     if (target !== "gls" && !greutate.dinCatalog) peRezerva.push(o.order_number);
 
     try {
-      const res = await createAwbForOrder(target, businessId, o, greutate.kg, cu);
+      const res = await createAwbForOrder(target, businessId, o, greutate.kg, cu, ep);
       if (isErr(res)) { result.failed++; result.errors.push({ order: o.order_number, message: res.error }); }
       else {
         result.done++;
@@ -689,6 +704,7 @@ type BulkOrderRow = {
 async function createAwbForOrder(
   courier: Exclude<BulkCourier, "auto">, businessId: string, order: unknown, weightKg: number,
   configCuriera: CurieraConfig | null,
+  configEpacket: EpacketConfig | null,
 ): Promise<{ error: string } | Record<string, unknown>> {
   const o = order as BulkOrderRow;
   const addr = (o.shipping_address ?? {}) as ShippingAddr;
@@ -1315,6 +1331,20 @@ async function createAwbForOrder(
         continut: numeProduse || null,
         serviciiExtra: configCuriera?.servicii_extra ?? [],
       });
+    }
+    case "epacket": {
+      /*
+       * ⚠ Datele se compun dupa ACELEASI reguli ca in `EpacketAwbModal` (`lot.ts`), dar fara om:
+       * ce nu se poate stabili sigur (localitate, numar, cod postal, nume) NU se ghiceste, iese cu
+       * motivul. Un AWB e-packet se taxeaza si nu se anuleaza prin API.
+       */
+      if (!configEpacket) return { error: "e-packet nu e configurat." };
+      const pregatit = await dateEpacketPentruLot(configEpacket, o, weight, cod, {
+        cauta: (q, j, ms) => cautaLocalitati(configEpacket, q, j, ms),
+        puncte: (c, id, ms) => puncteDinLocalitate(configEpacket, c, id, ms),
+      });
+      if ("motiv" in pregatit) return { error: `AWB-ul e-packet nu s-a emis: ${pregatit.motiv}.` };
+      return createEpacketAwbAction(businessId, o.id, pregatit.date);
     }
     default:
       return { error: "Curier nesuportat." };

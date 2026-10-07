@@ -39,6 +39,7 @@ import { pdfDintrunSingurFolio } from "./pdf-simplu";
 import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
 import { LIMITE_EMAG, taiat } from "./limite";
 import type { ContextEmag } from "./sync";
+import { NUME_CURIER_EPACKET } from "@/lib/epacket/client";
 
 type Admin = Parameters<typeof cuRegistru>[0];
 
@@ -72,6 +73,8 @@ const COLOANE_AWB: { coloana: string; curier: string }[] = [
   { coloana: "smartship_awb_number", curier: "SmartShip" },
   { coloana: "innoship_awb_number", curier: "Innoship" },
   { coloana: "curiera_awb_number", curier: "Curiera" },
+  /* Adaugat la coada, inaintea campului generic: ordinea celor vechi nu se misca. */
+  { coloana: "epacket_awb_number", curier: "e-packet" },
   { coloana: "tracking_number", curier: "curierul magazinului" },
 ];
 
@@ -83,6 +86,8 @@ export const CAMPURI_AWB_DE_CITIT = [
   "innoship_courier_name",
   "smartship_courier_name",
   "shipo_courier_name",
+  /* La e-packet, codul curierului de dedesubt (DPD, SDY...): AWB-ul e chiar al lui. */
+  "epacket_curier",
 ].join(", ");
 
 export interface AwbPropriu {
@@ -123,7 +128,9 @@ export function awbPropriuAlComenzii(
       coloana.startsWith("innoship") ? rand.innoship_courier_name
         : coloana.startsWith("smartship") ? rand.smartship_courier_name
           : coloana.startsWith("shipo") ? rand.shipo_courier_name
-            : null;
+            : coloana.startsWith("epacket") && typeof rand.epacket_curier === "string" && Object.hasOwn(NUME_CURIER_EPACKET, rand.epacket_curier)
+              ? NUME_CURIER_EPACKET[rand.epacket_curier as keyof typeof NUME_CURIER_EPACKET]
+              : null;
     const numeCurat = typeof numeReal === "string" ? numeReal.trim() : "";
     return { awb, curier: numeCurat || curier };
   }

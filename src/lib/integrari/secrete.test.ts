@@ -104,6 +104,7 @@ describe("acoperire", () => {
       "cargus_config",
       "colete_config",
       "curiera_config",
+      "epacket_config",
       "dpd_config",
       "ecolet_config",
       "fan_courier_config",

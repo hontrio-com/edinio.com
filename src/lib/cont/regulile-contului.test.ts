@@ -114,6 +114,7 @@ test("vederea redusa lasa sa iasa DOAR numarul, data, starea, liniile si totalul
     "migrations/2026-09-23-conturi-clienti-comanda-completa.sql",
     "migrations/2026-09-23-conturi-clienti-obligatoriu-si-curier.sql",
     "migrations/2026-09-29-curiera-curier.sql",
+    "migrations/2026-10-07-epacket-curier.sql",
   ];
   const definesteFunctia = /create\s+(or\s+replace\s+)?function\s+public\.cont_comanda_mea\s*\(/;
   const gasite = fisiereDin("migrations", [".sql"]).filter((p) => definesteFunctia.test(citeste(p)));

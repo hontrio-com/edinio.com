@@ -51,6 +51,18 @@ test("⚠⚠ urmarire: Woot trimite la pagina LOR, pe curierul real, pe ambele s
   assert.equal(urmareste({ curier: "woot", curierReal: null, awb: "1" }), null);
 });
 
+test("⚠ urmarire: e-packet trimite la CURIERUL REAL, al carui e chiar numarul", () => {
+  /* `curier_real` il scrie `cont_comanda_mea` din codul lor (DPD, SDY, CGS, FCR, DSC, TCE). */
+  assert.equal(href({ curier: "epacket", curierReal: "DPD", awb: "81382475619" }), "https://tracking.dpd.ro/?shipmentNumber=81382475619");
+  assert.equal(href({ curier: "epacket", curierReal: "Sameday", awb: "1ONBLN1456985" }), "https://sameday.ro/#awb=1ONBLN1456985");
+  assert.equal(href({ curier: "epacket", curierReal: "FAN Courier", awb: "2270499882526" }), "https://www.fancourier.ro/awb-tracking/?tracking=2270499882526");
+  /* Dragon Star si TCE n-au pagina in harta: nicio legatura, nu una gresita. */
+  assert.equal(href({ curier: "epacket", curierReal: "Dragon Star", awb: "X1" }), null);
+  assert.equal(href({ curier: "epacket", curierReal: null, awb: "X1" }), null);
+  assert.equal(numeleCurierului("epacket", "Sameday"), "Sameday");
+  assert.equal(numeleCurierului("epacket", "Dragon Star"), "e-packet");
+});
+
 test("urmarire: Posta si Pall-Ex dau numai pagina de cautare, marcata ca atare", () => {
   assert.deepEqual(urmareste({ curier: "posta", awb: "RR1" }), { href: "https://www.posta-romana.ro/track-trace.html", fel: "cautare" });
   assert.equal(urmareste({ curier: "pallex", awb: "P1" })?.fel, "cautare");

@@ -83,6 +83,13 @@ import { etichetaOferta as etichetaDhl, ofertePosibile as oferteDhl } from "@/li
    `FARA_API_DE_TARIF`. Normalizatorul poarta sufixul, ca sa nu se ciocneasca cu `normalizeazaPuncte`. */
 import { curieraGata, puncteCuriera, type CurieraConfig } from "@/lib/curiera/client";
 import { normalizeazaPuncteCuriera } from "@/lib/curiera/puncte";
+/* ⚠ e-packet NU importa nimic de tarif, dinadins: pretul vine din zona (`FARA_API_DE_TARIF`). */
+import { curierPuncte, epacketGata, type EpacketConfig } from "@/lib/epacket/client";
+import { kgMaximPunct, puncteDeCheckout } from "@/lib/epacket/puncte";
+import { localitatiPentruOras, numeleLocalitatii } from "@/lib/epacket/localitati";
+import { cautaLocalitati, idPunctCheckout, puncteDinLocalitate } from "@/lib/epacket/nomenclator";
+import { NUME_CURIER_EPACKET } from "@/lib/epacket/client";
+import { judetDupaCodAuto } from "@/lib/ro/judete";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
@@ -334,6 +341,7 @@ const COURIER_LABELS: Record<string, string> = {
      care sunt alte retele, cu alte conturi si alte API-uri. */
   dhl: "DHL Express",
   curiera: "Curiera",
+  epacket: "e-packet",
   own: "Curier propriu",
   pickup: "Ridicare personala",
 };
@@ -467,7 +475,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat, shipping_enabled")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, curiera_config, epacket_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat, shipping_enabled")
     .eq("business_id", businessId)
     .single();
 
@@ -2080,6 +2088,41 @@ export async function getShippingOptions(
           });
         }
       }
+    } else if (courierId === "epacket") {
+      /*
+       * ⚠ E-PACKET NU COTEAZA LIVE, desi are `POST /quotes` (07.10.2026): tariful lor e costul
+       * comerciantului din credit, nu pretul de vitrina, iar cheia de test coteaza absurd. Pretul e
+       * cel din zona, ramura e SINCRONA, si `epacket` sta in `FARA_API_DE_TARIF`.
+       *
+       * ⚠ Fara e-packet GATA (cheie + adresa de ridicare intreaga) nu se vinde nimic: fiecare AWB
+       * ar fi refuzat. Iesirea se RETINE (`iesitiDinLista`), altfel plasa de la 25 s o pune inapoi.
+       * ⚠ Si nu face `return` sau `continue`: optiunile ajung la semnarea unica de la sfarsit.
+       */
+      const epCfg = settings.epacket_config as EpacketConfig | null;
+      if (!epacketGata(epCfg)) {
+        iesitiDinLista.add(courierId);
+      } else {
+        options.push({
+          courier: "epacket",
+          courierLabel: addrLabel(zone.label, "Livrare prin e-packet"),
+          deliveryType: "address",
+          price: zone.price,
+        });
+        /*
+         * Lockerul se ofera doar pornit de comerciant si numai sub limita retelei lui (Sameday 20 kg,
+         * DPD si Cargus 15, FANbox 30; din tabelul lor). Reteaua sta in id-ul punctului
+         * (`idPunctCheckout`), deci nimic in plan.
+         */
+        const reteaEp = curierPuncte(epCfg);
+        if (epCfg.lockere && weight <= kgMaximPunct(reteaEp)) {
+          options.push({
+            courier: "epacket",
+            courierLabel: lockerLabel(zone.label, `Locker ${NUME_CURIER_EPACKET[reteaEp]} prin e-packet`),
+            deliveryType: "locker",
+            price: zone.price,
+          });
+        }
+      }
     } else {
       // Generic courier (own) — flat price
       options.push({
@@ -3350,7 +3393,7 @@ async function citesteSetarileLockerelor(businessId: string) {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config, curiera_config")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config, curiera_config, epacket_config")
     .eq("business_id", businessId)
     .single();
   return data;
@@ -3383,7 +3426,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups", "curiera"]);
+const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups", "curiera", "epacket"]);
 
 /**
  * Un punct de ridicare, cu fisa lui semnata de server.
@@ -3398,17 +3441,18 @@ export type PunctSemnat = LockerItem & { token: string };
  *
  * ═══ ⚠ DE CE E UN INVELIS SUBTIRE, SI NU SE SEMNEAZA IN RAMURI ═══
  *
- * Fiindca `puncteleDeLaCurier` are PATRUZECI SI TREI de puncte de iesire, din care TREISPREZECE pot
- * duce puncte: douasprezece ramuri de curier plus iesirea din cache, care nu apartine niciunei ramuri
+ * Fiindca `puncteleDeLaCurier` are PATRUZECI SI SASE de puncte de iesire, din care PAISPREZECE pot
+ * duce puncte: treisprezece ramuri de curier plus iesirea din cache, care nu apartine niciunei ramuri
  * si care serveste marea majoritate a cererilor. Numarate una cate una, nu estimate (recensamant
- * refacut pe 29.09.2026, la intrarea Curiera: era 40 si 12).
+ * refacut pe 07.10.2026, la intrarea e-packet: 52 de `return` in corp, din care 6 in functiile
+ * interioare de cache; inainte erau 43 si 13, iar la Curiera 40 si 12).
  *
- * ⚠ Cablata ramura cu ramura, ar fi fost treisprezece copii ale aceleiasi chemari, iar prima iesire
+ * ⚠ Cablata ramura cu ramura, ar fi fost paisprezece copii ale aceleiasi chemari, iar prima iesire
  * noua scrisa de altcineva ar fi plecat NESEMNATA. Exact defectul consemnat mai sus la cotatii,
  * pentru care s-a scris `semneazaOptiuni`, si care acolo chiar se intamplase o data.
  *
  * ⚠ SI DE CE NU IN `filtreazaOras`, care pare palnia. Fiindca nu e: steagul `filtreaza` il sare la
- * UPS si la Shipo, deci ar fi ratat trei din cele treisprezece drumuri. Si nu oricare trei, ci
+ * UPS, la Shipo si la e-packet, deci ar fi ratat patru din cele paisprezece drumuri. Si nu oricare, ci
  * tocmai curierii la care punctul bucurestean isi scrie orasul cum vrea, adica singurii la care
  * verificarea de la comanda n-ar avea nici macar potrivirea de oras drept plasa de rezerva.
  *
@@ -3417,7 +3461,7 @@ export type PunctSemnat = LockerItem & { token: string };
  * iesire, cache-ul ramane o lista curata si fiecare cumparator primeste un token proaspat.
  *
  * ⚠ SI DE CE AICI, IN AFARA TUTUROR LUI `try`. `secret()` ARUNCA fara cheie, dinadins. Pusa
- * inauntrul unei ramuri, aruncarea ar fi fost inghitita de `catch`-ul de acolo (sunt douasprezece) si
+ * inauntrul unei ramuri, aruncarea ar fi fost inghitita de `catch`-ul de acolo (sunt paisprezece, numarate) si
  * s-ar fi facut `return []`, adica un raspuns care arata exact ca „magazinul asta n-are puncte".
  *
  * ⚠ SI CE NU SE SCHIMBA, ca sa nu promita randul de mai sus mai mult decat face: CUMPARATORUL vede
@@ -3562,6 +3606,12 @@ async function puncteleDeLaCurier(
      * lui, si emiterea l-ar refuza.
      */
     : courier === "sameday" ? `:${reteaSamedayCeruta}`
+    /*
+     * ⚠ La e-packet intra LOCALITATEA, ca la Shipo si UPS: punctele se cer pe localitatea lor, deci
+     * lista din cache e a unui singur oras, si nimic n-o mai taie la iesire. Reteaua NU intra aici:
+     * e in configurare, deci in amprenta din `cheiaLockerelor`.
+     */
+    : courier === "epacket" ? `:${(city ?? "").trim().toLowerCase()}`
     : "";
 
   /*
@@ -3591,7 +3641,8 @@ async function puncteleDeLaCurier(
    * cache hit. Filtrat doar la hit, prima cerere ar intoarce lista intreaga si a doua
    * o lista goala: un defect care apare abia la al doilea cumparator.
    */
-  const filtreaza = courier !== "shipo" && courier !== "ups";
+  /* ⚠ e-packet tot asa: orasul punctului e localitatea LOR („Sectorul 3 (Bucuresti)"). */
+  const filtreaza = courier !== "shipo" && courier !== "ups" && courier !== "epacket";
 
   /*
    * ⚠ CURIERUL NECUNOSCUT SE REFUZA INAINTEA ORICAREI CITIRI, si de azi chiar
@@ -4173,6 +4224,40 @@ async function puncteleDeLaCurier(
       return filtreazaOras(toate, city);
     } catch (e) {
       console.error("[shipping] Curiera puncte failed:", (e as Error).message);
+      return [];
+    }
+  }
+
+  if (courier === "epacket") {
+    /*
+     * ⚠ Punctele e-packet se cer pe LOCALITATEA LOR (`locality_id`), iar aici avem doar orasul:
+     * `localitatiPentruOras` da sectorul, sau toate sase in capitala, sau localitatile cu exact acel
+     * nume (judetul fiecarui punct se vede in lista). Cache-ul e pe oras (vezi `discriminant`).
+     *
+     * ⚠ Id-ul punctului poarta RETEAUA (`SDY:79`), ca un AWB emis dupa o schimbare a retelei in
+     * configurare sa plece tot in reteaua aleasa de cumparator.
+     */
+    const config = settings.epacket_config as EpacketConfig | null;
+    if (!epacketGata(config) || !config.lockere || !(city ?? "").trim()) return [];
+    const reteaEp = curierPuncte(config);
+    try {
+      const toate = await CACHE_LOCKERE.iaSau(
+        cheieCache,
+        async () => {
+          const localitati = await localitatiPentruOras(city, (q, j) => cautaLocalitati(config, q, j));
+          const liste = await Promise.all(localitati.map(async (l) => {
+            const puncte = await puncteDinLocalitate(config, reteaEp, l.id);
+            return puncteDeCheckout(reteaEp, puncte, { nume: numeleLocalitatii(l), judet: judetDupaCodAuto(l.judet) ?? l.judet })
+              .map((p) => ({ ...p, id: idPunctCheckout(reteaEp, p.id) }));
+          }));
+          return liste.flat();
+        },
+        (v) => v.length === 0,
+        60_000,
+      );
+      return toate;
+    } catch (e) {
+      console.error("[shipping] e-packet puncte failed:", (e as Error).message);
       return [];
     }
   }

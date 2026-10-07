@@ -31,7 +31,7 @@ import { createHash } from "node:crypto";
  * ═══ ⚠ SE IA AMPRENTA INTREGULUI RAND, NU A CAMPULUI CURIERULUI CERUT ═══
  *
  * O harta curier -> camp de config ar fi fost a doua sursa de adevar langa cele
- * douasprezece ramuri din cotare care isi citesc fiecare configul, si s-ar fi departat
+ * treisprezece ramuri din cotare care isi citesc fiecare configul, si s-ar fi departat
  * de ele la prima schimbare. Mai rau: o potrivire gresita ar fi luat amprenta ALTUI
  * curier, deci rotatia contului n-ar mai fi schimbat cheia, si reparatia ar fi parut
  * pusa fara sa invalideze nimic.

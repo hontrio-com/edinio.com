@@ -34,8 +34,8 @@
  *      (`shipping.actions.ts`). Arătat clientului, el a cerut „lasă doar
  *      intern", deci au căzut două cuvinte.
  *
- * ⚠ `curiera` (29.09.2026) NU e în lista lui deloc: a venit după ea. Vezi nota de
- * la intrarea ei.
+ * ⚠ `curiera` (29.09.2026) și `epacket` (07.10.2026) NU sunt în lista lui deloc: au
+ * venit după ea. Vezi nota de la intrarea fiecăreia.
  *
  * ⚠ DESCRIEREA INTRĂ ȘI ÎN CĂUTAREA DE PE PAGINĂ (`textDeCautare`), nu doar sub
  * siglă: un cuvânt scos din ea scoate integrarea de la căutarea aceea. Textul
@@ -178,6 +178,14 @@ export const INTEGRARI: Integrare[] = [
     categorie: "curieri",
     stare: "activa",
     descriere: "Generezi AWB-uri Curiera din comenzi, cu ramburs și livrare la adresă sau în lockere FANbox.",
+  },
+  /* ⚠ Textul NU e din lista clientului: integrarea a venit dupa ea (07.10.2026). Scris dupa
+     regulile probelor, asteapta sa-l dea el. Cuvintele de cautare stau in sinonime. */
+  {
+    cheie: "epacket",
+    categorie: "curieri",
+    stare: "activa",
+    descriere: "Trimiți prin DPD, Sameday, Cargus sau FAN Courier dintr-un singur cont și un singur credit.",
   },
   {
     cheie: "packeta",
@@ -626,6 +634,9 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      ea. `punct`/`ridicare`: e în `CURIERI_CU_LOCKERE`, cu toate cele trei feluri de punct
      (FANbox, pudo, oficiu), dintr-o singură rețea. `urmarire`: cronul `curiera-tracking`. */
   curiera: ["urmarire", "tracking", "punct", "ridicare"],
+  /* Broker: curierii sunt deja in descriere. `ramburs`/`awb`: emitere cu ramburs; `locker`,
+     `punct`, `ridicare`: e in `CURIERI_CU_LOCKERE`; `urmarire`: cronul `epacket-tracking`. */
+  epacket: ["ramburs", "awb", "urmarire", "tracking", "locker", "punct", "ridicare"],
 
   /* ── Plăți online ──────────────────────────────────────────────────────────
      Doar cele CINCI livrate. `card` lipsește la Stripe (e deja în descriere) și

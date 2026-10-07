@@ -247,6 +247,9 @@ const SHIPPING_METHODS: { id: string; label: string; logo: string; defaultPrice:
   /* ⚠ Curiera nu coteaza live (vezi `FARA_PRET_AUTOMAT`), deci tariful fix ESTE pretul din
      checkout: un implicit apropiat de al curierilor locali, nu zero. */
   { id: "curiera",      label: "Curiera",           logo: "/integrations/curiera.webp",     defaultPrice: 17 },
+  /* ⚠ e-packet vinde pe tariful fix (vezi `FARA_PRET_AUTOMAT`), deci implicitul e un pret
+     apropiat de al curierilor locali, nu zero. */
+  { id: "epacket",      label: "e-packet",          logo: "/integrations/e-packet.svg",     defaultPrice: 17 },
   { id: "packeta",      label: "Packeta",           logo: "/integrations/packeta.png", defaultPrice: 15 },
   { id: "innoship",     label: "Innoship",          logo: "/integrations/innoship.svg",     defaultPrice: 18 },
   { id: "smartship",    label: "SmartShip",         logo: "/integrations/smartship.png",    defaultPrice: 17 },
@@ -289,6 +292,8 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
   /* ⚠ Sir-cu-sir egal cu rezerva lui `addrLabel` din ramura Curiera a checkoutului
      (shipping.actions.ts), NU cu `COURIER_LABELS.curiera`, care e doar numele. */
   curiera: "Livrare prin Curiera",
+  /* ⚠ Sir-cu-sir egal cu rezerva lui `addrLabel` din ramura e-packet a checkoutului. */
+  epacket: "Livrare prin e-packet",
   packeta: "Livrare la adresa prin Packeta",
   innoship: "Innoship",
   smartship: "SmartShip",
@@ -320,7 +325,11 @@ const DEFAULT_CHECKOUT_LABELS: Record<string, string> = {
 /* ⚠ Curiera e aici prin HOTARARE, nu din lipsa metodei: `get_price` exista, dar pe contul de
    test a intors 0 lei pe orice cerere, iar un 0 in checkout inseamna livrare GRATUITA. Pana
    se dovedeste un pret real (si daca e cu TVA), Curiera vinde pe tariful fix. */
-const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta", "packeta", "curiera"]);
+/* ⚠ e-packet e aici prin HOTARARE (07.10.2026), desi are `POST /quotes`: tariful lor e costul
+   COMERCIANTULUI din credit, nu un pret de vitrina; cheia de test coteaza absurd (Sameday 3.307
+   lei pe 2 kg), deci nimic nu se poate dovedi; iar o cotare dureaza 1,6-3,5 s in checkout.
+   Tarifele se vad in fereastra de AWB, la emitere. In pas cu `FARA_API_DE_TARIF`. */
+const FARA_PRET_AUTOMAT = new Set(["gls", "pallex", "posta", "packeta", "curiera", "epacket"]);
 
 function buildDefaultZones(existing: Record<string, ShippingMethodConfig>): Record<string, ShippingMethodConfig> {
   const zones: Record<string, ShippingMethodConfig> = {};

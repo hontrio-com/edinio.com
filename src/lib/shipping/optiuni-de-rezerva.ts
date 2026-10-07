@@ -45,8 +45,13 @@
  * taiata de regula de mai jos ca „rezerva esuata" (Curiera ar disparea din checkout), iar
  * `atingeApiPlatit` ar consuma plafoanele de cotare pentru un apel care nu pleaca.
  * ⚠ In pas cu `FARA_PRET_AUTOMAT` din `SettingsClient.tsx`.
+ *
+ * ⚠ e-packet (07.10.2026) are `POST /quotes`, si totusi sta aici, dinadins: tariful lor e costul
+ * comerciantului din credit, nu pretul de vitrina, cheia de test coteaza absurd (Sameday 3.307 lei
+ * pe 2 kg, masurat) si o cotare dureaza 1,6-3,5 s. Tarifele se vad in fereastra de AWB.
+ * ⚠ In pas cu `FARA_PRET_AUTOMAT` din `SettingsClient.tsx`.
  */
-export const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta", "packeta", "curiera"]);
+export const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta", "packeta", "curiera", "epacket"]);
 
 /**
  * Se pastreaza optiunea asta de rezerva?

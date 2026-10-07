@@ -1,0 +1,1060 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "e-packet API",
+    "version": "1.0",
+    "description": "API-ul e-packet vă permite să generați AWB-uri din propriul sistem (magazin online,\nERP, aplicație), cu prețurile și creditul contului dumneavoastră e-packet.\n\n## Cum obțineți o cheie\nCheile API se emit la cerere: contactați-ne. Orice cont e-packet poate primi o cheie.\nCreditul se alimentează din aplicație, ca de obicei, iar prețurile sunt exact cele\npe care le vedeți în aplicație pentru contul dumneavoastră.\n\n## Autentificare\nTrimiteți cheia la fiecare cerere, în antetul `Authorization`:\n\n    Authorization: Bearer epk_live_…\n\nCheia este un secret de server. Nu o puneți niciodată într-o pagină web, într-o\naplicație mobilă sau într-un depozit de cod public. API-ul nu răspunde cererilor\nfăcute din browser.\n\n## Live și test\n- `epk_live_…` — AWB-uri reale, la curieri.\n- `epk_test_…` — mediul de test (sandbox) al curierilor, doar pentru **DPD** și **Sameday**,\n  singurii curieri cu un mediu de test real. Alt curier cu o cheie de test este refuzat\n  (`422`, `sandbox_not_supported`), iar tarifele includ doar DPD și Sameday.\n  AWB-urile de test sunt salvate, dar **nu se ia nimic din credit** și creditul nu este verificat.\n\nO cheie de test vede doar AWB-urile create cu o cheie de test, iar o cheie live nu le vede.\n\n## Limite de utilizare\nCel mult **60 de cereri pe minut** pentru o cheie, toate adresele la un loc. Peste limită\nprimiți `429` cu antetul `Retry-After`; nimic nu este creat sau taxat.\n\n## Erori\nToate erorile au aceeași formă: un cod HTTP, un `code` în engleză (stabil, pentru program)\nși un `message` în română (pentru oameni). Pentru erorile de câmp primiți și `field`.\n\n| HTTP | code | Când |\n|---|---|---|\n| 401 | `invalid_api_key` | Cheie lipsă, greșită sau necunoscută |\n| 403 | `key_inactive` | Cheia a fost dezactivată |\n| 403 | `account_inactive` | Contul nu este activ |\n| 402 | `insufficient_credit` | Credit sub minimul pentru generare (20 lei; doar chei live) |\n| 404 | `not_found` | Adresă necunoscută sau AWB inexistent în contul dumneavoastră |\n| 405 | `method_not_allowed` | Metodă HTTP greșită |\n| 422 | `invalid_field` | Câmp lipsă, invalid sau peste limita curierului |\n| 422 | `sandbox_not_supported` | Curierul nu poate fi folosit cu o cheie de test |\n| 429 | `rate_limited` | Prea multe cereri |\n| 502 | `courier_refused` | Curierul a refuzat expedierea |\n| 502 | `courier_unavailable` | Curierul nu a răspuns |\n| 500 | `internal_error` | Eroare la noi; reîncercați |\n\nCâmpurile necunoscute sunt refuzate (`422`), ca o greșeală de scriere să nu treacă neobservată.\n\n## Lucruri importante\n- **Tariful este o estimare.** Nu există rezervare de preț: AWB-ul se taxează la prețul\n  calculat în momentul generării, exact ca în aplicație. Diferențele apar rar (de exemplu\n  la o schimbare de tarif a curierului sau a abonamentului).\n- **Cheile de test** generează doar cu DPD și Sameday, în mediul lor de test, și nu se\n  taxează. Ceilalți curieri nu au un mediu de test real, așa că sunt refuzați.\n- **Fiecare cerere `POST /awb` creează și taxează un AWB nou** (cu o cheie live), chiar dacă trimiteți\n  aceeași referință de două ori. Evitarea dublurilor (de exemplu la reîncercare după un\n  timeout) este responsabilitatea sistemului dumneavoastră.\n- **Ridicarea** se comandă automat după AWB pentru DPD, FAN Courier și Dragon Star, când\n  expeditorul este o adresă. Dacă ridicarea nu poate fi comandată, AWB-ul rămâne valid.\n- **Anularea** unui AWB nu este disponibilă prin API: contactați-ne.\n\n## Limite pe curier\nSe aplică, pe lângă regulile câmpurilor, limita mai strictă dintre aplicație și curier.\nPeste limită primiți `422` cu câmpul vizat, înainte ca ceva să fie trimis curierului.\n\n| Curier | Tipuri | Limite |\n|---|---|---|\n| DPD (`DPD`) | D2D, D2L, L2D, L2L | 31,5 kg pe colet și în total; greutate volumetrică totală (L×l×h÷5000) 31,5 kg; 1–10 colete; latură max. 175 cm; asigurare max. 55.000 lei; deschidere colet doar cu ramburs. Locker: 15 kg (și volumetric ÷5000), 60×37×35 cm |\n| Sameday (`SDY`) | D2D, D2L, L2D, L2L | 50 kg pe colet; latură max. 300 cm; asigurare max. 50.000 lei. Locker: 20 kg (și volumetric ÷6000), 47×44×39 cm |\n| Cargus (`CGS`) | D2D, D2L | 100 kg pe colet; latură max. 160 cm; 800 kg facturați pe expediere (volumetric ÷6000); asigurare max. 23.000 lei; livrare sâmbăta (nu la locker). Locker: 15 kg facturați, 60×40×37 cm |\n| FAN Courier (`FCR`) | D2D, D2L, L2D, L2L | 50 kg în total; 1–10 colete; latură max. 300 cm; bloc max. 20 caractere; fără deschidere colet. FANbox: 30 kg, 45×44,3×40,4 cm. PayPoint (doar livrare): 10 kg, 90×60×60 cm |\n| Dragon Star (`DSC`) | D2D | 100 kg pe colet; latură max. 300 cm |\n| TCE (`TCE`) | D2D | 31,5 kg pe colet, în total și volumetric (÷5000); latură max. 300 cm; plic max. 0,3 kg; bloc + scară + etaj + apartament împreună max. 20 caractere |\n\nPentru toți curierii: colet 0,1–100 kg, laturi 1–300 cm (apoi limita curierului); plic\ncel mult 0,5 kg (TCE 0,3 kg); un singur colet la locker; deschiderea coletului nu se\npoate la locker sau la plic; asigurarea nu se poate pentru colete peste 32 kg; livrarea\nsâmbăta doar la Cargus.\n\n## Statusuri\nCodurile din `GET /status` (câmpul `status`). Cele finale nu se mai schimbă.\n\n| status | Denumire | Final |\n|---|---|---|\n| `creat` | Creat | nu |\n| `preluat` | Preluat de curier | nu |\n| `preluare_esuata` | Preluare eșuată | nu |\n| `in_tranzit` | În tranzit | nu |\n| `in_livrare` | În livrare | nu |\n| `avizat` | Avizat | nu |\n| `livrare_esuata` | Livrare eșuată | nu |\n| `redirectionat` | Redirecționat | nu |\n| `retinut` | Reținut | nu |\n| `avariat` | Avariat | nu |\n| `refuzat` | Refuzat de destinatar | nu |\n| `retur_in_curs` | Retur în curs | nu |\n| `livrat` | Livrat | da |\n| `returnat` | Returnat expeditorului | da |\n| `anulat` | Anulat | da |\n| `distrus` | Distrus / furat | da |\n| `abandonat` | Abandonat | da |\n| `inchis_administrativ` | Închis administrativ | da |\n| `necunoscut` | Necunoscut | nu |\n\nFormatul etichetei: A6 există la DPD, Sameday și Cargus; FAN Courier tipărește A4;\nDragon Star și TCE au o singură etichetă, a curierului. Un format indisponibil devine A4.\n"
+  },
+  "servers": [
+    {
+      "url": "https://zbdnzolswscjoxhpsbtt.supabase.co/functions/v1/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Localități"
+    },
+    {
+      "name": "Lockere"
+    },
+    {
+      "name": "Tarife"
+    },
+    {
+      "name": "AWB"
+    }
+  ],
+  "paths": {
+    "/localities": {
+      "get": {
+        "tags": [
+          "Localități"
+        ],
+        "summary": "Căutare localitate",
+        "description": "Id-ul localității se folosește la tarife și la AWB. Fără filtre primiți toate\nlocalitățile, în pagini de 1.000.\n",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Numele localității, cel puțin 2 litere. Diacriticele și cratimele nu contează.",
+            "schema": {
+              "type": "string",
+              "example": "cluj-napoca"
+            }
+          },
+          {
+            "name": "county",
+            "in": "query",
+            "description": "Codul județului (B, CJ, IS, …).",
+            "schema": {
+              "type": "string",
+              "example": "CJ"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "O pagină de localități.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Page"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Locality"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 109,
+                      "name": "CLUJ NAPOCA",
+                      "display_name": "Cluj Napoca (Cluj)",
+                      "county": "CJ"
+                    }
+                  ],
+                  "page": 1,
+                  "page_size": 1000,
+                  "total": 1,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidField"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/lockers": {
+      "get": {
+        "tags": [
+          "Lockere"
+        ],
+        "summary": "Lockere și puncte de ridicare",
+        "description": "Punctele unui curier, opțional într-o localitate. `id` se trimite ca `locker_id`\nla AWB. Dragon Star și TCE nu au lockere; Cargus livrează la locker, dar nu preia\ndin locker.\n",
+        "parameters": [
+          {
+            "name": "courier",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DPD",
+                "SDY",
+                "FCR",
+                "CGS"
+              ]
+            }
+          },
+          {
+            "name": "locality_id",
+            "in": "query",
+            "description": "Id-ul unei localități din `/localities`.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "O pagină de lockere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Page"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Locker"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidField"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/quotes": {
+      "post": {
+        "tags": [
+          "Tarife"
+        ],
+        "summary": "Tarife de la toți curierii",
+        "description": "Prețul final, cu TVA, pentru contul dumneavoastră: cât s-ar lua din credit.\nEste o estimare: AWB-ul se taxează la prețul din momentul generării. Doar România.\n\nCu o cheie de test primiți doar tarifele DPD și Sameday.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRequest"
+              },
+              "example": {
+                "sender_locality_id": 14515,
+                "recipient_locality_id": 109,
+                "package_type": "parcel",
+                "parcels": [
+                  {
+                    "weight": 2,
+                    "length": 30,
+                    "width": 20,
+                    "height": 10
+                  }
+                ],
+                "delivery_type": "ALL",
+                "cash_on_delivery": 150
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "O ofertă pe curier și tip de livrare.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "quotes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Quote"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "quotes": [
+                    {
+                      "courier": "DPD",
+                      "delivery_type": "D2D",
+                      "available": true,
+                      "price": 28.68,
+                      "currency": "RON"
+                    },
+                    {
+                      "courier": "TCE",
+                      "delivery_type": "D2D",
+                      "available": false,
+                      "reason": "Curierul nu oferă un tarif pentru acest transport."
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidField"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/awb": {
+      "post": {
+        "tags": [
+          "AWB"
+        ],
+        "summary": "Generare AWB",
+        "description": "Creează AWB-ul la curier și îl taxează din credit. Dacă creditul este sub 20 lei\n(inclusiv negativ), cererea este refuzată (`402`) și nimic nu este creat.\n\nCu o cheie de test: doar `DPD` și `SDY` (altfel `422`, `sandbox_not_supported`), creditul\nnu este verificat și nu se ia nimic din el.\n\nFiecare cerere creează un AWB nou, chiar cu aceeași `reference`.\n\nPentru o parte la locker (`L2D`/`L2L` expeditor, `D2L`/`L2L` destinatar) trimiteți\n`locker_id` în locul adresei. O parte cu `company` este o firmă.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AwbRequest"
+              },
+              "example": {
+                "courier": "DPD",
+                "delivery_type": "D2D",
+                "sender": {
+                  "first_name": "Ion",
+                  "last_name": "Popescu",
+                  "company": "Magazin SRL",
+                  "phone": "0712345678",
+                  "email": "comenzi@magazin.ro",
+                  "locality_id": 14515,
+                  "postcode": "010011",
+                  "street": "Strada Exemplu",
+                  "number": "5"
+                },
+                "recipient": {
+                  "first_name": "Ana",
+                  "last_name": "Ionescu",
+                  "phone": "0722333444",
+                  "email": "ana@example.ro",
+                  "locality_id": 109,
+                  "postcode": "400001",
+                  "street": "Strada Mare",
+                  "number": "12",
+                  "block": "A2",
+                  "apartment": "7"
+                },
+                "package_type": "parcel",
+                "parcels": [
+                  {
+                    "weight": 2,
+                    "length": 30,
+                    "width": 20,
+                    "height": 10
+                  }
+                ],
+                "contents": "Haine",
+                "cash_on_delivery": {
+                  "amount": 150,
+                  "account_holder": "Ion Popescu",
+                  "iban": "RO49AAAA1B31007593840000",
+                  "bank_name": "Banca Transilvania"
+                },
+                "reference": "COMANDA-1042"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "AWB creat și taxat.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Awb"
+                },
+                "example": {
+                  "awb_number": "80512345678",
+                  "courier": "DPD",
+                  "delivery_type": "D2D",
+                  "price": 31.12,
+                  "currency": "RON",
+                  "credit_left": 468.88,
+                  "reference": "COMANDA-1042",
+                  "pickup": {
+                    "requested": true,
+                    "id": "123456",
+                    "from": "2026-10-05T09:00:00",
+                    "to": "2026-10-05T18:00:00"
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "$ref": "#/components/responses/Error"
+          },
+          "422": {
+            "$ref": "#/components/responses/InvalidField"
+          },
+          "502": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/label": {
+      "get": {
+        "tags": [
+          "AWB"
+        ],
+        "summary": "Eticheta AWB (PDF)",
+        "description": "PDF-ul etichetei, pentru un AWB din contul dumneavoastră. Antetul `X-Label-Size`\nspune formatul primit (`A4`, `A6` sau `courier_default`).\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/awb"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "A4",
+                "A6"
+              ],
+              "default": "A4"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Eticheta.",
+            "headers": {
+              "X-Label-Size": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "A4",
+                    "A6",
+                    "courier_default"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "tags": [
+          "AWB"
+        ],
+        "summary": "Statusul livrării",
+        "description": "Statusul unui AWB din contul dumneavoastră. Un status mai nou de 30 de minute nu este\ncerut din nou curierului; un status final (livrat, returnat, …) nu se mai schimbă.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/awb"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Statusul.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                },
+                "example": {
+                  "awb": "80512345678",
+                  "courier": "DPD",
+                  "status": "in_tranzit",
+                  "label": "În tranzit",
+                  "is_final": false,
+                  "status_at": "2026-10-05T11:20:00Z",
+                  "checked_at": "2026-10-05T12:01:00Z"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Cheia API, `epk_live_…` sau `epk_test_…`."
+      }
+    },
+    "parameters": {
+      "page": {
+        "name": "page",
+        "in": "query",
+        "description": "Pagina, de la 1.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "awb": {
+        "name": "awb",
+        "in": "query",
+        "required": true,
+        "description": "Numărul AWB.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Error": {
+        "description": "Eroare.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InvalidField": {
+        "description": "Câmp lipsă, invalid sau peste limită.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_field",
+                "message": "Codul poștal are exact 6 cifre.",
+                "field": "recipient.postcode"
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string",
+                "description": "În română."
+              },
+              "field": {
+                "type": "string",
+                "description": "Doar pentru erorile de câmp."
+              }
+            }
+          }
+        }
+      },
+      "Page": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer",
+            "example": 1000
+          },
+          "total": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "has_more": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Locality": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "county": {
+            "type": "string",
+            "description": "Codul județului."
+          }
+        }
+      },
+      "Locker": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Se trimite ca `locker_id` la AWB."
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "locker",
+              "office",
+              "paypoint"
+            ]
+          },
+          "address": {
+            "type": "string"
+          },
+          "postcode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "locality_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "latitude": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "longitude": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      },
+      "Parcel": {
+        "type": "object",
+        "required": [
+          "weight"
+        ],
+        "properties": {
+          "weight": {
+            "0": null,
+            "type": "number",
+            "description": "kg",
+            "1–100 (apoi limita curierului).": null
+          },
+          "length": {
+            "type": "number",
+            "description": "cm; obligatoriu la colet."
+          },
+          "width": {
+            "type": "number",
+            "description": "cm; obligatoriu la colet."
+          },
+          "height": {
+            "type": "number",
+            "description": "cm; obligatoriu la colet."
+          }
+        }
+      },
+      "QuoteRequest": {
+        "type": "object",
+        "required": [
+          "sender_locality_id",
+          "recipient_locality_id",
+          "package_type",
+          "parcels"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sender_locality_id": {
+            "type": "integer"
+          },
+          "recipient_locality_id": {
+            "type": "integer"
+          },
+          "package_type": {
+            "type": "string",
+            "enum": [
+              "parcel",
+              "envelope"
+            ]
+          },
+          "parcels": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "La plic, exact un element, doar cu greutatea.",
+            "items": {
+              "$ref": "#/components/schemas/Parcel"
+            }
+          },
+          "delivery_type": {
+            "type": "string",
+            "enum": [
+              "D2D",
+              "D2L",
+              "L2D",
+              "L2L",
+              "ALL"
+            ],
+            "default": "ALL"
+          },
+          "cash_on_delivery": {
+            "type": "number",
+            "description": "Suma rambursului",
+            "lei.": null
+          },
+          "insurance": {
+            "type": "number",
+            "description": "Valoarea declarată",
+            "lei.": null
+          },
+          "open_package": {
+            "type": "boolean"
+          },
+          "saturday_delivery": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Quote": {
+        "type": "object",
+        "properties": {
+          "courier": {
+            "type": "string",
+            "enum": [
+              "DPD",
+              "SDY",
+              "CGS",
+              "FCR",
+              "DSC",
+              "TCE"
+            ]
+          },
+          "delivery_type": {
+            "type": "string",
+            "enum": [
+              "D2D",
+              "D2L",
+              "L2D",
+              "L2L"
+            ]
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "price": {
+            "type": "number",
+            "description": "Lei",
+            "cu TVA. Doar când available este true.": null
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RON"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Doar când available este false."
+          }
+        }
+      },
+      "Side": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "first_name",
+          "last_name",
+          "phone",
+          "email"
+        ],
+        "properties": {
+          "first_name": {
+            "type": "string",
+            "description": "3–25 caractere",
+            "cel puțin o literă.": null
+          },
+          "last_name": {
+            "type": "string",
+            "description": "3–25 caractere",
+            "cel puțin o literă.": null
+          },
+          "company": {
+            "type": "string",
+            "description": "Dacă există",
+            "partea este o firmă.": null
+          },
+          "phone": {
+            "type": "string",
+            "description": "0712345678 sau +40712345678; spațiile și cratimele se ignoră."
+          },
+          "email": {
+            "type": "string"
+          },
+          "locality_id": {
+            "type": "integer",
+            "description": "Pentru adresă. Din `/localities`."
+          },
+          "postcode": {
+            "type": "string",
+            "description": "Pentru adresă. Exact 6 cifre."
+          },
+          "street": {
+            "type": "string",
+            "description": "Pentru adresă. Max. 50."
+          },
+          "number": {
+            "type": "string",
+            "description": "Pentru adresă. Max. 10."
+          },
+          "block": {
+            "type": "string",
+            "description": "Max. 30."
+          },
+          "entrance": {
+            "type": "string",
+            "description": "Scara. Max. 10."
+          },
+          "floor": {
+            "type": "string",
+            "description": "Etajul. Max. 10."
+          },
+          "apartment": {
+            "type": "string",
+            "description": "Max. 10."
+          },
+          "locker_id": {
+            "type": "string",
+            "description": "Pentru locker",
+            "în locul adresei. Din `/lockers`.": null
+          }
+        }
+      },
+      "AwbRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "courier",
+          "delivery_type",
+          "sender",
+          "recipient",
+          "package_type",
+          "parcels",
+          "contents"
+        ],
+        "properties": {
+          "courier": {
+            "type": "string",
+            "enum": [
+              "DPD",
+              "SDY",
+              "CGS",
+              "FCR",
+              "DSC",
+              "TCE"
+            ]
+          },
+          "delivery_type": {
+            "type": "string",
+            "enum": [
+              "D2D",
+              "D2L",
+              "L2D",
+              "L2L"
+            ]
+          },
+          "sender": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/Side"
+          },
+          "package_type": {
+            "type": "string",
+            "enum": [
+              "parcel",
+              "envelope"
+            ]
+          },
+          "parcels": {
+            "type": "array",
+            "minItems": 1,
+            "description": "La plic, exact un element, doar cu greutatea. La locker, un singur colet.",
+            "items": {
+              "$ref": "#/components/schemas/Parcel"
+            }
+          },
+          "contents": {
+            "type": "string",
+            "description": "Conținutul",
+            "max. 50 caractere.": null
+          },
+          "cash_on_delivery": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Ramburs. Toate cele patru câmpuri sunt obligatorii împreună.",
+            "required": [
+              "amount",
+              "account_holder",
+              "iban",
+              "bank_name"
+            ],
+            "properties": {
+              "amount": {
+                "type": "number",
+                "description": "Lei."
+              },
+              "account_holder": {
+                "type": "string",
+                "description": "Nume și prenume",
+                "fără diacritice.": null
+              },
+              "iban": {
+                "type": "string",
+                "description": "Fără spații."
+              },
+              "bank_name": {
+                "type": "string"
+              }
+            }
+          },
+          "insurance": {
+            "type": "number",
+            "description": "Valoarea declarată",
+            "lei.": null
+          },
+          "open_package": {
+            "type": "boolean"
+          },
+          "saturday_delivery": {
+            "type": "boolean",
+            "description": "Doar Cargus",
+            "nu la locker.": null
+          },
+          "reference": {
+            "type": "string",
+            "description": "Referința dumneavoastră (de ex. numărul comenzii), max. 100. Doar pentru evidență; nu previne dublurile."
+          }
+        }
+      },
+      "Awb": {
+        "type": "object",
+        "properties": {
+          "awb_number": {
+            "type": "string"
+          },
+          "courier": {
+            "type": "string"
+          },
+          "delivery_type": {
+            "type": "string"
+          },
+          "price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Lei, cu TVA, luat din credit (cu o cheie de test nu se ia nimic)."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "RON"
+            ]
+          },
+          "credit_left": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pickup": {
+            "description": "Doar DPD, FAN Courier și Dragon Star cu expeditor la adresă; altfel null.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "requested": {
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "from": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Începutul intervalului (DPD)."
+                  },
+                  "to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "description": "Sfârșitul intervalului (DPD)."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Doar când requested este false."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "awb": {
+            "type": "string"
+          },
+          "courier": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "Codul statusului e-packet."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Denumirea în română."
+          },
+          "is_final": {
+            "type": "boolean"
+          },
+          "status_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}

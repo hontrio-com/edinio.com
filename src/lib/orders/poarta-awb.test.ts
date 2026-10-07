@@ -196,7 +196,8 @@ test("⚠ poarta chiar refuza pe drumul intreg, nu doar in functia pura", async 
    ══════════════════════════════════════════════════════════════════════════
 
    ⚠ ASTA E PARTEA CARE CHIAR APARA. Regula de mai sus e o functie; ce conteaza e ca toate cele
-   douazeci si una de actiuni de emitere o cheama (afara de cele doua scutite, mai jos). Copiata cu mana, s-ar dezbina la primul curier nou:
+   douazeci de actiuni de emitere o cheama (sunt douazeci si doua, numarate pe 07.10.2026, la intrarea
+   e-packet; doua sunt scutite, mai jos). Copiata cu mana, s-ar dezbina la primul curier nou:
    cine il adauga copiaza fisierul de langa, si daca acela e cel fara poarta, lipsa e tacuta.
 
    ⚠ SI EMITATORII CARE NU SUNT CURIERI (13.09.2026). Plasa prindea doar `create…Awb…`, asa ca
@@ -394,10 +395,10 @@ test("⚠ eticheta de RETUR Sameday nu blocheaza livrarea", () => {
   assert.equal(deCeNuSePoateAwbPropriu(comanda({ awburi: {} }), "sameday"), null);
 });
 
-test("⚠ toti cei 18 curieri sunt acoperiti, si fiecare se recunoaste pe sine", async () => {
+test("⚠ toti cei 19 curieri sunt acoperiti, si fiecare se recunoaste pe sine", async () => {
   const { COLOANA_AWB } = await import("./awb-propriu");
   const chei = Object.keys(COLOANA_AWB) as (keyof typeof COLOANA_AWB)[];
-  assert.equal(chei.length, 18, "harta de coloane nu mai are 18 curieri");
+  assert.equal(chei.length, 19, "harta de coloane nu mai are 19 curieri");
   for (const c of chei) {
     // Mutantul e pe APELANT: fiecare curier, intrebat despre propriul AWB, trece;
     // intrebat despre al vecinului, cade.

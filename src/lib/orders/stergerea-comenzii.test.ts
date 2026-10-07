@@ -82,14 +82,14 @@ test("o comanda fara niciun colet se sterge in orice stare", () => {
   }
 });
 
-test("⚠ TOTI CEI 18 CURIERI OPRESC STERGEREA, nu doar GLS", () => {
+test("⚠ TOTI CEI 19 CURIERI OPRESC STERGEREA, nu doar GLS", () => {
   /*
    * ⚠ PROBA ASTA E CHIAR DEFECTUL. `deleteOrder` citea `gls_awb_number` si atat. Se
    * enumera din `COLOANA_AWB`, nu dintr-o lista scrisa aici: un curier nou adaugat acolo
    * si uitat in regula pica proba, nu productia.
    */
   const curieri = Object.keys(COLOANA_AWB) as CurierPropriu[];
-  assert.equal(curieri.length, 18, "harta are 18 curieri");
+  assert.equal(curieri.length, 19, "harta are 19 curieri");
   for (const c of curieri) {
     const motiv = deCeNuSeStergeComanda(cu(c, "X1", "shipped"));
     assert.ok(motiv, `${c} nu opreste stergerea`);

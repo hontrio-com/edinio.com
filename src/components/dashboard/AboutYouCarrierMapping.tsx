@@ -52,7 +52,7 @@ export function AboutYouCarrierMapping({
    * Carrierele romanesti se scot in fata, si se numara.
    *
    * Lista lor e pe TARA, iar pentru Romania — probat pe API-ul real — exista UN
-   * SINGUR carrier: `FAN_RO`. Ecranul insira 18 curieri Edinio, deci comerciantul
+   * SINGUR carrier: `FAN_RO`. Ecranul insira 19 curieri Edinio, deci comerciantul
    * care expediaza cu Cargus sau Sameday cauta zadarnic si sfarseste prin a alege
    * ceva strain, adica prin a raporta la About You un curier cu care coletul nu
    * pleaca. E o limitare a lor, dar taciuta de noi devine defectul nostru.

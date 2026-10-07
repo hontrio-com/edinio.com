@@ -63,7 +63,10 @@ test("⚠⚠ ramura curiera exista in bucla de curieri, INAINTEA else-ului gener
   assert.ok(generic, "nu mai gasesc else-ul generic: proba n-are fata de ce compara ordinea");
   assert.ok(iBucla < iRamura && iRamura < generic.index, "ramura curiera nu mai sta in bucla, inaintea generic-ului");
 
-  const ramura = c.slice(iRamura, generic.index);
+  /* ⚠ Pana la ramura URMATOARE, nu pana la generic: de la 07.10.2026 e-packet sta intre ele, iar
+     regulile Curiera (de ex. „fara lockerLabel") nu sunt ale lui. */
+  const iUrmatoarea = c.indexOf('} else if (courierId === "', iRamura + 1);
+  const ramura = c.slice(iRamura, iUrmatoarea > 0 && iUrmatoarea < generic.index ? iUrmatoarea : generic.index);
   /* Sincrona, ca GLS si Posta: pretul vine din zona, nu dintr-o cotare. */
   assert.doesNotMatch(ramura, /promises\.push/, "Curiera coteaza iar live, desi e in FARA_API_DE_TARIF");
   /* Semnarea e unica, la sfarsit: o iesire din ramura ar pleca fara simbol. */

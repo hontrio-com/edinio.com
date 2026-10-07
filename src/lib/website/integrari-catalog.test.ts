@@ -146,7 +146,8 @@ test("se potrivesc CUVINTELE, nu fraza", () => {
 
   /* Rubrica trage după ea toată familia. 29.09.2026: Curiera e al optsprezecelea; numărul
      se urcă odată cu livrarea, nu se slăbește în „cel puțin". */
-  assert.equal(gaseste("curieri").length, 18);
+  /* 07.10.2026: cu e-packet, 19. */
+  assert.equal(gaseste("curieri").length, 19);
   /* Căutarea goală nu filtrează nimic. */
   assert.equal(gaseste("   ").length, INTEGRARI.length);
   /* Iar exemplele din placeholder trebuie să funcționeze toate trei. */
@@ -200,7 +201,8 @@ test("numărătoarea de active și de anunțate e cea din panou", () => {
   /* ⚠ 29.09.2026: Curiera a intrat direct „activa", fără să fi fost anunțată: activele
      urcă 41 -> 42, anunțatele rămân 24. */
   assert.equal(NUMAR_IN_CURAND, 24);
-  assert.equal(NUMAR_ACTIVE, 42);
+  /* ⚠ 07.10.2026: e-packet a intrat direct „activa": activele urca 42 -> 43. */
+  assert.equal(NUMAR_ACTIVE, 43);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {
@@ -439,7 +441,7 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
     innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
     dpd: "dpd", sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
-    cargus: "cargus", colete: "coleteOnline", curiera: "curiera",
+    cargus: "cargus", colete: "coleteOnline", curiera: "curiera", epacket: "epacket",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(
@@ -468,7 +470,7 @@ test("punct de ridicare arată exact curierii unde cumpărătorul chiar alege pu
   const ID_LA_CHEIE: Record<string, LogoKey> = {
     sameday: "sameday", "fan-courier": "fanCourier", dpd: "dpd", cargus: "cargus",
     gls: "gls", posta: "postaRomana", innoship: "innoship", packeta: "packeta",
-    smartship: "smartship", shipo: "shipo", ups: "ups", curiera: "curiera",
+    smartship: "smartship", shipo: "shipo", ups: "ups", curiera: "curiera", epacket: "epacket",
   };
   const sursa = readFileSync(
     join(AICI, "..", "..", "lib", "actions", "shipping.actions.ts"),
@@ -494,10 +496,11 @@ test("căutările care cădeau la ZERO după textele noi întorc iar ce trebuie"
   */
   const gaseste = (q: string) => INTEGRARI.filter((i) => potrivire(i, q)).map((i) => i.cheie);
 
-  /* Cădeau la zero de tot. 29.09.2026: cu Curiera, 15 cu ramburs și 18 curieri în total. */
-  assert.equal(gaseste("ramburs").length, 15);
-  assert.equal(gaseste("curierat").length, 18);
-  assert.equal(gaseste("expediere").length, 18);
+  /* Cădeau la zero de tot. 29.09.2026: cu Curiera, 15 cu ramburs și 18 curieri în total.
+     07.10.2026: cu e-packet (are ramburs), 16 și 19. */
+  assert.equal(gaseste("ramburs").length, 16);
+  assert.equal(gaseste("curierat").length, 19);
+  assert.equal(gaseste("expediere").length, 19);
   assert.deepEqual(gaseste("whatsapp"), ["notice"]);
   assert.deepEqual(gaseste("shopping"), ["googleMerchant"]);
   assert.equal(gaseste("newsletter").length, 3);
@@ -517,7 +520,7 @@ test("căutările care cădeau la ZERO după textele noi întorc iar ce trebuie"
   /* Se subțiaseră fără să cadă de tot. */
   assert.ok(gaseste("card").includes("netopia"));
   assert.ok(gaseste("awb").includes("ecolet"));
-  assert.ok(gaseste("livrare").length === 18);
+  assert.ok(gaseste("livrare").length === 19, "cu e-packet (07.10.2026), 19");
 });
 
 test("cuvintele de legătură nu taie rezultate", () => {

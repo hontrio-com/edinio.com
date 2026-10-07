@@ -12,7 +12,7 @@ import type {
   Block, BlockStyle, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock,
   ButtonBlock, ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, FaqBlock,
   TrustBlock, ProductsBlock, SocialBlock, ContactBlock, HtmlBlock, ColumnItem, GalleryItem, GreutateFont,
-  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock, AcasaBlock,
+  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock, AcasaBlock, InaltimeRand, SpatiereLitere,
 } from "@/lib/pages/blocks.types";
 import { SECTIUNI_ACASA, VARIANTE_HERO } from "@/lib/pages/pagina-acasa";
 import { ProductPicker } from "./ProductPicker";
@@ -34,6 +34,19 @@ const GREUTATI: { value: GreutateFont; label: string }[] = [
   { value: "400", label: "Normal" }, { value: "500", label: "Mediu" }, { value: "600", label: "Semi-gros" },
   { value: "700", label: "Gros" }, { value: "800", label: "Foarte gros" }, { value: "900", label: "Maxim" },
 ];
+
+/*
+  Spatiul intre litere si intre randuri, aceleasi variante in toate blocurile
+  (07.10.2026). La titluri, lipsa se arata „Strânsă”: clasa lor e `tracking-tight`.
+*/
+const SPATIERE: { value: SpatiereLitere; label: string }[] = [
+  { value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "F. largă" },
+];
+const RANDURI: { value: InaltimeRand; label: string }[] = [
+  { value: "tight", label: "Strâns" }, { value: "normal", label: "Normal" }, { value: "relaxed", label: "Aerisit" }, { value: "loose", label: "Larg" },
+];
+/** Cu „Automat”: unde ce era pana acum nu cade pe nicio varianta (titlul urmeaza marimea). */
+const RANDURI_AUTO: { value: InaltimeRand | "auto"; label: string }[] = [{ value: "auto", label: "Auto" }, ...RANDURI];
 
 /* ─── Columns layout picker ────────────────────────────────────────────────── */
 
@@ -146,6 +159,10 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
             <AlegeFont label="Fontul subtitlului" value={b.subtitleFont ?? null} onChange={(v) => patch({ subtitleFont: v })} />
             <Select label="Grosime" value={b.titleWeight ?? "900"} onChange={(v) => patch({ titleWeight: v })} options={GREUTATI} />
             <Toggle label="Titlu cu majuscule" checked={b.titleTransform === "uppercase"} onChange={(v) => patch({ titleTransform: v ? "uppercase" : "none" })} />
+            <Segmentat label="Titlu: spațiu între rânduri" value={b.titleLineHeight ?? "normal"} onChange={(v) => patch({ titleLineHeight: v })} options={RANDURI} />
+            <Segmentat label="Titlu: spațiere între litere" value={b.titleSpacing ?? "tight"} onChange={(v) => patch({ titleSpacing: v })} options={SPATIERE} />
+            <Segmentat label="Subtitlu: spațiu între rânduri" value={b.subtitleLineHeight ?? "auto"} onChange={(v) => patch({ subtitleLineHeight: v === "auto" ? undefined : v })} options={RANDURI_AUTO} />
+            <Segmentat label="Subtitlu: spațiere între litere" value={b.subtitleSpacing ?? "normal"} onChange={(v) => patch({ subtitleSpacing: v })} options={SPATIERE} />
           </Grup>
 
           <Grup titlu="Aspect">
@@ -185,8 +202,8 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
           <Grup titlu="Tipografie" deschisImplicit>
             <AlegeFont label="Font" value={b.font ?? null} onChange={(v) => patch({ font: v })} />
             <Select label="Grosime" value={b.weight ?? "900"} onChange={(v) => patch({ weight: v })} options={GREUTATI} />
-            <Segmentat label="Spațiere între litere" value={b.spacing ?? "normal"} onChange={(v) => patch({ spacing: v })}
-              options={[{ value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "Foarte largă" }]} />
+            <Segmentat label="Spațiu între rânduri" value={b.lineHeight ?? "auto"} onChange={(v) => patch({ lineHeight: v === "auto" ? undefined : v })} options={RANDURI_AUTO} />
+            <Segmentat label="Spațiere între litere" value={b.spacing ?? "tight"} onChange={(v) => patch({ spacing: v })} options={SPATIERE} />
             <Segmentat label="Litere" value={b.transform ?? "none"} onChange={(v) => patch({ transform: v })}
               options={[{ value: "none", label: "Normale" }, { value: "uppercase", label: "MAJUSCULE" }, { value: "capitalize", label: "Fiecare Cuvânt" }]} />
             <Toggle label="Cursiv (italic)" checked={!!b.italic} onChange={(v) => patch({ italic: v })} />
@@ -218,10 +235,8 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
             <AlegeFont label="Font" value={b.font ?? null} onChange={(v) => patch({ font: v })} gol="Fontul magazinului" />
             <Range label="Mărime" value={b.fontSize ?? 16} min={12} max={32} onChange={(v) => patch({ fontSize: v })} />
             <Select label="Grosime" value={b.weight ?? "400"} onChange={(v) => patch({ weight: v })} options={GREUTATI} />
-            <Segmentat label="Spațiu între rânduri" value={b.lineHeight ?? "relaxed"} onChange={(v) => patch({ lineHeight: v })}
-              options={[{ value: "tight", label: "Strâns" }, { value: "normal", label: "Normal" }, { value: "relaxed", label: "Aerisit" }, { value: "loose", label: "Larg" }]} />
-            <Segmentat label="Spațiere între litere" value={b.spacing ?? "normal"} onChange={(v) => patch({ spacing: v })}
-              options={[{ value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "F. largă" }]} />
+            <Segmentat label="Spațiu între rânduri" value={b.lineHeight ?? "relaxed"} onChange={(v) => patch({ lineHeight: v })} options={RANDURI} />
+            <Segmentat label="Spațiere între litere" value={b.spacing ?? "normal"} onChange={(v) => patch({ spacing: v })} options={SPATIERE} />
           </Grup>
           <ControaleAspect style={b.style} onChange={setStyle} showTextColor />
         </div>
@@ -315,6 +330,7 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
             <AlegeFont label="Font" value={b.font ?? null} onChange={(v) => patch({ font: v })} gol="Fontul magazinului" />
             <Select label="Grosime" value={b.weight ?? "700"} onChange={(v) => patch({ weight: v })} options={GREUTATI} />
             <Toggle label="Text cu majuscule" checked={b.transform === "uppercase"} onChange={(v) => patch({ transform: v ? "uppercase" : "none" })} />
+            <Segmentat label="Spațiere între litere" value={b.spacing ?? "normal"} onChange={(v) => patch({ spacing: v })} options={SPATIERE} />
           </Grup>
           <Grup titlu="Al doilea buton">
             <Text label="Text" value={b.secondLabel} onChange={(v) => patch({ secondLabel: v })} placeholder="Lasă gol ca să nu apară" />

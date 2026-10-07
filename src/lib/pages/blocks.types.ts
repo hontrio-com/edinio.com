@@ -115,6 +115,11 @@ export interface HeroBlock extends BaseBlock {
   subtitleFont?: CheieFont | null;
   titleWeight?: GreutateFont;
   titleTransform?: "none" | "uppercase";
+  /* 07.10.2026: spatiul intre randuri si intre litere. Lipsa = ca pana acum. */
+  titleSpacing?: SpatiereLitere;
+  titleLineHeight?: InaltimeRand;
+  subtitleSpacing?: SpatiereLitere;
+  subtitleLineHeight?: InaltimeRand;
   /** Imaginea de fundal se apropie lent (Ken Burns). */
   kenBurns?: boolean;
   /** Intensitatea stratului intunecat, 0-80 (%). Lipsa = 45, ca pana acum. */
@@ -131,7 +136,9 @@ export interface HeadingBlock extends BaseBlock {
   /* 25.09.2026 (tipografie) */
   font?: CheieFont | null;
   weight?: GreutateFont;
-  spacing?: "tight" | "normal" | "wide" | "wider";
+  spacing?: SpatiereLitere;
+  /** 07.10.2026. Lipsa = cea data de marime. */
+  lineHeight?: InaltimeRand;
   transform?: "none" | "uppercase" | "capitalize";
   italic?: boolean;
   /** Text in degrade (doua culori). Bate `color`. */
@@ -150,9 +157,12 @@ export interface TextBlock extends BaseBlock {
   /** px, 12-32 */
   fontSize?: number;
   weight?: GreutateFont;
-  lineHeight?: "tight" | "normal" | "relaxed" | "loose";
-  spacing?: "tight" | "normal" | "wide" | "wider";
+  lineHeight?: InaltimeRand;
+  spacing?: SpatiereLitere;
 }
+
+export type SpatiereLitere = "tight" | "normal" | "wide" | "wider";
+export type InaltimeRand = "tight" | "normal" | "relaxed" | "loose";
 
 export interface ImageBlock extends BaseBlock {
   type: "image";
@@ -211,6 +221,8 @@ export interface ButtonBlock extends BaseBlock {
   font?: CheieFont | null;
   weight?: GreutateFont;
   transform?: "none" | "uppercase";
+  /** 07.10.2026. Lipsa = normala. */
+  spacing?: SpatiereLitere;
   /** Pictograma langa text (din `icon-registry`), stanga sau dreapta. */
   icon?: string | null;
   iconPos?: "left" | "right";

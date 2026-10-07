@@ -31,12 +31,12 @@ const BTN_ROUNDED: Record<string, string> = {
 
 type Varianta = "solid" | "outline" | "soft" | "ghost";
 
-function Btn({ href, basePath, label, color, variant = "solid", size = "md", rounded = "lg", effect = "none", textColor, fullWidth, newTab, icon, iconPos = "left", font, weight, transform }: {
+function Btn({ href, basePath, label, color, variant = "solid", size = "md", rounded = "lg", effect = "none", textColor, fullWidth, newTab, icon, iconPos = "left", font, weight, transform, spacing }: {
   href?: string; basePath: string; label: string; color: string;
   variant?: Varianta; size?: "sm" | "md" | "lg"; rounded?: "sm" | "md" | "lg" | "full";
   effect?: string; textColor?: string | null; fullWidth?: boolean; newTab?: boolean;
   icon?: string | null; iconPos?: "left" | "right";
-  font?: string | null; weight?: string; transform?: string;
+  font?: string | null; weight?: string; transform?: string; spacing?: string;
 }) {
   const resolved = resolveHref(href, basePath);
   const ext = newTab || isExternalHref(href);
@@ -46,7 +46,7 @@ function Btn({ href, basePath, label, color, variant = "solid", size = "md", rou
   else if (variant === "outline") style = { ...style, border: `2px solid ${color}`, color: textColor || color, background: "transparent" };
   else if (variant === "soft") style = { ...style, backgroundColor: cuTransparenta(color, 0.12), color: textColor || color };
   else style = { ...style, color: textColor || color, background: "transparent" }; // ghost
-  style = { ...style, ...tipografie({ font, weight, transform }) };
+  style = { ...style, ...tipografie({ font, weight, transform, spacing }) };
   const ic = icon ? <PageIcon name={icon} className={size === "lg" ? "h-5 w-5" : "h-4 w-4"} /> : null;
   return (
     <a href={resolved} {...(ext ? { target: "_blank", rel: "noopener noreferrer" } : {})}
@@ -66,11 +66,18 @@ function tipografie(t: { font?: string | null; weight?: string; transform?: stri
   if (t.weight) s.fontWeight = Number(t.weight);
   if (t.transform && t.transform !== "none") s.textTransform = t.transform as CSSProperties["textTransform"];
   if (t.italic) s.fontStyle = "italic";
-  if (t.spacing === "tight") s.letterSpacing = "-0.03em";
+  /* „Normala” aleasa anume bate `tracking-tight` din clasa titlurilor (07.10.2026). */
+  if (t.spacing === "normal") s.letterSpacing = "normal";
+  else if (t.spacing === "tight") s.letterSpacing = "-0.03em";
   else if (t.spacing === "wide") s.letterSpacing = "0.04em";
   else if (t.spacing === "wider") s.letterSpacing = "0.12em";
   return s;
 }
+
+/** Inaltimea randului la text (blocul de text, subtitlul din hero). */
+const INALTIME_RAND: Record<string, number> = { tight: 1.3, normal: 1.6, relaxed: 1.8, loose: 2.1 };
+/** Inaltimea randului la titluri; „normal” = `leading-tight`, cel de pana acum din hero. */
+const INALTIME_TITLU: Record<string, number> = { tight: 1.05, normal: 1.25, relaxed: 1.4, loose: 1.6 };
 
 export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock; color: string; basePath: string; h1?: boolean }) {
   const split = block.layout === "split-left" || block.layout === "split-right";
@@ -92,13 +99,21 @@ export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock
       {block.title && (
         <Titlu
           className="text-3xl pg-sm:text-4xl pg-md:text-5xl font-black tracking-tight leading-tight"
-          style={{ color: textColor, ...tipografie({ font: block.titleFont, weight: block.titleWeight, transform: block.titleTransform }) }}
+          style={{
+            color: textColor,
+            ...tipografie({ font: block.titleFont, weight: block.titleWeight, transform: block.titleTransform, spacing: block.titleSpacing }),
+            ...(block.titleLineHeight ? { lineHeight: INALTIME_TITLU[block.titleLineHeight] } : {}),
+          }}
         >
           {block.title}
         </Titlu>
       )}
       {block.subtitle && (
-        <p className="mt-4 text-base pg-sm:text-lg max-w-2xl leading-relaxed" style={{ color: textColor, opacity: 0.85, ...tipografie({ font: block.subtitleFont }) }}>{block.subtitle}</p>
+        <p className="mt-4 text-base pg-sm:text-lg max-w-2xl leading-relaxed" style={{
+          color: textColor, opacity: 0.85,
+          ...tipografie({ font: block.subtitleFont, spacing: block.subtitleSpacing }),
+          ...(block.subtitleLineHeight ? { lineHeight: INALTIME_RAND[block.subtitleLineHeight] } : {}),
+        }}>{block.subtitle}</p>
       )}
       {(block.buttonLabel || block.secondLabel) && (
         <div className={`mt-8 flex flex-wrap gap-3 ${split || block.align === "left" ? "" : "justify-center"}`}>
@@ -169,6 +184,7 @@ export function HeadingBlockView({ block, h1 }: { block: HeadingBlock; h1?: bool
     style.color = "transparent";
   } else if (block.color) style.color = block.color;
   if (custom) { style.fontSize = Math.max(12, block.sizeCustom ?? 32); style.lineHeight = 1.1; }
+  if (block.lineHeight) style.lineHeight = INALTIME_TITLU[block.lineHeight];
   const colorat = !!block.color || !!block.gradient;
   return (
     <BlockShell style={block.style}>
@@ -182,8 +198,6 @@ export function HeadingBlockView({ block, h1 }: { block: HeadingBlock; h1?: bool
     </BlockShell>
   );
 }
-
-const INALTIME_RAND: Record<string, number> = { tight: 1.3, normal: 1.6, relaxed: 1.8, loose: 2.1 };
 
 export function TextBlockView({ block }: { block: TextBlock }) {
   /* Tipografia textului, pe bloc (25.09.2026). Lipsa oricarui camp = ca pana acum. */
@@ -288,11 +302,11 @@ export function ButtonBlockView({ block, color, basePath }: { block: ButtonBlock
         <Btn href={block.href} basePath={basePath} label={block.label} color={block.color || color}
           variant={block.variant} size={block.size} rounded={block.rounded} effect={block.effect}
           textColor={block.textColor} fullWidth={block.fullWidth} newTab={block.newTab}
-          icon={block.icon} iconPos={block.iconPos} font={block.font} weight={block.weight} transform={block.transform} />
+          icon={block.icon} iconPos={block.iconPos} font={block.font} weight={block.weight} transform={block.transform} spacing={block.spacing} />
         {block.secondLabel && (
           <Btn href={block.secondHref} basePath={basePath} label={block.secondLabel} color={block.color || color}
             variant={block.secondVariant ?? "outline"} size={block.size} rounded={block.rounded}
-            fullWidth={block.fullWidth} newTab={block.newTab} font={block.font} weight={block.weight} transform={block.transform} />
+            fullWidth={block.fullWidth} newTab={block.newTab} font={block.font} weight={block.weight} transform={block.transform} spacing={block.spacing} />
         )}
       </div>
     </BlockShell>

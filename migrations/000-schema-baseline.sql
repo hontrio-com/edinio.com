@@ -502,7 +502,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -3718,10 +3718,20 @@ AS $function$
       from (values
         ('cargus', o.cargus_awb_number, null::text, o.cargus_awb_at, null::text),
         ('colete', o.colete_awb_number, null::text, o.colete_awb_at, null::text),
-        ('curiera', o.curiera_awb_number, null::text, o.curiera_awb_at, null::text),
+        -- Curiera e broker: cumparatorul primeste numarul PARTENERULUI (DPD), cu care il cauta
+        -- curierul care chiar livreaza; fara el, numarul Curiera, ca pana acum.
+        ('curiera',
+          coalesce(nullif(btrim(o.curiera_partener_awb), ''), o.curiera_awb_number), null::text, o.curiera_awb_at,
+          case when nullif(btrim(o.curiera_partener_awb), '') is not null then nullif(btrim(o.curiera_partener), '') end),
         ('dhl', o.dhl_awb_number, o.dhl_tracking_url, o.dhl_awb_at, null::text),
         ('dpd', o.dpd_awb_number, null::text, o.dpd_awb_at, null::text),
         ('ecolet', o.ecolet_awb_number, null::text, o.ecolet_awb_at, null::text),
+        /* Numele curierului de dedesubt, din codul LOR. Un cod nou iese null (fara legatura). */
+        ('epacket', o.epacket_awb_number, null::text, o.epacket_awb_at,
+          case o.epacket_curier
+            when 'DPD' then 'DPD' when 'SDY' then 'Sameday' when 'CGS' then 'Cargus'
+            when 'FCR' then 'FAN Courier' when 'DSC' then 'Dragon Star' when 'TCE' then 'TCE'
+          end),
         ('fancourier', o.fan_courier_awb_number, null::text, o.fan_courier_awb_at, null::text),
         ('fedex', o.fedex_awb_number, o.fedex_tracking_url, o.fedex_awb_at, null::text),
         ('gls', o.gls_awb_number, null::text, o.gls_awb_at, null::text),
@@ -4266,6 +4276,25 @@ AS $function$
      and lower(o.order_number) in (n.v, '#' || n.v)
    order by o.created_at desc
    limit 1;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cont_panou_conturile_comenzilor(p_business uuid, p_orders uuid[])
+ RETURNS TABLE(order_id uuid, cont_id uuid, nume text, email text, temei text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select l.order_id, l.cont_id,
+         nullif(btrim(c.nume), ''),
+         (select k.valoare_bruta from privat.cont_contact k
+           where k.business_id = l.business_id and k.cont_id = l.cont_id and k.fel = 'email'
+           order by k.verificat_la nulls last, k.creat_la limit 1),
+         l.temei
+    from privat.cont_comanda l
+    join privat.cont_cumparator c on c.id = l.cont_id and c.business_id = l.business_id and c.sters_la is null
+   where l.business_id = p_business
+     and l.order_id = any(coalesce(p_orders, '{}'::uuid[]));
 $function$
 ;
 
@@ -11041,7 +11070,8 @@ create table if not exists privat.store_settings (
   meta_capi_config jsonb,
   tiktok_capi_config jsonb,
   cont_client_config jsonb default '{}'::jsonb not null,
-  curiera_config jsonb);
+  curiera_config jsonb,
+  epacket_config jsonb);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -12360,7 +12390,17 @@ create table if not exists public.orders (
   curiera_status_checked_at timestamp with time zone,
   curiera_evenimente_semnalate jsonb,
   curiera_partener text,
-  curiera_partener_awb text);
+  curiera_partener_awb text,
+  epacket_awb_number text,
+  epacket_awb_at timestamp with time zone,
+  epacket_reference text,
+  epacket_curier text,
+  epacket_tip_livrare text,
+  epacket_test boolean,
+  epacket_status_code text,
+  epacket_status_label text,
+  epacket_status_at timestamp with time zone,
+  epacket_status_checked_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -13155,7 +13195,7 @@ alter table public.intentii_publicare add constraint intentii_publicare_sursa_ch
 alter table public.olx_adverts add constraint olx_adverts_dezactivat_de_check CHECK (((dezactivat_de IS NULL) OR (dezactivat_de = ANY (ARRAY['om'::text, 'stoc'::text, 'produs-inactiv'::text, 'inainte-de-stergere'::text]))));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
 alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'curiera'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'curiera'::text, 'epacket'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
@@ -13381,6 +13421,7 @@ insert into privat.campuri_secrete (coloana, cale) values ('dpd_config', 'passwo
 insert into privat.campuri_secrete (coloana, cale) values ('ecolet_config', 'api_token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('emag_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('email_config', 'smtp.pass') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('epacket_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fan_courier_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fedex_config', 'client_secret') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fgo_config', 'private_key') on conflict do nothing;
@@ -13676,6 +13717,7 @@ CREATE INDEX orders_dhl_urmarire_idx ON public.orders USING btree (dhl_status_ch
 CREATE INDEX orders_dpd_urmarire_idx ON public.orders USING btree (dpd_status_checked_at NULLS FIRST) WHERE ((dpd_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ecolet_emitere_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_order_to_send_id IS NOT NULL) AND (ecolet_awb_number IS NULL));
 CREATE INDEX orders_ecolet_urmarire_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_epacket_urmarire_idx ON public.orders USING btree (epacket_status_checked_at NULLS FIRST) WHERE ((epacket_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_fan_courier_urmarire_idx ON public.orders USING btree (fan_courier_status_checked_at NULLS FIRST) WHERE ((fan_courier_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_fedex_urmarire_idx ON public.orders USING btree (fedex_status_checked_at NULLS FIRST) WHERE ((fedex_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_gls_urmarire_idx ON public.orders USING btree (gls_status_checked_at NULLS FIRST) WHERE ((gls_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
@@ -13827,7 +13869,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(meta_capi_config, '{access_token}'::text[]) AS meta_capi_config,
     privat.decripteaza_config(tiktok_capi_config, '{access_token}'::text[]) AS tiktok_capi_config,
     cont_client_config,
-    privat.decripteaza_config(curiera_config, '{api_key}'::text[]) AS curiera_config
+    privat.decripteaza_config(curiera_config, '{api_key}'::text[]) AS curiera_config,
+    privat.decripteaza_config(epacket_config, '{api_key}'::text[]) AS epacket_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -16840,6 +16883,7 @@ grant execute on function public.cont_leaga_comanda_plasata(p_business uuid, p_c
 grant execute on function public.cont_maturare(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_panou_chei(p_business uuid, p_chei text[]) to service_role;
 grant execute on function public.cont_panou_comanda_de_legat(p_business uuid, p_cont uuid, p_numar text) to service_role;
+grant execute on function public.cont_panou_conturile_comenzilor(p_business uuid, p_orders uuid[]) to service_role;
 grant execute on function public.cont_panou_dezleaga_comanda(p_business uuid, p_cont uuid, p_order uuid) to service_role;
 grant execute on function public.cont_panou_fisa(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_panou_iesire(p_business uuid, p_cont uuid) to service_role;
@@ -17219,6 +17263,7 @@ revoke execute on function public.cont_leaga_comanda_plasata(p_business uuid, p_
 revoke execute on function public.cont_maturare(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_panou_chei(p_business uuid, p_chei text[]) from public;
 revoke execute on function public.cont_panou_comanda_de_legat(p_business uuid, p_cont uuid, p_numar text) from public;
+revoke execute on function public.cont_panou_conturile_comenzilor(p_business uuid, p_orders uuid[]) from public;
 revoke execute on function public.cont_panou_dezleaga_comanda(p_business uuid, p_cont uuid, p_order uuid) from public;
 revoke execute on function public.cont_panou_fisa(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_panou_iesire(p_business uuid, p_cont uuid) from public;

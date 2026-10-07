@@ -16,6 +16,8 @@ import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { etichetaOferta, ofertePosibile, termenLivrare, type OfertaAratata } from "@/lib/innoship/preturi";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -61,6 +63,8 @@ type ComandaInnoship = {
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaInnoship;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "innoship");
   const awb = comanda.innoship_awb_number ?? null;
 
   const laPunct = (addr.courier ?? "").toLowerCase().trim() === "innoship"
@@ -87,7 +91,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     return {
       nume: order.customer_name,
       persoanaContact: order.customer_name,
-      strada: addr.street || addr.address || "",
+      strada: punctStrain ? punctStrain.linieAcasa : (addr.street || addr.address || ""),
       numar: addr.street_no || null,
       /* ⚠ La punct, localitatea si judetul sunt ALE PUNCTULUI, nu ale clientului. */
       oras: (laPunct ? addr.locker_city : "") || addr.city || "",
@@ -292,6 +296,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           </div>
         ) : (
           <div className="space-y-4">
+            <PunctAltuiCurier punct={punctStrain} curier="Innoship" />
             {laPunct && (
               <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/5 p-3 text-xs">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-info" />

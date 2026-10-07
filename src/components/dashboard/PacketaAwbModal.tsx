@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -64,6 +66,8 @@ type ComandaPacketa = {
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaPacketa;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "packeta");
 
   const packetId = comanda.packeta_packet_id ?? null;
   const [emitere, setEmitere] = useState(false);
@@ -131,7 +135,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     const datePacketa = {
       destinatar: {
         nume: order.customer_name,
-        strada: addr.street || addr.address || "",
+        strada: punctStrain ? punctStrain.linieAcasa : (addr.street || addr.address || ""),
         numar: addr.street_no || null,
         /* ⚠ La punct, orasul si codul postal sunt ALE PUNCTULUI: coletul ajunge
            acolo, nu acasa la client. Aceeasi regula ca la GLS si Posta. */
@@ -317,6 +321,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           </div>
         ) : (
           <div className="space-y-4">
+            <PunctAltuiCurier punct={punctStrain} curier="Packeta" />
             {laPunct && (
               <div className="flex gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs">
                 <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />

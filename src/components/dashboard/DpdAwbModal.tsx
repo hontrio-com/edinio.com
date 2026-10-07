@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -58,6 +60,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   const hasAwb = !!orderData.dpd_awb_number;
   const addr = order.shipping_address as (ShippingAddress & { country?: string; postal_code?: string }) | null;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "dpd");
   // International order? The destination service is auto-discovered server-side.
   const intlCountry = euCountryByIso2(addr?.country);
   // Delivery to a DPD pickup point (office/locker): the AWB carries
@@ -95,7 +99,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [recipientEmail, setRecipientEmail] = useState(order.customer_email ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
   const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
-  const [recipientStreet, setRecipientStreet] = useState(stradaDestinatarului(addr));
+  const [recipientStreet, setRecipientStreet] = useState(punctStrain ? punctStrain.linieAcasa : stradaDestinatarului(addr));
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
   const [recipientAddressNote, setRecipientAddressNote] = useState("");
 
@@ -293,6 +297,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           ) : (
             /* ── Creare AWB ── */
             <div className="space-y-5">
+              <PunctAltuiCurier punct={punctStrain} curier="DPD" />
               {/* Destinatar */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Destinatar</p>

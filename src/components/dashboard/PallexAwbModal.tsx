@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaCuNumar } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -87,6 +89,8 @@ type ComandaPallex = {
 function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   const comanda = order as typeof order & ComandaPallex;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "pallex");
 
   /*
    * ⚠ Partida tocmai emisa se tine LOCAL, si fereastra NU se inchide dupa emitere.
@@ -120,7 +124,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   const [judet, setJudet] = useState(potrivesteJudet(addr.county) ?? "");
   const [codPostal, setCodPostal] = useState(addr.postal_code ?? "");
   const [strada, setStrada] = useState(
-    stradaCuNumar(addr),
+    punctStrain ? punctStrain.linieAcasa : stradaCuNumar(addr),
   );
 
   const [numarPaleti, setNumarPaleti] = useState("1");
@@ -478,6 +482,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
 
         {!areAwb && (
           <div className="space-y-3">
+            <PunctAltuiCurier punct={punctStrain} curier="Pall-Ex" />
             {/*
               ⚠ Avertismentul care nu apare la niciun alt curier. Pall-Ex nu are
               ramburs, deci pe o comanda neplatita marfa pleaca fara nicio cale de

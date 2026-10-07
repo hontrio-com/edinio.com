@@ -10,6 +10,8 @@ import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { adaugaZileLucratoare, ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -74,6 +76,8 @@ type ComandaPosta = {
 function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaPosta;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "posta" || c === "posta-romana");
 
   const awb = comanda.posta_awb_number ?? null;
   const [emitere, setEmitere] = useState(false);
@@ -107,7 +111,7 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
     const datePosta = {
       destinatar: {
         nume: order.customer_name,
-        strada: addr.street || addr.address || "",
+        strada: punctStrain ? punctStrain.linieAcasa : (addr.street || addr.address || ""),
         numar: addr.street_no || null,
         /* ⚠ La oficiu, localitatea si judetul sunt ALE OFICIULUI, nu ale
            clientului: coletul ajunge acolo, nu acasa la el. Aceeasi regula ca la
@@ -250,6 +254,7 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
           </div>
         ) : (
           <div className="space-y-4">
+            <PunctAltuiCurier punct={punctStrain} curier="Posta Romana" />
             {laOficiu && (
               <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/5 p-3 text-xs">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-info" />

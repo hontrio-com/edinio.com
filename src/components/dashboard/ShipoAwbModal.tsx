@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -79,6 +81,8 @@ type ComandaShipo = {
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaShipo;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "shipo");
   const awb = comanda.shipo_awb_number ?? null;
 
   const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({
@@ -129,7 +133,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   function destinatar() {
     return {
       nume: order.customer_name,
-      strada: addr.street || addr.address || "",
+      strada: punctStrain ? punctStrain.linieAcasa : (addr.street || addr.address || ""),
       numar: addr.street_no || null,
       /*
        * ⚠ Adresa RAMANE a clientului chiar si la livrarea in punct: Shipo ruteaza
@@ -344,6 +348,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           </div>
         ) : (
           <div className="space-y-4">
+            <PunctAltuiCurier punct={punctStrain} curier="Shipo" />
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs">
                 Greutate (kg)

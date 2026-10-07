@@ -51,3 +51,14 @@ test("un curier strain fara nume de punct sau eticheta tot primeste ceva lizibil
   assert.equal(r.numePunct, "un punct de ridicare");
   assert.equal(r.curierPunct, "sameday");
 });
+
+test("⚠⚠ easybox-ul eMAG (doar `locker_id`, adresa punctului in `street`) e tot punct strain", () => {
+  /* Forma reala a celor 157 de comenzi eMAG de punct din productie (07.10.2026), date inventate. */
+  const r = livrareaComenzii({
+    source: "emag", city: "Iasi", county: "Iasi", street: "Bd. Exemplu 1 (easybox Mall)",
+    locker_id: "1234", locker_name: "easybox Mall Exemplu",
+  } as never);
+  assert.ok(r.fel === "punct_strain", JSON.stringify(r));
+  assert.equal(r.curierPunct, "eMAG");
+  assert.equal(r.linieAcasa, "");
+});

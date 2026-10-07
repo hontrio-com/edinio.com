@@ -22,6 +22,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -63,6 +65,8 @@ export function WootAwbModal(props: Props) {
 
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "woot");
   // Ramburs dupa BANI, nu dupa metoda: comanda #0033 a plecat cu plata online
   // neincasata si ramburs zero. Vezi `rambursDeIncasat`.
   const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
@@ -77,7 +81,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
      („Strada, nr."), iar el pleaca INTREG la curier (`address: receiverAddress`). Deci
      trebuie linia completa, cu numarul in ea, nu strada fara numar. Aceeasi alegere ca
      la Cargus, care are exact aceeasi forma de camp. */
-  const [receiverAddress, setReceiverAddress] = useState(liniaAdresei(addr));
+  const [receiverAddress, setReceiverAddress] = useState(punctStrain ? punctStrain.linieAcasa : liniaAdresei(addr));
   const [receiverPhone, setReceiverPhone] = useState(order.customer_phone ?? "");
   const [receiverEmail, setReceiverEmail] = useState(order.customer_email ?? "");
 
@@ -462,6 +466,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               </div>
             ) : (
               <>
+                <PunctAltuiCurier punct={punctStrain} curier="Woot" />
                 {/* Courier chosen by the customer at checkout */}
                 {addr.woot_courier_name && (
                   <div className="flex items-start gap-2 p-3 bg-info/5 border border-info/20 rounded-lg">

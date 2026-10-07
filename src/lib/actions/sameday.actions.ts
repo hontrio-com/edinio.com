@@ -21,6 +21,7 @@ import {
 } from "@/lib/sameday/client";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 import { stradaDestinatarului, type AdresaLivrare } from "@/lib/orders/adresa";
+import { eComandaDePunct } from "@/lib/orders/punctul-altui-curier";
 import { adresaDupaEmitereSameday, type LockerAles } from "@/lib/sameday/punctul-de-pe-awb";
 import { destinatarulLaPunct } from "@/lib/shipping/punctul-de-pe-comanda";
 
@@ -525,7 +526,21 @@ export async function createSamedayReturnAwbAction(
   }
 
   const adr = (order.shipping_address ?? {}) as Record<string, unknown>;
-  const strada = [stradaDestinatarului(adr as AdresaLivrare), String(adr.street_no ?? "").trim()].filter(Boolean).join(" nr. ");
+  /*
+   * ⚠ La o comanda livrata in PUNCT, adresa de pe comanda e a punctului (`punctul-altui-curier.ts`).
+   * La returul standard curierul vine la client: cu adresa punctului, ar fi mers la dulap. Atunci
+   * se ia strada de acasa; fara ea, returul standard se opreste, iar returul prin locker (clientul
+   * duce singur coletul) merge mai departe.
+   */
+  const acasa = eComandaDePunct(adr) ? String(adr.home_address ?? "").trim() : null;
+  if (acasa === "" && input.fel !== "locker") {
+    return {
+      error: "Comanda a fost livrata la un punct de ridicare si nu are adresa de acasa a clientului, "
+        + "deci curierul n-ar avea de unde ridica returul. Alege returul prin locker, sau afla adresa de la client.",
+    };
+  }
+  const strada = acasa
+    || [stradaDestinatarului(adr as AdresaLivrare), String(adr.street_no ?? "").trim()].filter(Boolean).join(" nr. ");
 
   const r = await cuRegistru(
     createAdminClient(),

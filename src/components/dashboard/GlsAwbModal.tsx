@@ -11,6 +11,8 @@ import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaCuNumar } from "@/lib/orders/adresa";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -81,6 +83,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & { gls_awb_number?: string | null };
   const areAwb = !!comanda.gls_awb_number;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "gls");
 
   /*
    * Livrarea la punct GLS aleasa de client in checkout.
@@ -100,7 +104,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [email, setEmail] = useState(order.customer_email ?? "");
   const [oras, setOras] = useState((laPunct ? addr.locker_city : "") || addr.city || "");
   const [strada, setStrada] = useState(
-    stradaCuNumar(addr),
+    punctStrain ? punctStrain.linieAcasa : stradaCuNumar(addr),
   );
   const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || "");
   const [numarColete, setNumarColete] = useState("1");
@@ -323,6 +327,7 @@ Am salvat-o si noi, deci o poti descarca oricand din comanda. Butonul de mai
 
         {!areAwb && (
           <div className="space-y-3">
+            <PunctAltuiCurier punct={punctStrain} curier="GLS" />
             {laPunct && (
               <div className="rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-xs">
                 Livrare la punct GLS: <strong>{addr.locker_name || addr.locker_id}</strong>.

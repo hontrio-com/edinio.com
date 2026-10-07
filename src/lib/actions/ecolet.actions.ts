@@ -32,6 +32,7 @@ import { rezolvaLocalitatea } from "@/lib/ecolet/cautare";
 import type { Json } from "@/types/database.types";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 import { stradaDestinatarului, type AdresaLivrare } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 
 /**
  * Actiunile eColet.
@@ -66,6 +67,26 @@ async function proprietar(businessId: string): Promise<Proprietar> {
 }
 
 // ─── Configurare ──────────────────────────────────────────────────────────────
+
+/**
+ * Strada destinatarului la eColet, care o citeste din COMANDA (fereastra n-are camp de strada).
+ *
+ * ⚠ eColet nu are puncte de ridicare. Pe o comanda facuta pentru punctul altui curier, `address`
+ * (sau `street`, la eMAG) e adresa PUNCTULUI: coletul ar fi plecat la dulap, pe numele
+ * clientului. Atunci strada e cea de acasa (`home_address`), iar fara ea emiterea se opreste:
+ * omul nu o poate scrie din fereastra. Vezi `punctul-altui-curier.ts`.
+ */
+function stradaEcolet(addr: Record<string, unknown>): { strada: string; numar: string } | { error: string } {
+  const strain = punctulAltuiCurier(addr, (c) => c === "ecolet");
+  if (!strain) return { strada: stradaDestinatarului(addr as AdresaLivrare), numar: String(addr.street_no ?? "") };
+  if (strain.linieAcasa) return { strada: strain.linieAcasa, numar: "" };
+  return {
+    error: `Clientul a ales ${strain.numePunct} (${strain.dePe}), iar prin eColet coletul nu poate ajunge acolo. `
+      + "Comanda nu are adresa de acasa a clientului: emite cu curierul punctului"
+      + (strain.dePe === "eMAG" ? " (prin eMAG)" : "")
+      + ", sau afla adresa de la client.",
+  };
+}
 
 export async function saveEcoletConfig(
   businessId: string,
@@ -325,10 +346,12 @@ export async function coteazaEcoletAction(
   }
 
   const addr = (order.shipping_address ?? {}) as Record<string, unknown>;
+  const strada = stradaEcolet(addr);
+  if ("error" in strada) return { error: strada.error };
   const destinatar: AdresaComanda = {
     nume: String(order.customer_name ?? ""),
-    strada: stradaDestinatarului(addr),
-    numar: String(addr.street_no ?? ""),
+    strada: strada.strada,
+    numar: strada.numar,
     oras: date.oras,
     judet: date.judet,
     localityId: localitate.id,
@@ -426,10 +449,12 @@ export async function createEcoletAwbAction(
   }
 
   const destinatarBrut = (order.shipping_address ?? {}) as Record<string, unknown>;
+  const stradaDest = stradaEcolet(destinatarBrut);
+  if ("error" in stradaDest) return { error: stradaDest.error };
   const destinatar: AdresaComanda = {
     nume: String(order.customer_name ?? ""),
-    strada: stradaDestinatarului(destinatarBrut as AdresaLivrare),
-    numar: String(destinatarBrut.street_no ?? ""),
+    strada: stradaDest.strada,
+    numar: stradaDest.numar,
     oras: date.oras,
     judet: date.judet,
     localityId: localitate?.id ?? 0,

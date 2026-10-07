@@ -15,6 +15,8 @@ import { ButonPrinteaza } from "./ButonPrinteaza";
 import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -62,6 +64,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   const hasAwb = !!orderData.cargus_awb_number;
   const addr = order.shipping_address as ShippingAddress | null;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "cargus");
 
   // Delivery to a Cargus Ship & Go point: the AWB carries DeliveryPudoPoint +
   // ServiceId 38 (resolved server-side from the order).
@@ -98,7 +102,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [recipientEmail, setRecipientEmail] = useState(order.customer_email ?? "");
   const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
-  const [recipientAddress, setRecipientAddress] = useState(liniaAdresei(addr));
+  const [recipientAddress, setRecipientAddress] = useState(punctStrain ? punctStrain.linieAcasa : liniaAdresei(addr));
   const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code ?? "");
 
   const [creating, setCreating] = useState(false);
@@ -309,6 +313,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           ) : (
             /* ── Creare AWB ── */
             <div className="space-y-5">
+              <PunctAltuiCurier punct={punctStrain} curier="Cargus" />
               {/* Destinatar */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Destinatar</p>

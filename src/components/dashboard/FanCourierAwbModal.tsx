@@ -11,6 +11,8 @@ import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -84,6 +86,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   const hasAwb = !!orderData.fan_courier_awb_number;
   const addr = order.shipping_address as ShippingAddress | null;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "fan-courier" || c === "fancourier");
 
   /*
    * Livrarea intr-un punct FAN cere id-ul punctului: AWB-ul poarta `pickupLocationId` si
@@ -128,7 +132,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [recipientLocality, setRecipientLocality] = useState(
     laPunctFan ? (addr?.locker_city ?? addr?.city ?? "") : (addr?.city ?? ""),
   );
-  const [recipientStreet, setRecipientStreet] = useState(stradaDestinatarului(addr));
+  const [recipientStreet, setRecipientStreet] = useState(punctStrain ? punctStrain.linieAcasa : stradaDestinatarului(addr));
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
   const [recipientZipCode, setRecipientZipCode] = useState(addr?.postal_code ?? "");
 
@@ -389,6 +393,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           ) : (
             /* ── Creare AWB ── */
             <div className="space-y-5">
+              <PunctAltuiCurier punct={punctStrain} curier="FAN Courier" />
               {/* Destinatar */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Destinatar</p>

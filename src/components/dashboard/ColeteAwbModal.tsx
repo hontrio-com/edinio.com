@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -74,6 +76,8 @@ export function ColeteAwbModal(props: Props) {
 
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "colete");
   // Ramburs dupa BANI, nu dupa metoda: o comanda cu plata online ramasa neplatita
   // pleca altfel fara nicio cale de incasare. Vezi `rambursDeIncasat`.
   const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
@@ -92,7 +96,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   /* ⚠ Aici `stradaDestinatarului` e ajutorul POTRIVIT, si ramane: Colete are DOUA
      campuri, „Strada" si „Numar", duse separat la curier. `liniaAdresei` ar fi pus
      numarul de doua ori. Ce lipsea era semanarea numarului, mai jos. */
-  const [receiverStreet, setReceiverStreet] = useState(stradaDestinatarului(addr));
+  const [receiverStreet, setReceiverStreet] = useState(punctStrain ? punctStrain.linieAcasa : stradaDestinatarului(addr));
   const [receiverStreetNumber, setReceiverStreetNumber] = useState((addr.street_no ?? "").trim());
   const [receiverPostalCode, setReceiverPostalCode] = useState(addr.postal_code ?? "");
 
@@ -321,6 +325,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           ) : (
             /* ── Create AWB ── */
             <>
+              <PunctAltuiCurier punct={punctStrain} curier="Colete Online" />
               {/* Receiver */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">

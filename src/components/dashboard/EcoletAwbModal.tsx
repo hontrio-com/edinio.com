@@ -16,6 +16,8 @@ import { numeServiciuEcolet } from "@/lib/ecolet/preturi";
 import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -72,6 +74,8 @@ type ComandaEcolet = {
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaEcolet;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "ecolet");
 
   /* Starea locala a emiterii: fereastra nu se inchide dupa trimitere. */
   const [emisa, setEmisa] = useState<{ stare: string; awb: string | null; eroare: string | null } | null>(null);
@@ -340,6 +344,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         {/* ── Formularul ── */}
         {!gata && !inCurs && (
           <div className="space-y-3">
+            <PunctAltuiCurier punct={punctStrain} curier="eColet" />
             {alesDeClient && (
               <div className="rounded-lg border border-info/30 bg-info/5 px-3 py-2 text-xs">
                 Clientul a ales si a platit: <strong>{alesDeClient}</strong>.

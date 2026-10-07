@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -135,6 +137,8 @@ function descarca(base64: string, nume: string, tip: string) {
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaDhl;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "dhl");
   const awb = comanda.dhl_awb_number ?? null;
 
   const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({
@@ -186,7 +190,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   function destinatar() {
     return {
       nume: order.customer_name,
-      strada: addr.street || addr.address || "",
+      strada: punctStrain ? punctStrain.linieAcasa : (addr.street || addr.address || ""),
       numar: addr.street_no || null,
       oras: addr.city || "",
       judet: addr.county || null,
@@ -595,6 +599,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           </div>
         ) : (
           <div className="space-y-4">
+            <PunctAltuiCurier punct={punctStrain} curier="DHL" />
             {/*
               ⚠⚠ RAMBURSUL: AICI SE OPRESTE EMITEREA.
               DHL Express nu vinde plata la livrare cu origine Romania (verificat pe

@@ -52,6 +52,7 @@ import { dateEpacketPentruLot } from "@/lib/epacket/lot";
 import { cautaLocalitati, puncteDinLocalitate } from "@/lib/epacket/nomenclator";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
 export interface BulkResult {
@@ -104,6 +105,31 @@ const AWB_CONCURRENCY = 3;
 export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
 export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket";
 const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera", "epacket"];
+
+// Map a stored checkout courier value to our supported set.
+const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
+  cargus: "cargus", sameday: "sameday", fancourier: "fancourier", "fan-courier": "fancourier", "fan_courier": "fancourier", dpd: "dpd",
+  gls: "gls",
+  pallex: "pallex", "pall-ex": "pallex",
+  posta: "posta", "posta-romana": "posta",
+  innoship: "innoship",
+  packeta: "packeta",
+  smartship: "smartship",
+  /* ⚠ O cheie lipsa aici NU cade la tsc (`Record<string, …>`): modul „AWB dupa
+     client" ar sari TACUT peste comenzile Shipo si le-ar raporta drept „sarite",
+     nu „esuate". */
+  shipo: "shipo",
+  fedex: "fedex",
+  ups: "ups",
+  /* ⚠ Cheia trebuie sa fie sir-cu-sir ce scrie checkout-ul in
+     `shipping_address.courier` — vezi `CourierSelector`. Lipsa, modul „AWB dupa
+     client" ar sari TACUT peste comenzile DHL si le-ar raporta „sarite". */
+  dhl: "dhl",
+  /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
+  curiera: "curiera",
+  /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
+  epacket: "epacket",
+};
 
 interface ShippingAddr {
   county?: string; city?: string; address?: string; street?: string; street_no?: string;
@@ -493,30 +519,6 @@ export async function bulkGenerateAwbs(
   /** Comenzile care aveau deja AWB la curierul cerut. Nu cer nimic, deci se numara, nu se numesc. */
   let dejaAreAwb = 0;
 
-  // Map a stored checkout courier value to our supported set.
-  const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
-    cargus: "cargus", sameday: "sameday", fancourier: "fancourier", "fan-courier": "fancourier", "fan_courier": "fancourier", dpd: "dpd",
-    gls: "gls",
-    pallex: "pallex", "pall-ex": "pallex",
-    posta: "posta", "posta-romana": "posta",
-    innoship: "innoship",
-    packeta: "packeta",
-    smartship: "smartship",
-    /* ⚠ O cheie lipsa aici NU cade la tsc (`Record<string, …>`): modul „AWB dupa
-       client" ar sari TACUT peste comenzile Shipo si le-ar raporta drept „sarite",
-       nu „esuate". */
-    shipo: "shipo",
-    fedex: "fedex",
-    ups: "ups",
-    /* ⚠ Cheia trebuie sa fie sir-cu-sir ce scrie checkout-ul in
-       `shipping_address.courier` — vezi `CourierSelector`. Lipsa, modul „AWB dupa
-       client" ar sari TACUT peste comenzile DHL si le-ar raporta „sarite". */
-    dhl: "dhl",
-    /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
-    curiera: "curiera",
-    /* Sir-cu-sir ce scrie checkout-ul in `shipping_address.courier` (id-ul zonei). */
-    epacket: "epacket",
-  };
 
   await runPool(orders ?? [], async (o) => {
     const addr = (o.shipping_address ?? {}) as ShippingAddr;
@@ -708,6 +710,18 @@ async function createAwbForOrder(
 ): Promise<{ error: string } | Record<string, unknown>> {
   const o = order as BulkOrderRow;
   const addr = (o.shipping_address ?? {}) as ShippingAddr;
+  /*
+   * ⚠ PUNCTUL ALTUI CURIER NU PLEACA IN LOT (07.10.2026).
+   *
+   * La punct, adresa de pe comanda e a PUNCTULUI (`punctul-altui-curier.ts`). Un lot pe alt curier
+   * decat al punctului emitea „la adresa", adica la dulap, pe numele clientului, fara ca cineva sa
+   * vada. Acasa nu se trimite nici cand exista `home_address`: clientul a platit livrarea la punct,
+   * iar schimbarea o hotaraste omul, in fereastra, cu avertismentul in fata.
+   */
+  const strain = punctulAltuiCurier(addr, (c) => COURIER_ALIASES[c] === courier);
+  if (strain) {
+    return { error: `clientul a ales ${strain.numePunct} (${strain.dePe}), punct in care curierul ales nu livreaza: emite din fereastra comenzii, la adresa lui de acasa` };
+  }
   const items = Array.isArray(o.items) ? (o.items as { name?: string }[]) : [];
   const content = (items.map((i) => i?.name).filter(Boolean).join(", ").slice(0, 100)) || o.order_number;
   // Ramburs dupa BANI, nu dupa metoda — aceeasi regula ca in formularele de AWB.

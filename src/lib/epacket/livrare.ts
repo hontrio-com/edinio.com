@@ -1,6 +1,7 @@
 import { liniaAdresei, type AdresaLivrare } from "@/lib/orders/adresa";
 import type { CurierCuPuncte } from "./client";
 import { despartaIdPunct } from "./nomenclator";
+import { eComandaDePunct, punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
 
 /**
  * Unde merge coletul e-packet al unei comenzi, citit din `shipping_address`.
@@ -26,6 +27,7 @@ export type AdresaCuPunct = AdresaLivrare & {
   locker_id?: string | number;
   locker_name?: string;
   home_address?: string;
+  source?: string;
 };
 
 export type LivrareaComenzii =
@@ -41,7 +43,8 @@ export type LivrareaComenzii =
 export function livrareaComenzii(addr: AdresaCuPunct | null | undefined): LivrareaComenzii {
   const a = addr ?? {};
   const curier = (a.courier ?? "").toLowerCase().trim();
-  if (a.delivery_type !== "locker") return { fel: "adresa", linie: liniaAdresei(a) };
+  /* ⚠ Si easybox-ul eMAG, care vine fara `delivery_type`, doar cu `locker_id` (`eComandaDePunct`). */
+  if (!eComandaDePunct(a)) return { fel: "adresa", linie: liniaAdresei(a) };
 
   if (curier === "epacket") {
     const punct = despartaIdPunct(a.locker_id);
@@ -49,10 +52,8 @@ export function livrareaComenzii(addr: AdresaCuPunct | null | undefined): Livrar
     return { fel: "punct", punct, nume: (a.locker_name ?? "").toString().trim() || `Punctul ${punct.id}` };
   }
 
-  return {
-    fel: "punct_strain",
-    numePunct: (a.locker_name ?? "").toString().trim() || "un punct de ridicare",
-    curierPunct: (a.courier_label ?? "").trim() || curier || "alt curier",
-    linieAcasa: (a.home_address ?? "").trim(),
-  };
+  /* Regula comuna tuturor ferestrelor de AWB. Nu poate intoarce `null` aici: punctul exista si
+     nu e e-packet. */
+  const strain = punctulAltuiCurier(a, (c) => c === "epacket")!;
+  return { fel: "punct_strain", numePunct: strain.numePunct, curierPunct: strain.dePe, linieAcasa: strain.linieAcasa };
 }

@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { ButonPrinteaza } from "./ButonPrinteaza";
 import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -96,6 +98,8 @@ function descarca(base64: string, nume: string): boolean {
 
 function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "curiera");
 
   /*
    * Livrarea la punct aleasa de client in checkout.
@@ -123,7 +127,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
   const [nume, setNume] = useState(order.customer_name ?? "");
   const [telefon, setTelefon] = useState(order.customer_phone ?? "");
   const [email, setEmail] = useState(order.customer_email ?? "");
-  const [adresa, setAdresa] = useState(liniaAdresei(addr));
+  const [adresa, setAdresa] = useState(punctStrain ? punctStrain.linieAcasa : liniaAdresei(addr));
   /* ⚠ La punct: localitatea, judetul si codul postal ALE PUNCTULUI (vezi tipul de sus). */
   const [oras, setOras] = useState((laPunct ? addr.locker_city : "") || addr.city || "");
   const [judet, setJudet] = useState((laPunct ? addr.locker_county : "") || addr.county || "");
@@ -334,6 +338,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
           </div>
         ) : (
           <div className="space-y-3">
+            <PunctAltuiCurier punct={punctStrain} curier="Curiera" />
             {laPunct && (
               <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/5 p-3 text-xs">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-info" />

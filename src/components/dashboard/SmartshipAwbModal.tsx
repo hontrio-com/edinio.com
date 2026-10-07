@@ -19,6 +19,8 @@ import { ButonPrinteaza } from "./ButonPrinteaza";
 import { dinBase64 } from "@/lib/orders/printeaza-eticheta";
 import type { OfertaTransport } from "@/lib/smartship/client";
 import type { Database } from "@/types/database.types";
+import { punctulAltuiCurier } from "@/lib/orders/punctul-altui-curier";
+import { PunctAltuiCurier } from "./PunctAltuiCurier";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -106,6 +108,8 @@ const TIPURI_CAMION: { valoare: string; eticheta: string }[] = [
 function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const comanda = order as typeof order & ComandaSmartship;
   const addr = (order.shipping_address ?? {}) as ShippingAddress;
+  /* ⚠ Punctul ALTUI curier: coletul merge acasa, nu la adresa punctului (`punctul-altui-curier.ts`). */
+  const punctStrain = punctulAltuiCurier(addr, (c) => c === "smartship");
   const awb = comanda.smartship_awb_number ?? null;
 
   const laLocker = (addr.courier ?? "").toLowerCase().trim() === "smartship"
@@ -168,7 +172,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   function destinatar() {
     return {
       nume: order.customer_name,
-      strada: addr.street || addr.address || "",
+      strada: punctStrain ? punctStrain.linieAcasa : (addr.street || addr.address || ""),
       numar: addr.street_no || null,
       /*
        * ⚠ La SmartShip adresa RAMANE a clientului chiar si la locker: ei ruteaza
@@ -653,6 +657,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           </div>
         ) : (
           <div className="space-y-4">
+            <PunctAltuiCurier punct={punctStrain} curier="SmartShip" />
             {laLocker && (
               <div className="flex items-start gap-2 rounded-lg border border-info/20 bg-info/5 p-3 text-xs">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-info" />

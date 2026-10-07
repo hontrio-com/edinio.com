@@ -12,7 +12,7 @@ import type {
   Block, BlockStyle, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock,
   ButtonBlock, ColumnsBlock, SpacerBlock, DividerBlock, VideoBlock, MapBlock, FaqBlock,
   TrustBlock, ProductsBlock, SocialBlock, ContactBlock, HtmlBlock, ColumnItem, GalleryItem, GreutateFont,
-  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock, AcasaBlock, InaltimeRand, SpatiereLitere,
+  BundlesBlock, NewsletterBlock, PaymentsBlock, CouriersBlock, AcasaBlock,
 } from "@/lib/pages/blocks.types";
 import { SECTIUNI_ACASA, VARIANTE_HERO } from "@/lib/pages/pagina-acasa";
 import { ProductPicker } from "./ProductPicker";
@@ -27,26 +27,13 @@ import { SetariBeneficii, SetariNewsletter, SetariPachete, SetariPlatiCurieri, S
 import { cereIzolare } from "@/lib/pages/cod-personalizat";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
 import {
-  AlegeFont, Area, Field, Grup, IconPicker, Range, Segmentat, Select, Text, Toggle, inputCls,
+  AlegeFont, Area, Field, Grup, IconPicker, RANDURI, RANDURI_AUTO, Range, Segmentat, Select, SPATIERE, Text, Toggle, inputCls,
 } from "./editor/campuri";
 
 const GREUTATI: { value: GreutateFont; label: string }[] = [
   { value: "400", label: "Normal" }, { value: "500", label: "Mediu" }, { value: "600", label: "Semi-gros" },
   { value: "700", label: "Gros" }, { value: "800", label: "Foarte gros" }, { value: "900", label: "Maxim" },
 ];
-
-/*
-  Spatiul intre litere si intre randuri, aceleasi variante in toate blocurile
-  (07.10.2026). La titluri, lipsa se arata „Strânsă”: clasa lor e `tracking-tight`.
-*/
-const SPATIERE: { value: SpatiereLitere; label: string }[] = [
-  { value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "F. largă" },
-];
-const RANDURI: { value: InaltimeRand; label: string }[] = [
-  { value: "tight", label: "Strâns" }, { value: "normal", label: "Normal" }, { value: "relaxed", label: "Aerisit" }, { value: "loose", label: "Larg" },
-];
-/** Cu „Automat”: unde ce era pana acum nu cade pe nicio varianta (titlul urmeaza marimea). */
-const RANDURI_AUTO: { value: InaltimeRand | "auto"; label: string }[] = [{ value: "auto", label: "Auto" }, ...RANDURI];
 
 /* ─── Columns layout picker ────────────────────────────────────────────────── */
 

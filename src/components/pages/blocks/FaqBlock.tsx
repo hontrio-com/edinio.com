@@ -5,6 +5,7 @@ import { ArrowRight, ChevronDown, Minus, Plus } from "lucide-react";
 import { BlockShell } from "../BlockShell";
 import { cuTransparenta } from "@/lib/pages/culori";
 import { esteFontPagina, stivaFont } from "@/lib/pages/fonturi";
+import { INALTIME_TITLU, spatiere } from "@/lib/pages/spatiere-text";
 
 const font = (f?: string | null): CSSProperties | undefined => (f && esteFontPagina(f) ? { fontFamily: stivaFont(f) } : undefined);
 import type { FaqBlock } from "@/lib/pages/blocks.types";
@@ -83,7 +84,7 @@ export function FaqBlockView({ block }: { block: FaqBlock }) {
 
   const titlu = (block.title || block.subtitle) && (
     <div className={`${aliniere} ${titluStanga ? "" : "mb-8"}`}>
-      {block.title && <h2 className="pg-titlu text-2xl pg-sm:text-3xl font-black tracking-tight text-foreground" style={font(block.titleFont)}>{block.title}</h2>}
+      {block.title && <h2 className="pg-titlu text-2xl pg-sm:text-3xl font-black tracking-tight text-foreground" style={{ ...font(block.titleFont), ...spatiere(block.titleSpacing, block.titleLineHeight, INALTIME_TITLU) }}>{block.title}</h2>}
       {block.subtitle && <p className="mt-3 text-base leading-relaxed text-muted-foreground">{block.subtitle}</p>}
     </div>
   );
@@ -105,14 +106,14 @@ export function FaqBlockView({ block }: { block: FaqBlock }) {
                 <button type="button" onClick={() => comuta(i)} aria-expanded={deschis} aria-controls={`faq-${block.id}-${i}`}
                   className={`flex w-full items-start gap-4 py-5 text-left transition-opacity hover:opacity-80 ${dreapta ? "flex-row-reverse justify-between" : ""}`}>
                   <Iconita deschis={deschis} />
-                  <span className="flex-1 pr-2 text-base font-semibold" style={{ color: (deschis && accent) || block.questionColor || undefined, ...font(block.questionFont) }}>
+                  <span className="flex-1 pr-2 text-base font-semibold" style={{ color: (deschis && accent) || block.questionColor || undefined, ...font(block.questionFont), ...spatiere(block.questionSpacing, block.questionLineHeight) }}>
                     {block.numbered && <span className="mr-2 tabular-nums opacity-50">{String(i + 1).padStart(2, "0")}</span>}
                     {faq.q}
                   </span>
                 </button>
                 <div id={`faq-${block.id}-${i}`} hidden={!deschis}>
                   <p className={`whitespace-pre-line pb-5 text-sm leading-relaxed ${iconita === "none" || dreapta ? "" : "pl-10"} pr-4 ${block.answerColor ? "" : "text-muted-foreground"}`}
-                    style={{ ...(block.answerColor ? { color: block.answerColor } : {}), ...font(block.answerFont) }}>
+                    style={{ ...(block.answerColor ? { color: block.answerColor } : {}), ...font(block.answerFont), ...spatiere(block.answerSpacing, block.answerLineHeight) }}>
                     {faq.a}
                   </p>
                 </div>

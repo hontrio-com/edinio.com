@@ -7,6 +7,7 @@ import { videoEmbedUrl } from "@/lib/pages/embeds";
 import { culoareSigura, cuTransparenta } from "@/lib/pages/culori";
 import { atributeAnimatie, clasaEfectButon, clasaEfectImagine } from "@/lib/pages/animatii";
 import { stivaFont } from "@/lib/pages/fonturi";
+import { INALTIME_TITLU, spatiere } from "@/lib/pages/spatiere-text";
 import { NativeVideo } from "./NativeVideo";
 import type { CSSProperties, ReactNode } from "react";
 import type {
@@ -66,18 +67,8 @@ function tipografie(t: { font?: string | null; weight?: string; transform?: stri
   if (t.weight) s.fontWeight = Number(t.weight);
   if (t.transform && t.transform !== "none") s.textTransform = t.transform as CSSProperties["textTransform"];
   if (t.italic) s.fontStyle = "italic";
-  /* „Normala” aleasa anume bate `tracking-tight` din clasa titlurilor (07.10.2026). */
-  if (t.spacing === "normal") s.letterSpacing = "normal";
-  else if (t.spacing === "tight") s.letterSpacing = "-0.03em";
-  else if (t.spacing === "wide") s.letterSpacing = "0.04em";
-  else if (t.spacing === "wider") s.letterSpacing = "0.12em";
-  return s;
+  return { ...s, ...spatiere(t.spacing) };
 }
-
-/** Inaltimea randului la text (blocul de text, subtitlul din hero). */
-const INALTIME_RAND: Record<string, number> = { tight: 1.3, normal: 1.6, relaxed: 1.8, loose: 2.1 };
-/** Inaltimea randului la titluri; „normal” = `leading-tight`, cel de pana acum din hero. */
-const INALTIME_TITLU: Record<string, number> = { tight: 1.05, normal: 1.25, relaxed: 1.4, loose: 1.6 };
 
 export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock; color: string; basePath: string; h1?: boolean }) {
   const split = block.layout === "split-left" || block.layout === "split-right";
@@ -102,7 +93,7 @@ export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock
           style={{
             color: textColor,
             ...tipografie({ font: block.titleFont, weight: block.titleWeight, transform: block.titleTransform, spacing: block.titleSpacing }),
-            ...(block.titleLineHeight ? { lineHeight: INALTIME_TITLU[block.titleLineHeight] } : {}),
+            ...spatiere(null, block.titleLineHeight, INALTIME_TITLU),
           }}
         >
           {block.title}
@@ -112,7 +103,7 @@ export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock
         <p className="mt-4 text-base pg-sm:text-lg max-w-2xl leading-relaxed" style={{
           color: textColor, opacity: 0.85,
           ...tipografie({ font: block.subtitleFont, spacing: block.subtitleSpacing }),
-          ...(block.subtitleLineHeight ? { lineHeight: INALTIME_RAND[block.subtitleLineHeight] } : {}),
+          ...spatiere(null, block.subtitleLineHeight),
         }}>{block.subtitle}</p>
       )}
       {(block.buttonLabel || block.secondLabel) && (
@@ -184,7 +175,7 @@ export function HeadingBlockView({ block, h1 }: { block: HeadingBlock; h1?: bool
     style.color = "transparent";
   } else if (block.color) style.color = block.color;
   if (custom) { style.fontSize = Math.max(12, block.sizeCustom ?? 32); style.lineHeight = 1.1; }
-  if (block.lineHeight) style.lineHeight = INALTIME_TITLU[block.lineHeight];
+  Object.assign(style, spatiere(null, block.lineHeight, INALTIME_TITLU));
   const colorat = !!block.color || !!block.gradient;
   return (
     <BlockShell style={block.style}>
@@ -204,7 +195,7 @@ export function TextBlockView({ block }: { block: TextBlock }) {
   const stil: CSSProperties = tipografie({ font: block.font, weight: block.weight, spacing: block.spacing });
   if (block.style?.textColor) stil.color = block.style.textColor;
   if (block.fontSize) stil.fontSize = Math.min(32, Math.max(12, block.fontSize));
-  if (block.lineHeight) stil.lineHeight = INALTIME_RAND[block.lineHeight];
+  Object.assign(stil, spatiere(null, block.lineHeight));
   return (
     <BlockShell style={{ width: "narrow", ...block.style }}>
       {/* ⚠ Fara `text-left`: batea alinierea aleasa in „Aspect” (a venit din `BlockShell`). */}

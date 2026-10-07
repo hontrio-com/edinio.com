@@ -5,6 +5,7 @@ import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { PageIcon, PAGE_ICON_NAMES } from "../icon-registry";
 import { FAMILII_FONT, FONTURI_PAGINA, NUMELE_FAMILIEI, stivaFont, type CheieFont } from "@/lib/pages/fonturi";
+import type { InaltimeRand, SpatiereLitere } from "@/lib/pages/blocks.types";
 
 /*
   Controalele comune ale editorului de pagini. Stateau toate in `BlockSettings`,
@@ -62,6 +63,19 @@ export function Range({ label, value, onChange, min, max, step = 1, unit = "px" 
     </Field>
   );
 }
+
+/*
+  Spatiul intre litere si intre randuri, aceleasi variante in toate blocurile
+  (07.10.2026). La titluri, lipsa se arata „Strânsă”: clasa lor e `tracking-tight`.
+*/
+export const SPATIERE: { value: SpatiereLitere; label: string }[] = [
+  { value: "tight", label: "Strânsă" }, { value: "normal", label: "Normală" }, { value: "wide", label: "Largă" }, { value: "wider", label: "F. largă" },
+];
+export const RANDURI: { value: InaltimeRand; label: string }[] = [
+  { value: "tight", label: "Strâns" }, { value: "normal", label: "Normal" }, { value: "relaxed", label: "Aerisit" }, { value: "loose", label: "Larg" },
+];
+/** Cu „Automat”: unde ce era pana acum nu cade pe nicio varianta (titlul urmeaza marimea). */
+export const RANDURI_AUTO: { value: InaltimeRand | "auto"; label: string }[] = [{ value: "auto", label: "Auto" }, ...RANDURI];
 
 /** Butoane alaturate, pentru alegeri scurte (2-5 variante). */
 export function Segmentat<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: ReactNode; titlu?: string }[]; onChange: (v: T) => void }) {

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils/cn";
 import type { BlockStyle, FaqBlock } from "@/lib/pages/blocks.types";
 import { CampCuloare } from "./CampCuloare";
 import { ControaleAspect } from "./ControaleAspect";
-import { AlegeFont, Grup, Segmentat, Text, Toggle, inputCls } from "./campuri";
+import { AlegeFont, Grup, RANDURI_AUTO, Segmentat, SPATIERE, Text, Toggle, inputCls } from "./campuri";
 
 type Varianta = NonNullable<FaqBlock["variant"]>;
 
@@ -51,6 +51,8 @@ export function SetariFaq({ block: b, patch, setStyle }: {
     patch({ items: n });
   };
   const varianta = b.variant ?? "classic";
+  /* „Auto” = cel de pana acum, care nu cade pe nicio varianta; se salveaza ca lipsa. */
+  const rand = (v: string) => (v === "auto" ? undefined : (v as FaqBlock["titleLineHeight"]));
 
   return (
     <div className="space-y-4">
@@ -109,8 +111,14 @@ export function SetariFaq({ block: b, patch, setStyle }: {
 
       <Grup titlu="Tipografie">
         <AlegeFont label="Fontul titlului" value={b.titleFont ?? null} onChange={(v) => patch({ titleFont: v })} gol="Fontul magazinului" />
+        <Segmentat label="Titlu: spațiu între rânduri" value={b.titleLineHeight ?? "auto"} onChange={(v) => patch({ titleLineHeight: rand(v) })} options={RANDURI_AUTO} />
+        <Segmentat label="Titlu: spațiere între litere" value={b.titleSpacing ?? "tight"} onChange={(v) => patch({ titleSpacing: v })} options={SPATIERE} />
         <AlegeFont label="Fontul întrebărilor" value={b.questionFont ?? null} onChange={(v) => patch({ questionFont: v })} gol="Fontul magazinului" />
+        <Segmentat label="Întrebări: spațiu între rânduri" value={b.questionLineHeight ?? "auto"} onChange={(v) => patch({ questionLineHeight: rand(v) })} options={RANDURI_AUTO} />
+        <Segmentat label="Întrebări: spațiere între litere" value={b.questionSpacing ?? "normal"} onChange={(v) => patch({ questionSpacing: v })} options={SPATIERE} />
         <AlegeFont label="Fontul răspunsurilor" value={b.answerFont ?? null} onChange={(v) => patch({ answerFont: v })} gol="Fontul magazinului" />
+        <Segmentat label="Răspunsuri: spațiu între rânduri" value={b.answerLineHeight ?? "auto"} onChange={(v) => patch({ answerLineHeight: rand(v) })} options={RANDURI_AUTO} />
+        <Segmentat label="Răspunsuri: spațiere între litere" value={b.answerSpacing ?? "normal"} onChange={(v) => patch({ answerSpacing: v })} options={SPATIERE} />
       </Grup>
 
       <Grup titlu="Deschidere">

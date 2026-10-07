@@ -349,6 +349,13 @@ export interface FaqBlock extends BaseBlock {
   titleFont?: CheieFont | null;
   questionFont?: CheieFont | null;
   answerFont?: CheieFont | null;
+  /* 07.10.2026: spatiul intre litere si intre randuri. Lipsa = ca pana acum. */
+  titleSpacing?: SpatiereLitere;
+  titleLineHeight?: InaltimeRand;
+  questionSpacing?: SpatiereLitere;
+  questionLineHeight?: InaltimeRand;
+  answerSpacing?: SpatiereLitere;
+  answerLineHeight?: InaltimeRand;
 }
 
 export interface TrustItem {

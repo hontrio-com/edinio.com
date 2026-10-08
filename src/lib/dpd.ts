@@ -34,7 +34,7 @@ export type DpdConfig = {
    * tariful unui kilogram pentru un colet de zece. Campul poate exista in
    * `dpd_config` la magazinele vechi; nimeni nu-l mai citeste.
    */
-  /** Sender IBAN — required by DPD to pay back COD (ramburs) collected from recipients. */
+  /** Sender IBAN pentru ramburs. OPTIONAL la DPD: lipsa, banii merg in contul din contract. */
   iban?: string;
   /** Bank account holder (the merchant). Sent alongside the IBAN. */
   account_holder?: string;
@@ -232,7 +232,7 @@ const LOCAL_COUNTRY_IDS = new Set([642, 100]); // Romania, Bulgaria
 // type: type 1 (local) uses street fields / addressNote; type 2 (foreign) uses
 // addressLine1 (+ addressLine2). Both use countryId + siteName + postCode to
 // resolve the destination site.
-function buildDpdShipmentBody(
+export function buildDpdShipmentBody(
   config: DpdConfig,
   input: DpdShipmentInput,
   opts: { countryId: number; postCode?: string; serviceId: number; siteId?: number },
@@ -269,17 +269,20 @@ function buildDpdShipmentBody(
     service.additionalServices = additionalServices;
   }
 
-  // COD (ramburs): DPD pays the collected amount back to the sender, so a valid
-  // sender IBAN is required.
+  /*
+   * ═══ ⚠ IBAN-UL E OPTIONAL LA DPD (08.10.2026) ═══
+   *
+   * `payment.senderBankAccount` e „Required: No" in specificatia lor (api.dpd.ro/api/docs,
+   * ShipmentPayment): „Sender COD payout account information". Cand lipseste, DPD vireaza
+   * rambursul in contul din CONTRACTUL clientului. Noi il ceream obligatoriu si opream local
+   * orice AWB cu ramburs: la suporti-numar, 6 incercari in doua zile, desi DPD avea IBAN-ul
+   * in sistem. Cererea nici nu pleca, deci la DPD nu exista nicio eroare de cautat.
+   *
+   * Il trimitem doar cand comerciantul l-a completat la noi (atunci el castiga fata de contract).
+   */
   const payment: Record<string, unknown> = { courierServicePayer: "SENDER" };
-  if (hasCod) {
-    const iban = (config.iban ?? "").replace(/\s/g, "");
-    if (!iban) {
-      // `eroareRefuz`: validare PUR LOCALA, in `buildDpdShipmentBody`, inainte de
-      // orice POST catre DPD. Nimic nu s-a creat, deci reincercarea dupa completarea
-      // IBAN-ului trebuie sa ramana libera. Vezi src/lib/operatii/eroare-furnizor.ts.
-      throw eroareRefuz("Pentru comenzi cu ramburs, adauga IBAN-ul in setarile DPD (necesar pentru returnarea banilor incasati).");
-    }
+  const iban = (config.iban ?? "").replace(/\s/g, "");
+  if (hasCod && iban) {
     payment.senderBankAccount = {
       iban,
       accountHolder: (config.account_holder ?? "").trim() || "Expeditor",

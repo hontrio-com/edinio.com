@@ -637,7 +637,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
           rezumat: "După conectarea contului DPD setezi contul bancar pentru ramburs, livrarea în UE, asigurarea și OBPD.",
           pasi: [
             "Intră în Integrări > DPD, cu contul deja conectat.",
-            "În panoul \"Cont bancar (ramburs)\" completează \"IBAN\" și \"Titular cont\".",
+            "Dacă vrei rambursul într-un alt cont decât cel din contractul DPD, completează \"IBAN\" și \"Titular cont\" în panoul \"Cont bancar (ramburs)\".",
             "Pornește comutatorul \"Livrare internațională (UE)\" dacă vrei comenzi din UE.",
             "Bifează \"Calculează după greutatea reală a produselor.\" dacă vrei prețul din greutățile produselor.",
             "În panoul \"Opțiuni expediere\" bifează \"Asigurare (valoare declarată).\" dacă vrei asigurare pe fiecare AWB.",
@@ -645,7 +645,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Apasă \"Salvează configurația\".",
           ],
           detalii: [
-            { titlu: "Contul bancar pentru ramburs", text: "Este contul în care DPD îți virează banii încasați de la clienți la comenzile cu plata la livrare. Cele două câmpuri nu sunt marcate obligatorii în formular, dar fără ele nu ai unde primi rambursul." },
+            { titlu: "Contul bancar pentru ramburs", text: "Este contul în care DPD îți virează banii încasați de la clienți la comenzile cu plata la livrare. Câmpurile sunt opționale: dacă le lași goale, DPD virează rambursul în contul trecut în contractul tău. Dacă le completezi, banii merg în contul de aici." },
             { titlu: "Ce face livrarea internațională", text: "Cu comutatorul pornit, clientul poate alege o țară din UE la checkout, iar prețul livrării se calculează live prin DPD. Dacă opțiunea e oprită și încerci un AWB către o țară din UE, primești \"Livrarea internațională DPD nu este activată.\". Comanda internațională are nevoie și de cod poștal, altfel apare \"Comanda nu are cod poștal pentru expedierea internațională.\"." },
             { titlu: "Greutatea la livrarea internațională", text: "Bifa apare doar după ce pornești comutatorul internațional. Cu ea pornită, prețul se calculează din greutatea setată pe fiecare produs. Dacă e oprită, se folosește o estimare de 1 kg." },
             { titlu: "Ce este OBPD", text: "OBPD înseamnă că destinatarul poate deschide sau testa coletul înainte de plată. Alegi între \"Dezactivat\", \"Deschidere colet (OPEN)\" și \"Testare produs (TEST)\". A doua listă, cu \"Retur plătit de expeditor\" sau \"Retur plătit de destinatar\", apare doar când OBPD nu e \"Dezactivat\". Opțiunea se aplică doar livrărilor la adresă, nu și celor în puncte de ridicare." },

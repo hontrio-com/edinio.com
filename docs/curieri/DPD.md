@@ -61,7 +61,9 @@ Woot, nu inaintea lui.
 | `track` | **da** | `getDpdTracking`, prin cronul `dpd-tracking`. ⚠ cel mult 10 colete pe cerere |
 | `shipment/info` | nu | starea expedierii; `track` da mai mult, pe colet |
 | `validation/address` | nu | validarea adresei inainte de emitere |
-| `client/contract` | nu | datele contractului |
+| `client` | **da** | „Get Own Client Id", raspuns PLAT, doar `clientId` |
+| `client/{id}` | **da** | „Get Client": numele obiectului si verificarea sediului ales la salvare |
+| `client/contract` | **da** | toate obiectele (sediile) din contract, ca omul sa-l aleaga pe al lui |
 | `print/voucher` | nu | voucherul de ramburs |
 
 ---
@@ -132,6 +134,51 @@ Panoul arata acum si numaratoarea („0/200 de caractere, cat accepta DPD"), ca 
 inainte, nu s-o afle din refuz. **7 probe, banc de mutanti 6 din 6.**
 
 ---
+
+## Auditul pe specificatia oficiala, 08.10.2026
+
+Sursa: `docs/curieri/DPD-web-api.txt`, textul integral al `https://api.dpd.ro/api/docs/`, cu SHA256-ul
+HTML-ului in antet. Patru treceri paralele (autentificare si nomenclatoare, emiterea, cotarea,
+dupa emitere), fiecare cu citatul din specificatie si randul din cod. Probele noi:
+`src/lib/dpd-ca-la-carte.test.ts` si `src/lib/dpd-iban-optional.test.ts`.
+
+**Declansatorul:** suporti-numar nu putea emite AWB cu ramburs. Doua cauze, amandoua ale noastre:
+- IBAN-ul il ceream obligatoriu, desi `senderBankAccount` e „Required: No" (contul din contract).
+  Cererea nici nu pleca, deci DPD n-avea „EE2026…" de cautat. `8d20279d`.
+- Contul lui DPD vede mai multe OBIECTE din acelasi contract, iar `/client` intoarce doar pe cel
+  implicit (al intermediarului). Acum se listeaza `client/contract` si omul isi alege sediul.
+
+**Reparate:**
+
+| Ce | Specificatia spune | Ce era |
+| --- | --- | --- |
+| Erorile DPD | `id`: „unique error id to be used as this error reference"; `code`; `component` | se pierdeau; acum mesajul are `[cod eroare DPD: EE…, cod N]` si campul |
+| Eroarea pe rezultat la `calculate` | `CalculationResult.error` | citita doar cea de sus; refuzul trecea tacut pe tariful fix |
+| Cotatia interna | `additionalServices` „like COD, Declared value, etc." | doar rambursul; AWB-ul adauga asigurarea si OBPD, diferenta o platea comerciantul |
+| OBPD | „before the payment of the COD" | pleca si pe comenzi platite cu cardul |
+| Lockerul la cotare | OBPD nu se pune la punct de ridicare | acelasi pret ca adresa, deci cu OBPD inclus |
+| Internationalul | `amount` inainte de TVA, `total` cu TVA | mereu `amount`, si pe magazinele cu preturi CU TVA |
+| Find Site | „limited to 10 records"; `region` „prefix match"; `name` si „part of site name" | judetul doar la noi; o potrivire partiala fixa ALTA localitate |
+| Punctele de ridicare | `pickUpAllowed`, `validTo`, `palletOffice`, `cargoTypesAllowed`, plata cash/card | toate oficiile, si cele fara ridicare sau expirate |
+| Chemarea curierului | `explicitShipmentIdList` | coletele alese dupa `updated_at`: si ridicate, si livrate, si de pe comenzi anulate |
+| Anularea | | lasa codul de urmarire vechi, deci primul cod identic al AWB-ului nou nu mai anunta |
+| Greutatea | „Validated against the minimum ... allowed" | 0 sau NaN plecau la DPD |
+| Continutul in fereastra AWB | `contents` max 100 | taiat la 50 |
+
+**Ramase deschise, cu motivul:**
+- **Lockerul se coteaza tot pe localitatea cumparatorului**, nu pe `pickupOfficeId`: punctul se alege
+  DUPA ce se afiseaza pretul. Corect ar fi o recotare dupa alegerea punctului, adica o schimbare de
+  flux in checkout.
+- **Serviciul international e primul intors** de `services/destination`, nu unul preferat. Cotatia si
+  AWB-ul folosesc aceeasi regula, deci sunt consecvente intre ele.
+- **Un singur colet pe AWB** (`parcelsCount: 1`). Comenzile grele nu se pot imparti.
+- **Raspunsurile la ridicare si la emitere se citesc subtire**: fereastra de ridicare si costul DPD
+  al AWB-ului nu se pastreaza.
+- **Codurile finale care nu sunt „livrat"** (124 returnat, 125 distrus, 128 anulat) nu opresc
+  urmarirea; se opreste la 21 de zile. Comerciantul e anuntat o data.
+- **Telefonul** nu se verifica local dupa regula lor („only ... starting with 0 or +", max 20).
+- **Nedovedit live**: lista de obiecte din `client/contract` si verificarea `client/{id}` nu au rulat
+  inca pe un cont real.
 
 ## Deschis
 

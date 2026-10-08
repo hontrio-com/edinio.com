@@ -8,8 +8,9 @@ import {
   saveDpdConfig,
   disconnectDpd,
   loadDpdAccountAction,
+  verificaSediuDpdAction,
 } from "@/lib/actions/dpd.actions";
-import type { DpdConfig } from "@/lib/dpd";
+import type { DpdConfig, DpdObiect } from "@/lib/dpd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -35,6 +36,9 @@ export function DpdConfigClient({
   const [password, setPassword] = useState(initialConfig?.password ?? "");
   const [clientId, setClientId] = useState<number | null>(initialConfig?.client_id ?? null);
   const [clientName, setClientName] = useState("");
+  const [obiecte, setObiecte] = useState<DpdObiect[]>([]);
+  const [clientIdManual, setClientIdManual] = useState("");
+  const [verificSediu, setVerificSediu] = useState(false);
   const [international, setInternational] = useState(initialConfig?.international_enabled ?? false);
   const [iban, setIban] = useState(initialConfig?.iban ?? "");
   const [accountHolder, setAccountHolder] = useState(initialConfig?.account_holder ?? "");
@@ -57,9 +61,19 @@ export function DpdConfigClient({
       return;
     }
 
-    setClientId(result.clientId);
-    setClientName(result.name);
-    toast.success(`Cont DPD conectat · Client ID: ${result.clientId}`);
+    /*
+     * ⚠ Un cont DPD poate vedea mai multe obiecte (sedii) din acelasi contract, iar `/client`
+     * intoarce doar pe cel implicit. Daca obiectul salvat e printre ele, il pastram; altfel
+     * pornim de la cel implicit, iar omul il schimba din lista.
+     */
+    const salvat = initialConfig?.client_id;
+    const ales = result.obiecte.find((o) => o.clientId === salvat) ?? result.obiecte.find((o) => o.clientId === result.clientId);
+    setObiecte(result.obiecte);
+    setClientId(ales?.clientId ?? result.clientId);
+    setClientName(ales ? numeObiect(ales) : result.name);
+    toast.success(result.obiecte.length > 1
+      ? `Cont DPD conectat · ${result.obiecte.length} sedii in contract, alege-l pe al tau`
+      : `Cont DPD conectat · Client ID: ${result.clientId}`);
   }
 
   async function handleSave() {
@@ -100,6 +114,7 @@ export function DpdConfigClient({
       toast.success("DPD deconectat");
       setClientId(null);
       setClientName("");
+      setObiecte([]);
       router.refresh();
     }
   }
@@ -163,6 +178,66 @@ export function DpdConfigClient({
           <p className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-xs font-semibold text-success">
             Conectat ca: {clientName || "DPD Client"} (ID: {clientId})
           </p>
+        )}
+
+        {clientId && (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-foreground">Ai primit de la DPD un Client ID pentru firma ta?</p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Daca firma ta nu apare mai sus, scrie aici Client ID-ul dat de DPD. Il verificam la DPD inainte sa-l folosim.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={clientIdManual}
+                onChange={e => setClientIdManual(e.target.value.replace(/\D/g, ""))}
+                placeholder="ex: 50929196001"
+              />
+              <Button
+                variant="outline"
+                disabled={verificSediu || !clientIdManual}
+                onClick={async () => {
+                  setVerificSediu(true);
+                  const r = await verificaSediuDpdAction(businessId, username.trim(), password.trim(), Number(clientIdManual));
+                  setVerificSediu(false);
+                  if ("error" in r) return toast.error(r.error);
+                  setObiecte((prev) => prev.some((o) => o.clientId === r.obiect.clientId) ? prev : [...prev, r.obiect]);
+                  setClientId(r.obiect.clientId);
+                  setClientName(numeObiect(r.obiect));
+                  setClientIdManual("");
+                  toast.success(`Sediu verificat: ${numeObiect(r.obiect)}. Apasa „Salveaza configuratia".`);
+                }}
+              >
+                {verificSediu ? <Loader2 className="animate-spin" /> : null}
+                Foloseste
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {obiecte.length > 1 && (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-foreground">Sediul expeditor</p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Contul tau DPD vede mai multe sedii din acelasi contract. Alege firma ta: pe ea se emit AWB-urile, de acolo se ridica coletele si in contul ei se vireaza rambursul.
+            </p>
+            <select
+              aria-label="Sediul expeditor DPD"
+              value={clientId ?? ""}
+              onChange={e => {
+                const o = obiecte.find((x) => x.clientId === Number(e.target.value));
+                if (o) { setClientId(o.clientId); setClientName(numeObiect(o)); }
+              }}
+              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary"
+            >
+              {obiecte.map((o) => (
+                <option key={o.clientId} value={o.clientId}>
+                  {numeObiect(o)}{o.address ? ` · ${o.address}` : ""} (ID {o.clientId})
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </Panel>
 
@@ -289,4 +364,10 @@ export function DpdConfigClient({
       </div>
     </div>
   );
+}
+
+/** „Firma · Obiect", fara repetitie cand obiectul poarta chiar numele firmei. */
+function numeObiect(o: DpdObiect): string {
+  const obiect = o.objectName.trim();
+  return obiect && obiect !== o.name.trim() ? `${o.name} · ${obiect}` : o.name || obiect || "DPD Client";
 }

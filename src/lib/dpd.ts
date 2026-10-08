@@ -136,7 +136,18 @@ async function dpdPost<T>(path: string, body: unknown): Promise<T> {
      * degeaba.
      */
     const refuzDovedit = !!data["error"] || (res.status >= 400 && res.status < 500 && res.status !== 408);
-    const mesaj = `DPD ${path}: ${msg}`;
+    /*
+     * ⚠ `id` E REFERINTA PE CARE O CERE SUPORTUL DPD (08.10.2026). Specificatia: „System
+     * generated unique error id to be used as this error reference" (forma „EE2026…"). Fara el,
+     * comerciantul n-are ce le trimite, iar ei raspund „dati-ne codul de eroare". `context` spune
+     * CAMPUL gresit („This refers to an item that is wrong and should be corrected").
+     */
+    const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : "");
+    // `component` e calea JSON a campului („$.recipient.address.siteId"), mai precisa decat `context`.
+    const camp = text(errInfo?.["component"]) || text(errInfo?.["context"]);
+    const cod = typeof errInfo?.["code"] === "number" ? `, cod ${errInfo["code"]}` : "";
+    const idEroare = text(errInfo?.["id"]) ? ` [cod eroare DPD: ${text(errInfo?.["id"])}${cod}]` : (cod ? ` [${cod.slice(2)}]` : "");
+    const mesaj = `DPD ${path}: ${msg}${camp ? ` (camp: ${camp})` : ""}${idEroare}`;
     throw refuzDovedit ? eroareRefuz(mesaj) : eroareNesigura(mesaj);
   }
   return data as T;
@@ -144,17 +155,63 @@ async function dpdPost<T>(path: string, body: unknown): Promise<T> {
 
 // ─── Account verification ─────────────────────────────────────────────────────
 
+/** Un obiect (sediu) din contractul DPD: `clientId` e expeditorul de pe AWB. */
+export type DpdObiect = { clientId: number; name: string; objectName: string; address: string };
+
+type DpdClientBrut = {
+  clientId?: number; clientName?: string; objectName?: string;
+  address?: { fullAddressString?: string; siteName?: string; streetName?: string; streetNo?: string };
+};
+
+function obiectDinClient(c: DpdClientBrut): DpdObiect | null {
+  if (!c?.clientId) return null;
+  const a = c.address;
+  const adresa = a?.fullAddressString
+    || [a?.siteName, [a?.streetName, a?.streetNo].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return { clientId: c.clientId, name: c.clientName ?? "", objectName: c.objectName ?? "", address: adresa ?? "" };
+}
+
+/*
+ * ═══ ⚠ UN UTILIZATOR DPD POATE VEDEA MAI MULTE OBIECTE (08.10.2026) ═══
+ *
+ * `POST /client` intoarce doar obiectul IMPLICIT al utilizatorului. La suporti-numar acela era
+ * firma intermediarului care tine contractul, nu firma comerciantului (SBK WEB SQUAD SRL):
+ * AWB-urile plecau cu alt expeditor, alt punct de ridicare, iar IBAN-ul pe care DPD il avea
+ * „pe obiect" era al obiectului celalalt. Lista vine din `POST /client/contract` („clients with
+ * same contract as logged user's one"), iar comerciantul isi alege sediul.
+ *
+ * Lista e un plus: daca cererea cade, conectarea merge ca inainte, pe obiectul implicit.
+ */
+/** „Get Client" (`client/{id}`): datele unui obiect, si dovada ca utilizatorul are acces la el. */
+export async function citesteObiectDpd(username: string, password: string, clientId: number): Promise<DpdObiect | null> {
+  const data = await dpdPost<{ client?: DpdClientBrut }>(`client/${clientId}`, { userName: username, password, language: "RO" });
+  return data.client ? obiectDinClient(data.client) : null;
+}
+
 export async function loadDpdAccount(
   username: string,
   password: string,
-): Promise<{ clientId: number; name: string } | { error: string }> {
+): Promise<{ clientId: number; name: string; obiecte: DpdObiect[] } | { error: string }> {
   try {
-    const data = await dpdPost<{
-      clientId: number;
-      clientName: string;
-    }>("client", { userName: username, password, language: "RO" });
+    /* `POST /client` e „Get Own Client Id": raspunsul e PLAT si poarta doar `clientId`.
+       Numele si adresa vin din `client/{id}` („Get Client", raspuns sub `client`). */
+    const data = await dpdPost<{ clientId?: number }>("client", { userName: username, password, language: "RO" });
     if (!data.clientId) throw new Error("clientId lipsa din raspuns");
-    return { clientId: data.clientId, name: data.clientName ?? "" };
+    const implicit = (await citesteObiectDpd(username, password, data.clientId).catch(() => null))
+      ?? { clientId: data.clientId, name: "", objectName: "", address: "" };
+
+    let obiecte: DpdObiect[] = [];
+    try {
+      const contract = await dpdPost<{ clients?: DpdClientBrut[] }>(
+        "client/contract", { userName: username, password, language: "RO" },
+      );
+      obiecte = (contract.clients ?? []).map(obiectDinClient).filter((o): o is DpdObiect => o !== null);
+    } catch {
+      obiecte = [];
+    }
+    if (!obiecte.some((o) => o.clientId === implicit.clientId)) obiecte.unshift(implicit);
+
+    return { clientId: implicit.clientId, name: implicit.name, obiecte };
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -185,31 +242,64 @@ export async function resolveDpdSiteId(
 ): Promise<number | null> {
   const name = normalizeLocalityName(city, county);
   if (!name) return null;
-  try {
+  const norm = (s: string | undefined) => stripDiacritics(String(s ?? "")).trim().toLowerCase();
+  const wantedCounty = county ? norm(normalizeCountyName(county)) : "";
+  /*
+   * ⚠ DOUA REGULI DIN SPECIFICATIE (Find Site, 08.10.2026):
+   *  - „The result is limited to 10 records." Un sat cu nume comun are peste 10 omonime, iar
+   *    judetul bun putea sa nu fie printre ele. De aceea judetul pleaca in cerere, ca `region`
+   *    („Filter by region (prefix match)"), nu doar ca filtru la noi.
+   *  - `name` cauta si „part of site name". Fara potrivire EXACTA nu fixam niciun `siteId`:
+   *    inainte, un nume scris altfel prindea ALTA localitate din acelasi judet, iar `siteId`
+   *    bate `siteName`, deci coletul pleca gresit fara nicio eroare. Acum cade pe `siteName`
+   *    si decide DPD.
+   */
+  const cauta = async (region?: string) => {
     const data = await dpdPost<{ sites?: DpdSite[] }>("location/site", {
       userName: config.username,
       password: config.password,
       language: "RO",
       countryId: 642,
       name,
+      ...(region ? { region: region.toUpperCase() } : {}),
     });
-    const sites = data.sites ?? [];
-    if (sites.length === 0) return null;
+    return (data.sites ?? []).filter((s) => norm(s.name) === norm(name) || norm(s.nameEn) === norm(name));
+  };
+  try {
+    let exact = wantedCounty ? await cauta(wantedCounty) : [];
+    if (exact.length === 0) exact = await cauta();
+    if (exact.length === 0) return null;
 
-    const norm = (s: string | undefined) => stripDiacritics(String(s ?? "")).trim().toLowerCase();
-    // Prefer exact locality-name matches over partial ones ("Deva" also matches "Vadu Devei").
-    const exact = sites.filter((s) => norm(s.name) === norm(name) || norm(s.nameEn) === norm(name));
-    const pool = exact.length > 0 ? exact : sites;
-
-    if (!county) return pool.length === 1 ? (pool[0].id ?? null) : null;
-
-    const wantedCounty = norm(normalizeCountyName(county));
-    const byCounty = pool.filter((s) => norm(s.region) === wantedCounty || norm(s.regionEn) === wantedCounty);
+    if (!wantedCounty) return exact.length === 1 ? (exact[0].id ?? null) : null;
+    const byCounty = exact.filter((s) => norm(s.region) === wantedCounty || norm(s.regionEn) === wantedCounty);
+    // Doua localitati cu acelasi nume in acelasi judet: ramane alegerea de dinainte (prima),
+    // ca sa nu transformam in refuz un caz care azi trece.
     if (byCounty.length >= 1) return byCounty[0].id ?? null;
-    return pool.length === 1 ? (pool[0].id ?? null) : null;
+    return exact.length === 1 ? (exact[0].id ?? null) : null;
   } catch {
     return null; // resolution is best-effort; the shipment falls back to siteName
   }
+}
+
+/*
+ * OBPD (deschidere/testare la livrare). Aceeasi regula si in cotatie, si pe AWB: altfel
+ * cumparatorul plateste transportul fara OBPD, iar DPD factureaza cu el.
+ *
+ * ⚠ NUMAI CU RAMBURS (08.10.2026). Specificatia il defineste prin plata rambursului: „Options
+ * before payment are needed to define what options recipient has on delivery before the
+ * payment of the COD". Pe o comanda platita cu cardul nu exista plata la livrare, deci nici
+ * optiune inainte de ea. Restul conditiilor vin din modulul lor oficial: serviciile
+ * 2505/2002/2113/2005 si niciodata la punct de ridicare.
+ */
+export function obpdPentru(
+  config: DpdConfig,
+  o: { hasCod: boolean; pickupOfficeId?: number; countryId: number; serviceId: number },
+): Record<string, unknown> | null {
+  const option = config.open_before_delivery;
+  if (option !== "OPEN" && option !== "TEST") return null;
+  if (!o.hasCod || o.pickupOfficeId || o.countryId !== 642) return null;
+  if (![2505, 2002, 2113, 2005].includes(o.serviceId)) return null;
+  return { option, returnShipmentServiceId: o.serviceId, returnShipmentPayer: config.obpd_payer ?? "SENDER" };
 }
 
 /** Domestic service choice: prefer the mainline services over the first hit. */
@@ -250,21 +340,8 @@ export function buildDpdShipmentBody(
   if (input.declaredValue && input.declaredValue > 0) {
     additionalServices.declaredValue = { amount: Math.round(input.declaredValue * 100) / 100 };
   }
-  // OBPD (open/test at delivery): the official module applies it only for
-  // services 2505/2002/2113/2005 and never for pickup-point deliveries.
-  const obpdOption = config.open_before_delivery;
-  if (
-    (obpdOption === "OPEN" || obpdOption === "TEST") &&
-    !input.pickupOfficeId &&
-    opts.countryId === 642 &&
-    [2505, 2002, 2113, 2005].includes(opts.serviceId)
-  ) {
-    additionalServices.obpd = {
-      option: obpdOption,
-      returnShipmentServiceId: opts.serviceId,
-      returnShipmentPayer: config.obpd_payer ?? "SENDER",
-    };
-  }
+  const obpd = obpdPentru(config, { hasCod, pickupOfficeId: input.pickupOfficeId, countryId: opts.countryId, serviceId: opts.serviceId });
+  if (obpd) additionalServices.obpd = obpd;
   if (Object.keys(additionalServices).length > 0) {
     service.additionalServices = additionalServices;
   }
@@ -356,6 +433,11 @@ function taieDpd(v: string | undefined | null, max: number): string | undefined 
   return t.length > max ? t.slice(0, max).trim() : t;
 }
 
+  /* ⚠ Greutatea se verifica si pe server, nu doar in fereastra AWB: o actiune chemata direct cu
+     0 sau NaN ajungea la DPD ca refuz („Validated against the minimum ... allowed for the service"). */
+  if (!Number.isFinite(input.weightKg) || input.weightKg <= 0) {
+    throw eroareRefuz("Greutatea coletului lipseste sau e zero. Completeaz-o in fereastra AWB.");
+  }
   const hasDims = !!(input.length && input.width && input.height);
   const content: Record<string, unknown> = {
     parcelsCount: 1,
@@ -454,7 +536,13 @@ export async function createDpdShipment(
  */
 export async function calculateDpdDomesticPrice(
   config: DpdConfig,
-  input: { city: string; county?: string; weightKg: number; cod?: number },
+  input: {
+    city: string; county?: string; weightKg: number; cod?: number;
+    /** Valoarea declarata (asigurare); se foloseste doar daca `declared_value_enabled`. */
+    declaredValue?: number;
+    /** Cotatie pentru punct de ridicare: acolo AWB-ul nu pune OBPD, deci nici cotatia. */
+    laPunct?: boolean;
+  },
 ): Promise<{ serviceId: number; price: number; priceNoVat: number | null } | null> {
   const siteId = await resolveDpdSiteId(config, input.city, input.county);
   const location: Record<string, unknown> = siteId
@@ -468,17 +556,27 @@ export async function calculateDpdDomesticPrice(
   const serviceId = pickPreferredDpdService(ids);
   if (!serviceId) return null;
 
-  const service: Record<string, unknown> = { autoAdjustPickupDate: true, serviceIds: [serviceId] };
-  if (input.cod && input.cod > 0) {
-    service.additionalServices = {
-      cod: { amount: input.cod, processingType: "CASH", currencyCode: "RON" },
-    };
+  /*
+   * ⚠ ACELEASI SERVICII SUPLIMENTARE CA PE AWB (08.10.2026). Specificatia, la calcul:
+   * `additionalServices` „Defines sub-services (like COD, Declared value, etc.)". Cotatia avea
+   * doar rambursul, iar AWB-ul adauga si asigurarea si OBPD: cumparatorul platea pretul fara
+   * ele, DPD factura cu ele, iar diferenta o acoperea comerciantul la fiecare colet.
+   */
+  const hasCod = !!(input.cod && input.cod > 0);
+  const extra: Record<string, unknown> = {};
+  if (hasCod) extra.cod = { amount: input.cod, processingType: "CASH", currencyCode: "RON" };
+  if (config.declared_value_enabled && input.declaredValue && input.declaredValue > 0) {
+    extra.declaredValue = { amount: Math.round(input.declaredValue * 100) / 100 };
   }
+  const obpd = input.laPunct ? null : obpdPentru(config, { hasCod, countryId: 642, serviceId });
+  if (obpd) extra.obpd = obpd;
+  const service: Record<string, unknown> = { autoAdjustPickupDate: true, serviceIds: [serviceId] };
+  if (Object.keys(extra).length > 0) service.additionalServices = extra;
 
   /* ⚠ `vat` era nedeclarat aici, desi vine in ACELASI obiect `ShipmentPrice` si e declarat
      pe calea internationala. Sub-declarat, nu se putea verifica `amount + vat = total`. */
   const data = await dpdPost<{
-    calculations?: { price?: { amount?: number; vat?: number; total?: number; currency?: string }; error?: { message?: string } }[];
+    calculations?: { price?: { amount?: number; vat?: number; total?: number; currency?: string }; error?: { message?: string; id?: string } }[];
   }>("calculate", {
     userName: config.username,
     password: config.password,
@@ -491,6 +589,11 @@ export async function calculateDpdDomesticPrice(
   });
 
   const calc = data.calculations?.[0];
+  /* ⚠ Fiecare rezultat are `error`-ul lui (CalculationResult.error), iar `dpdPost` vede doar pe
+     cel de sus. Refuzul se aruncă, ca apelantul sa-l logheze inainte sa cada pe tariful fix. */
+  if (calc?.error?.message) {
+    throw eroareRefuz(`DPD calculate: ${calc.error.message}${calc.error.id ? ` [cod eroare DPD: ${calc.error.id}]` : ""}`);
+  }
   // Customer-facing domestic price is the gross total (VAT + COD premium included).
   const gross = calc?.price?.total ?? calc?.price?.amount;
   if (typeof gross !== "number") return null;
@@ -532,13 +635,14 @@ export type DpdOffice = {
  * All DPD RO pickup points (offices + lockers). Mirrors the official module's
  * location/office call (credentials only — the account's country implied).
  */
-export async function getDpdOffices(config: DpdConfig): Promise<DpdOffice[]> {
+export async function getDpdOffices(config: DpdConfig, o: { cuRamburs?: boolean } = {}): Promise<DpdOffice[]> {
   const data = await dpdPost<{ offices?: Record<string, unknown>[] }>("location/office", {
     userName: config.username,
     password: config.password,
     language: "RO",
   });
   return (data.offices ?? [])
+    .filter((x) => punctulDpdPrimesteColetul(x, { cuRamburs: !!o.cuRamburs }))
     .map((o) => {
       const addr = (o.address ?? {}) as Record<string, unknown>;
       return {
@@ -552,12 +656,38 @@ export async function getDpdOffices(config: DpdConfig): Promise<DpdOffice[]> {
     .filter((o) => o.id > 0);
 }
 
+/*
+ * ⚠ NU ORICE OFICIU DPD E UN PUNCT DE RIDICARE (08.10.2026).
+ *
+ * Lista intoarce TOATE oficiile, iar pana azi le ofeream pe toate cumparatorului. Campurile din
+ * specificatie (Office): `pickUpAllowed` „whether parcels can be picked up from office",
+ * `validFrom`/`validTo`, `palletOffice`, `cargoTypesAllowed` ["PARCEL","PALLET","TYRE"],
+ * `cashPaymentAllowed`/`cardPaymentAllowed`. Un camp LIPSA nu exclude: excludem doar ce DPD
+ * spune explicit ca nu merge, ca sa nu golim lista daca un raspuns vine mai sarac.
+ */
+export function punctulDpdPrimesteColetul(
+  o: Record<string, unknown>,
+  opt: { cuRamburs: boolean },
+  azi: string = new Date().toISOString().slice(0, 10),
+): boolean {
+  if (o.pickUpAllowed === false) return false;
+  if (o.palletOffice === true) return false;
+  const cargo = o.cargoTypesAllowed;
+  if (Array.isArray(cargo) && cargo.length > 0 && !cargo.includes("PARCEL")) return false;
+  if (typeof o.validFrom === "string" && o.validFrom.slice(0, 10) > azi) return false;
+  if (typeof o.validTo === "string" && o.validTo.slice(0, 10) < azi) return false;
+  // La ramburs cumparatorul plateste la punct: trebuie sa existe macar un fel de plata.
+  if (opt.cuRamburs && o.cashPaymentAllowed === false && o.cardPaymentAllowed === false) return false;
+  return true;
+}
+
 // ─── International (EU) ───────────────────────────────────────────────────────
 // DPD Romania runs the Speedy engine: countryId is the ISO 3166-1 numeric code.
 // Flow: services/destination (which service serves this country) -> calculate
 // (live price) -> shipment (AWB). Domestic helpers above stay unchanged.
 
-export type DpdIntlQuote = { serviceId: number; price: number; currency: string };
+/** `price` = brut (`total`), `priceNoVat` = net strict din `amount`; alege apelantul, ca la intern. */
+export type DpdIntlQuote = { serviceId: number; price: number; priceNoVat: number | null; currency: string };
 
 /**
  * DPD's engine wants postcodes without separators; Poland writes them "12-345"
@@ -610,7 +740,7 @@ export async function calculateDpdIntlPrice(
   if (!serviceId) return null;
 
   const data = await dpdPost<{
-    calculations?: { price?: { amount?: number; vat?: number; total?: number; currency?: string } }[];
+    calculations?: { price?: { amount?: number; vat?: number; total?: number; currency?: string }; error?: { message?: string; id?: string } }[];
     price?: { amount?: number; vat?: number; total?: number; currency?: string };
   }>("calculate", {
     userName: config.username,
@@ -623,12 +753,29 @@ export async function calculateDpdIntlPrice(
     payment: { courierServicePayer: "SENDER" }, // merchant pays the courier
   });
 
-  const price = data.calculations?.[0]?.price ?? data.price;
-  // ShipmentPrice.amount = price BEFORE VAT (the contracted net rate); .total adds
-  // VAT. We charge the net rate so it matches the merchant's DPD contract price.
-  const net = price?.amount ?? price?.total;
-  if (typeof net !== "number") return null;
-  return { serviceId, price: Math.round(net * 100) / 100, currency: price?.currency ?? "RON" };
+  const calc = data.calculations?.[0];
+  if (calc?.error?.message) {
+    throw eroareRefuz(`DPD calculate: ${calc.error.message}${calc.error.id ? ` [cod eroare DPD: ${calc.error.id}]` : ""}`);
+  }
+  const price = calc?.price ?? data.price;
+  /*
+   * ⚠ BRUTUL SI NETUL, CA LA INTERN (08.10.2026). Specificatia: „amount: Total amount (before
+   * VAT)", „total: Total amount (amount + vat)". Inainte se intorcea mereu `amount` (cu cadere
+   * pe `total`), deci un magazin cu preturi CU TVA incasa netul ca si cum ar fi continut TVA-ul.
+   * Apelantul alege dupa regimul magazinului; netul nu cade niciodata pe `total`.
+   */
+  const gross = price?.total ?? price?.amount;
+  if (typeof gross !== "number") return null;
+  const net = price?.amount;
+  const vat = price?.vat;
+  const netCredibil = typeof net === "number" && net > 0 && net <= gross
+    && (typeof vat !== "number" || Math.abs(net + vat - gross) <= 0.01);
+  return {
+    serviceId,
+    price: Math.round(gross * 100) / 100,
+    priceNoVat: netCredibil ? Math.round(net * 100) / 100 : null,
+    currency: price?.currency ?? "RON",
+  };
 }
 
 export type DpdIntlShipmentInput = DpdShipmentInput & {
@@ -710,7 +857,7 @@ export async function getDpdAwbPdf(
     userName: config.username,
     password: config.password,
     language: "RO",
-    paperSize: format, // A4 | A6 | A4_4xA6
+    paperSize: format, // A4 | A6 (DPD accepta si A4_4xA6, nefolosit la noi)
     parcels: [{ parcel: { id: barcode } }],
   });
   if (!res.data) throw new Error("PDF lipsa din raspuns DPD");

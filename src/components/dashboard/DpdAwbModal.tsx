@@ -94,7 +94,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [content, setContent] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
     const names = items.map((i) => i?.name).filter(Boolean).join(", ");
-    return (names || "Produse").slice(0, 50);
+    return (names || "Produse").slice(0, 100);
   });
 
   const [recipientName, setRecipientName] = useState(order.customer_name);
@@ -477,7 +477,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       type="text"
                       value={content}
                       onChange={e => setContent(e.target.value)}
-                      maxLength={50}
+                      maxLength={100}
                       placeholder="ex: Imbracaminte, Accesorii..."
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />

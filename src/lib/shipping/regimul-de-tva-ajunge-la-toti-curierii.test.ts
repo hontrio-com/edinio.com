@@ -199,9 +199,16 @@ test("⚠ DPD si Cargus aleg `priceNoVat`, si lipsa lui nu se deduce", () => {
    * `price.total`/`price.amount` la DPD). Alegerea o face APELANTUL, fiindca biblioteca nu
    * stie regimul magazinului.
    */
-  const alegeri = s.match(/tvaPeDeasupra \? q\.priceNoVat : q\.price/g) ?? [];
+  /* DPD alege acum printr-un ajutor (`x`), fiindca la ramburs cu OBPD coteaza separat adresa si
+     punctul de ridicare (08.10.2026). Regula e aceeasi, doar numele variabilei difera. */
+  const alegeri = s.match(/tvaPeDeasupra \? [qx]\.priceNoVat : [qx]\.price/g) ?? [];
   assert.equal(alegeri.length, 2,
     "DPD si Cargus nu mai aleg amandoi intre net si brut dupa regimul magazinului");
+
+  /* Si internationalul DPD (08.10.2026): intorcea mereu netul, si magazinul cu preturi CU TVA
+     il incasa ca si cum l-ar fi continut. */
+  assert.match(s, /peNet \? quote\.priceNoVat : quote\.price/,
+    "DPD international nu mai alege intre net si brut dupa regimul magazinului");
 
   /*
    * `priceNoVat` poate fi `null`, si atunci se cade pe tariful zonei. Ce NU are voie sa se

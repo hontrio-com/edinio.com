@@ -12,7 +12,9 @@ import {
   cancelDpdShipment,
   requestDpdCourierPickup,
   loadDpdAccount,
+  citesteObiectDpd,
   type DpdConfig,
+  type DpdObiect,
   type DpdShipmentInput,
 } from "@/lib/dpd";
 import { euCountryByIso2 } from "@/lib/eu-countries";
@@ -49,6 +51,24 @@ export async function saveDpdConfig(
     .from("store_settings").select("dpd_config").eq("business_id", businessId).maybeSingle();
   const configFinal = pastreazaSecretele("dpd_config", config, vechi?.dpd_config);
 
+  /*
+   * ⚠ SEDIUL ALES SE VERIFICA LA DPD (08.10.2026). Lista din contract arata toti membrii, dar
+   * specificatia spune ca, „depending on his/her permissions, a user is either allowed to work
+   * with shipments of these members or not". Un sediu fara drepturi s-ar salva fara eroare si ar
+   * cadea abia la prima cotatie sau la primul AWB. Se verifica doar cand sediul se SCHIMBA, ca o
+   * pana DPD sa nu blocheze salvarea celorlalte optiuni.
+   */
+  const vechiulSediu = (vechi?.dpd_config as DpdConfig | null)?.client_id;
+  const cfgNou = configFinal as unknown as DpdConfig;
+  if (cfgNou.client_id && cfgNou.client_id !== vechiulSediu) {
+    try {
+      const obiect = await citesteObiectDpd(cfgNou.username, cfgNou.password, cfgNou.client_id);
+      if (!obiect) return { error: "DPD nu a confirmat sediul ales. Alege alt sediu sau verifica drepturile contului." };
+    } catch (e) {
+      return { error: `DPD nu permite acest sediu pentru contul tau: ${(e as Error).message}` };
+    }
+  }
+
   const { error } = await supabase.from("store_settings").update({
     dpd_config: configFinal as unknown as import("@/types/database.types").Json,
     updated_at: new Date().toISOString(),
@@ -82,10 +102,36 @@ export async function loadDpdAccountAction(
   businessId: string,
   username: string,
   password: string,
-): Promise<{ clientId: number; name: string } | { error: string }> {
+): Promise<{ clientId: number; name: string; obiecte: DpdObiect[] } | { error: string }> {
   const parola = await secretDinConfig(businessId, "dpd_config", "password", password);
   if (!parola) return { error: "Completeaza parola DPD." };
   return loadDpdAccount(username, parola);
+}
+
+/*
+ * Client ID-ul unui sediu, dat de DPD comerciantului si introdus de mana.
+ *
+ * ⚠ La DPD autentificarea e doar utilizator si parola, iar utilizatorul are UN client implicit;
+ * celelalte sedii din contract se aleg prin `sender.clientId`. Lista din `client/contract` le arata
+ * de obicei, dar „depending on his/her permissions" poate lipsi. Atunci omul scrie Client ID-ul
+ * primit de la DPD, iar noi il verificam cu `client/{id}` inainte sa-l acceptam.
+ */
+export async function verificaSediuDpdAction(
+  businessId: string,
+  username: string,
+  password: string,
+  clientId: number,
+): Promise<{ obiect: DpdObiect } | { error: string }> {
+  if (!Number.isSafeInteger(clientId) || clientId <= 0) return { error: "Client ID-ul trebuie sa fie un numar." };
+  const parola = await secretDinConfig(businessId, "dpd_config", "password", password);
+  if (!parola) return { error: "Completeaza parola DPD." };
+  try {
+    const obiect = await citesteObiectDpd(username, parola, clientId);
+    if (!obiect) return { error: "DPD nu a gasit acest Client ID pentru contul tau." };
+    return { obiect };
+  } catch (e) {
+    return { error: `DPD nu permite acest Client ID pentru contul tau: ${(e as Error).message}` };
+  }
 }
 
 // ─── AWB actions ──────────────────────────────────────────────────────────────
@@ -325,7 +371,14 @@ export async function requestDpdPickupAction(
     .select("*")
     .eq("business_id", businessId)
     .not("dpd_shipment_id", "is", null)
-    .gte("updated_at", since);
+    /*
+     * ⚠ DUPA MOMENTUL EMITERII AWB-ULUI, NU DUPA `updated_at` (08.10.2026). Orice atingere a
+     * comenzii (o editare, o schimbare de status, o tranzitie de marketplace) o baga inapoi in
+     * fereastra, deci chemam curierul si pentru colete ridicate, livrate sau de pe comenzi
+     * anulate. Si setul de AWB-uri se schimba, deci amprenta de mai jos nu mai oprea dublura.
+     */
+    .gte("dpd_awb_at", since)
+    .not("status", "in", "(cancelled,refunded,delivered)");
 
   const ids = (orders ?? [])
     .map((o) => (o as { dpd_shipment_id?: number | string | null }).dpd_shipment_id)
@@ -389,6 +442,11 @@ export async function cancelDpdShipmentAction(
     const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       dpd_shipment_id: null,
       dpd_awb_number: null,
+      /* ⚠ Si urma de urmarire a coletului anulat: ramasa, un AWB nou cu aceeasi prima problema
+         (acelasi cod) nu mai anunta comerciantul, fiindca urmarirea compara cu codul vechi. */
+      dpd_status_code: null,
+      dpd_status_label: null,
+      dpd_status_checked_at: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId).eq("business_id", businessId).select("id");
     /*

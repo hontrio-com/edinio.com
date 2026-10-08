@@ -873,6 +873,11 @@ export async function getShippingOptions(
         weightKg: greutateIntl,
       });
       if (!quote) return [];
+      /* ⚠ Regimul de TVA al magazinului, ca la intern (`tvaPeDeasupra` de mai jos se declara
+         abia dupa iesirea asta). Pe regim net, fara net credibil nu se ofera optiunea. */
+      const peNet = !!settings.vat_enabled && settings.prices_include_vat === false;
+      const pretIntl = peNet ? quote.priceNoVat : quote.price;
+      if (pretIntl == null) return [];
       // Semnata prin ACELASI ajutor ca optiunile interne: ramura asta iese din
       // functie inainte de pasul de la final, si tocmai de aceea pleca fara
       // token. Cu `semneazaOptiuni` in amandoua iesirile, o optiune nesemnata
@@ -883,7 +888,7 @@ export async function getShippingOptions(
         courier: "dpd",
         courierLabel: `DPD International (${eu!.name})`,
         deliveryType: "address" as const,
-        price: quote.price,
+        price: pretIntl,
         estimatedDays: "3-6 zile",
       }], rambursCotatBani);
     } catch {
@@ -1367,7 +1372,7 @@ export async function getShippingOptions(
     } else if (courierId === "dpd") {
       const dpdCfg = settings.dpd_config as DpdConfig | null;
       const hasApi = !!(dpdCfg?.enabled && dpdCfg.username && dpdCfg.client_id);
-      const pushBoth = (price: number) => {
+      const pushBoth = (price: number, pretPunct: number = price) => {
         options.push({
           courier: "dpd",
           courierLabel: addrLabel(zone.label, "Livrare prin DPD"),
@@ -1379,25 +1384,35 @@ export async function getShippingOptions(
             courier: "dpd",
             courierLabel: lockerLabel(zone.label, "DPD punct de ridicare (locker)"),
             deliveryType: "locker",
-            price,
+            price: pretPunct,
           });
         }
       };
 
       if (hasApi && useAutoPrice) {
         // Live quote with the COD premium baked in when the order is ramburs.
+        /*
+         * ⚠ La adresa AWB-ul poate purta OBPD, la punct de ridicare niciodata (`obpdPentru`).
+         * Cand OBPD chiar se aplica, punctul se coteaza separat; altfel e acelasi pret si o
+         * singura cerere.
+         */
+        const cuObpd = !!(dpdCfg!.open_before_delivery && rambursDeCotat > 0);
+        const cotatie = (laPunct: boolean) => calculateDpdDomesticPrice(dpdCfg!, {
+          city: destination.city,
+          county: destination.county,
+          weightKg: weight,
+          cod: rambursDeCotat,
+          declaredValue: valoareDeclarata,
+          laPunct,
+        });
         promises.push(
-          calculateDpdDomesticPrice(dpdCfg!, {
-            city: destination.city,
-            county: destination.county,
-            weightKg: weight,
-            cod: rambursDeCotat,
-          })
-            .then((q) => {
+          Promise.all([cotatie(false), cuObpd ? cotatie(true) : null])
+            .then(([q, qPunct]) => {
               /* ⚠ Pe regim net se cere `priceNoVat`; lipsa lui inseamna „nu stim netul", si
                  atunci se cade pe tariful fix al zonei, care e deja in regimul magazinului. */
-              const cotat = q ? (tvaPeDeasupra ? q.priceNoVat : q.price) : null;
-              pushBoth(cotat ?? zone.price);
+              const alege = (x: typeof q) => (x ? (tvaPeDeasupra ? x.priceNoVat : x.price) : null);
+              const cotat = alege(q) ?? zone.price;
+              pushBoth(cotat, cuObpd ? (alege(qPunct) ?? cotat) : cotat);
             })
             .catch((err) => {
               console.error("[shipping] DPD estimate failed:", err.message);
@@ -3831,7 +3846,7 @@ async function puncteleDeLaCurier(
       const toate = await CACHE_LOCKERE.iaSau(
         cheieCache,
         async () =>
-          (await getDpdOffices(config)).map((o) => ({
+          (await getDpdOffices(config, { cuRamburs: !!(codAmount && codAmount > 0) })).map((o) => ({
             id: String(o.id),
             name: o.name,
             address: o.address,

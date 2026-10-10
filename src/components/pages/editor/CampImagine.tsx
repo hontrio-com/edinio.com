@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Film, ImagePlus, Link2, RefreshCw, X } from "lucide-react";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { cdnImage } from "@/lib/cdn-image";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -41,7 +42,7 @@ export function CampImagine({
             <video src={valoare} controls preload="metadata" className="max-h-44 w-full bg-black" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={valoare} alt="" className="max-h-40 w-full object-cover" />
+            <img src={cdnImage(valoare, 640)} alt="" className="max-h-40 w-full object-cover" />
           )}
           <div className="absolute right-1.5 top-1.5 z-10 flex gap-1">
             <button

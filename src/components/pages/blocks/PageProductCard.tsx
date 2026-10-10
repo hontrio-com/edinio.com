@@ -3,6 +3,8 @@ import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { AddToCartButton } from "./AddToCartButton";
 import type { PageProduct } from "./ProductsBlock";
 import { LegaturaProdus } from "./LegaturaProdus";
+import { cdnSrcSet, imaginePagina } from "@/lib/cdn-image";
+import { LATIMI } from "@/lib/latimi-imagini";
 
 export function PageProductCard({ p, color, basePath, storeSlug, addToCart, className }: {
   p: PageProduct; color: string; basePath: string; storeSlug: string; addToCart?: boolean; className?: string;
@@ -21,7 +23,8 @@ export function PageProductCard({ p, color, basePath, storeSlug, addToCart, clas
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
           {img ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={img} alt={p.name} className="w-full h-full object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500" />
+            <img src={imaginePagina(img, 640)} srcSet={cdnSrcSet(img, LATIMI)} sizes="(min-width: 1024px) 25vw, (min-width: 768px) 33vw, 50vw"
+              alt={p.name} className="w-full h-full object-contain p-2 group-hover:scale-[1.04] transition-transform duration-500" />
           ) : (
             <div className="w-full h-full flex items-center justify-center"><Package className="h-10 w-10 text-gray-200" /></div>
           )}

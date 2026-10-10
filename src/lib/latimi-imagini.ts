@@ -14,7 +14,7 @@
  * la 480 si un card de produs la 640 erau doua fisiere diferite pentru marimi pe care ochiul nu le
  * deosebeste. Pe o singura scara, cele doua cai cer ACELASI fisier, si a doua e gratuita.
  *
- * ⚠ SI TOATE VALORILE EXISTA IN `TREPTE_LATIME` din `src/app/api/img/route.ts`. Nu e o
+ * ⚠ SI TOATE VALORILE EXISTA IN `TREPTE_LATIME` (mai jos, folosita si de `/api/img`). Nu e o
  * coincidenta: pasul urmator e sa PREGENERAM variantele in R2 si sa le servim ca obiecte simple,
  * ca sa nu se mai transforme nimic lunar. Aia merge numai daca toate caile cer exact aceleasi
  * latimi — una singura pe langa inseamna un fisier care lipseste si o poza rupta.
@@ -170,4 +170,71 @@ export function sursaCerePngInEmail(cheie: string): boolean {
  */
 export function cheieVarianta(cheie: string, latime: number, calitate: number, format: FormatVarianta = "webp"): string {
   return `${PREFIX_VARIANTE}/w${latime}q${calitate}/${cheie}.${format}`;
+}
+
+/**
+ * Treptele pe care `/api/img` rotunjeste latimea si calitatea inainte sa scrie varianta.
+ *
+ * ⚠ AU STAT IN RUTA PANA PE 09.10.2026. Le citesc acum TREI locuri care trebuie sa dea aceeasi
+ * cheie: ruta, care scrie varianta; adresa directa (`adresaDirectaVariantei`), care o cere de pe
+ * domeniul Workerului; si Workerul insusi (`infra/cloudflare/imagini-directe/worker.js`), care
+ * refuza orice alta treapta. O adresa directa la o treapta pe care ruta n-o scrie niciodata nu
+ * s-ar fi gasit nicicand in depozit: fiecare cerere ar fi ocolit prin ruta, la nesfarsit.
+ *
+ * ⚠ Toata `LATIMI` si `CALITATE` sunt aici; o proba o cere.
+ */
+export const TREPTE_LATIME = [16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 640, 768, 896, 1024, 1280, 1536, 1920, 2048] as const;
+export const TREPTE_CALITATE = [50, 65, 75, 85, 95] as const;
+
+/** Treapta de latime a variantei, exact ca in `/api/img`: plafonata la 16..2048, rotunjita IN SUS. */
+export function latimeaVariantei(ceruta: number): number {
+  const w = Math.min(2048, Math.max(16, Math.trunc(ceruta) || 0));
+  return TREPTE_LATIME.find((t) => t >= w) ?? 2048;
+}
+
+/** Treapta de calitate a variantei, exact ca in `/api/img`: plafonata la 1..100, lipsa = 75, rotunjita IN SUS. */
+export function calitateaVariantei(ceruta: number): number {
+  const q = Math.min(100, Math.max(1, Math.trunc(ceruta) || 75));
+  return TREPTE_CALITATE.find((t) => t >= q) ?? 95;
+}
+
+/**
+ * Gazda Workerului care serveste variantele direct (`NEXT_PUBLIC_IMAGINI_DIRECTE`), sau "" cand
+ * calea directa e stinsa.
+ *
+ * ⚠ ORICE NU E O ADRESA `https://` CURATA STINGE CALEA, nu o strica. O valoare gresita in Vercel
+ * (o bara in plus, un `http://`, un spatiu) ar fi pus fiecare poza a fiecarui magazin pe o adresa
+ * care nu raspunde. Stinsa, pozele merg mai departe prin `/api/img`, ca inainte.
+ */
+export function gazdaImaginiDirecte(valoare: string | undefined): string {
+  if (!valoare) return "";
+  try {
+    const u = new URL(valoare.trim());
+    if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash) return "";
+    if (u.pathname !== "/" && u.pathname !== "") return "";
+    return u.origin;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Adresa DIRECTA a variantei WebP, pe domeniul Workerului, sau `null` cand nu se poate da una.
+ *
+ * ═══ ⚠ DE CE EXISTA (09.10.2026) ═══
+ *
+ * Prin `/api/img`, fiecare poza afisata e o cerere CDN la Vercel (redirectarea 302), iar planul
+ * Pro include doar 1M pe luna. La sute de magazine, redirectarile pozelor ar fi fost cel mai mare
+ * cost al lor, plus ~50 ms pe poza. Cerut direct, obiectul vine de la Cloudflare, fara salt.
+ *
+ * ⚠ O VARIANTA NEFACUTA INCA NU E O POZA RUPTA: Workerul o cauta in depozit si, daca lipseste,
+ * trimite browserul la `/api/img`, care o face si o pastreaza. Deci calea se vindeca singura, ca
+ * si pana acum.
+ *
+ * ⚠ `null` PENTRU ORICE CHEIE PE CARE RUTA N-AR OPTIMIZA-O. Acelea raman pe `/api/img`, care le
+ * da originalul; Workerul le-ar fi refuzat cu 404.
+ */
+export function adresaDirectaVariantei(gazda: string, cheie: string, latime: number, calitate: number): string | null {
+  if (!gazda || !cheieOptimizabila(cheie)) return null;
+  return `${gazda}/${cheieVarianta(cheie, latimeaVariantei(latime), calitateaVariantei(calitate))}`;
 }

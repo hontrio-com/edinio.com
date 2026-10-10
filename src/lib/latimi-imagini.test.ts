@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   CALITATE, LATIME_PNG, LATIMI, LATIMI_ECRAN, LATIMI_MICI, PREFIX_VARIANTE,
   cheieOptimizabila, cheieVarianta, latimeaDePeScara, sursaCerePngInEmail,
+  TREPTE_LATIME, TREPTE_CALITATE, latimeaVariantei, calitateaVariantei,
 } from "./latimi-imagini";
 
 /**
@@ -79,32 +80,53 @@ test("⚠ TOATE latimile scarii exista in treptele lui `/api/img`", () => {
    * ele — 828, sa zicem — loaderul ar cere 828 si ruta ar taia la 896: o poza mai grea decat trebuie,
    * un fisier in plus tinut pe veci, si niciodata marimea ceruta. Tacut, pe fiecare poza.
    *
-   * ⚠ Se citeste din SURSA fiindca ruta importa `sharp` si `@/lib/r2`, adica lucruri care nu se
-   * incarca intr-o proba pura. Deci se cere ca LISTA sa fie acolo, nu ca functia sa raspunda —
-   * ceea ce e destul: lista e o constanta literala.
+   * ⚠ 09.10.2026: treptele s-au mutat din ruta in modulul comun (le citesc si adresa directa si
+   * Workerul). Proba cere acum doua lucruri: ca scara sa fie in trepte, si ca ruta sa rotunjeasca
+   * PRIN functiile comune, nu printr-o copie a ei (vezi proba urmatoare).
    */
-  const ruta = sursa("src/app/api/img/route.ts");
-  const m = /const TREPTE_LATIME = \[([^\]]+)\]/.exec(ruta);
-  assert.ok(m, "nu s-a gasit `TREPTE_LATIME` in `/api/img` — s-a redenumit sau s-a mutat");
-
-  const trepte = m[1].split(",").map((s) => Number(s.trim()));
-  assert.ok(trepte.length > 0 && trepte.every(Number.isFinite), `trepte necitibile: ${m[1]}`);
-
   for (const l of LATIMI) {
     assert.ok(
-      trepte.includes(l),
-      `latimea ${l} din scara comuna nu e o treapta a lui /api/img (${trepte.join(", ")}): ` +
-        "calea pregenerata ar cere un fisier care nu se face niciodata",
+      (TREPTE_LATIME as readonly number[]).includes(l),
+      `latimea ${l} din scara comuna nu e o treapta a lui /api/img (${TREPTE_LATIME.join(", ")}): ` +
+        "calea directa ar cere un fisier care nu se face niciodata",
     );
+    assert.equal(latimeaVariantei(l), l, `ruta ar muta latimea ${l} pe alta treapta`);
   }
 });
 
 test("⚠ calitatea scarii e o treapta a lui `/api/img`, si e una singura", () => {
+  assert.ok((TREPTE_CALITATE as readonly number[]).includes(CALITATE), `calitatea ${CALITATE} nu e o treapta a lui /api/img`);
+  assert.equal(calitateaVariantei(CALITATE), CALITATE);
+});
+
+test("⚠ ruta rotunjeste prin treptele COMUNE, nu printr-o copie a lor", () => {
+  /*
+   * ⚠ Se citeste SURSA fiindca ruta importa `sharp` si `@/lib/r2`, care nu se incarca intr-o proba
+   * pura. O copie a treptelor scrisa din nou in ruta s-ar desparti de adresa directa si de Worker:
+   * pagina ar cere `w640`, ruta ar scrie `w768`, si Workerul n-ar gasi niciodata varianta.
+   */
   const ruta = sursa("src/app/api/img/route.ts");
-  const m = /const TREPTE_CALITATE = \[([^\]]+)\]/.exec(ruta);
-  assert.ok(m, "nu s-a gasit `TREPTE_CALITATE` in `/api/img`");
-  const trepte = m[1].split(",").map((s) => Number(s.trim()));
-  assert.ok(trepte.includes(CALITATE), `calitatea ${CALITATE} nu e o treapta a lui /api/img`);
+  assert.equal(/const TREPTE_(LATIME|CALITATE)\s*=/.test(ruta), false, "ruta si-a scris din nou propriile trepte");
+  assert.match(ruta, /latimeaVariantei\(latimeCeruta\)/, "ruta nu mai rotunjeste latimea prin functia comuna");
+  assert.match(ruta, /calitateaVariantei\(calitateCeruta\)/, "ruta nu mai rotunjeste calitatea prin functia comuna");
+});
+
+test("functiile comune rotunjesc EXACT ca ruta de dinainte de mutare", () => {
+  /*
+   * Copia literala a ce facea ruta pana pe 09.10.2026, ca mutarea sa nu schimbe nicio cheie deja
+   * scrisa in depozit: o cheie noua pentru aceeasi cerere ar fi refacut si pastrat a doua oara
+   * fiecare varianta din platforma.
+   */
+  const VECHI_L = [16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 640, 768, 896, 1024, 1280, 1536, 1920, 2048];
+  const VECHI_Q = [50, 65, 75, 85, 95];
+  for (let w = -5; w <= 2600; w++) {
+    const c = Math.min(2048, Math.max(16, w || 0));
+    assert.equal(latimeaVariantei(c), VECHI_L.find((t) => t >= c) ?? 2048, `latimea ${w}`);
+  }
+  for (let q = -5; q <= 130; q++) {
+    const c = Math.min(100, Math.max(1, q || 75));
+    assert.equal(calitateaVariantei(c), VECHI_Q.find((t) => t >= c) ?? 95, `calitatea ${q}`);
+  }
 });
 
 test("⚠ `next.config.ts` isi ia listele DIN scara, nu si le scrie pe ale lui", () => {

@@ -5,6 +5,7 @@ import { Check, Loader2, Mail } from "lucide-react";
 import { BlockShell } from "../BlockShell";
 import { aboneazaNewsletter } from "@/lib/actions/page.actions";
 import { cuTransparenta } from "@/lib/pages/culori";
+import { cdnSrcSet, imaginePagina } from "@/lib/cdn-image";
 import type { NewsletterBlock } from "@/lib/pages/blocks.types";
 
 const camp = "w-full rounded-xl border border-border bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-gray-400";
@@ -91,7 +92,7 @@ export function NewsletterBlockView({ block, color, businessId, pageId, disabled
         <div className="grid items-center overflow-hidden rounded-3xl border border-border bg-surface pg-md:grid-cols-2">
           {block.image
             // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={block.image} alt="" loading="lazy" className="h-56 w-full object-cover pg-md:h-full" />
+            ? <img src={imaginePagina(block.image, 1024)} srcSet={cdnSrcSet(block.image)} sizes="(min-width: 768px) 576px, 100vw" alt="" loading="lazy" className="h-56 w-full object-cover pg-md:h-full" />
             : <div className="hidden h-full min-h-[240px] pg-md:block" style={{ background: `linear-gradient(135deg, ${culoare}, ${cuTransparenta(culoare, 0.4)})` }} />}
           <div className="space-y-5 p-6 pg-sm:p-10">{text}{formular}</div>
         </div>

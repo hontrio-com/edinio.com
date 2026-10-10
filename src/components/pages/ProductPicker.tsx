@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, useRef } from "react";
 import { Search, X, Check, Loader2, ChevronUp, ChevronDown } from "lucide-react";
 import { searchProductsForPicker, getProductsByIds } from "@/lib/actions/product-picker.actions";
 import type { PageProduct } from "./blocks/ProductsBlock";
+import { cdnImage } from "@/lib/cdn-image";
 
 /**
  * Scalable manual product selector for the page builder. Selected products are
@@ -102,7 +103,7 @@ export function ProductPicker({ businessId, selectedIds, onChange, reordonabil =
               )}
               {p.images[0]
                 // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={p.images[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
+                ? <img src={cdnImage(p.images[0], 64)} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
                 : <div className="w-7 h-7 rounded bg-muted shrink-0" />}
               <span className="text-xs truncate flex-1 min-w-0">{p.name}</span>
               {reordonabil && (
@@ -141,7 +142,7 @@ export function ProductPicker({ businessId, selectedIds, onChange, reordonabil =
                 className="w-full flex items-center gap-2 p-2 text-left hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed">
                 {p.images[0]
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={p.images[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
+                  ? <img src={cdnImage(p.images[0], 64)} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
                   : <div className="w-7 h-7 rounded bg-muted shrink-0" />}
                 <span className="text-xs truncate flex-1 min-w-0">{p.name}</span>
                 {sel && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}

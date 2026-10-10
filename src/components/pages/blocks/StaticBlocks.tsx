@@ -9,6 +9,8 @@ import { atributeAnimatie, clasaEfectButon, clasaEfectImagine } from "@/lib/page
 import { stivaFont } from "@/lib/pages/fonturi";
 import { INALTIME_TITLU, spatiere } from "@/lib/pages/spatiere-text";
 import { NativeVideo } from "./NativeVideo";
+import { cdnSrcSet, imaginePagina } from "@/lib/cdn-image";
+import { LATIMI } from "@/lib/latimi-imagini";
 import type { CSSProperties, ReactNode } from "react";
 import type {
   Block, HeroBlock, HeadingBlock, TextBlock, ImageBlock, GalleryBlock, GalleryItem, ButtonBlock,
@@ -126,7 +128,8 @@ export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock
           <div className={`${block.layout === "split-right" ? "pg-md:order-2" : ""} overflow-hidden rounded-2xl`}>
             {block.bgImage && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={block.bgImage} alt="" fetchPriority={h1 ? "high" : undefined} decoding="async"
+              <img src={imaginePagina(block.bgImage, 1024)} srcSet={cdnSrcSet(block.bgImage)} sizes="(min-width: 768px) 576px, 100vw"
+                alt="" fetchPriority={h1 ? "high" : undefined} decoding="async"
                 className={`aspect-[4/3] w-full object-cover ${block.kenBurns ? "hero-ken-burns" : ""}`} />
             )}
           </div>
@@ -140,7 +143,8 @@ export function HeroBlockView({ block, color, basePath, h1 }: { block: HeroBlock
     <section className={`relative overflow-hidden ${block.style?.hideOn ? ASCUNS[block.style.hideOn] ?? "" : ""}`} style={{ backgroundColor: block.bgColor ?? (block.bgImage ? "#111" : fundalHero) }} {...atributeAnimatie(block.style).attrs} suppressHydrationWarning>
       {block.bgImage && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={block.bgImage} alt="" fetchPriority={h1 ? "high" : undefined} decoding="async"
+        <img src={imaginePagina(block.bgImage, 1536)} srcSet={cdnSrcSet(block.bgImage)} sizes="100vw"
+          alt="" fetchPriority={h1 ? "high" : undefined} decoding="async"
           className={`absolute inset-0 w-full h-full object-cover ${block.kenBurns ? "hero-ken-burns" : ""}`} />
       )}
       {block.bgImage && block.overlay !== false && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${strat})` }} />}
@@ -218,7 +222,8 @@ export function ImageBlockView({ block, basePath }: { block: ImageBlock; basePat
   const raza = block.rounded !== false ? "rounded-2xl" : "";
   const img = (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={block.src} alt={block.alt ?? ""} loading="lazy" decoding="async"
+    <img src={imaginePagina(block.src, 1536)} srcSet={cdnSrcSet(block.src)}
+      sizes={`(min-width: 1280px) ${Math.round(12.8 * w)}px, ${w}vw`} alt={block.alt ?? ""} loading="lazy" decoding="async"
       className={`h-auto w-full ${taiata ? `${taiata} object-cover` : ""} ${raza}`} />
   );
   const efect = clasaEfectImagine(block.hover);
@@ -262,7 +267,9 @@ export function GalleryBlockView({ block }: { block: GalleryBlock }) {
     <figure key={i} className={`text-left ${masonry ? `mb-3 break-inside-avoid` : ""}`}>
       <div className={`${efect} ${raza} border border-border`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={it.src} alt={it.title ?? ""} loading="lazy" decoding="async" className={`w-full ${aspect} ${raza}`} />
+        <img src={imaginePagina(it.src, 1024)} srcSet={cdnSrcSet(it.src, LATIMI)}
+          sizes={`(min-width: 768px) ${Math.ceil(100 / n)}vw, ${Math.ceil(100 / pePhone)}vw`}
+          alt={it.title ?? ""} loading="lazy" decoding="async" className={`w-full ${aspect} ${raza}`} />
       </div>
       {mode !== "none" && (it.title || it.desc) && (
         <figcaption className="mt-1.5">
@@ -365,7 +372,8 @@ export function ColumnsBlockView({ block, color, basePath, renderBlocks }: {
               style={cel.style}>
               {it.image && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.image} alt={it.heading ?? ""} loading="lazy" decoding="async" className="w-full h-auto rounded-xl" />
+                <img src={imaginePagina(it.image, 1024)} srcSet={cdnSrcSet(it.image, LATIMI)} sizes="(min-width: 768px) 50vw, 100vw"
+                  alt={it.heading ?? ""} loading="lazy" decoding="async" className="w-full h-auto rounded-xl" />
               )}
               {it.heading && <h3 className="text-lg font-bold text-foreground">{it.heading}</h3>}
               {it.html && <div className="policy-content text-foreground/75 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: it.html }} />}
@@ -499,7 +507,7 @@ export function TrustBlockView({ block, color, basePath }: { block: TrustBlock; 
               <div className={`flex shrink-0 items-center justify-center ${cutieIcon}`} style={fundalIcon}>
                 {b.image
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={b.image} alt="" loading="lazy" className={`${stilIcon === "plain" ? m.cutie : "h-3/5 w-3/5"} object-contain`} />
+                  ? <img src={imaginePagina(b.image, 128)} alt="" loading="lazy" className={`${stilIcon === "plain" ? m.cutie : "h-3/5 w-3/5"} object-contain`} />
                   : <PageIcon name={b.icon} className={m.icon} />}
               </div>
               <div className="min-w-0">

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { BlockStyle } from "@/lib/pages/blocks.types";
 import { atributeAnimatie } from "@/lib/pages/animatii";
+import { imaginePagina } from "@/lib/cdn-image";
 
 const PAD: Record<string, string> = {
   none: "py-0",
@@ -42,11 +43,14 @@ export const ASCUNS: Record<string, string> = { mobile: "pg-ascuns-mobil", deskt
  * in aceasta ordine. Adresa imaginii a trecut deja prin `prepareBlocksForPublic`
  * (numai https); ghilimelele si parantezele se scot oricum, ca `url()` sa nu se
  * poata inchide din valoare.
+ *
+ * ⚠ Poza din depozit trece prin optimizator (1920, fundalul acopera tot ecranul): pana pe
+ * 09.10.2026 se incarca originalul. Curatarea de caractere ramane DUPA, pe adresa finala.
  */
 function fundal(style?: BlockStyle): CSSProperties {
   const s: CSSProperties = {};
   if (style?.bgImage) {
-    const u = style.bgImage.replace(/["'()\\\s]/g, "");
+    const u = imaginePagina(style.bgImage, 1920).replace(/["'()\\\s]/g, "");
     const strat = Math.min(80, Math.max(0, style.bgOverlay ?? 0)) / 100;
     s.backgroundImage = `linear-gradient(rgba(0,0,0,${strat}), rgba(0,0,0,${strat})), url("${u}")`;
     s.backgroundSize = "cover";

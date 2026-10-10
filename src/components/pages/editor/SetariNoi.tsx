@@ -14,6 +14,7 @@ import { Field, Grup, IconPicker, Segmentat, Select, Text, Toggle, inputCls } fr
 import { ProductPicker } from "../ProductPicker";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
 import { PageIcon } from "../icon-registry";
+import { cdnImage } from "@/lib/cdn-image";
 
 type Patch<T> = (p: Partial<T>) => void;
 
@@ -76,7 +77,7 @@ export function SetariBeneficii({ block: b, patch, setStyle }: { block: TrustBlo
               <p className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
                 {it.image
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={it.image} alt="" className="h-4 w-4 object-contain" />
+                  ? <img src={cdnImage(it.image, 64)} alt="" className="h-4 w-4 object-contain" />
                   : <PageIcon name={it.icon} className="h-3.5 w-3.5" />}
                 Beneficiul {i + 1}
               </p>

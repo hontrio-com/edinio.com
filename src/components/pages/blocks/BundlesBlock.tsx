@@ -4,6 +4,8 @@ import { AddToCartButton } from "./AddToCartButton";
 import { LegaturaProdus } from "./LegaturaProdus";
 import { Numaratoare } from "./Numaratoare";
 import { formatPrice } from "@/lib/utils/format";
+import { cdnSrcSet, imaginePagina } from "@/lib/cdn-image";
+import { LATIMI } from "@/lib/latimi-imagini";
 import { cuTransparenta } from "@/lib/pages/culori";
 import type { BundlesBlock } from "@/lib/pages/blocks.types";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
@@ -123,7 +125,7 @@ export function BundlesBlockView({ block, pachete, color, basePath, storeSlug }:
               className={`block overflow-hidden bg-muted/40 ${lat ? "absolute inset-0" : "relative"}`}>
               {p.image
                 // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={p.image} alt={p.name} loading="lazy" decoding="async" className={`w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${lat ? "h-full" : "aspect-[4/3]"}`} />
+                ? <img src={imaginePagina(p.image, 1024)} srcSet={cdnSrcSet(p.image, LATIMI)} sizes="(min-width: 768px) 50vw, 100vw" alt={p.name} loading="lazy" decoding="async" className={`w-full object-cover transition-transform duration-500 group-hover:scale-[1.03] ${lat ? "h-full" : "aspect-[4/3]"}`} />
                 : <div className={`flex w-full items-center justify-center ${lat ? "h-full" : "aspect-[4/3]"}`}><Package className="h-10 w-10 text-muted-foreground/30" /></div>}
               <div className="absolute left-3 top-3">{etichete}</div>
             </LegaturaProdus>
@@ -150,7 +152,7 @@ export function BundlesBlockView({ block, pachete, color, basePath, storeSlug }:
                           <li key={`${c.id}-${i}`} className="flex min-h-[56px] items-center gap-3 rounded-xl border border-border bg-background p-2">
                             {c.imagine
                               // eslint-disable-next-line @next/next/no-img-element
-                              ? <img src={c.imagine} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                              ? <img src={imaginePagina(c.imagine, 128)} alt="" loading="lazy" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
                               : <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted"><Package className="h-4 w-4 text-muted-foreground" /></span>}
                             <span className="line-clamp-2 min-w-0 flex-1 text-[13px] leading-snug text-foreground/85">{c.nume}</span>
                             {c.cantitate > 1 && <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-bold text-foreground">×{c.cantitate}</span>}
@@ -189,7 +191,7 @@ export function BundlesBlockView({ block, pachete, color, basePath, storeSlug }:
                         {i > 0 ? <Plus className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-hidden /> : <span className="w-3 shrink-0" />}
                         {c.imagine
                           // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={c.imagine} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-lg border border-border object-cover" />
+                          ? <img src={imaginePagina(c.imagine, 64)} alt="" loading="lazy" className="h-8 w-8 shrink-0 rounded-lg border border-border object-cover" />
                           : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-muted"><Package className="h-4 w-4" /></span>}
                         <span className="min-w-0 truncate text-foreground/80">
                           {c.cantitate > 1 && <span className="font-semibold text-foreground">{c.cantitate}× </span>}

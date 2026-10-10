@@ -12,9 +12,11 @@
 // public `*.r2.dev` (randurile vechi) si domeniul CDN (incarcarile noi). Deci nu e nevoie de
 // nicio migrare de date, nici acum, nici cand s-a pornit CDN-ul.
 
-import { CALITATE } from "./latimi-imagini";
+import { CALITATE, adresaDirectaVariantei, gazdaImaginiDirecte } from "./latimi-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
+/* ⚠ Citit LITERAL: Next inlocuieste in pachetul browserului doar `process.env.NEXT_PUBLIC_…` scris intreg. */
+const DIRECTE = gazdaImaginiDirecte(process.env.NEXT_PUBLIC_IMAGINI_DIRECTE);
 
 /** The object key (e.g. "products/uid/file.webp") if src is one of our R2 origins. */
 function extractR2Key(src: string): string | null {
@@ -86,6 +88,16 @@ export default function imageLoader({
    * ⚠ CE AR TREBUI CA SA MEARGA: un hostname propriu al Workerului (Custom Domain, nu domeniu R2),
    * cu binding la galeata, care sa serveasca el octetii. Adica mutarea servirii tuturor imaginilor
    * intr-o piesa noua — pentru 50 ms care oricum se incarca in paralel. S-a hotarat sa nu.
+   *
+   * ═══ ⚠ 09.10.2026: S-A FACUT, FIINDCA SALTUL A DEVENIT BANI ═══
+   *
+   * Fiecare redirectare e o cerere CDN la Vercel, iar Pro include doar 1M pe luna. La sute de
+   * magazine, redirectarile pozelor ar fi fost cel mai mare cost al lor. Workerul are acum
+   * hostname-ul lui (`infra/cloudflare/imagini-directe/`), cu binding la galeata, iar la o varianta
+   * lipsa trimite browserul la `/api/img`. Cu `NEXT_PUBLIC_IMAGINI_DIRECTE` stins, totul ramane ca
+   * mai sus.
    */
+  const directa = adresaDirectaVariantei(DIRECTE, key, width, q);
+  if (directa) return directa;
   return `/api/img?p=${encodeURIComponent(key)}&w=${width}&q=${q}`;
 }

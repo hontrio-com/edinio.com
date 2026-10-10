@@ -26,6 +26,7 @@ import { SetariFaq } from "./editor/SetariFaq";
 import { SetariBeneficii, SetariNewsletter, SetariPachete, SetariPlatiCurieri, StilFormular } from "./editor/SetariNoi";
 import { cereIzolare } from "@/lib/pages/cod-personalizat";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
+import { cdnImage } from "@/lib/cdn-image";
 import {
   AlegeFont, Area, Field, Grup, IconPicker, RANDURI, RANDURI_AUTO, Range, Segmentat, Select, SPATIERE, Text, Toggle, inputCls,
 } from "./editor/campuri";
@@ -265,7 +266,7 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
               <div key={i} className="space-y-2 rounded-lg border border-border p-2">
                 <div className="flex items-center gap-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={it.src} alt="" className="h-10 w-10 shrink-0 rounded border border-border object-cover" />
+                  <img src={cdnImage(it.src, 128)} alt="" className="h-10 w-10 shrink-0 rounded border border-border object-cover" />
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{it.src.split("/").pop()}</span>
                   <button type="button" onClick={() => patch({ items: items.filter((_, k) => k !== i) })} aria-label="Scoate imaginea" className="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border"><X className="h-3.5 w-3.5 text-red-500" /></button>
                 </div>

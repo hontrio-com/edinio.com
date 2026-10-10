@@ -1,0 +1,33 @@
+# Workerul care serveste direct variantele de imagine. Vezi `worker.js` pentru de ce exista.
+#
+# Se publica din folderul asta, cu contul Cloudflare al platformei:
+#   npx wrangler@4 deploy
+#
+# ⚠ ORDINEA, ca sa nu se rupa nicio poza:
+#   1. Workerul se publica si se probeaza (varianta existenta = 200, lipsa = 302 catre /api/img).
+#   2. Abia apoi `NEXT_PUBLIC_IMAGINI_DIRECTE=https://img.edinio-cdn.com` in Vercel + redesfasurare.
+# La scoatere, invers: INTAI se stinge variabila din Vercel si se redesfasoara, abia apoi se
+# opreste Workerul. Altfel paginile deja servite cer poze de la un hostname care nu mai raspunde.
+
+name = "edinio-imagini-directe"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# Doar hostname-ul de mai jos; fara adresa *.workers.dev si fara previzualizari publice.
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "img.edinio-cdn.com", custom_domain = true },
+]
+
+[[r2_buckets]]
+binding = "IMAGINI"
+bucket_name = "edinio-uploads"
+
+[vars]
+# Unde se trimite browserul cand varianta lipseste. `www`: apexul raspunde cu 308, adica un salt in plus.
+ORIGINE = "https://www.edinio.com"
+
+[observability]
+enabled = true

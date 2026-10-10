@@ -1,4 +1,5 @@
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
+import { optimizeazaImaginiHtml } from "./imagini-html";
 import { sanitizeEmbedHtml } from "@/lib/utils/sanitize-embed";
 import type { Block, BlockStyle } from "@/lib/pages/blocks.types";
 import { curataCulorile } from "@/lib/pages/culori";
@@ -117,7 +118,9 @@ function prepareBlock(brut: Block): Block {
       /* ⚠ Aceeasi regula ca `HtmlBlockView`: codul activ (JS, `<script>`, formulare)
          merge in cadrul izolat, deci ramane intreg; curatat, widgetul lipit nu mergea. */
       if (cereIzolare(b.html, b.js)) return b;
-      return { ...b, raw: false, rawApprovedBy: null, html: sanitizeEmbedHtml(b.html) };
+      /* ⚠ Pozele se optimizeaza DUPA curatare: vezi `optimizeazaImaginiHtml`. Doar aici: textul
+         bogat (`sanitizeHtml`) nu lasa deloc `<img>`, editorul lui n-are poze. */
+      return { ...b, raw: false, rawApprovedBy: null, html: optimizeazaImaginiHtml(sanitizeEmbedHtml(b.html)) };
     }
     case "video": {
       // Uploaded video/poster URLs come from our own R2 upload flow; still pin

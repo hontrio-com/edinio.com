@@ -7,7 +7,7 @@ import { MAX_PIXELI } from "@/lib/utils/file-signature";
 import { esteIncarcareDeCumparator } from "@/lib/customization/adresa";
 import {
   CALITATE, LATIME_PNG, LATIME_JPG, CALITATE_JPG, cheieOptimizabila, cheieVarianta, sursaCerePngInEmail, sursaCereJpgInCatalog,
-  type FormatVarianta,
+  latimeaVariantei, calitateaVariantei, type FormatVarianta,
 } from "@/lib/latimi-imagini";
 
 export const runtime = "nodejs";
@@ -131,15 +131,15 @@ export async function GET(req: NextRequest) {
    * Lista acopera latimile pe care le cere efectiv interfata; orice alta valoare
    * urca la prima treapta mai mare, deci imaginea ramane cel putin la fel de
    * clara ca cea ceruta.
+   *
+   * ⚠ Treptele stau in `latimi-imagini.ts` (`TREPTE_LATIME`, `latimeaVariantei`): le citesc si
+   * adresa directa si Workerul, care trebuie sa ceara EXACT cheia scrisa aici.
    */
-  const TREPTE_LATIME = [16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 640, 768, 896, 1024, 1280, 1536, 1920, 2048];
-  const TREPTE_CALITATE = [50, 65, 75, 85, 95];
-
   const latimeCeruta = Math.min(2048, Math.max(16, parseInt(sp.get("w") ?? "", 10) || 0));
   const calitateCeruta = Math.min(100, Math.max(1, parseInt(sp.get("q") ?? "", 10) || 75));
 
-  const width = latimeCeruta ? (TREPTE_LATIME.find((t) => t >= latimeCeruta) ?? 2048) : 0;
-  const quality = TREPTE_CALITATE.find((t) => t >= calitateCeruta) ?? 95;
+  const width = latimeCeruta ? latimeaVariantei(latimeCeruta) : 0;
+  const quality = calitateaVariantei(calitateCeruta);
 
   /*
    * Formatul variantei: `webp`, afara de cererea explicita `f=png` pe o sursa WebP sau AVIF.

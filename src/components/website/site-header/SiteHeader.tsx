@@ -295,7 +295,7 @@ export function SiteHeader() {
             data-analytics-location="header"
             className={cn("ml-1", butonVerde("bara"))}
           >
-            Începe gratuit
+            Începe acum
           </Link>
         </div>
 

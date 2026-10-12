@@ -6,9 +6,14 @@ export function isPremiumPlan(plan: string | null | undefined): boolean {
   return plan === "premium" || plan === "ultra";
 }
 
+/*
+ * ⚠ `free` NU MAI E O OFERTA (12.10.2026): testarea gratuita de 15 zile a fost scoasa.
+ * Raman pe `free` conturile fara abonament: cele care nu si-au terminat onboarding-ul si
+ * testarile acordate inainte, care expira cel tarziu pe 27.10.2026.
+ */
 export const PLAN_LABELS: Record<string, string> = {
-  free: "Gratuit (15 zile)",
-  trial: "Gratuit (15 zile)",
+  free: "Fără abonament",
+  trial: "Fără abonament",
   basic: "Basic",
   premium: "Premium",
   ultra: "Ultra",

@@ -61,13 +61,13 @@ export const PRESETARI_INDEMN: Record<Exclude<TipIndemn, "propriu">, Presetare> 
   },
   start: {
     titlu: "Deschide-ți magazinul azi",
-    text: "15 zile gratuit, fără card de credit. Anulezi oricând.",
-    eticheta: "Începe gratuit",
+    text: "Preț fix pe viață și mentenanță gratuită. Anulezi oricând.",
+    eticheta: "Începe acum",
     /*
       ⚠ ERA `/start`, pagina de aterizare a site-ului vechi, ștearsă pe
       31.08.2026. Redirectarea din `next.config.ts` ar fi prins butonul, deci
       n-ar fi dat 404 — dar l-ar fi dus pe cititor la pagina de start în loc de
-      înscriere, adică îndemnul „Începe gratuit" ar fi cerut încă un clic.
+      înscriere, adică îndemnul „Începe acum" ar fi cerut încă un clic.
 
       `/register` e ținta adevărată a butonului ăstuia: același text duce acolo
       și din heroul paginii principale (`sections/Hero.tsx:183`).
@@ -93,7 +93,7 @@ export const PRESETARI_INDEMN: Record<Exclude<TipIndemn, "propriu">, Presetare> 
 
 export const NUMELE_TIPURILOR: Record<TipIndemn, string> = {
   preturi: "Prețuri",
-  start: "Începe gratuit",
+  start: "Începe acum",
   migrare: "Migrare",
   contact: "Contact",
   propriu: "Al meu (scriu eu tot)",

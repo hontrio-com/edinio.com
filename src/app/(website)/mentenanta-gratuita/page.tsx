@@ -77,7 +77,7 @@ export default function MentenantaPage() {
           fatada, iar aici ar fi stat sub un titlu care le are. Aceleasi cuvinte,
           nu alta formulare.
         */
-        cta={{ label: "Testează gratuit 15 zile", href: "/register" }}
+        cta={{ label: "Începe acum", href: "/register" }}
         /*
           ⚠ AL DOILEA BUTON LIPSEA DE PE PAGINA ASTA, si numai de pe ea.
           `HeroPagina` il primea de la toate celelalte (`/optimizare`, `/vs/*`),

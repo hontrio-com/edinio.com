@@ -16,8 +16,8 @@ strică fără el** — ca să poți sări peste ce nu-ți trebuie, în cunoști
 |---|---|
 | Eticheta GA4 `G-SB92HFQ1EN` | vie pe `edinio.com`, **numai** acolo |
 | Pixel Meta + TikTok | vii, **numai** pe `edinio.com` |
-| Evenimente | **28** de nume, trase din cod |
-| Conversii | cerere de ofertă, cont nou, trial, abonament |
+| Evenimente | **27** de nume, trase din cod |
+| Conversii | cerere de ofertă, cont nou, abonament |
 | Deduplicare | fiecare conversie poartă un `event_id` reproductibil pe server |
 
 Pixelii **nu** mai pornesc pe `localhost` și nici pe desfășurările de
@@ -43,14 +43,20 @@ adevărate.
 > `InitiateCheckout` scade — de acum numără doar pe cei care chiar pornesc plata.
 > Nu s-a stricat nimic; abia acum înseamnă ce spune.
 
-Cele 28 care se trag azi:
+> **12.10.2026 — `trial_start` nu se mai trage.** Testarea gratuită de 15 zile a
+> fost scoasă: magazinul se creează numai după o plată confirmată. Numele rămâne în
+> taxonomie (lista rezervată din `taxonomie-fara-apelant.test.ts`), împreună cu
+> legăturile către Meta (`StartTrial`), TikTok și Google Ads, ca să poată fi readus.
+> În GA4, `trial_start` poate rămâne marcat ca eveniment cheie: nu mai apare.
+
+Cele 27 care se trag azi:
 
 `page_view`, `section_view`, `scroll_depth`, `cta_click`, `navigation_click`,
 `outbound_click`, `landing_view`, `form_start`, `form_submit`, `form_error`,
 `generate_lead`, `article_view`, `article_read_progress`, `article_read_complete`,
 `newsletter_subscribe_request`, `newsletter_subscribe_confirmed`, `sign_up`,
 `onboarding_step_view`, `onboarding_step_complete`, `begin_checkout`,
-`trial_start`, `purchase`, `billing_period_change`,
+`purchase`, `billing_period_change`,
 `faq_open`, `integration_filter`, `article_cta_click`, `view_search_results`, `article_share`.
 
 > Ultimele cinci s-au adăugat pe 02.09.2026, după un audit din afară care a
@@ -115,12 +121,13 @@ consumă din cele 50 de locuri degeaba.
 
 **Unde:** Admin → *Events* → comutatorul *Mark as key event*.
 
-Doar acestea patru:
+Doar acestea trei:
 
 - `generate_lead` — cerere din formularul de contact sau de migrare
 - `sign_up` — cont nou
-- `trial_start` — a pornit perioada de probă
 - `purchase` — abonament plătit
+
+(`trial_start`, a patra până pe 12.10.2026, nu se mai trage: testarea gratuită a fost scoasă.)
 
 **De ce nu mai multe.** Un clic pe buton nu e o conversie. Marcat așa, optimizarea
 campaniilor învață să caute clicuri în loc de clienți — și plătești pentru ele.
@@ -280,7 +287,7 @@ la blocantele de reclame. Cele două drumuri poartă același `event_id`, deci
 furnizorii le unesc și numără o singură conversie.
 
 **Ce pleacă de pe server:** `sign_up` (email și Google), `generate_lead` (contact
-și migrare), `trial_start`, `purchase`.
+și migrare), `purchase`. (`trial_start` până pe 12.10.2026.)
 
 **Cum:** o coadă în baza de date (`edinio_conversion_outbox`), golită din minut în
 minut de `/api/cron/conversii`. O trimitere picată se reîncearcă de șase ori, cu

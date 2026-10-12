@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  Settings2, ShieldAlert, Package, Store, Percent, Clock, Mail, Save, Loader2,
+  Settings2, ShieldAlert, Package, Store, Percent, Mail, Save, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
@@ -124,11 +124,6 @@ export function AdminPlatformSettingsClient({
   const [commissionPercent, setCommissionPercent] = useState(commissionInit.percent);
   const [commissionFixed, setCommissionFixed] = useState(commissionInit.fixed);
   const [savingCommission, setSavingCommission] = useState(false);
-
-  // -- Default trial days --
-  const trialInit = (settings.default_trial_days ?? 14) as number;
-  const [trialDays, setTrialDays] = useState(trialInit);
-  const [savingTrial, setSavingTrial] = useState(false);
 
   // -- Email templates --
   const emailInit = (settings.email_templates ?? { welcome_subject: "", welcome_body: "" }) as {
@@ -304,30 +299,8 @@ export function AdminPlatformSettingsClient({
         </p>
       </SectionCard>
 
-      {/* 5. Default trial days */}
-      <SectionCard
-        title="Zile trial implicit"
-        description="Numarul de zile de trial gratuit pentru utilizatorii noi"
-        icon={Clock}
-        saving={savingTrial}
-        onSave={async () => {
-          setSavingTrial(true);
-          await saveSetting("default_trial_days", trialDays);
-          setSavingTrial(false);
-        }}
-      >
-        <LabeledInput label="Numar de zile">
-          <input
-            type="number"
-            min={0}
-            max={365}
-            value={trialDays}
-            onChange={(e) => setTrialDays(parseInt(e.target.value) || 0)}
-            className={cn(inputClass, "max-w-32")}
-          />
-        </LabeledInput>
-      </SectionCard>
-
+      {/* „Zile trial implicit" a stat aici pana pe 12.10.2026: nu-l citea nimeni (testarea era
+          15 zile, scrisa in cod), iar testarea gratuita a fost scoasa atunci. */}
       {/* 6. Email template */}
       <SectionCard
         title="Template email bun venit"

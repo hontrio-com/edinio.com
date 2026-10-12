@@ -128,7 +128,7 @@ export function emailOnboardingHelp(name: string): AutomationEmail {
       <p style="margin:0 0 6px 0;font-size:14px;font-weight:600;color:#18181b;">Raspunsuri la cele mai frecvente intrebari:</p>
       <ul style="margin:0 0 16px 0;padding-left:20px;font-size:14px;color:#3f3f46;line-height:1.8;">
         <li><strong>Cat dureaza sa creez magazinul?</strong> Sub 2 minute.</li>
-        <li><strong>Cat costa?</strong> Testarea e gratuita 15 zile, fara card.</li>
+        <li><strong>Cat costa?</strong> De la 99 de lei pe luna, cu mentenanta gratuita pe viata.</li>
         <li><strong>Am nevoie de cunostinte tehnice?</strong> Nu, totul e simplu si ghidat.</li>
         <li><strong>Pot sa vand orice?</strong> Da, de la produse fizice la servicii.</li>
       </ul>

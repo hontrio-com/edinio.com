@@ -2,9 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { areCuiDeFacturare, type FirmaFacturare } from "@/lib/billing/firma-abonament";
-import { headers } from "next/headers";
-import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
-import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -14,7 +11,6 @@ import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 import { culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
 import { designInitial } from "@/lib/onboarding/design-initial";
 import type { DesignContext } from "@/lib/storefront/design/types";
-import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /*
  * Adresa magazinului se valideaza AICI, pe server, nu doar in formular.
@@ -58,6 +54,18 @@ function motivSlugRespins(slug: string): string | null {
   return null;
 }
 
+/**
+ * Contul are un abonament PLATIT activ (`basic`/`premium`/`ultra` cu data in viitor).
+ * `free` si `trial` nu sunt abonament. NU se exporta: intr-un fisier "use server",
+ * orice export e o actiune pe care o poate chema oricine.
+ */
+async function areAbonamentPlatitActiv(db: ReturnType<typeof createAdminClient>, userId: string): Promise<boolean> {
+  const { data } = await db.from("users_profile").select("plan, plan_expires_at").eq("id", userId).maybeSingle();
+  const profil = data as { plan?: string | null; plan_expires_at?: string | null } | null;
+  if (!profil?.plan || profil.plan === "free" || profil.plan === "trial" || !profil.plan_expires_at) return false;
+  return new Date(profil.plan_expires_at).getTime() > Date.now();
+}
+
 export async function createBusiness(data: {
   business_name: string;
   tagline?: string;
@@ -73,14 +81,14 @@ export async function createBusiness(data: {
   primary_color: string;
   // NU exista `plan` aici, intentionat. Planul e decis EXCLUSIV pe server:
   // planurile platite vin din webhook-ul Stripe (checkout.session.completed /
-  // invoice.payment_succeeded), iar trialul gratuit se acorda mai jos. Cand
+  // invoice.payment_succeeded); fara plata confirmata nu se creeaza magazinul. Cand
   // parametrul exista, oricine putea trimite `plan: "ultra"` si primea planul
   // cel mai scump fara sa plateasca.
   //
   /*
     ATENTIE: ID-UL SESIUNII STRIPE, cand omul vine de la o plata. NU e un
     "am platit" pe cuvantul clientului: serverul il duce la Stripe si intreaba
-    acolo. Un id inventat da "n-a platit", adica se cade pe drumul gratuit —
+    acolo. Un id inventat da "n-a platit", adica magazinul nu se creeaza —
     partea sigura.
   */
   sesiuneStripe?: string;
@@ -107,6 +115,48 @@ export async function createBusiness(data: {
     : null;
   const motiv = motivSlugRespins(slug);
   if (motiv) return { error: motiv };
+
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ FARA PLATA, FARA MAGAZIN (12.10.2026: testarea gratuita a fost scoasa)
+    ═══════════════════════════════════════════════════════════════════════════
+
+    Pana atunci, cine nu venea de la o plata confirmata primea 15 zile gratuite
+    (plan `free` + `plan_expires_at`). Acum magazinul se creeaza NUMAI cand:
+      - Stripe confirma plata sesiunii cu care s-a intors omul, sau
+      - contul are deja un abonament platit activ (webhook-ul a ajuns primul,
+        ori l-a asezat un administrator).
+
+    ⚠ DE CE INAINTE DE INSERT, nu dupa. Un magazin creat si apoi lasat fara plan
+    ar fi ramas ACTIV PE VECI: `getInactiveReason` socoteste `free` fara data de
+    expirare drept cont activ (asa sunt conturile care nu si-au terminat
+    onboarding-ul). Deci intrebarea se pune inainte sa existe ceva de lasat in urma.
+
+    ⚠ „NU STIU" NU E „N-A PLATIT". La `indisponibil` (Stripe n-a raspuns) se
+    refuza la fel, dar cu alt motiv: pagina reincearca singura, fiindca intre timp
+    webhook-ul aseaza de obicei planul, iar a doua cerere trece prin ramura
+    „abonament activ". Omul nu e trimis la o plata noua: ar fi platit de doua ori.
+
+    SE INTREABA STRIPE, nu clientul: `data.sesiuneStripe` e doar un id. Un id
+    inventat sau al altcuiva da „n-a platit".
+
+    ⚠ PENTRU READUCEREA TESTARII: vezi istoricul fisierului inainte de 12.10.2026
+    (scrierea atomica a trialului, conditionata in UPDATE, si `trial_start`).
+  */
+  const adminDb = createAdminClient();
+  const plata = data.sesiuneStripe
+    ? await aduSiVerificaPlata(data.sesiuneStripe, user.id)
+    : ({ ok: false, motiv: "fara-sesiune" } as const);
+
+  if (!plata.ok && !(await areAbonamentPlatitActiv(adminDb, user.id))) {
+    if (plata.motiv === "indisponibil") {
+      return {
+        error: "Nu am putut confirma plata cu Stripe chiar acum. Datele magazinului sunt păstrate; reîncearcă în câteva secunde.",
+        plataNeconfirmata: true as const,
+      };
+    }
+    return { error: "Ca să creezi magazinul, alege un plan și finalizează plata." };
+  }
 
   const { data: business, error: bizError } = await supabase
     .from("businesses")
@@ -182,47 +232,12 @@ export async function createBusiness(data: {
     }
   }
 
-  // Marcheaza onboarding-ul incheiat si acorda trialul gratuit.
+  // Marcheaza onboarding-ul incheiat.
   //
-  // Coloanele `onboarding_completed`, `plan` si `plan_expires_at` sunt
-  // PRIVILEGIATE: clientul utilizatorului nu mai are voie sa le scrie (vezi
-  // migrations/2026-08-04-blocare-escaladare-rol.sql), asa ca trecem prin
-  // service role.
-  //
-  /*
-    ===========================================================================
-    ATENTIE: TRIALUL SE ACORDA ATOMIC, NU DUPA O CITIRE DE MAI DEVREME
-    ===========================================================================
-
-    Forma dinainte citea profilul, hotara "n-are plan, deci ii dau trial", si abia
-    apoi scria. Intre citire si scriere incape webhook-ul Stripe — care se aprinde
-    exact atunci, fiindca plata tocmai s-a incheiat.
-
-    CE STRICA, si nu e despre masurare:
-
-        T0  citim: plan=free, expira=null  ->  hotaram sa dam trial
-        T1  webhook-ul scrie: plan=premium, expira=peste un an
-        T2  scriem noi ce hotarasem la T0: plan=free, expira=peste 15 zile
-
-    Abonamentul PLATIT al omului e suprascris cu un trial. Nu cade nimic si nu se
-    vede nimic: omul plateste si primeste cincisprezece zile gratuite.
-
-    SI COMENTARIUL DE AICI SPUNEA CA E APARAT. Scria ca "conditia pe
-    `plan_expires_at is null` face operatia idempotenta". Conditia aia nu exista in
-    scriere — era doar `.eq("id", user.id)`. O promisiune, nu o paza.
-
-    Acum sunt DOUA scrieri, fiecare cu treaba ei:
-      1. `onboarding_completed` — neconditionat, e adevarat oricum s-ar aseza planul;
-      2. trialul — conditionat CHIAR IN SCRIERE, deci baza hotaraste, nu noi.
-
-    SI DACA OMUL A PLATIT, NICI NU SE INCEARCA. Poarta de mai jos intreaba Stripe
-    direct: fara ea, cand scrierea noastra ajunge prima, trialul se acorda si se
-    RAPORTEAZA `trial_start` pentru cineva care tocmai a cumparat un abonament —
-    iar Meta si TikTok vad si "a inceput un trial", si "s-a abonat", pentru aceeasi
-    fapta.
-  */
-  const adminDb = createAdminClient();
-
+  // `onboarding_completed` e o coloana PRIVILEGIATA: clientul utilizatorului nu
+  // mai are voie s-o scrie (vezi migrations/2026-08-04-blocare-escaladare-rol.sql),
+  // asa ca trecem prin service role. Planul NU se atinge aici: l-a scris webhook-ul
+  // Stripe (sau exista deja), iar fara el n-am fi ajuns pana aici (poarta de sus).
   const { error: profileError } = await adminDb
     .from("users_profile")
     .update({ onboarding_completed: true } as never)
@@ -237,85 +252,6 @@ export async function createBusiness(data: {
       severity: "critical",
     });
   }
-
-  /*
-    SE INTREABA STRIPE, nu clientul. `data.sesiuneStripe` e doar un id; daca e
-    inventat sau al altcuiva, raspunsul e "n-a platit" si se cade pe drumul
-    gratuit — adica partea sigura.
-  */
-  const plata = data.sesiuneStripe
-    ? await aduSiVerificaPlata(data.sesiuneStripe, user.id)
-    : ({ ok: false, motiv: "fara-sesiune" } as const);
-
-  /*
-    ═══════════════════════════════════════════════════════════════════════════
-    ⚠ „NU STIU" NU E „N-A PLATIT" — SI PANA AZI ERAU ACELASI LUCRU
-    ═══════════════════════════════════════════════════════════════════════════
-
-    `aduSiVerificaPlata` intoarce `ok: false` pentru trei lucruri deosebite:
-      - `fara-sesiune`  — n-a fost nicio plata, ori Stripe zice ca sesiunea nu
-                          exista. STIM ca n-a platit.
-      - `neplatita` / `alt-om` — Stripe a raspuns limpede. STIM.
-      - `indisponibil`  — Stripe n-a raspuns. NU STIM NIMIC.
-
-    Ramura de mai jos le trata la fel. Deci: omul chiar plateste, se intoarce cu
-    un `cs_...` bun, si exact atunci Stripe are o pana. Noi citim „ok: false",
-    acordam trialul si RAPORTAM `trial_start`. Webhook-ul aseaza pe urma planul
-    platit, deci omul primeste ce a cumparat — dar la Meta si TikTok raman doua
-    fapte pentru una: „a inceput un trial" si „s-a abonat".
-
-    ⚠ SI DE CE TOTUSI SE ACORDA RANDUL. Ar fi fost mai simplu sa taiem de tot cand
-    nu stim. Numai ca webhook-ul scrie planul NECONDITIONAT (`webhook/route.ts`),
-    deci un trial asezat acum nu poate rapi un abonament — il suprascrie el cand
-    ajunge. In schimb, netaiat, cineva care N-A platit si a nimerit pana ar ramane
-    fara niciun plan. Deci se taie RAPORTAREA, nu dreptul.
-
-    ⚠ ACEEASI FILOZOFIE CA LA CONSIMTAMANT: cand nu stim, nu trimitem. Acolo se
-    numeste fail-closed si e scrisa in `coada-conversii.ts`; aici e acelasi lucru.
-  */
-  const stiuCaNuAPlatit = !plata.ok && plata.motiv !== "indisponibil";
-
-  let trialAcordat = false;
-  if (!plata.ok) {
-    /*
-      CONDITIA STA IN SCRIERE. Daca intre timp cineva — webhook-ul — a asezat un
-      plan, `plan_expires_at` nu mai e gol si scrierea asta nu atinge niciun rand.
-      `.select()` ne spune CATE randuri s-au schimbat: aia e singura dovada ca noi
-      am acordat trialul, si numai pe ea se raporteaza `trial_start`.
-
-      SI CONDITIA PE `plan` E SCRISA CU `or`, nu cu `in`: pe o coloana care poate
-      fi NULL, `in` sare peste gol — vezi lectia din filtrele pe liste.
-    */
-    const { data: randuri, error: eroareTrial } = await adminDb
-      .from("users_profile")
-      .update({
-        plan: "free",
-        plan_expires_at: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-      } as never)
-      .eq("id", user.id)
-      .is("plan_expires_at", null)
-      .or("plan.is.null,plan.eq.free")
-      .select("id");
-
-    if (eroareTrial) {
-      await logError({
-        action: "createBusiness.trial",
-        message: eroareTrial.message,
-        details: { code: eroareTrial.code },
-        userId: user.id,
-        severity: "critical",
-      });
-    }
-    trialAcordat = (randuri?.length ?? 0) > 0;
-  }
-
-  /*
-    ⚠ DOUA CONDITII, SI AMANDOUA TREBUIE. Randul s-a schimbat CHIAR (deci noi
-    l-am acordat, nu altcineva), SI stim ca n-a fost nicio plata. A doua fara
-    prima raporteaza un trial pe care baza l-a refuzat; prima fara a doua
-    raporteaza un trial pentru cineva care tocmai a cumparat.
-  */
-  const trialRaportat = trialAcordat && stiuCaNuAPlatit;
 
   // Send welcome email + notify admin (non-blocking)
   if (user.email) {
@@ -341,58 +277,11 @@ export async function createBusiness(data: {
   }
 
   /*
-    ═══ ⚠ TRIALUL SE RAPORTEAZA DE UNDE SE ACORDA ═══
-
-    Browserul trage `trial_start` din `onboarding/plan/page.tsx`, cu `event_id`-ul
-    egal cu id-ul magazinului — si tot acela e folosit aici, deci furnizorii unesc
-    cele doua drumuri si numara UN trial, nu doua.
-
-    ⚠ SI DE CE E LEGAT DE CE S-A SCRIS CHIAR, nu de ce a ales omul in pagina.
-    Pagina hotaraste dupa `sessionStorage`; serverul stie cate randuri a schimbat.
-    Cand cele doua se despart — plata a intrat intre timp, sau n-a intrat —
-    adevarul e al bazei, fiindca dupa ea se si factureaza.
-
-    ⚠ SI NU DUPA O CITIRE DE MAI DEVREME. Pana azi conditia era `!areDejaPlan`,
-    adica ce se citise INAINTE de scriere. Intre cele doua incape webhook-ul, si
-    atunci se raporta un trial pentru cineva care tocmai platise.
-
     ⚠ `purchase` NU se pune aici. Suma adevarata o stie doar webhook-ul Stripe, din
     cat s-a incasat; citita din alta parte ar fi o presupunere raportata ca venit.
   */
-  if (trialRaportat) {
-    const anteturi = await headers();
-    /* ⚠ Hotararea se citeste O data: si amprenta, si poarta atarna de ea. */
-    const consim = await consimtamantulCererii();
-    await puneLaCoada(
-      { name: "trial_start", plan_id: "free", event_id: business.id },
-      {
-        ctx: {
-          ip: anteturi.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
-          userAgent: anteturi.get("user-agent"),
-        },
-        amprentaOmului: consim?.vid ?? user.id,
-        /* ⚠ Vezi nota din `auth.actions.ts`: `_fbc` leaga trialul de reclama platita. */
-        martori: await martoriiCererii(),
-      },
-      destinatiiActive(),
-      { fel: "cookie", stare: consim },
-    );
-  }
-
   revalidatePath("/dashboard", "layout");
-  /*
-    ⚠ `trialRaportat` PLEACA SI CATRE BROWSER, si nu ca sa fie frumos.
-
-    Browserul isi tragea `trial_start` cand `sessionStorage` spunea „free" — adica
-    dupa ce ALESESE omul, nu dupa ce s-a intamplat. Cele doua se despart usor:
-    planul ales e „free" si totusi trialul nu s-a acordat (avea deja unul), sau
-    plata tocmai a intrat. Atunci pleca o conversie din browser fara perechea ei
-    de pe server — si Meta o numara singura, fiindca n-are cu ce s-o uneasca.
-
-    Adevarul e unul singur, si e al bazei. Amandoua capetele il citesc de aici, cu
-    acelasi `event_id` (id-ul magazinului), deci raman o singura conversie.
-  */
-  return { success: true, businessId: business.id, slug: business.slug, trialRaportat };
+  return { success: true, businessId: business.id, slug: business.slug };
 }
 
 export async function updateBusiness(

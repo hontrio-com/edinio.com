@@ -24,7 +24,7 @@ import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 
   ⚠ CE NU ERA IN PERICOL, si merita spus limpede: DREPTUL la plan. `createBusiness`
   nu accepta planul de la client — planul platit se aseaza din webhook-ul Stripe,
-  iar pana atunci omul primeste trialul. Deci nu se putea fura un abonament. Ce se
+  iar pana atunci magazinul nu se creeaza. Deci nu se putea fura un abonament. Ce se
   strica era masuratoarea: Google Ads invata sa liciteze pe conversii care nu erau
   bani.
 

@@ -24,7 +24,8 @@ import { H1_HERO } from "@/lib/website/tipografie";
  * singură zi — până la prima corectură făcută într-un singur loc.
  */
 
-const TRUST = "15 zile gratuit, fără card de credit. Anulezi oricând.";
+/* Pana pe 12.10.2026: „15 zile gratuit, fără card de credit." Testarea gratuita a fost scoasa atunci. */
+const TRUST = "Preț fix pe viață și mentenanță gratuită. Anulezi oricând.";
 
 interface Actiune {
   label: string;
@@ -183,7 +184,7 @@ export function Hero() {
       */
       title="Magazinul tău online, deschis în câteva minute"
       lead="Îți deschizi magazinul și începi să vinzi în aceeași zi. Toate integrările sunt incluse: curieri cu AWB automat, plăți cu cardul și facturare. Iar mentenanța și asistența rămân gratuite, permanent."
-      principala={{ label: "Începe gratuit", href: "/register" }}
+      principala={{ label: "Începe acum", href: "/register" }}
       /* Ancora, nu `/preturi`: sectiunea e chiar mai jos pe aceeasi pagina, iar o
          navigare ar fi mai mult decat trebuie. Vezi nota din `TOP_NAV`. */
       secundara={{ label: "Vezi prețurile", href: "/#preturi" }}

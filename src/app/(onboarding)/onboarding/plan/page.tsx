@@ -20,9 +20,9 @@ import { culoareValida } from "@/lib/onboarding/aspect";
 import type { FirmaFacturare, FirmaManuala } from "@/lib/billing/firma-abonament";
 
 /*
- * Planurile platite, DRUMUL PRINCIPAL (27.09.2026, cerut de el: majoritatea sa
- * activeze direct un plan). Testarea gratuita e ultimul chenar, mai mic si fara
- * accent de culoare.
+ * Planurile platite, SINGURUL DRUM (12.10.2026). Pe 27.09.2026 testarea gratuita
+ * a ramas ultimul chenar, mai mic; pe 12.10.2026 a fost scoasa de tot, la cererea
+ * lui. Fara plata confirmata, `createBusiness` nu mai creeaza magazinul.
  *
  * Ce deosebeste planurile cu adevarat e numarul de produse si managerul dedicat;
  * comenzile nelimitate si suportul 7 din 7 sunt la toate, iar mentenanta se spune
@@ -85,6 +85,8 @@ function PlanPageContent() {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>("monthly");
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
+  /* Stripe n-a confirmat plata nici dupa reluari: ecran de reincercare, fara planuri (sa nu plateasca de doua ori). */
+  const [plataNeconfirmata, setPlataNeconfirmata] = useState(false);
   const createdRef = useRef(false);
   const plataAbonament = usePlataAbonament();
 
@@ -196,7 +198,7 @@ function PlanPageContent() {
     if (!storedPlan) return;
 
     setCreating(true);
-    finalizeBusiness(storedPlan);
+    finalizeBusiness();
   }, [isSuccess]);
 
   // Show toast if payment was cancelled
@@ -209,12 +211,12 @@ function PlanPageContent() {
     }
   }, [isCancelled]);
 
-  async function finalizeBusiness(plan: string) {
+  async function finalizeBusiness() {
     const details = citesteCiorna();
     /*
       Fara ciorna (alt browser, stocare golita) nu avem din ce crea magazinul. Nu
       lasam rotita sa se invarta la nesfarsit: omul reia pasul 1. Daca tocmai a
-      platit, planul e deja scris de webhook, iar crearea de dupa nu-i mai da trial.
+      platit, planul e deja scris de webhook, iar crearea de dupa trece pe el.
     */
     if (!ciornaCompleta(details)) {
       setCreating(false);
@@ -225,10 +227,9 @@ function PlanPageContent() {
 
     try {
 
-      // `plan` NU se mai trimite: serverul decide singur (trial gratuit sau
-      // planul platit scris de webhook-ul Stripe). Il pastram aici doar pentru
-      // evenimentele de analiza de mai jos.
-      const result = await createBusiness({
+      // `plan` NU se trimite: planul il scrie webhook-ul Stripe, iar serverul
+      // creeaza magazinul numai dupa ce Stripe confirma plata.
+      const creeaza = () => createBusiness({
         business_name: String(details.business_name ?? ""),
         phone: String(details.phone ?? ""),
         slug: String(details.slug ?? ""),
@@ -236,20 +237,34 @@ function PlanPageContent() {
         primary_color: culoareValida(details.culoare),
         stil: details.stil,
         /*
-          ⚠ ID-UL SESIUNII, ca serverul sa nu acorde un trial cuiva care a platit.
-          Nu e un „am platit" pe cuvantul nostru: acolo se duce la Stripe si
-          intreaba. Un id inventat da „n-a platit", deci se cade pe drumul gratuit.
+          ⚠ ID-UL SESIUNII: serverul il duce la Stripe si intreaba daca e platita.
+          Nu e un „am platit" pe cuvantul nostru. Un id inventat da „n-a platit",
+          deci magazinul nu se creeaza.
         */
         sesiuneStripe: searchParams.get("sid") ?? undefined,
         firma: firmaPastrata(),
       });
 
+      /*
+        ⚠ CAND STRIPE NU RASPUNDE, SE REIA AICI, nu se trimite omul la plata.
+        Intre timp webhook-ul aseaza de obicei planul, iar serverul trece atunci pe
+        ramura „abonament activ". Retrimis la planuri, omul ar fi platit de doua ori.
+      */
+      let result = await creeaza();
+      for (const pauza of [1500, 3000, 5000, 8000]) {
+        if (!("plataNeconfirmata" in result && result.plataNeconfirmata)) break;
+        await new Promise((r) => setTimeout(r, pauza));
+        result = await creeaza();
+      }
+
       if (result.error) {
-        toast.error(result.error);
+        if ("plataNeconfirmata" in result && result.plataNeconfirmata) setPlataNeconfirmata(true);
+        else toast.error(result.error);
         setCreating(false);
         setLoading(false);
         return;
       }
+      setPlataNeconfirmata(false);
 
       stergeCiorna();
       sessionStorage.removeItem("onboarding_pending_plan");
@@ -257,49 +272,14 @@ function PlanPageContent() {
       sessionStorage.removeItem("onboarding_firma");
 
       /*
-        ⚠ `event_id` E ID-UL MAGAZINULUI TOCMAI CREAT, nu un numar aleator.
-
-        Doua motive, si al doilea e cel important:
-        1. E unic prin constructie — un magazin se creeaza o singura data.
-        2. SERVERUL IL STIE. Cand se adauga trimiterea de pe server (Meta CAPI,
-           TikTok Events API), ea poate folosi EXACT acelasi id fara sa-l care
-           nimeni prin cookie-uri sau prin parametri de adresa. Fara asta, un
-           singur abonament ar aparea ca doua conversii.
+        ⚠ `purchase` poarta id-ul sesiunii Stripe (`conversiaDinPlata`), acelasi pe care il
+        foloseste webhook-ul: asa cele doua capete se contopesc intr-o singura conversie.
       */
       /*
-        ⚠ PENTRU ABONAMENT, ID-UL SESIUNII STRIPE; pentru trial, id-ul magazinului.
-
-        Nu e o inconsecventa, ci doua perechi deosebite. Trialul se raporteaza de
-        pe server din `createBusiness`, care stie id-ul magazinului. Abonamentul se
-        raporteaza din webhook-ul Stripe, care NU-l stie — la ora lui magazinul
-        inca nu exista — dar stie id-ul sesiunii. Fiecare drum poarta id-ul pe care
-        il are si perechea lui.
-
-        ⚠ CADEREA PE ID-UL MAGAZINULUI nu e o plasa, e o marturisire: daca `sid`
-        lipseste (o adresa veche, sau cineva care intra de-a dreptul pe `?success=1`),
-        browserul trimite un id pe care webhook-ul nu-l are, deci conversia s-ar
-        numara de doua ori. Se prefera asta in locul unei conversii pierdute, iar
-        cazul e rar prin constructie: Stripe pune sablonul intotdeauna.
+        ⚠ `trial_start` a plecat de aici pana pe 12.10.2026, cand s-a scos testarea
+        gratuita; acum orice magazin creat vine dintr-o plata.
       */
-      const idConversie = result.businessId ?? "";
-
-      /*
-        ═══ ⚠ CINE SPUNE CA S-A ACORDAT UN TRIAL ═══
-
-        Pana pe 03.09.2026, randul asta intreba `plan === "free"` — adica ce scria
-        in `sessionStorage`, adica ce ALESESE omul. Serverul, in schimb, stie cate
-        randuri a schimbat in baza.
-
-        Cele doua se despart mai des decat pare: omul isi face al doilea magazin si
-        are deja un trial (baza refuza, browserul raporteaza oricum), sau plata a
-        intrat intre timp. In amandoua, pleca o conversie din browser fara perechea
-        ei de pe server — deci Meta o numara singura, n-avand cu ce s-o uneasca.
-
-        Acum amandoua capetele citesc ACELASI adevar si poarta acelasi `event_id`.
-      */
-      if (result.trialRaportat) {
-        urmareste({ name: "trial_start", plan_id: "free", event_id: idConversie });
-      } else if (plan !== "free") {
+      {
         /*
           ═══ ⚠ ABONAMENTUL SE RAPORTEAZA NUMAI DUPA CE STRIPE CONFIRMA ═══
 
@@ -398,13 +378,7 @@ function PlanPageContent() {
     setSelectedPlan(plan);
     setLoading(true);
 
-    if (plan === "free") {
-      // Free trial: create business directly (no payment needed)
-      await finalizeBusiness("free");
-      return;
-    }
-
-    // Paid plan: redirect to Stripe Checkout
+    // Planul ales: plata prin Stripe Checkout (testarea gratuita a fost scoasa pe 12.10.2026)
     try {
       sessionStorage.setItem("onboarding_pending_plan", plan);
       sessionStorage.setItem("onboarding_pending_interval", billingInterval);
@@ -482,7 +456,27 @@ function PlanPageContent() {
     );
   }
 
-  const seCreeazaGratuit = loading && selectedPlan === "free";
+  if (plataNeconfirmata) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <OnboardingProgress currentStep={3} />
+        <div className="mx-auto mt-10 max-w-md rounded-2xl border border-border bg-surface p-6 text-center" role="alert">
+          <h1 className="text-lg font-semibold text-foreground">Confirmăm plata</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Stripe nu ne-a confirmat încă plata. Datele magazinului sunt păstrate, nu plăti din nou.
+            Reîncearcă peste câteva secunde.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setPlataNeconfirmata(false); setCreating(true); finalizeBusiness(); }}
+            className="mt-5 inline-flex h-11 items-center justify-center rounded-lg bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            Reîncearcă
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
@@ -527,11 +521,10 @@ function PlanPageContent() {
 
       {/*
         ⚠ PLANURILE PLATITE SUNT DRUMUL PRINCIPAL (27.09.2026), cerut de el: vrea ca
-        majoritatea sa activeze direct un plan. Premium iese in fata (recomandat),
-        iar testarea gratuita e ULTIMUL chenar, mai mic decat planurile si fara
-        accent de culoare: se vede, dar nu concureaza cu ele.
+        majoritatea sa activeze direct un plan. Premium iese in fata (recomandat).
+        Chenarul testarii gratuite a fost scos pe 12.10.2026.
       */}
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_0.8fr]">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {PLANS.map((plan) => {
           const perMonth = billingInterval === "annual" ? getAnnualMonthlyEquivalent(plan.id) : plan.price;
           const seDuce = loading && selectedPlan === plan.id;
@@ -583,19 +576,6 @@ function PlanPageContent() {
             </div>
           );
         })}
-        <div className="flex flex-col rounded-2xl border border-border bg-muted/30 p-5 lg:self-center">
-          <h3 className="text-sm font-semibold leading-snug text-foreground">Nu vrei să alegi un plan acum?</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Testează gratuit 15 zile.</p>
-          <button
-            type="button"
-            onClick={() => handleCreate("free")}
-            disabled={loading}
-            className="mt-4 flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-surface text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-          >
-            {seCreeazaGratuit && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {seCreeazaGratuit ? "Se creează…" : "Începe gratuit"}
-          </button>
-        </div>
       </div>
       <p className="mt-5 text-center text-xs text-muted-foreground">
         Mentenanță gratuită pe viață la toate planurile. Plata se face securizat prin Stripe.

@@ -14,8 +14,9 @@ import { verdictulPlatii, type PlataVerificata } from "../verdict-plata";
 
   ⚠ SI DE CE E NEVOIE DE DOI CHEMATORI. Pagina de plan intreaba „s-a platit?" ca
   sa stie daca poate raporta conversia. `createBusiness` are nevoie de acelasi
-  raspuns pentru cu totul altceva: ca sa NU acorde un trial cuiva care tocmai a
-  platit. Aceeasi intrebare, doua motive — deci un singur loc unde se raspunde.
+  raspuns pentru cu totul altceva: ca sa creeze magazinul NUMAI dupa o plata
+  confirmata (din 12.10.2026; inainte, ca sa nu acorde un trial cuiva care tocmai
+  platise). Aceeasi intrebare, doua motive — deci un singur loc unde se raspunde.
 */
 
 /**

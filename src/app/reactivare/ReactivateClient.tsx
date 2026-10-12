@@ -104,7 +104,9 @@ export function ReactivateClient({ reason, success, currentPlan, userEmail }: Pr
     );
   }
 
-  const title = reason === "trial" ? "Perioada de testare a expirat" : "Abonamentul tau a expirat";
+  /* `trial` = cont pe `free` cu data trecuta. Pana pe 12.10.2026 scria „Perioada de testare a expirat";
+     testarea gratuita a fost scoasa atunci, deci textul spune doar ce e adevarat pentru oricine. */
+  const title = reason === "trial" ? "Magazinul tău nu are un abonament activ" : "Abonamentul tau a expirat";
   const subtitle =
     reason === "trial"
       ? "Alege un plan ca sa reactivezi magazinul si sa continui sa vinzi."

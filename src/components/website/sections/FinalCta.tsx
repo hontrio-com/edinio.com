@@ -140,8 +140,8 @@ export function FinalCta() {
         </h2>
 
         <p className="mx-auto mt-6 max-w-[620px] text-[16px] leading-[1.6] text-ink-2 sm:text-[18px]">
-          Testează gratuit 15 zile. Fără card de credit, fără obligații. Mentenanță
-          gratuită pe viață și suport 7 zile din 7.
+          Prețul rămâne fix pe viață și anulezi oricând. Mentenanță gratuită pe viață
+          și suport 7 zile din 7.
         </p>
 
         <Link
@@ -151,7 +151,7 @@ export function FinalCta() {
           data-analytics-location="final_cta"
           className={cn("mt-10 halou-cta", butonVerde("lat"))}
         >
-          Începe gratuit acum
+          Începe acum
           <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
         </Link>
       </div>

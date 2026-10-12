@@ -25,7 +25,8 @@ import { faraComentarii } from "./fara-comentarii";
 */
 
 /** Conversii implinite: trebuie sa plece si de pe server. */
-const DE_PE_SERVER = ["generate_lead", "sign_up", "trial_start", "purchase"];
+/* `trial_start` a stat aici pana pe 12.10.2026, cand s-a scos testarea gratuita: nu-l mai trimite nimeni. */
+const DE_PE_SERVER = ["generate_lead", "sign_up", "purchase"];
 
 /*
   ⚠ LISTA GOLURILOR E GOALA, SI ASA A AJUNS SA FIE.
@@ -120,77 +121,50 @@ test("inscrierea prin Google are propria cale de server, nu doar cea cu email", 
   );
 });
 
-test("⚠ trialul se acorda ATOMIC, si se raporteaza doar daca s-a schimbat un rand", () => {
+test("⚠ fara plata confirmata NU se creeaza magazinul, si nu se mai acorda nicio testare", () => {
   /*
-    ═══════════════════════════════════════════════════════════════════════════
-    ⚠ PROBA ASTA CEREA PANA AZI O PAZA CARE NU PAZEA
-    ═══════════════════════════════════════════════════════════════════════════
+    ═══ ⚠ CE APARA (12.10.2026: testarea gratuita a fost scoasa) ═══
 
-    Cerea sa existe `if (!areDejaPlan && !profileError)`. Numai ca `areDejaPlan`
-    venea dintr-un SELECT facut INAINTE de scriere — deci proba dovedea ca
-    raportarea atarna de o CITIRE, nu de ce s-a intamplat chiar.
+    Pana atunci `createBusiness` crea magazinul si abia apoi intreba Stripe; fara
+    plata, acorda 15 zile (`plan: "free"` + `plan_expires_at`). Acum intrebarea se
+    pune INAINTE de INSERT, iar fara plata confirmata sau abonament activ se iese.
 
-    ⚠ CE INCAPEA INTRE ELE. Webhook-ul Stripe, care se aprinde exact atunci:
-
-        T0  citim: plan=free, expira=null  ->  hotaram sa dam trial
-        T1  webhook-ul scrie: plan=premium, expira=peste un an
-        T2  scriem noi ce hotarasem la T0: plan=free, expira=peste 15 zile
-
-    Abonamentul platit al omului, suprascris cu un trial. Iar comentariul de
-    deasupra codului sustinea ca operatia e aparata de o conditie pe
-    `plan_expires_at is null` — conditie care nu exista in scriere.
-
-    Acum se cer trei lucruri, si toate trei sunt insusiri ale codului, nu forme:
-      1. conditia sta CHIAR IN SCRIERE, nu intr-o citire de mai devreme;
-      2. raportarea atarna de cate randuri s-au schimbat;
-      3. cand omul a platit, trialul nici nu se incearca.
+    ⚠ DE CE CONTEAZA ORDINEA: un magazin creat si lasat pe `free` FARA data de
+    expirare e ACTIV PE VECI (`getInactiveReason` il socoteste activ). Deci o poarta
+    pusa dupa INSERT ar fi lasat in urma tocmai un magazin gratuit nelimitat.
   */
   const cod = readFileSync("src/lib/actions/business.actions.ts", "utf8");
 
-  /* 1 — conditia in scriere, nu intr-un `if` de deasupra. */
-  const iTrial = cod.lastIndexOf("const { data: randuri", cod.indexOf('plan_expires_at: new Date(Date.now() + 15'));
-  assert.ok(iTrial > 0, "nu mai gasesc acordarea trialului");
-
-  /*
-    ⚠ SE TAIE CHIAR INSTRUCTIUNEA, nu o fereastra. Prima forma taia „de la trial
-    pana la primul `.select(`" — iar cand am scos `.select(`-ul ca mutant, cautarea
-    a gasit unul de mai jos si felia a crescut peste el. Proba a trecut verde peste
-    exact mutantul pentru care fusese scrisa.
-  */
-  const scrierea = (() => {
-    let adanc = 0;
-    for (let i = iTrial; i < cod.length; i++) {
-      const c = cod[i];
-      if (c === "(" || c === "[" || c === "{") adanc++;
-      else if (c === ")" || c === "]" || c === "}") adanc--;
-      else if (c === ";" && adanc <= 0) return cod.slice(iTrial, i + 1);
-    }
-    return cod.slice(iTrial);
-  })();
-  assert.match(scrierea, /\.is\("plan_expires_at", null\)/,
-    "acordarea trialului nu mai e conditionata in scriere — un webhook care ajunge intre citire si scriere ii suprascrie abonamentul platit");
-  assert.match(scrierea, /\.select\(/,
-    "scrierea nu mai spune cate randuri a schimbat, deci nu se poate sti daca trialul s-a acordat chiar");
-
-  /* 2 — raportarea atarna de randurile schimbate. */
-  assert.match(cod, /trialAcordat = \(randuri\?\.length \?\? 0\) > 0/,
-    "acordarea nu se mai citeste din randurile schimbate");
-  const iGarda = cod.indexOf("if (trialRaportat) {");
-  assert.ok(iGarda > 0, "raportarea nu mai atarna de acordarea reala");
-
-  const iCoada = cod.indexOf("await puneLaCoada(", iGarda);
-  assert.ok(iCoada > iGarda, "punerea la coada nu mai vine dupa paza");
-  assert.ok(
-    cod.slice(iGarda, iCoada).indexOf("}") < 0,
-    "punerea la coada a iesit din ramura pazita — se raporteaza si cand trialul nu s-a acordat",
-  );
-
-  /* 3 — cand s-a platit, trialul nici nu se incearca. */
   assert.match(cod, /aduSiVerificaPlata\(data\.sesiuneStripe, user\.id\)/,
     "serverul nu mai intreaba Stripe daca omul a platit");
-  const iPlata = cod.indexOf("if (!plata.ok) {");
-  assert.ok(iPlata > 0 && iPlata < iTrial,
-    "acordarea trialului nu mai sta sub verdictul platii — cine tocmai a cumparat ar primi si un trial, si un `trial_start`");
+
+  const iPoarta = cod.indexOf("if (!plata.ok && !(await areAbonamentPlatitActiv(adminDb, user.id))) {");
+  const iInsert = cod.indexOf('.from("businesses")');
+  assert.ok(iPoarta > 0, "poarta de plata a disparut din createBusiness");
+  assert.ok(iInsert > 0, "nu mai gasesc crearea magazinului");
+  assert.ok(iPoarta < iInsert, "poarta de plata a ajuns DUPA crearea magazinului — un magazin neplatit ar ramane activ pe veci");
+
+  /* Ramura poartei iese din functie in ambele cazuri (pana la Stripe si plata lipsa). */
+  const ramura = cod.slice(iPoarta, iInsert);
+  assert.equal((ramura.match(/return \{\s*error:/g) ?? []).length, 2, "poarta nu mai refuza in amandoua cazurile");
+
+  /* Nicio acordare de timp gratuit si nicio raportare de trial nu mai exista. */
+  assert.ok(!/plan_expires_at:\s*new Date\(Date\.now\(\)/.test(cod), "s-a readus acordarea unei perioade gratuite");
+  assert.ok(!cod.includes('"trial_start"'), "serverul raporteaza iar un trial");
+  assert.ok(!/plan:\s*"free"/.test(cod), "serverul scrie iar planul gratuit");
+});
+
+test("⚠ abonamentul activ se recunoaste numai pe planurile PLATITE, cu data in viitor", () => {
+  /* Altfel, un cont `free` (cele care nu si-au terminat onboarding-ul) ar trece prin poarta. */
+  const cod = readFileSync("src/lib/actions/business.actions.ts", "utf8");
+  const i = cod.indexOf("async function areAbonamentPlatitActiv(");
+  assert.ok(i > 0, "verificarea abonamentului activ a disparut");
+  assert.ok(!cod.includes("export async function areAbonamentPlatitActiv"),
+    "verificarea s-a exportat — intr-un fisier \"use server\" ar deveni o actiune publica");
+  const corp = cod.slice(i, cod.indexOf("\n}\n", i));
+  assert.match(corp, /plan === "free"/);
+  assert.match(corp, /plan === "trial"/);
+  assert.match(corp, /getTime\(\) > Date\.now\(\)/);
 });
 
 /* ═══ Abonamentul: cele doua drumuri trebuie sa numeasca aceeasi sesiune ═══ */
@@ -275,10 +249,8 @@ test("⚠ browserul foloseste id-ul sesiunii pentru abonament, nu pe cel al maga
   assert.ok(!bucataPurchase.includes("PLAN_PRICES") && !bucataPurchase.includes("getAnnualPrice"),
     "pretul din tabel a ajuns in `purchase` — venitul raportat nu mai e cel incasat");
 
-  /* ⚠ Trialul RAMANE pe id-ul magazinului: perechea lui de server e `createBusiness`. */
-  const iTrial = cod.indexOf('name: "trial_start"');
-  assert.ok(iTrial > 0 && cod.slice(iTrial, iTrial + 160).includes("event_id: idConversie"),
-    "trialul nu mai poarta id-ul magazinului — s-ar despartii de perechea lui de server");
+  /* ⚠ Testarea gratuita a fost scoasa pe 12.10.2026: pagina nu mai trage `trial_start`. */
+  assert.ok(!cod.includes('name: "trial_start"'), "pagina trage iar trial_start");
 });
 
 /**
@@ -329,85 +301,36 @@ test("⚠ webhook-ul NU trimite ip-ul si browserul — ar fi ale lui Stripe", ()
 });
 
 
-test("⚠ cand Stripe TACE, trialul nu se raporteaza: necunoscutul nu e o plata lipsa", () => {
+test("⚠ cand Stripe TACE, magazinul nu se creeaza, dar omul NU e trimis la o plata noua", () => {
   /*
-    ═══════════════════════════════════════════════════════════════════════════
-    ⚠ DEFECTUL, SI ERA AL MEU, DE O ZI
-    ═══════════════════════════════════════════════════════════════════════════
-
-    `aduSiVerificaPlata` intoarce `ok: false` pentru trei lucruri deosebite:
-
-        fara-sesiune / neplatita / alt-om  ->  Stripe a raspuns. STIM ca n-a platit.
-        indisponibil                       ->  Stripe n-a raspuns. NU STIM NIMIC.
-
-    Ramura care acorda trialul le trata la fel: `if (!plata.ok)`.
-
-    ⚠ CE SE INTAMPLA ATUNCI. Omul chiar plateste, se intoarce cu un `cs_...` bun,
-    si exact in clipa aia Stripe are o pana. Noi citim „ok: false", acordam trialul
-    si RAPORTAM `trial_start`. Webhook-ul aseaza pe urma planul platit — deci omul
-    primeste ce a cumparat — dar la Meta si TikTok raman DOUA fapte pentru una:
-    „a inceput un trial" si „s-a abonat". Optimizarea invata pe conversia ieftina
-    in locul celei scumpe, si nimic nu cade.
-
-    ⚠ SI DE CE NU SE TAIE SI DREPTUL, ci doar raportarea. Webhook-ul scrie planul
-    neconditionat, deci un trial asezat acum nu poate rapi un abonament. In schimb,
-    taiat de tot, cineva care N-A platit si a nimerit pana ar ramane fara niciun
-    plan. Se taie ce minte, nu ce ajuta.
+    `aduSiVerificaPlata` intoarce `indisponibil` cand Stripe n-a raspuns: omul poate
+    sa fi platit chiar acum. Serverul refuza si atunci (nu stie), dar cu semnul
+    `plataNeconfirmata`, iar pagina:
+      - reia singura de cateva ori (intre timp webhook-ul aseaza de obicei planul);
+      - apoi arata ecranul „Confirmăm plata" cu „Reîncearcă", FARA planuri.
+    Intors la planuri, omul ar fi putut plati a doua oara.
   */
-  const cod = readFileSync("src/lib/actions/business.actions.ts", "utf8");
+  const server = readFileSync("src/lib/actions/business.actions.ts", "utf8");
+  const iInd = server.indexOf('if (plata.motiv === "indisponibil") {');
+  assert.ok(iInd > 0, "serverul nu mai deosebeste o pana la Stripe de o plata lipsa");
+  assert.ok(server.slice(iInd, iInd + 400).includes("plataNeconfirmata: true"),
+    "pana la Stripe nu mai e semnalata paginii");
 
-  assert.match(cod, /motiv !== "indisponibil"/,
-    "serverul nu mai deosebeste o pana la Stripe de o plata inexistenta — raporteaza un trial pentru cine tocmai a cumparat");
-
-  /* ⚠ SI CA DEOSEBIREA CHIAR PAZESTE RAPORTAREA, nu doar exista undeva. */
-  assert.match(cod, /const trialRaportat = trialAcordat && stiuCaNuAPlatit/,
-    "raportarea nu mai cere AMANDOUA: si randul schimbat, si certitudinea ca n-a fost plata");
-
-  /*
-    ⚠ SI CA DREPTUL A RAMAS NECONDITIONAT DE ASTA: scrierea trialului sta sub
-    `!plata.ok`, nu sub `stiuCaNuAPlatit`. Altfel o pana la Stripe ar lasa un om
-    fara plan.
-  */
-  const iScriere = cod.indexOf('plan_expires_at: new Date(Date.now() + 15');
-  const iRamura = cod.lastIndexOf("if (!plata.ok) {", iScriere);
-  assert.ok(iRamura > 0, "acordarea trialului nu mai sta sub verdictul platii");
-  assert.ok(
-    cod.lastIndexOf("if (stiuCaNuAPlatit", iScriere) < iRamura,
-    "acordarea trialului a ajuns si ea sub certitudine — o pana la Stripe lasa omul fara niciun plan",
-  );
+  const pagina = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
+  assert.match(pagina, /for \(const pauza of \[1500, 3000, 5000, 8000\]\)/, "pagina nu mai reia crearea cand Stripe tace");
+  assert.match(pagina, /if \(plataNeconfirmata\) \{\s*return \(/, "ecranul de reincercare a disparut");
+  const iEcran = pagina.indexOf("if (plataNeconfirmata) {");
+  const ecran = pagina.slice(iEcran, pagina.indexOf("\n  }\n", iEcran));
+  assert.ok(ecran.includes("Reîncearcă") && ecran.includes("finalizeBusiness()"), "butonul de reincercare nu mai reia crearea");
+  assert.ok(!ecran.includes("handleCreate("), "ecranul de reincercare porneste o plata noua");
 });
 
-test("⚠ browserul raporteaza trialul dupa BAZA, nu dupa ce scrie in sessionStorage", () => {
-  /*
-    ⚠ CE APARA. Pagina intreba `plan === "free"` — adica ce ALESESE omul, citit
-    din `sessionStorage`. Serverul stie altceva: cate randuri a schimbat chiar.
-
-    Cele doua se despart mai des decat pare. Omul isi face al DOILEA magazin si are
-    deja un trial: baza refuza (conditia `plan_expires_at is null`), serverul nu
-    raporteaza nimic — dar browserul vedea tot „free" si trimitea `trial_start`.
-    O conversie fara perechea ei de server, deci una pe care Meta o numara singura,
-    n-avand cu ce s-o uneasca.
-
-    ⚠ SI DE CE NU E DE AJUNS SA FIE CORECT SERVERUL. Perechea browser+server e
-    tot rostul lui `event_id`. Cand una din jumatati pleaca si cealalta nu, nu se
-    dubleaza nimic — dar numaratoarea creste cu un om care n-a facut fapta.
-  */
-  const cod = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
-
-  const iTrial = cod.indexOf('name: "trial_start"');
-  assert.ok(iTrial > 0, "pagina nu mai trage trial_start");
-
-  const iGarda = cod.lastIndexOf("if (", iTrial);
-  const garda = cod.slice(iGarda, iTrial);
-  assert.match(garda, /result\.trialRaportat/,
-    "`trial_start` din browser nu mai atarna de ce a scris serverul in baza");
-  assert.ok(!/plan === "free"/.test(garda),
-    "`trial_start` atarna iar de planul ales in browser, nu de trialul acordat");
-
-  /* ⚠ Si serverul chiar il trimite incoace. */
-  const server = readFileSync("src/lib/actions/business.actions.ts", "utf8");
-  assert.match(server, /return \{ success: true, businessId: business\.id, slug: business\.slug, trialRaportat \}/,
-    "serverul nu mai intoarce catre browser daca a acordat trialul");
+test("⚠ pagina de plan nu mai ofera nicio cale fara plata", () => {
+  const pagina = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
+  assert.ok(!pagina.includes('handleCreate("free")'), "s-a readus butonul de testare gratuita");
+  assert.ok(!pagina.includes('finalizeBusiness("free")'), "s-a readus crearea fara plata");
+  assert.ok(!/Începe gratuit|Testează gratuit/.test(pagina), "textul testarii gratuite a revenit");
+  assert.ok(!pagina.includes("trialRaportat"), "pagina asteapta iar un trial de la server");
 });
 
 test("⚠ `add_payment_info` nu mai exista pe magistrala noastra", () => {

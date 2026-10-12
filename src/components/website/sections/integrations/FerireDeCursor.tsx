@@ -235,7 +235,7 @@ export function FerireDeCursor({
         deci `alt`-urile dinăuntru nu se mai aud.
 
         `pointer-events-none`: câmpul acoperă tot hero-ul, inclusiv butoanele.
-        Fără asta, casetele ar fi înghițit apăsările pe „Începe gratuit".
+        Fără asta, casetele ar fi înghițit apăsările pe „Începe acum".
 
         Fără `overflow-hidden` aici: taie chiar secțiunea, care îl are deja pe al
         ei. Pus și pe câmp, ar fi fost a doua tăietură pe exact aceeași muchie.

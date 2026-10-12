@@ -116,7 +116,7 @@ export default async function ComparatiePage({ params }: Props) {
         eticheta={<EticheraVersus cheie={competitor as VersusKey} />}
         title={found.titlu}
         lead={found.lead}
-        cta={{ label: "Începe gratuit", href: "/register" }}
+        cta={{ label: "Începe acum", href: "/register" }}
         secundara={{ label: "Vezi prețurile", href: "/preturi" }}
       />
 

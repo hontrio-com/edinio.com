@@ -54,7 +54,7 @@ export default function OptimizarePage() {
       <HeroPagina
         title={<TitluOptimizare />}
         lead="Edinio optimizează magazinele pentru viteză, performanță și SEO, astfel încât să se încarce rapid și să aibă o bază bună pentru motoarele de căutare."
-        cta={{ label: "Începe gratuit", href: "/register" }}
+        cta={{ label: "Începe acum", href: "/register" }}
         secundara={{ label: "Vezi prețurile", href: "/preturi" }}
       />
 

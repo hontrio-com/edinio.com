@@ -156,7 +156,7 @@ export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
           </div>
         </div>
 
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:mt-12 lg:grid-cols-4 lg:gap-6">
+        <div className="mx-auto mt-10 grid max-w-5xl gap-5 sm:grid-cols-2 lg:mt-12 lg:grid-cols-3 lg:gap-6">
           {PRICING_PLANS.map((plan) => (
             <CardPlan key={plan.id} plan={plan} interval={interval} />
           ))}

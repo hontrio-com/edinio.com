@@ -133,7 +133,7 @@ export function MobileNav({ open, onClose }: Props) {
             onClick={onClose}
             className={cn("w-full", butonVerde())}
           >
-            Începe gratuit
+            Începe acum
           </Link>
           <Link
             href="/login"

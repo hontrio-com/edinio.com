@@ -35,19 +35,7 @@ export interface PricingPlan {
 }
 
 export const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: "trial",
-    name: "Testare",
-    description: "Testează platforma fără obligații",
-    features: [
-      "Acces complet 15 zile",
-      "Până la 10 produse",
-      "Comenzi nelimitate",
-      "Suport 7 zile din 7",
-    ],
-    cta: "Începe testarea",
-    popular: false,
-  },
+  /* Cardul „Testare" (15 zile, 10 produse) a stat aici pana pe 12.10.2026, cand s-a scos testarea gratuita. */
   {
     id: "basic",
     name: "Basic",

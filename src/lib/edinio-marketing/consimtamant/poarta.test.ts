@@ -184,7 +184,8 @@ test("⚠ ORICE punere la coada spune de unde stie ca are voie", () => {
     }
   }
 
-  assert.ok(apeluri.length >= 6, `s-au gasit doar ${apeluri.length} puneri la coada — cautarea s-a stricat?`);
+  /* 5 din 12.10.2026: punerea lui `trial_start` din `createBusiness` a plecat cu testarea gratuita. */
+  assert.ok(apeluri.length >= 5, `s-au gasit doar ${apeluri.length} puneri la coada — cautarea s-a stricat?`);
   for (const [f, bucata] of apeluri) {
     assert.match(
       bucata, /fel: "(cookie|carat)"/,

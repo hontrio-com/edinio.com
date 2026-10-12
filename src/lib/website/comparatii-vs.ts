@@ -189,7 +189,6 @@ export const TABELE_VS: Record<VersusKey, TabelVs> = {
       { criteriu: "Curieri românești conectați direct în platformă", edinio: true, rival: false },
       { criteriu: "Facturare românească integrată în ecosistem", edinio: true, rival: false },
       { criteriu: "Fluxuri construite în jurul pieței românești", edinio: true, rival: false },
-      { criteriu: "Trial gratuit", edinio: "15 zile", rival: "7 zile" },
       { criteriu: "Integrări și configurări locale într-un singur panou", edinio: true, rival: false },
       { criteriu: "Platformă dezvoltată pornind de la nevoile comercianților români", edinio: true, rival: false },
     ],

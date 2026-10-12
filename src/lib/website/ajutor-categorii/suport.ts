@@ -70,7 +70,7 @@ export const SUPORT: CategorieAjutor = {
             { titlu: "Tichetele țin de cont, nu de magazin", text: "Tichetele sunt legate de contul tău, nu de magazinul selectat în panou. Le vezi pe toate într-o singură listă, indiferent de magazinul pe care lucrezi în acel moment." },
             { titlu: "Dacă nu ai niciun tichet", text: "În locul listei apare o casetă punctată cu textul „Niciun tichet de suport” și „Ai o problemă sau o întrebare? Deschide un tichet și te ajutăm.”. Butonul „Deschide primul tichet” deschide același formular ca „Tichet nou”." },
             { titlu: "Unde găsești Suport pe telefon", text: "Pe telefon deschizi meniul din bara de sus. „Suport” apare după linia despărțitoare, la finalul listei de meniu. Dacă ai SMS Marketing activat, „Suport” este sub el." },
-            { titlu: "Ce îți trebuie ca să intri", text: "Ai nevoie de un cont autentificat, cu onboarding-ul finalizat. Dacă onboarding-ul nu e completat, panoul te trimite la pașii de configurare. Dacă abonamentul sau perioada de probă a expirat ori magazinul e suspendat, tot panoul, deci și zona Suport, te trimite la pagina de reactivare." },
+            { titlu: "Ce îți trebuie ca să intri", text: "Ai nevoie de un cont autentificat, cu onboarding-ul finalizat. Dacă onboarding-ul nu e completat, panoul te trimite la pașii de configurare. Dacă abonamentul a expirat ori magazinul e suspendat, tot panoul, deci și zona Suport, te trimite la pagina de reactivare." },
           ],
           termeni: ["istoric cereri suport", "unde vad tichetele", "status tichet", "raspuns necitit", "lista solicitari"],
         },

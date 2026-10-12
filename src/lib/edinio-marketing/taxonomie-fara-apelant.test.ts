@@ -33,6 +33,9 @@ import { NUME_TAXONOMIE } from "./evenimente";
  *   - `registration_view`, `registration_start` — pasii dintre `page_view` pe
  *     `/register` si `sign_up`. Numele sunt pregatite; instrumentarea lor e o
  *     hotarare separata, fiindca adauga masuratori, nu repara ceva.
+ *   - `trial_start` — SCOS pe 12.10.2026, odata cu testarea gratuita: magazinul se
+ *     creeaza numai dupa o plata confirmata. Numele si legaturile catre Meta
+ *     (`StartTrial`), TikTok si Google Ads raman, ca testarea sa poata fi readusa.
  */
 const REZERVATE = [
   "plan_select",
@@ -40,6 +43,7 @@ const REZERVATE = [
   "registration_view",
   "registration_start",
   "onboarding_complete",
+  "trial_start",
 ] as const;
 
 function numeTrase(): Set<string> {

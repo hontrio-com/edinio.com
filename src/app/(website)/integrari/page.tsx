@@ -62,7 +62,7 @@ export default function IntegrariPage() {
       <HeroPagina
         title="Toate integrările de care ai nevoie, pregătite din prima zi"
         lead="Facturare, curierat, plăți, e-mail marketing, Google și marketplace-uri. Le conectezi direct din Edinio, folosind propriile tale conturi."
-        cta={{ label: "Începe gratuit", href: "/register" }}
+        cta={{ label: "Începe acum", href: "/register" }}
         secundara={{ label: "Vezi prețurile", href: "/preturi" }}
         fundal={<CampSigle />}
         /* Spațierea vine din benzile siglelor, nu din ochi: exact zona în care

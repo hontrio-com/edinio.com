@@ -266,7 +266,6 @@ export function AdminBusinessDetailClient({
               <select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)}
                 className="h-8 px-2 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">
                 <option value="free">Free</option>
-                <option value="trial">Trial</option>
                 <option value="basic">Basic</option>
                 <option value="premium">Premium</option>
                 <option value="ultra">Ultra</option>

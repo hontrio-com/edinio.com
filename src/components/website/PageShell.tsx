@@ -46,7 +46,8 @@ import { FinalCta } from "./sections/FinalCta";
  * `BreadcrumbList` ies din ACEEAȘI listă, deci nu se pot despărți.
  */
 
-const TRUST = "15 zile gratuit, fără card de credit. Anulezi oricând.";
+/* Pana pe 12.10.2026: „15 zile gratuit, fără card de credit." Testarea gratuita a fost scoasa atunci. */
+const TRUST = "Preț fix pe viață și mentenanță gratuită. Anulezi oricând.";
 
 export function PageShell({
   sir,
@@ -103,7 +104,7 @@ export function PageShell({
                 data-analytics-location="page_shell"
                 className={butonVerde()}
               >
-                Începe gratuit
+                Începe acum
               </Link>
               <Link
                 /* Pagina, nu ancora: de pe o pagina interioara, `/#preturi` te

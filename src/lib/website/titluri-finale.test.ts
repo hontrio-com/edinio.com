@@ -70,7 +70,8 @@ const PAGINI: Record<string, Asteptat> = {
     fisier: "(website)/preturi/page.tsx",
     titlu: "Preț creare magazin online cu platforma Edinio | Edinio",
     descriere:
-      "Creează-ți magazinul online cu Edinio de la 99 lei/lună. Ai 15 zile gratuite, integrări incluse și mentenanță gratuită permanentă.",
+      /* Pana pe 12.10.2026: „Ai 15 zile gratuite, ..." — testarea gratuita a fost scoasa atunci. */
+      "Creează-ți magazinul online cu Edinio de la 99 lei/lună. Integrări incluse, preț fix pe viață și mentenanță gratuită permanentă.",
   },
   "/integrari": {
     fisier: "(website)/integrari/page.tsx",

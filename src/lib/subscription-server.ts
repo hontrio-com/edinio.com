@@ -104,7 +104,7 @@ export async function motivContInactiv(businessId: string): Promise<string | nul
   if (!motiv) return raspunde(businessId, null);
 
   return raspunde(businessId, motiv === "trial"
-    ? "Perioada de probă a expirat, deci nu se mai pot emite expedieri. Reactivează abonamentul din Setări > Abonament."
+    ? "Magazinul nu are un abonament activ, deci nu se mai pot emite expedieri. Alege un plan din Setări > Abonament."
     : "Abonamentul nu este activ, deci nu se mai pot emite expedieri. Reactivează-l din Setări > Abonament.");
 }
 

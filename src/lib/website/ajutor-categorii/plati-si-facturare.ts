@@ -607,7 +607,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "Sub denumire citește rândul Următoarea plată pe, cu data, sau Expiră pe, cu data, dacă ești pe plan neplătit.",
           ],
           detalii: [
-            { titlu: "Ce denumiri de plan pot apărea", text: "Gratuit (15 zile), Basic, Premium și Ultra. Contul pe perioadă de testare și contul pe planul gratuit apar amândouă ca Gratuit (15 zile)." },
+            { titlu: "Ce denumiri de plan pot apărea", text: "Basic, Premium și Ultra. Un cont fără abonament activ apare ca Fără abonament." },
             { titlu: "Rândul cu data", text: "Apare doar dacă pe contul tău există o dată de expirare. Pe plan plătit este data la care se face următoarea plată, pe plan neplătit este data la care expiră accesul." },
             { titlu: "Cardul este doar informativ", text: "Nu se editează nimic aici. Schimbarea planului se face din cardurile de mai jos, din aceeași secțiune, iar cardul, anularea și chitanțele se gestionează din Setări > Facturare." },
           ],

@@ -16,7 +16,10 @@ test("fiecare platforma comparata are tabelul ei", () => {
     if (cheie === "edinio") continue;
     const tabel = TABELE_VS[cheie as keyof typeof TABELE_VS];
     assert.ok(tabel, `lipseste tabelul pentru ${cheie}`);
-    assert.ok(tabel.randuri.length >= 10, `${cheie}: doar ${tabel.randuri.length} randuri`);
+    /* 9, nu 10, din 12.10.2026: randul „Trial gratuit" (15 zile vs 7) a plecat cu testarea
+       gratuita. Nu s-a pus altul in loc: un rand nou e o afirmatie despre un concurent numit
+       si se adauga numai verificat (vezi proba de publicitate comparativa de mai jos). */
+    assert.ok(tabel.randuri.length >= 9, `${cheie}: doar ${tabel.randuri.length} randuri`);
     assert.ok(tabel.intro.length > 40, `${cheie}: randul de deschidere e prea scurt`);
     assert.ok(tabel.coloanaRival.length > 0);
   }

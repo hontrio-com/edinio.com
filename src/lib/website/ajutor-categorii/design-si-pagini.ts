@@ -447,7 +447,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Apasă „Salvează”.",
           ],
           detalii: [
-            { titlu: "Pe plan gratuit sau de probă", text: "Comutatorul este dezactivat și nu răspunde la apăsare. Sub el scrie „Poate fi ascuns doar pe un plan plătit.”." },
+            { titlu: "Fără abonament plătit", text: "Comutatorul este dezactivat și nu răspunde la apăsare. Sub el scrie „Poate fi ascuns doar pe un plan plătit.”." },
             { titlu: "Pe plan plătit", text: "Textul de sub etichetă devine „Când e oprit, textul de credit dispare din footer-ul magazinului.”, iar comutatorul poate fi folosit." },
             { titlu: "Verificarea se face și pe magazin", text: "Chiar dacă setarea este salvată, magazinul public verifică din nou planul la afișare. Creditul dispare numai cât timp planul tău este unul plătit. Dacă planul revine la gratuit sau la probă, creditul reapare." },
           ],

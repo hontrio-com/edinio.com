@@ -611,7 +611,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             { titlu: "Rândul cu data", text: "Apare doar dacă pe contul tău există o dată de expirare. Pe plan plătit este data la care se face următoarea plată, pe plan neplătit este data la care expiră accesul." },
             { titlu: "Cardul este doar informativ", text: "Nu se editează nimic aici. Schimbarea planului se face din cardurile de mai jos, din aceeași secțiune, iar cardul, anularea și chitanțele se gestionează din Setări > Facturare." },
           ],
-          nota: "Dacă vrei să vezi dacă ești în testare sau pe planul gratuit, intră în Setări > Facturare. Acolo cele două stări arată diferit.",
+          nota: "Dacă vrei să vezi ce abonament ai și până când e plătit, intră în Setări > Facturare.",
           termeni: ["abonament curent", "cand expira", "data urmatoarei plati", "ce plan am", "interval de facturare"],
         },
         {
@@ -651,7 +651,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Creditul din planul curent", text: "Când treci pe plata anuală, sub buton apare nota că creditul din planul curent se aplică automat." },
-            { titlu: "Când apare opțiunea", text: "Doar dacă ești pe un plan plătit, adică Basic, Premium sau Ultra. Pe planul gratuit vezi butoanele obișnuite de alegere a planului." },
+            { titlu: "Când apare opțiunea", text: "Doar dacă ești pe un plan plătit, adică Basic, Premium sau Ultra. Fără abonament activ vezi butoanele obișnuite de alegere a planului." },
             { titlu: "Diferența dintre cele două etichete", text: "Plan activ apare pe cardul tău când te uiți la intervalul pe care plătești acum. Planul tău apare pe același card când ai comutat pe celălalt interval." },
           ],
           nota: "Ce se întâmplă exact cu perioada deja plătită, ca dată de intrare în vigoare, nu se vede în panou. Pentru un caz anume scrie la contact@edinio.com.",
@@ -669,7 +669,7 @@ export const PLATI_SI_FACTURARE: CategorieAjutor = {
             "În portal actualizezi cardul, anulezi abonamentul sau descarci chitanțele.",
           ],
           detalii: [
-            { titlu: "Când apare cardul Abonamentul tău", text: "Doar dacă ești pe un plan plătit. Pe planul gratuit sau în perioada de testare apar alte carduri, fără buton către portal." },
+            { titlu: "Când apare cardul Abonamentul tău", text: "Doar dacă ești pe un plan plătit. Fără abonament activ apar alte carduri, fără buton către portal." },
             { titlu: "Ce mai scrie pe card", text: "Rândul Următoarea plată, cu data la care se reînnoiește abonamentul, și explicația că prin portalul de plată poți actualiza cardul, anula abonamentul sau descărca chitanțele Stripe." },
             { titlu: "Când butonul lipsește", text: "Dacă abonamentul este în stare de plată restantă, în locul lui apare butonul roșu Reia plata." },
             { titlu: "Mesaje de eroare", text: "Nu există un abonament activ asociat contului tău, Eroare la deschiderea portalului de plată sau Eroare de rețea, încearcă din nou. Contul tău trebuie să aibă deja un client Stripe asociat, creat la prima plată." },

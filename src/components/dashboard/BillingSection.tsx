@@ -184,7 +184,7 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly", paym
           <div>
             <p className="text-sm font-semibold text-foreground mb-0.5">Niciun abonament activ</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Esti pe planul gratuit. Alege un plan din sectiunea{" "}
+              Nu ai un abonament activ. Alege un plan din sectiunea{" "}
               <button
                 type="button"
                 className="text-primary font-medium hover:underline"

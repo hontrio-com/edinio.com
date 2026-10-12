@@ -557,14 +557,14 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
           <div className="mx-3 mb-3 p-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
             <div className="flex items-center gap-2 mb-1.5">
               <Zap className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-              <span className="text-xs font-semibold text-foreground">Plan Gratuit</span>
+              <span className="text-xs font-semibold text-foreground">Fara abonament activ</span>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed mb-2">
-              Upgrade la Pro pentru functii avansate si suport prioritar.
+              Alege un plan ca sa iti pastrezi magazinul online.
             </p>
             <Link href="/dashboard/settings#abonament"
               className="block text-center text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg py-1.5 transition-colors">
-              Upgrade acum
+              Alege un plan
             </Link>
           </div>
         )}

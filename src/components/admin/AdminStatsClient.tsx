@@ -134,9 +134,9 @@ export function AdminStatsClient({
           <p className="text-xs text-zinc-500 mt-1">Utilizatori cu abonament activ</p>
         </div>
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Gratuiti</p>
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-1">Fara abonament</p>
           <p className="text-3xl font-black text-zinc-400">{totalFreeUsers}</p>
-          <p className="text-xs text-zinc-500 mt-1">Utilizatori pe plan gratuit</p>
+          <p className="text-xs text-zinc-500 mt-1">Utilizatori fara abonament activ</p>
         </div>
       </div>
 

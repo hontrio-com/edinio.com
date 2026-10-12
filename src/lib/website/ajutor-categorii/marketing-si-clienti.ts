@@ -303,7 +303,7 @@ export const MARKETING_SI_CLIENTI: CategorieAjutor = {
             { titlu: "Contorul de utilizări", text: "Numărul de utilizări crește când clientul plasează comanda cu acel cod. În panou nu există nicio cale de a-l scădea sau de a-l aduce la zero, nici din fereastra de editare." },
             { titlu: "Ce nu găsești în pagină", text: "Pagina nu are căutare, filtrare, sortare sau paginare. Toate codurile magazinului se afișează într-un singur tabel.\nNu poți vedea de aici ce comenzi anume au folosit un cod. Codul și suma redusă apar în detaliul fiecărei comenzi, în zona Comenzi." },
             { titlu: "Pe telefon", text: "Pe ecrane mici, o parte din coloane se ascund: „Valoare” apare de la ecrane puțin mai late, „Utilizări” și „Expiră” doar pe ecrane mari. Codul, tipul și starea rămân vizibile mereu.\nÎn meniul de jos de pe telefon nu există intrare pentru Discounturi. Ajungi la ea din meniul lateral sau din meniul barei de sus." },
-            { titlu: "Ce îți trebuie ca să intri în Discounturi", text: "Un cont conectat, onboardingul terminat și un magazin creat pe cont.\nDacă perioada gratuită sau abonamentul au expirat, panoul te trimite la pagina de reactivare. Conturile de administrator al platformei fac excepție." },
+            { titlu: "Ce îți trebuie ca să intri în Discounturi", text: "Un cont conectat, onboardingul terminat și un magazin creat pe cont.\nDacă abonamentul a expirat, panoul te trimite la pagina de reactivare. Conturile de administrator al platformei fac excepție." },
           ],
           termeni: ["lista coduri", "statistici cupoane", "utilizari cod", "expirat", "epuizat"],
         },

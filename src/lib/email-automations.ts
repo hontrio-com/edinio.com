@@ -189,7 +189,7 @@ export function emailNoProducts(name: string, businessName: string): AutomationE
         <li>Pune un nume, pret si cel putin o poza</li>
         <li>Apasa "Salveaza" - gata, produsul e in magazin!</li>
       </ol>
-      <p style="margin:0 0 0 0;font-size:14px;color:#3f3f46;">Poti adauga pana la 10 produse in planul gratuit. Incepe cu cel mai popular produs al tau.</p>
+      <p style="margin:0 0 0 0;font-size:14px;color:#3f3f46;">Incepe cu cel mai popular produs al tau.</p>
       ${btn("Adauga primul produs", "/dashboard/products/new")}
       ${CONTACT_BLOCK}
     `),

@@ -84,7 +84,7 @@ function RegisterForm() {
     <>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">
-          Creeaza cont gratuit
+          Creeaza cont
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Incepe sa construiesti prezenta ta online
@@ -230,7 +230,7 @@ function RegisterForm() {
             bg-primary hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-          {loading ? "Se creeaza contul..." : "Creeaza cont gratuit"}
+          {loading ? "Se creeaza contul..." : "Creeaza cont"}
         </button>
       </form>
 

@@ -159,7 +159,7 @@ export default function LoginPage() {
       <p className="mt-5 text-center text-sm text-muted-foreground">
         Nu ai cont?{" "}
         <Link href="/register" className="text-primary font-medium hover:underline">
-          Creeaza cont gratuit
+          Creeaza cont
         </Link>
       </p>
     </>

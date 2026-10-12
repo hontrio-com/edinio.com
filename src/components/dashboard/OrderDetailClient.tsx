@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { numeleFisierului, sePoateRandaCaImagine } from "@/lib/customization/adresa";
@@ -67,6 +67,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { etichetaRambursWoot } from "@/lib/shipping/ramburs-woot";
+import { useCampuriCheckout } from "@/components/dashboard/DetaliiCheckoutAwb";
+import { detaliileDeLaCheckout } from "@/lib/cont/detalii-checkout";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -485,7 +487,22 @@ export function OrderDetailClient({
   });
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
   const firma = readBillingCompany(order.billing_company);
-  const notes = order.notes as Record<string, string> | null;
+  /*
+   * ⚠ `orders.notes` E O COLOANA TEXT: tine un JSON cheiat pe id-ul campului de checkout
+   * (`{"cf_1791731508493":"30"}`), iar la comenzile vechi un text simplu. Pana pe 12.10.2026 se
+   * citea ca obiect, deci `Object.entries` pe SIR afisa un rand pe fiecare CARACTER („0 {", „1 "",
+   * „2 c"…), la toate cele 100 de comenzi cu campuri. Acum trece prin aceeasi regula ca contul
+   * clientului si exportul (`detaliileDeLaCheckout`), cu etichetele din configurarea magazinului.
+   */
+  const campuriCheckout = useCampuriCheckout();
+  const notaBruta = order.notes as unknown;
+  const detaliiCheckout = useMemo(
+    () => detaliileDeLaCheckout(
+      typeof notaBruta === "string" ? notaBruta : notaBruta && typeof notaBruta === "object" ? JSON.stringify(notaBruta) : null,
+      campuriCheckout,
+    ),
+    [notaBruta, campuriCheckout],
+  );
   /*
    * ⚠ NOTA INTERNA SE VEDE, si pana pe 08.09.2026 nu se vedea NICAIERI.
    *
@@ -2068,16 +2085,16 @@ export function OrderDetailClient({
           )}
 
           {/* Custom fields / notes */}
-          {notes && Object.keys(notes).length > 0 && (
+          {detaliiCheckout.length > 0 && (
             <div className={`${CARD} p-5 space-y-3`}>
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />Campuri aditionale
               </h2>
               <div className="divide-y divide-border">
-                {Object.entries(notes).map(([key, value]) => (
-                  <div key={key} className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">{key}</span>
-                    <span className="text-sm text-foreground text-right">{value}</span>
+                {detaliiCheckout.map((d, i) => (
+                  <div key={i} className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">{d.eticheta}</span>
+                    <span className="text-sm text-foreground text-right whitespace-pre-line break-words">{d.valoare}</span>
                   </div>
                 ))}
               </div>

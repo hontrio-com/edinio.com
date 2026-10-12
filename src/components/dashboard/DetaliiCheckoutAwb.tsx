@@ -16,6 +16,11 @@ export function CampuriCheckoutProvider({ campuri, children }: { campuri: Readon
   return <CampuriCheckout.Provider value={campuri}>{children}</CampuriCheckout.Provider>;
 }
 
+/** Campurile de checkout ale magazinului (id + eticheta), pentru a le afisa cu numele lor. */
+export function useCampuriCheckout(): ReadonlyArray<CampCheckoutAwb> {
+  return useContext(CampuriCheckout);
+}
+
 /** Observatiile si codul postal din formular, pentru comanda deschisa in fereastra. */
 export function useDetaliiPentruAwb(order: { notes?: unknown } | null | undefined): DetaliiPentruAwb {
   const campuri = useContext(CampuriCheckout);

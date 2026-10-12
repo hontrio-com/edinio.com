@@ -16,7 +16,11 @@ export type RandDetaliu = { eticheta: string; valoare: string };
 /** `interval_livrare` -> „Interval livrare", `cf_mesaj` -> „Mesaj". */
 function cheieCitibila(cheie: string): string {
   const s = cheie.replace(/^cf[_-]/i, "").replace(/[_-]+/g, " ").trim();
-  if (!s) return "Detaliu";
+  /*
+   * ⚠ Editorul da campurilor id-uri `cf_<ora in ms>`. Sters campul din checkout, ramanea pe ecran
+   * „1780781197625" (12.10.2026: 86 de comenzi la jhbijuterii, pe un camp care nu mai exista).
+   */
+  if (!s || /^\d+$/.test(s)) return "Detaliu";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 

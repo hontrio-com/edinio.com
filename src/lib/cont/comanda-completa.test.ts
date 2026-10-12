@@ -223,6 +223,21 @@ test("⚠ detalii: textul vechi sau JSON-ul stricat nu rup pagina si nu se pierd
   assert.deepEqual(detaliileDeLaCheckout(JSON.stringify({ a: true, b: "", c: { x: 1 } }), []), [{ eticheta: "A", valoare: "Da" }]);
 });
 
+test("⚠ detalii: forma REALA din productie, si un camp sters din checkout nu arata un numar", () => {
+  /*
+   * Comanda #0134 de la jhbijuterii (12.10.2026): `notes` e text, `{"cf_1791731508493":"30"}`.
+   * Panoul il citea ca obiect si afisa un rand pe fiecare caracter. Campul `cf_1780781197625`
+   * a fost sters din checkout, dar e pe 86 de comenzi: fara eticheta, ramanea „1780781197625".
+   */
+  const campuri = [{ id: "cf_1791731508493", label: "Observatii Magazin" }];
+  assert.deepEqual(detaliileDeLaCheckout('{"cf_1791731508493":"30"}', campuri), [
+    { eticheta: "Observatii Magazin", valoare: "30" },
+  ]);
+  assert.deepEqual(detaliileDeLaCheckout('{"cf_1780781197625":"Romania"}', campuri), [
+    { eticheta: "Detaliu", valoare: "Romania" },
+  ]);
+});
+
 /* ═══ Documentul fiscal ═══ */
 
 test("⚠⚠ factura STORNATA se spune pe fata", () => {
@@ -255,4 +270,12 @@ test("⚠⚠ urmarire: la Curiera cumparatorul primeste numarul si pagina PARTEN
   /* Fara partener, totul ramane al Curierei, ca inainte. */
   assert.equal(urmareste({ curier: "curiera", curierReal: null, awb: "710915533" })?.fel, "direct");
   assert.equal(numeleCurierului("curiera", null), "Curiera");
+});
+
+test("⚠ panoul comenzii citeste `notes` prin aceeasi regula, nu ca obiect", async () => {
+  /* Pe SIR, `Object.entries` da un rand pe fiecare caracter: asa a aratat panoul pana pe 12.10.2026. */
+  const { readFileSync } = await import("node:fs");
+  const sursa = readFileSync(new URL("../../components/dashboard/OrderDetailClient.tsx", import.meta.url), "utf8");
+  assert.equal(/Object\.(entries|keys)\(\s*notes\b/.test(sursa), false, "panoul parcurge iar `notes` ca obiect");
+  assert.match(sursa, /detaliileDeLaCheckout\(/);
 });

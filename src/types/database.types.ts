@@ -2346,6 +2346,373 @@ export type Database = {
           },
         ]
       }
+      easysales_comenzi: {
+        Row: {
+          awb: Json | null
+          awb_curier: string | null
+          awb_la: string | null
+          awb_viu: string | null
+          business_id: string
+          canal: string | null
+          cancel_request: string | null
+          citita_la: string | null
+          created_at: string
+          directie: string
+          efect: string | null
+          erori: Json | null
+          es_anulata_la: string | null
+          es_custom_status: Json | null
+          es_display_id: string | null
+          es_internal_id: string | null
+          es_livrare_cod: number | null
+          es_order_id: string
+          es_status_cod: number | null
+          es_status_text: string | null
+          es_updated_at: string | null
+          facturi: Json | null
+          id: string
+          incercari: number
+          motiv: string | null
+          next_retry_at: string | null
+          order_id: string | null
+          order_uuid: string | null
+          raspuns_brut: Json | null
+          stapan: string
+          stare: string
+          trimisa_la: string | null
+          ultima_veste_la: string | null
+          updated_at: string
+        }
+        Insert: {
+          awb?: Json | null
+          awb_curier?: string | null
+          awb_la?: string | null
+          awb_viu?: string | null
+          business_id: string
+          canal?: string | null
+          cancel_request?: string | null
+          citita_la?: string | null
+          created_at?: string
+          directie?: string
+          efect?: string | null
+          erori?: Json | null
+          es_anulata_la?: string | null
+          es_custom_status?: Json | null
+          es_display_id?: string | null
+          es_internal_id?: string | null
+          es_livrare_cod?: number | null
+          es_order_id: string
+          es_status_cod?: number | null
+          es_status_text?: string | null
+          es_updated_at?: string | null
+          facturi?: Json | null
+          id?: string
+          incercari?: number
+          motiv?: string | null
+          next_retry_at?: string | null
+          order_id?: string | null
+          order_uuid?: string | null
+          raspuns_brut?: Json | null
+          stapan?: string
+          stare?: string
+          trimisa_la?: string | null
+          ultima_veste_la?: string | null
+          updated_at?: string
+        }
+        Update: {
+          awb?: Json | null
+          awb_curier?: string | null
+          awb_la?: string | null
+          awb_viu?: string | null
+          business_id?: string
+          canal?: string | null
+          cancel_request?: string | null
+          citita_la?: string | null
+          created_at?: string
+          directie?: string
+          efect?: string | null
+          erori?: Json | null
+          es_anulata_la?: string | null
+          es_custom_status?: Json | null
+          es_display_id?: string | null
+          es_internal_id?: string | null
+          es_livrare_cod?: number | null
+          es_order_id?: string
+          es_status_cod?: number | null
+          es_status_text?: string | null
+          es_updated_at?: string | null
+          facturi?: Json | null
+          id?: string
+          incercari?: number
+          motiv?: string | null
+          next_retry_at?: string | null
+          order_id?: string | null
+          order_uuid?: string | null
+          raspuns_brut?: Json | null
+          stapan?: string
+          stare?: string
+          trimisa_la?: string | null
+          ultima_veste_la?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_comenzi_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "easysales_comenzi_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      easysales_produse: {
+        Row: {
+          business_id: string
+          confirmat_la: string | null
+          created_at: string
+          es_product_id: string | null
+          id: number
+          identitate: string
+          motiv: string | null
+          parinte_id: number | null
+          product_id: string | null
+          product_uuid: string
+          sku_generat: boolean
+          sku_trimis: string | null
+          stare: string
+          trimis_la: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          confirmat_la?: string | null
+          created_at?: string
+          es_product_id?: string | null
+          id?: number
+          identitate?: string
+          motiv?: string | null
+          parinte_id?: number | null
+          product_id?: string | null
+          product_uuid: string
+          sku_generat?: boolean
+          sku_trimis?: string | null
+          stare?: string
+          trimis_la?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          confirmat_la?: string | null
+          created_at?: string
+          es_product_id?: string | null
+          id?: number
+          identitate?: string
+          motiv?: string | null
+          parinte_id?: number | null
+          product_id?: string | null
+          product_uuid?: string
+          sku_generat?: boolean
+          sku_trimis?: string | null
+          stare?: string
+          trimis_la?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_produse_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "easysales_produse_parinte_id_fkey"
+            columns: ["parinte_id"]
+            isOneToOne: false
+            referencedRelation: "easysales_produse"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "easysales_produse_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      easysales_request_log: {
+        Row: {
+          business_id: string
+          cale: string
+          cod: string | null
+          corelatie: string | null
+          created_at: string
+          durata_ms: number | null
+          id: string
+          mesaj: string | null
+          metoda: string
+          rata_ramasa: number | null
+          status: number
+          verdict: string
+        }
+        Insert: {
+          business_id: string
+          cale: string
+          cod?: string | null
+          corelatie?: string | null
+          created_at?: string
+          durata_ms?: number | null
+          id?: string
+          mesaj?: string | null
+          metoda: string
+          rata_ramasa?: number | null
+          status?: number
+          verdict: string
+        }
+        Update: {
+          business_id?: string
+          cale?: string
+          cod?: string | null
+          corelatie?: string | null
+          created_at?: string
+          durata_ms?: number | null
+          id?: string
+          mesaj?: string | null
+          metoda?: string
+          rata_ramasa?: number | null
+          status?: number
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_request_log_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      easysales_sync_queue: {
+        Row: {
+          abandonat_la: string | null
+          business_id: string
+          cheie: string
+          created_at: string
+          generation: number
+          id: string
+          incercari: number
+          next_retry_at: string | null
+          op: string
+          pauze: number
+          prioritate: number
+          revendicat_pana: string | null
+          ultima_eroare: string | null
+        }
+        Insert: {
+          abandonat_la?: string | null
+          business_id: string
+          cheie: string
+          created_at?: string
+          generation?: number
+          id?: string
+          incercari?: number
+          next_retry_at?: string | null
+          op: string
+          pauze?: number
+          prioritate?: number
+          revendicat_pana?: string | null
+          ultima_eroare?: string | null
+        }
+        Update: {
+          abandonat_la?: string | null
+          business_id?: string
+          cheie?: string
+          created_at?: string
+          generation?: number
+          id?: string
+          incercari?: number
+          next_retry_at?: string | null
+          op?: string
+          pauze?: number
+          prioritate?: number
+          revendicat_pana?: string | null
+          ultima_eroare?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_sync_queue_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      easysales_webhook_inbox: {
+        Row: {
+          amprenta: string
+          business_id: string
+          corp: Json | null
+          eroare: string | null
+          id: string
+          incercari: number
+          motiv: string | null
+          prelucrat_la: string | null
+          primit_la: string
+          semnatura_ok: boolean | null
+          semnatura_varianta: string | null
+          slug: string | null
+          urmatoarea_incercare: string | null
+        }
+        Insert: {
+          amprenta: string
+          business_id: string
+          corp?: Json | null
+          eroare?: string | null
+          id?: string
+          incercari?: number
+          motiv?: string | null
+          prelucrat_la?: string | null
+          primit_la?: string
+          semnatura_ok?: boolean | null
+          semnatura_varianta?: string | null
+          slug?: string | null
+          urmatoarea_incercare?: string | null
+        }
+        Update: {
+          amprenta?: string
+          business_id?: string
+          corp?: Json | null
+          eroare?: string | null
+          id?: string
+          incercari?: number
+          motiv?: string | null
+          prelucrat_la?: string | null
+          primit_la?: string
+          semnatura_ok?: boolean | null
+          semnatura_varianta?: string | null
+          slug?: string | null
+          urmatoarea_incercare?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_webhook_inbox_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       edinio_consimtamant_retras: {
         Row: {
           retras_la: string
@@ -5845,6 +6212,7 @@ export type Database = {
           default_shipping_cost: number
           dhl_config: Json | null
           dpd_config: Json | null
+          easysales_config: Json
           ecolet_config: Json | null
           emag_config: Json
           email_config: Json
@@ -5926,6 +6294,7 @@ export type Database = {
           default_shipping_cost?: number
           dhl_config?: Json | null
           dpd_config?: Json | null
+          easysales_config?: Json
           ecolet_config?: Json | null
           emag_config?: Json
           email_config?: Json
@@ -6007,6 +6376,7 @@ export type Database = {
           default_shipping_cost?: number
           dhl_config?: Json | null
           dpd_config?: Json | null
+          easysales_config?: Json
           ecolet_config?: Json | null
           emag_config?: Json
           email_config?: Json
@@ -7024,6 +7394,20 @@ export type Database = {
         Returns: undefined
       }
       jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
+      /* easySales (migrations/2026-10-13-easysales-fundatia.sql): coada comasata si zavorul emiterii tokenului.
+         `easysales_ia_emiterea` intoarce id-ul zavorului sau NULL cand altcineva emite. */
+      easysales_pune_in_coada: { Args: { p_business: string; p_op: string; p_cheie: string; p_prioritate?: number }; Returns: undefined }
+      easysales_ia_emiterea: { Args: { p_business: string; p_versiune_vazuta: number; p_lease_sec?: number }; Returns: string | null }
+      easysales_scrie_tokenul: { Args: { p_business: string; p_zavor: string; p_patch: Json }; Returns: boolean }
+      easysales_elibereaza_emiterea: { Args: { p_business: string; p_zavor: string }; Returns: undefined }
+      /* „Preia in Edinio" si intoarcerea: `false` cand comanda nu e stampilata sau e a altui magazin. */
+      easysales_schimba_stapanul: { Args: { p_business: string; p_order: string; p_stapan: string }; Returns: boolean }
+      /* Plasa cronului: comenzile stampilate fara rand de legatura. Intoarce cate a reparat. */
+      easysales_plasa_legaturilor: { Args: { p_business: string; p_limita?: number }; Returns: number }
+      /* Regula stampilei (declansatorul si comenzile existente o impart). */
+      easysales_se_stampileaza: { Args: { p_business: string; p_order_source: Json; p_shipping: Json; p_items: Json }; Returns: boolean }
+      /* Comenzile deschise dinaintea activarii: `stampilata` | `deja` | `neeligibila` | `stare` | `negasita`. */
+      easysales_stampileaza_existenta: { Args: { p_business: string; p_order: string }; Returns: string }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
       numar_produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { sub_prag: number; epuizate: number }[] }
       produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { id: string; nume: string; imagine: string | null; stoc: number; variante: Json }[] }

@@ -46,6 +46,43 @@ const normalizeaza = (t) => t.split(CR).join("");
 // Tabelele de lucru si copiile de siguranta nu au ce cauta in tipuri.
 const IGNORATE = /^(zz_|_)/;
 
+/*
+ * ═══ MIGRATIILE IN ASTEPTARE ═══
+ *
+ * O migratie scrisa, dar tinuta ANUME in afara productiei, sta in afara lui `migrations/` (acolo
+ * intra numai ce e aplicat). Tipurile ii au deja coloanele, ca TypeScript sa verifice codul care le
+ * foloseste; codul acela e oprit de un comutator, iar o proba cere ca, oprit, sa nu le atinga.
+ *
+ * ⚠ NU e un prag ridicat: se scad din fantome NUMAI coloanele adaugate de fisierele de aici, si se
+ * scriu pe nume. Orice alta fantoma pica in continuare. Un fisier negasit PICA scriptul: cand
+ * migratia intra in productie (si se muta in `migrations/`), intrarea de aici trebuie scoasa, ca
+ * exceptia sa nu-si supravietuiasca motivul.
+ */
+const IN_ASTEPTARE = [
+  // easySales, catalogul si stocul (migratia 74): `CATALOG_PORNIT`, `STOC_PORNIT` in
+  // `src/lib/easysales/constante.ts`; proba `src/lib/easysales/catalogul-si-migratia-merg-impreuna.test.ts`.
+  "docs/marketplace/2026-10-13-easysales-catalog.sql",
+];
+
+/** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */
+function coloaneInAsteptare() {
+  const out = new Set();
+  for (const rel of IN_ASTEPTARE) {
+    const cale = path.join(RADACINA, rel);
+    if (!existsSync(cale)) {
+      console.error(`Migratia in asteptare ${rel} nu mai exista. Daca a intrat in productie, scoate-o din IN_ASTEPTARE.`);
+      process.exit(2);
+    }
+    const sql = normalizeaza(readFileSync(cale, "utf8")).replace(/--.*$/gm, "");
+    for (const instr of sql.split(";")) {
+      const t = instr.match(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\.)?([a-z0-9_]+)/i);
+      if (!t) continue;
+      for (const c of instr.matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z0-9_]+)/gi)) out.add(`${t[1]}.${c[1]}`);
+    }
+  }
+  return out;
+}
+
 /** Tabelele din `public`, cu coloanele lor, citite din baseline. */
 function dinBaseline() {
   const sql = normalizeaza(readFileSync(BASELINE, "utf8"));
@@ -120,14 +157,20 @@ for (const [nume, coloane] of baza) {
   if (!inTip) continue;
   for (const c of coloane) if (!inTip.has(c)) coloaneLipsa.push(`${nume}.${c}`);
 }
+const asteptate = coloaneInAsteptare();
 const fantome = [];
+const inAsteptare = [];
 for (const [nume, coloane] of tip) {
   const inBaza = baza.get(nume);
   if (!inBaza) continue;
-  for (const c of coloane) if (!inBaza.has(c)) fantome.push(`${nume}.${c}`);
+  for (const c of coloane) {
+    if (inBaza.has(c)) continue;
+    (asteptate.has(`${nume}.${c}`) ? inAsteptare : fantome).push(`${nume}.${c}`);
+  }
 }
 coloaneLipsa.sort();
 fantome.sort();
+inAsteptare.sort();
 
 console.log(`Tabele in schema: ${baza.size} · in tipuri: ${tip.size}`);
 console.log(`Tabele LIPSA din tipuri: ${tabeleLipsa.length}`);
@@ -136,6 +179,8 @@ console.log(`Coloane LIPSA din tipuri: ${coloaneLipsa.length}`);
 for (const c of coloaneLipsa) console.log(`  - ${c}`);
 console.log(`Coloane FANTOMA (in tipuri, nu in schema): ${fantome.length}`);
 for (const c of fantome) console.log(`  - ${c}`);
+console.log(`Coloane IN ASTEPTARE (migratii neaplicate inca, nenumarate ca fantome): ${inAsteptare.length}`);
+for (const c of inAsteptare) console.log(`  - ${c}`);
 
 /*
  * Ordinea alfabetica nu e cosmetica: fisierul se intretine DE MANA, aditiv, iar

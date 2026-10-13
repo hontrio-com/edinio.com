@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { CATALOG_PORNIT, STOC_PORNIT } from "./constante";
@@ -69,9 +69,45 @@ test("poarta fara comutator (`poartaMagazinului`) n-o da mai departe niciun fisi
   assert.deepEqual(gasite, []);
 });
 
-/** Un client Supabase fals: raspunde gol la orice si tine minte ce tabele si functii s-au atins. */
+/**
+ * Coloanele pe care migratia 74 le ADAUGA pe tabelele care exista deja in productie (`easysales_produse`,
+ * `easysales_comenzi`, din 72 si 73). Tabelele exista, deci o interogare care numeste una dintre ele
+ * nu cade pe 42P01, ci pe 42703, si numai cand ruleaza: proba pe tabele n-ar vedea-o.
+ */
+function coloanele74(): Set<string> {
+  const sql = readFileSync(IN_ASTEPTARE, "utf8").replace(/--.*$/gm, "");
+  const out = new Set<string>();
+  for (const instr of sql.split(";")) {
+    const t = instr.match(/alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?(?:public\.)?([a-z0-9_]+)/i);
+    if (!t) continue;
+    for (const c of instr.matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?([a-z0-9_]+)/gi)) out.add(`${t[1]}.${c[1]}`);
+  }
+  return out;
+}
+
+/** Filtrele si ordonarea: primul argument e numele coloanei. */
+const CU_COLOANA = new Set(["eq", "neq", "in", "is", "gt", "gte", "lt", "lte", "not", "order", "like", "ilike", "contains", "filter"]);
+
+/**
+ * Un client Supabase fals: raspunde gol la orice si tine minte ce tabele si functii s-au atins, si ce
+ * coloane s-au numit (in `select`, in filtre si in cheile scrierilor), ca `tabela.coloana`.
+ */
 function adminFals() {
   const atinse = new Set<string>();
+  const coloane = new Set<string>();
+  const noteaza = (tabela: string, metoda: string, args: unknown[]) => {
+    const [a] = args;
+    if (metoda === "select" && typeof a === "string") {
+      for (const bucata of a.split(",")) {
+        const nume = bucata.trim().split(/[\s:(!]/)[0];
+        if (nume && nume !== "*") coloane.add(`${tabela}.${nume}`);
+      }
+    } else if ((metoda === "insert" || metoda === "update" || metoda === "upsert") && a && typeof a === "object") {
+      for (const rand of Array.isArray(a) ? a : [a]) for (const k of Object.keys(rand as object)) coloane.add(`${tabela}.${k}`);
+    } else if (CU_COLOANA.has(metoda) && typeof a === "string") {
+      coloane.add(`${tabela}.${a}`);
+    }
+  };
   const rezultat = (unic: boolean, tabela: string) => ({
     data: unic ? (tabela === "businesses" ? { slug: "magazin", custom_domain: null } : null) : [],
     error: null, count: 0,
@@ -79,7 +115,6 @@ function adminFals() {
   const lant = (tabela: string): unknown => {
     let unic = false;
     const p: Record<string, unknown> = {};
-    const intoarce = () => proxy;
     const proxy: unknown = new Proxy(p, {
       get(_t, nume: string) {
         if (nume === "then") {
@@ -87,7 +122,7 @@ function adminFals() {
             Promise.resolve(rezultat(unic, tabela)).then(rezolva, respinge);
         }
         if (nume === "maybeSingle" || nume === "single") return () => { unic = true; return proxy; };
-        return intoarce;
+        return (...args: unknown[]) => { noteaza(tabela, nume, args); return proxy; };
       },
     });
     return proxy;
@@ -96,13 +131,21 @@ function adminFals() {
     from(t: string) { atinse.add(t); return lant(t); },
     rpc(f: string) { atinse.add(f); return lant(f); },
   } as unknown as SupabaseClient<Database>;
-  return { admin, atinse };
+  return { admin, atinse, coloane };
 }
+
+test("proba coloanelor citeste ce trebuie din migratia 74", { skip: CATALOG_PORNIT }, () => {
+  const c = coloanele74();
+  for (const x of ["easysales_produse.stoc_trimis", "easysales_produse.amprenta", "easysales_produse.pret_trimis", "easysales_comenzi.linii"]) {
+    assert.ok(c.has(x), `${x} lipseste din coloanele citite`);
+  }
+  assert.ok(![...c].some((x) => x.startsWith("easysales_categorii.")), "tabelele noi ale migratiei nu sunt coloane adaugate");
+});
 
 const B = "11111111-1111-4111-8111-111111111111";
 
-test("⚠ cu comutatorul oprit, niciun drum al catalogului nu atinge tabelele sau functiile migratiei 74", { skip: CATALOG_PORNIT }, async () => {
-  const { admin, atinse } = adminFals();
+test("⚠ cu comutatorul oprit, niciun drum al catalogului nu atinge tabelele, functiile sau coloanele migratiei 74", { skip: CATALOG_PORNIT }, async () => {
+  const { admin, atinse, coloane } = adminFals();
   const cfg = { connected: true, catalog_activ: true, website_nume: "Edinio" };
   const dep = depozitFals({ [B]: cfg });
   const ctx: ContextEasySales = { dep, businessId: B, cfg: dep.configuri.get(B)! };
@@ -137,4 +180,9 @@ test("⚠ cu comutatorul oprit, niciun drum al catalogului nu atinge tabelele sa
   assert.deepEqual(ale74, [], `atinse fara comutator: ${ale74.join(", ")}`);
   assert.ok(atinse.has("products"), "raportul chiar citeste produsele (proba nu e goala)");
   assert.ok(atinse.has("easysales_sync_queue"), "lucrarile catalogului chiar se sterg din coada");
+
+  const c74 = coloanele74();
+  const coloane74 = [...coloane].filter((x) => c74.has(x));
+  assert.deepEqual(coloane74, [], `coloane ale migratiei 74 numite fara comutator: ${coloane74.join(", ")}`);
+  assert.ok(coloane.has("easysales_produse.sku_trimis"), "raportul chiar numeste coloanele legaturii (proba coloanelor nu e goala)");
 });

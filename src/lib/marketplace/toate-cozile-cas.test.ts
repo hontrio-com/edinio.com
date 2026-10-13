@@ -24,11 +24,11 @@ const viu = (p: string) =>
 
 /** Cozile care au `generation` in baza. Sursa: declansatoarele `trg_generatie` din baseline. */
 const COZI_CU_GENERATIE = [
-  "aboutyou_sync_queue", "emag_sync_queue", "gmc_sync_queue",
+  "aboutyou_sync_queue", "easysales_sync_queue", "emag_sync_queue", "gmc_sync_queue",
   "olx_sync_queue", "trendyol_sync_queue",
 ];
 
-test("⚠ baseline-ul chiar are declansator pe toate cinci", () => {
+test("⚠ baseline-ul chiar are declansator pe toate (sase, cu easySales)", () => {
   /* Daca se adauga o coada noua cu generatie, proba de mai jos trebuie s-o acopere si pe ea. */
   const baza = readFileSync("migrations/000-schema-baseline.sql", "utf8");
   const gasite = [...baza.matchAll(/CREATE TRIGGER trg_generatie BEFORE UPDATE ON public\.(\w+)/g)]

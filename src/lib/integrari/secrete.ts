@@ -64,6 +64,12 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      `privat.campuri_secrete`. ⚠ IBAN-ul de ramburs nu e secret: e tiparit pe facturi. */
   epacket_config: ["api_key"],
   dpd_config: ["password"],
+  /* easySales: secretul clientului API, website token-ul, tokenurile emise, secretul de semnare al
+     webhook-urilor si (numai dupa D3) Personal Access Token-ul. `client_id` NU e secret: singur nu
+     deschide nimic, iar omul trebuie sa vada ce client a legat.
+     ⚠ Numele sunt IDENTICE in `EasySalesConfig` (lib/easysales/tipuri.ts) si in
+     `privat.campuri_secrete` (migratia fundatiei); `secretele-sunt-aceleasi.test.ts` le compara. */
+  easysales_config: ["client_secret", "website_token", "access_token", "refresh_token", "webhook_secret", "pat"],
   /* eMAG Marketplace: autentificare HTTP `Basic`, deci parola pleaca la fiecare
      cerere. `username` NU intra aici, desi e prima jumatate a acreditarii: singur
      nu deschide nimic, iar comerciantul trebuie sa-l poata reciti ca sa stie CE

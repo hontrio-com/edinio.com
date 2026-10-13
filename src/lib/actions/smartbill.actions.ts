@@ -1,5 +1,6 @@
 "use server";
 
+import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
@@ -845,6 +846,9 @@ export async function generateOrderInvoice(
   const { data: order } = await supabase
     .from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single();
   if (!order) return { error: "Comanda nu a fost gasita." };
+  /* ⚠ easySales: comanda stampilata „procesata in easySales" isi primeste factura ACOLO; a doua,
+     emisa aici, ar fi doua documente fiscale pentru aceeasi vanzare. */
+  if (procesataInEasySales((order as { order_source?: unknown }).order_source)) return { error: MESAJ_PROCESATA_IN_EASYSALES };
 
   /*
    * ⚠ Poarta cotelor amestecate a fost RIDICATA pe 09.09.2026: liniile isi poarta cotele lor.
@@ -982,6 +986,9 @@ export async function convertEstimateToInvoice(
   const { data: order } = await supabase
     .from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single();
   if (!order) return { error: "Comanda nu a fost gasita." };
+  /* ⚠ easySales: comanda stampilata „procesata in easySales" isi primeste factura ACOLO; a doua,
+     emisa aici, ar fi doua documente fiscale pentru aceeasi vanzare. */
+  if (procesataInEasySales((order as { order_source?: unknown }).order_source)) return { error: MESAJ_PROCESATA_IN_EASYSALES };
   if (!order.smartbill_estimate_number || !order.smartbill_estimate_series) {
     return { error: "Nu exista proforma pentru aceasta comanda." };
   }

@@ -1,4 +1,4 @@
-import { livrareaEDusaDeMarketplace } from "./origin";
+import { MESAJ_PROCESATA_IN_EASYSALES, livrareaEDusaDeMarketplace, procesataInEasySales } from "./origin";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CAND NU SE EMITE AWB PROPRIU, SI DE CE
@@ -239,6 +239,8 @@ const PLATI_IN_AVANS = new Set(["transfer", "creditcard"]);
  */
 export function deCeNuSePoateAwbPropriu(o: ComandaLaPoartaAwb, curier?: CurierPropriu): string | null {
   if (livrareaEDusaDeMarketplace(o.order_source)) return MOTIV_DUS_DE_EI;
+  /* ⚠ easySales: AWB-ul se emite acolo. Unul si aici ar insemna doua etichete pe acelasi colet. */
+  if (procesataInEasySales(o.order_source)) return MESAJ_PROCESATA_IN_EASYSALES;
 
   /*
    * ⚠ COMANDA INCHISA. `status` nu intra deloc in poarta pana pe 09.09.2026, deci

@@ -40,6 +40,8 @@ export const MARKETPLACE_ORIGINI: Record<string, { label: string; badge: string 
   /* Verdele Pepita. Fara randul asta, o comanda Pepita s-ar vedea in tabel cu eticheta
      implicita, adica exact ca una din magazinul propriu. */
   pepita: { label: "Pepita", badge: "bg-emerald-100 text-emerald-800 border-emerald-200" },
+  /* easySales: comenzile altor canale aduse de bucla de stoc (E4), cu `marketplace: "easysales"`. */
+  easysales: { label: "easySales", badge: "bg-sky-100 text-sky-800 border-sky-200" },
 };
 
 /*
@@ -112,7 +114,35 @@ export function mementoulMarketplace(orderSource: unknown): string | null {
  * si revendica marfa — daca intre timp se vanduse, stocul intra pe minus si ramanea doar un
  * rand in jurnal.
  */
-export const MARKETPLACE_CU_CICLU_PROPRIU = new Set(["emag", "trendyol"]);
+export const MARKETPLACE_CU_CICLU_PROPRIU = new Set(["emag", "trendyol", "easysales"]);
+
+/**
+ * Comanda VITRINEI se proceseaza in easySales? Stampila `order_source.easysales`, pusa de
+ * declansatorul `easysales_stampileaza_comanda` la inserare (migratia comenzilor easySales).
+ *
+ * ═══ ⚠ NU E UN MARKETPLACE, SI DE-AIA E O ALTA INTREBARE ═══
+ *
+ * Comanda e a magazinului si ramane in magazin (atribuire, client, bani). Numai FACTURA si AWB-ul
+ * se fac in easySales, iar starea vine de acolo dupa trimitere. Deci `deriveOrigin` o arata tot
+ * „Magazin online", iar portile de factura si AWB intreaba functia asta.
+ *
+ * ⚠ `stapan: "edinio"` (dupa „Preia in Edinio" sau dupa intoarcerea unei comenzi refuzate)
+ * inseamna ca se proceseaza din nou de aici, ca orice comanda.
+ */
+export function procesataInEasySales(orderSource: unknown): boolean {
+  const es = (orderSource as { easysales?: unknown } | null)?.easysales;
+  return !!es && typeof es === "object" && !Array.isArray(es) && (es as { stapan?: unknown }).stapan === "easysales";
+}
+
+/** Ce i se spune omului cand incearca sa factureze sau sa expedieze din Edinio o comanda easySales. */
+export const MESAJ_PROCESATA_IN_EASYSALES =
+  "Comanda se procesează în easySales: factura și AWB-ul se fac acolo. Ca s-o procesezi din Edinio, "
+  + "folosește „Preia în Edinio” din pagina comenzii.";
+
+/** Ce i se spune cand incearca sa-i schimbe starea de aici. */
+export const MESAJ_STAREA_IN_EASYSALES =
+  "Starea acestei comenzi vine din easySales. Ca s-o anulezi, folosește „Anulează în easySales”; "
+  + "ca s-o procesezi din Edinio, „Preia în Edinio”, din pagina comenzii.";
 
 /**
  * Cheia marketplace-ului care tine ciclul comenzii, sau `null` daca il tinem noi.
@@ -188,6 +218,9 @@ export function cineTineComanda(marketplace: string): { titlu: string; urmator: 
   const nume = MARKETPLACE_ORIGINI[marketplace]?.label ?? marketplace;
   const titlu = `Starea și plata acestei comenzi le ține ${nume}. Se schimbă în contul ${nume}, `
     + "iar noi le citim de acolo la fiecare trecere.";
+  if (marketplace === "easysales") {
+    return { titlu, urmator: "AWB-ul și factura se fac în easySales." };
+  }
   if (marketplace === "trendyol") {
     return {
       titlu,
@@ -283,7 +316,9 @@ export function deriveOrigin(raw: unknown): OrderOrigin {
   const device = deviceFromUA(src?.user_agent);
 
   // No attribution at all (older orders): we only know it's from the store.
-  if (!src || Object.keys(src).filter((k) => k !== "user_agent").length === 0) {
+  /* ⚠ `easysales` e stampila procesarii, nu atribuire: fara filtrul asta, o comanda fara nicio
+     atribuire ar fi trecut din „Magazin online" in „Direct" doar fiindca a plecat in easySales. */
+  if (!src || Object.keys(src).filter((k) => k !== "user_agent" && k !== "easysales").length === 0) {
     return { label: "Magazin online", channel: "store", device };
   }
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
@@ -727,6 +728,9 @@ export async function generateOblioInvoice(
   const ctx = await getConfigAndOrder(businessId, orderId, sistem);
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config, order, pricesIncludeVat, vatEnabled, vatRate } = ctx;
+  /* ⚠ easySales: comanda stampilata „procesata in easySales" isi primeste factura ACOLO; a doua,
+     emisa aici, ar fi doua documente fiscale pentru aceeasi vanzare. */
+  if (procesataInEasySales((order as { order_source?: unknown }).order_source)) return { error: MESAJ_PROCESATA_IN_EASYSALES };
 
 
   /*

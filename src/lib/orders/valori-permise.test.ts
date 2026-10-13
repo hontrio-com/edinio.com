@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { statusEdinio } from "@/lib/emag/orders";
 import { platitLaEi } from "@/lib/emag/plata";
+import { decide as decideEasySales } from "@/lib/easysales/stari";
 
 /* ══════════════════════════════════════════════════════════════════════════
    CE SCRIU INTEGRARILE IN `orders` TREBUIE SA INCAPA IN CE PRIMESTE BAZA
@@ -108,6 +109,29 @@ test("⚠ si celelalte marketplace-uri scriu numai valori primite", () => {
     assert.ok(scrise.length > 0, `${f}: nu s-a gasit nicio scriere de payment_status`);
     for (const v of scrise) {
       assert.ok(permise.has(v), `${f} scrie „${v}", respins de orders_payment_status_check`);
+    }
+  }
+});
+
+test("⚠ easySales: nicio stare citita de la ei nu da o tinta pe care baza o respinge", () => {
+  /*
+   * Recitirea comenzilor trimise in easySales (`stari.ts`) muta comanda numai prin
+   * `tranzitieComandaMarketplace`; o tinta in afara regulii ar cadea acolo, la fiecare trecere.
+   * Se incearca toate starile lor, cu si fara colet, din fiecare stare Edinio.
+   */
+  const permise = valoriPermise("status");
+  const stari = [0, 1, 2, 3, 4, 5, 6, 7, 99, -1, "Canceled", "0 -> Canceled", "ciudat", null];
+  const livrari = [null, 1, 2, 3, 4, 5, 6, 7, 9];
+  for (const acum of [...permise]) {
+    for (const status of stari) {
+      for (const livrare of livrari) {
+        const shipments = livrare === null ? [] : [{ awb_id: ["1"], courier: { id: 4 }, delivery_status: { value: livrare } }];
+        const d = decideEasySales({ status, shipments }, acum, 0);
+        assert.ok(
+          d.tinta === null || permise.has(d.tinta),
+          `decide(${JSON.stringify(status)}, livrare ${livrare}, din ${acum}) = „${d.tinta}”, respins de orders_status_check`,
+        );
+      }
     }
   }
 });

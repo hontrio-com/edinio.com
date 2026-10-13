@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda } from "@/lib/orders/origin";
+import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
@@ -1413,9 +1413,11 @@ export async function bulkUpdateOrderStatus(
     .select("id, order_source").eq("business_id", businessId).in("id", idsCerute);
   if (eOrigini) return { error: `Comenzile nu s-au putut citi: ${eOrigini.message}` };
 
+  /* ⚠ Si comenzile vitrinei procesate in easySales: starea lor vine de acolo. Lotul nu le face
+     exceptia anularii inainte de trimitere (o face panoul comenzii, care citeste legatura). */
   const tinuteDeEi = new Set(
     ((origini ?? []) as { id: string; order_source: unknown }[])
-      .filter((o) => marketplaceCareTineComanda(o.order_source))
+      .filter((o) => marketplaceCareTineComanda(o.order_source) || procesataInEasySales(o.order_source))
       .map((o) => o.id),
   );
   const ids = idsCerute.filter((id) => !tinuteDeEi.has(id));

@@ -3,7 +3,7 @@ import { magazinulCereriiDeCont, magazinulEOprit } from "@/lib/cont/magazinul-ce
 import { sesiuneCurenta } from "@/lib/cont/sesiune";
 import { sesiuneExpirata, vineDePeMagazin } from "@/lib/cont/cerere";
 import { anuleazaComanda, mesajulAnularii } from "@/lib/cont/date";
-import { dupaAnulareaDinCont } from "@/lib/cont/anulare";
+import { cerereaDeAnulareInEasySales, dupaAnulareaDinCont } from "@/lib/cont/anulare";
 import { logError } from "@/lib/error-logger";
 import { esteUuid } from "@/lib/supabase/ids";
 
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const r = await anuleazaComanda(magazin.id, s.contId, orderId);
+    /* Comanda procesata in easySales: n-o anulam de aici, dar comerciantul afla ca i s-a cerut. */
+    if (!r.ok && r.motiv === "procesata-extern") cerereaDeAnulareInEasySales(magazin, orderId);
     if (!r.ok) return NextResponse.json({ eroare: mesajulAnularii(r.motiv) }, { status: 400 });
     /* Emailul de stare, anuntul catre comerciant si GA4, ca la anularea din panou. */
     dupaAnulareaDinCont(magazin, orderId);

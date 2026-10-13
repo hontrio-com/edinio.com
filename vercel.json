@@ -64,6 +64,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/easysales-sync",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/catalog-proiector",
       "schedule": "* * * * *"
     },

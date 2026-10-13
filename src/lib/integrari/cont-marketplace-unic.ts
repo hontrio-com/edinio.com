@@ -22,15 +22,24 @@ import { logError } from "@/lib/error-logger";
  *
  * ⚠ Pepita nu e aici, dinadins: adresele de feed si de comenzi le genereaza Edinio
  * pentru fiecare magazin, deci un cont Pepita nu poate primi doua magazine.
+ *
+ * ⚠ easySales are DOUA identitati, si conflictul e pe ORICARE dintre ele: clientul API
+ * (`client_id`; un token nou il revoca pe cel vechi, deci doua magazine pe acelasi client
+ * si-ar taia reciproc tokenul) si website-ul (amprenta `website_token`; doua magazine pe
+ * acelasi website si-ar amesteca cataloagele). O cheie compusa ar prinde numai potrivirea pe
+ * amandoua.
  */
 
-export type Marketplace = "trendyol" | "emag" | "olx" | "aboutyou";
+export type Marketplace = "trendyol" | "emag" | "olx" | "aboutyou" | "easysales";
 
 const NUME: Record<Marketplace, string> = {
-  trendyol: "Trendyol", emag: "eMAG", olx: "OLX", aboutyou: "About You",
+  trendyol: "Trendyol", emag: "eMAG", olx: "OLX", aboutyou: "About You", easysales: "easySales",
 };
 
 export function mesajContFolosit(m: Marketplace): string {
+  if (m === "easysales") {
+    return "Acest client API sau acest website easySales este deja conectat la alt magazin Edinio. Fiecare magazin are nevoie de clientul și de website-ul lui: altfel cele două magazine și-ar revoca reciproc accesul, iar cataloagele s-ar amesteca. Creează în easySales un client API și un website noi pentru acest magazin, sau deconectează-l din celălalt.";
+  }
   return `Acest cont ${NUME[m]} este deja conectat la alt magazin Edinio. Un cont de vânzător poate fi legat de un singur magazin: altfel fiecare comandă ar intra de două ori, iar stocul s-ar suprascrie. Deconectează-l întâi din celălalt magazin sau scrie-ne la suport.`;
 }
 
@@ -60,6 +69,8 @@ export interface RandCandidat {
   tara?: unknown;
   /** About You, conectari de dinaintea amprentei: cheia (decriptata pe server). */
   cheie?: unknown;
+  /** easySales: amprenta `website_token`, a doua identitate. */
+  amprenta?: unknown;
 }
 
 /**
@@ -67,10 +78,15 @@ export interface RandCandidat {
  * Pura, ca sa se poata proba fara baza.
  */
 export function magazinulCareFolosesteContul(
-  m: Marketplace, noua: string, businessId: string, randuri: RandCandidat[],
+  m: Marketplace, noua: string, businessId: string, randuri: RandCandidat[], amprentaNoua?: string | null,
 ): string | null {
   for (const r of randuri) {
     if (r.business_id === businessId) continue;
+    if (m === "easysales") {
+      const amprenta = typeof r.amprenta === "string" ? r.amprenta.trim() : "";
+      if (identitateNormalizata(m, r) === noua || (amprentaNoua && amprenta && amprenta === amprentaNoua)) return r.business_id;
+      continue;
+    }
     let alta = identitateNormalizata(m, r);
     if (!alta && m === "aboutyou" && typeof r.cheie === "string" && r.cheie && !r.cheie.startsWith("enc.")) {
       alta = amprentaCheii(r.cheie);
@@ -95,6 +111,10 @@ const SELECTII: Record<Marketplace, { coloana: string; select: string }> = {
     coloana: "aboutyou_config",
     select: "business_id, id:aboutyou_config->>api_key_amprenta, cheie:aboutyou_config->>api_key",
   },
+  easysales: {
+    coloana: "easysales_config",
+    select: "business_id, id:easysales_config->>client_id, amprenta:easysales_config->>website_token_amprenta",
+  },
 };
 
 /**
@@ -107,7 +127,7 @@ const SELECTII: Record<Marketplace, { coloana: string; select: string }> = {
 export async function refuzaContFolositDeAltMagazin(
   m: Marketplace,
   businessId: string,
-  identitate: { id?: unknown; tara?: unknown },
+  identitate: { id?: unknown; tara?: unknown; amprenta?: string | null },
 ): Promise<string | null> {
   const noua = identitateNormalizata(m, identitate);
   if (!noua) return null;
@@ -127,7 +147,7 @@ export async function refuzaContFolositDeAltMagazin(
     return MESAJ_VERIFICARE_ESUATA;
   }
 
-  const alt = magazinulCareFolosesteContul(m, noua, businessId, (data ?? []) as unknown as RandCandidat[]);
+  const alt = magazinulCareFolosesteContul(m, noua, businessId, (data ?? []) as unknown as RandCandidat[], identitate.amprenta ?? null);
   if (!alt) return null;
 
   void logError({

@@ -57,6 +57,23 @@ test("fara identitate nu se refuza nimic, iar mesajul nu numeste celalalt magazi
   assert.doesNotMatch(m, /—/);
 });
 
+test("easySales: conflict pe ORICARE identitate, clientul API sau website-ul; propriul magazin trece", () => {
+  const client = identitateNormalizata("easysales", { id: " 0f1e2d3c-aaaa-4bbb-8ccc-123456789abc " })!;
+  const amprenta = amprentaCheii("website-token-lung");
+  const alt = [{ business_id: ALTUL, id: "0f1e2d3c-aaaa-4bbb-8ccc-123456789abc", amprenta: "alta" }];
+  assert.equal(magazinulCareFolosesteContul("easysales", client, EU, alt, amprenta), ALTUL, "acelasi client API");
+  const acelasiWebsite = [{ business_id: ALTUL, id: "alt-client", amprenta }];
+  assert.equal(magazinulCareFolosesteContul("easysales", client, EU, acelasiWebsite, amprenta), ALTUL, "acelasi website");
+  assert.equal(magazinulCareFolosesteContul("easysales", client, EU, [{ business_id: EU, id: "0f1e2d3c-aaaa-4bbb-8ccc-123456789abc", amprenta }], amprenta), null);
+  assert.equal(magazinulCareFolosesteContul("easysales", client, EU, [{ business_id: ALTUL, id: "alt-client", amprenta: "alta" }], amprenta), null);
+  /* o amprenta goala nu se potriveste cu alta amprenta goala */
+  assert.equal(magazinulCareFolosesteContul("easysales", client, EU, [{ business_id: ALTUL, id: "alt-client", amprenta: "" }], ""), null);
+  const m = mesajContFolosit("easysales");
+  assert.match(m, /deja conectat la alt magazin Edinio/);
+  /* liniuta lunga construita din codul ei (U+2014), ca sursa insasi sa nu o poarte */
+  assert.ok(!m.includes(String.fromCharCode(0x2014)));
+});
+
 /* ─── Pe sursa: fiecare conectare intreaba paza INAINTE sa salveze ─── */
 
 function ordine(cale: string, functie: RegExp, pasi: RegExp[]) {
@@ -90,7 +107,7 @@ test("OLX intreaba paza dupa ce afla contul si inainte sa scrie ceva", () => {
 test("paza nu citeste configurile intregi ale altor magazine, doar identificatorii", () => {
   const sursa = readFileSync("src/lib/integrari/cont-marketplace-unic.ts", "utf8");
   const selectii = [...sursa.matchAll(/select: "([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(selectii.length, 4);
+  assert.equal(selectii.length, 5);
   for (const sel of selectii) {
     for (const bucata of sel.split(",").map((b) => b.trim())) {
       // fie `business_id`, fie `alias:coloana->>cheie`: niciodata o coloana de config intreaga

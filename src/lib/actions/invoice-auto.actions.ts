@@ -3,6 +3,7 @@
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
 import { coteleLiniilor } from "@/lib/billing/cote-pe-linii";
+import { procesataInEasySales } from "@/lib/orders/origin";
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -60,6 +61,12 @@ export async function maybeAutoInvoice(
      * factura si fara `invoice_uploaded_at`.
      */
     const src = o.order_source as { marketplace?: string } | null;
+    /*
+     * ⚠ easySales: comanda vitrinei stampilata „procesata in easySales" isi primeste factura
+     * ACOLO. Una si aici ar fi a doua factura fiscala pentru aceeasi vanzare. Stampila o pune
+     * declansatorul la inserare, deci exista inaintea oricarei facturari la plata.
+     */
+    if (procesataInEasySales(o.order_source)) return;
     const eEmag = src?.marketplace === "emag" || o.payment_method === "emag";
 
     /*

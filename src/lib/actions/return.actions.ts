@@ -5,6 +5,7 @@
 // telefon. Scrierile publice folosesc admin client (service-role), ca la crearea
 // comenzilor. Administrarea (dashboard) e owner-only prin RLS.
 
+import { procesataInEasySales } from "@/lib/orders/origin";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -316,6 +317,20 @@ export async function submitReturnRequest(input: {
         title: "Cerere de retur",
         message: `${order.order_number} - ${order.customer_name ?? "client"}`,
       });
+      /*
+       * ⚠ easySales (planul, §5.3): cererea ajunge numai la noi, dar factura e la ei. Stornarea se
+       * face in easySales, rambursarea platii online prin procesatorul Edinio, iar marfa se repune
+       * in stoc din Edinio (sursa stocului). Fara anuntul asta, comerciantul ar cauta factura aici.
+       */
+      const { data: sursa } = await admin.from("orders").select("order_source").eq("id", order.id).maybeSingle();
+      if (procesataInEasySales((sursa as { order_source?: unknown } | null)?.order_source)) {
+        await admin.from("notifications").insert({
+          user_id: biz.user_id,
+          type: "easysales",
+          title: `Retur pe o comandă procesată în easySales: ${order.order_number}`,
+          message: "Stornează factura în easySales. Rambursarea plății online se face din Edinio, iar marfa o repui în stoc din Edinio, dacă e vandabilă.",
+        });
+      }
     }
   } catch (e) {
     logError({ action: "submitReturnRequest.notify", message: (e as Error).message ?? "notify failed", details: { businessId: input.businessId }, severity: "warning" });

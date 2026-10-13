@@ -45,7 +45,9 @@ export type NumeCoada =
      declansatorul pe TOATE CINCI cozile, anume ca sa nu ramana niciuna in urma — nota ei
      spune „Un leac pus doar pe una ar fi lasat celelalte patru cu acelasi defect si cu
      impresia ca s-a rezolvat". Apararea acoperea doua. */
-  | "gmc_sync_queue" | "olx_sync_queue";
+  | "gmc_sync_queue" | "olx_sync_queue"
+  /* easySales (13.10.2026): coada are `generation` si `trg_generatie` din nascare (migratia fundatiei). */
+  | "easysales_sync_queue";
 
 /** Ce trebuie sa poarte un element ca sa poata fi scris in siguranta. */
 export interface ElementRevendicat {

@@ -126,6 +126,17 @@ export function urmareste(p: {
    * `curier_real` il scrie `cont_comanda_mea` din codul lor. Dragon Star si TCE n-au pagina in harta,
    * deci acolo nu se arata nicio legatura (mai bine decat una gresita).
    */
+  /*
+   * ⚠ easySales: AWB-ul e al curierului real, iar `curier_real` (scris de `cont_comanda_mea` din
+   * `easysales_comenzi.awb_curier`) e deja CHEIA noastra, aleasa dupa `courier.id`, nu un nume
+   * (`easysales/curieri.ts`). Fara cheie (AWB „Manual" la ei, sau un id necunoscut), nicio legatura.
+   * Adresele de urmarire ale lor nu se dau cumparatorului pana nu se dovedesc publice (M-AWB-1).
+   */
+  if (p.curier === "easysales") {
+    const cheie = (p.curierReal ?? "").trim();
+    const tipar = cheie && Object.hasOwn(DIRECT, cheie) ? DIRECT[cheie] : undefined;
+    return tipar ? { href: tipar(numar), fel: "direct" } : null;
+  }
   if (p.curier === "innoship" || p.curier === "epacket") {
     const real = curierulReal(p.curierReal);
     const tipar = real ? DIRECT[real] : undefined;
@@ -162,6 +173,11 @@ function numeDinHarta(cheie: string): string {
  */
 export function numeleCurierului(curier: string | null | undefined, curierReal?: string | null): string | null {
   if (!curier) return null;
+  /* easySales: `curierReal` e cheia noastra (`dpd`, `fancourier`...); fara ea nu stim curierul. */
+  if (curier === "easysales") {
+    const cheie = (curierReal ?? "").trim();
+    return cheie && Object.hasOwn(NUME_CURIER, cheie) ? numeDinHarta(cheie) : null;
+  }
   const real = ["woot", "innoship", "shipo", "smartship", "epacket", "curiera"].includes(curier) ? curierulReal(curierReal) : null;
   return numeDinHarta(real ?? curier);
 }

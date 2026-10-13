@@ -3,6 +3,7 @@
 import { codPostalRoCurat } from "@/lib/orders/cod-postal-checkout";
 import { after } from "next/server";
 import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
+import { refuzaModificareaEasySales, refuzaStareaEasySales } from "@/lib/easysales/paza";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { scrieStatisticiOferte } from "@/lib/offers/statistici";
@@ -2673,6 +2674,9 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     if (data.status !== order.status) return { error: deCeNuDeAici(tineEl, "starea") };
     if (data.payment_status !== order.payment_status) return { error: deCeNuDeAici(tineEl, "plata") };
   }
+  /* easySales: dupa trimitere starea vine de la ei; inainte, numai anularea (vezi `easysales/paza.ts`). */
+  const refuzEasySales = await refuzaStareaEasySales(order.order_source, orderId, data.status, order.status);
+  if (refuzEasySales) return { error: refuzEasySales };
 
   /*
    * STATUSUL, CUPONUL SI STOCUL — INTR-O SINGURA TRANZACTIE.
@@ -3131,6 +3135,10 @@ export async function updateOrderDetails(orderId: string, data: {
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
   if (!biz) return { error: "Acces interzis" };
+
+  /* easySales: dupa trimitere, liniile si adresa se schimba la ei (vezi `easysales/paza.ts`). */
+  const refuzEasySales = await refuzaModificareaEasySales(order.order_source, orderId, "editarea");
+  if (refuzEasySales) return { error: refuzEasySales };
 
   if (order.status === "cancelled" || order.status === "refunded") {
     return { error: "Comenzile anulate sau rambursate nu pot fi editate." };
@@ -4004,6 +4012,8 @@ export async function deleteOrder(orderId: string) {
    */
   const tineEl = marketplaceCareTineComanda(order.order_source);
   if (tineEl) return { error: deCeNuDeAici(tineEl, "stergerea") };
+  const refuzEasySales = await refuzaModificareaEasySales(order.order_source, orderId, "stergerea");
+  if (refuzEasySales) return { error: refuzEasySales };
 
   /*
    * ═══ ⚠ SI NICI O COMANDA CU COLETUL PE DRUM (14.09.2026) ═══

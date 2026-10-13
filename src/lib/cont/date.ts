@@ -104,6 +104,8 @@ export function mesajulAnularii(motiv: string): string {
       return "Comanda este deja in procesare si nu mai poate fi anulata din cont. Contacteaza magazinul.";
     case "marketplace":
       return "Aceasta comanda a fost plasata pe un marketplace. Anularea se face de acolo.";
+    case "procesata-extern":
+      return "Comanda este deja in procesare si nu mai poate fi anulata din cont. Am anuntat magazinul ca vrei sa o anulezi.";
     case "platita":
       return "Comanda este deja platita, asa ca o poate anula doar magazinul, care iti va returna banii. Contacteaza magazinul.";
     case "plata-online":

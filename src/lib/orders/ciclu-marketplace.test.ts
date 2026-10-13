@@ -57,7 +57,11 @@ test("⚠ Trendyol E in lista, si numai fiindca are iesire adevarata", () => {
   /* About You a ramas pe dinafara, si ASTA e acum alegerea nescrisa: n-are inca o cale proprie
      de anulare. Se adauga aici cand o capata. */
   assert.equal(marketplaceCareTineComanda({ marketplace: "aboutyou" }), null);
-  assert.deepEqual([...MARKETPLACE_CU_CICLU_PROPRIU], ["emag", "trendyol"]);
+  /* easySales (13.10.2026): comenzile ALTOR canale aduse din easySales de bucla de stoc (E4).
+     Inlocuitorul e chiar easySales: acolo traieste comanda si acolo se anuleaza. Comenzile
+     vitrinei trimise in easySales nu trec pe aici: le pazeste `procesataInEasySales`. */
+  assert.equal(marketplaceCareTineComanda({ marketplace: "easysales" }), "easysales");
+  assert.deepEqual([...MARKETPLACE_CU_CICLU_PROPRIU], ["emag", "trendyol", "easysales"]);
 });
 
 test("⚠ blocarea vine cu inlocuitor: butonul de anulare exista in panou", () => {

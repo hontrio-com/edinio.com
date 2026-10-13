@@ -22,6 +22,9 @@ const citeste = (p: string) => readFileSync(join(RAD, p), "utf8").replace(/\r\n/
 const M54 = "2026-09-24-conturi-clienti-zzzz-reparatiile-auditului.sql";
 /* Profilul (56) redefineste exportul: copie intocmai din 54, plus profilul. */
 const M56 = "2026-09-24-conturi-clienti-zzzzzz-profilul.sql";
+/* easySales (73, 13.10.2026) redefineste anularea din cont: corpul din PRODUCTIE (md5 verificat in
+   REGISTRU), plus refuzul `procesata-extern`. Reparatiile auditului raman; le cer probele de mai jos. */
+const M73 = "2026-10-13-easysales-comenzi.sql";
 
 const MIGRATII = readdirSync(join(RAD, "migrations"))
   .filter((f) => f.endsWith(".sql") && !f.startsWith("000-"))
@@ -47,7 +50,7 @@ test("⚠ functiile reparate dupa audit au ultima definitie in migratia 54", () 
     "cont_export", "cont_panou_lista", "cont_panou_fisa", "cont_panou_comanda_de_legat", "cont_panou_chei",
   ]) {
     const { f, corp } = corpul(n);
-    assert.equal(f, n === "cont_export" ? M56 : M54, n);
+    assert.equal(f, n === "cont_export" ? M56 : n === "cont_anuleaza_comanda" ? M73 : M54, n);
     assert.ok(corp.length > 80, `${n}: ${corp.length} semne`);
   }
 });

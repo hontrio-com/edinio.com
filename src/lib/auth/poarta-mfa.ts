@@ -241,6 +241,7 @@ const API_FARA_POARTA = [
   "/api/google-merchant/webhook",
   "/api/aboutyou/webhook",
   "/api/ty/webhook",
+  "/api/easysales/webhook",
   /*
    * Meta Conversions API: evenimentele de palnie trimise din vitrina, de vizitatori. Pe `www.edinio.com/<slug>`
    * un comerciant logat care isi rasfoieste magazinul are cookie de sesiune, iar poarta i-ar fi oprit

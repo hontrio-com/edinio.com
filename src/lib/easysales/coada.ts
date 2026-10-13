@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
-import { scrieDacaNeschimbat, stergeDacaNeschimbat, type ElementRevendicat } from "@/lib/marketplace/coada-cas";
+import { scrieDacaNeschimbat, stergeDacaNeschimbat } from "@/lib/marketplace/coada-cas";
 import type { ContextEasySales } from "./client";
 import { anuleazaLaEi, citesteLegatura, intoarceLaEdinio, scrieLegatura, trimiteComanda } from "./comenzi";
 import { anunta } from "./notificari";
 import { recitesteComanda } from "./oglinda";
+import { COADA, asteptareaDupaPauze, type ElementCoada, type Soarta } from "./coada-element";
+import { OPERATII_CATALOG, prelucreazaLotulCatalogului } from "./catalog";
 
 /**
  * Lucratorul cozii `easysales_sync_queue` (planul, §5.1.6 si §7.5).
@@ -26,27 +28,12 @@ import { recitesteComanda } from "./oglinda";
  */
 
 type Admin = SupabaseClient<Database>;
-export const COADA = "easysales_sync_queue" as const;
-
-export interface ElementCoada extends ElementRevendicat {
-  op: string;
-  cheie: string;
-  incercari: number;
-  pauze: number;
-  created_at: string;
-}
-
-/** 1, 2, 5, 10, 30 de minute, apoi din ora in ora (planul, §5.1.6). */
-const TREPTE_MIN = [1, 2, 5, 10, 30];
-export function asteptareaDupaPauze(pauze: number): number {
-  return (pauze < TREPTE_MIN.length ? TREPTE_MIN[pauze] : 60) * 60_000;
-}
+export { COADA, asteptareaDupaPauze, type ElementCoada, type Soarta } from "./coada-element";
 
 const VIATA_COMENZII_MS = 48 * 3600_000;
 const NOTIFICARE_DUPA_MS = 2 * 3600_000;
 const ASTEPTARE_OM_MS = 5 * 60_000;
 
-export type Soarta = "gata" | "amanat" | "abandonat";
 
 /** CAS pe generatie, prin ajutorul comun. */
 async function sterge(admin: Admin, el: ElementCoada): Promise<Soarta> {
@@ -119,8 +106,12 @@ export async function prelucreazaElementul(admin: Admin, ctx: ContextEasySales, 
         return sterge(admin, el);
       }
       default:
-        /* Operatiile catalogului (E3) si ale buclei de stoc (E4) au lucratorul lor; aici nu se arunca nimic. */
-        return amana(admin, el, 60 * 60_000, `operatia ${el.op} nu se prelucreaza in etapa asta`);
+        /* Catalogul (E3) si stocul (E4): lucratorul lor, care stie si cand catalogul e oprit. */
+        if (OPERATII_CATALOG.includes(el.op)) {
+          const [s] = await prelucreazaLotulCatalogului(admin, ctx, el.op, [el], { maiAreTimp: () => true });
+          return s;
+        }
+        return amana(admin, el, 60 * 60_000, `operatia ${el.op} nu are lucrator`);
     }
   } catch (e) {
     /* `EroareCitireBaza` si orice pana neasteptata: se amana, nu se pierde. */

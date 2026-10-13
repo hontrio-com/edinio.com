@@ -41,6 +41,7 @@ import { modernizeazaSelectul } from "@/lib/customization/definitie";
 import type { Database } from "@/types/database.types";
 import { cuUid, redenumesteValoare, uidNou } from "@/lib/storefront/variante-identitate";
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
+import { EasySalesProdusPanel } from "@/components/dashboard/easysales/EasySalesProdusPanel";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
@@ -639,11 +640,13 @@ interface Props {
   emagPublicat?: boolean;
   // Sectiunea Google Shopping se afiseaza doar cand contul are Google Merchant conectat.
   gmcConnected?: boolean;
+  /** easySales e conectat: in bara laterala apare starea produsului in catalogul lor. */
+  easysalesConectat?: boolean;
   // Clasele de transport definite in Setari > Livrare (pentru selectorul de pe produs).
   shippingClasses?: { id: string; name: string }[];
 }
 
-export function ProductForm({ businessId, product, categories, brands = [], backHref = "/dashboard/products", business, radacinaProduse, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, shippingClasses = [] }: Props) {
+export function ProductForm({ businessId, product, categories, brands = [], backHref = "/dashboard/products", business, radacinaProduse, olxConnected = false, trendyolConnected = false, emagConnected = false, emagPublicat = false, gmcConnected = false, easysalesConectat = false, shippingClasses = [] }: Props) {
   const router = useRouter();
   const isEditing = !!product;
   const [olxPublishing, startOlxPublish] = useTransition();
@@ -2255,6 +2258,9 @@ export function ProductForm({ businessId, product, categories, brands = [], back
                 </Button>
               </div>
             </div>
+
+            {/* easySales: ce se intampla cu produsul in catalogul lor */}
+            {isEditing && easysalesConectat && product?.id && <EasySalesProdusPanel businessId={businessId} productId={product.id} />}
 
             {/* Delete */}
             {isEditing && (

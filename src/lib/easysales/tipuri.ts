@@ -109,6 +109,43 @@ export interface EasySalesConfig {
    */
   varianta_total?: "incasat" | "definitie";
 
+  /* ── catalogul (E3): setarile omului. Lipsa = hotararea recomandata din plan (D8, D9, D10, D21, D30). ── */
+  /** D8: produsele fara SKU propriu primesc unul generat (`EDN-...`), tinut numai in legatura. Implicit da. */
+  catalog_sku_generat?: boolean;
+  /** D10: un produs fara descriere pleaca cu numele drept descriere. Implicit nu: ramane blocat. */
+  catalog_descriere_din_nume?: boolean;
+  /** D9: stocul fix al produselor fara evidenta de stoc (ca la Trendyol). `null` = excluse. */
+  catalog_stoc_fix?: number | null;
+  /** D21: stergerea din Edinio arhiveaza produsul in easySales. Implicit da. */
+  catalog_arhivare_la_stergere?: boolean;
+  /** D30: o combinatie scoasa sau dezactivata ramane cu stoc 0 (implicit) sau se arhiveaza. */
+  catalog_combinatie_scoasa?: "stoc_zero" | "arhivare";
+  /** `handling_time`, in zile [A: „Handling time (days)"]. `null` = nu se trimite. */
+  catalog_termen_zile?: number | null;
+  /** Catalogul oprit de noi, cu motivul pentru om: website redenumit, moneda schimbata, cota de TVA. */
+  catalog_pauza?: string | null;
+  catalog_pornit_la?: string | null;
+  /**
+   * Amprenta a tot ce intra in produs fara sa fie pe `products`: TVA-ul, adresa magazinului,
+   * prefixul produselor, setarile de mai sus. Schimbata = tot catalogul inapoi in coada.
+   */
+  catalog_amprenta_mediu?: string | null;
+  /** Siguranta de masa pe preturi (D22): o trecere mare asteapta confirmarea omului. */
+  catalog_preturi_asteapta?: { cerut_la: string; produse: number } | null;
+  catalog_preturi_confirmate_la?: string | null;
+  /**
+   * SKU-urile purtate de mai multe unitati vandabile ale magazinului (`lower(trim)`), socotite pe tot
+   * catalogul cel mult o data pe ora: o citire a intregului catalog la fiecare lot ar costa mai mult
+   * decat lotul. Intre doua socoteli, paza tare ramane indexul unic pe `lower(sku_trimis)`.
+   */
+  catalog_sku_duplicate?: string[];
+  catalog_sku_duplicate_la?: string | null;
+  /** Marcajele catalogului in cron. */
+  /** Ultima retrimitere a catalogului intreg la cererea lor (`products-refresh-requested`). */
+  catalog_reimprospatat_la?: string | null;
+  catalog_verificare_la?: string | null;
+  catalog_arhivari_la?: string | null;
+
   /* ── alarmele de magazin, cu clipa ultimei notificari (`notificari.ts`) ── */
   alarme?: Record<string, string>;
 

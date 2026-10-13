@@ -269,3 +269,47 @@ test("nicio sumă trimisă nu are mai mult de sase zecimale, iar sumele de bani 
   assert.ok(zecimale(r.order.shipment.price_with_tax!) <= 2);
   assert.ok(zecimale(r.order.order_total) <= 2);
 });
+
+test("data comenzii in zilele de schimbare a orei (ultima duminica din martie si din octombrie)", () => {
+  /* 29.03.2026: la 03:00 ora Romaniei sare la 04:00 (UTC+2 -> UTC+3). */
+  assert.equal(dataLaEi("2026-03-29T00:59:59Z"), "2026-03-29 02:59:59");
+  assert.equal(dataLaEi("2026-03-29T01:00:00Z"), "2026-03-29 04:00:00");
+  /* 25.10.2026: la 04:00 ora Romaniei se intoarce la 03:00 (UTC+3 -> UTC+2). */
+  assert.equal(dataLaEi("2026-10-25T00:59:59Z"), "2026-10-25 03:59:59");
+  assert.equal(dataLaEi("2026-10-25T01:00:00Z"), "2026-10-25 03:00:00");
+});
+
+test("⚠ rotunjirea, ban cu ban, la 21% si la 11%: brutul refacut din netul trimis e chiar ce s-a incasat", () => {
+  /*
+   * Liniile pleaca NETE, cu sase zecimale. Daca ei refac brutul pe linie (`total_with_tax`,
+   * „rounded with 2 decimals" [A]), suma trebuie sa fie fix cea incasata cu cardul. Proba trece prin
+   * mii de comenzi generate determinist: preturi de doi bani, cantitati de la 1 la 60, transport,
+   * reducere si taxa de ramburs.
+   */
+  let semanta = 20261013;
+  const urmator = () => (semanta = (semanta * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (const cota of [21, 11]) {
+    for (let k = 0; k < 2000; k++) {
+      const linii = Array.from({ length: 1 + Math.floor(urmator() * 4) }, (_, i) => ({
+        product_id: `p${i}`, name: `P${i}`,
+        price: Math.round((0.5 + urmator() * 400) * 100) / 100,
+        quantity: 1 + Math.floor(urmator() * 60),
+      }));
+      const marfa = Math.round(linii.reduce((s, l) => s + l.price * l.quantity, 0) * 100) / 100;
+      const transport = urmator() < 0.5 ? 0 : Math.round(urmator() * 3000) / 100;
+      const reducere = urmator() < 0.7 ? 0 : Math.min(marfa, Math.round(urmator() * 5000) / 100);
+      const taxa = urmator() < 0.7 ? 0 : 5;
+      const total = Math.round((marfa + transport - reducere + taxa) * 100) / 100;
+      const r = construiesteComanda(comanda({
+        vat_rate: cota, items: linii, shipping_cost: transport, discount_amount: reducere, cod_fee_amount: taxa, total,
+      }), { ...MAGAZIN, vat_rate: cota }, linii.map((_, i) => ART(i + 1, `S${i}`)), 1);
+      assert.equal(r.fel, "gata", `cota ${cota}, comanda ${k}: ${r.fel === "refuz" ? r.mesaj : ""}`);
+      if (r.fel !== "gata") return;
+      const bruteLinii = r.order.order_products.reduce((s, p) => s + Math.round(p.total * (1 + p.tax / 100) * 100), 0);
+      const fees = r.order.fees.reduce((s, f) => s + Math.round((f.price_with_tax ?? 0) * 100), 0);
+      const vouchers = r.order.vouchers.reduce((s, v) => s + Math.round((v.price_with_tax ?? 0) * 100), 0);
+      const transportBani = Math.round((r.order.shipment.price_with_tax ?? 0) * 100);
+      assert.equal(bruteLinii + transportBani + fees + vouchers, Math.round(total * 100), `cota ${cota}, comanda ${k}`);
+    }
+  }
+});

@@ -2346,6 +2346,113 @@ export type Database = {
           },
         ]
       }
+      easysales_caracteristici: {
+        Row: {
+          business_id: string
+          cheie_normalizata: string
+          created_at: string
+          es_characteristic_id: string | null
+          id: number
+          motiv: string | null
+          nume: string
+          stare: string
+          trimis_la: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          cheie_normalizata: string
+          created_at?: string
+          es_characteristic_id?: string | null
+          id?: number
+          motiv?: string | null
+          nume: string
+          stare?: string
+          trimis_la?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          cheie_normalizata?: string
+          created_at?: string
+          es_characteristic_id?: string | null
+          id?: number
+          motiv?: string | null
+          nume?: string
+          stare?: string
+          trimis_la?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_caracteristici_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      easysales_categorii: {
+        Row: {
+          business_id: string
+          category_id: string | null
+          cheie: string
+          created_at: string
+          es_category_id: string | null
+          id: number
+          motiv: string | null
+          nume_edinio: string | null
+          nume_trimis: string | null
+          stare: string
+          trimis_la: string | null
+          updated_at: string
+        }
+        Insert: {
+          business_id: string
+          category_id?: string | null
+          cheie: string
+          created_at?: string
+          es_category_id?: string | null
+          id?: number
+          motiv?: string | null
+          nume_edinio?: string | null
+          nume_trimis?: string | null
+          stare?: string
+          trimis_la?: string | null
+          updated_at?: string
+        }
+        Update: {
+          business_id?: string
+          category_id?: string | null
+          cheie?: string
+          created_at?: string
+          es_category_id?: string | null
+          id?: number
+          motiv?: string | null
+          nume_edinio?: string | null
+          nume_trimis?: string | null
+          stare?: string
+          trimis_la?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_categorii_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "easysales_categorii_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       easysales_comenzi: {
         Row: {
           awb: Json | null
@@ -2372,6 +2479,7 @@ export type Database = {
           facturi: Json | null
           id: string
           incercari: number
+          linii: Json | null
           motiv: string | null
           next_retry_at: string | null
           order_id: string | null
@@ -2408,6 +2516,7 @@ export type Database = {
           facturi?: Json | null
           id?: string
           incercari?: number
+          linii?: Json | null
           motiv?: string | null
           next_retry_at?: string | null
           order_id?: string | null
@@ -2444,6 +2553,7 @@ export type Database = {
           facturi?: Json | null
           id?: string
           incercari?: number
+          linii?: Json | null
           motiv?: string | null
           next_retry_at?: string | null
           order_id?: string | null
@@ -2472,57 +2582,149 @@ export type Database = {
           },
         ]
       }
+      easysales_joburi: {
+        Row: {
+          actualizat_la: string
+          business_id: string
+          contoare: Json
+          eroare: string | null
+          fel: string
+          id: string
+          pagina: number
+          pornit_la: string
+          revendicat_pana: string | null
+          stare: string
+          terminat_la: string | null
+          total: number | null
+          ultima_pagina: number | null
+        }
+        Insert: {
+          actualizat_la?: string
+          business_id: string
+          contoare?: Json
+          eroare?: string | null
+          fel: string
+          id?: string
+          pagina?: number
+          pornit_la?: string
+          revendicat_pana?: string | null
+          stare?: string
+          terminat_la?: string | null
+          total?: number | null
+          ultima_pagina?: number | null
+        }
+        Update: {
+          actualizat_la?: string
+          business_id?: string
+          contoare?: Json
+          eroare?: string | null
+          fel?: string
+          id?: string
+          pagina?: number
+          pornit_la?: string
+          revendicat_pana?: string | null
+          stare?: string
+          terminat_la?: string | null
+          total?: number | null
+          ultima_pagina?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "easysales_joburi_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       easysales_produse: {
         Row: {
+          amprenta: string | null
+          arhivare_blocata_de_la: string | null
+          arhivat_la: string | null
           business_id: string
           confirmat_la: string | null
           created_at: string
+          deriva_la: string | null
           es_product_id: string | null
           id: number
           identitate: string
+          lipsa_la: string | null
           motiv: string | null
           parinte_id: number | null
+          pret_trimis: number | null
+          pret_vechi_trimis: number | null
           product_id: string | null
           product_uuid: string
+          retrimis_la: string | null
           sku_generat: boolean
           sku_trimis: string | null
           stare: string
+          stoc_la_ei: number | null
+          stoc_la_ei_la: string | null
+          stoc_trimis: number | null
           trimis_la: string | null
           updated_at: string
+          verificat_la: string | null
         }
         Insert: {
+          amprenta?: string | null
+          arhivare_blocata_de_la?: string | null
+          arhivat_la?: string | null
           business_id: string
           confirmat_la?: string | null
           created_at?: string
+          deriva_la?: string | null
           es_product_id?: string | null
           id?: number
           identitate?: string
+          lipsa_la?: string | null
           motiv?: string | null
           parinte_id?: number | null
+          pret_trimis?: number | null
+          pret_vechi_trimis?: number | null
           product_id?: string | null
           product_uuid: string
+          retrimis_la?: string | null
           sku_generat?: boolean
           sku_trimis?: string | null
           stare?: string
+          stoc_la_ei?: number | null
+          stoc_la_ei_la?: string | null
+          stoc_trimis?: number | null
           trimis_la?: string | null
           updated_at?: string
+          verificat_la?: string | null
         }
         Update: {
+          amprenta?: string | null
+          arhivare_blocata_de_la?: string | null
+          arhivat_la?: string | null
           business_id?: string
           confirmat_la?: string | null
           created_at?: string
+          deriva_la?: string | null
           es_product_id?: string | null
           id?: number
           identitate?: string
+          lipsa_la?: string | null
           motiv?: string | null
           parinte_id?: number | null
+          pret_trimis?: number | null
+          pret_vechi_trimis?: number | null
           product_id?: string | null
           product_uuid?: string
+          retrimis_la?: string | null
           sku_generat?: boolean
           sku_trimis?: string | null
           stare?: string
+          stoc_la_ei?: number | null
+          stoc_la_ei_la?: string | null
+          stoc_trimis?: number | null
           trimis_la?: string | null
           updated_at?: string
+          verificat_la?: string | null
         }
         Relationships: [
           {
@@ -7408,6 +7610,12 @@ export type Database = {
       easysales_se_stampileaza: { Args: { p_business: string; p_order_source: Json; p_shipping: Json; p_items: Json }; Returns: boolean }
       /* Comenzile deschise dinaintea activarii: `stampilata` | `deja` | `neeligibila` | `stare` | `negasita`. */
       easysales_stampileaza_existenta: { Args: { p_business: string; p_order: string }; Returns: string }
+      /* Catalogul (E3): `docs/marketplace/2026-10-13-easysales-catalog.sql`, pe productie numai la pornirea E3.
+         Ce din `page_sections` e continut si ce e pret sau stoc; tot catalogul in coada; revendicarea pe magazin. */
+      easysales_fara_stoc: { Args: { p: Json }; Returns: Json }
+      easysales_variante_pe: { Args: { p: Json; p_chei: string[] }; Returns: Json }
+      easysales_pune_catalogul_in_coada: { Args: { p_business: string; p_ops: string[] }; Returns: number }
+      easysales_revendica_catalogul: { Args: { p_business: string; p_ops: string[]; p_limita?: number; p_lease?: unknown }; Returns: Json[] }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
       numar_produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { sub_prag: number; epuizate: number }[] }
       produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { id: string; nume: string; imagine: string | null; stoc: number; variante: Json }[] }

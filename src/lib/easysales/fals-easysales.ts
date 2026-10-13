@@ -16,7 +16,12 @@
  *   - scrierile cu `website_token` in colectie il CER la radacina; fara el, 403 „Invalid website token";
  *   - raspunsul Save Order vine cu sau fara `data.internal_id` (exemplul lui e copiat de la Add);
  *   - `?website=` strict, partial sau ignorat; `?order_display_id=` exact sau partial;
- *   - campul secretului la abonare: `secret` sau `seccret` (M-WH-1).
+ *   - campul secretului la abonare: `secret` sau `seccret` (M-WH-1);
+ *   - CATALOGUL: o categorie sau o caracteristica necunoscuta pe produs da 422 („you must first create
+ *     that category or characteristic" [A]); `product_website_id` e unic pe website [A]; un lot cu un
+ *     element invalid da 422 pe tot sau trece partial, TACUT (M-PROD-2); potrivirea SKU-ului la Save e
+ *     cu sau fara majuscule (M-PROD-1); produsele arhivate nu apar in lista, iar un Save pe un SKU
+ *     arhivat face un produs NOU (ghidul „Arhivează și restaurează produse"; ES-25).
  */
 
 import type { DepozitEasySales, RandJurnal } from "./depozit";
@@ -135,6 +140,23 @@ export interface ComandaFalsa {
   curier: { id: number; name: string } | null;
 }
 
+export interface ProdusFalsInit {
+  sku: string;
+  website: string;
+  product_website_id?: number | string | null;
+}
+
+/** Un produs la ei: ce s-a trimis ultima oara, plus id-ul lor si arhivarea. */
+export interface ProdusFals extends ProdusFalsInit {
+  id: number;
+  corp: Record<string, unknown>;
+  arhivat: boolean;
+  stock: number;
+  reserved_stock: number;
+  /** De cate ori a primit un Save (ca proba sa vada retrimiterile). */
+  salvari: number;
+}
+
 export interface OptiuniFals {
   clientId?: string;
   clientSecret?: string;
@@ -157,7 +179,15 @@ export interface OptiuniFals {
   /** Website-urile contului. */
   websiteuri?: { name: string; url: string | null; status: string }[];
   /** Produsele existente pe website (pentru poarta „website gol"). */
-  produse?: { sku: string; website: string; product_website_id?: number }[];
+  produse?: ProdusFalsInit[];
+  /** Un lot de produse cu un element invalid: 422 pe tot (implicit) sau prelucrare partiala tacuta (M-PROD-2). */
+  lotInvalid?: "422" | "partial";
+  /** Potrivirea SKU-ului la Save: fara majuscule (implicit, ca la arhivare [A]) sau exacta (M-PROD-1). */
+  skuExact?: boolean;
+  /** SKU-urile pe care arhivarea le raspunde `blocked` (comenzi active). */
+  arhivareBlocata?: string[];
+  /** Intarzierea fiecarui raspuns, ca o latenta reala (proba incarcarii mari). */
+  intarziereMs?: number;
   /** `GET /account` raspunde 403 (grantul website nu-l poate citi). */
   contInterzis?: boolean;
 }
@@ -196,7 +226,13 @@ export function serverFals(opt: OptiuniFals = {}) {
     urmatorulIdAbonare: 1,
     declansari: [] as number[],
     websiteuri: o.websiteuri ?? [{ name: o.websiteNume, url: null, status: "active" }],
-    produse: o.produse ?? [],
+    produse: (o.produse ?? []).map((p, i) => ({
+      ...p, id: 9000 + i, corp: {}, arhivat: false, stock: 0, reserved_stock: 0, salvari: 0,
+    })) as ProdusFals[],
+    urmatorulIdProdus: 20_000,
+    categorii: new Map<number, { id: number; category_website_id: number; name: string }>(),
+    caracteristici: new Map<number, { id: number; characteristic_website_id: number; name: string }>(),
+    urmatorulIdCatalog: 500,
     /** Raspunsuri fortate, in ordine, pentru cererile care se potrivesc. */
     fortate: [] as { potrivire: (c: CerereInregistrata) => boolean; raspunde: Raspunzator; ramase: number }[],
   };
@@ -240,7 +276,92 @@ export function serverFals(opt: OptiuniFals = {}) {
     };
   }
 
+  function websiteulTokenului(): string {
+    return o.websiteNume;
+  }
+
+  /** Produsul viu al website-ului, dupa SKU. Arhivarea potriveste mereu fara majuscule [A]. */
+  function gasesteProdus(sku: string, faraMajuscule: boolean): ProdusFals | undefined {
+    const w = websiteulTokenului();
+    const exact = !faraMajuscule && !!o.skuExact;
+    return stare.produse.find((p) => !p.arhivat && p.website === w
+      && (exact ? p.sku === sku : p.sku.toLowerCase() === sku.toLowerCase()));
+  }
+
+  /** Erorile unui produs, in forma lor (`{"product.sku": ["..."]}`), sau `null` cand e bun. */
+  function valideazaProdus(brut: unknown, prefix: string): Record<string, string[]> | null {
+    const p = (brut ?? {}) as Record<string, unknown>;
+    const erori: Record<string, string[]> = {};
+    const plin = (v: unknown) => v !== null && v !== undefined && v !== "";
+    const cere = (camp: string, bun: boolean) => {
+      if (!bun) erori[`${prefix}.${camp}`] = [`The ${prefix}.${camp.replace(/_/g, " ")} field is required.`];
+    };
+    cere("product_website_id", plin(p.product_website_id) && Number.isFinite(Number(p.product_website_id)));
+    cere("name", typeof p.name === "string" && p.name.trim() !== "");
+    cere("sku", typeof p.sku === "string" && p.sku.trim() !== "");
+    cere("description", typeof p.description === "string" && p.description.trim() !== "");
+    cere("sale_price", plin(p.sale_price) && Number.isFinite(Number(p.sale_price)));
+    cere("stock", plin(p.stock) && Number.isFinite(Number(p.stock)));
+    cere("tax_rate", plin(p.tax_rate) && Number.isFinite(Number(p.tax_rate)));
+    if (p.type !== "simple" && p.type !== "complex") erori[`${prefix}.type`] = [`The selected ${prefix}.type is invalid.`];
+    for (const [i, id] of (Array.isArray(p.categories) ? p.categories : []).entries()) {
+      if (!stare.categorii.has(Number(id))) erori[`${prefix}.categories.${i}`] = [`The selected ${prefix}.categories.${i} is invalid.`];
+    }
+    for (const [i, x] of (Array.isArray(p.characteristics) ? p.characteristics : []).entries()) {
+      if (!stare.caracteristici.has(Number((x as { id?: unknown })?.id))) {
+        erori[`${prefix}.characteristics.${i}.id`] = [`The selected ${prefix}.characteristics.${i}.id is invalid.`];
+      }
+    }
+    if (Object.keys(erori).length === 0 && typeof p.sku === "string") {
+      const w = websiteulTokenului();
+      const sku = p.sku;
+      const altul = stare.produse.find((x) => !x.arhivat && x.website === w
+        && String(x.product_website_id) === String(p.product_website_id)
+        && (o.skuExact ? x.sku !== sku : x.sku.toLowerCase() !== sku.toLowerCase()));
+      if (altul) erori[`${prefix}.product_website_id`] = [`The ${prefix}.product website id has already been taken.`];
+    }
+    return Object.keys(erori).length ? erori : null;
+  }
+
+  function salveazaProdusFals(brut: unknown, prefix: string): { produs: ProdusFals } | { erori: Record<string, string[]> } {
+    const erori = valideazaProdus(brut, prefix);
+    if (erori) return { erori };
+    const p = brut as Record<string, unknown>;
+    const sku = String(p.sku);
+    const existent = gasesteProdus(sku, false);
+    if (existent) {
+      existent.corp = { ...p };
+      existent.product_website_id = p.product_website_id as number;
+      existent.stock = Number(p.stock);
+      existent.salvari += 1;
+      return { produs: existent };
+    }
+    const nou: ProdusFals = {
+      id: stare.urmatorulIdProdus++, sku, website: websiteulTokenului(), product_website_id: p.product_website_id as number,
+      corp: { ...p }, arhivat: false, stock: Number(p.stock), reserved_stock: 0, salvari: 1,
+    };
+    stare.produse.push(nou);
+    return { produs: nou };
+  }
+
+  /** Produsul cum il arata lista lor: id-urile ca siruri, preturile NETE cu patru zecimale [A: exemplele]. */
+  function produsPublic(p: ProdusFals) {
+    const cota = Number(p.corp.tax_rate) || 0;
+    const net = (v: unknown) => (plinNumar(v) ? (Number(v) / (1 + cota / 100)).toFixed(4) : null);
+    return {
+      id: p.id, name: p.corp.name ?? null, sku: p.sku,
+      product_website_id: p.product_website_id == null ? null : String(p.product_website_id),
+      stock: p.stock, reserved_stock: p.reserved_stock, sale_price: net(p.corp.sale_price), full_price: net(p.corp.full_price),
+      tax_rate: cota.toFixed(2), type: p.corp.type ?? "simple", status: "active", website: { name: p.website, url: null },
+    };
+  }
+
+  function plinNumar(v: unknown): boolean {
+    return v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v));
+  }
+
   async function raspunde(c: CerereInregistrata): Promise<Response> {
+    if (o.intarziereMs) await new Promise((r) => setTimeout(r, o.intarziereMs));
     for (const f of stare.fortate) {
       if (f.ramase > 0 && f.potrivire(c)) {
         f.ramase -= 1;
@@ -398,17 +519,141 @@ export function serverFals(opt: OptiuniFals = {}) {
       return json(200, { success: true, message: "Success", data: [] });
     }
 
+    // ── catalog (E3) ──
+    if ((cale === "/categories/save/bulk" || cale === "/characteristics/save/bulk") && c.metoda === "POST") {
+      const lipsaToken = ceraWebsiteToken(c);
+      if (lipsaToken) return lipsaToken;
+      const categorii = cale.startsWith("/categories");
+      const cheieLista = categorii ? "categories" : "characteristics";
+      const cheieId = categorii ? "category_website_id" : "characteristic_website_id";
+      const lista = ((c.corp ?? {}) as Record<string, unknown>)[cheieLista];
+      if (!Array.isArray(lista) || lista.length === 0) {
+        return json(422, { message: "The given data was invalid.", errors: { [cheieLista]: [`The ${cheieLista} field is required.`] } });
+      }
+      for (const [i, x] of (lista as Record<string, unknown>[]).entries()) {
+        if (!Number.isFinite(Number(x?.[cheieId])) || typeof x?.name !== "string" || !x.name.trim()) {
+          return json(422, { message: "The given data was invalid.", errors: { [`${cheieLista}.${i}.name`]: ["The name field is required."] } });
+        }
+      }
+      for (const x of lista as Record<string, unknown>[]) {
+        const id = Number(x[cheieId]);
+        if (categorii) {
+          const existent = stare.categorii.get(id);
+          stare.categorii.set(id, { id: existent?.id ?? stare.urmatorulIdCatalog++, category_website_id: id, name: String(x.name) });
+        } else {
+          const existent = stare.caracteristici.get(id);
+          stare.caracteristici.set(id, { id: existent?.id ?? stare.urmatorulIdCatalog++, characteristic_website_id: id, name: String(x.name) });
+        }
+      }
+      return json(200, { success: true, message: "Success", data: null });
+    }
+
+    if ((cale === "/products/save" || cale === "/products/save/bulk") && c.metoda === "POST") {
+      const lipsaToken = ceraWebsiteToken(c);
+      if (lipsaToken) return lipsaToken;
+      const corp = (c.corp ?? {}) as Record<string, unknown>;
+      if (cale === "/products/save") {
+        const r = salveazaProdusFals(corp.product, "product");
+        if ("erori" in r) return json(422, { message: "The given data was invalid.", errors: r.erori });
+        return json(200, { success: true, data: produsPublic(r.produs) });
+      }
+      const lista = corp.products;
+      if (!Array.isArray(lista) || lista.length === 0) {
+        return json(422, { message: "The given data was invalid.", errors: { products: ["The products field is required."] } });
+      }
+      if (o.lotInvalid !== "partial") {
+        for (const [i, p] of lista.entries()) {
+          const erori = valideazaProdus(p, `products.${i}`);
+          if (erori) return json(422, { message: "The given data was invalid.", errors: erori });
+        }
+      }
+      for (const [i, p] of lista.entries()) salveazaProdusFals(p, `products.${i}`);
+      return json(200, { success: true, message: "Success", data: null });
+    }
+
+    if (cale === "/products/prices/bulk" && c.metoda === "PATCH") {
+      const lipsaToken = ceraWebsiteToken(c);
+      if (lipsaToken) return lipsaToken;
+      const lista = ((c.corp ?? {}) as Record<string, unknown>).data;
+      if (!Array.isArray(lista) || lista.length === 0 || lista.length > 100) {
+        return json(422, { message: "The given data was invalid.", errors: { data: ["The data must have between 1 and 100 items."] } });
+      }
+      const success: string[] = [];
+      const errors: string[] = [];
+      const products: unknown[] = [];
+      for (const x of lista as { sku?: unknown; prices?: { sale_price?: unknown; full_price?: unknown } }[]) {
+        const sku = String(x?.sku ?? "");
+        const p = gasesteProdus(sku, false);
+        const v = Number(x?.prices?.sale_price);
+        const f = Number(x?.prices?.full_price);
+        if (!p || !Number.isFinite(v) || !Number.isFinite(f)) { errors.push(sku); continue; }
+        p.corp = { ...p.corp, sale_price: v, full_price: f };
+        success.push(sku);
+        const cota = Number(p.corp.tax_rate) || 0;
+        products.push({ id: p.id, sku: p.sku, ean: null, sale_price: (v / (1 + cota / 100)).toFixed(4), full_price: (f / (1 + cota / 100)).toFixed(4), tax_rate: cota.toFixed(2) });
+      }
+      return json(200, { success: true, message: "Success", data: { result: { errors, success }, products } });
+    }
+
+    if (cale === "/products/archive/bulk" && c.metoda === "PATCH") {
+      const lipsaToken = ceraWebsiteToken(c);
+      if (lipsaToken) return lipsaToken;
+      const skus = ((c.corp ?? {}) as Record<string, unknown>).skus;
+      if (!Array.isArray(skus) || skus.length === 0 || skus.length > 50) {
+        return json(422, { success: false, message: "The given data was invalid.", errors: { skus: ["The skus field is required."] } });
+      }
+      const archived: string[] = [];
+      const not_found: string[] = [];
+      const blocked: string[] = [];
+      for (const s of skus.map(String)) {
+        if ((o.arhivareBlocata ?? []).some((x) => x.toLowerCase() === s.toLowerCase())) { blocked.push(s); continue; }
+        const p = gasesteProdus(s, true);
+        if (!p) { not_found.push(s); continue; }
+        p.arhivat = true;
+        archived.push(s);
+      }
+      return json(200, { success: true, message: "Archive processed", data: { archived, not_found, blocked } });
+    }
+
+    if (cale === "/stocks/bulk" && c.metoda === "PATCH") {
+      const lipsaToken = ceraWebsiteToken(c);
+      if (lipsaToken) return lipsaToken;
+      const lista = ((c.corp ?? {}) as Record<string, unknown>).data;
+      if (!Array.isArray(lista) || lista.length === 0 || lista.length > 100) {
+        return json(422, { message: "The given data was invalid.", errors: { data: ["The data must have between 1 and 100 items."] } });
+      }
+      const success: string[] = [];
+      const errors: string[] = [];
+      const error_messages: unknown[] = [];
+      const products: unknown[] = [];
+      for (const x of lista as { sku?: unknown; stock?: unknown }[]) {
+        const sku = String(x?.sku ?? "");
+        const p = gasesteProdus(sku, false);
+        const s = Number(x?.stock);
+        if (!p) { errors.push(sku); error_messages.push({ sku, message: "Product not found" }); continue; }
+        if (!Number.isFinite(s)) { errors.push(sku); error_messages.push({ sku, message: "The stock must be a number." }); continue; }
+        p.stock = s;
+        success.push(sku);
+        products.push({ id: p.id, sku: p.sku, ean: null, stock: p.stock, reserved_stock: p.reserved_stock, handling_time: null });
+      }
+      return json(200, { success: true, message: "Success", data: { result: { success, errors, error_messages }, products } });
+    }
+
     // ── produse (citire) ──
     if (cale === "/products" && c.metoda === "GET") {
       const w = c.interogare.website;
-      let lista = stare.produse;
+      let lista = stare.produse.filter((p) => !p.arhivat);
       if (w && o.filtruWebsite === "strict") lista = lista.filter((p) => p.website === w);
       if (w && o.filtruWebsite === "partial") lista = lista.filter((p) => p.website.toLowerCase().includes(w.toLowerCase()));
       const s = c.interogare.sku;
       if (s) lista = lista.filter((p) => p.sku === s);
+      const pagina = Math.max(1, Number(c.interogare.page) || 1);
+      const total = lista.length;
+      const ultima = Math.max(1, Math.ceil(total / 50));
+      const felie = lista.slice((pagina - 1) * 50, pagina * 50);
       return json(200, {
-        data: lista.map((p) => ({ sku: p.sku, product_website_id: p.product_website_id ?? null, website: { name: p.website } })),
-        meta: { current_page: 1, last_page: 1, total: lista.length, per_page: 50 },
+        data: felie.map((p) => produsPublic(p)),
+        meta: { current_page: pagina, last_page: ultima, total, per_page: 50 },
       });
     }
 

@@ -34,6 +34,12 @@ rămâne deschis.
 | Cronul la minut | `/api/cron/easysales-sync`, `coada.ts` |
 | Porțile din Edinio (fără factură și AWB de aici, starea și editarea după trimitere) | `origin.ts` (`procesataInEasySales`), `awb-propriu.ts`, `invoice-auto.actions.ts`, casele de facturare, `order.actions.ts`, `bulk-orders.actions.ts`, `paza.ts`, `cont_anuleaza_comanda` |
 | Panoul și pagina comenzii | `/dashboard/features/easysales`, `EasySalesConfigClient.tsx`, `easysales/EasySalesComandaPanel.tsx` |
+| Catalogul (E3), oprit în cod până după E0 (`CATALOG_PORNIT`) | migrația 74, ținută în `docs/marketplace/2026-10-13-easysales-catalog.sql` (vezi mai jos de ce nu în `migrations/`) |
+| Ce pleacă în catalog și de ce nu: o singură hotărâre, pentru raport, pentru lucrător și pentru pagina produsului | `eligibilitate.ts` |
+| Corpul produsului, categoriile (calea, frunza, categoria de rezervă), caracteristicile | `mapare-produs.ts`, `mapare-categorii.ts`, `mapare-caracteristici.ts` |
+| Lucrătorul catalogului: categoriile și caracteristicile înaintea produselor, Save pe element până la 50, loturi de 100 cu vinovatul aflat din erori, prețurile pe drumul lor, arhivarea | `catalog.ts`, `catalog-loturi.ts`, `catalog-pas.ts` |
+| Verificarea: lista lor, cei doi martori, paza website-ului redenumit, retrimiterea o singură dată | `verificare.ts` |
+| Ce face omul: raportul de pregătire, pornirea, oprirea, reluarea, retrimiterea, excluderea, confirmarea prețurilor, setările | `catalog-actiuni.ts`, `easysales/EasySalesCatalog.tsx`, `easysales/EasySalesProdusPanel.tsx` (pagina produsului) |
 
 ## Ce NU are API-ul, și ce am făcut cu asta
 
@@ -56,19 +62,30 @@ rămâne deschis.
 | `order_source.easysales` se îmbină cu `jsonb_set`, niciodată prin rescrierea lui `order_source` | atribuirea (utm, consimțământ) stă în aceeași coloană |
 | Jetonul adresei de webhook se derivă (HMAC) din secretul de semnare, iar în bază stă numai hash-ul lui | abonările se pot reface oricând fără jetonul în clar |
 | `EASYSALES_LIVE=false` stinge numai conectările noi; `EASYSALES_PILOT` deschide magazinele pilot | magazinele conectate au comenzi ștampilate: oprirea lor e pauza, nu variabila |
+| Catalogul (E3) și bucla de stoc (E4) sunt oprite de constante în cod (`CATALOG_PORNIT`, `STOC_PORNIT`), nu de variabile de mediu | o variabilă s-ar putea porni fără migrația 74, iar codul ar citi tabele care nu există. Constanta se schimbă printr-un commit, iar proba `catalogul-si-migratia-merg-impreuna.test.ts` cere ca același commit să mute migrația în `migrations/` |
+| Migrația 74 stă în `docs/marketplace/`, nu în `migrations/` | în `migrations/` intră numai ce e deja în producție (`migrations/CITESTE-INTAI.md`), iar pasul CI „Baseline-ul acoperă toate migrațiile” cade altfel. Planul o aplică pe producție abia la pornirea E3 |
+| Raportul de pregătire merge de acum, fără comutator | citește numai tabele care există și pe producție (produsele, categoriile, setările, `easysales_produse`); arată golurile de SKU și de descriere din timp |
+| Hotărârile D8, D9, D10, D11, D21, D23, D30 au valorile recomandate din plan, ca setări ale catalogului | SKU generat pentru produsele fără SKU; produsele fără evidența stocului și cele fără descriere nu pleacă (cu bife care le pot trimite); pachetele și produsele cu personalizare servită nu pleacă; ștergerea arhivează; calea categoriei, frunza pe produs, „Fără categorie” ca rezervă; varianta scoasă rămâne pe stoc 0. **De confirmat de proprietar înainte de E3** |
+| Siguranța de masă pe prețuri (D22) numără produsele din coadă, nu variația fiecărui preț | variația cerea citirea întregului val înaintea primului preț trimis; regula de aici e mai strictă (întreabă și la o scumpire de 2% pe tot catalogul) |
+| Un preț nou pe un articol deja trimis pleacă numai prin `/products/prices/bulk` | Save-ul de conținut poartă prețul trimis ultima oară; altfel o scumpire în masă făcută odată cu o schimbare de descriere ar ocoli siguranța de masă |
+| Domeniul, permalinkurile, TVA-ul și setările catalogului intră într-o amprentă a mediului, socotită la fiecare trecere | o amprentă schimbată pune tot catalogul în coadă; prinde și drumurile de mâine, fără chemări scrise de mână în fiecare drum care schimbă adresa |
+| Un articol de catalog al cărui SKU propriu e deja al altui articol se oprește (`sku-duplicat`), nu cade pe SKU-ul generat | catalogul poate aștepta omul, o comandă nu (la comenzi, E2, cade pe cel generat). SKU-ul trimis se îngheață: un SKU nou la ei înseamnă un produs nou (M-PROD-1) |
+| Un SKU confirmat care dispare la ei nu se recreează singur | arhivarea sau ștergerea de acolo e hotărârea omului; panoul oferă „Retrimite” și „Exclude” |
 | Stingerea comenzilor sau deconectarea mută comenzile netrimise înapoi în Edinio, cu notificare | altfel ar rămâne comenzi ștampilate (fără factură și AWB din Edinio) care nu mai pleacă |
 
 ## Măsurat pe fir
 
 **Încă nimic pe un cont easySales real.** Contul de probă îl creează comerciantul (Edinio nu creează conturi). Până atunci:
 
+- **Catalogul pe DEMO**, cu baza adevărată și easySales fals (proba din afara depozitului, 11 scenarii): încărcarea inițială (categoriile înaintea produselor, fiecare articol eligibil o singură dată, pe stoc 0, cu `parent_id` = rândul părintelui), verificarea completă pe cei doi martori, a doua trecere fără nicio retrimitere (amprenta), declanșatorii cap la cap (descrierea cu Save, prețul cu `prices/bulk`, stocul nimic în E3), variantele (redenumirea fără `uid` păstrează produsul, combinația scoasă rămâne pe 0 sau se arhivează, arhivatul nu mai primește nimic), trecerea simplu -> variante, ștergerea cu arhivare și `blocked` reluat a doua zi, siguranța de masă pe prețuri, website-ul redenumit (nicio retrimitere), SKU-ul duplicat fără majuscule, încărcarea a 260 de produse tăiată după buget și reluată fără dubluri. Plus 14 probe SQL pe declanșatori (REGISTRU, rândul 74).
 - **Pe DEMO** (`krycmubsiojipwslxrka`), cu baza adevărată și easySales fals: trimiterea (7 scenarii: prima trimitere, răspuns pierdut cu comanda ajunsă, răspuns pierdut cu comanda neajunsă, plata online, 422 cu întoarcerea la Edinio, plafonul, anularea în timpul apelului), oglinda (procesare, expediere cu AWB și curier, livrare, retur anunțat o singură dată, anulare fără AWB, plasa pe 24 de ore), alocarea articolelor (cursa a doi lucrători), probele SQL ale migrațiilor (REGISTRU, rândurile 72-73).
 - **Fără rețea:** maparea pe valori (exemplul Save al lor se reface la zecimală), stările (și în `valori-permise`), contractul cu colecția, termenele, secretele, webhook-ul, abonările, testul fără scrieri.
 
 ## Ce rămâne deschis
 
 - **E0, pe contul de probă:** emiterea cu lista de scope-uri și JWT-ul decodat, 401 vs 403 la tokenul revocat, Save Order pe exemplul nostru (M-COM-1..9), semnătura și numele câmpului secretului (M-WH-1), ce comenzi vede tokenul de website (M-EXT-1), modelul de stoc (M-STOC-1).
-- **E3 (catalogul) și E4 (bucla de stoc)** pornesc numai după E0: un catalog ținut pe stoc 0 nu vinde nimic, iar o împingere de stoc pe un model greșit scade aceeași bucată de două ori.
+- **E3 (catalogul) e construit și oprit.** Pornește numai după E0 (M-EXT-1, M-STOC-1, plus M-CAT-1 și M-PROD-1..7) și după hotărârile D8-D11, D21-D23, D30. În ziua pornirii, în ordinea asta: migrația 74 se mută în `migrations/`, se aplică pe producție înaintea codului (cu acordul proprietarului), `CATALOG_PORNIT = true`, baseline-ul se regenerează, totul în același push.
+- **E4 (bucla de stoc)** pornește numai după E3 și după M-STOC-1: o împingere de stoc pe un model greșit scade aceeași bucată de două ori.
 - **Producția:** migrațiile 72 și 73 se aplică înaintea codului, cu acordul proprietarului; baseline-ul se regenerează în același push.
 - **Textul din catalogul public** și ghidurile din centrul de ajutor sunt ciorne care așteaptă textul proprietarului.
 

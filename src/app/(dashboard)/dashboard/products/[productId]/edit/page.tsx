@@ -44,7 +44,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
 
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, slug, custom_domain, is_published, store_settings(olx_config, trendyol_config, emag_config, google_merchant_config, shipping_classes, permalinks:page_content->permalinks)")
+    .select("id, slug, custom_domain, is_published, store_settings(olx_config, trendyol_config, emag_config, google_merchant_config, shipping_classes, permalinks:page_content->permalinks, easysales_conectat:easysales_config->connected)")
     .eq("user_id", user.id)
     .order("created_at")
     .limit(1)
@@ -57,6 +57,8 @@ export default async function EditProductPage({ params, searchParams }: Props) {
   /* ⚠ Numai `connected`. Restul lui `emag_config` are acreditari, iar citit cu clientul
      comerciantului ele vin criptate — vezi regula casei despre `createAdminClient`. */
   const emagConnected = !!(settings?.emag_config as { connected?: boolean } | null)?.connected;
+  /* easySales: numai steagul, citit ca atare din JSON (secretele raman in configurare, nicaieri aici). */
+  const easysalesConectat = (settings as { easysales_conectat?: unknown } | null)?.easysales_conectat === true;
   const gmcConfig = settings?.google_merchant_config as { connected?: boolean; account_id?: string } | null;
   const gmcConnected = !!gmcConfig?.connected && !!gmcConfig?.account_id;
   const shippingClasses = parseShippingClasses(settings?.shipping_classes);
@@ -117,6 +119,7 @@ export default async function EditProductPage({ params, searchParams }: Props) {
       emagConnected={emagConnected}
       emagPublicat={emagPublicat}
       gmcConnected={gmcConnected}
+      easysalesConectat={easysalesConectat}
       shippingClasses={shippingClasses}
     />
   );

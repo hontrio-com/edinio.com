@@ -2,6 +2,7 @@ import { cerereEasySales, type ContextEasySales, type Raspuns } from "./client";
 import type {
   AbonareEasySales, ComandaEasySales, WebsiteEasySales,
 } from "./tipuri";
+import type { CorpProdus } from "./mapare-produs";
 
 /**
  * Rutele easySales folosite de integrare, fiecare scrisa dupa colectie.
@@ -150,4 +151,93 @@ export interface FiltreProduse {
  */
 export function listaProduse(ctx: ContextEasySales, f: FiltreProduse): Promise<Raspuns<Record<string, unknown>[]>> {
   return cerereEasySales(ctx, { metoda: "GET", cale: "/products", interogare: { ...f, page: f.page ?? 1 } });
+}
+
+// ── Catalog (E3) si stoc (E4) ───────────────────────────────────────────────
+//
+// ⚠ Toate poarta `website_token` la radacina, ca in exemplele colectiei: SKU-ul e unic numai pe
+// website [A: „SKUs are unique only per website, so the target website is resolved from the
+// request's website_token"].
+
+export interface CategorieTrimisa { category_website_id: number; name: string }
+export interface CaracteristicaTrimisa { characteristic_website_id: number; name: string }
+
+/** `POST /api/v2/categories/save/bulk` cu `{website_token, categories}` [A]. Raspunsul are `data: null`. */
+export function salveazaCategoriile(ctx: ContextEasySales, categorii: CategorieTrimisa[]): Promise<Raspuns<unknown>> {
+  return cerereEasySales(ctx, {
+    metoda: "POST", cale: "/categories/save/bulk", cuWebsiteToken: true, inBloc: true, corp: { categories: categorii },
+  });
+}
+
+/** `POST /api/v2/characteristics/save/bulk` cu `{website_token, characteristics}` [A]. Raspunsul are `data: null`. */
+export function salveazaCaracteristicile(ctx: ContextEasySales, caracteristici: CaracteristicaTrimisa[]): Promise<Raspuns<unknown>> {
+  return cerereEasySales(ctx, {
+    metoda: "POST", cale: "/characteristics/save/bulk", cuWebsiteToken: true, inBloc: true, corp: { characteristics: caracteristici },
+  });
+}
+
+/**
+ * `POST /api/v2/products/save` cu `{website_token, product}` [A]: „created or updated".
+ *
+ * ⚠ `data.id` din raspuns e numai o rezerva pentru id-ul lor intern: exemplul e copiat de la Add, iar
+ * documentatia nu spune ce e (planul, §5.4.2). Id-ul se ia din citirea de verificare.
+ */
+export function salveazaProdusul(ctx: ContextEasySales, product: CorpProdus): Promise<Raspuns<Record<string, unknown>>> {
+  return cerereEasySales(ctx, { metoda: "POST", cale: "/products/save", cuWebsiteToken: true, corp: { product } });
+}
+
+/**
+ * `POST /api/v2/products/save/bulk` cu `{website_token, products}` [A].
+ *
+ * ⚠ UN LOT TERMINAT NU INSEAMNA REUSITA: raspunsul are `data: null` [A], deci nu spune ce a intrat.
+ * Ce face un lot cu un element invalid (422 pe tot, sau 200 cu prelucrare partiala tacuta) nu e
+ * documentat (M-PROD-2): verificarea citeste lista lor dupa.
+ */
+export function salveazaProdusele(ctx: ContextEasySales, products: CorpProdus[]): Promise<Raspuns<unknown>> {
+  return cerereEasySales(ctx, { metoda: "POST", cale: "/products/save/bulk", cuWebsiteToken: true, inBloc: true, corp: { products } });
+}
+
+export interface RezultatPeSku {
+  result?: { success?: unknown; errors?: unknown; error_messages?: unknown } | null;
+  products?: unknown;
+}
+
+/**
+ * `PATCH /api/v2/products/prices/bulk` cu `{website_token, data: [{sku, prices: {sale_price, full_price}}]}`,
+ * cel mult 100 [A]. Preturile pleaca CU TVA [A: „Product sale price with vat"]; rezultatul vine pe SKU,
+ * in `data.result.success` si `data.result.errors`.
+ */
+export function actualizeazaPreturile(
+  ctx: ContextEasySales, preturi: { sku: string; sale_price: number; full_price: number }[],
+): Promise<Raspuns<RezultatPeSku>> {
+  return cerereEasySales(ctx, {
+    metoda: "PATCH", cale: "/products/prices/bulk", cuWebsiteToken: true, inBloc: true,
+    corp: { data: preturi.map((p) => ({ sku: p.sku, prices: { sale_price: p.sale_price, full_price: p.full_price } })) },
+  });
+}
+
+/**
+ * `PATCH /api/v2/products/archive/bulk` cu `{website_token, skus}` (1-50) [A]. Fiecare SKU iese in
+ * `archived`, `not_found` sau `blocked` (comenzi active); potrivirea SKU-ului e fara majuscule [A].
+ *
+ * ⚠ Arhivarea dezactiveaza si dezleaga ofertele pe toate canalele [A], iar API-ul n-are restaurare.
+ */
+export function arhiveazaProdusele(
+  ctx: ContextEasySales, skus: string[],
+): Promise<Raspuns<{ archived?: unknown; not_found?: unknown; blocked?: unknown }>> {
+  return cerereEasySales(ctx, { metoda: "PATCH", cale: "/products/archive/bulk", cuWebsiteToken: true, corp: { skus } });
+}
+
+/**
+ * `PATCH /api/v2/stocks/bulk` cu `{website_token, data: [{sku, stock}]}`, cel mult 100 [A]. Rezultatul
+ * pe SKU: `success`, `errors` si `error_messages` („Product not found"), plus `products[].stock` si
+ * `reserved_stock`.
+ */
+export function actualizeazaStocul(
+  ctx: ContextEasySales, stocuri: { sku: string; stock: number }[],
+): Promise<Raspuns<RezultatPeSku>> {
+  return cerereEasySales(ctx, {
+    metoda: "PATCH", cale: "/stocks/bulk", cuWebsiteToken: true, inBloc: true,
+    corp: { data: stocuri.map((s) => ({ sku: s.sku, stock: s.stock })) },
+  });
 }

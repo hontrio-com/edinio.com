@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { EasySalesCatalog } from "@/components/dashboard/easysales/EasySalesCatalog";
 
 /**
  * Panoul easySales (planul, §7.4).
@@ -418,11 +419,7 @@ export function EasySalesConfigClient({ businessId, stare }: { businessId: strin
         </Button>
       </Panel>
 
-      <Panel title="Catalogul și stocul">
-        <p className="text-sm text-muted-foreground">
-          Trimiterea produselor și sincronizarea stocului cu easySales se pornesc după proba cu un cont real. Până atunci, produsele și stocul rămân cum le ai în easySales.
-        </p>
-      </Panel>
+      <EasySalesCatalog businessId={businessId} />
     </div>
   );
 }

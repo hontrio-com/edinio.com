@@ -18,6 +18,12 @@ import { anuleazaLaEi, citesteLegatura, intoarceLaEdinio, scrieLegatura, STARI_N
 import { citesteCanaleleNative, conflicteCanale, mesajConflict } from "@/lib/easysales/exclusivitate";
 import { stareaComenzii, stareaPanoului, type StareComandaEasySales, type StareEasySales } from "@/lib/easysales/panou";
 import type { CanalDeclarat } from "@/lib/easysales/tipuri";
+import type { ContextEasySales } from "@/lib/easysales/client";
+import {
+  confirmaPreturile, excludeArticolul, opresteCatalogul, pornesteCatalogul, raportulMagazinului, reiaCatalogul,
+  retrimiteArticolul, retrimiteTot, salveazaSetarileCatalogului, stareaCatalogului, stareaProdusului,
+  type RaportMagazin, type RezultatOm, type SetariCatalogTrimise, type StareCatalog, type StareProdusEasySales,
+} from "@/lib/easysales/catalog-actiuni";
 
 /**
  * Actiunile panoului easySales si ale paginii comenzii.
@@ -322,4 +328,100 @@ export async function reiaTrimitereaEasySales(businessId: string, orderId: strin
   await admin.rpc("easysales_pune_in_coada", { p_business: businessId, p_op: "comanda_trimite", p_cheie: orderId, p_prioritate: 1 });
   revalidatePath(`/dashboard/orders/${orderId}`);
   return { ok: true };
+}
+
+// ── Catalogul (E3) ──────────────────────────────────────────────────────────
+//
+// ⚠ Trimiterea catalogului e oprita in cod pana dupa E0 (`CATALOG_PORNIT`); actiunile o spun omului.
+// Raportul de pregatire merge de acum: citeste numai tabele care exista si pe productie.
+
+/** Raportul de pregatire, pe motive. Greu pe magazinele mari: cel mult 6 pe ora. */
+export async function raportulCataloguluiEasySales(businessId: string): Promise<RaportMagazin | { error: string }> {
+  const g = await garda(businessId);
+  if ("error" in g) return g;
+  if (!(await consumaLimita(`easysales-raport:${businessId}`, 6, 3600)).permis) {
+    return { error: "Raportul s-a calculat de prea multe ori în ultima oră. Încearcă din nou mai târziu." };
+  }
+  const admin = createAdminClient();
+  try {
+    const cfg = await depozitDinSupabase(admin).citesteConfig(businessId);
+    return await raportulMagazinului(admin, businessId, cfg);
+  } catch (e) {
+    await logError({ action: "easysales.raport", severity: "warning", businessId, message: (e as Error).message });
+    return { error: "Raportul nu s-a putut calcula. Încearcă din nou." };
+  }
+}
+
+export async function stareaCataloguluiEasySales(businessId: string): Promise<StareCatalog | { error: string }> {
+  const g = await garda(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  try {
+    return await stareaCatalogului(admin, businessId, await depozitDinSupabase(admin).citesteConfig(businessId));
+  } catch (e) {
+    await logError({ action: "easysales.catalog", severity: "warning", businessId, message: (e as Error).message });
+    return { error: "Starea catalogului nu s-a putut citi." };
+  }
+}
+
+/** Una dintre operatiile omului pe catalog, cu contextul magazinului conectat. */
+async function peCatalog(
+  businessId: string, fa: (admin: ReturnType<typeof createAdminClient>, ctx: ContextEasySales) => Promise<RezultatOm>,
+): Promise<{ ok: true; mesaj?: string } | { error: string }> {
+  const g = await garda(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const c = await incarcaContextul(admin, businessId, "panou");
+  if (c.fel === "deconectat") return { error: "Conectează întâi contul easySales." };
+  if (c.fel === "eroare") return { error: "Configurarea nu s-a putut citi. Reîncarcă pagina." };
+  try {
+    const r = await fa(admin, c.ctx);
+    revalidatePath(CALEA);
+    return r.ok ? { ok: true, mesaj: r.mesaj } : { error: r.eroare };
+  } catch (e) {
+    await logError({ action: "easysales.catalog", severity: "warning", businessId, message: (e as Error).message });
+    return { error: "Operația nu s-a putut face. Încearcă din nou." };
+  }
+}
+
+export async function pornesteCatalogulEasySales(businessId: string) {
+  return peCatalog(businessId, pornesteCatalogul);
+}
+export async function opresteCatalogulEasySales(businessId: string) {
+  return peCatalog(businessId, opresteCatalogul);
+}
+export async function reiaCatalogulEasySales(businessId: string) {
+  return peCatalog(businessId, reiaCatalogul);
+}
+export async function retrimiteCatalogulEasySales(businessId: string) {
+  return peCatalog(businessId, retrimiteTot);
+}
+export async function confirmaPreturileEasySales(businessId: string) {
+  return peCatalog(businessId, confirmaPreturile);
+}
+export async function retrimiteArticolulEasySales(businessId: string, id: number) {
+  if (!Number.isSafeInteger(id) || id <= 0) return { error: "Articol invalid." };
+  return peCatalog(businessId, (admin, ctx) => retrimiteArticolul(admin, ctx, id));
+}
+export async function excludeArticolulEasySales(businessId: string, id: number) {
+  if (!Number.isSafeInteger(id) || id <= 0) return { error: "Articol invalid." };
+  return peCatalog(businessId, (admin, ctx) => excludeArticolul(admin, ctx, id));
+}
+export async function salveazaSetarileCataloguluiEasySales(businessId: string, s: SetariCatalogTrimise) {
+  return peCatalog(businessId, async (_admin, ctx) => salveazaSetarileCatalogului(ctx, s));
+}
+
+/** Starea easySales a unui produs, pentru pagina lui. `null` = integrarea nu e conectata. */
+export async function stareaEasySalesAProdusului(businessId: string, productId: string): Promise<StareProdusEasySales | null | { error: string }> {
+  const g = await garda(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  try {
+    const cfg = await depozitDinSupabase(admin).citesteConfig(businessId);
+    if (!cfg.connected) return null;
+    return await stareaProdusului(admin, businessId, productId, cfg);
+  } catch (e) {
+    await logError({ action: "easysales.produs", severity: "warning", businessId, message: (e as Error).message });
+    return { error: "Starea easySales a produsului nu s-a putut citi." };
+  }
 }

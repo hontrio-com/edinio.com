@@ -11,6 +11,7 @@ import { COADA, asteptareaDupaPauze, prelucreazaElementul, type ElementCoada } f
 import { prelucreazaInboxul } from "@/lib/easysales/inbox";
 import { bandaDeLista, plasaPeComanda } from "@/lib/easysales/oglinda";
 import { verificareZilnica } from "@/lib/easysales/sanatate";
+import { pasulCatalogului } from "@/lib/easysales/catalog-pas";
 import type { EasySalesConfig } from "@/lib/easysales/tipuri";
 
 /**
@@ -19,7 +20,7 @@ import type { EasySalesConfig } from "@/lib/easysales/tipuri";
  *   1. coada (`easysales_sync_queue`), revendicata cu `revendica_din_coada` si scrisa cu CAS;
  *   2. inboxul webhook-urilor ramas neprelucrat dupa `after`;
  *   3. pe magazin, prin rotatie: plasa legaturilor (10 min), banda de comenzi (5 min), plasa pe
- *      comanda (o ora), sanatatea (o zi);
+ *      comanda (o ora), sanatatea (o zi), apoi catalogul (E3), cand e pornit (`catalog-pas.ts`);
  *   4. curatenia jurnalului si a inboxului (30 de zile), o data pe ora.
  *
  * ⚠ BUGETUL DE TIMP SE VERIFICA INAINTE DE FIECARE PAS, nu dupa: pasii taiati sunt mereu ultimii,
@@ -126,6 +127,8 @@ export async function GET(req: NextRequest) {
         const { data: biz } = await admin.from("businesses").select("cui").eq("id", businessId).maybeSingle();
         await verificareZilnica(admin, ctx, (biz as { cui?: string | null } | null)?.cui ?? null);
       }
+      /* Catalogul (E3): iese singur cand e oprit (in cod sau pe magazin). */
+      if (ramasa(BUGET_TOTAL_MS)) await pasulCatalogului(admin, ctx, () => ramasa(BUGET_TOTAL_MS));
     } catch (e) {
       rezultat.erori.push(`magazin:${businessId}`);
       await logError({ action: "easysales-sync", severity: "warning", businessId, message: `trecerea pe magazin: ${(e as Error).message}` });

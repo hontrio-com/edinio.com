@@ -164,3 +164,70 @@ export const ZILE_PASTRARE = 30;
 
 /** Plafonul corpului unei livrari de webhook pe care il citim. Un eveniment de-al lor are cativa KB. */
 export const PLAFON_CORP_WEBHOOK = 256 * 1024;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CATALOGUL (E3) SI STOCUL (E4)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * ⚠⚠ COMUTATORUL CATALOGULUI, IN COD, NU IN MEDIU.
+ *
+ * Catalogul (E3) porneste numai dupa masuratorile E0 pe contul de proba al comerciantului
+ * (M-EXT-1 si M-STOC-1, planul §10): un catalog tinut pe stoc 0 nu vinde nimic, iar o impingere de
+ * stoc pe un model gresit scade aceeasi bucata de doua ori. Si cere migratia 74
+ * (`docs/marketplace/2026-10-13-easysales-catalog.sql`), care pe productie se aplica tot atunci.
+ *
+ * De aceea comutatorul e o constanta si nu o variabila de mediu: o variabila s-ar putea porni fara
+ * migratie, iar codul catalogului ar citi tabele care nu exista. O constanta se schimba printr-un
+ * commit, iar proba `catalogul-si-migratia-merg-impreuna.test.ts` cere ca acelasi commit sa mute
+ * migratia in `migrations/` (deci si sa regenereze baseline-ul, pe care il cere CI-ul).
+ *
+ * Raportul de pregatire NU asteapta comutatorul: citeste numai tabele care exista deja.
+ */
+export const CATALOG_PORNIT = false;
+
+/**
+ * Bucla de stoc (E4): aceeasi regula, si inca o conditie, formula aleasa dupa M-STOC-1
+ * (`FORMULA_STOC`). Fara ea, nicio cantitate reala nu pleaca la ei: totul ramane pe 0.
+ */
+export const STOC_PORNIT = false;
+
+/** Cate produse pleaca intr-un `products/save/bulk` (ghidul „Conectează un magazin personalizat"; M-PROD-2). */
+export const LOT_PRODUSE = 100;
+/** Si sub cati octeti, ca un lot cu descrieri lungi sa nu ajunga la plafonul corpului lor. */
+export const LOT_PRODUSE_OCTETI = 900_000;
+/** Categoriile si caracteristicile, pe acelasi plafon de 100 (ghid, IPOTEZA ES-5). */
+export const LOT_CATEGORII = 100;
+/** `PATCH /products/prices/bulk`: „up to 100 products" [A]. */
+export const LOT_PRETURI = 100;
+/** `PATCH /stocks/bulk`: „up to 100 products" [A]. */
+export const LOT_STOC = 100;
+/** `PATCH /products/archive/bulk`: `skus` 1-50 [A]. */
+export const LOT_ARHIVARE = 50;
+/** `GET /products`: „The number of items to be shown per page is 50" [A]. */
+export const PAGINA_PRODUSE = 50;
+/**
+ * Pana la atatea articole schimbate deodata, fiecare pleaca cu Save pe element: raspunsul lui
+ * spune pe loc daca a intrat si, la 422, de ce. Peste prag, in bloc, cu verificarea dupa.
+ */
+export const SAVE_PE_ELEMENT_PANA_LA = 50;
+/** Un articol `trimis` nevazut la ei dupa atata timp se retrimite o data (planul, §5.4.5). */
+export const RETRIMITERE_DUPA_MS = 15 * 60_000;
+/** O arhivare `blocked` (comenzi active la ei) se reia zilnic atatea zile, apoi se anunta omul. */
+export const ZILE_ARHIVARE_BLOCATA = 14;
+
+/**
+ * Siguranta de masa (D22, pragurile propuse in plan, de confirmat de proprietar): o trecere care ar
+ * atinge peste atatea articole, sau peste procentul din articolele trimise ale magazinului, se
+ * opreste si cere confirmarea omului.
+ */
+export const SIGURANTA_MASA = { articole: 200, procent: 30 } as const;
+
+/** Cotele de TVA legale azi in Romania (planul, §5.4.4; verificate si la conectare). */
+export const COTE_LEGALE = [21, 11, 0] as const;
+
+/** Categoria de rezerva pentru produsele fara categorie, cu categorie ambigua sau stearsa (D23). */
+export const CATEGORIA_DE_REZERVA = "Fără categorie";
+export const CHEIE_CATEGORIE_DE_REZERVA = "#fara-categorie";
+/** Separatorul caii unei categorii in numele trimis („Femei > Rochii", D23). */
+export const SEPARATOR_CATEGORII = " > ";

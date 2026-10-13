@@ -24,6 +24,11 @@ function normalizeaza(cale: string): string {
     .split("/").map((s) => (/^\d+$/.test(s) ? "{}" : s)).join("/");
 }
 
+const PRODUS = {
+  product_website_id: 1000000003, sku: "SKU-1", name: "Cana", type: "simple" as const, description: "<p>Cana</p>",
+  sale_price: 121, full_price: 121, tax_rate: 21, stock: 0, images: [], categories: [1000000001], characteristics: [],
+};
+
 const CHEMARI: Record<string, (ctx: ContextEasySales) => Promise<unknown>> = {
   citesteContul: (c) => api.citesteContul(c),
   listaWebsiteuri: (c) => api.listaWebsiteuri(c),
@@ -40,6 +45,13 @@ const CHEMARI: Record<string, (ctx: ContextEasySales) => Promise<unknown>> = {
   anuleazaComandaLaEi: (c) => api.anuleazaComandaLaEi(c, "500", "motiv"),
   adaugaMetadate: (c) => api.adaugaMetadate(c, "500", [{ key: "k", value: "v" }]),
   listaProduse: (c) => api.listaProduse(c, { website: "Edinio Test" }),
+  salveazaCategoriile: (c) => api.salveazaCategoriile(c, [{ category_website_id: 1000000001, name: "Femei > Rochii" }]),
+  salveazaCaracteristicile: (c) => api.salveazaCaracteristicile(c, [{ characteristic_website_id: 1000000002, name: "Culoare" }]),
+  salveazaProdusul: (c) => api.salveazaProdusul(c, PRODUS),
+  salveazaProdusele: (c) => api.salveazaProdusele(c, [PRODUS]),
+  actualizeazaPreturile: (c) => api.actualizeazaPreturile(c, [{ sku: "SKU-1", sale_price: 121, full_price: 121 }]),
+  arhiveazaProdusele: (c) => api.arhiveazaProdusele(c, ["SKU-1"]),
+  actualizeazaStocul: (c) => api.actualizeazaStocul(c, [{ sku: "SKU-1", stock: 0 }]),
 };
 
 test("fiecare functie exportata din api.ts are o chemare de contract", () => {

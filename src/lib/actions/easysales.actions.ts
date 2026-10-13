@@ -57,7 +57,12 @@ export async function getEasySalesStatus(businessId: string): Promise<StareEasyS
   const g = await garda(businessId);
   if ("error" in g) return g;
   try {
-    return await stareaPanoului(createAdminClient(), businessId);
+    const s = await stareaPanoului(createAdminClient(), businessId);
+    /*
+     * ⚠ Administratorii trec si cu comutatorul de lansare stins, ca in hub si in actiunile de
+     * conectare (`deschisa`): altfel cardul s-ar deschide, dar pagina ar spune „nu e inca deschisa".
+     */
+    return s.disponibila ? s : { ...s, disponibila: await esteAdmin() };
   } catch (e) {
     await logError({ action: "easysales.stare", severity: "warning", businessId, message: (e as Error).message });
     return { error: "Starea integrării nu s-a putut citi. Reîncarcă pagina." };

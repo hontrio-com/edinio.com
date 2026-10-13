@@ -289,6 +289,8 @@ export const PROVIDER_LOGOS = {
   cel: { name: "Cel.ro", src: `${I}/cel.ro.webp`, ratio: 3.7, ink: 0.94 },
   okazii: { name: "Okazii.ro", src: `${I}/okazii.ro.svg`, ratio: 6.05 },
   pepita: { name: "Pepita.com", src: `${I}/pepita.svg`, ratio: 3.64, ink: 0.57 },
+  /* Masurat pe 13.10.2026: cutia 271x64, desenul 267x60. */
+  easySales: { name: "easySales", src: `${I}/easysales-mic.webp`, ratio: 4.23, ink: 0.92 },
   compari: { name: "Compari.ro", src: `${I}/compari.ro-mic.webp`, ratio: 4.44, ink: 0.4 },
   baseLinker: { name: "BaseLinker", src: `${I}/baselinker-mic.webp`, ratio: 3.82, ink: 0.91 },
 

@@ -202,7 +202,8 @@ test("numărătoarea de active și de anunțate e cea din panou", () => {
      urcă 41 -> 42, anunțatele rămân 24. */
   assert.equal(NUMAR_IN_CURAND, 24);
   /* ⚠ 07.10.2026: e-packet a intrat direct „activa": activele urca 42 -> 43. */
-  assert.equal(NUMAR_ACTIVE, 43);
+  /* ⚠ 13.10.2026: easySales a intrat direct „activa": activele urca 43 -> 44. */
+  assert.equal(NUMAR_ACTIVE, 44);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {

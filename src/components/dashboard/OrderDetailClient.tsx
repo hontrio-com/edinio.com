@@ -11,7 +11,8 @@ import {
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
-import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace } from "@/lib/orders/origin";
+import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace, procesataInEasySales, MESAJ_STAREA_IN_EASYSALES } from "@/lib/orders/origin";
+import { EasySalesComandaPanel } from "@/components/dashboard/easysales/EasySalesComandaPanel";
 import { awburiDinRand, deCeNuSePoateAwbPropriu, numarDeUrmarire } from "@/lib/orders/awb-propriu";
 import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { readBillingCompany } from "@/lib/billing/company";
@@ -533,6 +534,10 @@ export function OrderDetailClient({
   /* ⚠ Alta intrebare decat cea de mai sus: „mai trebuie facut ceva si la ei?". Vezi
      `MEMENTO_LA_MARKETPLACE`. */
   const memento = mementoulMarketplace(order.order_source);
+  /* easySales: comanda vitrinei stampilata la plasare. Panoul ei se arata si dupa preluarea in
+     Edinio (spune unde a fost); nota de stare, numai cat e a lor. */
+  const areStampilaEasySales = !!(order.order_source as { easysales?: unknown } | null)?.easysales;
+  const inEasySales = procesataInEasySales(order.order_source);
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -2104,6 +2109,7 @@ export function OrderDetailClient({
 
         {/* RAIL: operational actions (sticky on desktop) */}
         <div className="lg:w-[360px] lg:shrink-0 lg:sticky lg:top-6 space-y-4">
+          {areStampilaEasySales && <EasySalesComandaPanel businessId={businessId} orderId={order.id} />}
           {/* Status & plata */}
           <div className={`${CARD} p-5 space-y-4`}>
             <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>
@@ -2138,6 +2144,11 @@ export function OrderDetailClient({
             {memento && (
               <p className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-foreground">
                 {memento}
+              </p>
+            )}
+            {inEasySales && (
+              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+                {MESAJ_STAREA_IN_EASYSALES}
               </p>
             )}
 

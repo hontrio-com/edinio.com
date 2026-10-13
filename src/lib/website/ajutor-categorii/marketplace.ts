@@ -235,6 +235,67 @@ export const MARKETPLACE: CategorieAjutor = {
         },
       ],
     },
+    /*
+     * easySales (13.10.2026). Ciorna, ca toate de aici: scrisa din `EasySalesConfigClient.tsx`,
+     * `easysales/EasySalesComandaPanel.tsx` si `lib/easysales/`. Etichetele citate sunt cele de pe ecran.
+     */
+    {
+      titlu: "easySales",
+      ghiduri: [
+        {
+          slug: "cum-conectezi-easysales",
+          titlu: "Cum conectezi contul easySales",
+          rezumat: "Un website „API V2” nou și un client API de tip „Website Grant” în easySales, apoi cele trei date în Edinio, în doi pași.",
+          intro: "Contul easySales e al tău; Edinio doar îi trimite comenzile magazinului și citește înapoi statusul, AWB-ul și factura.",
+          pasi: [
+            "În easySales: Integrări, Magazine, Conectare Website. Alege România și RON, cotele de TVA ca în magazin și „Sursă stoc produse: Website”.",
+            "La API alege „API V2” și copiază website token-ul.",
+            "În easySales: Setări, Setări API, client nou de tip „Website Grant”, numit „Edinio”. Copiază ID Client și Secretul.",
+            "În Edinio: Integrări > Marketplace > easySales. Completează „ID Client”, „Secret” și „Website token”, apoi apasă „Verifică datele”.",
+            "La pasul 2 alege website-ul, bifează canalele pe care le vinzi prin easySales și cele patru confirmări, apoi apasă „Conectează”.",
+          ],
+          detalii: [
+            { titlu: "Un client și un website numai pentru acest magazin", text: "easySales ține un singur token pe client API: un al doilea program care folosește același client îl revocă pe al nostru, și invers. Iar un website folosit de două magazine le-ar amesteca cataloagele." },
+            { titlu: "Nimic nu pornește singur", text: "După conectare, trimiterea comenzilor are comutatorul ei, stins. Îl pornești când ești gata, din cardul „Comenzile magazinului în easySales”." },
+            { titlu: "Canalele vândute pe două drumuri", text: "Un canal se vinde fie direct din Edinio, fie prin easySales. Dacă eMAG România e conectat direct în Edinio, nu-l poți bifa și la easySales: aceeași comandă ar intra de două ori." },
+          ],
+          termeni: ["easysales", "website grant", "website token", "api v2", "client api"],
+        },
+        {
+          slug: "ce-comenzi-pleaca-in-easysales",
+          titlu: "Ce comenzi pleacă în easySales și ce rămâne în Edinio",
+          rezumat: "Comenzile cu livrare prin curier, în România și în lei pleacă în easySales, unde se fac factura și AWB-ul. Restul se procesează din Edinio, ca până acum.",
+          pasi: [
+            "Pornește comutatorul din cardul „Comenzile magazinului în easySales”.",
+            "Comenzile noi cu ramburs pleacă în câteva momente; cele plătite online pleacă după încasare.",
+            "Pe pagina comenzii, cardul „easySales” arată unde e comanda, statusul de la ei, AWB-ul și factura.",
+          ],
+          detalii: [
+            { titlu: "Ce rămâne în Edinio", text: "Ridicarea personală, curierul propriu, livrarea la punct de ridicare (locker), livrările în afara României, comenzile în altă monedă decât lei și comenzile cu fișiere de personalizare. Pentru ele factura și AWB-ul se fac din Edinio." },
+            { titlu: "Factura și AWB-ul nu se fac de două ori", text: "Pe o comandă care pleacă în easySales, Edinio nu mai emite factură și nici AWB: le face easySales. Statusul și AWB-ul se întorc apoi în Edinio, iar clientul își vede coletul în contul lui." },
+            { titlu: "Comenzile de dinainte", text: "Comenzile plasate înainte de pornire nu pleacă singure. Din același card poți trimite comenzile deschise din ultimele zile, numai cele fără factură și fără AWB din Edinio." },
+          ],
+          termeni: ["easysales", "factura easysales", "awb easysales", "comenzi easysales"],
+        },
+        {
+          slug: "ce-faci-cu-o-comanda-care-nu-pleaca-in-easysales",
+          titlu: "Ce faci cu o comandă care nu pleacă în easySales",
+          rezumat: "Cardul „Comenzi de verificat” strânge comenzile refuzate, oprite sau blocate de plafonul abonamentului, iar pe fiecare comandă ai „Preia în Edinio”, „Reia trimiterea” și „Anulează în easySales”.",
+          pasi: [
+            "Deschide Integrări > Marketplace > easySales și caută cardul „Comenzi de verificat”.",
+            "Apasă numărul comenzii ca să ajungi pe pagina ei.",
+            "La „Plafon easySales atins”, mărește abonamentul în easySales și apasă „Reia trimiterea”.",
+            "Ca s-o procesezi din Edinio, apasă „Preia în Edinio”. Pe o comandă deja trimisă, se anulează întâi la ei.",
+          ],
+          detalii: [
+            { titlu: "Comenzile refuzate trec singure în Edinio", text: "Dacă easySales refuză o comandă și verificăm că nu e la ei, ea se procesează din Edinio, cu factura pe drumul obișnuit, iar tu primești o notificare." },
+            { titlu: "Anularea", text: "Starea unei comenzi trimise vine din easySales. „Anulează în easySales” o anulează întâi acolo, apoi în Edinio, cu stocul pus înapoi. Merge numai cât comanda nu e procesată la ei și n-are AWB." },
+            { titlu: "Clientul cere anularea din contul lui", text: "Pe o comandă procesată în easySales, contul clientului nu o mai anulează singur. Primești o notificare, iar anularea o faci tu, din easySales sau cu butonul din Edinio." },
+          ],
+          termeni: ["easysales", "preia in edinio", "reia trimiterea", "anuleaza in easysales", "plafon easysales"],
+        },
+      ],
+    },
     {
       titlu: "Restul marketplace-urilor",
       ghiduri: [

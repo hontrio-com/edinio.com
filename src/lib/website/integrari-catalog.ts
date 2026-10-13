@@ -375,6 +375,14 @@ export const INTEGRARI: Integrare[] = [
     stare: "activa",
     descriere: "Conectezi catalogul Edinio cu Pepita Marketplace pentru listarea produselor.",
   },
+  /* ⚠ Textul NU e din lista clientului: integrarea a venit dupa ea (13.10.2026). Scris dupa
+     regulile probelor, asteapta sa-l dea el. */
+  {
+    cheie: "easySales",
+    categorie: "marketplace",
+    stare: "activa",
+    descriere: "Trimiți comenzile magazinului în easySales, iar statusul și AWB-ul se întorc în Edinio.",
+  },
   {
     cheie: "altex",
     categorie: "marketplace",

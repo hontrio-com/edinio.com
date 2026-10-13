@@ -62,6 +62,7 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   trendyol: { src: "/integrations/trendyol.svg", alt: "Trendyol" },
   emag: { src: "/integrations/emag.webp", alt: "eMAG Marketplace" },
   pepita: { src: "/integrations/pepita.svg", alt: "Pepita.com" },
+  easysales: { src: "/integrations/easysales.webp", alt: "easySales" },
   marketing: { src: "/integrations/facebook-pixel.svg", alt: "Marketing" },
 };
 

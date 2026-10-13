@@ -99,15 +99,20 @@ export function mesajConflict(c: readonly CanalPeTara[]): string {
  * `null` = se poate conecta. ⚠ Cade INCHIS: o citire picata refuza (ca garda contului unic).
  */
 export async function refuzaCanalDeclaratLaEasySales(
-  admin: SupabaseClient<Database>, businessId: string, canal: CanalNativ, taraCanal = "ro",
+  admin: SupabaseClient<Database>, businessId: string, canal: CanalNativ, taraCanal: string | null = "ro",
 ): Promise<string | null> {
   const { data, error } = await admin.from("store_settings").select("cfg:easysales_config->canale, conectat:easysales_config->>connected")
     .eq("business_id", businessId).maybeSingle();
+  /* ⚠ 42703 (coloana nu exista inca: codul a ajuns inaintea migratiei) inseamna ca nimic nu poate
+     fi declarat la easySales. Cazut inchis aici, ar fi oprit TOATE conectarile native deodata. */
+  if (error && error.code === "42703") return null;
   if (error) return "Nu am putut verifica dacă acest canal e vândut prin easySales. Încearcă din nou peste câteva momente.";
   const r = (data ?? {}) as { cfg?: unknown; conectat?: unknown };
   if (r.conectat !== "true") return null;
   const declarate = Array.isArray(r.cfg) ? (r.cfg as CanalDeclarat[]) : [];
-  const t = tara(taraCanal, "ro");
-  if (!declarate.some((d) => d?.canal === canal && tara(d?.tara, "ro") === t)) return null;
-  return `${NUME_CANAL[canal]} ${t.toUpperCase()} este declarat ca vândut prin easySales. Un canal se vinde fie direct, fie prin easySales, niciodată pe amândouă: scoate-l întâi din lista easySales (Integrări, easySales).`;
+  /* `null` = orice tara (About You si Pepita: tarile se aleg dupa conectare). */
+  const t = taraCanal === null ? null : tara(taraCanal, "ro");
+  const gasit = declarate.find((d) => d?.canal === canal && (t === null || tara(d?.tara, "ro") === t));
+  if (!gasit) return null;
+  return `${NUME_CANAL[canal]} ${tara(gasit.tara, "ro").toUpperCase()} este declarat ca vândut prin easySales. Un canal se vinde fie direct, fie prin easySales, niciodată pe amândouă: scoate-l întâi din lista easySales (Integrări, easySales).`;
 }

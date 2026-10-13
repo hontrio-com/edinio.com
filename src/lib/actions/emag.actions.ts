@@ -14,6 +14,7 @@
  * endpoint HTTP inregistrat in manifestul global.
  */
 
+import { refuzaCanalDeclaratLaEasySales } from "@/lib/easysales/exclusivitate";
 import { revalidatePath } from "next/cache";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { createClient } from "@/lib/supabase/server";
@@ -518,6 +519,9 @@ export async function connectEmag(
   // Acelasi cont eMAG (utilizator + tara) pe doua magazine = comenzi dublate.
   const folosit = await refuzaContFolositDeAltMagazin("emag", businessId, { id: username, tara: date.tara });
   if (folosit) return { error: folosit };
+  /* Un canal, un drum: vandut si prin easySales, aceeasi comanda ar intra de doua ori. */
+  const peDouaDrumuri = await refuzaCanalDeclaratLaEasySales(createAdminClient(), businessId, "emag", date.tara);
+  if (peDouaDrumuri) return { error: peDouaDrumuri };
 
   const veche = await loadConfig(businessId);
 

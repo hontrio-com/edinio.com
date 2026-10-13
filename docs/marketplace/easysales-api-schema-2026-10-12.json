@@ -1,0 +1,3671 @@
+{
+ "sursa": {
+  "colectie": "easySales V2 (Postman, 6542984/SzfDvj4T)",
+  "descarcata": "2026-10-12",
+  "sha256_original": "b1073237b09ca80f499428e067839a3bce27b086fc7bc9d0c2f51be7c8868e38"
+ },
+ "nota": "Derivat: numai numele, metoda, calea, cheile interogarii si tabelele de campuri. Fara exemple, fara corpuri, fara valorile variabilelor.",
+ "cereri": [
+  {
+   "dosar": "Authentication / Redirecting For Authorization",
+   "nume": "Authorization Code Grant - Converting Authorization Codes To Access Tokens",
+   "metoda": "POST",
+   "cale": "/oauth/token",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Authentication",
+   "nume": "Website Grant",
+   "metoda": "POST",
+   "cale": "/oauth/token",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Authentication",
+   "nume": "Password Grant",
+   "metoda": "POST",
+   "cale": "/oauth/token",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Authentication",
+   "nume": "Refresh Token",
+   "metoda": "POST",
+   "cale": "/oauth/token",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Authentication",
+   "nume": "Sub-Account Authentication",
+   "metoda": "POST",
+   "cale": "/api/v2/account/sub-account/login",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Account",
+   "nume": "Get account data",
+   "metoda": "GET",
+   "cale": "/api/v2/account",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Account",
+   "nume": "Get stats",
+   "metoda": "GET",
+   "cale": "/api/v2/stats",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Account",
+   "nume": "Assign partner",
+   "metoda": "POST",
+   "cale": "/api/v2/account/sub-account/login",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Account",
+   "nume": "Forgot password",
+   "metoda": "POST",
+   "cale": "/api/v2/account/forget-password",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Categories",
+   "nume": "List categories",
+   "metoda": "GET",
+   "cale": "/api/v2/categories",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Categories",
+   "nume": "Add Category",
+   "metoda": "POST",
+   "cale": "/api/v2/categories",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Category object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "category_website_id",
+       "Numeric",
+       "True",
+       "Category id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Category name"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Categories",
+   "nume": "Save Category",
+   "metoda": "POST",
+   "cale": "/api/v2/categories/save",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Category object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "category_website_id",
+       "Numeric",
+       "True",
+       "Category id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Category name"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Categories",
+   "nume": "Update Category",
+   "metoda": "PUT",
+   "cale": "/api/v2/categories/{{category_id}}",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Category object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "Category name"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Categories",
+   "nume": "Bulk save categories",
+   "metoda": "POST",
+   "cale": "/api/v2/categories/save/bulk",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Categories",
+   "nume": "Delete Category",
+   "metoda": "DELETE",
+   "cale": "/api/v2/categories/{{category_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Characteristics",
+   "nume": "List characteristics",
+   "metoda": "GET",
+   "cale": "/api/v2/characteristics",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Characteristics",
+   "nume": "Add Characteristic",
+   "metoda": "POST",
+   "cale": "/api/v2/characteristics",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Characteristic object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "characteristic_website_id",
+       "Numeric",
+       "True",
+       "Characteristic id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Characteristic name"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Characteristics",
+   "nume": "Save Characteristic",
+   "metoda": "POST",
+   "cale": "/api/v2/characteristics/save",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Characteristic object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "characteristic_website_id",
+       "Numeric",
+       "True",
+       "Characteristic id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Characteristic name"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Characteristics",
+   "nume": "Update Characteristic",
+   "metoda": "PUT",
+   "cale": "/api/v2/characteristics/{{characteristic_id}}",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Characteristic object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "Characteristic name"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Characteristics",
+   "nume": "Bulk save characteristics",
+   "metoda": "POST",
+   "cale": "/api/v2/characteristics/save/bulk",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Characteristics",
+   "nume": "Delete Characteristic",
+   "metoda": "DELETE",
+   "cale": "/api/v2/characteristics/{{characteristic_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Products",
+   "nume": "List products",
+   "metoda": "GET",
+   "cale": "/api/v2/products",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Products",
+   "nume": "Add product",
+   "metoda": "POST",
+   "cale": "/api/v2/products",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True (Unique)",
+       "Product id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name"
+      ],
+      [
+       "brand",
+       "String",
+       "False",
+       "Product brand"
+      ],
+      [
+       "sku",
+       "String",
+       "True (Unique)",
+       "Stock keeping unit - unique identifier of the product"
+      ],
+      [
+       "ean",
+       "String",
+       "False",
+       "European Article Number"
+      ],
+      [
+       "description",
+       "String",
+       "True",
+       "Product description. Can contain basic HTML tags."
+      ],
+      [
+       "sale_price",
+       "Numeric",
+       "True",
+       "Seller product sale price including VAT"
+      ],
+      [
+       "full_price",
+       "Numeric",
+       "False",
+       "Seller product regular price including VAT"
+      ],
+      [
+       "stock",
+       "Numeric",
+       "True",
+       "Product available quantity"
+      ],
+      [
+       "weight",
+       "Numeric",
+       "False",
+       "The weight of the product in KG"
+      ],
+      [
+       "type",
+       "simple/complex",
+       "True",
+       "simple if product doesn't have a parent / complex - if the product is a variation"
+      ],
+      [
+       "tax_rate",
+       "Numeric",
+       "True",
+       "tax rate, ex: 19"
+      ],
+      [
+       "url",
+       "String (valid url)",
+       "False",
+       "Product URL on the seller website."
+      ],
+      [
+       "warehouse_location",
+       "String",
+       "False",
+       ""
+      ],
+      [
+       "images",
+       "Array",
+       "False",
+       "Array of images urls"
+      ],
+      [
+       "categories",
+       "Array (array of categories ids)",
+       "False",
+       "Warning! Array of category_website_id's (internal id)"
+      ],
+      [
+       "characteristics",
+       "Array (array of characteristics ids and values)",
+       "False",
+       "Warning! id is characteristic_website_id (internal id) [{\"id\": {{characteristic_website_id }}, \"value\": \"Red\"}]"
+      ],
+      [
+       "parent_name",
+       "String",
+       "False",
+       "Parent name"
+      ],
+      [
+       "parent_url",
+       "String (valid url)",
+       "False",
+       "Parent url"
+      ],
+      [
+       "parent_id",
+       "Numeric",
+       "False",
+       "Parent internal id"
+      ],
+      [
+       "handling_time",
+       "Numeric",
+       "False",
+       "Handling time (in days)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Products",
+   "nume": "Save product",
+   "metoda": "POST",
+   "cale": "/api/v2/products/save",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True (Unique)",
+       "Product id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name"
+      ],
+      [
+       "brand",
+       "String",
+       "False",
+       "Product brand"
+      ],
+      [
+       "sku",
+       "String",
+       "True (Unique)",
+       "Stock keeping unit - unique identifier of the product"
+      ],
+      [
+       "ean",
+       "String",
+       "False",
+       "European Article Number"
+      ],
+      [
+       "description",
+       "String",
+       "True",
+       "Product description. Can contain basic HTML tags."
+      ],
+      [
+       "sale_price",
+       "Numeric",
+       "True",
+       "Seller product sale price including VAT"
+      ],
+      [
+       "full_price",
+       "Numeric",
+       "False",
+       "Seller product regular price including VAT"
+      ],
+      [
+       "stock",
+       "Numeric",
+       "True",
+       "Product available quantity"
+      ],
+      [
+       "weight",
+       "Numeric",
+       "False",
+       "The weight of the product in KG"
+      ],
+      [
+       "type",
+       "simple/complex",
+       "True",
+       "simple if product doesn't have a parent / complex - if the product is a variation"
+      ],
+      [
+       "tax_rate",
+       "Numeric",
+       "True",
+       "tax rate, ex: 19"
+      ],
+      [
+       "url",
+       "String (valid url)",
+       "False",
+       "Product URL on the seller website."
+      ],
+      [
+       "supplier_sku",
+       "String",
+       "False",
+       ""
+      ],
+      [
+       "warehouse_location",
+       "String",
+       "False",
+       ""
+      ],
+      [
+       "images",
+       "Array",
+       "False",
+       "Array of images urls"
+      ],
+      [
+       "categories",
+       "Array (array of categories ids)",
+       "False",
+       "Warning! Array of category_website_id's (internal id)"
+      ],
+      [
+       "characteristics",
+       "Array (array of characteristics ids and values)",
+       "False",
+       "Warning! id is characteristic_website_id (internal id) [{\"id\": {{characteristic_website_id }}, \"value\": \"Red\"}]"
+      ],
+      [
+       "parent_name",
+       "String",
+       "False",
+       "Parent name"
+      ],
+      [
+       "parent_url",
+       "String (valid url)",
+       "False",
+       "Parent url"
+      ],
+      [
+       "parent_id",
+       "Numeric",
+       "False",
+       "Parent internal id"
+      ],
+      [
+       "handling_time",
+       "Numeric",
+       "False",
+       "Handling time (days)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Products",
+   "nume": "Update Product",
+   "metoda": "PUT",
+   "cale": "/api/v2/products/{{product_id}}",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True (Unique)",
+       "Product id used in your app"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name"
+      ],
+      [
+       "brand",
+       "String",
+       "False",
+       "Product brand"
+      ],
+      [
+       "sku",
+       "String",
+       "True (Unique)",
+       "Stock keeping unit - unique identifier of the product"
+      ],
+      [
+       "ean",
+       "String",
+       "False",
+       "European Article Number"
+      ],
+      [
+       "description",
+       "String",
+       "True",
+       "Product description. Can contain basic HTML tags."
+      ],
+      [
+       "sale_price",
+       "Numeric",
+       "True",
+       "Seller product sale price including VAT"
+      ],
+      [
+       "full_price",
+       "Numeric",
+       "False",
+       "Seller product regular price including VAT"
+      ],
+      [
+       "stock",
+       "Numeric",
+       "True",
+       "Product available quantity"
+      ],
+      [
+       "weight",
+       "Numeric",
+       "False",
+       "The weight of the product in KG"
+      ],
+      [
+       "type",
+       "simple/complex",
+       "True",
+       "simple if product doesn't have a parent / complex - if the product is a variation"
+      ],
+      [
+       "tax_rate",
+       "Numeric",
+       "True",
+       "tax rate, ex: 19"
+      ],
+      [
+       "url",
+       "String (valid url)",
+       "False",
+       "Product URL on the seller website."
+      ],
+      [
+       "warehouse_location",
+       "String",
+       "False",
+       ""
+      ],
+      [
+       "images",
+       "Array",
+       "False",
+       "Array of images urls"
+      ],
+      [
+       "categories",
+       "Array (array of categories ids)",
+       "False",
+       "Warning! Array of category_website_id's (internal id)"
+      ],
+      [
+       "characteristics",
+       "Array (array of characteristics ids and values)",
+       "False",
+       "Warning! id is characteristic_website_id (internal id) [{\"id\": {{characteristic_website_id }}, \"value\": \"Red\"}]"
+      ],
+      [
+       "parent_name",
+       "String",
+       "False",
+       "Parent name"
+      ],
+      [
+       "parent_url",
+       "String (valid url)",
+       "False",
+       "Parent url"
+      ],
+      [
+       "parent_id",
+       "Numeric",
+       "False",
+       "Parent internal id"
+      ],
+      [
+       "handling_time",
+       "Numeric",
+       "False",
+       "Handling time (in days)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Products",
+   "nume": "Update Prices Bulk",
+   "metoda": "PATCH",
+   "cale": "/api/v2/products/prices/bulk",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": null,
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku"
+      ],
+      [
+       "prices",
+       "Array",
+       "True",
+       "Product prices"
+      ],
+      [
+       "prices.*.sale_price",
+       "Array",
+       "True",
+       "Product sale price with vat"
+      ],
+      [
+       "prices.*.full_price",
+       "Array",
+       "True",
+       "Product full_price with vat"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Products",
+   "nume": "Archive product",
+   "metoda": "PATCH",
+   "cale": "/api/v2/products/:id/archive",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Products",
+   "nume": "Archive products bulk",
+   "metoda": "PATCH",
+   "cale": "/api/v2/products/archive/bulk",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Products",
+   "nume": "Save products bulk",
+   "metoda": "POST",
+   "cale": "/api/v2/products/save/bulk",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Stocks",
+   "nume": "List products stocks",
+   "metoda": "GET",
+   "cale": "/api/v2/products/stock/list",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Stocks",
+   "nume": "Update Stock",
+   "metoda": "PATCH",
+   "cale": "/api/v2/products/{{product_id}}/stock",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Warning!!!",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "stock",
+       "Numeric",
+       "True",
+       "Product available quantity"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Stocks",
+   "nume": "Update Stock Bulk",
+   "metoda": "PATCH",
+   "cale": "/api/v2/stocks/bulk",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": null,
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku"
+      ],
+      [
+       "stock",
+       "Numeric",
+       "True",
+       "Product available quantity"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Orders",
+   "nume": "List orders",
+   "metoda": "GET",
+   "cale": "/api/v2/orders",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Export Orders",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/export",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Get order",
+   "metoda": "GET",
+   "cale": "/api/v2/orders/13",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Add Order",
+   "metoda": "POST",
+   "cale": "/api/v2/orders",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Order object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "order_id",
+       "Numeric",
+       "True",
+       "The number that uniquely identifies an order."
+      ],
+      [
+       "invoice_series",
+       "String",
+       "True",
+       "Default invoice series"
+      ],
+      [
+       "order_date",
+       "Numeric",
+       "True",
+       "Order date (Text in YYYY-mm-dd HH:ii:ss format.)"
+      ],
+      [
+       "order_total",
+       "Numeric",
+       "True",
+       "Order total value (products values + shipment tax)"
+      ],
+      [
+       "currency",
+       "String",
+       "False",
+       "3 letter symbol (ex. EUR, USD, RON)"
+      ],
+      [
+       "status",
+       "String",
+       "True",
+       "The order processing status."
+      ],
+      [
+       "payment_mode",
+       "Numeric",
+       "True",
+       "The order payment method."
+      ],
+      [
+       "shipment_tax",
+       "Numeric",
+       "True if shipment missing",
+       "Shipment tax (VAT included)"
+      ],
+      [
+       "observations",
+       "String",
+       "False",
+       "Order extra details."
+      ],
+      [
+       "total_vouchers",
+       "Numeric",
+       "True",
+       "A value describing the voucher discounts. Must be a negative number"
+      ],
+      [
+       "customer",
+       "Object",
+       "True",
+       "A list with the details about the customer."
+      ],
+      [
+       "shipping_address",
+       "Object",
+       "True",
+       "A list with the details about the shipping address."
+      ],
+      [
+       "billing_address",
+       "Object",
+       "True",
+       "A list with the details about the billing address."
+      ],
+      [
+       "order_products",
+       "Array of objects",
+       "True",
+       "A list of arrays describing the products in the order."
+      ],
+      [
+       "shipment",
+       "Object",
+       "True if shipment_tax missing",
+       "Information about shipment value and tax"
+      ]
+     ]
+    },
+    {
+     "titlu": "Customer object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "Required if the customer is physical person",
+       "The customer's name."
+      ],
+      [
+       "company_name",
+       "String",
+       "Required if the customer is juridical person",
+       "The name of the company."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's phone number."
+      ],
+      [
+       "email",
+       "String",
+       "True",
+       "The customer's email."
+      ],
+      [
+       "fax",
+       "String",
+       "False",
+       "The customer's fax number"
+      ],
+      [
+       "identification_number",
+       "Numeric",
+       "False",
+       ""
+      ],
+      [
+       "legal_entity",
+       "0 - physical person / 1 - juridical person",
+       "True",
+       "A flag indicating if the customer is physical or juridical entity."
+      ],
+      [
+       "bank",
+       "String",
+       "False",
+       "The bank name."
+      ],
+      [
+       "iban",
+       "String",
+       "False",
+       "The bank account."
+      ],
+      [
+       "vat_id",
+       "String",
+       "False",
+       "The company registration code."
+      ],
+      [
+       "registration_number",
+       "String",
+       "False",
+       "The company registration number."
+      ],
+      [
+       "vat_payer",
+       "company is vat payer: 0 - false / 1 - true",
+       "False",
+       "A flag indicating if the customer is vat payer."
+      ]
+     ]
+    },
+    {
+     "titlu": "Billing address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The customer's invoice name."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's invoice phone."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's invoice country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's invoice county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's invoice city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's invoice street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's invoice postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipping address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The name of the contact person that will pick up the parcel."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The phone used by the courier to contact the shipping person."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's shipping country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's shipping county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's shipping city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's shipping street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's shipping postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Order product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True",
+       "Product id."
+      ],
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku."
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name."
+      ],
+      [
+       "quantity",
+       "Numeric",
+       "True",
+       "Product quantity."
+      ],
+      [
+       "price",
+       "Numeric",
+       "True",
+       "The price without VAT."
+      ],
+      [
+       "total",
+       "Numeric",
+       "True",
+       "tax excluded, price * quantity"
+      ],
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "Tax rate, ex: 19"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "False",
+       "[Read-only] The price with VAT, rounded with 2 decimals"
+      ],
+      [
+       "total_with_tax",
+       "Numeric",
+       "False",
+       "[Read-only] The total value of product line with VAT, rounded with 2 decimals"
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipment object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Fee object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Voucher object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT (negative value)"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT (negative value)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Save Order",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/save",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Order object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "order_id",
+       "Numeric",
+       "True",
+       "The number that uniquely identifies an order."
+      ],
+      [
+       "invoice_series",
+       "String",
+       "True",
+       "Default invoice series"
+      ],
+      [
+       "order_date",
+       "Numeric",
+       "True",
+       "Order date (Text in YYYY-mm-dd HH:ii:ss format.)"
+      ],
+      [
+       "order_total",
+       "Numeric",
+       "True",
+       "Order total value (products values + shipment tax)"
+      ],
+      [
+       "currency",
+       "String",
+       "False",
+       "3 letter symbol (ex. EUR, USD, RON)"
+      ],
+      [
+       "status",
+       "String",
+       "True",
+       "The order processing status."
+      ],
+      [
+       "payment_mode",
+       "Numeric",
+       "True",
+       "The order payment method."
+      ],
+      [
+       "shipment_tax",
+       "Numeric",
+       "True if shipment missing",
+       "Shipment tax (VAT included)"
+      ],
+      [
+       "observations",
+       "String",
+       "False",
+       "Order extra details."
+      ],
+      [
+       "delivery_notes",
+       "String",
+       "False",
+       "Delivery extra details."
+      ],
+      [
+       "total_vouchers",
+       "Numeric",
+       "True",
+       "A value describing the voucher discounts. Must be a negative number"
+      ],
+      [
+       "customer",
+       "Object",
+       "True",
+       "A list with the details about the customer."
+      ],
+      [
+       "shipping_address",
+       "Object",
+       "True",
+       "A list with the details about the shipping address."
+      ],
+      [
+       "billing_address",
+       "Object",
+       "True",
+       "A list with the details about the billing address."
+      ],
+      [
+       "order_products",
+       "Array of objects",
+       "True",
+       "A list of arrays describing the products in the order."
+      ],
+      [
+       "shipment",
+       "Object",
+       "True if shipment_tax missing",
+       "Information about shipment value and tax"
+      ]
+     ]
+    },
+    {
+     "titlu": "Customer object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "Required if the customer is physical person",
+       "The customer's name."
+      ],
+      [
+       "company_name",
+       "String",
+       "Required if the customer is juridical person",
+       "The name of the company."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's phone number."
+      ],
+      [
+       "email",
+       "String",
+       "True",
+       "The customer's email."
+      ],
+      [
+       "fax",
+       "String",
+       "False",
+       "The customer's fax number"
+      ],
+      [
+       "identification_number",
+       "Numeric",
+       "False",
+       ""
+      ],
+      [
+       "legal_entity",
+       "0 - physical person / 1 - juridical person",
+       "True",
+       "A flag indicating if the customer is physical or juridical entity."
+      ],
+      [
+       "bank",
+       "String",
+       "False",
+       "The bank name."
+      ],
+      [
+       "iban",
+       "String",
+       "False",
+       "The bank account."
+      ],
+      [
+       "vat_id",
+       "String",
+       "False",
+       "The company registration code."
+      ],
+      [
+       "registration_number",
+       "String",
+       "False",
+       "The company registration number."
+      ],
+      [
+       "vat_payer",
+       "company is vat payer: 0 - false / 1 - true",
+       "False",
+       "A flag indicating if the customer is vat payer."
+      ]
+     ]
+    },
+    {
+     "titlu": "Billing address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The customer's invoice name."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's invoice phone."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's invoice country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's invoice county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's invoice city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's invoice street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's invoice postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipping address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The name of the contact person that will pick up the parcel."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The phone used by the courier to contact the shipping person."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's shipping country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's shipping county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's shipping city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's shipping street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's shipping postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Order product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True",
+       "Product id."
+      ],
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku."
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name."
+      ],
+      [
+       "quantity",
+       "Numeric",
+       "True",
+       "Product quantity."
+      ],
+      [
+       "price",
+       "Numeric",
+       "True",
+       "The price without VAT."
+      ],
+      [
+       "total",
+       "Numeric",
+       "True",
+       "tax excluded, price * quantity"
+      ],
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "Tax rate, ex: 19"
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipment object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Fee object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Voucher object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT (negative value)"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT (negative value)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Update Order",
+   "metoda": "PUT",
+   "cale": "/api/v2/orders/{{internal_order_id}}",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Order object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "order_id",
+       "Numeric",
+       "True",
+       "The number that uniquely identifies an order."
+      ],
+      [
+       "invoice_series",
+       "String",
+       "True",
+       "Default invoice series"
+      ],
+      [
+       "order_date",
+       "Numeric",
+       "True",
+       "Order date (Text in YYYY-mm-dd HH:ii:ss format.)"
+      ],
+      [
+       "order_total",
+       "Numeric",
+       "True",
+       "Order total value (products values + shipment tax)"
+      ],
+      [
+       "status",
+       "String",
+       "True",
+       "The order processing status."
+      ],
+      [
+       "payment_mode",
+       "Numeric",
+       "True",
+       "The order payment method."
+      ],
+      [
+       "shipment_tax",
+       "Numeric",
+       "True if shipment missing",
+       "Shipment tax (VAT included)"
+      ],
+      [
+       "observations",
+       "String",
+       "False",
+       "Order extra details."
+      ],
+      [
+       "total_vouchers",
+       "Numeric",
+       "True",
+       "A value describing the voucher discounts. Must be a negative number"
+      ],
+      [
+       "customer",
+       "Object",
+       "True",
+       "A list with the details about the customer."
+      ],
+      [
+       "shipping_address",
+       "Object",
+       "True",
+       "A list with the details about the shipping address."
+      ],
+      [
+       "billing_address",
+       "Object",
+       "True",
+       "A list with the details about the billing address."
+      ],
+      [
+       "order_products",
+       "Array of objects",
+       "True",
+       "A list of arrays describing the products in the order."
+      ],
+      [
+       "shipment",
+       "Object",
+       "True if shipment_tax missing",
+       "Information about shipment value and tax"
+      ]
+     ]
+    },
+    {
+     "titlu": "Customer object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "Required if the customer is physical person",
+       "The customer's name."
+      ],
+      [
+       "company_name",
+       "String",
+       "Required if the customer is juridical person",
+       "The name of the company."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's phone number."
+      ],
+      [
+       "email",
+       "String",
+       "True",
+       "The customer's email."
+      ],
+      [
+       "fax",
+       "String",
+       "False",
+       "The customer's fax number"
+      ],
+      [
+       "identification_number",
+       "Numeric",
+       "False",
+       ""
+      ],
+      [
+       "legal_entity",
+       "0 - physical person / 1 - juridical person",
+       "True",
+       "A flag indicating if the customer is physical or juridical entity."
+      ],
+      [
+       "bank",
+       "String",
+       "False",
+       "The bank name."
+      ],
+      [
+       "iban",
+       "String",
+       "False",
+       "The bank account."
+      ],
+      [
+       "vat_id",
+       "String",
+       "False",
+       "The company registration code."
+      ],
+      [
+       "registration_number",
+       "String",
+       "False",
+       "The company registration number."
+      ],
+      [
+       "vat_payer",
+       "company is vat payer: 0 - false / 1 - true",
+       "False",
+       "A flag indicating if the customer is vat payer."
+      ]
+     ]
+    },
+    {
+     "titlu": "Billing address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The customer's invoice name."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's invoice phone."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's invoice country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's invoice county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's invoice city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's invoice street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's invoice postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipping address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The name of the contact person that will pick up the parcel."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The phone used by the courier to contact the shipping person."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's shipping country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's shipping county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's shipping city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's shipping street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's shipping postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Order product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True",
+       "Product id."
+      ],
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku."
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name."
+      ],
+      [
+       "quantity",
+       "Numeric",
+       "True",
+       "Product quantity."
+      ],
+      [
+       "price",
+       "Numeric",
+       "True",
+       "The price without VAT."
+      ],
+      [
+       "total",
+       "Numeric",
+       "True",
+       "tax excluded, price * quantity"
+      ],
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "Tax rate, ex: 19"
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipment object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Fee object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Voucher object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT (negative value)"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT (negative value)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Update Order General Data",
+   "metoda": "PUT",
+   "cale": "/api/v2/orders/{{internal_order_id}}/general-data",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Order object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "order_id",
+       "Numeric",
+       "True",
+       "The number that uniquely identifies an order."
+      ],
+      [
+       "invoice_series",
+       "String",
+       "True",
+       "Default invoice series"
+      ],
+      [
+       "order_date",
+       "Numeric",
+       "True",
+       "Order date (Text in YYYY-mm-dd HH:ii:ss format.)"
+      ],
+      [
+       "order_total",
+       "Numeric",
+       "True",
+       "Order total value (products values + shipment tax)"
+      ],
+      [
+       "status",
+       "String",
+       "True",
+       "The order processing status."
+      ],
+      [
+       "payment_mode",
+       "Numeric",
+       "True",
+       "The order payment method."
+      ],
+      [
+       "shipment_tax",
+       "Numeric",
+       "True if shipment missing",
+       "Shipment tax (VAT included)"
+      ],
+      [
+       "observations",
+       "String",
+       "False",
+       "Order extra details."
+      ],
+      [
+       "total_vouchers",
+       "Numeric",
+       "True",
+       "A value describing the voucher discounts. Must be a negative number"
+      ],
+      [
+       "customer",
+       "Object",
+       "True",
+       "A list with the details about the customer."
+      ],
+      [
+       "shipping_address",
+       "Object",
+       "True",
+       "A list with the details about the shipping address."
+      ],
+      [
+       "billing_address",
+       "Object",
+       "True",
+       "A list with the details about the billing address."
+      ],
+      [
+       "order_products",
+       "Array of objects",
+       "True",
+       "A list of arrays describing the products in the order."
+      ],
+      [
+       "shipment",
+       "Object",
+       "True if shipment_tax missing",
+       "Information about shipment value and tax"
+      ]
+     ]
+    },
+    {
+     "titlu": "Customer object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "Required if the customer is physical person",
+       "The customer's name."
+      ],
+      [
+       "company_name",
+       "String",
+       "Required if the customer is juridical person",
+       "The name of the company."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's phone number."
+      ],
+      [
+       "email",
+       "String",
+       "True",
+       "The customer's email."
+      ],
+      [
+       "fax",
+       "String",
+       "False",
+       "The customer's fax number"
+      ],
+      [
+       "identification_number",
+       "Numeric",
+       "False",
+       ""
+      ],
+      [
+       "legal_entity",
+       "0 - physical person / 1 - juridical person",
+       "True",
+       "A flag indicating if the customer is physical or juridical entity."
+      ],
+      [
+       "bank",
+       "String",
+       "False",
+       "The bank name."
+      ],
+      [
+       "iban",
+       "String",
+       "False",
+       "The bank account."
+      ],
+      [
+       "vat_id",
+       "String",
+       "False",
+       "The company registration code."
+      ],
+      [
+       "registration_number",
+       "String",
+       "False",
+       "The company registration number."
+      ],
+      [
+       "vat_payer",
+       "company is vat payer: 0 - false / 1 - true",
+       "False",
+       "A flag indicating if the customer is vat payer."
+      ]
+     ]
+    },
+    {
+     "titlu": "Billing address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The customer's invoice name."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's invoice phone."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's invoice country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's invoice county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's invoice city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's invoice street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's invoice postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipping address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "True",
+       "The name of the contact person that will pick up the parcel."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The phone used by the courier to contact the shipping person."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's shipping country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's shipping county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's shipping city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's shipping street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's shipping postal code."
+      ]
+     ]
+    },
+    {
+     "titlu": "Order product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "product_website_id",
+       "Numeric",
+       "True",
+       "Product id."
+      ],
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku."
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Product name."
+      ],
+      [
+       "quantity",
+       "Numeric",
+       "True",
+       "Product quantity."
+      ],
+      [
+       "price",
+       "Numeric",
+       "True",
+       "The price without VAT."
+      ],
+      [
+       "total",
+       "Numeric",
+       "True",
+       "tax excluded, price * quantity"
+      ],
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "Tax rate, ex: 19"
+      ]
+     ]
+    },
+    {
+     "titlu": "Shipment object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Fee object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT"
+      ]
+     ]
+    },
+    {
+     "titlu": "Voucher object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "tax",
+       "Numeric",
+       "True",
+       "VAT Rate, ex. 19"
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "Fee name"
+      ],
+      [
+       "price_with_tax",
+       "Numeric",
+       "True if price_without_tax missing",
+       "The price with VAT (negative value)"
+      ],
+      [
+       "price_without_tax",
+       "Numeric",
+       "True if price_with_tax missing",
+       "The price without VAT (negative value)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Complete Order",
+   "metoda": "PATCH",
+   "cale": "/api/v2/orders/{{internal_order_id}}/complete",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Cancel Order",
+   "metoda": "PATCH",
+   "cale": "/api/v2/orders/{{internal_order_id}}/cancel",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Update custom status",
+   "metoda": "PATCH",
+   "cale": "/api/v2/orders/{{internal_order_id}}/custom-status",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Orders",
+   "nume": "Get custom statuses",
+   "metoda": "GET",
+   "cale": "/api/v2/custom-statuses",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Order Metadata",
+   "nume": "Add order metadata",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/metadata",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Metadata object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "key",
+       "String",
+       "True",
+       "Metadata key (max 191 characters)"
+      ],
+      [
+       "value",
+       "String",
+       "True",
+       "Metadata value (max 191 characters)"
+      ],
+      [
+       "value_type",
+       "String",
+       "false",
+       "Type of metadata value, available values: string or boolean (optional)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Order Metadata",
+   "nume": "Update order metadata",
+   "metoda": "PUT",
+   "cale": "/api/v2/orders/{{internal_order_id}}/metadata",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Metadata object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "key",
+       "String",
+       "True",
+       "Metadata key that needs to be updated, has to exist already on order (max 191 characters)"
+      ],
+      [
+       "value",
+       "String",
+       "True",
+       "New metadata value (max 191 characters)"
+      ],
+      [
+       "value_type",
+       "String",
+       "false",
+       "New metadata value type, available values: string or boolean (optional)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Order Metadata",
+   "nume": "Delete order metadata",
+   "metoda": "DELETE",
+   "cale": "/api/v2/orders/{{internal_order_id}}/metadata",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Metadata object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "key",
+       "String",
+       "True",
+       "Metadata key that needs to be deleted, has to exist already on order (max 191 characters)"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Returns",
+   "nume": "Save Return",
+   "metoda": "POST",
+   "cale": "/api/v2/returns",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Return object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "order_id",
+       "Numeric",
+       "True",
+       "The identifier of order that should be returned."
+      ],
+      [
+       "pickup_address",
+       "Object",
+       "True",
+       "A list with the details about the pickup address."
+      ],
+      [
+       "products",
+       "Array of objects",
+       "True",
+       "A list of arrays with the products that should be returned."
+      ]
+     ]
+    },
+    {
+     "titlu": "Pickup address object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "pickup_type",
+       "String",
+       "True",
+       "The pickup method. Accepted values: locker, office, courier."
+      ],
+      [
+       "name",
+       "String",
+       "True",
+       "The name of the contact person that will pickup the parcel."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The phone used by the courier to contact the customer."
+      ],
+      [
+       "country",
+       "String (Country ISO alpha-2 Code)",
+       "True",
+       "The customer's pickup country."
+      ],
+      [
+       "county",
+       "String (County ISO Code)",
+       "True",
+       "The customer's pickup county."
+      ],
+      [
+       "city",
+       "String",
+       "True",
+       "The customer's pickup city."
+      ],
+      [
+       "street",
+       "String",
+       "True",
+       "The customer's pickup street."
+      ],
+      [
+       "postal_code",
+       "String",
+       "False",
+       "The customer's pickup postal code."
+      ],
+      [
+       "locker_id",
+       "Numeric",
+       "False",
+       "The identifier of locker in case of pickup_type is Lockers."
+      ]
+     ]
+    },
+    {
+     "titlu": "Return product object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "sku",
+       "String",
+       "True",
+       "Product sku."
+      ],
+      [
+       "quantity",
+       "Numeric",
+       "True",
+       "Product quantity."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Get couriers acccounts",
+   "metoda": "GET",
+   "cale": "/api/v2/couriers",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Upload AWB",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/awb",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Payload",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "awb_id",
+       "String",
+       "True",
+       "ID of the document"
+      ],
+      [
+       "file",
+       "File",
+       "True",
+       "PDF document representing the details about the shipment"
+      ],
+      [
+       "courier_name",
+       "String",
+       "False",
+       "Optional field, used for informational purposes"
+      ],
+      [
+       "source",
+       "String",
+       "False",
+       "Optional field representing the source the request, used for webhook triggering logic"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Attach AWB",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/awb/attach",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Generate AWB",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/awb/{{courier_account_id}}",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Payload",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "package_type",
+       "0 - if package is an envelope/ 1 - if package is a parcel",
+       "False",
+       ""
+      ],
+      [
+       "advanced_data",
+       "Object/ includes customer and order data properties",
+       "False",
+       "advanced_data parameter is optional and is used to overwrite default order data"
+      ]
+     ]
+    },
+    {
+     "titlu": "Customer object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "Required if the customer is physical person",
+       "The customer's name."
+      ],
+      [
+       "company",
+       "String",
+       "Required if the customer is juridical person",
+       "The name of the company."
+      ],
+      [
+       "phone",
+       "String",
+       "True",
+       "The customer's phone number."
+      ],
+      [
+       "email",
+       "String",
+       "False",
+       "The customer's email."
+      ],
+      [
+       "legalType",
+       "0 - physical person / 1 - juridical person",
+       "True",
+       "A flag indicating if the customer is physical or juridical entity."
+      ],
+      [
+       "address",
+       "string",
+       "True",
+       "The customer's address"
+      ],
+      [
+       "city",
+       "string",
+       "True",
+       "The customer's city"
+      ],
+      [
+       "country",
+       "string (Country ISO2 code)",
+       "True",
+       "The customer's country"
+      ],
+      [
+       "county",
+       "string (County ISO code)",
+       "True",
+       "The customer's county"
+      ]
+     ]
+    },
+    {
+     "titlu": "Order data object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "cashValue",
+       "float",
+       "True",
+       "Order value"
+      ],
+      [
+       "envelopes",
+       "Integer",
+       "True",
+       "Number of envelopes"
+      ],
+      [
+       "parcels",
+       "Integer",
+       "True",
+       "Number of parcels"
+      ],
+      [
+       "weight",
+       "Float",
+       "True",
+       "Package weight in kg"
+      ],
+      [
+       "observations",
+       "String",
+       "True",
+       "Package observations"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Generate Return AWB",
+   "metoda": "POST",
+   "cale": "/api/v2/returns/{{internal_order_id}}/awb/{{courier_account_id}}",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Payload",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "package_type",
+       "0 - if package is an envelope/ 1 - if package is a parcel",
+       "False",
+       ""
+      ],
+      [
+       "advanced_data",
+       "Object/ includes customer and order data properties",
+       "False",
+       "advanced_data parameter is optional and is used to overwrite default order data"
+      ]
+     ]
+    },
+    {
+     "titlu": "Order data object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "cashValue",
+       "float",
+       "True",
+       "Order value"
+      ],
+      [
+       "envelopes",
+       "Integer",
+       "True",
+       "Number of envelopes"
+      ],
+      [
+       "parcels",
+       "Integer",
+       "True",
+       "Number of parcels"
+      ],
+      [
+       "weight",
+       "Float",
+       "True",
+       "Package weight in kg"
+      ],
+      [
+       "observations",
+       "String",
+       "True",
+       "Package observations"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Delete/Cancel Awbs",
+   "metoda": "DELETE",
+   "cale": "/api/v2/orders/38/awb",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Get delivery statuses",
+   "metoda": "GET",
+   "cale": "/api/v2/delivery-statuses",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "AWB",
+   "nume": "Update delivery status",
+   "metoda": "PATCH",
+   "cale": "/api/v2/orders/{{internal_order_id}}/delivery-status",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Get billing software acccounts",
+   "metoda": "GET",
+   "cale": "/api/v2/billing-software",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Generate invoice",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/invoice/{{billing_software_account_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Upload Invoice",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/invoice",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Attach invoice",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/invoice/attach",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Storno Invoice",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/invoice/storno",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Delete Invoice",
+   "metoda": "DELETE",
+   "cale": "/api/v2/orders/{{internal_order_id}}/delete-invoice",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Cancel invoice",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/cancel-invoice",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Invoices",
+   "nume": "Mark invoice as paid",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/{{internal_order_id}}/mark-as-paid/{{internal_invoice_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Webhooks",
+   "nume": "List webhooks",
+   "metoda": "GET",
+   "cale": "/api/v2/webhooks",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Webhooks",
+   "nume": "Subscribing to webhooks",
+   "metoda": "POST",
+   "cale": "/api/v2/webhooks/{{webhook_slug}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Webhooks",
+   "nume": "Update webhook",
+   "metoda": "PUT",
+   "cale": "/api/v2/webhooks/{{user_webhook_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Webhooks",
+   "nume": "Unsubscribing from webhooks",
+   "metoda": "DELETE",
+   "cale": "/api/v2/webhooks/{{user_webhook_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Webhooks",
+   "nume": "Triggering webhooks",
+   "metoda": "POST",
+   "cale": "/api/v2/webhooks/{{user_webhook_id}}/trigger",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Fulfillment Services",
+   "nume": "List fulfillment services",
+   "metoda": "GET",
+   "cale": "/api/v2/fulfillments/list",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Marketplaces",
+   "nume": "List marketplaces",
+   "metoda": "GET",
+   "cale": "/api/v2/marketplaces/list",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Websites",
+   "nume": "List websites",
+   "metoda": "GET",
+   "cale": "/api/v2/websites/list",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Offers",
+   "nume": "Get offers",
+   "metoda": "GET",
+   "cale": "/api/v2/offers/40",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Offers",
+   "nume": "Update Prices",
+   "metoda": "PATCH",
+   "cale": "/api/v2/offers/40/6/prices",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Offers",
+   "nume": "Update Prices Bulk",
+   "metoda": "PATCH",
+   "cale": "/api/v2/offers/40/prices/bulk",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Offers",
+   "nume": "Export Offers",
+   "metoda": "POST",
+   "cale": "/api/v2/offers/export",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Customers",
+   "nume": "List customers",
+   "metoda": "GET",
+   "cale": "/api/v2/customers/app",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Customers",
+   "nume": "Get customer",
+   "metoda": "GET",
+   "cale": "/api/v2/customers/{{customer_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Customers",
+   "nume": "Update Customer",
+   "metoda": "PATCH",
+   "cale": "/api/v2/customers/8",
+   "interogare": [],
+   "tabele": [
+    {
+     "titlu": "Customer object",
+     "coloane": [
+      "Property",
+      "Type",
+      "Required",
+      "Notes"
+     ],
+     "randuri": [
+      [
+       "name",
+       "String",
+       "False",
+       "The customer name."
+      ],
+      [
+       "company_name",
+       "String",
+       "False",
+       "The customer company name."
+      ],
+      [
+       "phone",
+       "Numeric",
+       "False",
+       "The customer phone."
+      ],
+      [
+       "email",
+       "String",
+       "False",
+       "The customer email."
+      ],
+      [
+       "fax",
+       "String",
+       "False",
+       "The customer fax."
+      ],
+      [
+       "identification_number",
+       "String",
+       "False",
+       "The customer identification number."
+      ],
+      [
+       "legal_entity",
+       "Boolean",
+       "True",
+       "The customer legal entity."
+      ],
+      [
+       "bank",
+       "String",
+       "False",
+       "The customer bank."
+      ],
+      [
+       "iban",
+       "String",
+       "False",
+       "The customer iban."
+      ],
+      [
+       "vat_id",
+       "String",
+       "False",
+       "The customer vat_id."
+      ],
+      [
+       "registration_number",
+       "Numeric",
+       "False",
+       "The customer registration_number."
+      ],
+      [
+       "notes",
+       "String",
+       "False",
+       "The customer notes."
+      ],
+      [
+       "blacklist",
+       "Boolean",
+       "True",
+       "Information about blacklist."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "dosar": "Tags",
+   "nume": "List tags",
+   "metoda": "GET",
+   "cale": "/api/v2/tags",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Tags",
+   "nume": "Create tag",
+   "metoda": "POST",
+   "cale": "/api/v2/tags",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Tags",
+   "nume": "Update tag",
+   "metoda": "PUT",
+   "cale": "/api/v2/tags/{{tag_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Tags",
+   "nume": "Delete tag",
+   "metoda": "DELETE",
+   "cale": "/api/v2/tags/{{tag_id}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Tags",
+   "nume": "Attach tag",
+   "metoda": "POST",
+   "cale": "/api/v2/tags/attach",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Tags",
+   "nume": "Detach tag",
+   "metoda": "POST",
+   "cale": "/api/v2/tags/detach",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Exports",
+   "nume": "Export PDF Orders",
+   "metoda": "POST",
+   "cale": "/api/v2/orders/export",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Shipping Addresses",
+   "nume": "Update Shipping Address",
+   "metoda": "PUT",
+   "cale": "/api/v2/shipping-address/{{shipping_address}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "Billing Addresses",
+   "nume": "Update Billing Address",
+   "metoda": "PUT",
+   "cale": "/api/v2/billing-address/{{billing_address}}",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "General Data",
+   "nume": "Countries",
+   "metoda": "GET",
+   "cale": "/api/v2/general-data/countries",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "General Data",
+   "nume": "Counties",
+   "metoda": "GET",
+   "cale": "/api/v2/general-data/countries/{{country_id}}/counties",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "General Data",
+   "nume": "Currencies",
+   "metoda": "GET",
+   "cale": "/api/v2/general-data/currencies",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "General Data",
+   "nume": "Languages",
+   "metoda": "GET",
+   "cale": "/api/v2/general-data/languages",
+   "interogare": [],
+   "tabele": []
+  },
+  {
+   "dosar": "General Data",
+   "nume": "Marketplace cancellation reasons",
+   "metoda": "GET",
+   "cale": "/api/v2/general-data/marketplace-cancellation-reasons/40",
+   "interogare": [],
+   "tabele": []
+  }
+ ]
+}

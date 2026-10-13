@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { refuzaCanalDeclaratLaEasySales } from "@/lib/easysales/exclusivitate";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { patchOlxConfig } from "@/lib/olx/config";
@@ -86,6 +87,10 @@ export async function GET(req: NextRequest) {
      */
     if (await refuzaContFolositDeAltMagazin("olx", businessId, { id: me.data.id })) {
       return back(req, "olx=cont_folosit");
+    }
+    /* Un canal, un drum: OLX vandut si prin easySales ar aduce aceleasi comenzi de doua ori. */
+    if (await refuzaCanalDeclaratLaEasySales(createAdminClient(), businessId, "olx", "ro")) {
+      return back(req, "olx=canal_easysales");
     }
     config.olx_user_id = me.data.id;
     config.olx_user_name = me.data.name;

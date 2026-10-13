@@ -9,6 +9,7 @@
 // every other *_config secret). These actions NEVER return the raw secrets to the
 // client — only a masked preview and booleans.
 
+import { refuzaCanalDeclaratLaEasySales } from "@/lib/easysales/exclusivitate";
 import { randomBytes } from "crypto";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
@@ -322,6 +323,9 @@ export async function connectTrendyol(
   // Un Seller ID legat de doua magazine = comenzi dublate (Okxi si VetDepo, 11.09.2026).
   const folosit = await refuzaContFolositDeAltMagazin("trendyol", businessId, { id: supplierId });
   if (folosit) return { error: folosit };
+  /* Un canal, un drum: vandut si prin easySales, aceeasi comanda ar intra de doua ori. */
+  const peDouaDrumuri = await refuzaCanalDeclaratLaEasySales(createAdminClient(), businessId, "trendyol", vitrina.toLowerCase());
+  if (peDouaDrumuri) return { error: peDouaDrumuri };
 
   const test = await testConnection({ supplierId, apiKey, apiSecret, environment: env, storefront: vitrina, userAgentCompany: company });
   if (!test.ok) return { error: test.error };

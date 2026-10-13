@@ -1,5 +1,6 @@
 "use server";
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
@@ -159,6 +160,27 @@ export async function anonimizeazaClienti(
   /* ⚠ Numai daca s-a atins ceva: altfel se reface pagina degeaba. */
   if (urma.comenzi + urma.contacte + urma.cosuri + urma.retururi + urma.mesaje > 0) {
     revalidatePath("/dashboard/customers");
+  }
+  /*
+   * easySales: comenzile trimise acolo au plecat cu numele, telefonul si adresa clientului, iar API-ul
+   * lor n-are stergere de clienti. Contractul cu easySales e al comerciantului, deci stergerea de acolo
+   * o face el; noi il anuntam (hotararea proprietarului, 12.10.2026).
+   */
+  if (urma.comenzi > 0) {
+    try {
+      const admin = createAdminClient();
+      const { count } = await admin.from("easysales_comenzi").select("id", { count: "exact", head: true })
+        .eq("business_id", businessId).not("trimisa_la", "is", null);
+      if ((count ?? 0) > 0) {
+        await admin.from("notifications").insert({
+          user_id: user.id, type: "easysales",
+          title: "Șterge datele clienților și din easySales",
+          message: "Ai anonimizat clienți în Edinio. Dacă le-ai trimis comenzi prin easySales, numele, telefonul și adresa lor au rămas acolo: șterge-le și din easySales.",
+        });
+      }
+    } catch {
+      /* Anuntul nu are voie sa strice anonimizarea, care s-a facut deja. */
+    }
   }
   return { urma };
 }

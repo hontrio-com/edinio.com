@@ -9,6 +9,7 @@
 // other *_config secret). These actions NEVER return the raw key to the client —
 // only a masked preview and booleans.
 
+import { refuzaCanalDeclaratLaEasySales } from "@/lib/easysales/exclusivitate";
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -243,6 +244,9 @@ export async function connectAboutYou(
   const amprenta = amprentaCheii(apiKey);
   const folosit = await refuzaContFolositDeAltMagazin("aboutyou", businessId, { id: amprenta });
   if (folosit) return { error: folosit };
+  /* Un canal, un drum. Tarile About You se aleg dupa conectare, deci orice tara declarata opreste. */
+  const peDouaDrumuri = await refuzaCanalDeclaratLaEasySales(createAdminClient(), businessId, "aboutyou", null);
+  if (peDouaDrumuri) return { error: peDouaDrumuri };
 
   const test = await testConnection({ apiKey, environment: env });
   if (!test.ok) return { error: test.error };

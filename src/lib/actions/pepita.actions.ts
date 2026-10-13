@@ -16,6 +16,7 @@
  * mesajul catre Pepita si nimic n-ar fi mers.
  */
 
+import { refuzaCanalDeclaratLaEasySales } from "@/lib/easysales/exclusivitate";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -252,6 +253,9 @@ export async function activeazaPepita(businessId: string) {
   const g = await poarta(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
+  /* Un canal, un drum: Pepita vanduta si prin easySales ar aduce aceleasi comenzi de doua ori. */
+  const peDouaDrumuri = await refuzaCanalDeclaratLaEasySales(admin, businessId, "pepita", null);
+  if (peDouaDrumuri) return { error: peDouaDrumuri };
 
   try {
     const brut = await configulBrut(businessId);

@@ -345,7 +345,7 @@ export async function bulkGenerateInvoices(
      din acelasi fisier isi verifica citirea de mult; astea doua ramasesera in urma. */
   const { data: orders, error: eCitire } = await admin
     .from("orders")
-    .select("id, order_number, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number")
+    .select("id, order_number, order_source, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number")
     .eq("business_id", businessId).in("id", ids);
   if (eCitire) return { error: `Nu am putut citi comenzile selectate: ${eCitire.message}` };
 
@@ -354,6 +354,8 @@ export async function bulkGenerateInvoices(
   await runPool(orders ?? [], async (o) => {
     const row = o as Record<string, unknown>;
     if (row.smartbill_invoice_number || row.oblio_invoice_number || row.fgo_invoice_number) { result.skipped++; return; }
+    /* easySales: factura se face ACOLO. Sarita, nu refuzata: lotul amestecat e cazul obisnuit. */
+    if (procesataInEasySales(row.order_source)) { result.skipped++; return; }
     try {
       const res =
         pick === "smartbill" ? await generateOrderInvoice(businessId, o.id)

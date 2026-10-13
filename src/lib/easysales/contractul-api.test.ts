@@ -76,3 +76,27 @@ test("lista colectiei e cea derivata: forma randurilor, fara dubluri", () => {
   assert.equal(new Set(RUTE_COLECTIE).size, RUTE_COLECTIE.length);
   assert.ok(RUTE_COLECTIE.length >= 80, "lista pare taiata");
 });
+
+/*
+ * ⚠ SCHEMA DERIVATA E SURSA, IAR AMPRENTA EI E FIXATA. Colectia insasi nu intra in depozit (are
+ * credentiale si date de cumparatori in exemple), deci `docs/marketplace/easysales-api-schema-*.json`
+ * tine numele, metoda, calea si tabelele de campuri. O descarcare noua a colectiei reface schema;
+ * proba cade pana cand lista rutelor si amprenta de aici se pun de acord cu ea, constient.
+ */
+const SCHEMA = "docs/marketplace/easysales-api-schema-2026-10-12.json";
+const AMPRENTA_SCHEMEI = "3828ef3f929da89be4ba2458269c9b30f726f09e7f826da9dd4694644b681024";
+
+test("rutele din `rute-colectie.ts` sunt EXACT cele din schema derivata, iar schema e cea stiuta", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { createHash } = await import("node:crypto");
+  /* ⚠ Terminatiile de rand se aduc la LF inainte de amprenta: pe Windows, git le poate face CRLF la checkout. */
+  const text = readFileSync(SCHEMA, "utf8").replace(/\r\n/g, "\n");
+  assert.equal(createHash("sha256").update(text, "utf8").digest("hex"), AMPRENTA_SCHEMEI, "schema s-a schimbat: reface lista rutelor si amprenta");
+  const schema = JSON.parse(text) as { cereri: { metoda: string; cale: string }[] };
+  const derivate = new Set(schema.cereri
+    .filter((c) => c.cale.startsWith("/api/v2") || c.cale.startsWith("/oauth"))
+    .map((c) => `${c.metoda} ${c.cale.replace(/^\/api\/v2/, "").split("/").map((x) => (x.startsWith(":") || /^\{\{.*\}\}$/.test(x) || /^\d+$/.test(x) ? "{}" : x)).join("/")}`));
+  assert.deepEqual([...derivate].sort(), [...RUTE_COLECTIE].sort());
+  assert.doesNotMatch(text, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/, "schema are o adresa de email");
+  assert.doesNotMatch(text, /eyJ[A-Za-z0-9_-]{10,}/, "schema are un JWT");
+});

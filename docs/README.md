@@ -17,6 +17,7 @@ Git pastrata (`git mv`).
 | `plati/` | Netopia, Stripe, Revolut, Klarna, iPay |
 | `marketing/` | Integrarile de marketing ale COMERCIANTILOR: Facebook (Meta Pixel, CAPI, catalog), TikTok, Google Ads, Google Analytics, Google Merchant, email marketing (Mailchimp, Brevo, Klaviyo), SMS (notice.ro, SMSO) |
 | `pepita/` | Integrarea Pepita (`PEPITA-INTEGRARE.md`) si documentatia lor oficiala pastrata local (PDF + text). `README.md` spune care versiune e cea buna |
+| `marketplace/` | easySales: planul (`EASYSALES-PLAN.md`, fiecare afirmatie cu sursa ei), documentul integrarii (`EASYSALES.md`) si schema derivata a colectiei lor (`easysales-api-schema-2026-10-12.json`, fara exemple; o proba cere amprenta) |
 
 ## Marketingul platformei
 

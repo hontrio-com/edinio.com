@@ -11,7 +11,7 @@ import { foaiaExportului } from "@/lib/orders/export-comenzi";
 import type { SheetData } from "write-excel-file/browser";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
-import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
+import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI, procesataInEasySales } from "@/lib/orders/origin";
 import { awburiDinRand, deCeNuSePoateAwbPropriu } from "@/lib/orders/awb-propriu";
 import {
   bulkGenerateInvoices, bulkGenerateAwbs, bulkUpdateOrderStatus,
@@ -1593,6 +1593,15 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                             )}>
                               {origine.label}
                             </span>
+                            {/* Comanda vitrinei procesata in easySales: factura si AWB-ul se fac acolo. */}
+                            {procesataInEasySales(order.order_source) && (
+                              <span className={cn(
+                                "ml-1 inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-medium whitespace-nowrap",
+                                MARKETPLACE_ORIGINI.easysales.badge,
+                              )}>
+                                easySales
+                              </span>
+                            )}
                           </td>
                         )}
                         <td className="px-5 py-3.5 text-muted-foreground hidden md:table-cell">

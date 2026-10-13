@@ -138,6 +138,15 @@ export interface ComandaFalsa {
   cancel_request: string | null;
   livrare: number | null;
   curier: { id: number; name: string } | null;
+  /**
+   * Liniile, in forma Get Order [A: `sku`, `quantity`, `price` net, `tax` fractie, `product_data`,
+   * `offer`]: numai la comenzile ALTOR canale (bucla de stoc, E4). Comenzile trimise de noi nu le au.
+   */
+  linii?: Record<string, unknown>[];
+  /** Starea platii, ca in lista lor („Paid"). */
+  plata?: string | null;
+  client?: { name?: string } | null;
+  adresa?: { city?: string; county?: string; country?: string } | null;
 }
 
 export interface ProdusFalsInit {
@@ -273,6 +282,7 @@ export function serverFals(opt: OptiuniFals = {}) {
       invoices: x.facturi.map((f) => ({ ...f, URL: "https://easy-sales.com/orders/u/invoice" })),
       total_value: String((x.corp.order_total as number) ?? 0),
       updated_at: x.updated_at,
+      ...(x.linii ? { products: x.linii, payment_status: x.plata ?? null, customer: x.client ?? null, shipping_address: x.adresa ?? null } : {}),
     };
   }
 
@@ -482,6 +492,8 @@ export function serverFals(opt: OptiuniFals = {}) {
       if (w) lista = lista.filter((k) => k.website === w);
       const dupa = c.interogare.modified_after;
       if (dupa) lista = lista.filter((k) => k.updated_at.replace("T", " ").slice(0, 19) >= dupa);
+      const sku = c.interogare.product_sku;
+      if (sku) lista = lista.filter((k) => (k.linii ?? []).some((l) => String(l.sku ?? "").toLowerCase() === sku.toLowerCase()));
       const pe = Math.min(100, Math.max(1, Number(c.interogare.per_page ?? 100)));
       const pagina = Math.max(1, Number(c.interogare.page ?? 1));
       const felie = lista.slice((pagina - 1) * pe, pagina * pe);
@@ -686,12 +698,36 @@ export function serverFals(opt: OptiuniFals = {}) {
     try { return await fn(); } finally { globalThis.fetch = vechi; }
   }
 
+  /**
+   * O comanda a ALTUI canal (marketplace sau manuala), cum ar aparea in contul lor: liniile in forma
+   * Get Order, cu `product_data.id` = id-ul lor al produsului (`ProdusFals.id`). Intoarce `internal_id`.
+   */
+  function comandaAltuiCanal(x: {
+    canal: string | null; linii: { sku: string; cantitate: number; pretNet: number; cota?: number; idLor?: number | null }[];
+    status?: number; plata?: string | null; website?: string;
+  }): number {
+    const internalId = stare.urmatorulInternalId++;
+    stare.comenzi.set(internalId, {
+      internal_id: internalId, order_id: `M-${internalId}`, website: x.website ?? "Emag", status: x.status ?? 1, awb: [], facturi: [],
+      metadate: [], corp: { order_total: x.linii.reduce((s, l) => s + l.pretNet * (1 + (l.cota ?? 21) / 100) * l.cantitate, 0) },
+      updated_at: new Date().toISOString(), marketplace: x.canal, cancel_request: null, livrare: null, curier: null,
+      plata: x.plata ?? null, client: { name: "Cumpărător Marketplace" }, adresa: { city: "Cluj-Napoca", county: "Cluj", country: "RO" },
+      linii: x.linii.map((l) => ({
+        sku: l.sku, name: `Produs ${l.sku}`, quantity: l.cantitate, price: l.pretNet.toFixed(4), total: (l.pretNet * l.cantitate).toFixed(4),
+        tax: ((l.cota ?? 21) / 100).toFixed(2),
+        product_data: l.idLor === null ? null : { id: l.idLor ?? stare.produse.find((p) => p.sku.toLowerCase() === l.sku.toLowerCase())?.id ?? null, sku: l.sku },
+        offer: x.canal ? { id: 1, marketplace_id: 1, marketplace_name: x.canal } : null,
+      })),
+    });
+    return internalId;
+  }
+
   /** Comanda lor, ca s-o poata schimba o proba (AWB, factura, stare). */
   function comanda(internalId: number): ComandaFalsa | undefined {
     return stare.comenzi.get(internalId);
   }
 
-  return { stare, optiuni: o, fetch: fetchFals, cuFetch, forteaza, comanda };
+  return { stare, optiuni: o, fetch: fetchFals, cuFetch, forteaza, comanda, comandaAltuiCanal };
 }
 
 /** O cadere de retea, cum o arunca `fetch`. */

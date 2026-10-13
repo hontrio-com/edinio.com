@@ -47,8 +47,11 @@ export type Canal = "emag" | "trendyol" | "aboutyou" | "gmc" | "olx";
  * ⚠ Pepita nu primește nimic de la noi: își citește singură feedurile, o dată pe oră
  * pentru stoc. Deci nu are coadă și nu are ce să i se împingă. Dar vinde, iar când vinde
  * trebuie să afle celelalte cinci canale, exact ca la orice altă vânzare.
+ *
+ * ⚠ easySales (E4) vinde pe canalele lui, dar nu e în `Canal`: împingerea spre easySales o face
+ * declanșatorul de pe `products` (`easysales_marcheaza_produsul`), la orice schimbare de stoc.
  */
-export type CanalVanzator = Canal | "pepita";
+export type CanalVanzator = Canal | "pepita" | "easysales";
 
 const IMPINGERI: Record<Canal, (b: string, p: (string | null | undefined)[]) => Promise<unknown>> = {
   emag: enqueueEmagStocMany,

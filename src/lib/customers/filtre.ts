@@ -120,6 +120,7 @@ const NUMELE_CANALELOR: Record<string, string> = {
   aboutyou: "About You",
   pepita: "Pepita",
   olx: "OLX",
+  easysales: "easySales",
 };
 
 export function numeleCanalului(slug: string): string {

@@ -23,10 +23,22 @@ test("`anunta` scrie INTAI clopotelul, apoi jurnalul", () => {
 });
 
 test("modulele care cer o hotarare a omului trec prin `anunta`", () => {
-  for (const f of ["comenzi.ts", "oglinda.ts", "coada.ts", "inbox.ts", "sanatate.ts"]) {
+  for (const f of ["comenzi.ts", "oglinda.ts", "coada.ts", "inbox.ts", "sanatate.ts", "catalog.ts", "verificare.ts", "bucla.ts", "vanzari-externe.ts"]) {
     const s = viu(`src/lib/easysales/${f}`);
     assert.match(s, /\banunta(Rar)?\(/, `${f} nu mai anunta comerciantul`);
   }
+});
+
+test("catalogul si bucla de stoc anunta ce cere omul: pauza, preturile, stocul, supravanzarea, canalul pe doua drumuri", () => {
+  const cat = viu("src/lib/easysales/catalog.ts");
+  for (const semn of ["Catalogul easySales e în pauză", "Confirmă prețurile trimise în easySales", "n-a putut fi arhivat în easySales"]) {
+    assert.ok(cat.includes(semn), `catalogul nu mai anunta: ${semn}`);
+  }
+  assert.ok(viu("src/lib/easysales/verificare.ts").includes("Website-ul Edinio nu mai apare în easySales"));
+  const b = viu("src/lib/easysales/bucla.ts");
+  for (const semn of ["Confirmă stocul trimis în easySales", "fără o comandă care să explice"]) assert.ok(b.includes(semn), `bucla nu mai anunta: ${semn}`);
+  const v = viu("src/lib/easysales/vanzari-externe.ts");
+  for (const semn of ["Un canal vinde pe două drumuri", "Vânzare externă neînregistrată", "Posibilă supravânzare"]) assert.ok(v.includes(semn), `vanzarile externe nu mai anunta: ${semn}`);
 });
 
 test("refuzul, plafonul si intoarcerea la Edinio anunta; cererea clientului de anulare la fel", () => {

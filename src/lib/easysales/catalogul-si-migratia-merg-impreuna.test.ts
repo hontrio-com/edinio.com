@@ -12,6 +12,10 @@ import {
 import { depozitFals } from "./fals-easysales";
 import type { ContextEasySales } from "./client";
 import type { ElementCoada } from "./coada-element";
+import {
+  bucla, calculatorDeStoc, consumaComenzileDinUmbra, golesteCoadaStocului, opresteBucla, pasulDerivei, pornesteBucla,
+  prelucreazaExterna, stareaBuclei,
+} from "./bucla";
 
 /*
  * ═══ COMUTATORUL CATALOGULUI SI MIGRATIA 74 MERG IMPREUNA ═══
@@ -115,6 +119,19 @@ test("⚠ cu comutatorul oprit, niciun drum al catalogului nu atinge tabelele sa
     assert.equal(r.ok, false, "fara comutator, omul primeste motivul, nu o lucrare");
   }
   await raportulMagazinului(admin, B, ctx.cfg);
+
+  /* Bucla de stoc (E4), cu acelasi magazin pornit pe toate comutatoarele lui: */
+  Object.assign(ctx.cfg, { stoc_activ: true, stoc_mod: "efect" });
+  assert.equal(bucla(ctx.cfg), null, "fara comutatoarele din cod, bucla nu exista");
+  assert.equal(await prelucreazaExterna(admin, ctx, { ...el, op: "extern_citeste", cheie: "500" }, { maiAreTimp: () => true }), "gata");
+  await golesteCoadaStocului(admin, ctx, { maiAreTimp: () => true });
+  await pasulDerivei(admin, ctx, { maiAreTimp: () => true });
+  const stocul = await calculatorDeStoc(admin, ctx, { maiAreTimp: () => true });
+  assert.equal(stocul({} as never, {} as never, undefined), 0, "fara bucla, Save-ul poarta stocul 0");
+  await stareaBuclei(admin, B, ctx.cfg);
+  assert.equal((await pornesteBucla(admin, ctx, "efect", [])).ok, false);
+  assert.equal((await consumaComenzileDinUmbra(admin, ctx)).ok, false);
+  assert.equal((await opresteBucla(admin, ctx)).ok, true, "oprirea fara bucla nu are ce face, dar nu da eroare");
 
   const ale74 = [...atinse].filter((x) => OBIECTE_74.includes(x));
   assert.deepEqual(ale74, [], `atinse fara comutator: ${ale74.join(", ")}`);

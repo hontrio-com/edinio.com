@@ -192,6 +192,14 @@ export const CATALOG_PORNIT = false;
  */
 export const STOC_PORNIT = false;
 
+/**
+ * Formula stocului trimis (`stoc.ts`): `scadere` daca easySales isi scade copia la vanzare,
+ * `rezervare` daca rezerva si scade abia la AWB sau la factura. Se alege dupa M-STOC-1 (masurata pe
+ * contul de proba, separat pentru comanda vitrinei si pentru cea a altui canal, sub ambele setari de
+ * scadere ale contului). `null` = nemasurat: nicio cantitate reala nu pleaca, nici in canar.
+ */
+export const FORMULA_STOC: "scadere" | "rezervare" | null = null;
+
 /** Cate produse pleaca intr-un `products/save/bulk` (ghidul „Conectează un magazin personalizat"; M-PROD-2). */
 export const LOT_PRODUSE = 100;
 /** Si sub cati octeti, ca un lot cu descrieri lungi sa nu ajunga la plafonul corpului lor. */

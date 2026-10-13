@@ -21,6 +21,7 @@ import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { EasySalesCatalog } from "@/components/dashboard/easysales/EasySalesCatalog";
+import { EasySalesStoc } from "@/components/dashboard/easysales/EasySalesStoc";
 
 /**
  * Panoul easySales (planul, §7.4).
@@ -420,6 +421,7 @@ export function EasySalesConfigClient({ businessId, stare }: { businessId: strin
       </Panel>
 
       <EasySalesCatalog businessId={businessId} />
+      <EasySalesStoc businessId={businessId} />
     </div>
   );
 }

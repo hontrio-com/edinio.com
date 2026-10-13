@@ -12,6 +12,7 @@ import { prelucreazaInboxul } from "@/lib/easysales/inbox";
 import { bandaDeLista, plasaPeComanda } from "@/lib/easysales/oglinda";
 import { verificareZilnica } from "@/lib/easysales/sanatate";
 import { pasulCatalogului } from "@/lib/easysales/catalog-pas";
+import { bucla, puneExterneleInCoada } from "@/lib/easysales/bucla";
 import type { EasySalesConfig } from "@/lib/easysales/tipuri";
 
 /**
@@ -34,6 +35,7 @@ const BUGET_TOTAL_MS = 52_000;
 const MAGAZINE_PE_TURA = 5;
 
 const LA_10_MIN = 10 * 60_000;
+const LA_MINUT = 55_000;
 const LA_5_MIN = 5 * 60_000;
 const LA_ORA = 60 * 60_000;
 const LA_ZI = 24 * 60 * 60_000;
@@ -115,8 +117,11 @@ export async function GET(req: NextRequest) {
         if (!error) marcaje.plasa_legaturi_la = new Date().toISOString();
       }
       const poateCitiLaEi = !cfg.pauza && !cfg.needs_reconnect;
-      if (poateCitiLaEi && ramasa(BUGET_TOTAL_MS) && aTrecut(cfg.banda_la, LA_5_MIN)) {
-        await bandaDeLista(admin, ctx, { runStartMs: Date.now(), maxPagini: 3, bugetMs: 12_000 });
+      /* Cu bucla de stoc pornita (E4), banda e singurul semnal sigur al vanzarilor altor canale: la minut. */
+      const buclaPornita = bucla(cfg) !== null;
+      if (poateCitiLaEi && ramasa(BUGET_TOTAL_MS) && aTrecut(cfg.banda_la, buclaPornita ? LA_MINUT : LA_5_MIN)) {
+        const banda = await bandaDeLista(admin, ctx, { runStartMs: Date.now(), maxPagini: 3, bugetMs: 12_000 });
+        if (buclaPornita) await puneExterneleInCoada(admin, businessId, banda.externe);
         marcaje.banda_la = new Date().toISOString();
       }
       if (ramasa(BUGET_TOTAL_MS) && aTrecut(cfg.plasa_comenzi_la, LA_ORA)) {

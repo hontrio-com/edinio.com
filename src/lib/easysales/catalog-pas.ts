@@ -8,6 +8,7 @@ import {
 } from "./catalog";
 import type { EasySalesConfig } from "./tipuri";
 import { pasulVerificarii, pauzaWebsiteRedenumit, pornesteVerificarea, websiteulExista } from "./verificare";
+import { bucla, impinge, pasulDerivei, prelucreazaExternele } from "./bucla";
 
 /**
  * Trecerea cronului pe un magazin cu catalogul pornit (planul, §7.5).
@@ -19,7 +20,8 @@ import { pasulVerificarii, pauzaWebsiteRedenumit, pornesteVerificarea, websiteul
  *      dupa ce numele website-ului e confirmat in lista lor (paza retrimiterii in masa);
  *   4. SKU-urile duplicate, socotite pe tot catalogul cel mult o data pe ora;
  *   5. coada catalogului, pe operatii, cat tine bugetul;
- *   6. verificarea (tintita sau completa, pe felii);
+ *   6. verificarea (tintita sau completa, pe felii); cu bucla de stoc pornita, intai comenzile altor
+ *      canale (`extern_citeste`), apoi stocul (in coada catalogului), iar dupa verificare deriva;
  *   7. incarcarea initiala: cand coada continutului s-a golit, jobul se inchide si porneste o
  *      trecere completa de verificare.
  *
@@ -70,8 +72,24 @@ export async function pasulCatalogului(
     }
 
     await improspateazaSkuDuplicate(admin, ctx);
+    /* Bucla de stoc (E4): intai vanzarile altor canale, ca stocul care pleaca sa le cuprinda. */
+    const optBucla = { maiAreTimp, poarta: probe.poartaBuclei };
+
+    /* Cererea lor de stoc intreg (`stock-refresh-requested`, reactivarea contului), cel mult o data pe ora. */
+    const cerutStoc = ctx.cfg.reimprospatare_stoc_ceruta_la ? Date.parse(ctx.cfg.reimprospatare_stoc_ceruta_la) : 0;
+    const facutStoc = ctx.cfg.stoc_reimprospatat_la ? Date.parse(ctx.cfg.stoc_reimprospatat_la) : 0;
+    if (cerutStoc > facutStoc && Date.now() - facutStoc > ORA && impinge((probe.poartaBuclei ?? bucla)(ctx.cfg))) {
+      await admin.from("easysales_produse").update({ stoc_trimis: null, updated_at: new Date().toISOString() })
+        .eq("business_id", b).in("stare", ["trimis", "confirmat"]);
+      await admin.rpc("easysales_pune_catalogul_in_coada", { p_business: b, p_ops: ["articol_stoc"] });
+      const acum = new Date().toISOString();
+      await ctx.dep.peticConfig(b, { stoc_reimprospatat_la: acum });
+      ctx.cfg.stoc_reimprospatat_la = acum;
+    }
+    if (maiAreTimp()) await prelucreazaExternele(admin, ctx, optBucla);
     if (maiAreTimp()) await golesteCoadaCatalogului(admin, ctx, { ...probe, maiAreTimp, poarta });
     if (maiAreTimp()) await pasulVerificarii(admin, ctx, maiAreTimp);
+    if (maiAreTimp()) await pasulDerivei(admin, ctx, optBucla);
     await inchideIncarcarea(admin, b);
   } catch (e) {
     await logError({ action: "easysales.catalog", severity: "warning", businessId: b, message: `trecerea catalogului: ${(e as Error).message}` });

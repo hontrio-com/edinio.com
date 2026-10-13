@@ -73,6 +73,7 @@ export async function pauzaWebsiteRedenumit(admin: Admin, ctx: ContextEasySales)
 interface ProdusCitit {
   id?: unknown;
   sku?: unknown;
+  stock?: unknown;
   product_website_id?: unknown;
   website?: { name?: unknown } | null;
 }
@@ -103,6 +104,9 @@ async function noteazaVazute(admin: Admin, businessId: string, produse: ProdusCi
     legate++;
     const esId = idText(p.id);
     const petic: Database["public"]["Tables"]["easysales_produse"]["Update"] = { verificat_la: acum, lipsa_la: null, updated_at: acum };
+    /* Stocul de la ei, pentru deriva (E4): se compara cu ce am trimite (`bucla.ts`, `pasulDerivei`). */
+    const stoc = Number(p.stock);
+    if (Number.isFinite(stoc)) { petic.stoc_la_ei = Math.floor(stoc); petic.stoc_la_ei_la = acum; }
     if (esId && esId !== r.es_product_id) petic.es_product_id = esId;
     if (r.stare === "trimis" || r.stare === "disparut") {
       petic.stare = "confirmat";

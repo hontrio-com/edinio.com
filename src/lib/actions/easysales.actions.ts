@@ -24,6 +24,9 @@ import {
   retrimiteArticolul, retrimiteTot, salveazaSetarileCatalogului, stareaCatalogului, stareaProdusului,
   type RaportMagazin, type RezultatOm, type SetariCatalogTrimise, type StareCatalog, type StareProdusEasySales,
 } from "@/lib/easysales/catalog-actiuni";
+import {
+  bucla, confirmaStocul, consumaComenzileDinUmbra, opresteBucla, pornesteBucla, stareaBuclei, type StareBuclaPanou,
+} from "@/lib/easysales/bucla";
 
 /**
  * Actiunile panoului easySales si ale paginii comenzii.
@@ -181,10 +184,27 @@ export async function salveazaSetarileEasySales(
   return { ok: true };
 }
 
+/**
+ * D20: cu bucla de stoc pornita, o oprire planificata (pauza, deconectarea) pune INTAI stocul pe 0 la
+ * ei, verificat pe SKU. Altfel marfa ar ramane de vanzare pe marketplace-uri, fara ca vanzarile de
+ * acolo sa mai scada stocul din Edinio. `null` = se poate merge mai departe.
+ */
+async function stoculPeZeroInainte(businessId: string, ce: string): Promise<{ error: string } | null> {
+  const admin = createAdminClient();
+  const c = await incarcaContextul(admin, businessId, "oprire");
+  if (c.fel !== "gata" || !bucla(c.ctx.cfg)) return null;
+  const r = await opresteBucla(admin, c.ctx);
+  return r.ok ? null : { error: `${ce} s-a oprit: ${r.eroare}` };
+}
+
 /** Pauza pusa de om: nimic nu mai pleaca spre easySales; citirile si inboxul continua. */
 export async function pauzaEasySales(businessId: string, pauza: boolean): Promise<{ ok: true } | { error: string }> {
   const g = await garda(businessId);
   if ("error" in g) return g;
+  if (pauza) {
+    const z = await stoculPeZeroInainte(businessId, "Pauza");
+    if (z) return z;
+  }
   const ok = await depozitDinSupabase(createAdminClient()).peticConfig(businessId, pauza
     ? { pauza: true, pauza_motiv: "Pusă în pauză din Edinio." }
     : { pauza: false, pauza_motiv: null });
@@ -199,6 +219,8 @@ export async function deconecteazaEasySales(businessId: string): Promise<{ ok: t
   const c = await incarcaContextul(admin, businessId, "deconectare");
   if (c.fel === "eroare") return { error: "Configurarea nu s-a putut citi. Încearcă din nou." };
   if (c.fel === "deconectat") return { ok: true, intoarse: 0, abonariRamase: 0 };
+  const z = await stoculPeZeroInainte(businessId, "Deconectarea");
+  if (z) return z;
   const r = await deconecteaza(admin, c.ctx);
   revalidatePath(CALEA);
   return { ok: true, ...r };
@@ -424,4 +446,47 @@ export async function stareaEasySalesAProdusului(businessId: string, productId: 
     await logError({ action: "easysales.produs", severity: "warning", businessId, message: (e as Error).message });
     return { error: "Starea easySales a produsului nu s-a putut citi." };
   }
+}
+
+// ── Bucla de stoc (E4) ──────────────────────────────────────────────────────
+//
+// ⚠ Oprita in cod pana dupa E0 si M-STOC-1 (`STOC_PORNIT`, `FORMULA_STOC`); actiunile o spun omului.
+
+export async function stareaBucleiEasySales(businessId: string): Promise<StareBuclaPanou | { error: string }> {
+  const g = await garda(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  try {
+    return await stareaBuclei(admin, businessId, await depozitDinSupabase(admin).citesteConfig(businessId));
+  } catch (e) {
+    await logError({ action: "easysales.bucla", severity: "warning", businessId, message: (e as Error).message });
+    return { error: "Starea sincronizării stocului nu s-a putut citi." };
+  }
+}
+
+export async function pornesteBuclaEasySales(businessId: string, mod: "umbra" | "canar" | "efect", canar: string[]) {
+  if (mod !== "umbra" && mod !== "canar" && mod !== "efect") return { error: "Mod necunoscut." };
+  const lista = Array.isArray(canar) ? canar.filter((s) => typeof s === "string").map((s) => s.slice(0, 120)).slice(0, 20) : [];
+  return peCatalog(businessId, async (admin, ctx) => {
+    const r = await pornesteBucla(admin, ctx, mod, lista);
+    return r.ok ? { ok: true, mesaj: r.mesaj } : { ok: false, eroare: r.eroare };
+  });
+}
+export async function opresteBuclaEasySales(businessId: string) {
+  return peCatalog(businessId, async (admin, ctx) => {
+    const r = await opresteBucla(admin, ctx);
+    return r.ok ? { ok: true, mesaj: r.mesaj } : { ok: false, eroare: r.eroare };
+  });
+}
+export async function confirmaStoculEasySales(businessId: string) {
+  return peCatalog(businessId, async (_admin, ctx) => {
+    const r = await confirmaStocul(ctx);
+    return r.ok ? { ok: true, mesaj: r.mesaj } : { ok: false, eroare: r.eroare };
+  });
+}
+export async function consumaComenzileDinUmbraEasySales(businessId: string) {
+  return peCatalog(businessId, async (admin, ctx) => {
+    const r = await consumaComenzileDinUmbra(admin, ctx);
+    return r.ok ? { ok: true, mesaj: r.mesaj } : { ok: false, eroare: r.eroare };
+  });
 }

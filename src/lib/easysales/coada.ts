@@ -8,6 +8,7 @@ import { anunta } from "./notificari";
 import { recitesteComanda } from "./oglinda";
 import { COADA, asteptareaDupaPauze, type ElementCoada, type Soarta } from "./coada-element";
 import { OPERATII_CATALOG, prelucreazaLotulCatalogului } from "./catalog";
+import { prelucreazaExterna } from "./bucla";
 
 /**
  * Lucratorul cozii `easysales_sync_queue` (planul, §5.1.6 si §7.5).
@@ -105,6 +106,9 @@ export async function prelucreazaElementul(admin: Admin, ctx: ContextEasySales, 
         if (r === "asteapta_omul") return amana(admin, el, ASTEPTARE_OM_MS, "tokenul cere reconectare");
         return sterge(admin, el);
       }
+      case "extern_citeste":
+        /* O comanda a altui canal (E4): bucla o clasifica si, cu efect, o consuma. */
+        return prelucreazaExterna(admin, ctx, el, { maiAreTimp: () => true });
       default:
         /* Catalogul (E3) si stocul (E4): lucratorul lor, care stie si cand catalogul e oprit. */
         if (OPERATII_CATALOG.includes(el.op)) {

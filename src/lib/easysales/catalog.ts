@@ -11,14 +11,18 @@ import { EroareCitireBaza } from "@/lib/supabase/rand-citit";
 import * as api from "./api";
 import type { ContextEasySales } from "./client";
 import { trimiteInLoturi, type RezultatLot, type SoartaElement } from "./catalog-loturi";
+import { calculatorDeStoc, prelucreazaLotulStocului, type StareBucla } from "./bucla";
+import {
+  STARI_LA_EI, bucati, citesteProdusele, citesteRandurile, inParalel, inchis, laEi, scrieRand, type Rand,
+} from "./catalog-baza";
 import { COADA, asteptareaDupaPauze, type ElementCoada, type Soarta } from "./coada-element";
 import {
   CATALOG_PORNIT, CHEIE_CATEGORIE_DE_REZERVA, LOT_ARHIVARE, LOT_CATEGORII, LOT_PRETURI, LOT_PRODUSE,
-  LOT_PRODUSE_OCTETI, SAVE_PE_ELEMENT_PANA_LA, SIGURANTA_MASA, STOC_PORNIT, ZILE_ARHIVARE_BLOCATA,
+  LOT_PRODUSE_OCTETI, SAVE_PE_ELEMENT_PANA_LA, SIGURANTA_MASA, ZILE_ARHIVARE_BLOCATA,
 } from "./constante";
 import { verificaMagazinul } from "./conectare";
 import {
-  COLOANE_PRODUS_CATALOG, hotarareaProdusului, setarileCatalogului, skuDuplicateleMagazinului,
+  hotarareaProdusului, setarileCatalogului, skuDuplicateleMagazinului,
   type ArticolCatalog, type HotarareProdus, type Motiv, type ProdusCatalog, type SetariCatalog,
 } from "./eligibilitate";
 import { eTrecatoare, mesajPentruOm, tineDeConexiune, type Clasificare } from "./erori";
@@ -61,7 +65,6 @@ import type { EasySalesConfig } from "./tipuri";
  */
 
 type Admin = SupabaseClient<Database>;
-type Rand = Database["public"]["Tables"]["easysales_produse"]["Row"];
 type RandCategorie = Database["public"]["Tables"]["easysales_categorii"]["Row"];
 
 export interface OptiuniLucru {
@@ -70,6 +73,8 @@ export interface OptiuniLucru {
   poarta?: (cfg: EasySalesConfig) => PoateLucra;
   /** Aducerea imaginilor la un format primit; implicit `imaginiPentruEmag`. Numai probele dau alta. */
   imagini?: typeof imaginiPentruEmag;
+  /** Poarta buclei de stoc (E4); implicit `bucla`. Numai probele dau alta. */
+  poartaBuclei?: (cfg: EasySalesConfig) => StareBucla | null;
 }
 
 /** Ce iese dintr-un pas al catalogului pentru un produs (sau pentru tot pasul). */
@@ -257,19 +262,6 @@ export async function improspateazaSkuDuplicate(admin: Admin, ctx: ContextEasySa
    AJUTOARE
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** Ruleaza `fn` pe elemente, cate `cate` deodata. */
-async function inParalel<T>(elemente: readonly T[], cate: number, fn: (e: T) => Promise<void>): Promise<void> {
-  for (let i = 0; i < elemente.length; i += cate) {
-    await Promise.all(elemente.slice(i, i + cate).map(fn));
-  }
-}
-
-function bucati<T>(lista: readonly T[], n: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < lista.length; i += n) out.push(lista.slice(i, i + n));
-  return out;
-}
-
 /** Verdictul unui raspuns, dus la ce face pasul: mai departe, reincercare sau omul. */
 function cePasDupa(c: Clasificare): SoartaProdus | null {
   if (c.verdict === "reusit") return null;
@@ -278,43 +270,6 @@ function cePasDupa(c: Clasificare): SoartaProdus | null {
     return { fel: "asteapta_omul", mesaj: mesajPentruOm(c) };
   }
   return null;
-}
-
-/** Starile in care un articol e la ei (sau poate fi) si primeste actualizari. */
-const STARI_LA_EI = ["trimis", "confirmat"] as const;
-/** Starile care nu mai primesc nimic: nici continut, nici pret, nici stoc. */
-const STARI_INCHISE = ["arhivat", "exclus", "disparut"] as const;
-
-function laEi(r: Pick<Rand, "stare">): boolean {
-  return (STARI_LA_EI as readonly string[]).includes(r.stare);
-}
-function inchis(r: Pick<Rand, "stare">): boolean {
-  return (STARI_INCHISE as readonly string[]).includes(r.stare);
-}
-
-async function citesteProdusele(admin: Admin, businessId: string, uuids: string[]): Promise<Map<string, ProdusCatalog>> {
-  const out = new Map<string, ProdusCatalog>();
-  for (const b of bucati(uuids, 100)) {
-    const { data, error } = await admin.from("products").select(COLOANE_PRODUS_CATALOG).eq("business_id", businessId).in("id", b);
-    if (error) throw new EroareCitireBaza("easysales.produse", error.message);
-    for (const p of (data ?? []) as unknown as ProdusCatalog[]) out.set(p.id, p);
-  }
-  return out;
-}
-
-async function citesteRandurile(admin: Admin, businessId: string, uuids: string[]): Promise<Rand[]> {
-  const out: Rand[] = [];
-  for (const b of bucati(uuids, 100)) {
-    const { data, error } = await admin.from("easysales_produse").select("*").eq("business_id", businessId).in("product_uuid", b);
-    if (error) throw new EroareCitireBaza("easysales.articole", error.message);
-    out.push(...((data ?? []) as Rand[]));
-  }
-  return out;
-}
-
-async function scrieRand(admin: Admin, id: number, petic: Partial<Rand>): Promise<void> {
-  const { error } = await admin.from("easysales_produse").update({ ...petic, updated_at: new Date().toISOString() }).eq("id", id);
-  if (error) throw new EroareCitireBaza("easysales.articole", error.message);
 }
 
 function primulMotiv(motive: readonly Motiv[]): string {
@@ -664,6 +619,14 @@ export async function prelucreazaContinutul(
     if (!out.has(u)) out.set(u, GATA);
   }
 
+  /*
+   * Stocul care pleaca in Save: 0 cat bucla de stoc e oprita (E3); cu bucla pornita, cel proaspat la
+   * un articol nou si cel mai mic dintre trimis si proaspat la unul vechi (`calculatorDeStoc`).
+   */
+  const stocul = peArticol.length
+    ? await calculatorDeStoc(admin, ctx, { maiAreTimp: opt.maiAreTimp, poarta: opt.poartaBuclei })
+    : () => 0;
+
   /* Caracteristicile, INAINTEA produselor. */
   const car = await asiguraCaracteristicile(admin, ctx, dorite);
   if (car.fel !== "gata") {
@@ -696,7 +659,7 @@ export async function prelucreazaContinutul(
       produs: x.p, articol: x.a, productWebsiteId: Number(x.rand.id), sku: x.rand.sku_trimis!, parinteId: x.parinteId,
       magazin: mediu.magazin, baza: mediu.baza, prefixProdus: mediu.prefixProdus,
       categorii: [idCategorie.get(x.cheieCategorie)!],
-      caracteristici, imagini, stoc: 0, preturi, termenZile: mediu.setari.termenZile, descriereDinNume: mediu.setari.descriereDinNume,
+      caracteristici, imagini, stoc: stocul(x.p, x.a, x.rand), preturi, termenZile: mediu.setari.termenZile, descriereDinNume: mediu.setari.descriereDinNume,
     });
     const amprenta = amprentaContinutului(corp);
     if (amprenta === x.rand.amprenta && (laEi(x.rand) || x.rand.stare === "respins")) continue;
@@ -982,9 +945,9 @@ export async function prelucreazaLotulCatalogului(
     }));
   }
   try {
-    if (op === "articol_stoc" && !STOC_PORNIT) {
-      /* E3: totul e pe 0 la ei, iar stocul nu pleaca (bucla de stoc e E4). */
-      return Promise.all(elemente.map((el) => dupaSoarta(admin, el, GATA)));
+    if (op === "articol_stoc") {
+      /* Bucla de stoc (E4): cu ea oprita, lucrarea se sterge (totul e pe 0 la ei). */
+      return prelucreazaLotulStocului(admin, ctx, elemente, { maiAreTimp: opt.maiAreTimp, poarta: opt.poartaBuclei });
     }
     const mediu = await incarcaMediul(admin, ctx.businessId, ctx.cfg);
     const problema = problemaMediului(mediu);

@@ -132,8 +132,14 @@ export async function prelucreazaLivrarea(admin: Admin, ctx: ContextEasySales, r
       return "prelucrata";
     }
     case "account-suspended":
-    case "account-activated":
-      return verificaContul(admin, ctx, rand.slug);
+    case "account-activated": {
+      const r = await verificaContul(admin, ctx, rand.slug);
+      /* Reactivarea contului retrimite tot stocul (planul, §5.5), prin aceleasi garzi, din cron. */
+      if (rand.slug === "account-activated" && ctx.cfg.stoc_activ && r === "prelucrata") {
+        await ctx.dep.peticConfig(b, { reimprospatare_stoc_ceruta_la: new Date().toISOString() });
+      }
+      return r;
+    }
     case "products-refresh-requested":
     case "stock-refresh-requested": {
       const w = obiect(p?.website);

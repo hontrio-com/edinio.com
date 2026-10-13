@@ -146,6 +146,27 @@ export interface EasySalesConfig {
   catalog_verificare_la?: string | null;
   catalog_arhivari_la?: string | null;
 
+  /* ── bucla de stoc (E4) ── */
+  /**
+   * `umbra`: comenzile altor canale se clasifica si se noteaza „ce as consuma", fara efect;
+   * `canar`: se consuma si se impinge numai pe SKU-urile din `stoc_canar`; `efect`: tot catalogul.
+   */
+  stoc_mod?: "umbra" | "canar" | "efect";
+  /** SKU-urile canarului (5-20), alese de om. */
+  stoc_canar?: string[];
+  stoc_pornit_la?: string | null;
+  /** Valul de stoc in curs: cate articole a pus pe 0 (siguranta de masa, D22). */
+  stoc_val?: { inceput_la: string; la_zero: number } | null;
+  /** Valul asteapta confirmarea omului. */
+  stoc_val_asteapta?: { cerut_la: string; la_zero: number } | null;
+  stoc_val_confirmat_la?: string | null;
+  /** Ultima citire a comenzilor lor inaintea unei impingeri de stoc (regula celor 60 de secunde). */
+  stoc_comenzi_citite_la?: string | null;
+  /** Ultima retrimitere a stocului intreg (`stock-refresh-requested`, reactivarea contului). */
+  stoc_reimprospatat_la?: string | null;
+  /** Ultima trecere a derivei (articolele citite de verificare dupa ea se compara). */
+  stoc_deriva_la?: string | null;
+
   /* ── alarmele de magazin, cu clipa ultimei notificari (`notificari.ts`) ── */
   alarme?: Record<string, string>;
 

@@ -102,6 +102,8 @@ export function citesteComanda(ctx: ContextEasySales, internalId: string): Promi
 
 export interface FiltreComenzi {
   order_display_id?: string;
+  /** Comenzile care contin SKU-ul [A: filtrul `product_sku`]; deriva stocului (E4). */
+  product_sku?: string;
   website?: string;
   modified_after?: string;
   page?: number;

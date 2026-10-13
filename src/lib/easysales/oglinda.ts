@@ -34,9 +34,11 @@ import type { ComandaEasySales } from "./tipuri";
 
 type Admin = SupabaseClient<Database>;
 
-const COLOANE_RECITIRE = `${COLOANE_LEGATURA}, es_updated_at, awb_viu, awb_la, raspuns_brut, cancel_request, facturi`;
+const COLOANE_RECITIRE = `${COLOANE_LEGATURA}, directie, es_updated_at, awb_viu, awb_la, raspuns_brut, cancel_request, facturi`;
 
 export interface LegaturaRecitita extends LegaturaComenzii {
+  /** `iesire` = comanda vitrinei; `intrare` = comanda altui canal, adusa de bucla de stoc (E4). */
+  directie: string;
   es_updated_at: string | null;
   awb_viu: string | null;
   awb_la: string | null;
@@ -87,9 +89,10 @@ function textCerere(v: unknown): string | null {
 }
 
 export async function citesteLegaturaPentruRecitire(
-  admin: Admin, businessId: string, f: { orderUuid?: string; internalId?: string; esOrderId?: string },
+  admin: Admin, businessId: string,
+  f: { orderUuid?: string; internalId?: string; esOrderId?: string; directie?: "iesire" | "intrare" },
 ): Promise<LegaturaRecitita | null> {
-  let q = admin.from("easysales_comenzi").select(COLOANE_RECITIRE).eq("business_id", businessId).eq("directie", "iesire");
+  let q = admin.from("easysales_comenzi").select(COLOANE_RECITIRE).eq("business_id", businessId).eq("directie", f.directie ?? "iesire");
   if (f.orderUuid) q = q.eq("order_uuid", f.orderUuid);
   else if (f.internalId) q = q.eq("es_internal_id", f.internalId);
   else if (f.esOrderId) q = q.eq("es_order_id", f.esOrderId);
@@ -162,7 +165,11 @@ export async function aplicaComandaLor(
   const r = await tranzitieComandaMarketplace(admin, {
     orderId: o.id, businessId: ctx.businessId, status: d.tinta, sursa: "easysales", elibereazaStoc: d.elibereazaStoc,
   });
-  if (r === "ok" && d.tinta === "cancelled") {
+  /*
+   * ⚠ Rambursarea GA4 si anuntul „banii nu s-au intors" sunt ale comenzilor VITRINEI. O comanda adusa
+   * de pe alt canal (`intrare`) n-a fost raportata in GA4, iar banii ei ii tine marketplace-ul.
+   */
+  if (r === "ok" && d.tinta === "cancelled" && leg.directie !== "intrare") {
     try {
       const { raporteazaRambursareaGa4 } = await import("@/lib/orders/ga4-comanda");
       await raporteazaRambursareaGa4(o.id, admin);
@@ -241,7 +248,8 @@ export interface RezultatBanda {
   aplicate: number;
   /** Clipa la care s-a mutat marcajul, sau `null` cand ramane pe loc. */
   marcaj: string | null;
-  externe: string[];
+  /** Comenzile care nu sunt ale noastre, cu `updated_at`-ul lor (E4 le reciteste, daca bucla e pornita). */
+  externe: { id: string; la: string | null }[];
 }
 
 /**
@@ -271,7 +279,7 @@ export async function bandaDeLista(
   let cursorMs: number | undefined;
   let ordonate = true;
   let ultimulMs = -Infinity;
-  const externe: string[] = [];
+  const externe: { id: string; la: string | null }[] = [];
 
   for (let pagina = 1; ; pagina++) {
     if (pagina > maxPagini || Date.now() - start > bugetMs) { ok = false; break; }
@@ -294,7 +302,7 @@ export async function bandaDeLista(
         if (leg && internalId && !leg.es_internal_id) await scrieLegatura(admin, leg, [leg.stare], { es_internal_id: internalId });
       }
       if (!leg) {
-        if (internalId) externe.push(internalId);
+        if (internalId) externe.push({ id: internalId, la: clipa });
         continue;
       }
       const rez = await aplicaComandaLor(admin, ctx, leg, c, { updatedAt: clipa });

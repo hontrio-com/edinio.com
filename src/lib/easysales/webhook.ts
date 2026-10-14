@@ -232,12 +232,15 @@ export async function primesteLivrarea(deps: DepsPrimire, intrare: IntrarePrimir
 /**
  * Corpul raspunsului catre easySales, pe fiecare drum al rutei.
  *
- * ⚠ MASURAT pe 14.10.2026, pe contul primului comerciant: un 200 cu `{"received": true}`, dat in
- * sub 0,3 secunde, e notat la ei ca livrare ESUATA (`success: false` cu `status_code: 200`), deci
- * reincearca dupa 10 s, 100 s si 1000 s, iar acelasi eveniment soseste de patru ori. Documentatia
- * spune numai „2xx in sub 3 secunde”, dar exemplul lor de livrare reusita are raspunsul exact
- * `{"success":true}`. La orice 200 (si la livrarile ignorate anume, unde o reincercare n-ar schimba
- * nimic) raspundem deci `{"success": true}` si nimic altceva; la 503, `{"success": false}`.
+ * Raspundem ca in exemplul lor de livrare reusita: `{"success": true}` la orice 200 (si la livrarile
+ * ignorate anume, unde o reincercare n-ar schimba nimic), `{"success": false}` la 503.
+ *
+ * ⚠ MASURAT pe 14.10.2026, si NU lamurit: evenimentul lor de PROBA (payload `[]`) e notat ESUAT
+ * (`success: false` cu `status_code: 200`) si reincercat dupa 10 s, 100 s si 1000 s, si cu
+ * `{"received": true}`, si cu `{"success": true}`, desi ruta raspunde in 0,25-0,5 secunde, cap la cap.
+ * Corpul nu e deci cauza. Ipoteza: logica lor cade pe payload-ul gol, dupa raspuns. De confirmat pe o
+ * livrare reala (`details.result` din `GET /webhooks`). Reincercarile nu strica nimic: proba se ignora,
+ * iar o livrare reala duce doar la o recitire comasata.
  */
 export function corpulRaspunsului(status: number): { success: boolean } {
   return { success: status >= 200 && status < 300 };

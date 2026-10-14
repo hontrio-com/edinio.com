@@ -149,11 +149,16 @@ export function FeatureStack({ children }: { children: React.ReactNode }) {
           card.style.setProperty("--covered", rounded.toFixed(3));
         }
 
-        /* Acoperit de tot: scos din pictura. Vezi nota 4. */
+        /* Acoperit de tot: scos din pictura. Vezi nota 4.
+           `data-acoperit` spune acelasi lucru celor dinauntru: o animatie din card nu
+           are cum sa afle altfel ca nu se mai vede: un `IntersectionObserver` o
+           socoteste pe ecran, fiindca un card lipit sus chiar ESTE pe ecran, doar
+           ascuns sub cel care a urcat peste el (`MagazinAnimat` se opreste aici). */
         const shouldHide = rounded >= 1;
         if (shouldHide !== hidden[index]) {
           hidden[index] = shouldHide;
           card.style.visibility = shouldHide ? "hidden" : "";
+          card.toggleAttribute("data-acoperit", shouldHide);
         }
       });
     }
@@ -265,6 +270,7 @@ export function FeatureStack({ children }: { children: React.ReactNode }) {
       cards.forEach((card, index) => {
         card.style.removeProperty("--covered");
         card.style.visibility = "";
+        card.removeAttribute("data-acoperit");
         written[index] = -1;
         hidden[index] = false;
       });

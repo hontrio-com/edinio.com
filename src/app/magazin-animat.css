@@ -1,0 +1,471 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  MACHETA ANIMATĂ A PRIMULUI CARD: iMac-ul cu magazinul (`MagazinAnimat.tsx`)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Desenul e al machetei făcute de client (14.10.2026), neatins. Cronologia stă în
+  `lib/website/magazin-animat.ts`; rama (fundalul, luminile, scena 4:3) e comună cu
+  macheta integrărilor, în `animatii-carduri.css`. Aici e doar forma, plus TREI lucruri
+  schimbate:
+
+  1. UNITĂȚILE trec prin `--u` (vezi `animatii-carduri.css`), ca să meargă și pe un
+     browser fără interogări de container.
+
+  2. SCARA ECRANULUI. Capturile au 1920 px și se micșorează până încap în ecranul
+     iMac-ului. Macheta socotea scara în JavaScript, la încărcare și la fiecare
+     redimensionare. Aici o face CSS-ul: `tan(atan2(lungime, lungime))` e singurul
+     mod de a împărți două lungimi și a obține un număr pur. Deci cadrul static e
+     corect chiar și fără JavaScript, iar redimensionarea nu cere nimic.
+
+  3. FĂRĂ `will-change`. Animațiile își promovează singure straturile cât rulează,
+     iar un `will-change` lăsat pe loc ține memorie video și când nu se mișcă nimic.
+     Peste toate, o pagină stinsă primește `visibility: hidden` (din componentă, în
+     clipele în care se schimbă, NU din cadre: vezi `pistaPagina`), ca să nu mai fie
+     rasterizată deloc.
+
+  ⚠ Monitorul e la `left 17`, `top 10.5`, `width 66`, rama `.95`, raportul
+  `66/38.6`. Camera țintește ecranul socotit din numerele astea (`ECRAN` în
+  `magazin-animat.ts`), iar proba le compară. Dacă se mută ceva, se mută în ambele.
+*/
+
+.emx-cam {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+}
+
+/* ─── Monitorul ─── */
+
+.emx-mon {
+  position: absolute;
+  left: calc(var(--u) * 17);
+  top: calc(var(--u) * 10.5);
+  width: calc(var(--u) * 66);
+}
+
+.emx-bez {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 66 / 38.6;
+  border-radius: calc(var(--u) * 1.5) calc(var(--u) * 1.5) 0 0;
+  background: #0c0d0e;
+  padding: calc(var(--u) * 0.95);
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.22) #d6d9dc,
+    0 0 0 calc(var(--u) * 0.3) #bfc3c7;
+}
+
+.emx-scr {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+  border-radius: calc(var(--u) * 0.25);
+}
+
+/* Capturile au 1920 px; se micșorează cât lățimea ecranului (64,1 din 100). */
+.emx-vp {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: 0 0;
+  transform: scale(tan(atan2(calc(var(--u) * 64.1), 1920px)));
+}
+
+.emx-chin {
+  height: calc(var(--u) * 7.2);
+  border-radius: 0 0 calc(var(--u) * 1.5) calc(var(--u) * 1.5);
+  background: #e4e6e9;
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.22) #d6d9dc,
+    inset 0 calc(var(--u) * -0.35) 0 #d3d6da,
+    inset 0 calc(var(--u) * 0.15) 0 #f2f3f5;
+}
+
+.emx-neck {
+  position: absolute;
+  left: calc(var(--u) * 44);
+  top: calc(var(--u) * 56);
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 10.2);
+  background: #d9dce0;
+  clip-path: polygon(6% 0, 94% 0, 100% 100%, 0 100%);
+}
+
+.emx-neck i {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 28%;
+  height: 100%;
+  background: #c9cdd1;
+}
+
+.emx-foot {
+  position: absolute;
+  left: calc(var(--u) * 36.5);
+  top: calc(var(--u) * 66);
+  width: calc(var(--u) * 27);
+  height: calc(var(--u) * 2.6);
+  border-radius: calc(var(--u) * 0.6) calc(var(--u) * 0.6) calc(var(--u) * 1.3) calc(var(--u) * 1.3);
+  background: #d3d7db;
+  box-shadow: inset 0 calc(var(--u) * 0.5) 0 #e3e6e9;
+}
+
+.emx-shadow {
+  position: absolute;
+  left: calc(var(--u) * 24);
+  top: calc(var(--u) * 67);
+  width: calc(var(--u) * 52);
+  height: calc(var(--u) * 4);
+  border-radius: 50%;
+  background: #0b0f0c;
+  opacity: 0.16;
+  filter: blur(calc(var(--u) * 1.8));
+}
+
+.emx-glare {
+  position: absolute;
+  left: -30%;
+  top: -60%;
+  width: 55%;
+  height: 220%;
+  background: #fff;
+  opacity: 0.035;
+  transform: rotate(24deg);
+  pointer-events: none;
+}
+
+/* ─── Paginile magazinului ─── */
+
+.emx-pg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Cadrul static (fără JavaScript, înainte de pornire): pagina de start, din larg. */
+.emx-pg[data-emx="pagina-home"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.emx-pg img {
+  display: block;
+  width: 1920px;
+  height: auto;
+}
+
+.emx-pb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+}
+
+.emx-o {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+
+.emx-sw {
+  position: absolute;
+  left: 1096px;
+  top: 503px;
+  width: 64px;
+  height: 65px;
+  border: 2px solid #fe3d2e;
+  border-radius: 9px;
+  opacity: 0;
+}
+
+.emx-hc {
+  position: absolute;
+  left: 1462px;
+  top: 52px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 112px;
+  height: 30px;
+  padding-left: 2px;
+  background: #fff;
+  opacity: 0;
+}
+
+.emx-hc b {
+  position: absolute;
+  left: -8px;
+  top: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #fe3d2e;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emx-hc span {
+  margin-left: 22px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111;
+}
+
+.emx-hc2 {
+  left: 1433px;
+  opacity: 1;
+}
+
+.emx-hc2 span {
+  margin-left: 22px;
+}
+
+.emx-toast {
+  position: absolute;
+  left: 1150px;
+  top: 96px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 360px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    0 12px 36px rgba(11, 15, 12, 0.16),
+    0 0 0 1px rgba(11, 15, 12, 0.06);
+  opacity: 0;
+}
+
+.emx-tk {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #e8f8ec;
+}
+
+.emx-tk svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #0fa53a;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.emx-toast strong {
+  display: block;
+  font-size: 15px;
+  color: #111;
+}
+
+.emx-toast small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: #6e6e72;
+}
+
+/* Bara spre livrarea gratuită. Umplerea e un element, nu `::after`, ca s-o poată
+   scrie componenta direct (o scară pe X, deci tot pe compozitor). */
+.emx-bar {
+  position: absolute;
+  width: 674px;
+  height: 6px;
+  border-radius: 3px;
+  background: #e4e3e8;
+  overflow: hidden;
+}
+
+.emx-bar i {
+  position: absolute;
+  inset: 0;
+  background: #fe3d2e;
+  border-radius: 3px;
+  transform-origin: 0 50%;
+}
+
+.emx-min {
+  position: absolute;
+  left: 1180px;
+  top: 450px;
+  width: 305px;
+  height: 34px;
+  background: #fff;
+  opacity: 0;
+}
+
+.emx-fin {
+  position: absolute;
+  left: 1173px;
+  top: 499px;
+  width: 318px;
+  height: 48px;
+  border-radius: 16px;
+  background: #fe3d2e;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+
+.emx-in {
+  position: absolute;
+  left: 470px;
+  width: 590px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  background: #fff;
+  font-size: 15px;
+  color: #111;
+  opacity: 0;
+}
+
+.emx-in i {
+  width: 1.5px;
+  height: 18px;
+  background: #111;
+  margin-left: 1px;
+  opacity: 0;
+}
+
+.emx-sel {
+  width: 560px;
+}
+
+.emx-ok {
+  position: absolute;
+  inset: 0;
+  height: 1180px;
+  background: rgba(11, 15, 12, 0.42);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 250px;
+  opacity: 0;
+}
+
+.emx-okc {
+  width: 520px;
+  padding: 44px 40px 36px;
+  border-radius: 24px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
+}
+
+.emx-okt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #0fb63e;
+}
+
+.emx-okt svg {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.emx-okc strong {
+  display: block;
+  margin-top: 22px;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  color: #111;
+}
+
+.emx-okc p {
+  margin-top: 10px;
+  font-size: 17px;
+  color: #3f3f44;
+}
+
+.emx-okc small {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: #6e6e72;
+}
+
+.emx-okc em {
+  display: block;
+  margin-top: 26px;
+  height: 52px;
+  line-height: 52px;
+  border-radius: 14px;
+  background: #fe3d2e;
+  color: #fff;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* ─── Cursorul ─── */
+
+.emx-cur {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  z-index: 20;
+  opacity: 0;
+}
+
+.emx-cur svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+}
+
+.emx-hd {
+  opacity: 0;
+  left: -9px !important;
+}
+
+.emx-rp {
+  position: absolute;
+  left: -22px;
+  top: -22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid rgba(254, 61, 46, 0.55);
+  opacity: 0;
+}

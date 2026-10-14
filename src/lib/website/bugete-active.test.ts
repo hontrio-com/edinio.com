@@ -56,8 +56,22 @@ const BUGETE: Record<string, number> = {
   /* /optimizare, captura de produs. Se desenează la 68×84,4 px CSS — măsurat în
      Chrome, nu dedus din clase. Fișierul are 280×347. Măsurat 14.296. */
   "optimizare/produs-mic.webp": 15_200,
-  /* Pagina de start, cea mai mare treaptă din `srcset`-ul primului card. */
-  "features/magazin-1440.webp": 67_700,
+  /*
+    Pagina de start, primul card: capturile machetei animate (14.10.2026). Se cer
+    toate cinci, la o singură lățime aleasă de `latimeaImaginilor`: 1280 pe telefon
+    (192.114 octeți în total), 1920 pe desktop (396.092). Sub fold, descărcate abia
+    când secțiunea se apropie de ecran. Măsurat × 1,06, ca mai sus.
+  */
+  "features/magazin-animat/home-1280.webp": 69_700,
+  "features/magazin-animat/produs-a-1280.webp": 36_800,
+  "features/magazin-animat/produs-b-1280.webp": 36_900,
+  "features/magazin-animat/cos-1280.webp": 31_100,
+  "features/magazin-animat/checkout-1280.webp": 29_400,
+  "features/magazin-animat/home-1920.webp": 136_800,
+  "features/magazin-animat/produs-a-1920.webp": 78_200,
+  "features/magazin-animat/produs-b-1920.webp": 77_900,
+  "features/magazin-animat/cos-1920.webp": 66_500,
+  "features/magazin-animat/checkout-1920.webp": 60_700,
 };
 
 /*

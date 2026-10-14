@@ -8,8 +8,13 @@
  *
  * ═══ IMAGINILE VIN ÎN TREI MĂRIMI ═══
  *
- * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/magazin`
- * ies `/features/magazin-720.webp`, `-1080` și `-1440`, iar browserul alege.
+ * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/automatizari`
+ * ies `/features/automatizari-720.webp`, `-1080` și `-1440`, iar browserul alege.
+ *
+ * Primele două carduri nu mai au imagine, ci câte o machetă animată
+ * (`image.animatie`): iMac-ul cu magazinul (capturile lui în
+ * `/features/magazin-animat/`, vezi `MagazinAnimat.tsx`) și panoul de integrări
+ * (`IntegrariAnimat.tsx`).
  *
  * Motivul e concret. Loader-ul proiectului lasă neatinse imaginile locale — trece
  * prin el doar ce e pe R2 — deci `next/image` nu produce niciun `srcset` pentru
@@ -69,6 +74,15 @@ export interface FeatureCard {
   image: {
     /** Radacina, fara sufixul de marime. Lipseste => se afiseaza substituentul. */
     base?: string;
+    /**
+     * In locul imaginii, o macheta ANIMATA. Are prioritate fata de `base`.
+     *
+     * `magazin`: iMac-ul cu magazinul, de la pagina de start pana la comanda plasata
+     * (`MagazinAnimat.tsx`). `integrari`: panoul de integrari, apoi o comanda
+     * procesata singura (`IntegrariAnimat.tsx`). Machetele sunt ale clientului,
+     * 14.10.2026.
+     */
+    animatie?: "magazin" | "integrari";
     alt: string;
     /** Ce trebuie sa arate imaginea. Se vede pe substituent. */
     hint: string;
@@ -102,9 +116,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
     */
     cta: { label: "Vezi ce include", href: "/preturi" },
     image: {
-      base: "/features/magazin",
-      alt: "Magazin online Edinio pe desktop și pe telefon",
-      hint: "Homepage premium + telefon",
+      /* Imaginea statica de dinainte (`/features/magazin-*.webp`) a fost inlocuita pe
+         14.10.2026 de macheta animata a clientului, si fisierele ei sterse. */
+      animatie: "magazin",
+      alt: "Un magazin online făcut cu Edinio, pe un monitor: pagina de start, produsul, coșul și comanda plasată",
+      hint: "iMac cu magazinul, de la pagina de start la comanda plasată",
     },
   },
   {
@@ -121,9 +137,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
     ],
     cta: { label: "Vezi toate integrările", href: "/integrari" },
     image: {
-      base: "/features/integrari",
-      alt: "Integrările Edinio, conectate între ele",
-      hint: "Toate logo-urile conectându-se spre Edinio",
+      /* Imaginea statica de dinainte (`/features/integrari-*.webp`) a fost inlocuita
+         pe 14.10.2026 de macheta animata a clientului, si fisierele ei sterse. */
+      animatie: "integrari",
+      alt: "Panoul de integrări din Edinio: FAN Courier, NETOPIA, SmartBill și eMAG pornite dintr-un clic, apoi o comandă procesată automat",
+      hint: "Integrările pornite dintr-un clic, apoi o comandă procesată automat",
     },
   },
   {

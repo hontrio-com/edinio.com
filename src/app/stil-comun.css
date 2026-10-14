@@ -263,6 +263,21 @@
   perspective-origin: 50% 0%;
 }
 
+/*
+  ⚠ NEMOȘTENITĂ, și e măsurat (14.10.2026). `FeatureStack` o scrie pe card la fiecare
+  cadru de derulare, iar o variabilă CSS obișnuită se moștenește: fiecare scriere
+  recalcula stilul a TOT ce e în card. Cu machetele animate din primele două carduri
+  (~90 și ~175 de elemente), derularea peste teanc costa 176 ms de stil pe secundă;
+  pe un telefon încetinit de 4 ori, pagina nu mai ținea pasul (65 de cadre pe secundă
+  în loc de 124). Nemoștenită: 56 ms, respectiv derulare la pas. O citește doar
+  `.feature-card`; un browser fără `@property` o moștenește, ca înainte.
+*/
+@property --covered {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
 .feature-card {
   --covered: 0;
   transform-origin: 50% 0%;

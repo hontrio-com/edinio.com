@@ -1,0 +1,108 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  RAMA COMUNĂ A MACHETELOR ANIMATE DIN „SOLUȚIA” (`ScenaAnimata.tsx`)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Machetele clientului (iMac-ul cu magazinul, panoul de integrări) au aceeași
+  ramă: fundalul gri-verzui cu două lumini care plutesc și o scenă 4:3 în mijloc.
+  Stă aici o singură dată; fiecare machetă își are desenul în foaia ei
+  (`magazin-animat.css`, `integrari-animat.css`).
+
+  UNITĂȚILE. Machetele scriau totul în `cqw` (sutimi din lățimea scenei). Aici
+  trec printr-o variabilă, `--u`: implicit `1cqw`, dar pe un browser fără
+  interogări de container (Safari sub 16) o scrie componenta în pixeli. Fără
+  asta, pe un iPhone rămas pe iOS 15 tot desenul s-ar fi prăbușit într-un colț.
+  Fiind o variabilă neînregistrată, `1cqw` se rezolvă abia unde e folosită,
+  deci la copiii scenei se raportează la scenă, nu la cardul de deasupra.
+*/
+
+.anim-card {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #f3f5f4;
+  isolation: isolate;
+  /* Scena se potrivește în caseta cardului, oricare ar fi raportul ei (vezi `.anim-scena`). */
+  container-type: size;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Specificitate ZERO (`:where`): foile vin acum cu componentele, iar ordinea lor în
+   pagină o hotărăște încărcarea, nu noi. Așa, orice regulă cu o clasă din foaia unei
+   machete (`.eic-lg { padding }`) câștigă oricum. */
+:where(.anim-card *) {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+  Lumina verde de fundal. Doar `transform` animat, deci rămâne pe compozitor,
+  dar NUMAI cât cardul se vede: un card acoperit în teanc e `visibility: hidden`,
+  iar acolo animația cade pe firul principal (măsurat: 130 de recalculări de stil
+  pe secundă). Deci merge doar cât rulează și macheta, care pune `data-ruleaza`
+  pe rădăcină (`useAnimatieInBucla`). Fără JavaScript, luminile stau pe loc.
+*/
+.anim-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(10cqw);
+  opacity: 0.5;
+  z-index: -1;
+}
+
+/* ⚠ Cu doi selectori, nu cu unul: `animation` de la `.anim-b1`/`.anim-b2` repune
+   implicit `running`, iar la egalitate ar fi câștigat ea, fiind mai jos. */
+.anim-card .anim-blob {
+  animation-play-state: paused;
+}
+
+.anim-card[data-ruleaza] .anim-blob {
+  animation-play-state: running;
+}
+
+.anim-b1 {
+  width: 60cqw;
+  height: 60cqw;
+  left: -18cqw;
+  top: -22cqw;
+  background: #c4f2cf;
+  animation: anim-dr 17s ease-in-out infinite alternate;
+}
+
+.anim-b2 {
+  width: 52cqw;
+  height: 52cqw;
+  right: -18cqw;
+  bottom: -20cqw;
+  background: #e3f5bf;
+  animation: anim-dr 21s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes anim-dr {
+  to {
+    transform: translate3d(8cqw, 6cqw, 0) scale(1.08);
+  }
+}
+
+/*
+  Scena: 4:3, cât încape în casetă, centrată. Pe telefon caseta e chiar 4:3; pe
+  desktop înălțimea o dă textul de alături, deci poate fi puțin mai înaltă: atunci
+  fundalul umple caseta, iar scena stă în mijloc, întreagă.
+*/
+.anim-scena {
+  --u: 1cqw;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(100cqw, 133.333cqh);
+  aspect-ratio: 4 / 3;
+  transform: translate(-50%, -50%);
+  container-type: inline-size;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-blob {
+    animation: none;
+  }
+}

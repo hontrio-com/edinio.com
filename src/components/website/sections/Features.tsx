@@ -9,6 +9,8 @@ import {
 /* Mutată în `lib` fiindcă o folosesc două locuri — vezi nota de acolo. */
 import { DASH_ON_WHITE } from "@/lib/website/linii";
 import { FeatureStack } from "./FeatureStack";
+import { IntegrariAnimat } from "./IntegrariAnimat";
+import { MagazinAnimat } from "./MagazinAnimat";
 import { SectionEyebrow } from "./SectionEyebrow";
 import { butonAlb } from "@/lib/website/buton";
 
@@ -371,7 +373,13 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
         flipped && "lg:order-1",
       )}
     >
-      {card.image.base ? (
+      {card.image.animatie === "magazin" ? (
+        /* Machetele animate umplu toata jumatatea, ca o imagine: fundalul lor merge pana
+           in margini, iar scena 4:3 sta intreaga in mijloc. Vezi `ScenaAnimata.tsx`. */
+        <MagazinAnimat eticheta={card.image.alt} />
+      ) : card.image.animatie === "integrari" ? (
+        <IntegrariAnimat eticheta={card.image.alt} />
+      ) : card.image.base ? (
         /*
           `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.
 

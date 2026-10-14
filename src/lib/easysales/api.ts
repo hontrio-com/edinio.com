@@ -1,4 +1,5 @@
 import { cerereEasySales, type ContextEasySales, type Raspuns } from "./client";
+import { abonarileDin } from "./abonari-lista";
 import type {
   AbonareEasySales, ComandaEasySales, WebsiteEasySales,
 } from "./tipuri";
@@ -40,9 +41,13 @@ export function statusuriLivrare(ctx: ContextEasySales): Promise<Raspuns<{ descr
 
 // ── Webhook-uri ─────────────────────────────────────────────────────────────
 
-/** `GET /api/v2/webhooks` [A]: abonarile, fiecare cu `url`, `webhook.slug` si o livrare in `details`. */
-export function listaAbonari(ctx: ContextEasySales): Promise<Raspuns<AbonareEasySales[]>> {
-  return cerereEasySales(ctx, { metoda: "GET", cale: "/webhooks" });
+/**
+ * `GET /api/v2/webhooks`, intors ca lista PLATA de abonari, fiecare cu `webhook: {slug, name, group}`.
+ * ⚠ La ei raspunsul e GRUPAT pe tipul de webhook (masurat pe 14.10.2026): vezi `abonarileDin`.
+ */
+export async function listaAbonari(ctx: ContextEasySales): Promise<Raspuns<AbonareEasySales[]>> {
+  const r = await cerereEasySales<unknown>(ctx, { metoda: "GET", cale: "/webhooks" });
+  return { ...r, date: r.ok ? abonarileDin(r.date) : null };
 }
 
 /**

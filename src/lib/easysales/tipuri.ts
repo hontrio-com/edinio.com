@@ -207,6 +207,8 @@ export interface AbonareEasySales {
   id?: unknown;
   url?: string | null;
   http_method?: string | null;
+  /** `1` la abonarile vazute pe 14.10.2026. */
+  active?: unknown;
   webhook?: { slug?: string | null; name?: string | null; group?: string | null } | null;
   details?: {
     result?: {

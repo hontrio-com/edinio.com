@@ -92,14 +92,26 @@ rămâne deschis.
 - **Pe DEMO** (`krycmubsiojipwslxrka`), cu baza adevărată și easySales fals: trimiterea (7 scenarii: prima trimitere, răspuns pierdut cu comanda ajunsă, răspuns pierdut cu comanda neajunsă, plata online, 422 cu întoarcerea la Edinio, plafonul, anularea în timpul apelului), oglinda (procesare, expediere cu AWB și curier, livrare, retur anunțat o singură dată, anulare fără AWB, plasa pe 24 de ore), alocarea articolelor (cursa a doi lucrători), probele SQL ale migrațiilor (REGISTRU, rândurile 72-73).
 - **Fără rețea:** maparea pe valori (exemplul Save al lor se reface la zecimală), stările (și în `valori-permise`), contractul cu colecția, termenele, secretele, webhook-ul, abonările, testul fără scrieri.
 
+## Măsurat pe contul real (E0, 14.10.2026)
+
+Primul comerciant conectat (okxi, website-ul „Edinio”), numai cu cereri de citire în afara conectării:
+
+- **Emiterea tokenului** (`grant_type=website`, corp JSON cu `client_id`, `client_secret`, `website_token`, `scope`) merge: tokenul ține un an, iar toate cele 26 de scope-uri cerute sunt acordate. La perechea client-secret greșită: `401 Client authentication failed`.
+- **`GET /websites/list`** dă `name`, `url`, `status`, `module_version`. Contul de probă vine cu un website demonstrativ, „Virtual Shop” (fără URL), cu 3 produse demonstrative; poarta „website gol” l-a refuzat corect.
+- **`GET /products?website=`** filtrează STRICT (un nume inexistent dă zero, numele exact numai produsele lui) și are `meta.total` (M-PROD-7).
+- **`GET /marketplaces/list`** dă tot catalogul lor (178 de canale), nu canalele contului (M-MKT-1): exclusivitatea rămâne pe declarația omului.
+- **`GET /webhooks`** e GRUPAT pe tipul de webhook: `{slug, name, group, subscriptions: [{id, url, http_method, secret, details, active}]}`, cu adresa întreagă (query string inclus) și secretul în clar. Secretul trimis sub numele `secret` e preluat la toate abonările (M-WH-1, numele câmpului). `POST /webhooks/{slug}` cu un (slug, adresă) existent: `422 „Câmpul url a fost deja folosit.”`.
+  ⚠ Codul citea lista plat: nu găsea nicio abonare, verificarea zilnică le reabona, primea zece 422 și golea `abonari`. Reparat în `abonari-lista.ts`; serverul fals întoarce acum forma reală, iar proba pică pe citirea plată.
+- **Limita:** 500 de cereri pe minut (`x-ratelimit-remaining`).
+
 ## Ce rămâne deschis
 
-- **E0, pe contul de probă:** emiterea cu lista de scope-uri și JWT-ul decodat, 401 vs 403 la tokenul revocat, Save Order pe exemplul nostru (M-COM-1..9), semnătura și numele câmpului secretului (M-WH-1), ce comenzi vede tokenul de website (M-EXT-1), modelul de stoc (M-STOC-1).
+- **E0, pe contul de probă:** JWT-ul decodat, 401 vs 403 la tokenul revocat, Save Order pe exemplul nostru (M-COM-1..9), formula semnăturii (M-WH-1, la prima livrare), ce comenzi vede tokenul de website (M-EXT-1), modelul de stoc (M-STOC-1).
 - **E3 (catalogul) e construit și oprit.** Pornește numai după E0 (M-EXT-1, M-STOC-1, plus M-CAT-1 și M-PROD-1..7) și după hotărârile D8-D11, D21-D23, D30. În ziua pornirii, în ordinea asta: migrația 74 se mută în `migrations/`, se aplică pe producție înaintea codului (cu acordul proprietarului), `CATALOG_PORNIT = true`, baseline-ul se regenerează, totul în același push.
 - **E4 (bucla de stoc) e construită și oprită.** Pornește după E3, după M-EXT-1 și M-EXT-2 (ce comenzi vede tokenul de website, ce e `product_data.id`) și după M-STOC-1, care alege `FORMULA_STOC`. Ordinea pe magazin: umbra cel puțin 14 zile sau 30 de comenzi, apoi canarul 7 zile, apoi tot catalogul. Rămân deschise: harta exactă a canalelor (M-MKT-1), forma comenzilor FBE (ES-20), câmpurile unei comenzi modificate (ES-21), vânzările de pe alte website-uri ale contului (D32), abonamentul Edinio expirat (D12) și verificarea automată a sursei stocului după primele măsurători.
-- **Producția:** migrațiile 72 și 73 se aplică înaintea codului, cu acordul proprietarului; baseline-ul se regenerează în același push.
+- **Producția:** migrațiile 72 și 73 sunt aplicate (13.10.2026), iar integrarea e deschisă tuturor (`EASYSALES_LIVE=true`).
 - **Textul din catalogul public** și ghidurile din centrul de ajutor sunt ciorne care așteaptă textul proprietarului.
 
 ## Nota cinstită
 
-Integrarea e construită pe documentație și pe un server fals; niciun octet n-a plecat încă spre easy-sales.com. Tot ce e marcat IPOTEZĂ în plan rămâne ipoteză până la E0, iar codul e scris să cadă în siguranță acolo unde documentația tace: comanda care nu pleacă se întoarce în Edinio, nu se pierde.
+Integrarea e construită pe documentație și pe un server fals, iar primul cont real s-a conectat pe 14.10.2026. Prima zi a contrazis deja o presupunere (forma listei de webhook-uri, mai sus). Tot ce e marcat IPOTEZĂ în plan și nu apare la „Măsurat” rămâne ipoteză, iar codul e scris să cadă în siguranță acolo unde documentația tace: comanda care nu pleacă se întoarce în Edinio, nu se pierde.

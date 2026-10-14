@@ -27,6 +27,15 @@
 import type { DepozitEasySales, RandJurnal } from "./depozit";
 import type { EasySalesConfig } from "./tipuri";
 
+/** Tipurile de webhook din `GET /webhooks`, cu grupul lor, cum le-a intors contul real pe 14.10.2026. */
+const GRUPUL_WEBHOOKULUI: Record<string, string> = {
+  "order-created": "orders", "order-updated": "orders", "awb-created": "orders", "invoice-created": "orders",
+  "storno-invoice-created": "orders", "delivery-status-updated": "orders",
+  "account-suspended": "account", "account-activated": "account",
+  "products-refresh-requested": "websites", "stock-refresh-requested": "websites",
+};
+const SLUGURI_WEBHOOK = Object.keys(GRUPUL_WEBHOOKULUI);
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Depozitul in memorie
 // ═════════════════════════════════════════════════════════════════════════════
@@ -429,15 +438,24 @@ export function serverFals(opt: OptiuniFals = {}) {
     if (cale === "/marketplaces/list" && c.metoda === "GET") return json(200, { data: [{ id: 1, name: "Emag" }, { id: 6, name: "EmagHU" }] });
 
     // ── webhook-uri ──
+    /* ⚠ Forma REALA, masurata pe 14.10.2026: GRUPATA pe tipul de webhook, cu abonarile in
+       `subscriptions`, adresa intreaga si secretul in clar. Nu lista plata pe care o presupusese codul. */
     if (cale === "/webhooks" && c.metoda === "GET") {
-      return json(200, { success: true, message: "Success", data: [...stare.abonari.values()].map((a) => ({
-        id: a.id, url: a.url, http_method: "post", webhook: { slug: a.slug, name: a.slug, group: "orders" },
-        details: { result: { success: true, status_code: 200, attempt_nr: 1, final: true, total_nr_of_attempts: 3 }, triggered_at: null },
+      const tipuri = [...new Set([...SLUGURI_WEBHOOK, ...[...stare.abonari.values()].map((a) => a.slug)])];
+      return json(200, { success: true, message: "Success", data: tipuri.map((slug) => ({
+        slug, name: slug, group: GRUPUL_WEBHOOKULUI[slug] ?? "orders",
+        subscriptions: [...stare.abonari.values()].filter((a) => a.slug === slug).map((a) => ({
+          id: a.id, url: a.url, http_method: "post", secret: a.secret, details: null, active: 1,
+        })),
       })) });
     }
     let m = /^\/webhooks\/([a-z-]+)$/.exec(cale);
     if (m && c.metoda === "POST") {
       const b = (c.corp ?? {}) as Record<string, unknown>;
+      /* Ca la ei: acelasi tip cu aceeasi adresa e refuzat (masurat pe 14.10.2026). */
+      if ([...stare.abonari.values()].some((a) => a.slug === m![1] && a.url === String(b.url ?? ""))) {
+        return json(422, { message: "The given data was invalid.", errors: { url: ["Câmpul url a fost deja folosit."] } });
+      }
       const id = stare.urmatorulIdAbonare++;
       const secret = typeof b[o.campSecretPreluat] === "string" ? String(b[o.campSecretPreluat]) : null;
       stare.abonari.set(id, { id, slug: m[1], url: String(b.url ?? ""), secret });

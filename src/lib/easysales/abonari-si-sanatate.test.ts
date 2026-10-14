@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { depozitFals, serverFals } from "./fals-easysales";
 import { adresaAbonarii, asiguraAbonarile, eAdresaMagazinului, jetonulAdresei, secretNou, stergeAbonarile } from "./abonari";
+import { abonarileDin } from "./abonari-lista";
 import { contractulLivrarilor, contulDin, cuiComparabil, depozitFaraScriere, stareaWebsiteului, testeazaConexiunea } from "./sanatate";
 import { amprentaWebsiteToken, verificaForma, verificaMagazinul } from "./conectare";
 import { canaleleNative, conflicteCanale } from "./exclusivitate";
@@ -58,6 +59,49 @@ test("abonarile: toate slugurile, cu secretul si hash-ul jetonului scrise INAINT
   assert.ok(Object.values(r2.sluguri).every((s) => s?.rezultat === "exista"));
   assert.equal(srv.stare.cereri.filter((c) => c.metoda === "POST" && c.cale.startsWith("/api/v2/webhooks/")).length, posturi);
   delete process.env.EASYSALES_API_URL;
+});
+
+test("⚠ lista lor e GRUPATA pe tip (masurat 14.10.2026): abonarile existente se regasesc si fara id-urile pastrate, fara nicio reabonare", async () => {
+  /*
+   * Ce s-a intamplat pe productie la primul comerciant: abonarile create la conectare n-au fost
+   * gasite in lista citita plat, cronul le-a crezut disparute, le-a refacut, iar easySales a raspuns
+   * de zece ori 422 „Câmpul url a fost deja folosit”, iar `abonari` a ramas gol.
+   */
+  process.env.EASYSALES_API_URL = "https://easysales.fals";
+  const srv = serverFals();
+  const ctx = context(srv);
+  await srv.cuFetch(() => asiguraAbonarile(ctx));
+  const idurile = { ...ctx.cfg.abonari };
+  assert.equal(Object.keys(idurile).length, SLUGURI_ABONATE.length);
+
+  ctx.cfg.abonari = {};
+  const posturi = srv.stare.cereri.filter((c) => c.metoda === "POST" && c.cale.startsWith("/api/v2/webhooks/")).length;
+  const r = await srv.cuFetch(() => asiguraAbonarile(ctx));
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.ok(Object.values(r.sluguri).every((s) => s?.rezultat === "exista"), JSON.stringify(r.sluguri));
+  assert.equal(srv.stare.cereri.filter((c) => c.metoda === "POST" && c.cale.startsWith("/api/v2/webhooks/")).length, posturi, "nicio reabonare");
+  assert.deepEqual(ctx.cfg.abonari, idurile, "id-urile se recupereaza din lista lor");
+  delete process.env.EASYSALES_API_URL;
+});
+
+test("lista abonarilor: forma lor grupata se citeste plata, fara secret; forma plata merge si ea", () => {
+  const masurat = [
+    { slug: "order-created", name: "Comanda creata", group: "orders", subscriptions: [
+      { id: 19196, url: `https://www.edinio.com/api/easysales/webhook?businessId=${B}&t=j`, http_method: "post", secret: "s3cret", details: null, active: 1 },
+    ] },
+    { slug: "account-activated", name: "Cont activat", group: "account", subscriptions: [] },
+    { slug: "stock-refresh-requested", name: "Stoc", group: "websites", subscriptions: [
+      { id: 19205, url: `https://www.edinio.com/api/easysales/webhook?businessId=${B}&t=j`, http_method: "post", secret: "s3cret", details: null, active: 1 },
+      { id: 7, url: "https://altcineva.ro/hook", http_method: "post", secret: "x", details: null, active: 1 },
+    ] },
+  ];
+  const plate = abonarileDin(masurat);
+  assert.deepEqual(plate.map((a) => [a.id, a.webhook?.slug]), [[19196, "order-created"], [19205, "stock-refresh-requested"], [7, "stock-refresh-requested"]]);
+  assert.ok(plate.every((a) => !("secret" in a)), "secretul lor nu trece mai departe");
+  assert.equal(eAdresaMagazinului(plate[0].url, B), true, "adresa vine intreaga, cu businessId");
+  assert.equal(plate[1].webhook?.group, "websites");
+  assert.deepEqual(abonarileDin([{ id: 5, url: "u", webhook: { slug: "order-updated" } }]).map((a) => [a.id, a.webhook?.slug]), [[5, "order-updated"]]);
+  assert.deepEqual(abonarileDin(null), []);
 });
 
 test("o abonare disparuta se reface O DATA; a doua disparitie in 7 zile inseamna ca o inlocuieste altcineva", async () => {

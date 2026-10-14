@@ -229,6 +229,20 @@ export async function primesteLivrarea(deps: DepsPrimire, intrare: IntrarePrimir
   return { status: 200, urma: "scris" };
 }
 
+/**
+ * Corpul raspunsului catre easySales, pe fiecare drum al rutei.
+ *
+ * ⚠ MASURAT pe 14.10.2026, pe contul primului comerciant: un 200 cu `{"received": true}`, dat in
+ * sub 0,3 secunde, e notat la ei ca livrare ESUATA (`success: false` cu `status_code: 200`), deci
+ * reincearca dupa 10 s, 100 s si 1000 s, iar acelasi eveniment soseste de patru ori. Documentatia
+ * spune numai „2xx in sub 3 secunde”, dar exemplul lor de livrare reusita are raspunsul exact
+ * `{"success":true}`. La orice 200 (si la livrarile ignorate anume, unde o reincercare n-ar schimba
+ * nimic) raspundem deci `{"success": true}` si nimic altceva; la 503, `{"success": false}`.
+ */
+export function corpulRaspunsului(status: number): { success: boolean } {
+  return { success: status >= 200 && status < 300 };
+}
+
 /** Citeste corpul cel mult pana la plafon. Peste plafon, intoarce `null` (livrarea nu e a lor). */
 export async function citesteCorpulMarginit(req: Request): Promise<string | null> {
   const lungime = Number(req.headers.get("content-length") ?? "0");

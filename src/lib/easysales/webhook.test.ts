@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { curataLivrarea, jetonulWebsiteuluiSePotriveste, primesteLivrarea, type DepsPrimire, type RandInbox } from "./webhook";
+import { corpulRaspunsului, curataLivrarea, jetonulWebsiteuluiSePotriveste, primesteLivrarea, type DepsPrimire, type RandInbox } from "./webhook";
 import { hashJeton, livrareaDovedesteFormula, subsirulValorii, verificaSemnatura } from "./semnatura";
 import type { EasySalesConfig } from "./tipuri";
 
@@ -131,4 +131,16 @@ test("un corp care nu e JSON nu se arunca: rand fara corp, cu motivul, si alarma
   assert.equal(x.inbox[0].motiv, "corp_necitibil");
   assert.equal(x.programate.length, 0);
   assert.ok(x.alarme.some((a) => /nu e JSON/.test(a)));
+});
+
+test("⚠ raspunsul catre easySales e exact `{success: true}` (masurat 14.10.2026: `{received: true}` era notat esuat)", async () => {
+  assert.deepEqual(corpulRaspunsului(200), { success: true });
+  assert.deepEqual(corpulRaspunsului(503), { success: false });
+  /* Ruta: niciun raspuns nu ocoleste functia, iar forma veche nu mai apare. */
+  const { readFileSync } = await import("node:fs");
+  const ruta = readFileSync("src/app/api/easysales/webhook/route.ts", "utf8");
+  const toate = (ruta.match(/NextResponse\.json\(/g) ?? []).length;
+  assert.ok(toate >= 2, "proba citeste chiar ruta");
+  assert.equal((ruta.match(/NextResponse\.json\(corpulRaspunsului\(/g) ?? []).length, toate, "orice raspuns trece prin corpulRaspunsului");
+  assert.ok(!/received:/.test(ruta), "forma veche `{received}` nu mai apare");
 });

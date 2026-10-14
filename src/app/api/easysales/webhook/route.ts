@@ -5,7 +5,7 @@ import { logError } from "@/lib/error-logger";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { citesteConfigEasySales, depozitDinSupabase } from "@/lib/easysales/depozit";
-import { citesteCorpulMarginit, primesteLivrarea, type DepsPrimire } from "@/lib/easysales/webhook";
+import { citesteCorpulMarginit, corpulRaspunsului, primesteLivrarea, type DepsPrimire } from "@/lib/easysales/webhook";
 import { prelucreazaInboxul } from "@/lib/easysales/inbox";
 
 /**
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const corp = await citesteCorpulMarginit(req);
   if (corp === null) {
     /* Peste plafon: un eveniment de-al lor are cativa KB. Nu se citeste, nu se reincearca. */
-    return NextResponse.json({ received: false }, { status: 200 });
+    return NextResponse.json(corpulRaspunsului(200), { status: 200 });
   }
 
   const admin = createClient<Database>(
@@ -74,5 +74,6 @@ export async function POST(req: NextRequest) {
   };
 
   const r = await primesteLivrarea(deps, { businessId, jeton, corpBrut: corp, antetSemnatura: req.headers.get("signature") });
-  return NextResponse.json({ received: r.status === 200 }, { status: r.status });
+  /* ⚠ `{"success": true}`, nu alt corp: altfel easySales noteaza livrarea esuata (vezi `corpulRaspunsului`). */
+  return NextResponse.json(corpulRaspunsului(r.status), { status: r.status });
 }

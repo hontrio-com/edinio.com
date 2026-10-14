@@ -102,6 +102,8 @@ Primul comerciant conectat (okxi, website-ul „Edinio”), numai cu cereri de c
 - **`GET /marketplaces/list`** dă tot catalogul lor (178 de canale), nu canalele contului (M-MKT-1): exclusivitatea rămâne pe declarația omului.
 - **`GET /webhooks`** e GRUPAT pe tipul de webhook: `{slug, name, group, subscriptions: [{id, url, http_method, secret, details, active}]}`, cu adresa întreagă (query string inclus) și secretul în clar. Secretul trimis sub numele `secret` e preluat la toate abonările (M-WH-1, numele câmpului). `POST /webhooks/{slug}` cu un (slug, adresă) existent: `422 „Câmpul url a fost deja folosit.”`.
   ⚠ Codul citea lista plat: nu găsea nicio abonare, verificarea zilnică le reabona, primea zece 422 și golea `abonari`. Reparat în `abonari-lista.ts`; serverul fals întoarce acum forma reală, iar proba pică pe citirea plată.
+- **Livrările webhook:** semnătura se potrivește pe corpul brut (varianta „corp”, M-WH-1). Antetele lor includ `Website-Token` și `EasySales-User-Uuid`, iar evenimentul de probă are payload-ul `[]`. ⚠ Un 200 cu `{"received": true}`, dat în sub 0,3 secunde, e notat la ei **eșuat** (`success: false` cu `status_code: 200`) și reîncercat după 10 s, 100 s și 1000 s, deși documentația cere numai „2xx în sub 3 secunde”. Exemplul lor de livrare reușită are răspunsul exact `{"success":true}`: ruta răspunde acum așa (`corpulRaspunsului`), cu probă pe textul rutei.
+- **Produsele:** `products/save` primește și fără imagini, categorii sau caracteristici. Prețul trimis e cu TVA, iar ei îl păstrează net (1 cu 21% devine 0,8264). `stocks/bulk` scrie `stock` și întoarce `reserved_stock`.
 - **Limita:** 500 de cereri pe minut (`x-ratelimit-remaining`).
 
 ## Ce rămâne deschis

@@ -1,22 +1,12 @@
 -- easySales, CATALOGUL (E3) - 13.10.2026. Dupa `2026-10-13-easysales-comenzi.sql` (73).
 --
--- ⚠⚠ NU STA IN `migrations/`, DINADINS.
---
--- Acolo stau numai migratiile deja aplicate in productie: `migrations/CITESTE-INTAI.md` le numeste
--- „istoric", iar pasul CI „Baseline-ul acopera toate migratiile" cade la orice fisier `.sql` adaugat
--- acolo dupa ultima regenerare a schemei din productie. Planul (`docs/marketplace/EASYSALES-PLAN.md`,
--- §7.1 si §10) spune ca migratia asta se aplica pe productie NUMAI cand porneste E3, iar E3 asteapta
--- masuratorile E0 pe contul de proba al comerciantului (M-EXT-1, M-STOC-1): un catalog tinut pe stoc 0
--- nu vinde nimic.
---
--- Pana atunci: aplicata si probata pe DEMO (`docs/redesign/REGISTRU.md`, randul 74), iar catalogul e
--- oprit in cod (`CATALOG_PORNIT` din `src/lib/easysales/constante.ts`). Proba
--- `src/lib/easysales/catalogul-si-migratia-merg-impreuna.test.ts` cere ca, in ziua in care cineva
--- porneste comutatorul, fisierul asta sa fie mutat in `migrations/`.
---
--- In ziua pornirii, in ordinea asta: se muta in `migrations/` (acelasi nume), se aplica pe productie
--- INAINTEA codului, cu acordul proprietarului, se regenereaza baseline-ul (`bash scripts/schema-baseline.sh`,
--- apoi `--check`) si se comit toate trei in acelasi push.
+-- Aplicata pe productie pe 15.10.2026, la pornirea E3, la cererea proprietarului („sa poata fi
+-- folosit fara testare”): FARA proba pe contul de test, deci fara M-PROD-1..7 si M-CAT-1 masurate.
+-- Pana atunci a stat in `docs/marketplace/` (in `migrations/` intra numai ce e deja in productie),
+-- aplicata si probata numai pe DEMO (`docs/redesign/REGISTRU.md`, randul 74). Comutatorul din cod e
+-- `CATALOG_PORNIT` (`src/lib/easysales/constante.ts`); proba
+-- `src/lib/easysales/catalogul-si-migratia-merg-impreuna.test.ts` cere ca el si locul fisierului sa
+-- se schimbe impreuna. Stocul real (E4) ramane oprit: asteapta M-STOC-1.
 --
 -- Ce atinge:
 --   1. `easysales_produse`: starile `respins`, `disparut`, `exclus`; amprenta continutului trimis,

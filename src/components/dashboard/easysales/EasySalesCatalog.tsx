@@ -20,9 +20,9 @@ import { Panel } from "@/components/ui/panel";
 /**
  * Catalogul in easySales (planul, §7.4): raportul de pregatire, setarile, pornirea si problemele.
  *
- * ⚠ Trimiterea catalogului e oprita in cod pana dupa proba pe contul de test (E0): butoanele raman
- * stinse cu motivul scris. Raportul de pregatire merge de acum si arata golurile de SKU si de
- * descriere, ca omul sa le poata repara din timp.
+ * ⚠ Trimiterea catalogului asculta de `CATALOG_PORNIT` (pornit din 15.10.2026): cu el oprit, butoanele
+ * raman stinse cu motivul scris. Raportul de pregatire merge oricum si arata golurile de SKU si de
+ * descriere, ca omul sa le poata repara inainte de trimitere.
  */
 
 const NUME_MOTIV: Record<string, string> = {

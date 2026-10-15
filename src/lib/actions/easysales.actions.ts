@@ -359,8 +359,8 @@ export async function reiaTrimitereaEasySales(businessId: string, orderId: strin
 
 // ── Catalogul (E3) ──────────────────────────────────────────────────────────
 //
-// ⚠ Trimiterea catalogului e oprita in cod pana dupa E0 (`CATALOG_PORNIT`); actiunile o spun omului.
-// Raportul de pregatire merge de acum: citeste numai tabele care exista si pe productie.
+// ⚠ Trimiterea catalogului asculta de `CATALOG_PORNIT` (pornit din 15.10.2026); cu el oprit, actiunile o
+// spun omului. Raportul de pregatire nu depinde de comutator.
 
 /** Raportul de pregatire, pe motive. Greu pe magazinele mari: cel mult 6 pe ora. */
 export async function raportulCataloguluiEasySales(businessId: string): Promise<RaportMagazin | { error: string }> {

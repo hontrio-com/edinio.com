@@ -59,9 +59,7 @@ const IGNORATE = /^(zz_|_)/;
  * exceptia sa nu-si supravietuiasca motivul.
  */
 const IN_ASTEPTARE = [
-  // easySales, catalogul si stocul (migratia 74): `CATALOG_PORNIT`, `STOC_PORNIT` in
-  // `src/lib/easysales/constante.ts`; proba `src/lib/easysales/catalogul-si-migratia-merg-impreuna.test.ts`.
-  "docs/marketplace/2026-10-13-easysales-catalog.sql",
+  // Gol. Ultima intrare (migratia 74, catalogul easySales) a intrat in productie pe 15.10.2026.
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

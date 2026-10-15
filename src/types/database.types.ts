@@ -7610,7 +7610,7 @@ export type Database = {
       easysales_se_stampileaza: { Args: { p_business: string; p_order_source: Json; p_shipping: Json; p_items: Json }; Returns: boolean }
       /* Comenzile deschise dinaintea activarii: `stampilata` | `deja` | `neeligibila` | `stare` | `negasita`. */
       easysales_stampileaza_existenta: { Args: { p_business: string; p_order: string }; Returns: string }
-      /* Catalogul (E3): `docs/marketplace/2026-10-13-easysales-catalog.sql`, pe productie numai la pornirea E3.
+      /* Catalogul (E3): `migrations/2026-10-13-easysales-catalog.sql`, pe productie din 15.10.2026.
          Ce din `page_sections` e continut si ce e pret sau stoc; tot catalogul in coada; revendicarea pe magazin. */
       easysales_fara_stoc: { Args: { p: Json }; Returns: Json }
       easysales_variante_pe: { Args: { p: Json; p_chei: string[] }; Returns: Json }

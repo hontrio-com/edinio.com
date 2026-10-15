@@ -6942,6 +6942,23 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.easysales_fara_stoc(p jsonb)
+ RETURNS jsonb
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select case
+    when p is null or jsonb_typeof(p) <> 'object' then p
+    when jsonb_typeof(p -> 'variants') = 'object' and jsonb_typeof(p -> 'variants' -> 'combinations') = 'array' then
+      jsonb_set(p - 'stock_status' - 'low_stock_threshold', '{variants,combinations}',
+        (select coalesce(jsonb_agg(case when jsonb_typeof(e.c) = 'object' then e.c - 'stock_quantity' else e.c end order by e.o), '[]'::jsonb)
+           from jsonb_array_elements(p -> 'variants' -> 'combinations') with ordinality as e(c, o)))
+    else p - 'stock_status' - 'low_stock_threshold'
+  end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.easysales_ia_emiterea(p_business uuid, p_versiune_vazuta bigint, p_lease_sec integer DEFAULT 30)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -6985,6 +7002,41 @@ begin
          updated_at = now()
    where id = v_id;
   return v_zavor;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.easysales_marcheaza_categoria()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_b uuid;
+begin
+  if tg_op = 'DELETE' then
+    v_b := old.business_id;
+  else
+    v_b := new.business_id;
+  end if;
+  if not exists (
+    select 1 from privat.store_settings s
+     where s.business_id = v_b
+       and coalesce(s.easysales_config ->> 'catalog_activ', '') = 'true'
+       and coalesce(s.easysales_config ->> 'connected', '') = 'true'
+  ) then
+    return null;
+  end if;
+  if tg_op = 'UPDATE' and new.name is not distinct from old.name and new.parent_id is not distinct from old.parent_id then
+    return null;
+  end if;
+  begin
+    perform public.easysales_pune_in_coada(v_b, 'categorie', '*', 5);
+  exception when others then
+    raise warning 'easysales_marcheaza_categoria: %', sqlerrm;
+  end;
+  return null;
 end;
 $function$
 ;
@@ -7053,6 +7105,91 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.easysales_marcheaza_produsul()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_b   uuid;
+  v_id  uuid;
+  v_ops text[] := array[]::text[];
+begin
+  if tg_op = 'DELETE' then
+    v_b := old.business_id;
+    v_id := old.id;
+  else
+    v_b := new.business_id;
+    v_id := new.id;
+  end if;
+
+  if not exists (
+    select 1 from privat.store_settings s
+     where s.business_id = v_b
+       and coalesce(s.easysales_config ->> 'catalog_activ', '') = 'true'
+       and coalesce(s.easysales_config ->> 'connected', '') = 'true'
+  ) then
+    return null;
+  end if;
+
+  begin
+    if tg_op = 'DELETE' then
+      v_ops := array['articol_sterge'];
+    elsif tg_op = 'INSERT' then
+      -- Primul Save poarta si pretul, si stocul [A: `sale_price`, `stock` obligatorii].
+      v_ops := array['articol_continut'];
+    else
+      if new.price is distinct from old.price
+         or new.compare_at_price is distinct from old.compare_at_price
+         or public.easysales_variante_pe(new.page_sections, array['title', 'price', 'compare_at_price'])
+            is distinct from public.easysales_variante_pe(old.page_sections, array['title', 'price', 'compare_at_price']) then
+        v_ops := v_ops || 'articol_pret'::text;
+      end if;
+      if new.stock_quantity is distinct from old.stock_quantity
+         or new.track_inventory is distinct from old.track_inventory
+         or new.is_active is distinct from old.is_active
+         or (new.page_sections -> 'stock_status') is distinct from (old.page_sections -> 'stock_status')
+         or public.easysales_variante_pe(new.page_sections, array['title', 'stock_quantity'])
+            is distinct from public.easysales_variante_pe(old.page_sections, array['title', 'stock_quantity']) then
+        v_ops := v_ops || 'articol_stoc'::text;
+      end if;
+      if new.name is distinct from old.name
+         or new.description is distinct from old.description
+         or new.images is distinct from old.images
+         or new.category is distinct from old.category
+         or new.sku is distinct from old.sku
+         or new.weight_grams is distinct from old.weight_grams
+         or new.slug is distinct from old.slug
+         or new.is_bundle is distinct from old.is_bundle
+         or new.is_active is distinct from old.is_active
+         or new.track_inventory is distinct from old.track_inventory
+         or public.easysales_fara_stoc(new.page_sections) is distinct from public.easysales_fara_stoc(old.page_sections) then
+        v_ops := v_ops || 'articol_continut'::text;
+      end if;
+    end if;
+
+    if cardinality(v_ops) > 0 then
+      insert into public.easysales_sync_queue as q (business_id, op, cheie, prioritate)
+      select v_b, o.op, v_id::text,
+             (case o.op when 'articol_stoc' then 3 when 'articol_pret' then 4 when 'articol_sterge' then 6 else 5 end)::smallint
+        from unnest(v_ops) as o(op)
+      on conflict (business_id, op, cheie) do update
+         set abandonat_la = null,
+             incercari = 0,
+             pauze = 0,
+             next_retry_at = null,
+             ultima_eroare = null,
+             prioritate = least(q.prioritate, excluded.prioritate);
+    end if;
+  exception when others then
+    raise warning 'easysales_marcheaza_produsul (%): %', v_id, sqlerrm;
+  end;
+  return null;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.easysales_plasa_legaturilor(p_business uuid, p_limita integer DEFAULT 50)
  RETURNS integer
  LANGUAGE plpgsql
@@ -7101,6 +7238,43 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.easysales_pune_catalogul_in_coada(p_business uuid, p_ops text[])
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_n integer := 0;
+  v_k integer;
+  v_op text;
+begin
+  if p_business is null then
+    raise exception 'easysales_pune_catalogul_in_coada: magazinul e obligatoriu';
+  end if;
+  foreach v_op in array coalesce(p_ops, array[]::text[]) loop
+    if v_op not in ('articol_continut', 'articol_pret', 'articol_stoc') then
+      raise exception 'easysales_pune_catalogul_in_coada: operatie nepermisa %', v_op;
+    end if;
+    insert into public.easysales_sync_queue as q (business_id, op, cheie, prioritate)
+    select p_business, v_op, p.id::text, 7::smallint
+      from public.products p
+     where p.business_id = p_business
+    on conflict (business_id, op, cheie) do update
+       set abandonat_la = null,
+           incercari = 0,
+           pauze = 0,
+           next_retry_at = null,
+           ultima_eroare = null,
+           prioritate = least(q.prioritate, excluded.prioritate);
+    get diagnostics v_k = row_count;
+    v_n := v_n + v_k;
+  end loop;
+  return v_n;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.easysales_pune_in_coada(p_business uuid, p_op text, p_cheie text, p_prioritate integer DEFAULT 5)
  RETURNS void
  LANGUAGE plpgsql
@@ -7120,6 +7294,36 @@ begin
          next_retry_at = null,
          ultima_eroare = null,
          prioritate = least(q.prioritate, excluded.prioritate);
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.easysales_revendica_catalogul(p_business uuid, p_ops text[], p_limita integer DEFAULT 100, p_lease interval DEFAULT '00:05:00'::interval)
+ RETURNS SETOF jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  if p_business is null or p_ops is null or cardinality(p_ops) = 0 then
+    return;
+  end if;
+  return query
+    with alese as materialized (
+      select c.id from public.easysales_sync_queue c
+       where c.business_id = p_business
+         and c.op = any (p_ops)
+         and (c.revendicat_pana is null or c.revendicat_pana < now())
+         and (c.next_retry_at is null or c.next_retry_at <= now())
+         and c.abandonat_la is null
+       order by c.prioritate, c.created_at
+       limit greatest(1, least(coalesce(p_limita, 100), 500))
+       for update skip locked)
+    update public.easysales_sync_queue q
+       set revendicat_pana = now() + p_lease
+      from alese a
+     where q.id = a.id
+    returning to_jsonb(q.*);
 end;
 $function$
 ;
@@ -7329,6 +7533,26 @@ begin
   end if;
   return 'stampilata';
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.easysales_variante_pe(p jsonb, p_chei text[])
+ RETURNS jsonb
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select coalesce(jsonb_agg(
+           case when jsonb_typeof(e.c) = 'object'
+                then (select coalesce(jsonb_object_agg(k.k, e.c -> k.k), '{}'::jsonb)
+                        from unnest(p_chei) as k(k) where e.c ? k.k)
+                else e.c end
+           order by e.o), '[]'::jsonb)
+    from jsonb_array_elements(
+           case when jsonb_typeof(p) = 'object' and jsonb_typeof(p -> 'variants') = 'object'
+                     and jsonb_typeof(p -> 'variants' -> 'combinations') = 'array'
+                then p -> 'variants' -> 'combinations' else '[]'::jsonb end
+         ) with ordinality as e(c, o)
 $function$
 ;
 
@@ -12148,6 +12372,32 @@ create table if not exists public.domains (
   source text default 'purchased'::text not null,
   created_at timestamp with time zone default now() not null);
 
+create table if not exists public.easysales_caracteristici (
+  id bigint default nextval('easysales_id_seq'::regclass) not null,
+  business_id uuid not null,
+  cheie_normalizata text not null,
+  nume text not null,
+  es_characteristic_id text,
+  stare text default 'de_trimis'::text not null,
+  motiv text,
+  trimis_la timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.easysales_categorii (
+  id bigint default nextval('easysales_id_seq'::regclass) not null,
+  business_id uuid not null,
+  category_id uuid,
+  cheie text not null,
+  nume_edinio text,
+  nume_trimis text,
+  es_category_id text,
+  stare text default 'de_trimis'::text not null,
+  motiv text,
+  trimis_la timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
 create table if not exists public.easysales_comenzi (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -12182,7 +12432,23 @@ create table if not exists public.easysales_comenzi (
   citita_la timestamp with time zone,
   ultima_veste_la timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  linii jsonb);
+
+create table if not exists public.easysales_joburi (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  fel text not null,
+  stare text default 'in_lucru'::text not null,
+  pagina integer default 0 not null,
+  ultima_pagina integer,
+  total integer,
+  contoare jsonb default '{}'::jsonb not null,
+  eroare text,
+  revendicat_pana timestamp with time zone,
+  pornit_la timestamp with time zone default now() not null,
+  actualizat_la timestamp with time zone default now() not null,
+  terminat_la timestamp with time zone);
 
 create table if not exists public.easysales_produse (
   id bigint default nextval('easysales_id_seq'::regclass) not null,
@@ -12199,7 +12465,19 @@ create table if not exists public.easysales_produse (
   trimis_la timestamp with time zone,
   confirmat_la timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  amprenta text,
+  pret_trimis numeric(12,2),
+  pret_vechi_trimis numeric(12,2),
+  stoc_trimis integer,
+  verificat_la timestamp with time zone,
+  lipsa_la timestamp with time zone,
+  retrimis_la timestamp with time zone,
+  arhivare_blocata_de_la timestamp with time zone,
+  arhivat_la timestamp with time zone,
+  stoc_la_ei integer,
+  stoc_la_ei_la timestamp with time zone,
+  deriva_la timestamp with time zone);
 
 create table if not exists public.easysales_request_log (
   id uuid default gen_random_uuid() not null,
@@ -13548,7 +13826,10 @@ alter table public.discount_customer_uses add constraint discount_customer_uses_
 alter table public.discounts add constraint discounts_pkey PRIMARY KEY (id);
 alter table public.domain_orders add constraint domain_orders_pkey PRIMARY KEY (id);
 alter table public.domains add constraint domains_pkey PRIMARY KEY (id);
+alter table public.easysales_caracteristici add constraint easysales_caracteristici_pkey PRIMARY KEY (id);
+alter table public.easysales_categorii add constraint easysales_categorii_pkey PRIMARY KEY (id);
 alter table public.easysales_comenzi add constraint easysales_comenzi_pkey PRIMARY KEY (id);
+alter table public.easysales_joburi add constraint easysales_joburi_pkey PRIMARY KEY (id);
 alter table public.easysales_produse add constraint easysales_produse_pkey PRIMARY KEY (id);
 alter table public.easysales_request_log add constraint easysales_request_log_pkey PRIMARY KEY (id);
 alter table public.easysales_sync_queue add constraint easysales_sync_queue_pkey PRIMARY KEY (id);
@@ -13645,6 +13926,8 @@ alter table public.custom_pages add constraint custom_pages_business_id_slug_key
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
 alter table public.discount_customer_uses add constraint discount_customer_uses_discount_id_customer_key_ordinal_key UNIQUE (discount_id, customer_key, ordinal);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
+alter table public.easysales_caracteristici add constraint easysales_caracteristici_cheie UNIQUE (business_id, cheie_normalizata);
+alter table public.easysales_categorii add constraint easysales_categorii_cheie UNIQUE (business_id, cheie);
 alter table public.easysales_comenzi add constraint easysales_comenzi_cheie UNIQUE (business_id, directie, es_order_id);
 alter table public.easysales_produse add constraint easysales_produse_cheie UNIQUE (business_id, product_uuid, identitate);
 alter table public.easysales_sync_queue add constraint easysales_sync_queue_cheie UNIQUE (business_id, op, cheie);
@@ -13719,11 +14002,15 @@ alter table public.customer_segments add constraint customer_segments_fel_check 
 alter table public.discounts add constraint discounts_per_customer_limit_pozitiv CHECK (((per_customer_limit IS NULL) OR (per_customer_limit >= 1)));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
+alter table public.easysales_caracteristici add constraint easysales_caracteristici_stare_check CHECK ((stare = ANY (ARRAY['de_trimis'::text, 'trimis'::text, 'respins'::text])));
+alter table public.easysales_categorii add constraint easysales_categorii_stare_check CHECK ((stare = ANY (ARRAY['de_trimis'::text, 'trimis'::text, 'respins'::text, 'scoasa'::text])));
 alter table public.easysales_comenzi add constraint easysales_comenzi_directie_check CHECK ((directie = ANY (ARRAY['iesire'::text, 'intrare'::text])));
 alter table public.easysales_comenzi add constraint easysales_comenzi_efect_check CHECK (((efect IS NULL) OR (efect = ANY (ARRAY['umbra'::text, 'aplicat'::text]))));
 alter table public.easysales_comenzi add constraint easysales_comenzi_stapan_check CHECK ((stapan = ANY (ARRAY['easysales'::text, 'edinio'::text])));
 alter table public.easysales_comenzi add constraint easysales_comenzi_stare_check CHECK ((stare = ANY (ARRAY['asteapta_plata'::text, 'de_trimis'::text, 'trimisa'::text, 'necunoscuta'::text, 'refuzata'::text, 'respinsa_local'::text, 'blocata_plafon'::text, 'abandonata'::text, 'anulata_inainte'::text, 'preluata_edinio'::text, 'conflict'::text, 'externa'::text, 'consumata'::text, 'neconsumata'::text])));
-alter table public.easysales_produse add constraint easysales_produse_stare_check CHECK ((stare = ANY (ARRAY['nou'::text, 'de_trimis'::text, 'trimis'::text, 'confirmat'::text, 'blocat'::text, 'arhivat'::text])));
+alter table public.easysales_joburi add constraint easysales_joburi_fel_check CHECK ((fel = ANY (ARRAY['incarcare'::text, 'verificare'::text])));
+alter table public.easysales_joburi add constraint easysales_joburi_stare_check CHECK ((stare = ANY (ARRAY['in_lucru'::text, 'gata'::text, 'oprit'::text, 'esuat'::text])));
+alter table public.easysales_produse add constraint easysales_produse_stare_check CHECK ((stare = ANY (ARRAY['nou'::text, 'de_trimis'::text, 'trimis'::text, 'confirmat'::text, 'blocat'::text, 'respins'::text, 'disparut'::text, 'exclus'::text, 'arhivat'::text])));
 alter table public.easysales_sync_queue add constraint easysales_sync_queue_op_check CHECK ((op = ANY (ARRAY['comanda_trimite'::text, 'comanda_anuleaza'::text, 'comanda_citeste'::text, 'extern_citeste'::text, 'articol_continut'::text, 'articol_pret'::text, 'articol_stoc'::text, 'articol_sterge'::text, 'categorie'::text, 'caracteristica'::text])));
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
 alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK ((op = ANY (ARRAY['oferta'::text, 'pret'::text, 'stoc'::text, 'retragere'::text, 'masuratori'::text])));
@@ -13839,8 +14126,12 @@ alter table public.domain_orders add constraint domain_orders_business_id_fkey F
 alter table public.domain_orders add constraint domain_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.domains add constraint domains_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.domains add constraint domains_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.easysales_caracteristici add constraint easysales_caracteristici_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.easysales_categorii add constraint easysales_categorii_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.easysales_categorii add constraint easysales_categorii_category_id_fkey FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL;
 alter table public.easysales_comenzi add constraint easysales_comenzi_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.easysales_comenzi add constraint easysales_comenzi_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.easysales_joburi add constraint easysales_joburi_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.easysales_produse add constraint easysales_produse_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.easysales_produse add constraint easysales_produse_parinte_id_fkey FOREIGN KEY (parinte_id) REFERENCES easysales_produse(id) ON DELETE SET NULL;
 alter table public.easysales_produse add constraint easysales_produse_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
@@ -14117,14 +14408,18 @@ CREATE INDEX dhl_etichete_business_idx ON public.dhl_etichete USING btree (busin
 CREATE INDEX dhl_etichete_order_id_idx ON public.dhl_etichete USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE UNIQUE INDEX domain_orders_stripe_session_id_key ON public.domain_orders USING btree (stripe_session_id) WHERE (stripe_session_id IS NOT NULL);
 CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (business_id, domain);
+CREATE INDEX easysales_categorii_categorie_idx ON public.easysales_categorii USING btree (category_id);
 CREATE INDEX easysales_comenzi_display_idx ON public.easysales_comenzi USING btree (business_id, es_display_id) WHERE (es_display_id IS NOT NULL);
 CREATE UNIQUE INDEX easysales_comenzi_iesire_idx ON public.easysales_comenzi USING btree (order_uuid) WHERE (directie = 'iesire'::text);
 CREATE UNIQUE INDEX easysales_comenzi_internal_idx ON public.easysales_comenzi USING btree (business_id, es_internal_id) WHERE (es_internal_id IS NOT NULL);
 CREATE INDEX easysales_comenzi_order_idx ON public.easysales_comenzi USING btree (order_id);
 CREATE INDEX easysales_comenzi_stare_idx ON public.easysales_comenzi USING btree (business_id, stare);
+CREATE INDEX easysales_joburi_magazin_idx ON public.easysales_joburi USING btree (business_id, pornit_la DESC);
+CREATE UNIQUE INDEX easysales_joburi_unul_viu ON public.easysales_joburi USING btree (business_id, fel) WHERE (stare = 'in_lucru'::text);
 CREATE INDEX easysales_produse_parinte_idx ON public.easysales_produse USING btree (parinte_id);
 CREATE INDEX easysales_produse_produs_idx ON public.easysales_produse USING btree (product_id);
 CREATE UNIQUE INDEX easysales_produse_sku_idx ON public.easysales_produse USING btree (business_id, lower(sku_trimis)) WHERE (sku_trimis IS NOT NULL);
+CREATE INDEX easysales_produse_stare_idx ON public.easysales_produse USING btree (business_id, stare);
 CREATE INDEX easysales_request_log_biz_idx ON public.easysales_request_log USING btree (business_id, created_at DESC);
 CREATE INDEX easysales_request_log_probleme_idx ON public.easysales_request_log USING btree (business_id, created_at DESC) WHERE (verdict <> 'reusit'::text);
 CREATE INDEX easysales_request_log_varsta_idx ON public.easysales_request_log USING btree (created_at);
@@ -14460,6 +14755,7 @@ CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR 
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
 CREATE TRIGGER catalog_produs_rezumat AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_rezumat_murdar();
 CREATE TRIGGER categorii_rezumat_murdar AFTER INSERT OR DELETE OR UPDATE ON public.categories FOR EACH ROW EXECUTE FUNCTION trg_categorii_rezumat_murdar();
+CREATE TRIGGER easysales_marcheaza_categoria AFTER INSERT OR DELETE OR UPDATE OF name, parent_id ON public.categories FOR EACH ROW EXECUTE FUNCTION easysales_marcheaza_categoria();
 CREATE TRIGGER customers_touch BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION touch_customers();
 CREATE TRIGGER set_domain_orders_updated_at BEFORE UPDATE ON public.domain_orders FOR EACH ROW EXECUTE FUNCTION update_domain_orders_updated_at();
 CREATE TRIGGER set_easysales_comenzi_updated_at BEFORE UPDATE ON public.easysales_comenzi FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -14478,6 +14774,7 @@ CREATE TRIGGER email_marketing_la_schimbare AFTER UPDATE OF status, payment_stat
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER pepita_listari_stampileaza_clipa BEFORE UPDATE ON public.pepita_listari FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION pepita_stampileaza_listarea();
 CREATE TRIGGER aboutyou_marcheaza_modificarea AFTER UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity ON public.products FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_modificarea();
+CREATE TRIGGER easysales_marcheaza_produsul AFTER INSERT OR DELETE OR UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity, slug, is_bundle ON public.products FOR EACH ROW EXECUTE FUNCTION easysales_marcheaza_produsul();
 CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
 CREATE TRIGGER products_repretuieste_pachetele AFTER UPDATE OF price ON public.products FOR EACH ROW WHEN (((NOT COALESCE(new.is_bundle, false)) AND (new.price IS DISTINCT FROM old.price))) EXECUTE FUNCTION trg_repretuieste_pachetele();
 CREATE TRIGGER products_sync_variant_stock BEFORE INSERT OR UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION sync_product_stock_from_variants();
@@ -14545,7 +14842,10 @@ alter table public.discount_customer_uses enable row level security;
 alter table public.discounts enable row level security;
 alter table public.domain_orders enable row level security;
 alter table public.domains enable row level security;
+alter table public.easysales_caracteristici enable row level security;
+alter table public.easysales_categorii enable row level security;
 alter table public.easysales_comenzi enable row level security;
+alter table public.easysales_joburi enable row level security;
 alter table public.easysales_produse enable row level security;
 alter table public.easysales_request_log enable row level security;
 alter table public.easysales_sync_queue enable row level security;
@@ -14778,7 +15078,16 @@ create policy discounts_owner_all on public.discounts as PERMISSIVE for ALL to a
   WHERE (businesses.user_id = auth.uid()))));
 create policy "Users can view own domain orders" on public.domain_orders as PERMISSIVE for SELECT to public using ((auth.uid() = user_id));
 create policy "Users manage own domains" on public.domains as PERMISSIVE for ALL to public using ((auth.uid() = user_id)) with check ((auth.uid() = user_id));
+create policy owner_select_easysales_caracteristici on public.easysales_caracteristici as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_easysales_categorii on public.easysales_categorii as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_easysales_comenzi on public.easysales_comenzi as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy owner_select_easysales_joburi on public.easysales_joburi as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_easysales_produse on public.easysales_produse as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
@@ -15937,6 +16246,24 @@ grant SELECT on table public.domains to service_role;
 grant TRIGGER on table public.domains to service_role;
 grant TRUNCATE on table public.domains to service_role;
 grant UPDATE on table public.domains to service_role;
+grant SELECT on table public.easysales_caracteristici to anon;
+grant SELECT on table public.easysales_caracteristici to authenticated;
+grant DELETE on table public.easysales_caracteristici to service_role;
+grant INSERT on table public.easysales_caracteristici to service_role;
+grant REFERENCES on table public.easysales_caracteristici to service_role;
+grant SELECT on table public.easysales_caracteristici to service_role;
+grant TRIGGER on table public.easysales_caracteristici to service_role;
+grant TRUNCATE on table public.easysales_caracteristici to service_role;
+grant UPDATE on table public.easysales_caracteristici to service_role;
+grant SELECT on table public.easysales_categorii to anon;
+grant SELECT on table public.easysales_categorii to authenticated;
+grant DELETE on table public.easysales_categorii to service_role;
+grant INSERT on table public.easysales_categorii to service_role;
+grant REFERENCES on table public.easysales_categorii to service_role;
+grant SELECT on table public.easysales_categorii to service_role;
+grant TRIGGER on table public.easysales_categorii to service_role;
+grant TRUNCATE on table public.easysales_categorii to service_role;
+grant UPDATE on table public.easysales_categorii to service_role;
 grant SELECT on table public.easysales_comenzi to anon;
 grant SELECT on table public.easysales_comenzi to authenticated;
 grant DELETE on table public.easysales_comenzi to service_role;
@@ -15946,6 +16273,15 @@ grant SELECT on table public.easysales_comenzi to service_role;
 grant TRIGGER on table public.easysales_comenzi to service_role;
 grant TRUNCATE on table public.easysales_comenzi to service_role;
 grant UPDATE on table public.easysales_comenzi to service_role;
+grant SELECT on table public.easysales_joburi to anon;
+grant SELECT on table public.easysales_joburi to authenticated;
+grant DELETE on table public.easysales_joburi to service_role;
+grant INSERT on table public.easysales_joburi to service_role;
+grant REFERENCES on table public.easysales_joburi to service_role;
+grant SELECT on table public.easysales_joburi to service_role;
+grant TRIGGER on table public.easysales_joburi to service_role;
+grant TRUNCATE on table public.easysales_joburi to service_role;
+grant UPDATE on table public.easysales_joburi to service_role;
 grant SELECT on table public.easysales_produse to anon;
 grant SELECT on table public.easysales_produse to authenticated;
 grant DELETE on table public.easysales_produse to service_role;
@@ -17615,15 +17951,21 @@ grant execute on function public.domeniu_pentru_proxy(p_domenii text[]) to anon;
 grant execute on function public.domeniu_pentru_proxy(p_domenii text[]) to authenticated;
 grant execute on function public.domeniu_pentru_proxy(p_domenii text[]) to service_role;
 grant execute on function public.easysales_elibereaza_emiterea(p_business uuid, p_zavor uuid) to service_role;
+grant execute on function public.easysales_fara_stoc(p jsonb) to service_role;
 grant execute on function public.easysales_ia_emiterea(p_business uuid, p_versiune_vazuta bigint, p_lease_sec integer) to service_role;
+grant execute on function public.easysales_marcheaza_categoria() to service_role;
 grant execute on function public.easysales_marcheaza_comanda() to service_role;
+grant execute on function public.easysales_marcheaza_produsul() to service_role;
 grant execute on function public.easysales_plasa_legaturilor(p_business uuid, p_limita integer) to service_role;
+grant execute on function public.easysales_pune_catalogul_in_coada(p_business uuid, p_ops text[]) to service_role;
 grant execute on function public.easysales_pune_in_coada(p_business uuid, p_op text, p_cheie text, p_prioritate integer) to service_role;
+grant execute on function public.easysales_revendica_catalogul(p_business uuid, p_ops text[], p_limita integer, p_lease interval) to service_role;
 grant execute on function public.easysales_schimba_stapanul(p_business uuid, p_order uuid, p_stapan text) to service_role;
 grant execute on function public.easysales_scrie_tokenul(p_business uuid, p_zavor uuid, p_patch jsonb) to service_role;
 grant execute on function public.easysales_se_stampileaza(p_business uuid, p_order_source jsonb, p_shipping jsonb, p_items jsonb) to service_role;
 grant execute on function public.easysales_stampileaza_comanda() to service_role;
 grant execute on function public.easysales_stampileaza_existenta(p_business uuid, p_order uuid) to service_role;
+grant execute on function public.easysales_variante_pe(p jsonb, p_chei text[]) to service_role;
 grant execute on function public.edinio_revendica_conversii(limita integer) to service_role;
 grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
@@ -17976,15 +18318,21 @@ revoke execute on function public.discount_totaluri(bid uuid) from public;
 revoke execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) from public;
 revoke execute on function public.domeniu_pentru_proxy(p_domenii text[]) from public;
 revoke execute on function public.easysales_elibereaza_emiterea(p_business uuid, p_zavor uuid) from public;
+revoke execute on function public.easysales_fara_stoc(p jsonb) from public;
 revoke execute on function public.easysales_ia_emiterea(p_business uuid, p_versiune_vazuta bigint, p_lease_sec integer) from public;
+revoke execute on function public.easysales_marcheaza_categoria() from public;
 revoke execute on function public.easysales_marcheaza_comanda() from public;
+revoke execute on function public.easysales_marcheaza_produsul() from public;
 revoke execute on function public.easysales_plasa_legaturilor(p_business uuid, p_limita integer) from public;
+revoke execute on function public.easysales_pune_catalogul_in_coada(p_business uuid, p_ops text[]) from public;
 revoke execute on function public.easysales_pune_in_coada(p_business uuid, p_op text, p_cheie text, p_prioritate integer) from public;
+revoke execute on function public.easysales_revendica_catalogul(p_business uuid, p_ops text[], p_limita integer, p_lease interval) from public;
 revoke execute on function public.easysales_schimba_stapanul(p_business uuid, p_order uuid, p_stapan text) from public;
 revoke execute on function public.easysales_scrie_tokenul(p_business uuid, p_zavor uuid, p_patch jsonb) from public;
 revoke execute on function public.easysales_se_stampileaza(p_business uuid, p_order_source jsonb, p_shipping jsonb, p_items jsonb) from public;
 revoke execute on function public.easysales_stampileaza_comanda() from public;
 revoke execute on function public.easysales_stampileaza_existenta(p_business uuid, p_order uuid) from public;
+revoke execute on function public.easysales_variante_pe(p jsonb, p_chei text[]) from public;
 revoke execute on function public.edinio_revendica_conversii(limita integer) from public;
 revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;

@@ -172,19 +172,20 @@ export const PLAFON_CORP_WEBHOOK = 256 * 1024;
 /**
  * ⚠⚠ COMUTATORUL CATALOGULUI, IN COD, NU IN MEDIU.
  *
- * Catalogul (E3) porneste numai dupa masuratorile E0 pe contul de proba al comerciantului
- * (M-EXT-1 si M-STOC-1, planul §10): un catalog tinut pe stoc 0 nu vinde nimic, iar o impingere de
- * stoc pe un model gresit scade aceeasi bucata de doua ori. Si cere migratia 74
- * (`docs/marketplace/2026-10-13-easysales-catalog.sql`), care pe productie se aplica tot atunci.
+ * PORNIT pe 15.10.2026, la cererea proprietarului („sa poata fi folosit fara testare”), INAINTEA
+ * masuratorilor E0 pe contul de proba (M-CAT-1, M-PROD-1..7; planul §10). Migratia 74
+ * (`migrations/2026-10-13-easysales-catalog.sql`) e aplicata pe productie din aceeasi zi. Fiecare
+ * magazin il porneste singur, cu „Trimite catalogul” (`catalog_activ`); pana atunci nu pleaca nimic.
+ * Stocul trimis ramane 0 cat timp bucla de stoc (E4, mai jos) e oprita.
  *
- * De aceea comutatorul e o constanta si nu o variabila de mediu: o variabila s-ar putea porni fara
- * migratie, iar codul catalogului ar citi tabele care nu exista. O constanta se schimba printr-un
- * commit, iar proba `catalogul-si-migratia-merg-impreuna.test.ts` cere ca acelasi commit sa mute
- * migratia in `migrations/` (deci si sa regenereze baseline-ul, pe care il cere CI-ul).
+ * De ce constanta si nu variabila de mediu: o variabila s-ar putea porni fara migratie, iar codul
+ * catalogului ar citi tabele care nu exista. O constanta se schimba printr-un commit, iar proba
+ * `catalogul-si-migratia-merg-impreuna.test.ts` cere ca acelasi commit sa mute migratia in
+ * `migrations/` (deci si sa regenereze baseline-ul, pe care il cere CI-ul).
  *
- * Raportul de pregatire NU asteapta comutatorul: citeste numai tabele care exista deja.
+ * Raportul de pregatire nu depinde de comutator: citeste numai tabele care existau si inainte.
  */
-export const CATALOG_PORNIT = false;
+export const CATALOG_PORNIT = true;
 
 /**
  * Bucla de stoc (E4): aceeasi regula, si inca o conditie, formula aleasa dupa M-STOC-1

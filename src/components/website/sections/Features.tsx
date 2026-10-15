@@ -12,6 +12,7 @@ import { FeatureStack } from "./FeatureStack";
 import { AutomatizariAnimat } from "./AutomatizariAnimat";
 import { IntegrariAnimat } from "./IntegrariAnimat";
 import { MagazinAnimat } from "./MagazinAnimat";
+import { VanzariAnimat } from "./VanzariAnimat";
 import { SectionEyebrow } from "./SectionEyebrow";
 import { butonAlb } from "@/lib/website/buton";
 
@@ -382,6 +383,8 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
         <IntegrariAnimat eticheta={card.image.alt} />
       ) : card.image.animatie === "automatizari" ? (
         <AutomatizariAnimat eticheta={card.image.alt} />
+      ) : card.image.animatie === "vanzari" ? (
+        <VanzariAnimat eticheta={card.image.alt} />
       ) : card.image.base ? (
         /*
           `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.

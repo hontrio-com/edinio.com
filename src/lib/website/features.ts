@@ -8,13 +8,14 @@
  *
  * ═══ IMAGINILE VIN ÎN TREI MĂRIMI ═══
  *
- * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/vanzari`
- * ies `/features/vanzari-720.webp`, `-1080` și `-1440`, iar browserul alege.
+ * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/mentenanta`
+ * ies `/features/mentenanta-720.webp`, `-1080` și `-1440`, iar browserul alege.
  *
- * Primele trei carduri nu mai au imagine, ci câte o machetă animată
+ * Primele patru carduri nu mai au imagine, ci câte o machetă animată
  * (`image.animatie`): iMac-ul cu magazinul (capturile lui în
  * `/features/magazin-animat/`, vezi `MagazinAnimat.tsx`), panoul de integrări
- * (`IntegrariAnimat.tsx`) și documentele unei comenzi (`AutomatizariAnimat.tsx`).
+ * (`IntegrariAnimat.tsx`), documentele unei comenzi (`AutomatizariAnimat.tsx`)
+ * și telefonul clientului cu campaniile automate (`VanzariAnimat.tsx`).
  *
  * Motivul e concret. Loader-ul proiectului lasă neatinse imaginile locale — trece
  * prin el doar ce e pe R2 — deci `next/image` nu produce niciun `srcset` pentru
@@ -82,7 +83,7 @@ export interface FeatureCard {
      * procesata singura (`IntegrariAnimat.tsx`). Machetele sunt ale clientului,
      * 14.10.2026.
      */
-    animatie?: "magazin" | "integrari" | "automatizari";
+    animatie?: "magazin" | "integrari" | "automatizari" | "vanzari";
     alt: string;
     /** Ce trebuie sa arate imaginea. Se vede pe substituent. */
     hint: string;
@@ -189,9 +190,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
        meniului. Daca se face vreodata o pagina de marketing, aici se schimba. */
     cta: { label: "Vezi cum optimizăm magazinul", href: "/optimizare" },
     image: {
-      base: "/features/vanzari",
-      alt: "Panoul de marketing din Edinio",
-      hint: "Dashboard marketing",
+      /* Imaginea statica de dinainte (`/features/vanzari-*.webp`) a fost inlocuita
+         pe 15.10.2026 de macheta animata a clientului, si fisierele ei sterse. */
+      animatie: "vanzari",
+      alt: "Telefonul unui client primește notificările campaniilor automate, iar în Edinio intră comenzile aduse de ele, cu veniturile din marketing",
+      hint: "Notificările campaniilor automate și comenzile pe care le aduc",
     },
   },
   {

@@ -34,7 +34,8 @@ const SEMN = "/semn.svg";
 const SIGLA_SMARTBILL = "/integrations/smartbill-mic.webp";
 const SIGLA_FAN = "/integrations/fan-courier.svg";
 const SIGLA_GMAIL = "/mentenanta/gmail.svg";
-const SIGLA_IMESSAGE = "/features/automatizari-animat/imessage.svg";
+/** Comună cu cardul cu vânzări. */
+const SIGLA_IMESSAGE = "/features/sigle/imessage.svg";
 /*
  * Sigla magazinului, in doua marimi apropiate de cele afisate (factura si e-mailul). ⚠ MASURAT: cat
  * ruleaza o animatie pe compozitor, Chrome filtreaza imaginile din ea cu calitate redusa si le reface

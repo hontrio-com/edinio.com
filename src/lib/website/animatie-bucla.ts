@@ -1,7 +1,7 @@
 /**
  * Motorul comun al machetelor animate din cardurile „Soluția” (`magazin-animat.ts`,
- * `integrari-animat.ts`): o buclă descrisă ca funcții de timp, tradusă o singură dată în
- * cadre-cheie pentru Web Animations.
+ * `integrari-animat.ts`, `automatizari-animat.ts`, `vanzari-animat.ts`): o buclă descrisă ca funcții
+ * de timp, tradusă o singură dată în cadre-cheie pentru Web Animations.
  *
  * ═══ DE CE AȘA ═══
  *
@@ -59,6 +59,11 @@ export interface Pista {
   scrie: (v: number[]) => Keyframe;
   /** Abaterea admisă, pe fiecare componentă, în unitățile ei. */
   toleranta: number[];
+  /**
+   * Valori care SAR, fără trecere între ele (cifrele unui contor): cadrele-cheie se păstrează exact
+   * unde se schimbă valoarea și țin fiecare până la următorul (`easing: step-end`).
+   */
+  trepte?: boolean;
 }
 
 /**
@@ -129,7 +134,15 @@ export function esantioanePista(
     ts.push(t);
     vs.push(p.valori(t));
   }
-  return { ts, vs, pastrate: simplifica(ts, vs, p.toleranta) };
+  return { ts, vs, pastrate: p.trepte ? schimbari(vs) : simplifica(ts, vs, p.toleranta) };
+}
+
+/** O pistă în trepte: primul eșantion, fiecare schimbare de valoare și ultimul. */
+function schimbari(vs: readonly number[][]): number[] {
+  const out = [0];
+  for (let k = 1; k < vs.length - 1; k++) if (vs[k].some((x, d) => x !== vs[k - 1][d])) out.push(k);
+  out.push(vs.length - 1);
+  return out;
 }
 
 /** Cadrele-cheie ale unei piste, gata pentru `element.animate`. */
@@ -138,6 +151,7 @@ export function cadrePista(p: Pista, buclaS: number, pePeSecunda = ESANTIOANE_PE
   return pastrate.map((k, idx) => ({
     ...p.scrie(vs[k]),
     offset: idx === 0 ? 0 : idx === pastrate.length - 1 ? 1 : ts[k] / buclaS,
+    ...(p.trepte ? { easing: "step-end" } : {}),
   }));
 }
 

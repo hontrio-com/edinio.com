@@ -6,6 +6,7 @@ import { cadrePista, esantioanePista, urmatorulMoment, type Pista } from "./anim
 import * as magazin from "./magazin-animat";
 import * as integrari from "./integrari-animat";
 import * as automatizari from "./automatizari-animat";
+import * as vanzari from "./vanzari-animat";
 
 /*
   Regulile motorului comun, verificate pe TOATE machetele odată. O regulă care ține de motor n-are
@@ -44,6 +45,14 @@ const MACHETE: ReadonlyArray<{
     componenta: "src/components/website/sections/AutomatizariAnimat.tsx",
     atribut: "eau",
   },
+  {
+    nume: "vanzari",
+    piste: vanzari.PISTE,
+    buclaS: vanzari.BUCLA_S,
+    momente: vanzari.MOMENTE_DISCRETE,
+    componenta: "src/components/website/sections/VanzariAnimat.tsx",
+    atribut: "evz",
+  },
 ];
 
 for (const m of MACHETE) {
@@ -57,7 +66,8 @@ for (const m of MACHETE) {
         while (s < pastrate.length - 2 && pastrate[s + 1] <= k) s++;
         const a = pastrate[s];
         const b = pastrate[s + 1];
-        const f = b === a ? 0 : (ts[k] - ts[a]) / (ts[b] - ts[a]);
+        /* În trepte (`step-end`), fiecare cadru ține până la următorul; altfel, dreapta dintre ele. */
+        const f = p.trepte ? (k === b ? 1 : 0) : b === a ? 0 : (ts[k] - ts[a]) / (ts[b] - ts[a]);
         for (let d = 0; d < p.toleranta.length; d++) {
           const desenat = vs[a][d] + (vs[b][d] - vs[a][d]) * f;
           assert.ok(
@@ -92,7 +102,8 @@ for (const m of MACHETE) {
        mult decât macheta originală. Proba ține ușa închisă pentru orice altă proprietate. */
     for (const p of m.piste) {
       for (const cadru of cadrePista(p, m.buclaS)) {
-        const proprietati = Object.keys(cadru).filter((k) => k !== "offset");
+        /* `offset` și `easing` (treptele) țin de cronometrare, nu de stil. */
+        const proprietati = Object.keys(cadru).filter((k) => k !== "offset" && k !== "easing");
         for (const k of proprietati) assert.ok(k === "transform" || k === "opacity", `${p.tinta}: \`${k}\` în cadre`);
       }
     }

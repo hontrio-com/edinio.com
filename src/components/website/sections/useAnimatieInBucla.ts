@@ -4,9 +4,10 @@ import { useEffect, type RefObject } from "react";
 import { cadrePista, urmatorulMoment, type Pista } from "@/lib/website/animatie-bucla";
 
 /**
- * Partea de DOM a machetelor animate din „Soluția” (`MagazinAnimat`, `IntegrariAnimat`): pornește
- * bucla, o oprește când nu se vede și scrie ce nu poate rula pe compozitor. Pistele și cronologia
- * sunt pure, în `lib/website/` (`animatie-bucla.ts` și câte un fișier pe machetă).
+ * Partea de DOM a machetelor animate din „Soluția” (`MagazinAnimat`, `IntegrariAnimat`,
+ * `AutomatizariAnimat`, `VanzariAnimat`): pornește bucla, o oprește când nu se vede și scrie ce nu
+ * poate rula pe compozitor. Pistele și cronologia sunt pure, în `lib/website/` (`animatie-bucla.ts`
+ * și câte un fișier pe machetă).
  *
  * ═══ CUM PORNEȘTE, CA SĂ NU SE SIMTĂ ═══
  *
@@ -66,6 +67,12 @@ export interface Bucla {
    * scris din JavaScript la fiecare lățime a scenei. Lipsește când macheta nu le folosește.
    */
   faraTrig?: (scena: HTMLElement, latime: number) => void;
+  /**
+   * Pistele făcute din ce se poate afla numai în pagină (înălțimea unui text, care depinde de fontul
+   * sistemului), chemate o dată, după `pregateste`, înainte de cadrele-cheie. Lipsește când toate
+   * pistele se știu dinainte; `piste` rămân atunci cele din HTML și din probe.
+   */
+  pisteMasurate?: (radacina: HTMLElement, scena: HTMLElement) => readonly Pista[];
 }
 
 /** Peste atâta pauză, la întoarcere bucla o ia de la capăt. */
@@ -229,7 +236,7 @@ export function useAnimatieInBucla(radacina: RefObject<HTMLElement | null>, bucl
      * `BUCATA_MS`, chiar și când răgazul vine forțat, după 800 ms fără timp liber. Toate pleacă
      * oprite pe clipa din HTML, deci până pornesc împreună cardul arată exact ce arăta.
      */
-    function construiesteAnimatiile(): Promise<Animation[] | null> {
+    function construiesteAnimatiile(piste: readonly Pista[]): Promise<Animation[] | null> {
       return new Promise((rezolva) => {
         const facute: Animation[] = [];
         let i = 0;
@@ -240,8 +247,8 @@ export function useAnimatieInBucla(radacina: RefObject<HTMLElement | null>, bucl
             return;
           }
           const pana = performance.now() + BUCATA_MS;
-          while (i < bucla.piste.length) {
-            const p = bucla.piste[i++];
+          while (i < piste.length) {
+            const p = piste[i++];
             const el = elemente.get(p.tinta);
             if (el) {
               const a = el.animate(cadrePista(p, bucla.buclaS), { duration: buclaMs, iterations: Infinity });
@@ -252,11 +259,21 @@ export function useAnimatieInBucla(radacina: RefObject<HTMLElement | null>, bucl
             const fortat = !ragaz || ragaz.didTimeout;
             if (performance.now() >= pana || (!fortat && ragaz.timeRemaining() < 1)) break;
           }
-          if (i < bucla.piste.length) laRagaz(bucata);
+          if (i < piste.length) laRagaz(bucata);
           else rezolva(facute);
         };
         laRagaz(bucata);
       });
+    }
+
+    /** Pistele măsurate în pagină, dacă macheta le cere; altfel cele știute dinainte. Nu aruncă. */
+    function pisteleDeFolosit(): readonly Pista[] {
+      if (!bucla.pisteMasurate) return bucla.piste;
+      try {
+        return bucla.pisteMasurate(radacinaSigura, scena);
+      } catch {
+        return bucla.piste;
+      }
     }
 
     let pregatit = false;
@@ -264,7 +281,7 @@ export function useAnimatieInBucla(radacina: RefObject<HTMLElement | null>, bucl
       if (pregatit) return;
       pregatit = true;
       void pregatesteImaginile()
-        .then(() => (anulat || typeof scena.animate !== "function" ? null : construiesteAnimatiile()))
+        .then(() => (anulat || typeof scena.animate !== "function" ? null : construiesteAnimatiile(pisteleDeFolosit())))
         .then((facute) => {
           if (anulat) {
             for (const a of facute ?? []) a.cancel();

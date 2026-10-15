@@ -1,0 +1,704 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  MACHETA ANIMATĂ A CARDULUI CU VÂNZĂRI (`VanzariAnimat.tsx`)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Desenul e al machetei făcute de client (15.10.2026, „varianta 5: telefonul
+  clientului”), neatins: aceleași poziții, mărimi, culori și fonturi, în `--u`
+  (vezi `animatii-carduri.css`).
+
+  Cronologia stă în `lib/website/vanzari-animat.ts`, cu tot ce s-a schimbat ca
+  să meargă pe compozitor. De aici se văd: notificările stau fiecare într-un
+  purtător cât zona lor (`.evz-nl`, se mută el), iar fondul verde al comenzii
+  noi e un strat (`.evz-orf`).
+
+  Valorile de start ale celor animate le scrie componenta, din piste, pe fiecare
+  element: aici stau doar cele care nu se schimbă.
+*/
+
+.evz {
+  color: #0e1210;
+  user-select: none;
+}
+
+.evz svg {
+  display: block;
+}
+
+/* ─── Telefonul ─── */
+
+.evz-dev {
+  position: absolute;
+  left: calc(var(--u) * 6);
+  top: calc(var(--u) * 3.6);
+  width: calc(var(--u) * 32.4);
+  height: calc(var(--u) * 67.8);
+  border-radius: calc(var(--u) * 5.6);
+  background: #c6c9cd;
+  padding: calc(var(--u) * 0.42);
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.12) #eeeff1,
+    inset 0 0 0 calc(var(--u) * 0.3) #b0b4b8,
+    inset 0 calc(var(--u) * 0.5) calc(var(--u) * 0.4) rgba(255, 255, 255, 0.35),
+    0 calc(var(--u) * 0.3) calc(var(--u) * 0.6) rgba(14, 18, 16, 0.12),
+    0 calc(var(--u) * 3) calc(var(--u) * 6) rgba(14, 18, 16, 0.2);
+}
+
+.evz-bt {
+  position: absolute;
+  width: calc(var(--u) * 0.42);
+  border-radius: calc(var(--u) * 0.2);
+  background: #b7bbbf;
+  box-shadow: inset calc(var(--u) * 0.1) 0 0 #e0e2e4;
+}
+
+.evz-bt1 {
+  left: calc(var(--u) * -0.32);
+  top: calc(var(--u) * 11.6);
+  height: calc(var(--u) * 2.6);
+}
+
+.evz-bt2 {
+  left: calc(var(--u) * -0.32);
+  top: calc(var(--u) * 16.2);
+  height: calc(var(--u) * 4.6);
+}
+
+.evz-bt3 {
+  left: calc(var(--u) * -0.32);
+  top: calc(var(--u) * 21.9);
+  height: calc(var(--u) * 4.6);
+}
+
+.evz-bt4 {
+  right: calc(var(--u) * -0.32);
+  top: calc(var(--u) * 17.4);
+  height: calc(var(--u) * 7.2);
+  box-shadow: inset calc(var(--u) * -0.1) 0 0 #e0e2e4;
+}
+
+.evz-bt5 {
+  right: calc(var(--u) * -0.18);
+  top: calc(var(--u) * 35.2);
+  height: calc(var(--u) * 4.4);
+  width: calc(var(--u) * 0.3);
+  background: #9da1a6;
+  box-shadow: inset calc(var(--u) * -0.08) 0 0 #c9cccf;
+}
+
+.evz-bz {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--u) * 5.2);
+  background: #050505;
+  padding: calc(var(--u) * 0.7);
+}
+
+.evz-sc {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--u) * 4.5);
+  overflow: hidden;
+  background: #3e5fae;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Fundalul: discuri de culoare, suprapuse. */
+.evz-wp {
+  position: absolute;
+  inset: 0;
+  background: #e4eef1;
+  filter: blur(calc(var(--u) * 0.12));
+}
+
+.evz-wp i {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.evz-w2 {
+  width: calc(var(--u) * 40);
+  height: calc(var(--u) * 40);
+  left: calc(var(--u) * 12);
+  top: calc(var(--u) * -15);
+  background: #2e5bcb;
+  box-shadow:
+    inset calc(var(--u) * 2.4) calc(var(--u) * 1.6) calc(var(--u) * 4) rgba(170, 200, 255, 0.55),
+    inset calc(var(--u) * -3) calc(var(--u) * -2) calc(var(--u) * 5) rgba(10, 30, 110, 0.45);
+}
+
+.evz-w3 {
+  width: calc(var(--u) * 38);
+  height: calc(var(--u) * 38);
+  left: calc(var(--u) * 12);
+  top: calc(var(--u) * 40);
+  background: #2a6fe0;
+  box-shadow: inset calc(var(--u) * -4) calc(var(--u) * -2) calc(var(--u) * 6) rgba(120, 190, 255, 0.6);
+}
+
+.evz-w1 {
+  width: calc(var(--u) * 56);
+  height: calc(var(--u) * 56);
+  left: calc(var(--u) * -32);
+  top: calc(var(--u) * 21);
+  background: #93dccb;
+  box-shadow:
+    inset calc(var(--u) * -3) calc(var(--u) * 4) calc(var(--u) * 6) rgba(255, 255, 255, 0.35),
+    inset calc(var(--u) * 2) calc(var(--u) * -5) calc(var(--u) * 7) rgba(30, 120, 140, 0.45);
+}
+
+.evz-w4 {
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 16);
+  right: calc(var(--u) * -9);
+  bottom: calc(var(--u) * 6);
+  background: #bfe0fa;
+  opacity: 0.8;
+  filter: blur(calc(var(--u) * 2));
+}
+
+.evz-w5 {
+  width: calc(var(--u) * 20);
+  height: calc(var(--u) * 20);
+  left: calc(var(--u) * -6);
+  bottom: calc(var(--u) * -8);
+  background: #1e4fc0;
+  opacity: 0.9;
+  filter: blur(calc(var(--u) * 1.4));
+}
+
+/* Bara de stare și insula. */
+.evz-di {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--u) * 1.05);
+  width: calc(var(--u) * 9.4);
+  height: calc(var(--u) * 2.75);
+  margin-left: calc(var(--u) * -4.7);
+  border-radius: calc(var(--u) * 1.4);
+  background: #000;
+  z-index: 5;
+}
+
+.evz-di b {
+  position: absolute;
+  right: calc(var(--u) * 0.95);
+  top: calc(var(--u) * 0.85);
+  width: calc(var(--u) * 1.05);
+  height: calc(var(--u) * 1.05);
+  border-radius: 50%;
+  background: #0e1626;
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.2) #05070c,
+    inset calc(var(--u) * 0.25) calc(var(--u) * -0.2) 0 calc(var(--u) * 0.32) #101c33;
+}
+
+.evz-sb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 1.45);
+  height: calc(var(--u) * 2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 calc(var(--u) * 2.7) 0 calc(var(--u) * 3.2);
+  z-index: 4;
+}
+
+.evz-sb svg {
+  fill: #fff;
+}
+
+.evz-ri {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
+}
+
+.evz-ri svg {
+  width: calc(var(--u) * 1.45);
+  height: calc(var(--u) * 1.05);
+}
+
+.evz-bat {
+  position: relative;
+  width: calc(var(--u) * 2.45);
+  height: calc(var(--u) * 1.18);
+  border-radius: calc(var(--u) * 0.38);
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.evz-bat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 82%;
+  border-radius: calc(var(--u) * 0.38) 0 0 calc(var(--u) * 0.38);
+  background: #fff;
+}
+
+.evz-bat::after {
+  content: "";
+  position: absolute;
+  right: calc(var(--u) * -0.28);
+  top: calc(var(--u) * 0.38);
+  width: calc(var(--u) * 0.18);
+  height: calc(var(--u) * 0.42);
+  border-radius: 0 calc(var(--u) * 0.1) calc(var(--u) * 0.1) 0;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* Ecranul de blocare: data și ceasul de sticlă. */
+.evz-dt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 5.6);
+  text-align: center;
+  font-size: calc(var(--u) * 1.5);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 calc(var(--u) * 0.1) calc(var(--u) * 0.4) rgba(0, 0, 0, 0.08);
+}
+
+.evz-tm {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--u) * 7.6);
+  text-align: center;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  font-size: calc(var(--u) * 12.6);
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  transform: scaleX(0.82) scaleY(1.42);
+  transform-origin: 50% 0;
+  color: rgba(255, 255, 255, 0.3);
+  -webkit-text-stroke: calc(var(--u) * 0.05) rgba(255, 255, 255, 0.6);
+  text-shadow:
+    calc(var(--u) * 0.05) calc(var(--u) * 0.07) 0 rgba(255, 255, 255, 0.55),
+    calc(var(--u) * -0.03) calc(var(--u) * -0.03) 0 rgba(255, 255, 255, 0.3),
+    0 calc(var(--u) * 0.4) calc(var(--u) * 1) rgba(20, 40, 110, 0.12);
+}
+
+/* Notificările: plăci de sticlă. Fiecare stă într-un purtător cât zona lor, care o mută. */
+.evz-ns {
+  position: absolute;
+  left: calc(var(--u) * 1.2);
+  right: calc(var(--u) * 1.2);
+  top: calc(var(--u) * 28.6);
+}
+
+.evz-nl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--u) * 40);
+}
+
+.evz-nt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  gap: calc(var(--u) * 1);
+  padding: calc(var(--u) * 1.15) calc(var(--u) * 1.25) calc(var(--u) * 1.2);
+  border-radius: calc(var(--u) * 2.6);
+  white-space: normal;
+  color: #000;
+  background: rgba(255, 255, 255, 0.52);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 1.8)) saturate(1.8);
+  backdrop-filter: blur(calc(var(--u) * 1.8)) saturate(1.8);
+  box-shadow:
+    inset 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.9),
+    inset 0 calc(var(--u) * -0.06) 0 rgba(255, 255, 255, 0.35),
+    inset 0 0 0 calc(var(--u) * 0.07) rgba(255, 255, 255, 0.45),
+    0 calc(var(--u) * 0.4) calc(var(--u) * 1.4) rgba(15, 25, 60, 0.12);
+}
+
+.evz-nt > img {
+  flex: none;
+  width: calc(var(--u) * 3.35);
+  height: calc(var(--u) * 3.35);
+  border-radius: calc(var(--u) * 0.8);
+  box-shadow: 0 calc(var(--u) * 0.1) calc(var(--u) * 0.3) rgba(0, 0, 0, 0.12);
+}
+
+.evz-nt > img.g {
+  padding: calc(var(--u) * 0.45);
+  background: #fff;
+}
+
+.evz-nt > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.evz-nh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(var(--u) * 0.6);
+}
+
+.evz-nh b {
+  font-size: calc(var(--u) * 1.18);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.evz-nh small {
+  font-size: calc(var(--u) * 1.02);
+  color: rgba(40, 40, 50, 0.55);
+  letter-spacing: -0.01em;
+}
+
+.evz-nt p {
+  margin-top: calc(var(--u) * 0.08);
+  font-size: calc(var(--u) * 1.12);
+  line-height: 1.28;
+  letter-spacing: -0.015em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.evz-nt p.s {
+  font-weight: 600;
+  -webkit-line-clamp: 1;
+}
+
+/* Butoanele de jos și bara „acasă”. */
+.evz-qb {
+  position: absolute;
+  bottom: calc(var(--u) * 3.3);
+  width: calc(var(--u) * 5);
+  height: calc(var(--u) * 5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.6);
+  backdrop-filter: blur(calc(var(--u) * 1.2)) saturate(1.6);
+  box-shadow:
+    inset 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.6),
+    inset 0 calc(var(--u) * -0.06) 0 rgba(255, 255, 255, 0.2),
+    inset 0 0 0 calc(var(--u) * 0.06) rgba(255, 255, 255, 0.25);
+}
+
+.evz-qb svg {
+  width: calc(var(--u) * 2.25);
+  height: calc(var(--u) * 2.25);
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.evz-qb1 {
+  left: calc(var(--u) * 3.3);
+}
+
+.evz-qb2 {
+  right: calc(var(--u) * 3.3);
+}
+
+.evz-hi {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--u) * 0.75);
+  width: calc(var(--u) * 11.6);
+  height: calc(var(--u) * 0.48);
+  margin-left: calc(var(--u) * -5.8);
+  border-radius: calc(var(--u) * 0.3);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+/* ─── Panoul cu comenzi ─── */
+
+.evz-pn {
+  position: absolute;
+  left: calc(var(--u) * 44);
+  top: calc(var(--u) * 7);
+  width: calc(var(--u) * 52);
+  height: calc(var(--u) * 61);
+  border-radius: calc(var(--u) * 2.2);
+  background: #fff;
+  padding: calc(var(--u) * 2.2) calc(var(--u) * 2.4);
+  box-shadow:
+    0 0 0 1px rgba(14, 18, 16, 0.06),
+    0 calc(var(--u) * 0.4) calc(var(--u) * 1) rgba(14, 18, 16, 0.04),
+    0 calc(var(--u) * 3) calc(var(--u) * 7) rgba(14, 18, 16, 0.09);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.evz-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.evz-hd strong {
+  display: block;
+  font-size: calc(var(--u) * 1.9);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.evz-hd small {
+  display: block;
+  font-size: calc(var(--u) * 1.1);
+  color: #6b716e;
+  margin-top: calc(var(--u) * 0.2);
+}
+
+.evz-live {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
+  font-size: calc(var(--u) * 1.05);
+  font-weight: 650;
+  padding: calc(var(--u) * 0.4) calc(var(--u) * 0.9);
+  border-radius: calc(var(--u) * 1);
+  background: #e8f8ec;
+  color: #078a22;
+}
+
+.evz-live i {
+  width: calc(var(--u) * 0.8);
+  height: calc(var(--u) * 0.8);
+  border-radius: 50%;
+  background: #07c527;
+}
+
+.evz-rows {
+  position: relative;
+  margin-top: calc(var(--u) * 1.4);
+  height: calc(var(--u) * 41.4);
+}
+
+.evz-or {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: calc(var(--u) * 6.6);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.1);
+  padding: 0 calc(var(--u) * 1);
+  border-radius: calc(var(--u) * 1.2);
+  isolation: isolate;
+}
+
+/* Fondul verde al comenzii noi: un strat sub conținutul rândului, care se stinge. */
+.evz-orf {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(7, 197, 39, 0.12);
+  z-index: -1;
+}
+
+.evz-av {
+  position: relative;
+  flex: none;
+  width: calc(var(--u) * 3.8);
+  height: calc(var(--u) * 3.8);
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--u) * 1.15);
+  font-weight: 700;
+  color: #fff;
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.2) #fff,
+    0 calc(var(--u) * 0.2) calc(var(--u) * 0.6) rgba(14, 18, 16, 0.12);
+}
+
+.evz-av img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.evz-or > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.evz-or b {
+  display: block;
+  font-size: calc(var(--u) * 1.3);
+  font-weight: 650;
+}
+
+.evz-or small {
+  display: block;
+  font-size: calc(var(--u) * 1.02);
+  color: #6b716e;
+  margin-top: calc(var(--u) * 0.1);
+}
+
+.evz-or em {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
+  height: calc(var(--u) * 2.6);
+  padding: 0 calc(var(--u) * 0.9) 0 calc(var(--u) * 0.45);
+  border-radius: calc(var(--u) * 1.3);
+  background: #f3f5f4;
+  font-style: normal;
+  font-size: calc(var(--u) * 1);
+  font-weight: 600;
+  color: #3b413e;
+}
+
+.evz-or em img {
+  width: calc(var(--u) * 1.8);
+  height: calc(var(--u) * 1.8);
+  border-radius: calc(var(--u) * 0.45);
+}
+
+.evz-or em svg {
+  width: calc(var(--u) * 1.6);
+  height: calc(var(--u) * 1.6);
+  fill: none;
+  stroke: #f56a52;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.evz-or strong {
+  flex: none;
+  width: calc(var(--u) * 9.4);
+  text-align: right;
+  font-size: calc(var(--u) * 1.35);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.evz-ft {
+  position: absolute;
+  left: calc(var(--u) * 2.4);
+  right: calc(var(--u) * 2.4);
+  bottom: calc(var(--u) * 2);
+  padding-top: calc(var(--u) * 1.6);
+  border-top: 1px solid #eceeed;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.evz-ft small {
+  display: block;
+  font-size: calc(var(--u) * 1.05);
+  color: #6b716e;
+}
+
+/*
+  Totalul, ca un contor cu ROLE (vezi nota 4 din `vanzari-animat.ts`): rândul „HTU,ZZ lei” stă într-un
+  purtător lat cât o cifră (`.evz-tvc`), care se mută cu câte o cifră; fiecare cifră e o bandă 0-9
+  într-o fereastră de un rând (`.evz-cf`). Lățimile sunt ale textului machetei în Inter 750 cu cifre
+  tabulare și spațierea -0,02em, MĂSURATE: cifra 0,626em, virgula 0,2486em („958,50 lei” iese exact
+  5 cifre + virgula + „ lei”). Rândul are înălțimea `normal` a lui Inter (1,2109375).
+*/
+.evz-tv {
+  display: block;
+  margin-top: calc(var(--u) * 0.2);
+  font-size: calc(var(--u) * 2.4);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2109375;
+  color: #0e1210;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.evz-tvc {
+  display: block;
+  width: 0.626em;
+}
+
+.evz-tvr {
+  display: flex;
+  align-items: flex-start;
+}
+
+.evz-cf {
+  flex: none;
+  width: 0.626em;
+  height: 1.2109375em;
+  overflow: hidden;
+}
+
+.evz-cs {
+  display: block;
+  white-space: pre;
+}
+
+.evz-cv {
+  flex: none;
+  width: 0.24859375em;
+}
+
+.evz-tvl {
+  white-space: pre;
+}
+
+.evz-src {
+  display: flex;
+  gap: calc(var(--u) * 0.7);
+}
+
+.evz-src span {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
+  height: calc(var(--u) * 3);
+  padding: 0 calc(var(--u) * 0.9) 0 calc(var(--u) * 0.4);
+  border-radius: calc(var(--u) * 1.5);
+  background: #f3f5f4;
+  font-size: calc(var(--u) * 1.2);
+}
+
+.evz-src img,
+.evz-src svg {
+  width: calc(var(--u) * 2.1);
+  height: calc(var(--u) * 2.1);
+  border-radius: calc(var(--u) * 0.5);
+}
+
+.evz-src span:nth-child(2) img {
+  background: #fff;
+  padding: calc(var(--u) * 0.25);
+}
+
+.evz-cpn svg {
+  background: #fff;
+  padding: calc(var(--u) * 0.3);
+  fill: none;
+  stroke: #f56a52;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}

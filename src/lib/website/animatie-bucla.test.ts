@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { cadrePista, esantioanePista, urmatorulMoment, type Pista } from "./animatie-bucla";
 import * as magazin from "./magazin-animat";
 import * as integrari from "./integrari-animat";
+import * as automatizari from "./automatizari-animat";
 
 /*
   Regulile motorului comun, verificate pe TOATE machetele odată. O regulă care ține de motor n-are
@@ -34,6 +35,14 @@ const MACHETE: ReadonlyArray<{
     momente: integrari.MOMENTE_DISCRETE,
     componenta: "src/components/website/sections/IntegrariAnimat.tsx",
     atribut: "eic",
+  },
+  {
+    nume: "automatizari",
+    piste: automatizari.PISTE,
+    buclaS: automatizari.BUCLA_S,
+    momente: automatizari.MOMENTE_DISCRETE,
+    componenta: "src/components/website/sections/AutomatizariAnimat.tsx",
+    atribut: "eau",
   },
 ];
 

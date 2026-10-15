@@ -1,0 +1,2148 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  MACHETA ANIMATĂ A CARDULUI CU AUTOMATIZĂRI (`AutomatizariAnimat.tsx`)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Desenul e al machetei făcute de client (14.10.2026, „varianta 6”), neatins:
+  aceleași poziții, mărimi, culori și fonturi. Comanda de sus și cardurile sunt
+  în `--u` (vezi `animatii-carduri.css`); ce e ÎN carduri e desenat pe o pânză de
+  1200 × 746 px, micșorată cât cardul, deci acolo rămân pixeli, ca în machetă.
+
+  Cronologia stă în `lib/website/automatizari-animat.ts`, cu tot ce s-a schimbat
+  ca să meargă pe compozitor. De aici se văd: umbra cardului e în două straturi
+  (`.eau-cu` obișnuită, `.eau-cv` cu chenarul verde), ledul aprins e un strat
+  (`.eau-pr-ledon`), fondul galben al e-mailului nou e un strat (`.eau-grf`), iar
+  rândurile vechi din Gmail stau într-un singur container (`.eau-grv`).
+
+  Valorile de start ale celor animate le scrie componenta, din piste, pe fiecare
+  element: aici stau doar cele care nu se schimbă.
+*/
+
+/* `line-height: normal`, ca în machetă (pagina ei n-are resetarea Tailwind, care pune 1,5 pe `html`):
+   altfel blocurile de text fără înălțime de rând proprie (comanda de sus, expeditorul din Gmail,
+   tabelul din e-mail) ies mai înalte și se mută pe verticală. */
+.eau {
+  color: #0e1210;
+  line-height: normal;
+  user-select: none;
+}
+
+.eau svg {
+  display: block;
+}
+
+/* ⚠ Titlurile din desen (factura, e-mailul) nu sunt titlurile site-ului: `stil-comun.css` le dă tuturor
+   `h1`-`h6` fontul titlurilor, rândul de 1,25 și spațierea -0,02em. În machetă moștenesc fontul și
+   rândul blocului lor (Arial pe factură, Roboto în Gmail). Măsurat: fără asta, tot ce urma sub titlul
+   e-mailului cobora cu 1,65 px. */
+.eau :where(h1, h2, h3, h4, h5, h6) {
+  font-family: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.eau-ck {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Comanda de sus ─── */
+
+.eau-or {
+  position: absolute;
+  left: calc(var(--u) * 24);
+  top: calc(var(--u) * 3.8);
+  width: calc(var(--u) * 52);
+  height: calc(var(--u) * 8.2);
+  border-radius: calc(var(--u) * 2);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.3);
+  padding: 0 calc(var(--u) * 1.4);
+  box-shadow:
+    0 0 0 1px rgba(14, 18, 16, 0.06),
+    0 calc(var(--u) * 1.6) calc(var(--u) * 4) rgba(14, 18, 16, 0.09);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.eau-oi {
+  width: calc(var(--u) * 5);
+  height: calc(var(--u) * 5);
+  border-radius: calc(var(--u) * 1.2);
+  background: #eaf9ee;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* `semn.svg` e pătrat (48), cu desenul lat de 47,5: așa iese la fel de lat ca în machetă (3,2). */
+.eau-oi img {
+  width: calc(var(--u) * 3.234);
+}
+
+.eau-or > div {
+  flex: 1;
+}
+
+.eau-or b {
+  display: block;
+  font-size: calc(var(--u) * 1.55);
+  font-weight: 700;
+}
+
+.eau-or small {
+  display: block;
+  font-size: calc(var(--u) * 1.1);
+  color: #6b716e;
+  margin-top: calc(var(--u) * 0.2);
+}
+
+.eau-or em {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.4);
+  height: calc(var(--u) * 2.7);
+  padding: 0 calc(var(--u) * 1);
+  border-radius: calc(var(--u) * 1.4);
+  font-style: normal;
+  font-size: calc(var(--u) * 1.1);
+  font-weight: 650;
+  background: #fff6e5;
+  color: #b7791f;
+}
+
+.eau-or em svg {
+  width: 0;
+  height: calc(var(--u) * 1.3);
+}
+
+.eau-or em.on {
+  background: #e8f8ec;
+  color: #078a22;
+}
+
+.eau-or em.on svg {
+  width: calc(var(--u) * 1.3);
+}
+
+/* ─── Cardurile: umbra obișnuită, umbra cu chenar verde, corpul, pânza ─── */
+
+.eau-c {
+  position: absolute;
+  left: calc(var(--u) * 5);
+  top: calc(var(--u) * 15);
+  width: calc(var(--u) * 90);
+  height: calc(var(--u) * 56);
+  transform-origin: 0 0;
+  z-index: 1;
+}
+
+.eau-cu,
+.eau-cv,
+.eau-cb {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--u) * 2);
+}
+
+.eau-cu {
+  box-shadow:
+    0 0 0 1px rgba(14, 18, 16, 0.06),
+    0 calc(var(--u) * 0.8) calc(var(--u) * 2) rgba(14, 18, 16, 0.06),
+    0 calc(var(--u) * 4) calc(var(--u) * 9) rgba(14, 18, 16, 0.1);
+}
+
+.eau-cv {
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.3) #07c527,
+    0 calc(var(--u) * 0.8) calc(var(--u) * 2) rgba(14, 18, 16, 0.06),
+    0 calc(var(--u) * 5) calc(var(--u) * 10) rgba(14, 18, 16, 0.18);
+}
+
+.eau-cb {
+  background: #fff;
+  overflow: hidden;
+}
+
+/* Pânza de 1200 px, micșorată cât cardul (90 din 100). Ca la `.emx-vp`, scara o
+   face CSS-ul: `tan(atan2(lungime, lungime))` împarte două lungimi. */
+.eau-sc {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1200px;
+  height: 746px;
+  transform-origin: 0 0;
+  transform: scale(tan(atan2(calc(var(--u) * 90), 1200px)));
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.eau-hd {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: 22px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+  z-index: 6;
+}
+
+.eau-hd b {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.eau-hd small {
+  font-size: 19px;
+  color: #6b716e;
+}
+
+.eau-li {
+  width: 56px;
+  height: 56px;
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #e4e7e5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+}
+
+.eau-li img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Iconița iMessage umple caseta, fără ramă (starea „încărcată” din machetă). */
+.eau-li.eau-lim {
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.eau-li.eau-lim img {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 15px;
+}
+
+.eau-hd em {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  font-style: normal;
+  font-size: 19px;
+  font-weight: 650;
+  background: #f3f5f4;
+  color: #9aa09d;
+}
+
+.eau-hd em svg {
+  width: 0;
+  height: 22px;
+}
+
+.eau-hd em.run {
+  background: #fff6e5;
+  color: #b7791f;
+}
+
+.eau-hd em.on {
+  background: #e8f8ec;
+  color: #078a22;
+}
+
+.eau-hd em.on svg {
+  width: 22px;
+}
+
+/* Bulele de confirmare. */
+.eau-chs {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  z-index: 5;
+}
+
+.eau-chs > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px 12px 12px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(14, 18, 16, 0.06),
+    0 10px 26px rgba(14, 18, 16, 0.12);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.eau-chs small {
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b716e;
+}
+
+.eau-chs i {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e8f8ec;
+  position: relative;
+}
+
+.eau-chs i::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 9px;
+  width: 8px;
+  height: 15px;
+  border: solid #07a824;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+
+/* ─── 1. Factura SmartBill ─── */
+
+.eau-pgw {
+  position: absolute;
+  left: 118px;
+  top: 100px;
+  width: 710px;
+  height: 780px;
+}
+
+.eau-pg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 910px;
+  height: 1000px;
+  background: #fff;
+  transform: scale(0.78);
+  transform-origin: 0 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #222;
+  box-shadow:
+    0 0 0 1px #e2e5e3,
+    0 20px 50px rgba(14, 18, 16, 0.16);
+}
+
+.eau-pg > * {
+  position: absolute;
+}
+
+.eau-plogo {
+  left: 30px;
+  top: 52px;
+  height: 74px;
+  width: auto;
+}
+
+.eau-pt {
+  left: 496px;
+  top: 26px;
+  font-size: 36px;
+  font-weight: 700;
+  color: #333;
+}
+
+.eau-pn {
+  right: 32px;
+  top: 40px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #333;
+}
+
+.eau-pd {
+  left: 497px;
+  top: 81px;
+  font-size: 14px;
+  color: #444;
+}
+
+.eau-pd span {
+  color: #111;
+  font-size: 15px;
+}
+
+.eau-pbox {
+  left: 497px;
+  top: 164px;
+  width: 381px;
+  height: 43px;
+  background: #406d87;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 15px;
+}
+
+.eau-pbox span {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.eau-pbox b {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.eau-pbox small {
+  font-size: 14px;
+}
+
+.eau-pb {
+  top: 224px;
+  width: 445px;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: #333;
+}
+
+.eau-pb1 {
+  left: 30px;
+}
+
+.eau-pb2 {
+  left: 497px;
+  width: 380px;
+}
+
+.eau-pb h6 {
+  font-size: 13px;
+  color: #777;
+  font-weight: 700;
+  padding-bottom: 6px;
+  width: 188px;
+  border-bottom: 1px solid #999;
+  margin-bottom: 14px;
+}
+
+.eau-pb h5 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #222;
+  margin-bottom: 8px;
+  font-family: Verdana, Arial, sans-serif;
+}
+
+.eau-pb p {
+  margin-top: 3px;
+}
+
+.eau-pb p span {
+  color: #111;
+  font-size: 14.5px;
+}
+
+.eau-tb {
+  left: 30px;
+  top: 410px;
+  width: 848px;
+}
+
+.eau-th,
+.eau-tr {
+  position: relative;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
+
+.eau-th {
+  height: 50px;
+  border-top: 2px solid #406d87;
+  border-bottom: 2px solid #406d87;
+  font-weight: 700;
+  font-size: 13.5px;
+  line-height: 1.15;
+}
+
+.eau-tr {
+  height: 37px;
+  color: #333;
+}
+
+.eau-alt {
+  background: #f7f7f7;
+}
+
+.eau-tb span {
+  position: absolute;
+}
+
+.eau-tb .c0 {
+  left: 0;
+  width: 46px;
+  text-align: center;
+}
+
+.eau-tb .c1 {
+  left: 50px;
+}
+
+.eau-tb .c2 {
+  left: 430px;
+  width: 50px;
+  text-align: center;
+}
+
+.eau-tb .c3 {
+  left: 545px;
+  width: 50px;
+  text-align: center;
+}
+
+.eau-tb .c4 {
+  right: 130px;
+  text-align: right;
+}
+
+.eau-tb .c5 {
+  right: 15px;
+  text-align: right;
+}
+
+.eau-tb > div:last-child {
+  border-bottom: 1px solid #9a9a9a;
+}
+
+.eau-pf {
+  left: 30px;
+  top: 552px;
+  width: 848px;
+  height: 40px;
+  font-size: 14px;
+  color: #333;
+}
+
+.eau-pf span {
+  position: absolute;
+  left: 0;
+  top: 12px;
+}
+
+.eau-pf b {
+  position: absolute;
+  left: 467px;
+  top: 12px;
+  font-size: 14px;
+}
+
+.eau-pf strong {
+  position: absolute;
+  right: 15px;
+  top: 4px;
+  font-size: 22px;
+  color: #222;
+}
+
+.eau-pf small {
+  font-size: 14px;
+}
+
+.eau-pft {
+  left: 22px;
+  top: 842px;
+  width: 864px;
+  padding: 8px;
+  background: #f4f4f4;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.eau-pl {
+  left: 30px;
+  top: 930px;
+  font-size: 10px;
+  color: #666;
+}
+
+.eau-pl2 {
+  right: 32px;
+  top: 955px;
+  font-size: 10px;
+  color: #666;
+}
+
+.eau-pl2 u {
+  text-decoration: none;
+  color: #3b82c4;
+}
+
+.eau-pl2 b {
+  font-weight: 400;
+  color: #222;
+  margin-left: 16px;
+}
+
+.eau-ch1 {
+  left: 880px;
+  top: 150px;
+}
+
+/* ─── 2. Imprimanta termică și eticheta AWB ─── */
+
+.eau-prs {
+  position: absolute;
+  left: 250px;
+  top: 92px;
+  width: 700px;
+  height: 170px;
+}
+
+.eau-prs > i {
+  position: absolute;
+  display: block;
+}
+
+.eau-pr-sh {
+  left: 30px;
+  right: 30px;
+  top: 146px;
+  height: 28px;
+  border-radius: 50%;
+  background: #0e1210;
+  opacity: 0.22;
+  filter: blur(10px);
+}
+
+.eau-pr-ft {
+  top: 146px;
+  width: 60px;
+  height: 8px;
+  border-radius: 0 0 4px 4px;
+  background: #16181a;
+}
+
+.eau-pr-body {
+  left: 0;
+  right: 0;
+  top: 52px;
+  height: 98px;
+  border-radius: 14px 14px 18px 18px;
+  background: #2b2f33;
+  box-shadow:
+    inset 9px 0 0 #33383d,
+    inset -9px 0 0 #222528,
+    inset 0 -7px 0 #1f2225;
+}
+
+.eau-pr-top {
+  left: 22px;
+  right: 22px;
+  top: 0;
+  height: 50px;
+  background: #4a5057;
+  clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
+  border-radius: 18px 18px 0 0;
+}
+
+.eau-pr-win {
+  left: 190px;
+  right: 190px;
+  top: 8px;
+  height: 30px;
+  background: #1e2226;
+  clip-path: polygon(4% 0, 96% 0, 100% 100%, 0 100%);
+}
+
+.eau-pr-win i {
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  top: 9px;
+  height: 13px;
+  border-radius: 7px;
+  background: #e8e6de;
+  opacity: 0.55;
+}
+
+.eau-pr-win b {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: #2c3136;
+}
+
+.eau-pr-hl {
+  left: 60px;
+  right: 60px;
+  top: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: #fff;
+  opacity: 0.12;
+}
+
+.eau-pr-lid {
+  left: 10px;
+  right: 10px;
+  top: 44px;
+  height: 26px;
+  border-radius: 12px 12px 8px 8px;
+  background: #3c4248;
+  box-shadow:
+    inset 0 2px 0 #565d65,
+    inset 0 -2px 0 #2e3337;
+}
+
+.eau-pr-face {
+  left: 44px;
+  right: 44px;
+  top: 80px;
+  height: 40px;
+  border-radius: 10px;
+  background: #25292c;
+  box-shadow:
+    inset 0 3px 4px rgba(0, 0, 0, 0.45),
+    0 1px 0 #3a3f44;
+}
+
+.eau-pr-pw {
+  left: 66px;
+  top: 87px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #3a4046;
+  box-shadow:
+    inset 0 2px 0 #4f565d,
+    0 2px 0 #17191b;
+}
+
+.eau-pr-pw b {
+  position: absolute;
+  left: 9px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.6px solid #8d949b;
+  border-top-color: transparent;
+}
+
+.eau-pr-led,
+.eau-pr-ledon {
+  left: 108px;
+  top: 95px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.eau-pr-led {
+  background: #2e4a35;
+}
+
+/* Ledul aprins: un strat peste cel stins (macheta schimba `background` și `box-shadow`). */
+.eau-pr-ledon {
+  background: #3ce36a;
+  box-shadow: 0 0 8px #3ce36a;
+}
+
+.eau-pr-led2 {
+  left: 126px;
+  top: 95px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4a3a2a;
+}
+
+.eau-pr-vent {
+  left: 290px;
+  top: 93px;
+  width: 120px;
+  height: 14px;
+  background: #1d2023;
+  clip-path: polygon(
+    0 0,
+    8% 0,
+    8% 100%,
+    16% 100%,
+    16% 0,
+    24% 0,
+    24% 100%,
+    32% 100%,
+    32% 0,
+    40% 0,
+    40% 100%,
+    48% 100%,
+    48% 0,
+    56% 0,
+    56% 100%,
+    64% 100%,
+    64% 0,
+    72% 0,
+    72% 100%,
+    80% 100%,
+    80% 0,
+    88% 0,
+    88% 100%,
+    96% 100%,
+    96% 0,
+    100% 0,
+    100% 100%,
+    0 100%
+  );
+}
+
+.eau-pr-btn {
+  right: 66px;
+  top: 88px;
+  width: 56px;
+  height: 24px;
+  border-radius: 12px;
+  background: #3a4046;
+  box-shadow:
+    inset 0 2px 0 #4f565d,
+    0 2px 0 #17191b;
+}
+
+.eau-pr-slot {
+  left: 62px;
+  right: 62px;
+  top: 128px;
+  height: 10px;
+  border-radius: 5px;
+  background: #08090a;
+  box-shadow: 0 1px 0 #3a3f44;
+}
+
+.eau-prf {
+  position: absolute;
+  left: 316px;
+  top: 226px;
+  width: 568px;
+  height: 12px;
+  z-index: 3;
+}
+
+.eau-prf svg {
+  display: block;
+  width: 100%;
+  height: 12px;
+}
+
+.eau-lm {
+  position: absolute;
+  left: 316px;
+  top: 226px;
+  width: 568px;
+  height: 520px;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.eau-lbl {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 614px;
+  height: 445px;
+  transform-origin: 0 0;
+  background: #fff;
+  border: 2px solid #111;
+  font-family: Verdana, "DejaVu Sans", Geneva, sans-serif;
+  color: #111;
+}
+
+.eau-lbl > * {
+  position: absolute;
+}
+
+.eau-lbl small {
+  font-size: 6.5px;
+  letter-spacing: 0.02em;
+}
+
+.eau-l {
+  border-right: 1.5px solid #111;
+}
+
+.eau-lfl {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 84px;
+}
+
+.eau-lfx {
+  position: absolute;
+  left: 94px;
+  top: 4px;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.1;
+  font-weight: 400;
+  text-align: center;
+  width: 80px;
+}
+
+.eau-ldt {
+  position: absolute;
+  left: 7px;
+  top: 78px;
+  font-size: 9px;
+  font-family: Arial, sans-serif;
+}
+
+.eau-lawb {
+  border-top: 1.5px solid #111;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.eau-lawb b {
+  padding: 0 6px;
+  border-right: 1.5px solid #111;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.eau-lawb span {
+  padding-left: 8px;
+  letter-spacing: 0.02em;
+}
+
+.eau-lbc {
+  left: 188px;
+  top: 4px;
+  width: 344px;
+  height: 90px;
+}
+
+.eau-lbc rect {
+  fill: #111;
+}
+
+.eau-lbn {
+  left: 188px;
+  top: 99px;
+  width: 344px;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.eau-l1 {
+  left: 560px;
+  top: 12px;
+  width: 50px;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  line-height: 1.05;
+}
+
+.eau-l1 b {
+  display: block;
+  font-size: 22px;
+}
+
+.eau-l1 span {
+  display: block;
+  font-size: 15px;
+}
+
+.eau-lbl::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 121px;
+  border-top: 1.5px solid #111;
+}
+
+.eau-lbl::after {
+  content: "";
+  position: absolute;
+  left: 181px;
+  top: 121px;
+  height: 139px;
+  border-left: 1.5px solid #111;
+}
+
+.eau-lsnd {
+  left: 8px;
+  top: 130px;
+  width: 170px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.eau-lsnd > b {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  margin-bottom: 12px;
+}
+
+.eau-lsnd p {
+  margin-top: 2px;
+}
+
+.eau-lrt {
+  left: 203px;
+  top: 130px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.eau-lrz {
+  left: 494px;
+  top: 130px;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.eau-ldst {
+  left: 188px;
+  top: 158px;
+  width: 410px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.eau-ldst b {
+  display: block;
+  font-weight: 400;
+  font-size: 15px;
+  margin-left: 10px;
+}
+
+.eau-ldst p {
+  margin-left: 10px;
+}
+
+.eau-lph {
+  left: 198px;
+  top: 228px;
+  width: 405px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.eau-lrow {
+  left: 0;
+  top: 260px;
+  width: 610px;
+  height: 24px;
+  border-top: 1.5px solid #111;
+  border-bottom: 1px solid #111;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  font-size: 11px;
+}
+
+.eau-lrow b {
+  margin-right: 12px;
+}
+
+.eau-lstd {
+  margin-left: 16px;
+}
+
+.eau-lbox {
+  left: 4px;
+  top: 288px;
+  width: 355px;
+  height: 128px;
+  border: 1px solid #333;
+  font-size: 10px;
+}
+
+.eau-lbox > div {
+  position: relative;
+  border-bottom: 1px solid #333;
+  padding: 2px 4px;
+}
+
+.eau-lb1 {
+  height: 18px;
+}
+
+.eau-lb2 {
+  height: 37px;
+}
+
+.eau-lb3 {
+  height: 35px;
+}
+
+.eau-lbox > .eau-lb4 {
+  height: 36px;
+  border: 0;
+}
+
+.eau-lib {
+  position: absolute;
+  left: 125px;
+  top: 3px;
+}
+
+.eau-lpt {
+  position: absolute;
+  left: 245px;
+  top: 3px;
+  line-height: 1.15;
+}
+
+.eau-lpd {
+  position: absolute;
+  left: 250px;
+  top: 21px;
+}
+
+.eau-lvd {
+  margin-left: 28px;
+}
+
+.eau-ldm {
+  left: 365px;
+  top: 296px;
+  width: 88px;
+  height: 88px;
+}
+
+.eau-ldm rect {
+  fill: #111;
+}
+
+.eau-lcf {
+  left: 470px;
+  top: 292px;
+  width: 140px;
+}
+
+.eau-lcf small {
+  display: block;
+  margin-bottom: 9px;
+}
+
+.eau-lcf .eau-lsg {
+  margin-top: 20px;
+}
+
+.eau-lda span {
+  margin-left: 40px;
+}
+
+.eau-lob {
+  left: 0;
+  top: 418px;
+  width: 610px;
+  border-top: 1px solid #111;
+  padding: 2px 8px;
+}
+
+.eau-lob small {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.eau-ch2 {
+  left: 930px;
+  top: 300px;
+}
+
+/* ─── 3. Gmail ─── */
+
+.eau-gm {
+  position: absolute;
+  left: 24px;
+  top: 96px;
+  width: 1152px;
+  height: 640px;
+  border-radius: 16px;
+  background: #f6f8fc;
+  overflow: hidden;
+  font-family: Roboto, "Google Sans", Arial, sans-serif;
+  color: #1f1f1f;
+  box-shadow: 0 0 0 1px #e4e7eb;
+}
+
+.eau-gtop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.eau-gham {
+  width: 24px;
+  height: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin: 0 22px 0 8px;
+}
+
+.eau-gham b {
+  height: 2px;
+  background: #444746;
+  border-radius: 1px;
+}
+
+/* Sigla Gmail a site-ului e tot pătrată (`width`/`height` 2500 în fișier, desenul centrat), ca a
+   machetei: aceeași înălțime, 34, dă același desen. */
+.eau-glogo {
+  height: 34px;
+  margin: 0 6px 0 0;
+}
+
+.eau-gword {
+  font-size: 22px;
+  color: #444746;
+  margin-right: 56px;
+}
+
+.eau-gsr {
+  width: 620px;
+  height: 46px;
+  border-radius: 24px;
+  background: #e9eef6;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  font-size: 16px;
+  color: #444746;
+}
+
+.eau-gsr svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: #444746;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.eau-gsr .eau-gtn {
+  margin-left: auto;
+}
+
+.eau-gic {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.eau-gic svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: #444746;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.eau-gic .eau-gapp {
+  fill: #444746;
+  stroke: none;
+}
+
+.eau-gic b {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #7b4fd8;
+  color: #fff;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+}
+
+.eau-grail {
+  position: absolute;
+  left: 0;
+  top: 64px;
+  width: 236px;
+  bottom: 0;
+  padding-top: 4px;
+}
+
+.eau-gcmp {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 142px;
+  height: 56px;
+  margin: 0 0 14px 8px;
+  padding-left: 18px;
+  border-radius: 16px;
+  background: #c2e7ff;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.eau-gcmp svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: #1f1f1f;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.eau-gnv {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  height: 32px;
+  padding: 0 14px 0 26px;
+  margin-right: 16px;
+  border-radius: 0 16px 16px 0;
+  font-size: 14px;
+  color: #1f1f1f;
+}
+
+.eau-gnv svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #444746;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.eau-gnv.on {
+  background: #d3e3fd;
+  font-weight: 700;
+}
+
+.eau-gnv b {
+  margin-left: auto;
+  font-size: 12.5px;
+}
+
+.eau-gmain {
+  position: absolute;
+  left: 236px;
+  right: 16px;
+  top: 64px;
+  bottom: 0;
+  border-radius: 16px 16px 0 0;
+  background: #fff;
+  overflow: hidden;
+}
+
+.eau-glist,
+.eau-gread {
+  position: absolute;
+  inset: 0;
+}
+
+.eau-gbar {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 18px;
+  color: #444746;
+  font-size: 12.5px;
+}
+
+.eau-gbar svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #444746;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.eau-gbar span {
+  margin-left: auto;
+}
+
+.eau-gcb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #444746;
+  border-radius: 2px;
+}
+
+.eau-gtabs {
+  display: flex;
+  height: 54px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.eau-gtabs span {
+  position: relative;
+  width: 250px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-left: 16px;
+  font-size: 14px;
+  color: #444746;
+}
+
+.eau-gtabs span.on {
+  color: #0b57d0;
+  font-weight: 500;
+}
+
+.eau-gtabs span.on::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #0b57d0;
+}
+
+.eau-gtabs svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.eau-grows {
+  position: relative;
+}
+
+/* Rândurile vechi, într-un singur container: coboară toate odată când intră cel nou. */
+.eau-grv {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+
+.eau-gr {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #1f1f1f;
+  border-bottom: 1px solid #f2f2f2;
+  background: #f2f6fc;
+  white-space: nowrap;
+}
+
+.eau-gr.u {
+  background: #fff;
+  font-weight: 700;
+}
+
+/* E-mailul nou: fondul galben de cât intră e un strat sub conținutul rândului. */
+.eau-gr.eau-grn {
+  top: 0;
+  isolation: isolate;
+}
+
+.eau-grf {
+  position: absolute;
+  inset: 0;
+  background: #fff8e6;
+  z-index: -1;
+}
+
+.eau-gr .cb {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #c4c7c5;
+  border-radius: 2px;
+  margin: 0 14px 0 18px;
+}
+
+.eau-gr .st {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 16px;
+  fill: none;
+  stroke: #c4c7c5;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.eau-gr .nm {
+  flex: none;
+  width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eau-gr .sb {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 10px;
+}
+
+.eau-gr .sb span {
+  font-weight: 400;
+  color: #5e5e5e;
+}
+
+.eau-gr .ac {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 12px 0 6px;
+  margin-right: 14px;
+  border-radius: 13px;
+  box-shadow: inset 0 0 0 1px #c4c7c5;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.eau-gr .ac i {
+  width: 16px;
+  height: 18px;
+  border-radius: 2px;
+  background: #ea4335;
+  color: #fff;
+  font-size: 6px;
+  font-style: normal;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2px;
+  font-weight: 700;
+}
+
+.eau-gr .tm {
+  flex: none;
+  width: 70px;
+  text-align: right;
+  padding-right: 18px;
+  font-size: 12.5px;
+}
+
+.eau-gread {
+  padding: 6px 26px 20px;
+}
+
+.eau-gtb {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  height: 44px;
+  margin: 0 -8px 10px;
+  padding-left: 4px;
+}
+
+.eau-gtb svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #444746;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.eau-gtb i {
+  width: 1px;
+  height: 20px;
+  background: #dadce0;
+}
+
+.eau-gtb span {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: #444746;
+}
+
+.eau-gsub {
+  font-size: 22px;
+  color: #1f1f1f;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 56px;
+}
+
+.eau-gsub span {
+  font-size: 12px;
+  background: #dde3ea;
+  color: #444746;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.eau-gfrom {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.eau-gfrom > i {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #f56a52;
+  color: #fff;
+  font-style: normal;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eau-gfrom small {
+  font-size: 12.5px;
+  color: #5e5e5e;
+}
+
+.eau-gfrom .eau-gtm {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: #5e5e5e;
+}
+
+.eau-gmsg {
+  margin: 12px 0 0 56px;
+  width: 560px;
+  border: 1px solid #eceeed;
+  border-radius: 12px;
+  padding: 16px 26px;
+  font-size: 13.5px;
+  color: #333;
+  line-height: 1.45;
+}
+
+.eau-ml {
+  display: block;
+  height: 34px;
+  width: auto;
+}
+
+/* Gros, ca în machetă: acolo e grosimea implicită a unui `h4`, pe care resetarea site-ului o șterge. */
+.eau-gmsg h4 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 10px 0 4px;
+  color: #111;
+}
+
+.eau-mt {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  margin: 12px 0;
+  padding: 10px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+}
+
+.eau-mt .t {
+  font-weight: 700;
+  color: #111;
+}
+
+.eau-gmsg em {
+  display: inline-block;
+  font-style: normal;
+  font-weight: 700;
+  color: #fff;
+  background: #f56a52;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+}
+
+.eau-gatt {
+  margin: 14px 0 0 56px;
+}
+
+.eau-gatt small {
+  font-size: 13px;
+  color: #444746;
+  font-weight: 500;
+}
+
+.eau-gac {
+  margin-top: 8px;
+  width: 180px;
+  height: 112px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px #dadce0;
+  overflow: hidden;
+  position: relative;
+}
+
+.eau-gath {
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  top: 10px;
+  bottom: 34px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #eee;
+  padding: 10px;
+}
+
+.eau-gath i {
+  display: block;
+  height: 4px;
+  background: #e6e6e6;
+  margin-bottom: 6px;
+  border-radius: 2px;
+}
+
+.eau-gaf {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34px;
+  background: #f2f2f2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.eau-gaf b {
+  background: #ea4335;
+  color: #fff;
+  font-size: 8px;
+  padding: 3px 3px;
+  border-radius: 2px;
+}
+
+/* ─── 4. iMessage ─── */
+
+.eau-ip {
+  position: absolute;
+  left: 444px;
+  top: 88px;
+  width: 312px;
+  height: 650px;
+  border-radius: 56px;
+  background: #1c1c1e;
+  box-shadow:
+    0 0 0 3px #a9acb0,
+    0 0 0 5px #d8dadc,
+    0 30px 60px rgba(14, 18, 16, 0.25);
+  padding: 11px;
+}
+
+.eau-ip > i {
+  position: absolute;
+  width: 4px;
+  background: #a9acb0;
+  border-radius: 2px;
+}
+
+.eau-ib1 {
+  left: -7px;
+  top: 120px;
+  height: 30px;
+}
+
+.eau-ib2 {
+  left: -7px;
+  top: 170px;
+  height: 54px;
+}
+
+.eau-ib3 {
+  left: -7px;
+  top: 236px;
+  height: 54px;
+}
+
+.eau-ip > .eau-ib4 {
+  right: -7px;
+  top: 190px;
+  height: 84px;
+}
+
+.eau-is {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 46px;
+  background: #fff;
+  overflow: hidden;
+  font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  color: #000;
+}
+
+.eau-ist {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 26px 0 34px;
+  z-index: 3;
+}
+
+.eau-ist > b {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.eau-idi {
+  position: absolute;
+  left: 50%;
+  top: 11px;
+  width: 96px;
+  height: 28px;
+  margin-left: -48px;
+  border-radius: 14px;
+  background: #000;
+}
+
+.eau-ist span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.eau-ist span svg {
+  width: 17px;
+  height: 11px;
+  fill: #000;
+}
+
+.eau-ist em {
+  position: relative;
+  width: 25px;
+  height: 12px;
+  border-radius: 3.5px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.eau-ist em b {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: 16px;
+  border-radius: 1.5px;
+  background: #000;
+}
+
+.eau-ist em::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: 4px;
+  width: 1.5px;
+  height: 4px;
+  border-radius: 1px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.eau-inav {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 44px;
+  height: 96px;
+  background: #f6f6f7;
+  border-bottom: 0.5px solid #d1d1d6;
+  text-align: center;
+  z-index: 2;
+}
+
+.eau-iback {
+  position: absolute;
+  left: 10px;
+  top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #007aff;
+}
+
+.eau-iback svg {
+  width: 12px;
+  height: 20px;
+  fill: none;
+  stroke: #007aff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.eau-iback b {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #007aff;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eau-iav {
+  width: 52px;
+  height: 52px;
+  margin: 8px auto 4px;
+  border-radius: 50%;
+  background: #a5a9b1;
+  overflow: hidden;
+}
+
+.eau-iav svg {
+  width: 52px;
+  height: 52px;
+  fill: #fff;
+}
+
+.eau-inav small {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  color: #000;
+}
+
+.eau-inav small svg {
+  width: 6px;
+  height: 10px;
+  fill: none;
+  stroke: #8e8e93;
+  stroke-width: 1.6;
+}
+
+.eau-ibody {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 140px;
+  bottom: 76px;
+  padding: 12px 12px;
+}
+
+.eau-imeta {
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+.eau-ityp {
+  position: absolute;
+  left: 14px;
+  top: 62px;
+  width: 62px;
+  height: 38px;
+  border-radius: 19px;
+  background: #e9e9eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transform-origin: 0 100%;
+}
+
+.eau-ityp i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #8e8e93;
+}
+
+.eau-ityp::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e9e9eb;
+}
+
+.eau-ibub {
+  position: absolute;
+  left: 14px;
+  top: 62px;
+  width: 214px;
+  padding: 8px 13px 9px;
+  border-radius: 19px;
+  background: #e9e9eb;
+  font-size: 15.5px;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  transform-origin: 0 100%;
+}
+
+.eau-ibub u {
+  color: #000;
+  text-decoration: underline;
+}
+
+.eau-ibub::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  bottom: 0;
+  width: 20px;
+  height: 18px;
+  background: #e9e9eb;
+  border-bottom-right-radius: 16px 14px;
+  z-index: -1;
+}
+
+.eau-ibub::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  bottom: 0;
+  width: 10px;
+  height: 20px;
+  background: #fff;
+  border-bottom-right-radius: 10px;
+  z-index: -1;
+}
+
+.eau-iin {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 30px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.eau-iplus {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #e9e9eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eau-iplus svg {
+  width: 16px;
+  height: 16px;
+  stroke: #8e8e93;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.eau-ipill {
+  flex: 1;
+  height: 36px;
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px #c7c7cc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 14px;
+  font-size: 15.5px;
+  color: #c7c7cc;
+}
+
+.eau-ipill svg {
+  width: 13px;
+  height: 17px;
+  fill: none;
+  stroke: #8e8e93;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.eau-ihb {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 120px;
+  height: 5px;
+  margin-left: -60px;
+  border-radius: 3px;
+  background: #000;
+}
+
+.eau-ch4a {
+  left: 120px;
+  top: 300px;
+}
+
+.eau-ch4b {
+  left: 800px;
+  top: 420px;
+}

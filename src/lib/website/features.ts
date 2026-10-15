@@ -8,13 +8,13 @@
  *
  * ═══ IMAGINILE VIN ÎN TREI MĂRIMI ═══
  *
- * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/automatizari`
- * ies `/features/automatizari-720.webp`, `-1080` și `-1440`, iar browserul alege.
+ * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/vanzari`
+ * ies `/features/vanzari-720.webp`, `-1080` și `-1440`, iar browserul alege.
  *
- * Primele două carduri nu mai au imagine, ci câte o machetă animată
+ * Primele trei carduri nu mai au imagine, ci câte o machetă animată
  * (`image.animatie`): iMac-ul cu magazinul (capturile lui în
- * `/features/magazin-animat/`, vezi `MagazinAnimat.tsx`) și panoul de integrări
- * (`IntegrariAnimat.tsx`).
+ * `/features/magazin-animat/`, vezi `MagazinAnimat.tsx`), panoul de integrări
+ * (`IntegrariAnimat.tsx`) și documentele unei comenzi (`AutomatizariAnimat.tsx`).
  *
  * Motivul e concret. Loader-ul proiectului lasă neatinse imaginile locale — trece
  * prin el doar ce e pe R2 — deci `next/image` nu produce niciun `srcset` pentru
@@ -82,7 +82,7 @@ export interface FeatureCard {
      * procesata singura (`IntegrariAnimat.tsx`). Machetele sunt ale clientului,
      * 14.10.2026.
      */
-    animatie?: "magazin" | "integrari";
+    animatie?: "magazin" | "integrari" | "automatizari";
     alt: string;
     /** Ce trebuie sa arate imaginea. Se vede pe substituent. */
     hint: string;
@@ -163,9 +163,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
        pagina intreaga: doua tinte apropiate, cu doua rosturi diferite. */
     cta: { label: "Vezi curierii disponibili", href: "/integrari#biblioteca" },
     image: {
-      base: "/features/automatizari",
-      alt: "Fluxul automat: comandă, factură, AWB, livrare",
-      hint: "Flux animat: Comandă → Factură → AWB → Livrare",
+      /* Imaginea statica de dinainte (`/features/automatizari-*.webp`) a fost inlocuita
+         pe 15.10.2026 de macheta animata a clientului, si fisierele ei sterse. */
+      animatie: "automatizari",
+      alt: "Documentele unei comenzi, generate automat: factura în SmartBill, AWB-ul FAN Courier, e-mailul de confirmare și SMS-ul către client",
+      hint: "Factura, AWB-ul, e-mailul și SMS-ul unei comenzi, generate automat",
     },
   },
   {

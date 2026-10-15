@@ -9,6 +9,7 @@ import {
 /* Mutată în `lib` fiindcă o folosesc două locuri — vezi nota de acolo. */
 import { DASH_ON_WHITE } from "@/lib/website/linii";
 import { FeatureStack } from "./FeatureStack";
+import { AutomatizariAnimat } from "./AutomatizariAnimat";
 import { IntegrariAnimat } from "./IntegrariAnimat";
 import { MagazinAnimat } from "./MagazinAnimat";
 import { SectionEyebrow } from "./SectionEyebrow";
@@ -379,6 +380,8 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
         <MagazinAnimat eticheta={card.image.alt} />
       ) : card.image.animatie === "integrari" ? (
         <IntegrariAnimat eticheta={card.image.alt} />
+      ) : card.image.animatie === "automatizari" ? (
+        <AutomatizariAnimat eticheta={card.image.alt} />
       ) : card.image.base ? (
         /*
           `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.

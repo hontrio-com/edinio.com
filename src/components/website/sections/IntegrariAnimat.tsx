@@ -16,6 +16,7 @@ import {
   stareaDiscreta,
 } from "@/lib/website/integrari-animat";
 import { ScenaAnimata } from "./ScenaAnimata";
+import { decodeazaImaginile, facatorDeTinte } from "./tinteAnimate";
 import { useAnimatieInBucla, type Bucla } from "./useAnimatieInBucla";
 /* Vine cu componenta, după ramă (vezi `ScenaAnimata.tsx`). */
 import "@/app/integrari-animat.css";
@@ -41,22 +42,9 @@ const SEMN = "/semn.svg";
 
 const RANDURI = [0, 1, 2, 3] as const;
 
-/** Ce arată fiecare element animat în clipa din HTML, socotit din pista lui. */
-const INITIAL = new Map(PISTE.map((p) => [p.tinta, p.scrie(p.valori(PORNIRE_S))]));
+/** `data-eic` și stilul de start al unui element animat, socotit din pista lui. */
+const tinta = facatorDeTinte("eic", PISTE, PORNIRE_S);
 const D0 = stareaDiscreta(PORNIRE_S, 0);
-
-/** `data-eic` și stilul de start al unui element animat. */
-function tinta(nume: string, stilFix?: CSSProperties): { "data-eic": string; style: CSSProperties } {
-  const k = INITIAL.get(nume);
-  return {
-    "data-eic": nume,
-    style: {
-      ...stilFix,
-      ...(typeof k?.transform === "string" ? { transform: k.transform } : {}),
-      ...(k?.opacity !== undefined && k.opacity !== null ? { opacity: Number(k.opacity) } : {}),
-    },
-  };
-}
 
 /** O lungime în unitățile scenei. */
 const u = (n: number) => `calc(var(--u) * ${Number(n.toFixed(3))})`;
@@ -94,20 +82,14 @@ function scriitor(radacina: HTMLElement) {
   };
 }
 
-/** Siglele, descărcate și decodate înainte de pornire. Sunt mici și aproape toate deja în cache. */
-function incarcaSiglele(radacina: HTMLElement): Promise<unknown> {
-  const imagini = Array.from(radacina.querySelectorAll<HTMLImageElement>("img"));
-  for (const img of imagini) img.loading = "eager";
-  return Promise.all(imagini.map((img) => img.decode().catch(() => undefined)));
-}
-
 const BUCLA: Bucla = {
   atribut: "eic",
   buclaS: BUCLA_S,
   piste: PISTE,
   momente: MOMENTE_DISCRETE,
   scriitor,
-  pregateste: incarcaSiglele,
+  /* Siglele, descărcate și decodate înainte de pornire. */
+  pregateste: decodeazaImaginile,
   pornireS: PORNIRE_S,
   staticS: STATIC_S,
 };

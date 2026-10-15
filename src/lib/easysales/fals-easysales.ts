@@ -208,6 +208,13 @@ export interface OptiuniFals {
   intarziereMs?: number;
   /** `GET /account` raspunde 403 (grantul website nu-l poate citi). */
   contInterzis?: boolean;
+  /**
+   * Cate milisecunde dupa `categories/save/bulk` (si `characteristics/save/bulk`) devin categoriile
+   * valabile pentru produse. ⚠ MASURAT pe 15.10.2026, la primul catalog real (okxi): raspunsul e 200
+   * pe loc, dar le creeaza in fundal, in ~3 s; un produs trimis intre timp primeste 422 („The selected
+   * product.categories.0 is invalid”). Implicit 0, ca inainte: cine nu-l cere, nu-l primeste.
+   */
+  catalogAsincronMs?: number;
 }
 
 type Raspunzator = (c: CerereInregistrata) => Response | null | Promise<Response | null>;
@@ -248,8 +255,9 @@ export function serverFals(opt: OptiuniFals = {}) {
       ...p, id: 9000 + i, corp: {}, arhivat: false, stock: 0, reserved_stock: 0, salvari: 0,
     })) as ProdusFals[],
     urmatorulIdProdus: 20_000,
-    categorii: new Map<number, { id: number; category_website_id: number; name: string }>(),
-    caracteristici: new Map<number, { id: number; characteristic_website_id: number; name: string }>(),
+    /** `valabilDe`: clipa (ms) de la care un produs o poate folosi (vezi `catalogAsincronMs`). */
+    categorii: new Map<number, { id: number; category_website_id: number; name: string; valabilDe: number }>(),
+    caracteristici: new Map<number, { id: number; characteristic_website_id: number; name: string; valabilDe: number }>(),
     urmatorulIdCatalog: 500,
     /** Raspunsuri fortate, in ordine, pentru cererile care se potrivesc. */
     fortate: [] as { potrivire: (c: CerereInregistrata) => boolean; raspunde: Raspunzator; ramase: number }[],
@@ -323,11 +331,12 @@ export function serverFals(opt: OptiuniFals = {}) {
     cere("stock", plin(p.stock) && Number.isFinite(Number(p.stock)));
     cere("tax_rate", plin(p.tax_rate) && Number.isFinite(Number(p.tax_rate)));
     if (p.type !== "simple" && p.type !== "complex") erori[`${prefix}.type`] = [`The selected ${prefix}.type is invalid.`];
+    const valabila = (x: { valabilDe: number } | undefined) => !!x && x.valabilDe <= Date.now();
     for (const [i, id] of (Array.isArray(p.categories) ? p.categories : []).entries()) {
-      if (!stare.categorii.has(Number(id))) erori[`${prefix}.categories.${i}`] = [`The selected ${prefix}.categories.${i} is invalid.`];
+      if (!valabila(stare.categorii.get(Number(id)))) erori[`${prefix}.categories.${i}`] = [`The selected ${prefix}.categories.${i} is invalid.`];
     }
     for (const [i, x] of (Array.isArray(p.characteristics) ? p.characteristics : []).entries()) {
-      if (!stare.caracteristici.has(Number((x as { id?: unknown })?.id))) {
+      if (!valabila(stare.caracteristici.get(Number((x as { id?: unknown })?.id)))) {
         erori[`${prefix}.characteristics.${i}.id`] = [`The selected ${prefix}.characteristics.${i}.id is invalid.`];
       }
     }
@@ -565,14 +574,16 @@ export function serverFals(opt: OptiuniFals = {}) {
           return json(422, { message: "The given data was invalid.", errors: { [`${cheieLista}.${i}.name`]: ["The name field is required."] } });
         }
       }
+      /* Una noua devine valabila abia peste `catalogAsincronMs`; una existenta (redenumita) ramane valabila. */
+      const valabilDe = Date.now() + (o.catalogAsincronMs ?? 0);
       for (const x of lista as Record<string, unknown>[]) {
         const id = Number(x[cheieId]);
         if (categorii) {
           const existent = stare.categorii.get(id);
-          stare.categorii.set(id, { id: existent?.id ?? stare.urmatorulIdCatalog++, category_website_id: id, name: String(x.name) });
+          stare.categorii.set(id, { id: existent?.id ?? stare.urmatorulIdCatalog++, category_website_id: id, name: String(x.name), valabilDe: existent?.valabilDe ?? valabilDe });
         } else {
           const existent = stare.caracteristici.get(id);
-          stare.caracteristici.set(id, { id: existent?.id ?? stare.urmatorulIdCatalog++, characteristic_website_id: id, name: String(x.name) });
+          stare.caracteristici.set(id, { id: existent?.id ?? stare.urmatorulIdCatalog++, characteristic_website_id: id, name: String(x.name), valabilDe: existent?.valabilDe ?? valabilDe });
         }
       }
       return json(200, { success: true, message: "Success", data: null });

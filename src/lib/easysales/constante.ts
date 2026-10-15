@@ -207,6 +207,20 @@ export const LOT_PRODUSE = 100;
 export const LOT_PRODUSE_OCTETI = 900_000;
 /** Categoriile si caracteristicile, pe acelasi plafon de 100 (ghid, IPOTEZA ES-5). */
 export const LOT_CATEGORII = 100;
+/**
+ * ⚠ MASURAT pe 15.10.2026, la primul catalog real (okxi): `categories/save/bulk` raspunde 200 pe
+ * loc, dar easySales creeaza categoriile in fundal, in ~3 s. Primele 7 produse, trimise in secundele
+ * acelea, au primit 422 („Câmpul product.categories.0 selectat nu este valid”) si au ramas `respins`.
+ * De aceea o categorie sau o caracteristica trimisa de mai putin de atat nu se da inca produselor:
+ * produsul asteapta trecerea urmatoare a cronului (cel putin un minut).
+ */
+export const ASTEPTARE_DUPA_CATEGORII_MS = 30_000;
+/**
+ * Cat timp dupa trimiterea unei categorii (sau caracteristici) un 422 pe ea inseamna „inca n-au
+ * creat-o” si se reia, nu `respins`. Dupa atat, refuzul e al produsului (de exemplu, categoria a
+ * fost stearsa din easySales) si ramane la om.
+ */
+export const CATEGORIE_RECENTA_MS = 15 * 60_000;
 /** `PATCH /products/prices/bulk`: „up to 100 products" [A]. */
 export const LOT_PRETURI = 100;
 /** `PATCH /stocks/bulk`: „up to 100 products" [A]. */

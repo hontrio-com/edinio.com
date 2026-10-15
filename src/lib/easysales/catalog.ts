@@ -17,8 +17,9 @@ import {
 } from "./catalog-baza";
 import { COADA, asteptareaDupaPauze, type ElementCoada, type Soarta } from "./coada-element";
 import {
-  CATALOG_PORNIT, CHEIE_CATEGORIE_DE_REZERVA, LOT_ARHIVARE, LOT_CATEGORII, LOT_PRETURI, LOT_PRODUSE,
-  LOT_PRODUSE_OCTETI, SAVE_PE_ELEMENT_PANA_LA, SIGURANTA_MASA, ZILE_ARHIVARE_BLOCATA,
+  ASTEPTARE_DUPA_CATEGORII_MS, CATALOG_PORNIT, CATEGORIE_RECENTA_MS, CHEIE_CATEGORIE_DE_REZERVA, LOT_ARHIVARE,
+  LOT_CATEGORII, LOT_PRETURI, LOT_PRODUSE, LOT_PRODUSE_OCTETI, SAVE_PE_ELEMENT_PANA_LA, SIGURANTA_MASA,
+  ZILE_ARHIVARE_BLOCATA,
 } from "./constante";
 import { verificaMagazinul } from "./conectare";
 import {
@@ -282,6 +283,38 @@ function primulMotiv(motive: readonly Motiv[]): string {
 
 export type RezultatPas = { fel: "gata" } | { fel: "reincearca"; mesaj: string } | { fel: "asteapta_omul"; mesaj: string };
 
+/**
+ * ⚠ easySales creeaza categoriile si caracteristicile IN FUNDAL: `save/bulk` raspunde 200 pe loc, dar
+ * un produs care le foloseste in secundele urmatoare primeste 422 (masurat pe 15.10.2026, vezi
+ * `ASTEPTARE_DUPA_CATEGORII_MS`). Cele doua reguli de mai jos tin produsul departe de fereastra aceea.
+ */
+
+/** Trimisa de destul timp ca un produs s-o poata folosi? Fara `trimis_la` (randuri vechi): da. */
+export function eAsezata(trimisLa: string | null | undefined, acumMs: number, pragMs = ASTEPTARE_DUPA_CATEGORII_MS): boolean {
+  if (!trimisLa) return true;
+  const la = Date.parse(trimisLa);
+  return !Number.isFinite(la) || acumMs - la >= pragMs;
+}
+
+/**
+ * Un 422 al produsului e de fapt „categoria (sau caracteristica) lui inca nu exista la ei”? Da, numai
+ * cand eroarea e chiar pe campul acela si produsul poarta una trimisa de curand
+ * (`CATEGORIE_RECENTA_MS`). Atunci produsul se reia; altfel ramane `respins`, la om.
+ *
+ * Campul vine in doua forme: `product.categories.0: ...` (Save pe element) si `categories.0: ...`
+ * (elementul unui lot, fara `products.N.`, vezi `eroriPeElement`).
+ */
+export function refuzPeCategorieProaspata(
+  mesaj: string,
+  corp: Pick<CorpProdus, "categories" | "characteristics">,
+  categoriiRecente: ReadonlySet<number>,
+  caracteristiciRecente: ReadonlySet<number>,
+): boolean {
+  if (/(?:^|[\s;.])categories\.\d+/.test(mesaj) && corp.categories.some((id) => categoriiRecente.has(Number(id)))) return true;
+  if (/(?:^|[\s;.])characteristics\.\d+/.test(mesaj) && corp.characteristics.some((c) => caracteristiciRecente.has(Number(c.id)))) return true;
+  return false;
+}
+
 async function citesteRandurileCategoriilor(admin: Admin, businessId: string): Promise<RandCategorie[]> {
   const { data, error } = await admin.from("easysales_categorii").select("*").eq("business_id", businessId).limit(5000);
   if (error) throw new EroareCitireBaza("easysales.categorii", error.message);
@@ -360,13 +393,19 @@ export async function sincronizeazaCategoriile(admin: Admin, ctx: ContextEasySal
    CARACTERISTICILE
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** Caracteristicile cerute (cheie -> nume), aduse la ei. Intoarce id-urile celor trimise. */
+/**
+ * Caracteristicile cerute (cheie -> nume), aduse la ei. Intoarce id-urile celor trimise, cheile celor
+ * prea proaspete ca un produs sa le foloseasca inca (`eAsezata`) si id-urile celor trimise de curand
+ * (`refuzPeCategorieProaspata`).
+ */
 async function asiguraCaracteristicile(
   admin: Admin, ctx: ContextEasySales, dorite: Map<string, string>,
-): Promise<{ fel: "gata"; iduri: Map<string, number> } | { fel: "reincearca" | "asteapta_omul"; mesaj: string }> {
+): Promise<{ fel: "gata"; iduri: Map<string, number>; proaspete: Set<string>; recente: Set<number> } | { fel: "reincearca" | "asteapta_omul"; mesaj: string }> {
   const b = ctx.businessId;
   const iduri = new Map<string, number>();
-  if (dorite.size === 0) return { fel: "gata", iduri };
+  const proaspete = new Set<string>();
+  const recente = new Set<number>();
+  if (dorite.size === 0) return { fel: "gata", iduri, proaspete, recente };
   const chei = [...dorite.keys()];
   const citeste = async () => {
     const out: Database["public"]["Tables"]["easysales_caracteristici"]["Row"][] = [];
@@ -398,10 +437,17 @@ async function asiguraCaracteristicile(
         ? { stare: "trimis", trimis_la: acumIso, motiv: null, updated_at: acumIso }
         : { stare: "respins", motiv: (raspuns.campuri.join("; ") || raspuns.mesaj).slice(0, 500), updated_at: acumIso }).eq("id", r.id);
       r.stare = raspuns.ok ? "trimis" : "respins";
+      if (raspuns.ok) r.trimis_la = acumIso;
     });
   }
-  for (const r of randuri) if (r.stare === "trimis") iduri.set(r.cheie_normalizata, Number(r.id));
-  return { fel: "gata", iduri };
+  const acumMs = Date.now();
+  for (const r of randuri) {
+    if (r.stare !== "trimis") continue;
+    iduri.set(r.cheie_normalizata, Number(r.id));
+    if (!eAsezata(r.trimis_la, acumMs)) proaspete.add(r.cheie_normalizata);
+    if (!eAsezata(r.trimis_la, acumMs, CATEGORIE_RECENTA_MS)) recente.add(Number(r.id));
+  }
+  return { fel: "gata", iduri, proaspete, recente };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -551,7 +597,10 @@ export async function prelucreazaContinutul(
     }
     categorii = await citesteRandurileCategoriilor(admin, b);
   }
-  const idCategorie = new Map(categorii.filter((c) => c.stare === "trimis").map((c) => [c.cheie, Number(c.id)]));
+  /* O categorie abia trimisa nu se da inca produselor: ele asteapta trecerea urmatoare (`eAsezata`). */
+  const acumMs = Date.now();
+  const idCategorie = new Map(categorii.filter((c) => c.stare === "trimis" && eAsezata(c.trimis_la, acumMs)).map((c) => [c.cheie, Number(c.id)]));
+  const categoriiRecente = new Set(categorii.filter((c) => c.stare === "trimis" && !eAsezata(c.trimis_la, acumMs, CATEGORIE_RECENTA_MS)).map((c) => Number(c.id)));
 
   /* Hotararile si alocarea. */
   const deTrimis: DeTrimis[] = [];
@@ -646,6 +695,11 @@ export async function prelucreazaContinutul(
   }
 
   for (const x of peArticol) {
+    /* O caracteristica abia trimisa: produsul asteapta, ca sa nu plece fara ea sau sa primeasca 422. */
+    if (x.caracteristici.some((c) => car.proaspete.has(c.cheie))) {
+      out.set(x.p.id, { fel: "reincearca", mesaj: "caracteristicile produsului abia au plecat in easySales" });
+      continue;
+    }
     const im = imaginiPe.get(x.p.id);
     if (!im || im.amanat || out.get(x.p.id)?.fel === "reincearca") continue;
     const imagini = imaginileArticolului(x.p, x.a).map((u) => im.noi.get(u)).filter((u): u is string => !!u);
@@ -708,6 +762,11 @@ export async function prelucreazaContinutul(
         await scrieRand(admin, e.rand.id, { stare: e.rand.stare === "confirmat" ? "confirmat" : "trimis", amprenta: e.amprenta, ...pretTrimis, trimis_la: acum, motiv: null });
         break;
       case "respins":
+        /* Refuzul pe o categorie sau caracteristica trimisa de curand: inca n-o creasera. Se reia, fara amprenta. */
+        if (refuzPeCategorieProaspata(s.mesaj, e.corp, categoriiRecente, car.recente)) {
+          out.set(e.productUuid, { fel: "reincearca", mesaj: `easySales inca n-a creat categoria sau caracteristicile produsului: ${s.mesaj}`.slice(0, 500) });
+          break;
+        }
         /* Amprenta se scrie si aici: acelasi continut nu se mai trimite pana nu se schimba ceva. */
         await scrieRand(admin, e.rand.id, { stare: e.rand.stare === "confirmat" ? "confirmat" : "respins", amprenta: e.amprenta, motiv: `easySales a refuzat produsul: ${s.mesaj}`.slice(0, 500) });
         break;

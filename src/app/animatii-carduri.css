@@ -25,6 +25,11 @@
   /* Scena se potrivește în caseta cardului, oricare ar fi raportul ei (vezi `.anim-scena`). */
   container-type: size;
   -webkit-font-smoothing: antialiased;
+  /* ⚠ Rândul machetelor, `normal`: paginile lor n-aveau resetarea site-ului, care pune 1,5 pe
+     `html` (și 1,6 pe `body`). MĂSURAT 15.10.2026 față de macheta deschisă singură: cu rândul
+     site-ului, textele cardului cu integrări ieșeau cu 2-4,5 px mai jos (casetă mai înaltă, literele
+     la mijlocul ei). Comparația făcută în pagina site-ului nu vedea asta: o primea și macheta. */
+  line-height: normal;
 }
 
 /* Specificitate ZERO (`:where`): foile vin acum cu componentele, iar ordinea lor în

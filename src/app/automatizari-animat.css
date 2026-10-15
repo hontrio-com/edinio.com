@@ -18,12 +18,9 @@
   element: aici stau doar cele care nu se schimbă.
 */
 
-/* `line-height: normal`, ca în machetă (pagina ei n-are resetarea Tailwind, care pune 1,5 pe `html`):
-   altfel blocurile de text fără înălțime de rând proprie (comanda de sus, expeditorul din Gmail,
-   tabelul din e-mail) ies mai înalte și se mută pe verticală. */
+/* Rândul (`line-height: normal`, ca în machetă) îl dă rama comună, `.anim-card`. */
 .eau {
   color: #0e1210;
-  line-height: normal;
   user-select: none;
 }
 

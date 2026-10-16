@@ -63,10 +63,14 @@ export interface Bucla {
   /** Cadrul static pentru „mișcare redusă”. */
   staticS: number;
   /**
-   * Rezerva pentru browserele fără funcții trigonometrice în CSS (Safari sub 15.4): ce trebuie
-   * scris din JavaScript la fiecare lățime a scenei. Lipsește când macheta nu le folosește.
+   * Scara pânzei desenate la mărime fixă (cardurile 1, 3 și 5), scrisă din JavaScript la fiecare
+   * lățime a scenei, în ORICE browser. Foaia de stil o socotește cu `tan(atan2(lungime, lungime))`,
+   * dar nu se poate bizui pe ea: Safari 16.4-18.1 citește fiecare lungime în unitatea ei (`cqw`
+   * și `px` amestecate dau o scară de 3-6 ori prea mică), Firefox până la 152 n-o aplică, iar
+   * amândouă spun că o suportă, deci o verificare cu `CSS.supports` nu le prinde. Foaia rămâne
+   * pentru primul cadru, până pornește JavaScript-ul. Lipsește când macheta n-are pânză scalată.
    */
-  faraTrig?: (scena: HTMLElement, latime: number) => void;
+  scaraPanzei?: (scena: HTMLElement, latime: number) => void;
   /**
    * Pistele făcute din ce se poate afla numai în pagină (înălțimea unui text, care depinde de fontul
    * sistemului), chemate o dată, după `pregateste`, înainte de cadrele-cheie. Lipsește când toate
@@ -83,6 +87,10 @@ const PREGATIRE_DE_LA = "1000px 0px";
 const PREGATIRE_CEL_MULT_MS = 4000;
 /** Cât lucrează, cel mult, o bucată din construcția animațiilor. */
 const BUCATA_MS = 4;
+/** Cât din card trebuie să se vadă ca să ruleze (vezi `vedere`). */
+const PRAG_VEDERE = 0.5;
+/** Antetul lipit al site-ului (`h-18` plus bordura, ca `HEADER_H` din `FeatureStack`): ce e sub el nu se vede. */
+const SUB_ANTET = "-73px 0px 0px 0px";
 
 type Ragaz = { didTimeout: boolean; timeRemaining: () => number };
 /** O funcție chemată în timpul liber al browserului (sau imediat după, unde nu există). */
@@ -110,22 +118,22 @@ export function useAnimatieInBucla(radacina: RefObject<HTMLElement | null>, bucl
     const card = root.closest<HTMLElement>("[data-feature-card]");
     const miscareRedusa = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    /* ─── Rezervele pentru browserele vechi ─────────────────────────────────
+    /* ─── Geometria scrisă din JavaScript ───────────────────────────────────
        Fără interogări de container (Safari sub 16), `cqw` nu există: scena și unitatea `--u` se
-       scriu în pixeli. Fără funcții trigonometrice în CSS (Safari sub 15.4), ce socotea foaia de
-       stil cu ele o scrie macheta (`faraTrig`). Pe un browser de azi, niciuna nu rulează. */
+       scriu în pixeli. Iar scara pânzelor desenate la mărime fixă o scrie MEREU macheta
+       (`scaraPanzei`, de ce în nota ei), din lățimea exactă a scenei: `getComputedStyle` dă
+       lățimea așezată, cu zecimale și fără transformările de deasupra (micșorarea din teanc). */
     const faraContainer = !CSS.supports("width", "1cqw");
-    const faraTrig = bucla.faraTrig !== undefined && !CSS.supports("transform", "scale(tan(atan2(1px, 2px)))");
     let urmaritorMarime: ResizeObserver | null = null;
-    if (faraContainer || faraTrig) {
+    if (faraContainer || bucla.scaraPanzei) {
       const aplicaGeometria = () => {
-        let latime = scena.offsetWidth;
+        let latime = parseFloat(getComputedStyle(scena).width) || scena.offsetWidth;
         if (faraContainer) {
           latime = Math.min(radacinaSigura.clientWidth, (radacinaSigura.clientHeight * 4) / 3);
           scena.style.width = `${latime}px`;
           scena.style.setProperty("--u", `${latime / 100}px`);
         }
-        if (faraTrig) bucla.faraTrig?.(scena, latime);
+        bucla.scaraPanzei?.(scena, latime);
       };
       aplicaGeometria();
       if (typeof ResizeObserver !== "undefined") {
@@ -310,13 +318,21 @@ export function useAnimatieInBucla(radacina: RefObject<HTMLElement | null>, bucl
     if (aproape) aproape.observe(root);
     else pregateste();
 
+    /* Rulează cât se vede CEL PUȚIN JUMĂTATE din card, sub antetul lipit. Cu „orice pixel”, pe telefon
+       (unde cardurile curg unul sub altul) rulau câte DOUĂ machete deodată cât deget derula de la una
+       la alta: una abia o fâșie la margine sau sub antet. Cu imaginile de ~250 px și ~600 px între ele,
+       două carduri nu pot fi pe jumătate vizibile odată. */
     const vedere =
       typeof IntersectionObserver === "undefined"
         ? null
-        : new IntersectionObserver((intrari) => {
-            vizibil = intrari[intrari.length - 1].isIntersecting;
-            actualizeaza();
-          });
+        : new IntersectionObserver(
+            (intrari) => {
+              const ultima = intrari[intrari.length - 1];
+              vizibil = ultima.isIntersecting && ultima.intersectionRatio >= PRAG_VEDERE;
+              actualizeaza();
+            },
+            { threshold: [0, PRAG_VEDERE], rootMargin: SUB_ANTET },
+          );
     vedere?.observe(root);
 
     const acoperire =

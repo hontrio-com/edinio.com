@@ -7,6 +7,7 @@ import { ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
 import { MENU_PREFIXES, TOP_NAV, type MenuId } from "@/lib/website/nav";
+import { meniulUrmator, type StareMeniu } from "@/lib/website/meniu-stare";
 import { ComparePanel, ResourcesPanel, SolutionPanel } from "./MegaPanels";
 import { MobileNav } from "./MobileNav";
 import { butonVerde } from "@/lib/website/buton";
@@ -48,7 +49,7 @@ export function SiteHeader() {
    * la randare, dar un ref citit la randare nu e de încredere când React
    * randează de două ori, iar regula `react-hooks/refs` o taie pe bună dreptate.
    */
-  const [menu, setMenu] = useState<{ open: MenuId | null; instant: boolean }>({
+  const [menu, setMenu] = useState<StareMeniu>({
     open: null,
     instant: false,
   });
@@ -56,10 +57,8 @@ export function SiteHeader() {
   const switching = menu.instant;
 
   const setOpenMenu = useCallback((next: MenuId | null) => {
-    setMenu((previous) => ({
-      open: next,
-      instant: previous.open !== null && next !== null && previous.open !== next,
-    }));
+    /* ⚠ Închis rămâne același obiect, ca atingerile de oriunde să nu redeseneze bara (vezi funcția). */
+    setMenu((previous) => meniulUrmator(previous, next));
   }, []);
 
   const headerRef = useRef<HTMLElement | null>(null);

@@ -47,11 +47,20 @@
   iar acolo animația cade pe firul principal (măsurat: 130 de recalculări de stil
   pe secundă). Deci merge doar cât rulează și macheta, care pune `data-ruleaza`
   pe rădăcină (`useAnimatieInBucla`). Fără JavaScript, luminile stau pe loc.
+
+  ⚠ FĂRĂ `filter: blur()`. Machetele desenau un disc estompat cu 10cqw; o lumină
+  care se mișcă și se scalează își refăcea estomparea la FIECARE cadru, pe placa
+  grafică. MĂSURAT 16.10.2026, pe toate cele cinci carduri: estomparea era 15-35%
+  din munca procesului grafic cât rula un card, iar cadrele pierdute (2-4 la 5 s)
+  apăreau aproape numai cu ea. Aici discul e deja estompat, ca degrade radial:
+  se desenează o dată și apoi doar se mută. Opririle sunt profilul MĂSURAT al
+  estompării lui Chrome (disc de rază 3 neclarități, respectiv 2,6), la fiecare
+  1/24 din rază; abaterea față de el e sub un nivel de culoare din 255. Caseta e
+  mai mare cât să încapă toată lumina (raza discului + 3 neclarități), cu ACELAȘI
+  centru, deci și scalarea din `anim-dr` se face în jurul aceluiași punct.
 */
 .anim-blob {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(10cqw);
   opacity: 0.5;
   z-index: -1;
 }
@@ -66,21 +75,74 @@
   animation-play-state: running;
 }
 
+/* Discul machetei: 60cqw, centrul la (12, 8), #c4f2cf, estompat cu 10cqw. Caseta: (30 + 3 × 10) × 2. */
 .anim-b1 {
-  width: 60cqw;
-  height: 60cqw;
-  left: -18cqw;
-  top: -22cqw;
-  background: #c4f2cf;
+  width: 120cqw;
+  height: 120cqw;
+  left: -48cqw;
+  top: -52cqw;
+  background: radial-gradient(
+    closest-side,
+    rgba(196, 242, 207, 0.992) 0%,
+    rgba(196, 242, 207, 0.988) 4.167%,
+    rgba(196, 242, 207, 0.984) 8.333%,
+    rgba(196, 242, 207, 0.973) 12.5%,
+    rgba(196, 242, 207, 0.953) 16.667%,
+    rgba(196, 242, 207, 0.929) 20.833%,
+    rgba(196, 242, 207, 0.894) 25%,
+    rgba(196, 242, 207, 0.845) 29.167%,
+    rgba(196, 242, 207, 0.784) 33.333%,
+    rgba(196, 242, 207, 0.706) 37.5%,
+    rgba(196, 242, 207, 0.62) 41.667%,
+    rgba(196, 242, 207, 0.526) 45.833%,
+    rgba(196, 242, 207, 0.431) 50%,
+    rgba(196, 242, 207, 0.339) 54.167%,
+    rgba(196, 242, 207, 0.255) 58.333%,
+    rgba(196, 242, 207, 0.184) 62.5%,
+    rgba(196, 242, 207, 0.126) 66.667%,
+    rgba(196, 242, 207, 0.08) 70.833%,
+    rgba(196, 242, 207, 0.051) 75%,
+    rgba(196, 242, 207, 0.028) 79.167%,
+    rgba(196, 242, 207, 0.016) 83.333%,
+    rgba(196, 242, 207, 0.008) 87.5%,
+    rgba(196, 242, 207, 0) 91.667%
+  );
   animation: anim-dr 17s ease-in-out infinite alternate;
 }
 
+/* Discul machetei: 52cqw, centrul la 8 de dreapta și 6 de jos, #e3f5bf, estompat cu 10cqw. Caseta: (26 + 3 × 10) × 2. */
 .anim-b2 {
-  width: 52cqw;
-  height: 52cqw;
-  right: -18cqw;
-  bottom: -20cqw;
-  background: #e3f5bf;
+  width: 112cqw;
+  height: 112cqw;
+  right: -48cqw;
+  bottom: -50cqw;
+  background: radial-gradient(
+    closest-side,
+    rgba(227, 245, 191, 0.965) 0%,
+    rgba(227, 245, 191, 0.961) 4.167%,
+    rgba(227, 245, 191, 0.949) 8.333%,
+    rgba(227, 245, 191, 0.933) 12.5%,
+    rgba(227, 245, 191, 0.907) 16.667%,
+    rgba(227, 245, 191, 0.869) 20.833%,
+    rgba(227, 245, 191, 0.82) 25%,
+    rgba(227, 245, 191, 0.756) 29.167%,
+    rgba(227, 245, 191, 0.681) 33.333%,
+    rgba(227, 245, 191, 0.6) 37.5%,
+    rgba(227, 245, 191, 0.512) 41.667%,
+    rgba(227, 245, 191, 0.421) 45.833%,
+    rgba(227, 245, 191, 0.337) 50%,
+    rgba(227, 245, 191, 0.261) 54.167%,
+    rgba(227, 245, 191, 0.195) 58.333%,
+    rgba(227, 245, 191, 0.137) 62.5%,
+    rgba(227, 245, 191, 0.092) 66.667%,
+    rgba(227, 245, 191, 0.059) 70.833%,
+    rgba(227, 245, 191, 0.035) 75%,
+    rgba(227, 245, 191, 0.021) 79.167%,
+    rgba(227, 245, 191, 0.014) 83.333%,
+    rgba(227, 245, 191, 0.008) 87.5%,
+    rgba(227, 245, 191, 0.004) 91.667%,
+    rgba(227, 245, 191, 0) 95.833%
+  );
   animation: anim-dr 21s ease-in-out infinite alternate-reverse;
 }
 
@@ -109,5 +171,17 @@
 @media (prefers-reduced-motion: reduce) {
   .anim-blob {
     animation: none;
+  }
+}
+
+/*
+  Plasa pentru browserele fără unități de container (Safari sub 16, adică iOS 15). Acolo nu
+  pornește nici JavaScript-ul site-ului (Next 16 cere Safari 16.4), deci nici rezerva din
+  `useAnimatieInBucla`: machetele ar ieși grămadă (texte îngrămădite, pânze de 0 × 0). Rămâne
+  fundalul ramei, curat. (Luminile oricum nu apăreau acolo: sunt în `cqw`.)
+*/
+@supports not (width: 1cqw) {
+  .anim-scena {
+    display: none;
   }
 }

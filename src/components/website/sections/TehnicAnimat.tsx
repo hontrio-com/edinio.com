@@ -157,7 +157,7 @@ const BUCLA: Bucla = {
   pisteMasurate,
   pornireS: PORNIRE_S,
   staticS: STATIC_S,
-  faraTrig: (scena, latime) => {
+  scaraPanzei: (scena, latime) => {
     for (const ui of scena.querySelectorAll<HTMLElement>(".eth-ui")) {
       ui.style.transform = `scale(${(latime * PANZA.cat) / 100 / PANZA.latime})`;
     }

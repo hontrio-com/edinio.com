@@ -159,11 +159,13 @@
    Miscarea e foarte lenta dinadins, 30-50 de secunde tura: cat sa observi ca
    traieste daca stai pe pagina, nu cat sa-ti ia ochii de pe titlu.
 
-   COSTUL. `filter: blur()` e scump de recalculat, dar aici nu se recalculeaza:
-   petele isi schimba doar `transform`, iar continutul desenat ramane acelasi,
-   deci stratul deja neclar se muta pe compozitor. `will-change` face promovarea
-   explicita. Cu `scale` sau `opacity` in animatie, blur-ul s-ar fi refacut la
-   fiecare cadru. */
+   COSTUL. ⚠ Aici scria ca `filter: blur()` nu se recalculeaza, fiindca petele
+   isi schimba doar `transform`. MASURAT 16.10.2026: FALS. Cu primul ecran pe
+   ecran, estomparea celor sase pete era jumatate din munca procesului grafic
+   (143-165 ms/s fata de 65-74 fara ea), la fiecare cadru. Acum petele n-au
+   filtru: lumina deja estompata e un degrade pe `::before` (socotit pe server,
+   `luminaPetei` in `hero-backgrounds.tsx`), care doar se muta pe compozitor.
+   Si cat primul ecran nu se vede, petele stau (`data-in-afara`, mai jos). */
 /* Cursa e in procente din PATA, nu din sectiune, iar petele au 380-640px. La
    14% inseamna vreo 60-90px de drum pe fiecare cheie: destul cat suprapunerile
    sa se refaca altfel, prea putin cat sa ramana goluri de alb intre ele. */
@@ -223,6 +225,29 @@
   animation: var(--mesh-path) var(--mesh-duration) ease-in-out var(--mesh-delay)
     infinite;
   will-change: transform;
+}
+
+/* Lumina petei, mai mare decat pata cat sa incapa toata estomparea; pata isi
+   pastreaza marimea, deci si cursa animatiei (in procente din ea). */
+.hero-mesh-blob::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--mesh-intindere) * -1);
+  background: var(--mesh-lumina);
+}
+
+/* ─── Animatiile paginii, oprite cat nu se vad ───────────────────────────────
+   Petele de sus si benzile de sigle curg la nesfarsit. In afara ecranului nu se
+   deseneaza, dar compozitorul tot le avanseaza la fiecare cadru, iar la orice
+   cadru al firului principal (o derulare, un text schimbat) Chrome le
+   recalculeaza stilul. MASURAT 16.10.2026, pe un telefon incetinit de 4 ori: la
+   derularea prin carduri, firul principal scadea de la 687 la 364 ms/s cu ele
+   oprite, iar recalcularea stilului de la 78 la 0,1 ms/s.
+   `data-in-afara` il pune `OprireInAfaraEcranului` pe sectiunea lor. Doua clase,
+   nu una: `animation` (prescurtarea) de la `.hero-mesh-blob` repune `running`. */
+[data-in-afara] .hero-mesh-blob,
+[data-in-afara] .banda {
+  animation-play-state: paused;
 }
 
 /* Fara miscare, petele raman unde le prinde. Desenul e acelasi, doar ca sta pe

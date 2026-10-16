@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
 import { LOGOS_CASETA, type LogoKey } from "@/lib/website/logos";
 import { CasetaSigla } from "./CasetaSigla";
+import { OprireInAfaraEcranului } from "@/components/website/OprireInAfaraEcranului";
 import { VERDE_CITIBIL } from "@/lib/website/linii";
 
 /**
@@ -106,6 +107,8 @@ const MASCA =
 export function IntegrationsBenzi() {
   return (
     <section data-analytics-section="integrari" className="bg-white py-20 lg:py-28">
+      {/* Benzile stau cât secțiunea nu se vede (vezi componenta). */}
+      <OprireInAfaraEcranului />
       {/* ── Antetul, ingust si centrat ────────────────────────────────────── */}
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         {/*

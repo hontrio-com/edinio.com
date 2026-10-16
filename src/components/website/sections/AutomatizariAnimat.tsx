@@ -100,8 +100,8 @@ const BUCLA: Bucla = {
   pregateste: decodeazaImaginile,
   pornireS: PORNIRE_S,
   staticS: STATIC_S,
-  /* Fără funcții trigonometrice în CSS, scara pânzei fiecărui card (`.eau-sc`) o scrie componenta. */
-  faraTrig: (scena, latime) => {
+  /* Scara pânzei fiecărui card (`.eau-sc`), scrisă din JavaScript în orice browser (de ce: `scaraPanzei`). */
+  scaraPanzei: (scena, latime) => {
     for (const sc of scena.querySelectorAll<HTMLElement>(".eau-sc")) sc.style.transform = `scale(${(latime * 0.9) / 1200})`;
   },
 };

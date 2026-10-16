@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cadrePista, esantioanePista, urmatorulMoment, type Pista } from "./animatie-bucla";
+import { TREAPTA_S, cadrePista, esantioanePista, urmatorulMoment, type Pista } from "./animatie-bucla";
 import * as magazin from "./magazin-animat";
 import * as integrari from "./integrari-animat";
 import * as automatizari from "./automatizari-animat";
@@ -75,7 +75,8 @@ for (const m of MACHETE) {
         while (s < pastrate.length - 2 && pastrate[s + 1] <= k) s++;
         const a = pastrate[s];
         const b = pastrate[s + 1];
-        /* În trepte (`step-end`), fiecare cadru ține până la următorul; altfel, dreapta dintre ele. */
+        /* În trepte, fiecare cadru ține până la `TREAPTA_S` înaintea următorului (vezi `cadrePista`), deci
+           la eșantioane, care sunt la 1/60 s, se vede valoarea lui; altfel, dreapta dintre ele. */
         const f = p.trepte ? (k === b ? 1 : 0) : b === a ? 0 : (ts[k] - ts[a]) / (ts[b] - ts[a]);
         for (let d = 0; d < p.toleranta.length; d++) {
           const desenat = vs[a][d] + (vs[b][d] - vs[a][d]) * f;
@@ -111,9 +112,27 @@ for (const m of MACHETE) {
        mult decât macheta originală. Proba ține ușa închisă pentru orice altă proprietate. */
     for (const p of m.piste) {
       for (const cadru of cadrePista(p, m.buclaS)) {
-        /* `offset` și `easing` (treptele) țin de cronometrare, nu de stil. */
-        const proprietati = Object.keys(cadru).filter((k) => k !== "offset" && k !== "easing");
+        /* `offset` ține de cronometrare, nu de stil. ⚠ Și NICIUN `easing`: Safari nu trece pe compozitor
+           o animație cu funcție în trepte (`step-end`), o avansează pe firul principal la fiecare cadru. */
+        const proprietati = Object.keys(cadru).filter((k) => k !== "offset");
         for (const k of proprietati) assert.ok(k === "transform" || k === "opacity", `${p.tinta}: \`${k}\` în cadre`);
+      }
+    }
+  });
+
+  test(`${m.nume}: treptele sar în ${TREAPTA_S * 1000} ms, fără nicio valoare intermediară la eșantioane`, () => {
+    for (const p of m.piste.filter((x) => x.trepte)) {
+      const cadre = cadrePista(p, m.buclaS);
+      const { ts, vs, pastrate } = esantioanePista(p, m.buclaS);
+      /* Fiecare schimbare: valoarea veche cu `TREAPTA_S` înainte, cea nouă la clipa ei. */
+      assert.equal(cadre.length, 2 * pastrate.length - 1, `${p.tinta}: câte două cadre pe treaptă`);
+      for (let idx = 1; idx < pastrate.length - 1; idx++) {
+        const tine = cadre[2 * idx - 1];
+        const sare = cadre[2 * idx];
+        assert.deepEqual({ ...tine, offset: 0 }, { ...p.scrie(vs[pastrate[idx - 1]]), offset: 0 }, `${p.tinta}: valoarea veche`);
+        assert.deepEqual({ ...sare, offset: 0 }, { ...p.scrie(vs[pastrate[idx]]), offset: 0 }, `${p.tinta}: valoarea nouă`);
+        const durata = ((sare.offset as number) - (tine.offset as number)) * m.buclaS;
+        assert.ok(Math.abs(durata - TREAPTA_S) < 1e-9, `${p.tinta}: treapta de la ${ts[pastrate[idx]].toFixed(3)} s durează ${durata} s`);
       }
     }
   });

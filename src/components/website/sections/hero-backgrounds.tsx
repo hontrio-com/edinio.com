@@ -1,4 +1,6 @@
 import type { CSSProperties } from "react";
+import { DEVIATII_DINCOLO, opririEstompate } from "@/lib/website/lumina-estompata";
+import { OprireInAfaraEcranului } from "@/components/website/OprireInAfaraEcranului";
 
 /**
  * Fundalul hero-ului: mesh de lumină verde, în plutire lentă.
@@ -24,7 +26,8 @@ import type { CSSProperties } from "react";
  *
  * ═══ CUM E FĂCUT ═══
  *
- * Din gradiente și blur, nu cu WebGL. Varianta cu `ogl` de pe reactbits arată
+ * Din gradiente, nu cu WebGL. (Și fără `filter: blur()`: lumina e deja estompată în degrade, socotită
+ * pe server; vezi `luminaPetei`.) Varianta cu `ogl` de pe reactbits arată
  * bine, dar pune o pânză care se redesenează la fiecare cadru exact peste
  * elementul cel mai important al paginii, plus o dependință de încărcat înainte
  * să se vadă titlul — pe un site care are și o pagină „Optimizare".
@@ -157,6 +160,30 @@ const BLOBS: Blob[] = [
 const FADE =
   "linear-gradient(to bottom, black 0%, black 52%, rgba(0,0,0,0.55) 74%, transparent 97%)";
 
+/**
+ * Forma unei pete înainte de estompare: `radial-gradient(circle, a 0%, 0.38a 48%, transparent 72%)`
+ * (cercul ajunge la colțul cel mai depărtat, deci 100% = latura/2 · √2), tăiată rotund la latura/2.
+ */
+function formaPetei(marime: number) {
+  const r100 = (marime / 2) * Math.SQRT2;
+  return (r: number) => {
+    const p = r / r100;
+    if (p <= 0.48) return 1 + (0.38 - 1) * (p / 0.48);
+    if (p <= 0.72) return 0.38 * (1 - (p - 0.48) / 0.24);
+    return 0;
+  };
+}
+
+/**
+ * Lumina petei, deja estompată: degradeul pe care îl desena `filter: blur()`, socotit o dată, pe server
+ * (vezi `lib/website/lumina-estompata.ts`, cu măsurătoarea). Profilul depinde doar de raportul dintre
+ * mărime și neclaritate, iar ele se scalează împreună (`scaled`), deci procentele țin pe orice ecran.
+ */
+function luminaPetei(blob: Blob, rgb: string): string {
+  const opriri = opririEstompate(formaPetei(blob.size), blob.size / 2, blob.blur);
+  return `radial-gradient(closest-side, ${opriri.map(([p, a]) => `rgba(${rgb},${(a * blob.alpha).toFixed(4)}) ${p}%`).join(", ")})`;
+}
+
 function blobStyle(blob: Blob): CSSProperties {
   const rgb = TONES[blob.tone];
   const size = scaled(blob.size);
@@ -174,8 +201,14 @@ function blobStyle(blob: Blob): CSSProperties {
     */
     marginLeft: `calc(${size} * -0.5)`,
     marginTop: `calc(${size} * -0.5)`,
-    background: `radial-gradient(circle, rgba(${rgb},${blob.alpha}) 0%, rgba(${rgb},${(blob.alpha * 0.38).toFixed(3)}) 48%, transparent 72%)`,
-    filter: `blur(${scaled(blob.blur)})`,
+    /*
+      ⚠ Nu `filter: blur()` pe pată: estomparea se refăcea la fiecare cadru cât pata se plimba (MĂSURAT,
+      vezi `luminaPetei`). Lumina deja estompată stă pe `::before`, mai mare decât pata cu
+      `DEVIATII_DINCOLO` neclarități (`stil-comun.css`); pata își păstrează mărimea, deci și cursa
+      animației, care e în procente din ea.
+    */
+    ["--mesh-lumina" as string]: luminaPetei(blob, rgb),
+    ["--mesh-intindere" as string]: scaled(DEVIATII_DINCOLO * blob.blur),
     ["--mesh-path" as string]: `hero-mesh-${blob.path}`,
     ["--mesh-duration" as string]: `${blob.duration}s`,
     ["--mesh-delay" as string]: `${blob.delay}s`,
@@ -214,6 +247,9 @@ export function HeroMesh() {
           style={blobStyle(blob)}
         />
       ))}
+
+      {/* Petele stau cât primul ecran nu se vede (vezi componenta). */}
+      <OprireInAfaraEcranului />
     </div>
   );
 }

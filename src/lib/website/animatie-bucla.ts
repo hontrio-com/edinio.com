@@ -60,8 +60,9 @@ export interface Pista {
   /** Abaterea admisă, pe fiecare componentă, în unitățile ei. */
   toleranta: number[];
   /**
-   * Valori care SAR, fără trecere între ele (cifrele unui contor): cadrele-cheie se păstrează exact
-   * unde se schimbă valoarea și țin fiecare până la următorul (`easing: step-end`).
+   * Valori care SAR, fără trecere între ele (cifrele unui contor, o variantă aprinsă): cadrele-cheie
+   * se păstrează exact unde se schimbă valoarea, iar valoarea veche ține până cu `TREAPTA_S` înainte
+   * (vezi `cadrePista`).
    */
   trepte?: boolean;
 }
@@ -145,14 +146,30 @@ function schimbari(vs: readonly number[][]): number[] {
   return out;
 }
 
+/**
+ * Cât durează o treaptă: valoarea veche ține până cu atât înainte de schimbare, apoi trece liniar în
+ * cea nouă. O zecime de milisecundă: un cadru de 60 pe secundă nimerește în ea o dată la 167.
+ *
+ * ⚠ NU `easing: step-end`. Treptele erau scrise așa, iar Safari (WebKit, pe Mac și pe orice
+ * iPhone) nu trece pe compozitor o animație cu funcție în trepte: o avansa pe firul principal la
+ * FIECARE cadru, pe toată bucla, tocmai la contorul cu role (cardul 4) și la variantele aprinse
+ * (cardul 5), făcute ca să nu ceară firul principal. Două cadre-cheie lineare foarte apropiate
+ * merg pe compozitor peste tot.
+ */
+export const TREAPTA_S = 0.0001;
+
 /** Cadrele-cheie ale unei piste, gata pentru `element.animate`. */
 export function cadrePista(p: Pista, buclaS: number, pePeSecunda = ESANTIOANE_PE_SECUNDA): Keyframe[] {
   const { ts, vs, pastrate } = esantioanePista(p, buclaS, pePeSecunda);
-  return pastrate.map((k, idx) => ({
-    ...p.scrie(vs[k]),
-    offset: idx === 0 ? 0 : idx === pastrate.length - 1 ? 1 : ts[k] / buclaS,
-    ...(p.trepte ? { easing: "step-end" } : {}),
-  }));
+  const offset = (idx: number) => (idx === 0 ? 0 : idx === pastrate.length - 1 ? 1 : ts[pastrate[idx]] / buclaS);
+  if (!p.trepte) return pastrate.map((k, idx) => ({ ...p.scrie(vs[k]), offset: offset(idx) }));
+  /* În trepte: înaintea fiecărui cadru păstrat, valoarea de dinainte, ținută până la `TREAPTA_S` de el. */
+  const cadre: Keyframe[] = [];
+  pastrate.forEach((k, idx) => {
+    if (idx > 0) cadre.push({ ...p.scrie(vs[pastrate[idx - 1]]), offset: Math.max(offset(idx - 1), offset(idx) - TREAPTA_S / buclaS) });
+    cadre.push({ ...p.scrie(vs[k]), offset: offset(idx) });
+  });
+  return cadre;
 }
 
 /* ─── Partea scrisă din JavaScript ─────────────────────────────────────────── */

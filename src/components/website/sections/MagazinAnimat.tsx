@@ -125,8 +125,8 @@ const BUCLA: Bucla = {
   pregateste: incarcaImaginile,
   pornireS: 0,
   staticS: STATIC_S,
-  /* Fără funcții trigonometrice în CSS, scara capturilor (`.emx-vp`) o scrie componenta. */
-  faraTrig: (scena, latime) => {
+  /* Scara capturilor (`.emx-vp`), scrisă din JavaScript în orice browser (de ce: `scaraPanzei`). */
+  scaraPanzei: (scena, latime) => {
     const vp = scena.querySelector<HTMLElement>("[data-emx='vp']");
     if (vp) vp.style.transform = `scale(${(latime * ECRAN.w) / LATIME_PAGINA})`;
   },

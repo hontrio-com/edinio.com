@@ -7,6 +7,7 @@ import * as magazin from "./magazin-animat";
 import * as integrari from "./integrari-animat";
 import * as automatizari from "./automatizari-animat";
 import * as vanzari from "./vanzari-animat";
+import * as tehnic from "./tehnic-animat";
 
 /*
   Regulile motorului comun, verificate pe TOATE machetele odată. O regulă care ține de motor n-are
@@ -52,6 +53,14 @@ const MACHETE: ReadonlyArray<{
     momente: vanzari.MOMENTE_DISCRETE,
     componenta: "src/components/website/sections/VanzariAnimat.tsx",
     atribut: "evz",
+  },
+  {
+    nume: "tehnic",
+    piste: tehnic.PISTE,
+    buclaS: tehnic.BUCLA_S,
+    momente: tehnic.MOMENTE_DISCRETE,
+    componenta: "src/components/website/sections/TehnicAnimat.tsx",
+    atribut: "eth",
   },
 ];
 

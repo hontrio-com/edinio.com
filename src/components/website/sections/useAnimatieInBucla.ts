@@ -5,8 +5,8 @@ import { cadrePista, urmatorulMoment, type Pista } from "@/lib/website/animatie-
 
 /**
  * Partea de DOM a machetelor animate din „Soluția” (`MagazinAnimat`, `IntegrariAnimat`,
- * `AutomatizariAnimat`, `VanzariAnimat`): pornește bucla, o oprește când nu se vede și scrie ce nu
- * poate rula pe compozitor. Pistele și cronologia sunt pure, în `lib/website/` (`animatie-bucla.ts`
+ * `AutomatizariAnimat`, `VanzariAnimat`, `TehnicAnimat`): pornește bucla, o oprește când nu se vede
+ * și scrie ce nu poate rula pe compozitor. Pistele și cronologia sunt pure, în `lib/website/` (`animatie-bucla.ts`
  * și câte un fișier pe machetă).
  *
  * ═══ CUM PORNEȘTE, CA SĂ NU SE SIMTĂ ═══

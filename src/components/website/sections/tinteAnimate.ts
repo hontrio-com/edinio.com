@@ -3,8 +3,8 @@ import type { Pista } from "@/lib/website/animatie-bucla";
 
 /**
  * Ce au comun machetele animate din „Soluția” in componenta lor (`IntegrariAnimat`,
- * `AutomatizariAnimat`): tintele pistelor, cu stilul lor de start, si imaginile decodate inainte
- * de pornire. O singura copie, ca doua machete sa nu poata ajunge sa faca acelasi lucru diferit.
+ * `AutomatizariAnimat`, `VanzariAnimat`, `TehnicAnimat`): tintele pistelor, cu stilul lor de start,
+ * si imaginile decodate inainte de pornire. O singura copie, ca doua machete sa nu poata ajunge sa faca acelasi lucru diferit.
  */
 
 type Tinta = { [atribut: `data-${string}`]: string; style: CSSProperties };

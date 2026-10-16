@@ -72,6 +72,15 @@ const BUGETE: Record<string, number> = {
   "features/magazin-animat/produs-b-1920.webp": 77_900,
   "features/magazin-animat/cos-1920.webp": 66_500,
   "features/magazin-animat/checkout-1920.webp": 60_700,
+  /*
+    Pagina de start, al cincilea card (16.10.2026): fundalul conversației și avatarul
+    asistenței, și sigla SmartBill din captură. Fundalul e fâșia de sus a lui
+    `fundal_whatsapp`, tăiată din masterul PNG: în card se văd 429 din cei 1.396 px.
+    Măsurat 10.920, 2.480 și 5.330, × 1,06.
+  */
+  "features/tehnic-animat/fundal-whatsapp.webp": 11_600,
+  "features/tehnic-animat/asistenta.webp": 2_700,
+  "features/tehnic-animat/smartbill.webp": 5_700,
 };
 
 /*
@@ -235,6 +244,12 @@ const PERECHI: Array<{ mare: string; mic: string; unde: string; deCe: string }> 
     mic: "/mentenanta/fundal_whatsapp-card.webp",
     unde: "src/components/website/sections/mentenanta/IlustratiiMentenanta.tsx",
     deCe: "caseta are 438×170, iar din cei 1396 px pe verticală se văd 295",
+  },
+  {
+    mare: "/mentenanta/fundal_whatsapp.webp",
+    mic: "/features/tehnic-animat/fundal-whatsapp.webp",
+    unde: "src/components/website/sections/TehnicAnimat.tsx",
+    deCe: "pânza conversației are 720 × 406 px de fir, deci din cei 1.396 px pe verticală se văd 429",
   },
   {
     mare: "/logo.png",

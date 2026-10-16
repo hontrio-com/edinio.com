@@ -1,7 +1,7 @@
 /**
  * Motorul comun al machetelor animate din cardurile „Soluția” (`magazin-animat.ts`,
- * `integrari-animat.ts`, `automatizari-animat.ts`, `vanzari-animat.ts`): o buclă descrisă ca funcții
- * de timp, tradusă o singură dată în cadre-cheie pentru Web Animations.
+ * `integrari-animat.ts`, `automatizari-animat.ts`, `vanzari-animat.ts`, `tehnic-animat.ts`): o buclă
+ * descrisă ca funcții de timp, tradusă o singură dată în cadre-cheie pentru Web Animations.
  *
  * ═══ DE CE AȘA ═══
  *

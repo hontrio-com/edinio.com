@@ -1,0 +1,586 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  MACHETA ANIMATĂ A CARDULUI CU PARTEA TEHNICĂ (`TehnicAnimat.tsx`)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Desenul e al machetei făcute de client (16.10.2026, „varianta 3: chat de
+  suport non-stop”), neatins: aceleași poziții, mărimi, culori și fonturi.
+  Cardul e în `--u` (vezi `animatii-carduri.css`); conversația e desenată pe o
+  pânză de 720 × 524 px, micșorată cât cardul, deci acolo rămân pixeli, ca în
+  machetă.
+
+  Cronologia stă în `lib/website/tehnic-animat.ts`, cu tot ce s-a schimbat ca
+  să meargă pe compozitor. De aici se văd: ce se schimba prin clase și texte e
+  desenat în toate variantele, una peste alta (starea din bara de sus, bifele,
+  eticheta „Inactiv”/„Conectat”, fondul gri și cel verde al comutatorului), iar
+  fondul verde al rândului SmartBill e un strat (`.eth-sbf`).
+
+  Valorile de start ale celor animate le scrie componenta, din piste, pe fiecare
+  element: aici stau doar cele care nu se schimbă.
+*/
+
+/* Rândul (`line-height: normal`, ca în machetă) îl dă rama comună, `.anim-card`. */
+.eth {
+  color: #0e1210;
+  user-select: none;
+}
+
+.eth svg {
+  display: block;
+}
+
+/* ─── Cardul și pânza ─── */
+
+.eth-card {
+  position: absolute;
+  left: calc(var(--u) * 4);
+  top: calc(var(--u) * 4);
+  width: calc(var(--u) * 92);
+  height: calc(var(--u) * 67);
+  border-radius: calc(var(--u) * 2.2);
+  overflow: hidden;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgba(11, 20, 26, 0.08),
+    0 calc(var(--u) * 0.6) calc(var(--u) * 1.6) rgba(11, 20, 26, 0.06),
+    0 calc(var(--u) * 3) calc(var(--u) * 7) rgba(11, 20, 26, 0.14);
+}
+
+/* Pânza de 720 px, micșorată cât cardul (92 din 100). Ca la `.emx-vp`, scara o
+   face CSS-ul: `tan(atan2(lungime, lungime))` împarte două lungimi. */
+.eth-ui {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 720px;
+  height: 524px;
+  transform-origin: 0 0;
+  transform: scale(tan(atan2(calc(var(--u) * 92), 720px)));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  color: #000;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Bara de sus ─── */
+
+.eth-nav {
+  height: 60px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 0 12px;
+  background: #f6f6f6;
+  border-bottom: 0.5px solid #d1d1d6;
+}
+
+.eth-back {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #000;
+}
+
+.eth-back svg {
+  width: 12px;
+  height: 20px;
+  fill: none;
+  stroke: #000;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.eth-back b {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: #e5e5ea;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eth-ca {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.eth-ca img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.eth-nt {
+  flex: 1;
+  min-width: 0;
+}
+
+.eth-nt b {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 16.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.eth-vf {
+  width: 15px;
+  height: 15px;
+  fill: #25d366;
+  flex: none;
+}
+
+/* Starea: „online” în rând, „scrie…” peste el, din același colț. */
+.eth-stt {
+  position: relative;
+  display: block;
+  font-size: 12.5px;
+  color: #8a8a8e;
+  margin-top: 1px;
+}
+
+.eth-stt2 {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+}
+
+.eth-hic {
+  display: flex;
+  gap: 22px;
+}
+
+.eth-hic svg {
+  width: 25px;
+  height: 25px;
+  fill: none;
+  stroke: #000;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Firul ─── */
+
+.eth-pane {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background: #efeae2;
+}
+
+.eth-bgi {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.eth-msgs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+
+.eth-day {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+}
+
+.eth-day span {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #3c3c43;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 4px 11px;
+  border-radius: 9px;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+
+.eth-biz {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 8px auto 0;
+  width: max-content;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #54656f;
+  background: #fff5c4;
+  padding: 6px 10px;
+  border-radius: 9px;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+  text-align: center;
+}
+
+.eth-biz svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  fill: #25d366;
+}
+
+.eth-m {
+  position: absolute;
+  top: 0;
+  max-width: 440px;
+  padding: 6px 8px 8px 10px;
+  border-radius: 9px;
+  font-size: 16px;
+  line-height: 21px;
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+
+.eth-m p {
+  display: inline;
+}
+
+.eth-m p b {
+  font-weight: 600;
+}
+
+/* Locul orei, la capătul ultimului rând. */
+.eth-m::after {
+  content: "";
+  display: inline-block;
+  width: 64px;
+}
+
+.eth-o {
+  right: 22px;
+  background: #d9fdd3;
+}
+
+.eth-i {
+  left: 22px;
+  background: #fff;
+}
+
+.eth-tl.eth-o {
+  border-bottom-right-radius: 0;
+}
+
+.eth-tl.eth-i {
+  border-bottom-left-radius: 0;
+}
+
+.eth-tl.eth-o::before,
+.eth-tl.eth-i::before {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 9px;
+  height: 14px;
+}
+
+.eth-tl.eth-o::before {
+  right: -8px;
+  background: #d9fdd3;
+  clip-path: path("M0 0 C1 9 4 12 9 14 L0 14Z");
+}
+
+.eth-tl.eth-i::before {
+  left: -8px;
+  background: #fff;
+  clip-path: path("M9 0 C8 9 5 12 0 14 L9 14Z");
+}
+
+.eth-ts {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #667781;
+  white-space: nowrap;
+}
+
+/* Bifele: cele trei variante, una peste alta (vezi pistele `bifa-*`). */
+.eth-tk {
+  position: relative;
+  display: inline-block;
+  width: 17px;
+  height: 11px;
+}
+
+/* ⚠ Cu proprietăți separate, nu cu `background`: prescurtarea, cu selectorul ăsta mai tare decât
+   `.eth-tk1`, ștergea imaginea bifei (ieșeau toate goale, deși pistele le aprindeau). */
+.eth-tk i {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.eth-tk1 {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M3 5.6 6 8.5 12 1.5' fill='none' stroke='%238696A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.eth-tk2 {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M1 5.6 4 8.5 10 1.5M6.2 8.3l.4.3 6-7.1' fill='none' stroke='%238696A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.eth-tk3 {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M1 5.6 4 8.5 10 1.5M6.2 8.3l.4.3 6-7.1' fill='none' stroke='%2353BDEB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* ─── Captura integrării ─── */
+
+.eth-img {
+  padding: 3px;
+}
+
+.eth-img::after {
+  display: none;
+}
+
+/* Fontul site-ului, cu rezerva lui de aceleași dimensiuni („Inter Fallback”, de la `next/font`): așa
+   înălțimea capturii nu se schimbă când sosește fontul. */
+.eth-shot {
+  width: 300px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #e9edef;
+  font-family: Inter, "Inter Fallback", -apple-system, "Segoe UI", Arial, sans-serif;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.eth-sbh {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 11px;
+  border-bottom: 1px solid #eef0ef;
+  font-size: 12.5px;
+}
+
+.eth-sbh img {
+  width: 18px;
+}
+
+.eth-sbh span {
+  margin-left: auto;
+  font-size: 11px;
+  color: #9aa09d;
+}
+
+/* Rândul SmartBill. `isolation` ține stratul verde (`.eth-sbf`) deasupra capturii, sub conținut. */
+.eth-sbr {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+}
+
+.eth-sbf {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgba(7, 197, 39, 0.08);
+}
+
+.eth-sbl {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  box-shadow: 0 0 0 1px #e8ebe9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.eth-sbl img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.eth-sbr div {
+  flex: 1;
+  min-width: 0;
+}
+
+.eth-sbr b {
+  display: block;
+  font-size: 13px;
+}
+
+.eth-sbr small {
+  display: block;
+  font-size: 10.5px;
+  color: #6b716e;
+  margin-top: 1px;
+}
+
+/* Eticheta: „Inactiv” și „Conectat” în aceeași celulă, aliniate la dreapta ca eticheta machetei. */
+.eth-sbw {
+  display: grid;
+  justify-items: end;
+}
+
+.eth-sbw > em {
+  grid-area: 1 / 1;
+}
+
+.eth-sbs {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 10px;
+  background: #f3f5f4;
+  color: #8a908d;
+}
+
+.eth-sbs.on {
+  background: #e8f8ec;
+  color: #078a22;
+}
+
+/* Fondul comutatorului: gri și verde, două straturi care se schimbă în aceeași clipă. ⚠ Nu verdele
+   peste un fond gri: marginea rotunjită a fondului ieșea pe sub cea a verdelui, un tiv gri (măsurat). */
+.eth-sw {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+}
+
+.eth-swg,
+.eth-swv {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+}
+
+.eth-swg {
+  background: #d7dbd9;
+}
+
+.eth-swv {
+  background: #07c527;
+}
+
+.eth-sw b {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.eth-sbo {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 0 11px 10px;
+  font-size: 11px;
+  color: #6b716e;
+}
+
+.eth-sbo b {
+  text-align: right;
+  color: #111;
+  font-weight: 600;
+}
+
+.eth-sbt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  background: #e8f8ec;
+  color: #078a22;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.eth-sbt svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Bara de jos ─── */
+
+.eth-ft {
+  flex: none;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  background: #f6f6f6;
+  border-top: 0.5px solid #d1d1d6;
+}
+
+.eth-ft > svg {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: #000;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.eth-ft .eth-plus {
+  stroke-width: 1.8;
+}
+
+.eth-inp {
+  flex: 1;
+  height: 36px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: inset 0 0 0 0.5px #d1d1d6;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 9px;
+}
+
+.eth-inp svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: #000;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}

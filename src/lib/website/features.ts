@@ -8,14 +8,15 @@
  *
  * ═══ IMAGINILE VIN ÎN TREI MĂRIMI ═══
  *
- * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/mentenanta`
- * ies `/features/mentenanta-720.webp`, `-1080` și `-1440`, iar browserul alege.
+ * `image.base` NU e o cale de fișier, ci rădăcina lor: din `/features/exemplu`
+ * ies `/features/exemplu-720.webp`, `-1080` și `-1440`, iar browserul alege.
  *
- * Primele patru carduri nu mai au imagine, ci câte o machetă animată
+ * Azi niciun card nu mai are imagine: fiecare are câte o machetă animată
  * (`image.animatie`): iMac-ul cu magazinul (capturile lui în
  * `/features/magazin-animat/`, vezi `MagazinAnimat.tsx`), panoul de integrări
- * (`IntegrariAnimat.tsx`), documentele unei comenzi (`AutomatizariAnimat.tsx`)
- * și telefonul clientului cu campaniile automate (`VanzariAnimat.tsx`).
+ * (`IntegrariAnimat.tsx`), documentele unei comenzi (`AutomatizariAnimat.tsx`),
+ * telefonul clientului cu campaniile automate (`VanzariAnimat.tsx`) și asistența
+ * pe WhatsApp (`TehnicAnimat.tsx`). Calea imaginilor rămâne pentru un card nou.
  *
  * Motivul e concret. Loader-ul proiectului lasă neatinse imaginile locale — trece
  * prin el doar ce e pe R2 — deci `next/image` nu produce niciun `srcset` pentru
@@ -83,7 +84,7 @@ export interface FeatureCard {
      * procesata singura (`IntegrariAnimat.tsx`). Machetele sunt ale clientului,
      * 14.10.2026.
      */
-    animatie?: "magazin" | "integrari" | "automatizari" | "vanzari";
+    animatie?: "magazin" | "integrari" | "automatizari" | "vanzari" | "tehnic";
     alt: string;
     /** Ce trebuie sa arate imaginea. Se vede pe substituent. */
     hint: string;
@@ -211,9 +212,11 @@ export const FEATURE_CARDS: FeatureCard[] = [
     ],
     cta: { label: "Vezi ce include mentenanța", href: "/mentenanta-gratuita" },
     image: {
-      base: "/features/mentenanta",
-      alt: "Mentenanță, securitate și asistență Edinio",
-      hint: "Scut + dashboard + operator suport",
+      /* Imaginea statica de dinainte (`/features/mentenanta-*.webp`) a fost inlocuita
+         pe 16.10.2026 de macheta animata a clientului, si fisierele ei sterse. */
+      animatie: "tehnic",
+      alt: "Asistența Edinio pe WhatsApp: o clientă întreabă cum pornește facturarea automată cu SmartBill, iar asistența i-o activează pe loc",
+      hint: "Asistența pe WhatsApp, care pornește facturarea automată cu SmartBill",
     },
   },
 ];

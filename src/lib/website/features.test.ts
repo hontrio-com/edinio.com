@@ -4,7 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existaPaginaStatica } from "./rute-pe-disc";
-import { FEATURE_CARDS } from "./features";
+import { FEATURE_CARDS, FEATURE_IMAGE_WIDTHS } from "./features";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const APP = join(AICI, "..", "..", "app");
@@ -78,6 +78,22 @@ test("fiecare card are exact patru bife", () => {
      un patrat plin. Cu trei sau cu cinci, ultimul rand ramane pe jumatate gol. */
   for (const card of FEATURE_CARDS) {
     assert.equal(card.checks.length, 4, `cardul „${card.id}" are ${card.checks.length} bife`);
+  }
+});
+
+test("fiecare card care cere imagini le are pe disc, in toate marimile", () => {
+  /* Plasa pentru o imagine stearsa dar inca ceruta: de pilda o imbinare care pune la loc `base` pe un
+     card trecut pe macheta animata. `tsc` si restul probelor nu vad o adresa care da 404; pagina de
+     start ar arata o imagine rupta. Azi niciun card nu mai cere imagini, deci martorul de mai jos
+     tine locul cazului: o radacina inexistenta TREBUIE sa iasa lipsa. */
+  const PUBLIC = join(AICI, "..", "..", "..", "public");
+  const lipsa = (base: string) =>
+    FEATURE_IMAGE_WIDTHS.map((w) => `${base}-${w}.webp`).filter((f) => !existsSync(join(PUBLIC, f)));
+  assert.equal(lipsa("/features/nu-exista").length, FEATURE_IMAGE_WIDTHS.length, "martorul: verificarea nu vede lipsa");
+  for (const card of FEATURE_CARDS) {
+    /* Macheta animata are prioritate fata de `base` (vezi `Features.tsx`): atunci imaginile nu se cer. */
+    if (card.image.animatie || !card.image.base) continue;
+    assert.deepEqual(lipsa(card.image.base), [], `cardul „${card.id}” cere imagini care lipsesc`);
   }
 });
 

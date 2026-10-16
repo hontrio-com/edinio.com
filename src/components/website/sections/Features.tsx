@@ -12,6 +12,7 @@ import { FeatureStack } from "./FeatureStack";
 import { AutomatizariAnimat } from "./AutomatizariAnimat";
 import { IntegrariAnimat } from "./IntegrariAnimat";
 import { MagazinAnimat } from "./MagazinAnimat";
+import { TehnicAnimat } from "./TehnicAnimat";
 import { VanzariAnimat } from "./VanzariAnimat";
 import { SectionEyebrow } from "./SectionEyebrow";
 import { butonAlb } from "@/lib/website/buton";
@@ -361,6 +362,11 @@ function Card({
  * muchiile aproape albe (#FA–#FF măsurat), deci nu se vede unde se termină
  * imaginea și începe cardul.
  *
+ * ⚠ Ce scrie mai sus despre „cele cinci imagini” s-a măsurat pe imaginile statice
+ * de dinainte. Din 16.10.2026 toate cele cinci carduri au machete animate, care își
+ * umplu singure jumătatea (`ScenaAnimata.tsx`); regula rămâne pentru un card nou
+ * cu imagine.
+ *
  * `aspect-[4/3]` rămâne pe telefon, unde jumătățile stau una sub alta și nimic
  * n-ar da înălțimea; acolo imaginea umple caseta exact, fără bandă.
  *
@@ -385,6 +391,8 @@ function ImagePanel({ card, flipped }: { card: FeatureCard; flipped: boolean }) 
         <AutomatizariAnimat eticheta={card.image.alt} />
       ) : card.image.animatie === "vanzari" ? (
         <VanzariAnimat eticheta={card.image.alt} />
+      ) : card.image.animatie === "tehnic" ? (
+        <TehnicAnimat eticheta={card.image.alt} />
       ) : card.image.base ? (
         /*
           `<img>` simplu, nu `next/image`, si asta e o decizie, nu o scapare.

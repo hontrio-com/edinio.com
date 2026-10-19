@@ -1,3 +1,5 @@
+import { METODE_RAMBURS } from "@/lib/cont/plata";
+import { marketplaceCareTineComanda, procesataInEasySales } from "@/lib/orders/origin";
 import type { OrderStatus } from "@/lib/orders/status";
 import type { EvenimentCuriera } from "./client";
 
@@ -139,7 +141,8 @@ export function statusComandaDinStatus(v: unknown): OrderStatus | null {
     case "in_retea": return "shipped";
     case "la_comerciant": return "processing";
     /* Sfarsiturile proaste au inteles, dar anularea si rambursarea sunt decizii ale
-       comerciantului, nu ale curierului. */
+       comerciantului, nu ale curierului. Singura exceptie, returul la ramburs neincasat, are
+       regula ei mai jos (`statusDupaRetur`): ea cere si plata comenzii, pe care starea n-o stie. */
     default: return null;
   }
 }
@@ -163,6 +166,62 @@ export function statusUrmator(statusCurent: string, v: unknown): OrderStatus | n
   const nou = TREAPTA[tinta];
   if (acum === undefined || nou === undefined) return tinta === statusCurent ? null : tinta;
   return nou > acum ? tinta : null;
+}
+
+// ─── Returul ──────────────────────────────────────────────────────────────────
+
+/** Ce trebuie stiut despre comanda ca sa se hotarasca ce face un retur. */
+export type ComandaUrmarita = {
+  status: string;
+  /** `orders.payment_method`. */
+  metodaPlata: string | null;
+  /** `orders.payment_status`. */
+  starePlata: string | null;
+  /** `orders.order_source`: cine tine ciclul comenzii. */
+  sursa: unknown;
+};
+
+/** Statusurile din care un retur mai poate muta comanda: cele care asteapta inca livrarea. */
+const INAINTE_DE_LIVRARE = new Set(["pending", "confirmed", "processing", "shipped"]);
+
+/**
+ * Statusul comenzii dupa un colet RETURNAT, sau `null` daca ramane decizia comerciantului.
+ *
+ * ═══ CERUT PE 19.10.2026: LA RAMBURS NEINCASAT, RETURUL TRECE COMANDA PE „RAMBURSAT” ═══
+ *
+ * Pana atunci returul nu muta nimic, la niciun curier: comerciantul primea o notificare si schimba
+ * statusul de mana. La JHBijuterii, singurul magazin cu Curiera pe colete reale, au fost 30 de
+ * retururi intre 02 si 16.10.2026, toate cu ramburs neincasat. 29 erau trecute DE MANA pe
+ * „Rambursat” (care elibereaza si stocul), iar al treizecilea statea inca pe „Expediat”. Comerciantul
+ * a intrebat daca se poate face singur. Hotararea proprietarului: da, pe „Rambursat”, NUMAI la Curiera.
+ *
+ * ⚠ NUMAI la ramburs NEINCASAT (`unpaid`). Coletul s-a intors, deci nimeni n-a platit la usa si
+ * nu e nimic de dat inapoi. La o plata online banii sunt la comerciant si se intorc din procesatorul
+ * de plati. Trecuta singura pe „Rambursat”, comanda ar spune ca banii s-au dat inapoi cand nu s-au
+ * dat. Acolo ramane notificarea de pana acum. O metoda sau o stare a platii necunoscuta cade tot
+ * acolo: drumul prudent e cel vechi.
+ *
+ * ⚠ Nu dintr-o comanda incheiata (`delivered`, `cancelled`, `refunded`). Cronul nici nu le cere,
+ * dar regula nu se bizuie pe interogare.
+ *
+ * ⚠ Nici dintr-o comanda tinuta de un marketplace sau procesata in easySales: starea lor se schimba
+ * la ei, ca in `updateOrder` (`marketplaceCareTineComanda`, `refuzaStareaEasySales`).
+ */
+export function statusDupaRetur(c: ComandaUrmarita): OrderStatus | null {
+  if (!INAINTE_DE_LIVRARE.has(c.status)) return null;
+  if (!METODE_RAMBURS.has(c.metodaPlata ?? "") || c.starePlata !== "unpaid") return null;
+  if (marketplaceCareTineComanda(c.sursa) || procesataInEasySales(c.sursa)) return null;
+  return "refunded";
+}
+
+/**
+ * Ce status primeste comanda dupa o stare citita de la Curiera, sau `null` daca nu se schimba nimic.
+ *
+ * ⚠ Cronul o cheama pe ASTA, nu pe `statusUrmator`: returul are regula lui, care cere si plata
+ * comenzii, iar restul starilor urca pe scara obisnuita.
+ */
+export function statusDupaStare(c: ComandaUrmarita, v: unknown): OrderStatus | null {
+  return esteRetur(v) ? statusDupaRetur(c) : statusUrmator(c.status, v);
 }
 
 // ─── Evenimentele din istoric ─────────────────────────────────────────────────

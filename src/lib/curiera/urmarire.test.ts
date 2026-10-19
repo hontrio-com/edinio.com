@@ -117,11 +117,28 @@ describe("ce se spune omului", () => {
     assert.equal(trebuieSpus(inCurs, evenimenteDeSemnalat(istoric, prima.memorie).noi), false);
   });
 
-  test("returul spune ca banii nu s-au incasat, si decizia e a lui", () => {
-    const r = semnalareCuriera({ orderNumber: "1001", awb: "710915533", cheie: "returnat|RET", eticheta: "Colet returnat expeditorului", evenimente: null });
+  test("returul trecut singur pe Rambursat spune ce s-a facut, nu ce ar mai fi de facut", () => {
+    const r = semnalareCuriera({
+      orderNumber: "1001", awb: "710915533", cheie: "returnat|RET", eticheta: "Colet returnat expeditorului",
+      evenimente: null, rambursataAutomat: true,
+    });
     assert.equal(r.titlu, "Colet Curiera returnat");
     assert.match(r.mesaj, /^Comanda 1001: coletul 710915533 se intoarce la tine \(Colet returnat expeditorului\)/);
-    assert.match(r.mesaj, /rambursul NU s-a incasat/);
+    assert.match(r.mesaj, /am trecut comanda pe Rambursat si am eliberat stocul ei/);
+    assert.doesNotMatch(r.mesaj, /decizia ta/, "statusul e deja schimbat");
+  });
+
+  test("returul care n-a mutat comanda lasa decizia la el, fara sa spuna ca banii n-au intrat", () => {
+    /* ⚠ La o plata online banii AU intrat: vechiul „rambursul NU s-a incasat" ar fi mintit. */
+    for (const rambursataAutomat of [false, undefined]) {
+      const r = semnalareCuriera({
+        orderNumber: "1001", awb: "710915533", cheie: "returnat", eticheta: "Colet returnat expeditorului",
+        evenimente: null, rambursataAutomat,
+      });
+      assert.equal(r.titlu, "Colet Curiera returnat");
+      assert.match(r.mesaj, /Comanda nu s-a mutat singura: statusul ei si, la o plata online, returul banilor raman decizia ta\./);
+      assert.doesNotMatch(r.mesaj, /nu s-a incasat|Rambursat/i);
+    }
   });
 
   test("⚠ anularea vazuta de cron s-a facut din contul Curiera, si mesajul o spune", () => {

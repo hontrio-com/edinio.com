@@ -12,8 +12,11 @@ import {
   evenimenteDeSemnalat,
   normalizeazaStatus,
   statusDinCheie,
+  statusDupaRetur,
+  statusDupaStare,
   statusUrmator,
   trebuieSemnalat,
+  type ComandaUrmarita,
 } from "./statusuri";
 
 describe("starile vin in doua limbi", () => {
@@ -61,11 +64,11 @@ describe("harta", () => {
     assert.ok(trebuieSemnalat("exceptie"));
   });
 
-  test("returnat si anulat sunt finale si se semnaleaza, fara sa miste comanda", () => {
+  test("returnat si anulat sunt finale si se semnaleaza; scara singura nu le muta", () => {
     for (const s of ["returnat", "anulat"]) {
       assert.ok(eStareFinala(s));
       assert.ok(trebuieSemnalat(s));
-      assert.equal(statusUrmator("shipped", s), null);
+      assert.equal(statusUrmator("shipped", s), null, "returul are regula lui, `statusDupaRetur`");
     }
     assert.ok(esteRetur("returnat|RETURNAT"));
   });
@@ -79,6 +82,58 @@ describe("harta", () => {
     assert.equal(statusUrmator("processing", "ceva_nou"), null);
     assert.equal(eStareFinala("ceva_nou"), false);
     assert.equal(trebuieSemnalat("ceva_nou"), false);
+  });
+});
+
+describe("returul (19.10.2026): la ramburs neincasat, comanda trece pe „Rambursat”", () => {
+  const ramburs = (p: Partial<ComandaUrmarita> = {}): ComandaUrmarita => ({
+    status: "shipped", metodaPlata: "cash_on_delivery", starePlata: "unpaid", sursa: null, ...p,
+  });
+
+  test("forma vazuta la JHBijuterii: ramburs neincasat, expediat -> Rambursat", () => {
+    assert.equal(statusDupaRetur(ramburs()), "refunded");
+    assert.equal(statusDupaStare(ramburs(), "returnat"), "refunded");
+    assert.equal(statusDupaStare(ramburs(), "returned"), "refunded", "starea in engleza");
+    assert.equal(statusDupaStare(ramburs(), "returnat|IND"), "refunded", "cu motiv");
+    for (const status of ["pending", "confirmed", "processing"]) {
+      assert.equal(statusDupaRetur(ramburs({ status })), "refunded", status);
+    }
+    for (const metodaPlata of ["cod", "ramburs"]) {
+      assert.equal(statusDupaRetur(ramburs({ metodaPlata })), "refunded", metodaPlata);
+    }
+  });
+
+  test("⚠ banii incasati, o plata online sau o plata necunoscuta raman la om", () => {
+    assert.equal(statusDupaRetur(ramburs({ starePlata: "paid" })), null, "ramburs marcat incasat");
+    assert.equal(statusDupaRetur(ramburs({ starePlata: "refunded" })), null);
+    assert.equal(statusDupaRetur(ramburs({ starePlata: null })), null, "starea platii lipseste");
+    for (const metodaPlata of ["netopia", "stripe", "revolut", "klarna", "ipay", "bank_transfer", "emag", "trendyol", "ceva_nou", null]) {
+      assert.equal(statusDupaRetur(ramburs({ metodaPlata })), null, String(metodaPlata));
+    }
+  });
+
+  test("⚠ o comanda incheiata nu se redeschide de la curier", () => {
+    for (const status of ["delivered", "cancelled", "refunded", "ceva_nou"]) {
+      assert.equal(statusDupaRetur(ramburs({ status })), null, status);
+    }
+  });
+
+  test("⚠ o comanda tinuta de un marketplace sau procesata in easySales ramane a lor", () => {
+    for (const marketplace of ["emag", "trendyol", "easysales"]) {
+      assert.equal(statusDupaRetur(ramburs({ sursa: { marketplace } })), null, marketplace);
+    }
+    assert.equal(statusDupaRetur(ramburs({ sursa: { easysales: { stapan: "easysales" } } })), null);
+    assert.equal(statusDupaRetur(ramburs({ sursa: { utm_source: "google" } })), "refunded",
+      "o comanda a vitrinei, cu atribuire, e a noastra");
+  });
+
+  test("celelalte stari urca pe scara obisnuita, oricum ar fi platita comanda", () => {
+    assert.equal(statusDupaStare(ramburs({ status: "processing" }), "in_curs"), "shipped");
+    assert.equal(statusDupaStare(ramburs({ metodaPlata: "netopia", starePlata: "paid" }), "livrat"), "delivered");
+    assert.equal(statusDupaStare(ramburs(), "avizat"), null, "o livrare esuata nu e un retur");
+    assert.equal(statusDupaStare(ramburs(), "anulat"), null, "anularea ramane a lui");
+    assert.equal(statusDupaStare(ramburs(), "exceptie"), null);
+    assert.equal(statusDupaStare(ramburs(), null), null);
   });
 });
 

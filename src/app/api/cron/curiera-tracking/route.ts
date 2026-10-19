@@ -13,7 +13,7 @@ import {
 } from "@/lib/curiera/client";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { cheieEveniment, eStareFinala, evenimenteDeSemnalat, statusUrmator, trebuieSemnalat } from "@/lib/curiera/statusuri";
+import { cheieEveniment, eStareFinala, evenimenteDeSemnalat, statusDupaStare, trebuieSemnalat } from "@/lib/curiera/statusuri";
 import {
   alarmaMagazinului,
   citesteStarea,
@@ -26,6 +26,7 @@ import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace"
 import { marcheazaLotul, scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { proprietariiMagazinelor, semnaleazaExpedierea } from "@/lib/orders/semnalarea-ajunge-la-om";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
+import { raporteazaRambursareaGa4 } from "@/lib/orders/ga4-comanda";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -115,7 +116,9 @@ export async function GET(req: NextRequest) {
 
   const { data: comenzi, error: eComenzi } = await admin
     .from("orders")
-    .select("id, business_id, status, order_number, payment_status, created_at, curiera_awb_number, curiera_awb_at, curiera_status_code, curiera_status_at, curiera_status_checked_at, curiera_evenimente_semnalate, curiera_partener_awb")
+    /* ⚠ `payment_method` si `order_source` sunt ale returului: fara ele `statusDupaRetur` nu stie
+       daca e ramburs neincasat si cine tine comanda, deci nu muta nimic. */
+    .select("id, business_id, status, order_number, payment_status, payment_method, order_source, created_at, curiera_awb_number, curiera_awb_at, curiera_status_code, curiera_status_at, curiera_status_checked_at, curiera_evenimente_semnalate, curiera_partener_awb")
     .not("curiera_awb_number", "is", null)
     .neq("curiera_awb_number", "")
     /* ⚠ O comanda anulata isi pastreaza AWB-ul: fara filtrul pe status s-ar potrivi la nesfarsit. */
@@ -307,7 +310,15 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        const tinta = statusUrmator(o.status, c.status);
+        /*
+         * ⚠ `statusDupaStare`, nu `statusUrmator`: returul la ramburs neincasat trece comanda pe
+         * „Rambursat” (cerut pe 19.10.2026), iar regula aceea cere si plata comenzii si cine o tine.
+         */
+        const tinta = statusDupaStare({
+          status: o.status, metodaPlata: o.payment_method, starePlata: o.payment_status, sursa: o.order_source,
+        }, c.status);
+        const eRetur = tinta === "refunded";
+        let rambursataAutomat = false;
         let prelucrat = true;
         if (tinta) {
           const rez = await tranzitieComandaMarketplace(admin, {
@@ -316,9 +327,36 @@ export async function GET(req: NextRequest) {
             status: tinta,
             sursa: "curiera",
             expediere: { coloana: "curiera_awb_number", valoare: o.curiera_awb_number },
+            /*
+             * ⚠ La retur stocul se ELIBEREAZA, dinadins: se intoarce tot coletul, iar „Rambursat”
+             * pus de mana (cum facea comerciantul) il elibera la fel. Scris aici, nu lasat pe
+             * implicit, fiindca `tranzitie-marketplace.ts` spune, pentru retururile eMAG, ca stocul
+             * NU se pune inapoi singur: nu e o scapare.
+             */
+            ...(eRetur ? { elibereazaStoc: true } : {}),
           });
           /* ⚠ Verdictul e un SIR (`ok` | `reincearca` | `definitiv`), nu un obiect cu `.ok`. */
-          if (rez === "ok") {
+          if (rez === "ok" && eRetur) {
+            mutate++;
+            rambursataAutomat = true;
+            /*
+             * Ca la „Rambursat” pus din panou (`updateOrder`): o achizitie raportata in GA4 primeste
+             * perechea ei, altfel venitul ramane umflat. Fara achizitie, functia nu trimite nimic.
+             * ⚠ Clientului NU i se scrie nimic: cronul n-are plafoanele lui `updateOrder`, iar
+             * un „comanda ta a fost rambursata" la un colet refuzat la usa l-ar minti.
+             */
+            try {
+              await raporteazaRambursareaGa4(o.id, admin);
+            } catch (e) {
+              await logError({
+                action: ACTIUNE,
+                message: `comanda ${o.order_number ?? o.id} a trecut pe refunded dupa retur, dar rambursarea GA4 a esuat: ${(e as Error).message}`,
+                details: { orderId: o.id, awb },
+                businessId,
+                severity: "warning",
+              });
+            }
+          } else if (rez === "ok") {
             mutate++;
             /*
              * ⚠ SE ASTEAPTA, si NU doar la `delivered`: triggerul magazinului poate fi si
@@ -349,7 +387,7 @@ export async function GET(req: NextRequest) {
         if (trebuieSpus(c, evenimente)) {
           semnalate++;
           const { titlu, mesaj } = semnalareCuriera({
-            orderNumber: o.order_number, awb, cheie: c.cheie, eticheta: c.eticheta, evenimente,
+            orderNumber: o.order_number, awb, cheie: c.cheie, eticheta: c.eticheta, evenimente, rambursataAutomat,
           });
           await semnaleazaExpedierea(admin, {
             userId: proprietari.get(businessId) ?? null,

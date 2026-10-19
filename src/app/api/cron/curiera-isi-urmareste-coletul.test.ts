@@ -199,6 +199,31 @@ test("⚠⚠ facturarea automata se ASTEAPTA, in try, si nu doar la livrat", () 
   assert.match(fereastra, /severity: "warning"/, "si esecul strigat, nu inghitit");
 });
 
+test("⚠⚠ returul trece prin `statusDupaStare`, cu plata si sursa comenzii citite din baza", () => {
+  /*
+   * Regula (ramburs neincasat -> Rambursat) e probata pe purtare in `statusuri.test.ts`. Aici se
+   * cere ca ruta chiar s-o cheme: cu `statusUrmator` chemat direct, returul n-ar muta nimic, iar
+   * fara `payment_method` / `order_source` in select regula ar primi `undefined` si n-ar trece
+   * nicio comanda, tacut.
+   */
+  const s = viu(CRON);
+  assert.doesNotMatch(s, /statusUrmator\(/, "scara chemata direct ocoleste regula returului");
+  assert.match(s, /const tinta = statusDupaStare\(\{\s*status: o\.status, metodaPlata: o\.payment_method, starePlata: o\.payment_status, sursa: o\.order_source,\s*\}, c\.status\);/);
+  assert.match(s, /\.select\("[^"]*\bpayment_status, payment_method, order_source\b[^"]*"\)/);
+  /* Stocul se elibereaza la retur pe fata, nu pe implicitul tranzitiei. */
+  assert.match(s, /\.\.\.\(eRetur \? \{ elibereazaStoc: true \} : \{\}\),/);
+});
+
+test("⚠ dupa returul trecut pe Rambursat: GA4 primeste perechea, notificarea spune ce s-a facut", () => {
+  const s = viu(CRON);
+  const b = bloc(s, "if (rez === \"ok\" && eRetur) {");
+  assert.match(b, /rambursataAutomat = true;/);
+  assert.match(b, /try \{\s*await raporteazaRambursareaGa4\(o\.id, admin\);/);
+  assert.match(b, /severity: "warning"/, "esecul GA4 strigat, nu inghitit");
+  assert.doesNotMatch(b, /maybeAutoInvoice|sendOrderStatusToCustomer/, "returul nu factureaza si nu-i scrie clientului");
+  assert.match(bloc(s, "if (trebuieSpus(c, evenimente)) {"), /evenimente, rambursataAutomat,/);
+});
+
 test("⚠ alarmele se ridica PE MAGAZIN, plus alarma de coada", () => {
   const s = viu(CRON);
   const b = bloc(s, "for (const [bizId, g] of galeti) {");

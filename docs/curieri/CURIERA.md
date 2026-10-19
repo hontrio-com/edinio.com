@@ -283,6 +283,35 @@ si scanata o eticheta inainte de folosire. N-a fost scanata inca de un cititor a
 marirea pica, omul primeste eticheta A6 cu un avertisment. Pe lot, marimea ramane cea a
 documentului (A4 sau eticheta mica), ca paginile lipite sa aiba aceeasi marime.
 
+## Returul trece comanda pe „Rambursat”, 19.10.2026
+
+Intrebat de comerciantul JHBijuterii (singurul magazin cu Curiera pe colete reale): se poate schimba
+statusul singur la retur? Pana atunci, nu, la niciun curier. Returul era o stare-problema: notificare,
+coletul iesea din urmarire, iar comanda ramanea „Expediat” pana o schimba omul. Masurat pe productie:
+30 de colete returnate intre 02 si 16.10.2026, toate cu ramburs neincasat, toate comenzi ale vitrinei,
+niciuna facturata. 29 erau trecute DE MANA pe „Rambursat” (care le-a eliberat si stocul), iar una statea
+inca pe „Expediat”.
+
+Hotararea proprietarului: pe „Rambursat”, automat, NUMAI la Curiera. Regula e `statusDupaRetur`
+(`src/lib/curiera/statusuri.ts`), iar cronul o cheama prin `statusDupaStare`:
+
+- se muta doar o comanda la ramburs (`METODE_RAMBURS`) cu plata `unpaid`, inca nelivrata (pending,
+  confirmed, processing, shipped), care nu e tinuta de un marketplace si nu e procesata in easySales;
+- la o plata online, o metoda necunoscuta sau o plata marcata incasata, totul ramane ca inainte:
+  notificare, decizia omului. Banii unei plati online se dau inapoi din procesator, iar un „Rambursat”
+  pus singur ar fi spus ca s-a facut;
+- stocul se elibereaza (`elibereazaStoc: true`, pe fata), ca la „Rambursat” pus din panou;
+- GA4 primeste rambursarea, dar numai daca a primit achizitia (`raporteazaRambursareaGa4`);
+- clientului nu i se scrie nimic (cronul n-are plafoanele lui `updateOrder`, iar un „comanda ta a fost
+  rambursata” la un colet refuzat l-ar minti); factura automata nu se cheama;
+- notificarea spune ce s-a facut: „am trecut comanda pe Rambursat si am eliberat stocul ei”.
+
+⚠ Se aplica de acum inainte: un retur deja scris pe comanda e stare finala, deci cronul nu-l mai
+citeste. Comanda returnata pe 16.10 ramane pe „Expediat” pana o schimba omul.
+
+⚠ Nestiut inca: daca Curiera pune „returnat” cand coletul PORNESTE inapoi sau cand AJUNGE la
+expeditor. Daca e prima, stocul se elibereaza cu o zi-doua inaintea marfii.
+
 ---
 
 ## Ce ramane deschis, si de ce

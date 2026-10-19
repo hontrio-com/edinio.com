@@ -106,15 +106,28 @@ export function semnalareCuriera(p: {
   eticheta: string;
   /** Evenimentele noi din istoric; `null` = se spune starea curenta. */
   evenimente: EvenimentCuriera[] | null;
+  /**
+   * Comanda a trecut singura pe „Rambursat” in aceasta trecere (returul la ramburs neincasat,
+   * `statusDupaRetur`). Lipsa = n-a trecut, iar decizia ramane a lui.
+   */
+  rambursataAutomat?: boolean;
 }): { titlu: string; mesaj: string } {
   const comanda = p.orderNumber ? `Comanda ${p.orderNumber}` : "O comanda";
   const ce = p.evenimente && p.evenimente.length > 0 ? p.evenimente.map(descriereEveniment) : [p.eticheta];
   const lista = ce.join("; ");
 
   if (esteRetur(p.cheie)) {
+    /*
+     * ⚠ Textul spune CE S-A FACUT, nu ce ar trebui facut. Dupa trecerea automata, vechiul „anularea
+     * comenzii raman decizia ta" l-ar fi trimis sa schimbe un status deja schimbat. Iar cand n-a
+     * trecut (plata online, metoda necunoscuta, comanda de marketplace), nu se mai spune „rambursul
+     * NU s-a incasat": la o plata online banii chiar au intrat.
+     */
     return {
       titlu: "Colet Curiera returnat",
-      mesaj: `${comanda}: coletul ${p.awb} se intoarce la tine (${lista}). Marfa vine inapoi, iar rambursul NU s-a incasat: anularea comenzii si returul banilor raman decizia ta.`,
+      mesaj: p.rambursataAutomat
+        ? `${comanda}: coletul ${p.awb} se intoarce la tine (${lista}). Rambursul nu s-a incasat, asa ca am trecut comanda pe Rambursat si am eliberat stocul ei.`
+        : `${comanda}: coletul ${p.awb} se intoarce la tine (${lista}). Comanda nu s-a mutat singura: statusul ei si, la o plata online, returul banilor raman decizia ta.`,
     };
   }
   /*

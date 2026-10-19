@@ -309,8 +309,13 @@ Hotararea proprietarului: pe „Rambursat”, automat, NUMAI la Curiera. Regula 
 ⚠ Se aplica de acum inainte: un retur deja scris pe comanda e stare finala, deci cronul nu-l mai
 citeste. Comanda returnata pe 16.10 ramane pe „Expediat” pana o schimba omul.
 
-⚠ Nestiut inca: daca Curiera pune „returnat” cand coletul PORNESTE inapoi sau cand AJUNGE la
-expeditor. Daca e prima, stocul se elibereaza cu o zi-doua inaintea marfii.
+⚠ MASURAT la prima trecere, 19.10.2026, 10:31 UTC: Curiera pune „returnat” cand coletul PORNESTE
+inapoi, nu cand ajunge. Evenimentul din istoric e „Expedierea va fi returnata”. Deci stocul se
+elibereaza cu o zi-doua inaintea marfii; Curiera n-are o stare de dupa (cele opt stari se opresc la
+„returnat”). In aceeasi trecere: 45 de colete verificate, 3 retururi noi (#0114, #0084, #0135, toate
+ramburs `unpaid`, ale vitrinei) trecute pe „Rambursat” cu stocul eliberat si notificarea noua; #0205
+(returnat pe 16.10) ramas pe „Expediat”, cum s-a hotarat; GA4 nelegat la magazin, deci nicio rambursare
+trimisa.
 
 ---
 

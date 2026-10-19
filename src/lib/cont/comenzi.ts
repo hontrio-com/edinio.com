@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esteUuid } from "@/lib/supabase/ids";
 import { decalajSigur } from "./paginare";
+import { argumenteleCautarii, FARA_FILTRE, type FiltreComenzi } from "./cautare-comenzi";
 import { documentulFiscal, type DocumentFiscal } from "./documente";
 import { numeleCurierului, urmareste, type Urmarire } from "./urmarire";
 import type { LivrareBruta } from "./livrare";
@@ -184,12 +185,16 @@ export async function comenzileMele(
   contId: string,
   limita = 20,
   decalaj = 0,
+  /** Cautarea din „Comenzile mele” (`cautare-comenzi.ts`). Fara ea, lista intreaga. */
+  filtre: FiltreComenzi = FARA_FILTRE,
 ): Promise<{ comenzi: ComandaDinCont[]; total: number }> {
   const { data, error } = await createAdminClient().rpc("cont_comenzile_mele", {
     p_business: businessId,
     p_cont: contId,
     p_limita: limita,
     p_decalaj: decalajSigur(decalaj),
+    /* ⚠ Numai filtrele cerute: fara ele pleaca apelul de dinainte, cu patru argumente. */
+    ...argumenteleCautarii(filtre, new Date()),
   });
   if (error) throw error;
 

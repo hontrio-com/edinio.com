@@ -12,13 +12,28 @@ import { LegaturaCont } from "../ui/LegaturaCont";
  * din sir. Pe telefon butoanele raman numai sageata (textul ramane pentru cititorul
  * de ecran), ca randul sa incapa la 320px.
  */
-export function Paginare({ baza, pagina, pagini }: { baza: string; pagina: number; pagini: number }) {
+export function Paginare({
+  baza,
+  pagina,
+  pagini,
+  parametri = "",
+}: {
+  baza: string;
+  pagina: number;
+  pagini: number;
+  /**
+   * Restul adresei, fara `?` si fara `p=` (filtrele cautarii, din `parametriiFiltrelor`).
+   * ⚠ Fara el, „Urmatoare” pe o lista filtrata ar fi dus la pagina 2 a listei INTREGI.
+   */
+  parametri?: string;
+}) {
   if (pagini <= 1) return null;
   const buton = cn(BUTON_SECUNDAR, "min-h-10 px-3 sm:px-5");
+  const adresa = (p: number) => `${baza}?${parametri ? `${parametri}&` : ""}p=${p}`;
   return (
     <nav aria-label="Paginare" className="flex items-center justify-between gap-3 pt-1">
       {pagina > 1 ? (
-        <LegaturaCont href={`${baza}?p=${pagina - 1}`} className={buton} rel="prev">
+        <LegaturaCont href={adresa(pagina - 1)} className={buton} rel="prev">
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
           <span className="sr-only sm:not-sr-only">Anterioara</span>
         </LegaturaCont>
@@ -27,7 +42,7 @@ export function Paginare({ baza, pagina, pagini }: { baza: string; pagina: numbe
         Pagina {pagina} din {pagini}
       </span>
       {pagina < pagini ? (
-        <LegaturaCont href={`${baza}?p=${pagina + 1}`} className={buton} rel="next">
+        <LegaturaCont href={adresa(pagina + 1)} className={buton} rel="next">
           <span className="sr-only sm:not-sr-only">Urmatoare</span>
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </LegaturaCont>

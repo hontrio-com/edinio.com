@@ -8304,9 +8304,12 @@ export type Database = {
       cont_comenzile_mele: {
         Args: {
           p_business: string
+          p_cautare?: string
           p_cont: string
+          p_de_la?: string
           p_decalaj?: number
           p_limita?: number
+          p_stare?: string
         }
         Returns: {
           are_factura: boolean

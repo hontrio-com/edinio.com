@@ -51,7 +51,9 @@ test("Comenzi si Facturi citesc pagina prin `numarulPaginii` si trimit decalajul
     const s = citeste(pagina);
     assert.match(s, /numarulPaginii\(p\)/, pagina);
     assert.doesNotMatch(s, /Number\.parseInt/, `${pagina}: pagina se citeste intr-un singur loc`);
-    assert.match(s, /if \(pagina > 1 && \w+\.length === 0\) redirect\("\/cont\/(comenzi|facturi)"\)/, `${pagina}: dupa capatul listei, inapoi la prima`);
+    /* ⚠ Comenzile au cautare: inapoi la PRIMA pagina, cu filtrele pastrate (`adresaComenzilor`
+       da `/cont/comenzi` fara ele, vezi `cautare-comenzi.test.ts`). */
+    assert.match(s, /if \(pagina > 1 && \w+\.length === 0\) redirect\(("\/cont\/(comenzi|facturi)"|adresaComenzilor\(filtre\))\)/, `${pagina}: dupa capatul listei, inapoi la prima`);
     const l = citeste(lib);
     const apel = l.slice(l.indexOf(`rpc("${fn}"`));
     assert.match(apel.slice(0, 300), /p_decalaj: decalajSigur\(decalaj\)/, lib);

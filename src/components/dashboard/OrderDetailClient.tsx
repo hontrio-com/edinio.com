@@ -18,6 +18,8 @@ import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
+import { pozaLiniei } from "@/lib/orders/miniaturi-produse";
+import { MiniaturaProdus } from "@/components/dashboard/MiniaturaProdus";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
@@ -370,6 +372,7 @@ const CARD = "bg-surface border border-border rounded-xl";
 export function OrderDetailClient({
   order,
   businessId,
+  miniaturi = {},
   areEtichetaPepita = false,
   stareEtichetaPepita = null,
   expediere = null,
@@ -406,6 +409,12 @@ export function OrderDetailClient({
 }: {
   order: Order;
   businessId: string;
+  /**
+   * Pozele din „Produse comandate”: id-ul produsului -> prima poza din catalog (`miniaturileProduselor`,
+   * pe server). Liniile comenzii nu poarta imaginea. Implicit goala: fiecare linie isi pastreaza
+   * pictograma, ca paginile si probele care randeaza componenta sa nu trebuiasca sa stie de ea.
+   */
+  miniaturi?: Record<string, string>;
   /**
    * Pepita a trimis eticheta de colet pentru comanda asta?
    *
@@ -1844,6 +1853,7 @@ export function OrderDetailClient({
                   ? Object.values(item.customization)
                   : [];
                 const defalcare = citesteDefalcarea(item.personalizare);
+                const poza = pozaLiniei(miniaturi, item.product_id);
                 return (
                   <div key={i}>
                     {/*
@@ -1851,14 +1861,18 @@ export function OrderDetailClient({
                       Avea `truncate`, iar pe telefon taia exact partea care
                       deosebeste produsele intre ele: din zece randuri cu "Tulipan
                       Negro Gel Dus ..." nu se mai vedea care e care.
-                      Alinierea trece pe `items-start`, ca iconita, bucata si pretul
+                      Alinierea trece pe `items-start`, ca miniatura, bucata si pretul
                       sa stea in dreptul PRIMULUI rand, nu la mijlocul unui nume de
                       trei randuri. Bucata sta lipita de nume, in aceeasi curgere,
                       ca sa nu ramana singura pe un rand nou.
+
+                      ⚠ Poza vine din CATALOG (`miniaturi`, de pe server): linia
+                      comenzii n-o poarta. Fara poza, `MiniaturaProdus` pune
+                      patratul cu pictograma, ca numele sa ramana aliniate.
                     */}
                     <div className="flex items-start justify-between gap-3 text-sm">
-                      <div className="flex items-start gap-2 min-w-0 flex-1">
-                        <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-[3px]" />
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <MiniaturaProdus poza={poza} />
                         <span className="min-w-0 break-words text-foreground">
                           {item.name}
                           <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{item.quantity}</span>
@@ -1867,7 +1881,7 @@ export function OrderDetailClient({
                       <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
                     </div>
                     {(campuri.length > 0 || defalcare) && (
-                      <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
+                      <div className="ml-13 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
                         <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
                         {campuri.map((field, fi) => (
                           <div key={fi}>

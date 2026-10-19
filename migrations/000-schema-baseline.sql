@@ -3770,12 +3770,23 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer DEFAULT 20, p_decalaj integer DEFAULT 0)
+CREATE OR REPLACE FUNCTION public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer DEFAULT 20, p_decalaj integer DEFAULT 0, p_cautare text DEFAULT NULL::text, p_stare text DEFAULT NULL::text, p_de_la timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS TABLE(order_id uuid, numar text, creata_la timestamp with time zone, stare text, incasata boolean, total numeric, bucati bigint, vedere text, total_randuri bigint, miniaturi jsonb, produse integer, are_factura boolean)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
+  with cautarea as (
+    /* Cuvintele omului, curatate o data: fara diacritice si majuscule, fara „#” in
+       fata, cu `%`, `_` si `\` scapate, cel mult opt. Lista goala = fara filtru. */
+    select coalesce(array_agg('%' || replace(replace(replace(x.w, '\', '\\'), '%', '\%'), '_', '\_') || '%' order by x.n), '{}') as tipare
+      from (
+        select ltrim(w.w, '#') as w, w.n
+          from regexp_split_to_table(lower(public.fara_diacritice(btrim(coalesce(p_cautare, '')))), '\s+')
+               with ordinality as w(w, n)
+      ) x
+     where x.w <> '' and x.n <= 8
+  )
   select
     o.id,
     o.order_number,
@@ -3793,6 +3804,7 @@ AS $function$
   join public.orders o
     on o.id = l.order_id
    and o.business_id = l.business_id
+  cross join cautarea c
   cross join lateral (
     select
       coalesce(sum(
@@ -3823,6 +3835,23 @@ AS $function$
   ) m
   where l.business_id = p_business
     and l.cont_id = p_cont
+    and (p_stare is null or o.status = p_stare)
+    and (p_de_la is null or o.created_at >= p_de_la)
+    /* Niciun cuvant care sa nu se gaseasca: fiecare, in numarul comenzii SAU in numele
+       unei linii (si al unei extraoptiuni: „cadou” gaseste comanda cu ambalaj cadou,
+       ceea ce omul chiar cauta). Fara cuvinte, `not exists` pe lista goala trece tot. */
+    and not exists (
+      select 1
+        from unnest(c.tipare) as t(tipar)
+       where not (
+         lower(public.fara_diacritice(coalesce(o.order_number, ''))) like t.tipar
+         or exists (
+           select 1
+             from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as s(li)
+            where lower(public.fara_diacritice(coalesce(s.li->>'name', ''))) like t.tipar
+         )
+       )
+    )
   /* ⚠ Departajator pe `id`: fara el, doua comenzi din aceeasi secunda pot aparea
      pe doua pagini deodata si alta poate lipsi. */
   order by o.created_at desc, o.id desc
@@ -17841,7 +17870,7 @@ grant execute on function public.cont_buget_email_epuizat(p_business uuid) to se
 grant execute on function public.cont_cate_conturi(p_business uuid) to service_role;
 grant execute on function public.cont_cere_cod(p_business uuid, p_scop text, p_fel text, p_destinatie_bruta text, p_cod_hash text, p_cont uuid, p_minute integer, p_ip text, p_provocare_hash text, p_parola_hash text) to service_role;
 grant execute on function public.cont_comanda_mea(p_business uuid, p_cont uuid, p_order uuid) to service_role;
-grant execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer) to service_role;
+grant execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer, p_cautare text, p_stare text, p_de_la timestamp with time zone) to service_role;
 grant execute on function public.cont_contactele_mele(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_curatenie() to service_role;
 grant execute on function public.cont_dispozitiv_adauga(p_business uuid, p_cont uuid, p_jeton_hash text, p_zile integer) to service_role;
@@ -18237,7 +18266,7 @@ revoke execute on function public.cont_buget_email_epuizat(p_business uuid) from
 revoke execute on function public.cont_cate_conturi(p_business uuid) from public;
 revoke execute on function public.cont_cere_cod(p_business uuid, p_scop text, p_fel text, p_destinatie_bruta text, p_cod_hash text, p_cont uuid, p_minute integer, p_ip text, p_provocare_hash text, p_parola_hash text) from public;
 revoke execute on function public.cont_comanda_mea(p_business uuid, p_cont uuid, p_order uuid) from public;
-revoke execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer) from public;
+revoke execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer, p_cautare text, p_stare text, p_de_la timestamp with time zone) from public;
 revoke execute on function public.cont_contactele_mele(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_curatenie() from public;
 revoke execute on function public.cont_dispozitiv_adauga(p_business uuid, p_cont uuid, p_jeton_hash text, p_zile integer) from public;

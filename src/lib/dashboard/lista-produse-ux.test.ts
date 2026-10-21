@@ -173,3 +173,89 @@ test("⚠ toate paginile se aleg anume, din bara, iar un raspuns intarziat nu bi
   /* O bifa scoasa de mana nu mai lasa selectia sa se numeasca „toate paginile”. */
   assert.match(corpulFunctiei(cod, "toggleOne"), /setSelectieTotala\(false\);/);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   „STERG SI NU SE STERGE”, „SALVEZ SI SE FACE COPIE”          (21.10.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Reclamat de un comerciant nou, si dovedit din jurnalele API: serverul era corect. Randul avea
+   doua iconite fara text, „Duplica” PRIMA si nicio stergere. Duplicarea pornea la o apasare si
+   deschidea editarea COPIEI, care arata ca originalul; omul apasa acolo „Sterge produsul” si
+   stergea copia. In doua zile: 16 copii, 9 sterse la cateva secunde dupa, originalul neatins.
+*/
+
+/* Corpul unei functii din componenta, pana la acolada ei de inchidere (doua spatii in fata). */
+function corpExact(cod: string, nume: string): string {
+  const i = cod.indexOf(`function ${nume}(`);
+  assert.ok(i > 0, `lipseste ${nume}`);
+  const j = cod.indexOf("\n  }\n", i);
+  assert.ok(j > i, `nu gasesc capatul lui ${nume}`);
+  return cod.slice(i, j);
+}
+
+/* Elementul JSX care poarta eticheta data, de la `<` pana la `>`-ul care il deschide. */
+function elementul(cod: string, eticheta: string): string {
+  const i = cod.indexOf(`aria-label="${eticheta}"`);
+  assert.ok(i > 0, `lipseste butonul „${eticheta}”`);
+  const start = cod.lastIndexOf("<", i);
+  const sfarsit = cod.indexOf(">", cod.indexOf("className=", i));
+  return cod.slice(start, sfarsit);
+}
+
+test("⚠ duplicarea porneste NUMAI din „Da, creeaza copia”, nu din iconita", () => {
+  const cod = faraComentarii(lista);
+  assert.equal((cod.match(/duplicateProduct\(/g) ?? []).length, 1, "duplicarea se cheama dintr-un singur loc");
+  assert.match(corpExact(cod, "duplica"), /await duplicateProduct\(product\.id, businessId\)/);
+  const iconita = elementul(cod, "Duplica");
+  assert.doesNotMatch(iconita, /duplica\(|duplicateProduct\(/, "iconita nu duplica direct");
+  assert.match(iconita, /setConfirmaRand\(/, "iconita deschide confirmarea");
+  assert.match(corpExact(cod, "bandaConfirmare"), /sterg \? sterge\(product\) : duplica\(product\)/,
+    "„Da” din banda e singurul care duplica");
+});
+
+test("⚠ dupa duplicare nu se deschide singura editarea copiei", () => {
+  const corp = corpExact(faraComentarii(lista), "duplica");
+  /* Singura navigare permisa e butonul din notificare, apasat de om. */
+  const faraButon = corp.replace(/action: \{[^}]*\}/, "");
+  assert.doesNotMatch(faraButon, /router\.push\(/, "duplicarea navigheaza singura spre copie");
+  assert.match(corp, /label: "Deschide copia", onClick: \(\) => router\.push\(editHref\(idCopie\)\)/);
+  /* ⚠ Notificarile panoului dispar implicit dupa 1,8 s: „Produs duplicat” abia se vedea.
+     ⚠ Se citeste durata mesajului de SUCCES: prima din functie e a erorii (12 s), si o proba
+     care o citea pe aceea ramanea verde cu succesul pus inapoi pe 1,8 s. Bancul a aratat-o. */
+  const succes = corp.slice(corp.indexOf("toast.success("));
+  const durata = Number(succes.match(/duration: (\d+)/)?.[1] ?? 0);
+  assert.ok(durata >= 5000, `mesajul despre copie sta prea putin pe ecran (${durata} ms)`);
+  assert.match(corp, /originalul a ramas neschimbat/, "mesajul nu spune ca originalul n-a fost atins");
+});
+
+test("⚠ stergerea din rand cere confirmare si e chiar stergerea produsului", () => {
+  const cod = faraComentarii(lista);
+  assert.equal((cod.match(/deleteProduct\(/g) ?? []).length, 1, "stergerea se cheama dintr-un singur loc");
+  assert.match(corpExact(cod, "sterge"), /await deleteProduct\(product\.id, businessId\)/);
+  const iconita = elementul(cod, "Sterge");
+  assert.doesNotMatch(iconita, /sterge\(|deleteProduct\(/, "iconita nu sterge direct");
+  assert.match(iconita, /setConfirmaRand\(/, "iconita deschide confirmarea");
+  /* Confirmarea scrie NUMELE: „stergi definitiv” fara nume ar lasa loc exact greselii de mai sus. */
+  const banda = corpExact(cod, "bandaConfirmare");
+  assert.match(banda, /Stergi definitiv „\$\{product\.name\}”\?/);
+  assert.match(banda, /Creezi o copie a produsului „\$\{product\.name\}”\?/);
+  /* Un produs sters nu ramane bifat pentru actiunile in masa. */
+  assert.match(corpExact(cod, "sterge"), /n\.delete\(product\.id\)/);
+});
+
+test("⚠ „Editeaza” e primul buton al randului, si fiecare spune ce face", () => {
+  const cod = faraComentarii(lista);
+  const butoane = corpExact(cod, "butoaneRand");
+  const e = butoane.indexOf('aria-label="Editeaza"');
+  const d = butoane.indexOf('aria-label="Duplica"');
+  const s = butoane.indexOf('aria-label="Sterge"');
+  assert.ok(e > 0 && d > e && s > d, "ordinea trebuie sa fie Editeaza, Duplica, Sterge");
+  for (const eticheta of ["Editeaza", "Duplica", "Sterge"]) {
+    assert.match(elementul(butoane, eticheta), /title="[^"]+"/, `„${eticheta}” n-are explicatie la trecerea mouse-ului`);
+  }
+  /* ⚠ O SINGURA copie a butoanelor, pentru telefon si pentru tabel: inainte erau doua, scrise de mana. */
+  assert.equal((cod.match(/aria-label="Duplica"/g) ?? []).length, 1, "butoanele sunt scrise de doua ori");
+  assert.equal((cod.match(/\{butoaneRand\(product\)\}/g) ?? []).length, 2, "telefonul sau tabelul nu folosesc butoanele comune");
+  assert.match(cod, /\{bandaConfirmare\(product\)\}/, "confirmarea lipseste pe telefon");
+  assert.match(cod, /bandaConfirmare\(product, true\)/, "confirmarea lipseste in tabel");
+});

@@ -2,13 +2,13 @@
 
 import { FARA_BRAND, FARA_CATEGORIE } from "@/lib/dashboard/produse-filtre";
 import { SiglaMarketplace } from "./SiglaMarketplace";
-import { useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
+import { Fragment, useState, useMemo, useOptimistic, useTransition, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, X, Package, Pencil, Search, Star, AlertTriangle, Copy, Loader2, Upload, Download, Tag, Trash2, Percent, Award } from "lucide-react";
 import { brandCanonic, curataBrand, type BrandCuProduse } from "@/lib/dashboard/branduri";
-import { duplicateProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
+import { duplicateProduct, deleteProduct, bulkProductAction, type BulkAction } from "@/lib/actions/product.actions";
 import { bulkPublishTrendyol } from "@/lib/actions/trendyol.actions";
 import { publicaSelectiaPeEmag } from "@/lib/actions/emag.actions";
 import { publishProductsToOlx } from "@/lib/actions/olx.actions";
@@ -56,6 +56,21 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
   const [searchQuery, setSearchQuery] = useState(filtre.cautare);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [, startDupTransition] = useTransition();
+  /*
+   * ═══ ⚠ DUPLICAREA SI STERGEREA DIN RAND CER CONFIRMARE (21.10.2026) ═══
+   *
+   * Reclamat de un comerciant nou: „sterg produsul si nu se sterge”, „salvez si se face copie”.
+   * Serverul era corect. Randul avea doua iconite fara text, „Duplica” PRIMA si nicio stergere;
+   * duplicarea pornea la o singura apasare si deschidea editarea COPIEI, care arata ca originalul.
+   * Omul apasa acolo „Sterge produsul” si stergea copia: in doua zile, 16 copii, 9 sterse la
+   * cateva secunde dupa, iar originalul ramanea in lista.
+   *
+   * Acum ambele cer un „Da” in rand, cu numele produsului scris, iar duplicarea NU mai deschide
+   * nimic: copia apare in lista, iar notificarea are „Deschide copia” pentru cine chiar o vrea.
+   */
+  const [confirmaRand, setConfirmaRand] = useState<{ id: string; fel: "duplica" | "sterge" } | null>(null);
+  const [stergId, setStergId] = useState<string | null>(null);
+  const [, startStergTransition] = useTransition();
   const [naviga, startNavigare] = useTransition();
 
   /*
@@ -213,6 +228,127 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
     const qs = interogareLista();
     return `/dashboard/products/${id}/edit${qs ? `?${qs}` : ""}`;
   };
+
+  /* Se cheama numai din „Da, creeaza copia”. Vezi nota de la `confirmaRand`. */
+  function duplica(product: Product) {
+    setConfirmaRand(null);
+    setDuplicatingId(product.id);
+    startDupTransition(async () => {
+      let res: Awaited<ReturnType<typeof duplicateProduct>>;
+      try {
+        res = await duplicateProduct(product.id, businessId);
+      } catch {
+        /* ⚠ `setDuplicatingId(null)` se stinge AICI, inaintea mesajului: el sta sub asteptare, deci
+           o cadere l-ar sari si rotita de pe buton ar invarti la nesfarsit.
+           ⚠ Si se poate sa fi fost duplicat totusi: a doua apasare ar scoate a doua copie. */
+        setDuplicatingId(null);
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca produsul s-a duplicat. Lista se reincarca: uita-te acolo inainte sa "
+          + "apesi din nou, ca sa nu iasa doua copii.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
+      setDuplicatingId(null);
+      if ("error" in res) { toast.error(res.error); return; }
+      const idCopie = res.id;
+      /* ⚠ Opt secunde, nu cele 1,8 implicite: mesajul spune ce s-a intamplat si are un buton. */
+      toast.success(`Copie creata: „${product.name} (copie)”. E inactiva, iar originalul a ramas neschimbat.`, {
+        duration: 8000,
+        action: { label: "Deschide copia", onClick: () => router.push(editHref(idCopie)) },
+      });
+      router.refresh();
+    });
+  }
+
+  /* Se cheama numai din „Da, sterge”. Stergerea e chiar cea din pagina produsului. */
+  function sterge(product: Product) {
+    setConfirmaRand(null);
+    setStergId(product.id);
+    startStergTransition(async () => {
+      let res: Awaited<ReturnType<typeof deleteProduct>>;
+      try {
+        res = await deleteProduct(product.id, businessId);
+      } catch {
+        setStergId(null);
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca produsul s-a sters. Lista se reincarca: uita-te acolo daca mai e.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
+      setStergId(null);
+      if (res.error) { toast.error(res.error); return; }
+      /* Un produs sters nu ramane bifat: actiunile in masa ar lucra pe un id care nu mai exista. */
+      setSelected((prev) => {
+        if (!prev.has(product.id)) return prev;
+        const n = new Set(prev);
+        n.delete(product.id);
+        return n;
+      });
+      toast.success(`Produs sters: „${product.name}”.`, { duration: 5000 });
+      router.refresh();
+    });
+  }
+
+  /*
+   * Butoanele randului, aceleasi pe telefon si in tabel. Editarea e PRIMA: iconita pe care o
+   * apasa omul din obisnuinta trebuie sa fie cea care nu creeaza si nu sterge nimic. Fiecare are
+   * `title`, ca sa se vada ce face inainte de apasare.
+   */
+  function butoaneRand(product: Product) {
+    const ocupat = duplicatingId === product.id || stergId === product.id;
+    const deschis = confirmaRand?.id === product.id ? confirmaRand.fel : null;
+    const iconBtn = "w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground transition-colors disabled:opacity-50";
+    return (
+      <>
+        <Link href={editHref(product.id)} title="Editeaza produsul" aria-label="Editeaza"
+          className={cn(iconBtn, "hover:text-foreground hover:bg-muted")}>
+          <Pencil className="h-3.5 w-3.5" />
+        </Link>
+        <button type="button" disabled={ocupat} title="Duplica produsul (creeaza o copie)" aria-label="Duplica"
+          aria-expanded={deschis === "duplica"}
+          onClick={() => setConfirmaRand(deschis === "duplica" ? null : { id: product.id, fel: "duplica" })}
+          className={cn(iconBtn, "hover:text-foreground hover:bg-muted", deschis === "duplica" && "bg-muted text-foreground")}>
+          {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+        <button type="button" disabled={ocupat} title="Sterge produsul" aria-label="Sterge"
+          aria-expanded={deschis === "sterge"}
+          onClick={() => setConfirmaRand(deschis === "sterge" ? null : { id: product.id, fel: "sterge" })}
+          className={cn(iconBtn, "hover:text-destructive hover:bg-destructive/10", deschis === "sterge" && "bg-destructive/10 text-destructive")}>
+          {stergId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+        </button>
+      </>
+    );
+  }
+
+  /* Banda de confirmare de sub rand, aceeasi pe telefon si in tabel (acolo randul isi are linia lui). */
+  function bandaConfirmare(product: Product, inTabel = false) {
+    if (confirmaRand?.id !== product.id) return null;
+    const sterg = confirmaRand.fel === "sterge";
+    return (
+      <div role="group" aria-label={sterg ? "Confirma stergerea produsului" : "Confirma duplicarea produsului"}
+        className={cn("flex flex-wrap items-center gap-2 px-3 py-2.5", !inTabel && "border-t",
+          sterg ? "border-destructive/20 bg-destructive/5" : "border-primary/20 bg-primary/5")}>
+        <span className={cn("min-w-0 flex-1 basis-56 text-sm font-medium break-words", sterg ? "text-destructive" : "text-foreground")}>
+          {sterg
+            ? `Stergi definitiv „${product.name}”? Actiunea nu poate fi anulata.`
+            : `Creezi o copie a produsului „${product.name}”? Copia porneste inactiva, iar originalul ramane neschimbat.`}
+        </span>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => (sterg ? sterge(product) : duplica(product))}
+            className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-colors",
+              sterg ? "bg-destructive hover:bg-destructive/90" : "bg-primary hover:bg-primary/90")}>
+            {sterg ? <Trash2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {sterg ? "Da, sterge" : "Da, creeaza copia"}
+          </button>
+          <button type="button" onClick={() => setConfirmaRand(null)} className={bulkBtn}>Anuleaza</button>
+        </div>
+      </div>
+    );
+  }
 
   /*
    * Cautarea se trimite cu INTARZIERE, nu la fiecare tasta.
@@ -710,9 +846,10 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
               return (
                 <div key={product.id}
                   className={cn(
-                    "flex items-start gap-3 p-3 rounded-xl border transition-colors",
+                    "rounded-xl border overflow-hidden transition-colors",
                     isSel ? "border-primary/40 bg-primary/5" : "border-border bg-surface"
                   )}>
+                  <div className="flex items-start gap-3 p-3">
                   <input type="checkbox" checked={isSel} onChange={() => toggleOne(product.id)}
                     aria-label={`Selecteaza ${product.name}`}
                     className="mt-1 h-4 w-4 rounded border-border accent-primary cursor-pointer flex-shrink-0" />
@@ -757,44 +894,10 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                     </div>
                   </Link>
                   <div className="flex flex-col gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      disabled={duplicatingId === product.id}
-                      onClick={() => {
-                        setDuplicatingId(product.id);
-                        startDupTransition(async () => {
-                          let res: Awaited<ReturnType<typeof duplicateProduct>>;
-                          try {
-                            res = await duplicateProduct(product.id, businessId);
-                          } catch {
-                            /* ⚠ `setDuplicatingId(null)` se stinge AICI, inaintea mesajului: el sta sub asteptare, deci
-                               o cadere l-ar sari si rotita de pe buton ar invarti la nesfarsit.
-                               ⚠ Si se poate sa fi fost duplicat totusi: a doua apasare ar scoate a doua copie. */
-                            setDuplicatingId(null);
-                            toast.error(
-                              "Nu am primit raspuns de la server, deci nu stim daca produsul s-a duplicat. Lista se reincarca: uita-te acolo inainte sa "
-                              + "apesi din nou, ca sa nu iasa doua copii.",
-                              { duration: 12000 },
-                            );
-                            router.refresh();
-                            return;
-                          }
-                          setDuplicatingId(null);
-                          if ("error" in res) { toast.error(res.error); }
-                          else { toast.success("Produs duplicat"); router.push(editHref(res.id)); }
-                        });
-                      }}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                      aria-label="Duplica"
-                    >
-                      {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-                    </button>
-                    <Link href={editHref(product.id)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      aria-label="Editeaza">
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Link>
+                    {butoaneRand(product)}
                   </div>
+                  </div>
+                  {bandaConfirmare(product)}
                 </div>
               );
             })}
@@ -815,14 +918,17 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[14%] sm:w-[12%]">Pret</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell w-[12%]">Stoc</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[12%] sm:w-[10%]">Status</th>
-                <th className="px-4 py-3 w-[20%] sm:w-[12%]" />
+                {/* Trei butoane de 32 px cer 104 px. La 12% cu px-4 ramaneau 53-86 px (masurat la 768-1280 px),
+                    deci ieseau peste coloana Status; asa raman 112-146 px. */}
+                <th className="px-2 py-3 w-[22%] sm:w-[18%] lg:w-[14%]" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {paginated.map((product) => {
                 const images = Array.isArray(product.images) ? product.images : [];
                 return (
-                  <tr key={product.id} className={cn("hover:bg-muted/30 transition-colors cursor-pointer", selected.has(product.id) && "bg-primary/5")}
+                  <Fragment key={product.id}>
+                  <tr className={cn("hover:bg-muted/30 transition-colors cursor-pointer", selected.has(product.id) && "bg-primary/5")}
                     onClick={() => router.push(editHref(product.id))}>
                     <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.has(product.id)} onChange={() => toggleOne(product.id)}
@@ -882,50 +988,18 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                         {product.is_active ? "Activ" : "Inactiv"}
                       </span>
                     </td>
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <td className="px-2 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
-                        <button
-                          type="button"
-                          disabled={duplicatingId === product.id}
-                          onClick={() => {
-                            setDuplicatingId(product.id);
-                            startDupTransition(async () => {
-                              let res: Awaited<ReturnType<typeof duplicateProduct>>;
-                              try {
-                                res = await duplicateProduct(product.id, businessId);
-                              } catch {
-                                /* ⚠ `setDuplicatingId(null)` se stinge AICI, inaintea mesajului: el sta sub asteptare, deci
-                                   o cadere l-ar sari si rotita de pe buton ar invarti la nesfarsit.
-                                   ⚠ Si se poate sa fi fost duplicat totusi: a doua apasare ar scoate a doua copie. */
-                                setDuplicatingId(null);
-                                toast.error(
-                                  "Nu am primit raspuns de la server, deci nu stim daca produsul s-a duplicat. Lista se reincarca: uita-te acolo inainte sa "
-                                  + "apesi din nou, ca sa nu iasa doua copii.",
-                                  { duration: 12000 },
-                                );
-                                router.refresh();
-                                return;
-                              }
-                              setDuplicatingId(null);
-                              if ("error" in res) { toast.error(res.error); }
-                              else { toast.success("Produs duplicat"); router.push(editHref(res.id)); }
-                            });
-                          }}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                          aria-label="Duplica"
-                        >
-                          {duplicatingId === product.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
-                        </button>
-                        <Link
-                          href={editHref(product.id)}
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                          aria-label="Editeaza"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Link>
+                        {butoaneRand(product)}
                       </div>
                     </td>
                   </tr>
+                  {confirmaRand?.id === product.id && (
+                    <tr>
+                      <td colSpan={7} className="p-0">{bandaConfirmare(product, true)}</td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

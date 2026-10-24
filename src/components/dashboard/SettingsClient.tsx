@@ -9,17 +9,21 @@ import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
-  Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
+  Truck, Percent, Globe, Bell, Lock, Clock, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
   ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package, UserRound, Link2,
-  AlertTriangle, Infinity as InfinityIcon,
+  AlertTriangle, Infinity as InfinityIcon, LayoutGrid, ClipboardList,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateVatSettings, updateNotificationsSettings, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { ContClientiSetari } from "@/components/dashboard/setari/ContClientiSetari";
 import { PermalinkuriSetari } from "@/components/dashboard/setari/PermalinkuriSetari";
+import { DateleMagazinului, type DateleMagazinuluiInitiale } from "@/components/dashboard/setari/DateleMagazinului";
+import { FormularComandaSetari } from "@/components/dashboard/setari/FormularComandaSetari";
+import type { ConfigFormular } from "@/lib/dashboard/formular-comanda";
+import { CatalogSetari, type VizibilitateCatalog } from "@/components/dashboard/setari/CatalogSetari";
 import type { Permalinkuri } from "@/lib/storefront/permalinkuri";
 import type { StareaConturilor } from "@/lib/actions/cont-client.actions";
 import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
@@ -55,16 +59,18 @@ type UserProfile = Pick<
 >;
 
 type SectionId =
-  | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
+  | "general" | "tip-magazin" | "catalog" | "plan" | "facturare" | "livrare" | "formular-comanda"
   | "taxe" | "plati" | "domeniu" | "seo" | "email" | "notificari" | "politici" | "cookies"
   | "conturi-clienti" | "permalinkuri" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
   { id: "tip-magazin", label: "Tip magazin", icon: Package  },
+  { id: "catalog",    label: "Catalog",     icon: LayoutGrid },
   { id: "plan",       label: "Plan",        icon: Zap       },
   { id: "facturare",  label: "Facturare",   icon: Receipt   },
   { id: "livrare",    label: "Livrare",     icon: Truck     },
+  { id: "formular-comanda", label: "Formular de comanda", icon: ClipboardList },
   { id: "taxe",       label: "Taxe",        icon: Percent   },
   { id: "plati",      label: "Metode de plata", icon: Wallet },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
@@ -376,6 +382,12 @@ interface Props {
   permalinkuri: Permalinkuri;
   /** Domeniul propriu sau `edinio.com/<slug>`, fara protocol. */
   adresaMagazin: string;
+  /** Setari > General: magazinul, contactul, retelele si datele firmei. */
+  dateleMagazinului: DateleMagazinuluiInitiale;
+  /** Setari > Formular de comanda (`page_content.checkout_config`). */
+  formularComanda: ConfigFormular;
+  /** Setari > Catalog: ce produse si categorii apar in magazin. */
+  vizibilitateCatalog: VizibilitateCatalog;
 }
 
 function ComingSoon({ title }: { title: string }) {
@@ -390,7 +402,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin, dateleMagazinului, formularComanda, vizibilitateCatalog }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -444,23 +456,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   // Account
   const [fullName, setFullName] = useState(profile.full_name);
   const [savingName, setSavingName] = useState(false);
-
-  // Business
-  const [biz, setBiz] = useState({
-    business_name: businessData?.business_name ?? "",
-    address: businessData?.address ?? "",
-    city: businessData?.city ?? "",
-    county: businessData?.county ?? "",
-    phone: businessData?.phone ?? "",
-    email: businessData?.email ?? "",
-    cui: businessData?.cui ?? "",
-    reg_com: businessData?.reg_com ?? "",
-  });
-  const [anafLoading, setAnafLoading] = useState(false);
-  const [orderFormat, setOrderFormat] = useState<"sequential" | "random">(
-    orderNumberFormat === "random" ? "random" : "sequential"
-  );
-  const [savingGeneral, startGeneralTransition] = useTransition();
 
   // Password
   const [currentPassword, setCurrentPassword] = useState("");
@@ -771,60 +766,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     setSavingName(false);
     if ("error" in result) toast.error(result.error);
     else toast.success("Profilul a fost actualizat.");
-  }
-
-  async function lookupCui() {
-    if (!biz.cui.trim()) { toast.error("Introdu CUI-ul mai intai."); return; }
-    setAnafLoading(true);
-    try {
-      const res = await fetch("/api/anaf/lookup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cui: biz.cui }),
-      });
-      const data = await res.json() as { business_name?: string; county?: string; city?: string; address?: string; reg_com?: string; error?: string };
-      if (!res.ok || data.error) {
-        toast.error(data.error ?? "CUI negasit in ANAF.");
-      } else {
-        setBiz(b => ({
-          ...b,
-          business_name: data.business_name ?? b.business_name,
-          county: data.county ?? b.county,
-          city: data.city ?? b.city,
-          address: data.address ?? b.address,
-          reg_com: data.reg_com ?? b.reg_com,
-        }));
-        toast.success("Date completate automat din ANAF.");
-      }
-    } catch {
-      toast.error("Eroare la interogarea ANAF.");
-    } finally {
-      setAnafLoading(false);
-    }
-  }
-
-  function saveGeneral() {
-    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
-    if (!biz.business_name.trim()) { toast.error("Denumirea firmei este obligatorie."); return; }
-    startGeneralTransition(async () => {
-      let result: Awaited<ReturnType<typeof updateGeneralSettings>>;
-      try {
-        result = await updateGeneralSettings(businessId, biz, orderFormat);
-      } catch {
-        /* ⚠ `updateGeneralSettings` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
-           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
-           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
-        toast.error(
-          "Nu am primit raspuns de la server, deci nu stim daca setarile generale s-au salvat. "
-          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
-          + "din nou.",
-          { duration: 12000 },
-        );
-        return;
-      }
-      if ("error" in result) toast.error(result.error);
-      else toast.success("Setarile au fost salvate.");
-    });
   }
 
   function saveVat() {
@@ -1188,7 +1129,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               {/* Card 1: Cont */}
               <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
-                  <p className="text-sm font-semibold text-foreground">Contul tau</p>
+                  <p className="text-sm font-semibold text-foreground">Contul tău</p>
                 </div>
                 <div className="px-5 py-5 space-y-4">
                   <div>
@@ -1209,185 +1150,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                       disabled
                       className={inputCls + " opacity-60 cursor-not-allowed"}
                     />
-                    <p className="mt-1 text-xs text-muted-foreground">Contactati suportul pentru schimbarea adresei de email.</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Pentru altă adresă de email, scrie-ne la suport.</p>
                   </div>
                   <Button onClick={saveProfile} disabled={savingName}>
                     {savingName ? <Loader2 className="animate-spin" /> : <Save />}
-                    {savingName ? "Se salveaza..." : "Salveaza contul"}
+                    {savingName ? "Se salvează..." : "Salvează contul"}
                   </Button>
                 </div>
               </div>
 
-              {/* Card 2: Datele magazinului */}
-              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-border">
-                  <p className="text-sm font-semibold text-foreground">Datele magazinului</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Apar pe documente, facturi si in footer-ul magazinului.</p>
-                </div>
-                <div className="px-5 py-5 space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">
-                      Denumirea firmei <span className="text-destructive">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={biz.business_name}
-                      onChange={(e) => setBiz(b => ({ ...b, business_name: e.target.value }))}
-                      className={inputCls}
-                      placeholder="ex: SC Firma Mea SRL"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      Folosita pentru date legale si facturare. Numele afisat in magazin se editeaza din <strong>Editeaza magazinul</strong>.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">CUI / CIF</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={biz.cui}
-                        onChange={(e) => setBiz(b => ({ ...b, cui: e.target.value }))}
-                        className={inputCls}
-                        placeholder="ex: RO12345678"
-                      />
-                      <Button type="button" variant="outline" onClick={lookupCui} disabled={anafLoading || !biz.cui.trim()} className="shrink-0 whitespace-nowrap">
-                        {anafLoading ? <Loader2 className="animate-spin" /> : <Search />}
-                        {anafLoading ? "Se cauta..." : "Completeaza automat"}
-                      </Button>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">Apare pe facturile emise catre tine. Butonul completeaza automat datele din ANAF.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Nr. Registrul Comertului</label>
-                    <input
-                      type="text"
-                      value={biz.reg_com}
-                      onChange={(e) => setBiz(b => ({ ...b, reg_com: e.target.value }))}
-                      className={inputCls}
-                      placeholder="ex: J40/1234/2017"
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">Se afiseaza public in footer-ul magazinului. Obligatoriu pentru procesatorii de plati (ex: Netopia).</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Adresa</label>
-                    <input
-                      type="text"
-                      value={biz.address}
-                      onChange={(e) => setBiz(b => ({ ...b, address: e.target.value }))}
-                      className={inputCls}
-                      placeholder="ex: Str. Exemplu nr. 10"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Oras</label>
-                      <input
-                        type="text"
-                        value={biz.city}
-                        onChange={(e) => setBiz(b => ({ ...b, city: e.target.value }))}
-                        className={inputCls}
-                        placeholder="ex: Bucuresti"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Judet</label>
-                      <input
-                        type="text"
-                        value={biz.county}
-                        onChange={(e) => setBiz(b => ({ ...b, county: e.target.value }))}
-                        className={inputCls}
-                        placeholder="ex: Ilfov"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Telefon</label>
-                      <input
-                        type="tel"
-                        value={biz.phone}
-                        onChange={(e) => setBiz(b => ({ ...b, phone: e.target.value }))}
-                        className={inputCls}
-                        placeholder="ex: 0722 123 456"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">Email contact</label>
-                      <input
-                        type="email"
-                        value={biz.email}
-                        onChange={(e) => setBiz(b => ({ ...b, email: e.target.value }))}
-                        className={inputCls}
-                        placeholder="ex: comenzi@firma.ro"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 3: Formatul comenzilor */}
-              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-border">
-                  <p className="text-sm font-semibold text-foreground">Formatul numarului de comanda</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Alege cum vor fi numerotate comenzile in magazinul tau.</p>
-                </div>
-                <div className="px-5 py-5 space-y-3">
-                  <label className={`flex items-start gap-3.5 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                    orderFormat === "sequential" ? "border-primary bg-primary/5" : "border-border hover:border-border/80 hover:bg-muted/30"
-                  }`}>
-                    <input
-                      type="radio"
-                      name="order_format"
-                      value="sequential"
-                      checked={orderFormat === "sequential"}
-                      onChange={() => setOrderFormat("sequential")}
-                      className="mt-0.5 accent-primary flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <Hash className="h-4 w-4 text-foreground flex-shrink-0" />
-                        <p className="text-sm font-semibold text-foreground">Secvential</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">Comenzile primesc numere in ordine crescatoare.</p>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {["#0001", "#0002", "#0003"].map(n => (
-                          <span key={n} className="px-2 py-0.5 bg-muted text-foreground text-xs font-mono rounded">{n}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-start gap-3.5 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                    orderFormat === "random" ? "border-primary bg-primary/5" : "border-border hover:border-border/80 hover:bg-muted/30"
-                  }`}>
-                    <input
-                      type="radio"
-                      name="order_format"
-                      value="random"
-                      checked={orderFormat === "random"}
-                      onChange={() => setOrderFormat("random")}
-                      className="mt-0.5 accent-primary flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <Shuffle className="h-4 w-4 text-foreground flex-shrink-0" />
-                        <p className="text-sm font-semibold text-foreground">Random</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">Comenzile primesc un cod unic generat aleatoriu.</p>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {["X8SAD-213F", "A2KMP-991C", "Z7TRQ-445B"].map(n => (
-                          <span key={n} className="px-2 py-0.5 bg-muted text-foreground text-xs font-mono rounded">{n}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              <Button onClick={saveGeneral} disabled={savingGeneral || !businessId}>
-                {savingGeneral ? <Loader2 className="animate-spin" /> : <Save />}
-                {savingGeneral ? "Se salveaza..." : "Salveaza setarile generale"}
-              </Button>
+              {/* Magazinul, contactul, retelele si datele firmei: un singur buton de salvare. */}
+              <DateleMagazinului
+                businessId={businessId}
+                initial={dateleMagazinului}
+                orderNumberFormat={orderNumberFormat}
+              />
             </div>
           )}
 
@@ -1458,6 +1235,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ── Catalog: ce produse si categorii apar in magazin ── */}
+          {activeSection === "catalog" && (
+            businessId ? (
+              <CatalogSetari businessId={businessId} initial={vizibilitateCatalog} />
+            ) : (
+              <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
+            )
           )}
 
           {/* ── Plan ── */}
@@ -1887,6 +1673,15 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* ── Formular de comanda (`page_content.checkout_config`) ── */}
+          {activeSection === "formular-comanda" && (
+            businessId ? (
+              <FormularComandaSetari businessId={businessId} initial={formularComanda} />
+            ) : (
+              <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
+            )
           )}
 
           {/* ── Taxe / TVA ── */}

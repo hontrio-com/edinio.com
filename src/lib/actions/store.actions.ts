@@ -12,6 +12,7 @@ import { checkoutPaymentMethods, processorReadiness, sanitizePaymentMethods, par
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules, parseShippingZones, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
 import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
+import { imbinaButoanele, imbinaRetelele, pregatesteDateleGenerale, type DateleGenerale } from "@/lib/dashboard/datele-magazinului";
 
 /**
  * Public, secret-free view of a store's checkout configuration.
@@ -293,28 +294,37 @@ export async function updatePageContent(businessId: string, pageContent: Record<
   return { success: true };
 }
 
+/**
+ * Setari > General: datele publice ale magazinului, datele firmei si formatul
+ * numarului de comanda, intr-o singura salvare.
+ *
+ * ⚠ `date` vine din browser, deci trece intai prin `pregatesteDateleGenerale`:
+ * de acolo iese UPDATE-ul, nu din ce a trimis ecranul. `features` si `social` se
+ * imbina pe server peste randul din baza, ca o fila deschisa de ieri sa nu stearga
+ * cheile pe care ecranul asta nu le are.
+ */
 export async function updateGeneralSettings(
   businessId: string,
-  business: { business_name: string; address: string; city: string; county: string; phone: string; email: string; cui: string; reg_com: string },
+  date: DateleGenerale,
   orderNumberFormat: string,
 ): Promise<{ error: string } | { success: true }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
+  const pregatite = pregatesteDateleGenerale(date);
+  if (!pregatite.ok) return { error: pregatite.eroare };
+  // Ecranul are exact doua alegeri; orice alt text ar ajunge in numerotarea comenzilor.
+  const formatComanda = orderNumberFormat === "random" ? "random" : "sequential";
+
   const { data: biz } = await supabase
-    .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
+    .from("businesses").select("id, slug, features, social").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
   const { error: bizError } = await supabase.from("businesses").update({
-    business_name: business.business_name,
-    address: business.address || null,
-    city: business.city || null,
-    county: business.county || null,
-    phone: business.phone || null,
-    email: business.email || null,
-    cui: business.cui || null,
-    reg_com: business.reg_com || null,
+    ...pregatite.coloane,
+    social: imbinaRetelele(biz.social, pregatite.retele),
+    features: imbinaButoanele(biz.features, pregatite.butoane) as Json,
     updated_at: new Date().toISOString(),
   }).eq("id", businessId);
   if (bizError) {
@@ -328,11 +338,11 @@ export async function updateGeneralSettings(
   let settingsError;
   if (existing) {
     ({ error: settingsError } = await supabase.from("store_settings")
-      .update({ order_number_format: orderNumberFormat, updated_at: new Date().toISOString() })
+      .update({ order_number_format: formatComanda, updated_at: new Date().toISOString() })
       .eq("business_id", businessId));
   } else {
     ({ error: settingsError } = await supabase.from("store_settings")
-      .insert({ business_id: businessId, order_number_format: orderNumberFormat }));
+      .insert({ business_id: businessId, order_number_format: formatComanda }));
   }
   if (settingsError) {
     logError({ action: "updateGeneralSettings.settings", message: settingsError.message, details: { code: settingsError.code, businessId }, userId: user.id });

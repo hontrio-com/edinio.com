@@ -506,7 +506,7 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       return (
         <div className="space-y-4">
           <Text label="Titlu" value={b.title} onChange={(v) => patch({ title: v })} />
-          <p className="text-xs text-muted-foreground">Linkurile rețelelor se preiau din setările magazinului.</p>
+          <p className="text-xs text-muted-foreground">Linkurile rețelelor se preiau din <Link href="/dashboard/settings?sectiune=general" className="font-medium text-primary hover:underline">Setări &gt; General</Link>.</p>
           <ControaleAspect style={b.style} onChange={setStyle} hide={["width"]} />
         </div>
       );

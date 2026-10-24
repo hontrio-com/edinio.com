@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  Info, Palette, MapPin, Share2, Globe,
+  Palette, Globe,
   ChevronDown, ChevronUp, Save, Loader2, Check, ExternalLink, Upload, X, Plus,
-  Layout, Smartphone, Tablet, Monitor, Paintbrush2, Home, ClipboardList, LayoutGrid,
+  Layout, Smartphone, Tablet, Monitor, Paintbrush2, Home, LayoutGrid, Settings,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { AlegeFonturi } from "./AlegeFonturi";
 import { fontDinPageContent } from "@/lib/storefront/design/fonturi-magazin";
@@ -43,8 +44,6 @@ import type { Database } from "@/types/database.types";
 type Business = Database["public"]["Tables"]["businesses"]["Row"];
 type StoreSettings = Database["public"]["Tables"]["store_settings"]["Row"];
 
-interface Social { facebook?: string; instagram?: string; tiktok?: string; youtube?: string; }
-interface Features { floating_whatsapp?: boolean; floating_call?: boolean; }
 interface BannerItem { id: string; url: string; file: File | null; link?: string; }
 
 interface PageContent {
@@ -59,15 +58,6 @@ interface PageContent {
   store_benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string; }>; };
   benefits_section?: { enabled: boolean; title: string; items: Array<{ title: string; desc: string; }>; };
   reviews_section?: { enabled: boolean; title: string; items: Array<{ name: string; rating: number; text: string; date: string; image?: string; }>; };
-  checkout_config?: {
-    custom_fields?: Array<{ id: string; label: string; type: "text" | "textarea" | "select" | "checkbox"; options?: string; required: boolean; placeholder?: string; pe_awb?: boolean; }>;
-    extras?: Array<{ id: string; label: string; price: number; description?: string; }>;
-    hidden_fields?: string[];
-    email_field?: { enabled: boolean; required: boolean };
-    /** Codul postal la comenzile din Romania (pana acum doar la livrarea internationala). */
-    postal_field?: { enabled: boolean; required: boolean };
-    company_fields?: { enabled: boolean };
-  };
   how_it_works_section?: { enabled: boolean; title: string; steps: Array<{ title: string; desc: string; }>; };
   faq_section?: { enabled: boolean; title: string; items: Array<{ q: string; a: string; }>; };
   button_effect?: string;
@@ -87,9 +77,6 @@ interface PageContent {
   show_social_proof?: boolean;
   show_quality_badge?: boolean;
   show_category_badges?: boolean;
-  hide_products_without_images?: boolean;
-  hide_out_of_stock_products?: boolean;
-  show_empty_categories?: boolean;
   footer_badges?: InsignaFooterStocata[];
   footer_badges_title?: string;
   footer_badges_title_enabled?: boolean;
@@ -337,35 +324,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     return "error" in result ? null : result.url;
   }
 
-  async function save(section: string, data: Parameters<typeof updateBusiness>[1]) {
-    setSaving(section);
-    const result = await updateBusiness(business.id, data);
-    setSaving(null);
-    if (result.error) { toast.error(result.error); }
-    else { setSaved(section); reincarcaPreview(); setTimeout(() => setSaved(null), 2000); }
-  }
-
-  // ── General section state
-  const [general, setGeneral] = useState({
-    store_name: business.store_name ?? business.business_name,
-    tagline: business.tagline ?? "",
-    description: business.description ?? "",
-    phone: business.phone ?? "",
-    whatsapp: business.whatsapp ?? "",
-    email: business.email ?? "",
-  });
-  // WhatsApp = same number as phone unless an explicitly different one is set.
-  const [whatsappSameAsPhone, setWhatsappSameAsPhone] = useState(
-    () => !business.whatsapp || business.whatsapp === business.phone,
-  );
-
-  // ── Features state
-  const rawFeatures = (business.features as Features) ?? {};
-  const [features, setFeatures] = useState<Features>({
-    floating_whatsapp: rawFeatures.floating_whatsapp !== false,
-    floating_call: rawFeatures.floating_call ?? false,
-  });
-
   // ── Branding section state
   const [logoPreview, setLogoPreview] = useState<string | null>(business.logo_url);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -498,7 +456,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     // Banners (+ their click links) + hero overlay toggle live in page_content.
     // Doar cheile panoului asta, plus cele trei pe care le calculeaza el aici.
     // Trimis intreg, `pageContent` ar fi dus in magazin si ce a schimbat
-    // comerciantul in „Pagina produs" sau in „Formular de comanda" fara sa salveze.
+    // comerciantul in „Pagina produs" sau in „Pagina principala" fara sa salveze.
     // Starea de ACUM, nu cea din clipa clicului: intre timp s-au urcat imagini,
     // deci pot fi secunde bune in care comerciantul a mai schimbat ceva.
     const trimisBranding = {
@@ -541,22 +499,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     }
   }
 
-  // ── Location section state
-  const [location, setLocation] = useState({
-    address: business.store_address ?? "",
-    city: business.store_city ?? "",
-    county: business.store_county ?? "",
-  });
-
-  // ── Social section state
-  const rawSocial = (business.social as Social) ?? {};
-  const [social, setSocial] = useState<Social>({
-    facebook: rawSocial.facebook ?? "",
-    instagram: rawSocial.instagram ?? "",
-    tiktok: rawSocial.tiktok ?? "",
-    youtube: rawSocial.youtube ?? "",
-  });
-
   // ── Page content state
   const rawPageContent = (storeSettings?.page_content as PageContent) ?? {};
   const [pageContent, setPageContentBrut] = useState<PageContent>({
@@ -584,7 +526,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     faq_section: rawPageContent.faq_section ?? { enabled: false, title: "Intrebari frecvente", items: [] },
     button_effect: rawPageContent.button_effect ?? "none",
     reviews_section: rawPageContent.reviews_section ?? { enabled: false, title: "Ce spun clientii nostri", items: [] },
-    checkout_config: rawPageContent.checkout_config ?? { custom_fields: [], extras: [] },
     show_announcement_on_store: rawPageContent.show_announcement_on_store ?? true,
     // `enabled` chiar se citeste acum (comutatorul din „Pagina principala").
     // Pana la 05.08.2026 era scris mereu `true` si ignorat de randare.
@@ -615,9 +556,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
     show_social_proof: rawPageContent.show_social_proof ?? false,
     show_quality_badge: rawPageContent.show_quality_badge ?? false,
     show_category_badges: rawPageContent.show_category_badges ?? true,
-    hide_products_without_images: rawPageContent.hide_products_without_images ?? false,
-    hide_out_of_stock_products: rawPageContent.hide_out_of_stock_products ?? false,
-    show_empty_categories: rawPageContent.show_empty_categories ?? false,
     footer_badges: rawPageContent.footer_badges ?? [],
     // Titlul se scrie in stare cu implicitul, ca sa se vada in caseta din prima
     // clipa: golit de om inseamna „fara titlu", iar asta trebuie sa fie o alegere
@@ -751,123 +689,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
   // ── Sections
   const sections = [
-    {
-      id: "general",
-      icon: Info,
-      title: "Informatii generale",
-      content: (
-        <div className="px-5 pb-5 space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Numele magazinului</label>
-            <input type="text" value={general.store_name} className={inputCls}
-              onChange={(e) => setGeneral((p) => ({ ...p, store_name: e.target.value }))} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Slogan</label>
-            <input type="text" value={general.tagline} className={inputCls} maxLength={120}
-              onChange={(e) => setGeneral((p) => ({ ...p, tagline: e.target.value }))}
-              placeholder="ex: Livrare rapida in toata tara" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Descriere</label>
-            <textarea value={general.description} rows={4} className={inputCls + " resize-none"} maxLength={600}
-              onChange={(e) => setGeneral((p) => ({ ...p, description: e.target.value }))}
-              placeholder="Descrie pe scurt ce vinzi si ce te face special..." />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Telefon</label>
-            <input type="tel" value={general.phone} className={inputCls}
-              onChange={(e) => setGeneral((p) => ({ ...p, phone: e.target.value }))} />
-            <label className="mt-2 flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={whatsappSameAsPhone}
-                onChange={(e) => setWhatsappSameAsPhone(e.target.checked)}
-                className="h-4 w-4 accent-primary cursor-pointer flex-shrink-0" />
-              <span className="text-xs text-foreground">Numarul este disponibil si pe WhatsApp</span>
-            </label>
-          </div>
-          {!whatsappSameAsPhone && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Numar WhatsApp (diferit)</label>
-              <input type="tel" value={general.whatsapp} className={inputCls}
-                onChange={(e) => setGeneral((p) => ({ ...p, whatsapp: e.target.value }))}
-                placeholder="ex: 07xx xxx xxx" />
-            </div>
-          )}
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
-            <input type="email" value={general.email} className={inputCls}
-              onChange={(e) => setGeneral((p) => ({ ...p, email: e.target.value }))} />
-          </div>
-
-          {/* Locatie magazin (publica) */}
-          <div className="border border-border rounded-xl p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-              <p className="text-xs font-semibold text-foreground">Locatie</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Adresa</label>
-              <input type="text" value={location.address} className={inputCls}
-                onChange={(e) => setLocation((p) => ({ ...p, address: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Oras</label>
-                <input type="text" value={location.city} className={inputCls}
-                  onChange={(e) => setLocation((p) => ({ ...p, city: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Judet</label>
-                <input type="text" value={location.county} className={inputCls}
-                  onChange={(e) => setLocation((p) => ({ ...p, county: e.target.value }))} />
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
-              Adresa apare public pe pagina magazinului (in footer si la datele de contact). Lasa campurile goale daca nu vrei sa o afisezi.
-            </p>
-          </div>
-
-          <div className="border border-border rounded-xl p-3 space-y-3">
-            <p className="text-xs font-semibold text-foreground">Butoane flotante</p>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-foreground">Buton WhatsApp</p>
-                <p className="text-[10px] text-muted-foreground">Necesita numar WhatsApp completat</p>
-              </div>
-              <button type="button"
-                onClick={() => setFeatures(f => ({ ...f, floating_whatsapp: !f.floating_whatsapp }))}
-                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", features.floating_whatsapp ? "bg-primary" : "bg-muted-foreground/30")}>
-                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", features.floating_whatsapp ? "translate-x-4" : "translate-x-0")} />
-              </button>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-foreground">Buton Apel</p>
-                <p className="text-[10px] text-muted-foreground">Necesita numar de telefon completat</p>
-              </div>
-              <button type="button"
-                onClick={() => setFeatures(f => ({ ...f, floating_call: !f.floating_call }))}
-                className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", features.floating_call ? "bg-primary" : "bg-muted-foreground/30")}>
-                <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", features.floating_call ? "translate-x-4" : "translate-x-0")} />
-              </button>
-            </div>
-          </div>
-          <SaveBtn loading={saving === "general"} saved={saved === "general"}
-            onSave={() => save("general", {
-              store_name: general.store_name || null,
-              tagline: general.tagline || null,
-              description: general.description || null,
-              phone: general.phone || null,
-              whatsapp: (whatsappSameAsPhone ? general.phone : general.whatsapp) || null,
-              email: general.email || null,
-              store_address: location.address || null,
-              store_city: location.city || null,
-              store_county: location.county || null,
-              features: { ...rawFeatures, ...features } as Record<string, boolean>,
-            })} />
-        </div>
-      ),
-    },
     {
       id: "branding",
       icon: Palette,
@@ -1034,25 +855,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             onText={(v) => setPageContent((p) => ({ ...p, font_text: v }))}
           />
           <SaveBtn loading={saving === "branding"} saved={saved === "branding"} onSave={saveBranding} />
-        </div>
-      ),
-    },
-    {
-      id: "social",
-      icon: Share2,
-      title: "Social media",
-      content: (
-        <div className="px-5 pb-5 space-y-3">
-          {(["instagram", "facebook", "tiktok", "youtube"] as const).map((key) => (
-            <div key={key}>
-              <label className="block text-xs font-medium text-muted-foreground mb-1 capitalize">{key}</label>
-              <input type="url" value={social[key] ?? ""} className={inputCls}
-                placeholder={`https://${key}.com/...`}
-                onChange={(e) => setSocial((p) => ({ ...p, [key]: e.target.value }))} />
-            </div>
-          ))}
-          <SaveBtn loading={saving === "social"} saved={saved === "social"}
-            onSave={() => save("social", { social: social as Record<string, string> })} />
         </div>
       ),
     },
@@ -1521,51 +1323,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
           <hr className="border-border" />
 
-          {/* Vizibilitate catalog: produse fara imagini */}
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-xs font-semibold text-foreground">Ascunde produsele fara imagini</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Produsele fara nicio imagine nu mai apar in magazin. Raman accesibile prin link direct.</p>
-            </div>
-            <button type="button"
-              onClick={() => setPageContent(p => ({ ...p, hide_products_without_images: !p.hide_products_without_images }))}
-              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.hide_products_without_images ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.hide_products_without_images ? "translate-x-4" : "translate-x-0")} />
-            </button>
-          </div>
-
-          <hr className="border-border" />
-
-          {/* Vizibilitate catalog: produse fara stoc */}
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-xs font-semibold text-foreground">Ascunde produsele fara stoc</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Produsele cu stoc epuizat nu mai apar in magazin. Raman accesibile prin link direct.</p>
-            </div>
-            <button type="button"
-              onClick={() => setPageContent(p => ({ ...p, hide_out_of_stock_products: !p.hide_out_of_stock_products }))}
-              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.hide_out_of_stock_products ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.hide_out_of_stock_products ? "translate-x-4" : "translate-x-0")} />
-            </button>
-          </div>
-
-          <hr className="border-border" />
-
-          {/* Navigare: categoriile fara produse */}
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-xs font-semibold text-foreground">Arata si categoriile goale</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Categoriile fara niciun produs apar oricum in meniuri si in banda de categorii. Cele ascunse din Produse &gt; Categorii nu apar in niciun caz.</p>
-            </div>
-            <button type="button"
-              onClick={() => setPageContent(p => ({ ...p, show_empty_categories: !p.show_empty_categories }))}
-              className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", pageContent.show_empty_categories ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", pageContent.show_empty_categories ? "translate-x-4" : "translate-x-0")} />
-            </button>
-          </div>
-
-          <hr className="border-border" />
-
           {/* "Creat cu Edinio" footer credit — can be hidden on a paid plan */}
           <div className="flex items-center justify-between">
             <div>
@@ -1983,246 +1740,6 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
       ),
     },
     {
-      id: "checkout",
-      icon: ClipboardList,
-      title: "Formular de comanda",
-      content: (
-        <div className="px-5 pb-5 space-y-5">
-          <div className="p-3 bg-muted/50 rounded-xl">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Campurile standard (Nume, Telefon, Judet, Oras, Adresa) sunt incluse automat. Poti ascunde campurile optionale sau adauga campuri si optiuni extra.
-            </p>
-          </div>
-
-          {/* Standard fields toggles */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground">Campuri standard</p>
-
-            {/* Discount code */}
-            {[
-              { id: "discount", label: "Cod discount", desc: "Permite clientilor sa aplice un cod de reducere" },
-            ].map(field => {
-              // Discount code is OFF by default — the field is hidden unless the merchant explicitly enables it.
-              const hidden = (pageContent.checkout_config?.hidden_fields ?? ["discount"]).includes(field.id);
-              return (
-                <div key={field.id} className="flex items-center justify-between p-3 border border-border rounded-xl">
-                  <div>
-                    <p className="text-xs font-medium text-foreground">{field.label}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{field.desc}</p>
-                  </div>
-                  <button type="button"
-                    onClick={() => {
-                      const current = pageContent.checkout_config?.hidden_fields ?? [];
-                      const next = hidden ? current.filter(f => f !== field.id) : [...current, field.id];
-                      setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, hidden_fields: next } }));
-                    }}
-                    className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", !hidden ? "bg-primary" : "bg-muted-foreground/30")}>
-                    <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", !hidden ? "translate-x-4" : "translate-x-0")} />
-                  </button>
-                </div>
-              );
-            })}
-
-            {/* Email field */}
-            {(() => {
-              const emailField = pageContent.checkout_config?.email_field ?? { enabled: false, required: false };
-              return (
-                <div className="border border-border rounded-xl p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Camp Email</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Clientul poate introduce adresa de email pentru confirmare comanda</p>
-                    </div>
-                    <button type="button"
-                      onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, email_field: { ...emailField, enabled: !emailField.enabled } } }))}
-                      className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", emailField.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                      <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", emailField.enabled ? "translate-x-4" : "translate-x-0")} />
-                    </button>
-                  </div>
-                  {emailField.enabled && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <div>
-                        <p className="text-xs font-medium text-foreground">Obligatoriu</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Daca e dezactivat, campul apare ca optional</p>
-                      </div>
-                      <button type="button"
-                        onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, email_field: { ...emailField, required: !emailField.required } } }))}
-                        className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", emailField.required ? "bg-primary" : "bg-muted-foreground/30")}>
-                        <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", emailField.required ? "translate-x-4" : "translate-x-0")} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Codul postal, la comenzile din Romania */}
-            {(() => {
-              const postalField = pageContent.checkout_config?.postal_field ?? { enabled: false, required: false };
-              return (
-                <div className="border border-border rounded-xl p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Camp Cod postal</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Clientul isi scrie codul postal (6 cifre). Ajunge in campul de cod postal al AWB-ului, la toti curierii</p>
-                    </div>
-                    <button type="button"
-                      onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, postal_field: { ...postalField, enabled: !postalField.enabled } } }))}
-                      className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", postalField.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                      <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", postalField.enabled ? "translate-x-4" : "translate-x-0")} />
-                    </button>
-                  </div>
-                  {postalField.enabled && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <div>
-                        <p className="text-xs font-medium text-foreground">Obligatoriu</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">Daca e dezactivat, campul apare ca optional</p>
-                      </div>
-                      <button type="button"
-                        onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, postal_field: { ...postalField, required: !postalField.required } } }))}
-                        className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", postalField.required ? "bg-primary" : "bg-muted-foreground/30")}>
-                        <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", postalField.required ? "translate-x-4" : "translate-x-0")} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Comenzi pe firma */}
-            {(() => {
-              const companyFields = pageContent.checkout_config?.company_fields ?? { enabled: false };
-              return (
-                <div className="border border-border rounded-xl p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Comenzi pe firma</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Clientul alege persoana fizica sau juridica; pentru firma completeaza CUI-ul si datele se preiau automat din ANAF</p>
-                    </div>
-                    <button type="button"
-                      onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, company_fields: { enabled: !companyFields.enabled } } }))}
-                      className={cn("relative w-9 h-5 rounded-full transition-colors flex-shrink-0", companyFields.enabled ? "bg-primary" : "bg-muted-foreground/30")}>
-                      <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", companyFields.enabled ? "translate-x-4" : "translate-x-0")} />
-                    </button>
-                  </div>
-                  {companyFields.enabled && (
-                    <p className="text-[10px] text-muted-foreground pt-2 border-t border-border">
-                      Datele firmei ajung pe factura. Adresa de livrare ramane cea completata de client, separat de sediul fiscal.
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-
-          <hr className="border-border" />
-
-          {/* Custom fields */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground">Campuri suplimentare</p>
-            <p className="text-[10px] text-muted-foreground">Campuri de text, liste sau bife pe care clientul le completeaza la comanda.</p>
-            {(pageContent.checkout_config?.custom_fields ?? []).map((field, i) => (
-              <div key={field.id} className="border border-border rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <input type="text" value={field.label} placeholder="Eticheta camp" className={inputCls + " !py-1.5 !text-xs"}
-                    onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, label: e.target.value } : f) } }))} />
-                  <button type="button" onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.filter((_, j) => j !== i) } }))}
-                    className="p-1.5 text-muted-foreground hover:text-destructive flex-shrink-0">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Tip</label>
-                    <select value={field.type} className={inputCls + " !py-1.5 !text-xs"}
-                      onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, type: e.target.value as never } : f) } }))}>
-                      <option value="text">Text scurt</option>
-                      <option value="textarea">Text lung</option>
-                      <option value="select">Lista optiuni</option>
-                      <option value="checkbox">Bifa (Da/Nu)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <label className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
-                      <input type="checkbox" checked={field.required}
-                        onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, required: e.target.checked } : f) } }))}
-                        className="rounded" />
-                      Obligatoriu
-                    </label>
-                  </div>
-                </div>
-                {/* Ce scrie clientul aici apare la Observatii pe AWB (la curierii care au campul). */}
-                <label className="flex items-start gap-1.5 text-xs text-foreground cursor-pointer">
-                  <input type="checkbox" checked={field.pe_awb === true}
-                    onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, pe_awb: e.target.checked } : f) } }))}
-                    className="rounded mt-0.5" />
-                  <span>
-                    Pune pe AWB
-                    <span className="block text-[10px] text-muted-foreground">Ce scrie clientul apare la Observatii pentru curier</span>
-                  </span>
-                </label>
-                {field.type === "select" && (
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Optiuni (separate prin virgula)</label>
-                    <input type="text" value={field.options ?? ""} placeholder="Optiunea 1, Optiunea 2" className={inputCls + " !py-1.5 !text-xs"}
-                      onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, options: e.target.value } : f) } }))} />
-                  </div>
-                )}
-                {(field.type === "text" || field.type === "textarea") && (
-                  <input type="text" value={field.placeholder ?? ""} placeholder="Placeholder (optional)" className={inputCls + " !py-1.5 !text-xs"}
-                    onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: p.checkout_config!.custom_fields!.map((f, j) => j === i ? { ...f, placeholder: e.target.value } : f) } }))} />
-                )}
-              </div>
-            ))}
-            <button type="button"
-              onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, custom_fields: [...(p.checkout_config!.custom_fields ?? []), { id: `cf_${Date.now()}`, label: "", type: "text" as const, required: false, placeholder: "" }] } }))}
-              className="flex items-center gap-1 text-xs text-primary hover:underline">
-              <Plus className="h-3 w-3" /> Adauga camp
-            </button>
-          </div>
-
-          <hr className="border-border" />
-
-          {/* Extras */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-foreground">Optiuni extra platite</p>
-            <p className="text-[10px] text-muted-foreground">Afisate cu border punctat in formular. Clientul le poate bifa si se adauga la total.</p>
-            {(pageContent.checkout_config?.extras ?? []).map((extra, i) => (
-              <div key={extra.id} className="border-2 border-dashed border-border rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <input type="text" value={extra.label} placeholder="ex: Prioritizeaza comanda mea" className={inputCls + " !py-1.5 !text-xs"}
-                    onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, extras: p.checkout_config!.extras!.map((ex, j) => j === i ? { ...ex, label: e.target.value } : ex) } }))} />
-                  <button type="button" onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, extras: p.checkout_config!.extras!.filter((_, j) => j !== i) } }))}
-                    className="p-1.5 text-muted-foreground hover:text-destructive flex-shrink-0">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Pret (lei)</label>
-                    <input type="number" value={extra.price} min={0} className={inputCls + " !py-1.5 !text-xs"}
-                      onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, extras: p.checkout_config!.extras!.map((ex, j) => j === i ? { ...ex, price: Number(e.target.value) } : ex) } }))} />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Descriere scurta (optional)</label>
-                    <input type="text" value={extra.description ?? ""} placeholder="ex: livrat in 24h" className={inputCls + " !py-1.5 !text-xs"}
-                      onChange={e => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, extras: p.checkout_config!.extras!.map((ex, j) => j === i ? { ...ex, description: e.target.value } : ex) } }))} />
-                  </div>
-                </div>
-              </div>
-            ))}
-            <button type="button"
-              onClick={() => setPageContent(p => ({ ...p, checkout_config: { ...p.checkout_config!, extras: [...(p.checkout_config!.extras ?? []), { id: `ext_${Date.now()}`, label: "", price: 0, description: "" }] } }))}
-              className="flex items-center gap-1 text-xs text-primary hover:underline">
-              <Plus className="h-3 w-3" /> Adauga optiune extra
-            </button>
-          </div>
-
-          <SaveBtn loading={saving === "checkout"} saved={saved === "checkout"} onSave={() => salveazaPanou("checkout")} />
-        </div>
-      ),
-    },
-    {
       id: "publish",
       icon: Globe,
       title: "Publicare",
@@ -2297,6 +1814,24 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               {open === s.id && s.content}
             </div>
           ))}
+          {/*
+            Ce a plecat de aici pe 24.10.2026. Nu era design: datele firmei,
+            formularul de comanda si regulile catalogului au acum un singur loc, in
+            Setari. Trimiterile raman cat timp oamenii le mai cauta aici.
+          */}
+          <div className="px-5 py-4">
+            <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-2">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                Le gasesti acum in Setari
+              </p>
+              <ul className="space-y-1.5 text-xs">
+                <li><Link href="/dashboard/settings?sectiune=general" className="text-primary hover:underline">Numele, contactul, adresa si retelele sociale</Link></li>
+                <li><Link href="/dashboard/settings?sectiune=formular-comanda" className="text-primary hover:underline">Formularul de comanda</Link></li>
+                <li><Link href="/dashboard/settings?sectiune=catalog" className="text-primary hover:underline">Ce produse si categorii apar in magazin</Link></li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2311,10 +1846,9 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
           </button>
 
           {/*
-            Ce PAGINA se previzualizeaza. Panourile „Pagina produs" si „Formular
-            de comanda" regleaza lucruri care nu apar niciodata pe pagina
-            principala; fara selectorul asta, zeci de comutatoare se salvau fara
-            ca ceva vizibil sa se schimbe.
+            Ce PAGINA se previzualizeaza. Panoul „Pagina produs" regleaza lucruri
+            care nu apar niciodata pe pagina principala; fara selectorul asta,
+            zeci de comutatoare se salvau fara ca ceva vizibil sa se schimbe.
           */}
           <div className="flex bg-muted rounded-lg p-0.5 gap-0.5">
             {SUPRAFETE.map(({ cheie, eticheta }) => {

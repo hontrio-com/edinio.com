@@ -17,6 +17,8 @@ import type { Database } from "@/types/database.types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import { epacketGata, type EpacketConfig } from "@/lib/epacket/client";
+import { dateleMagazinuluiDinRand } from "@/lib/dashboard/datele-magazinului";
+import { formularDinPageContent } from "@/lib/dashboard/formular-comanda";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string; sectiune?: string }>;
@@ -89,9 +91,9 @@ export default async function SettingsPage({ searchParams }: Props) {
 function ScheletSetari() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)]">
-      {/* coloana din stanga tine locul celor 16 file din NAV_SECTIONS */}
+      {/* coloana din stanga tine locul celor 18 file din NAV_SECTIONS */}
       <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6 px-2 space-y-1">
-        {Array.from({ length: 16 }).map((_, i) => (
+        {Array.from({ length: 18 }).map((_, i) => (
           <Skeleton key={i} className="h-9" />
         ))}
       </aside>
@@ -135,7 +137,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, email, cui, reg_com, custom_domain, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, store_address, store_county, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, whatsapp, email, cui, reg_com, custom_domain, social, features, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -168,6 +170,20 @@ async function ContinutSetari({
    * Justificarea ramasese in urma codului pe care il descria. Asa se nasc scurgerile care
    * par intemeiate.
    */
+
+  /*
+   * Setari > General, > Formular de comanda si > Catalog: pana la 24.10.2026 se
+   * editau din „Editeaza magazinul". Comutatoarele de catalog se citesc ca in
+   * magazin (`=== true`), ca ecranul sa arate starea pe care o vad clientii.
+   */
+  const dateleMagazinului = dateleMagazinuluiDinRand(bizRow);
+  const formularComanda = formularDinPageContent(storeSettings?.page_content);
+  const pcCatalog = (storeSettings?.page_content ?? {}) as Record<string, unknown>;
+  const vizibilitateCatalog = {
+    hide_products_without_images: pcCatalog.hide_products_without_images === true,
+    hide_out_of_stock_products: pcCatalog.hide_out_of_stock_products === true,
+    show_empty_categories: pcCatalog.show_empty_categories === true,
+  };
 
   // One Product Store (Settings > Tip magazin): current mode + active products picker.
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
@@ -438,6 +454,9 @@ async function ContinutSetari({
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={planSuccess}
       domainSuccess={domainSuccess}
+      dateleMagazinului={dateleMagazinului}
+      formularComanda={formularComanda}
+      vizibilitateCatalog={vizibilitateCatalog}
     />
   );
 }

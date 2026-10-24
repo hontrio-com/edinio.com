@@ -241,7 +241,7 @@ async function ContinutPanou({
   // editare, marcata client-side in ActivationChecklist (vezi customizeVisitedKey).
   const activationSteps: ChecklistStep[] = [
     { id: "product", title: "Adauga primul produs", description: "Fara produse, clientii nu au ce cumpara.", done: (productsTotal ?? 0) > 0, href: "/dashboard/products/new", cta: "Adauga" },
-    { id: "customize", title: "Personalizeaza magazinul", description: "Adauga logo, culori si detaliile magazinului tau.", done: !!business.logo_url, href: "/dashboard/editor", cta: "Personalizeaza" },
+    { id: "customize", title: "Personalizeaza magazinul", description: "Adauga logo-ul si culorile magazinului tau.", done: !!business.logo_url, href: "/dashboard/editor", cta: "Personalizeaza" },
     { id: "publish", title: "Publica magazinul", description: "Fa magazinul vizibil pentru clientii tai.", done: business.is_published, href: "/dashboard/editor", cta: "Publica" },
     { id: "order", title: "Primeste prima comanda", description: "Distribuie link-ul pe WhatsApp si retele sociale.", done: (ordersTotal ?? 0) > 0, share: true, cta: "Distribuie" },
   ];

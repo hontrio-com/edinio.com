@@ -69,6 +69,9 @@ Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, 
 ## Etapele
 
 1. **Inventar + mutarea setarilor de business in Setari** (Comanda, Catalog, Magazin, Social).
+   FACUT 24.10.2026: Setari > General (magazinul, contactul, adresa, butoanele flotante,
+   retelele, datele firmei, un singur buton), Setari > Formular de comanda, Setari > Catalog.
+   Editorul are trimiteri spre ele. Fara migratii. Detalii si ce se verifica: `REGISTRU.md`.
 2. **Un singur ecran**: `/dashboard/editor` cu bara de sus (alegi pagina, desktop/mobil,
    anuleaza/refa, Salveaza/Publica), stanga arborele, dreapta previzualizarea. La inceput
    gazduieste editoarele existente.

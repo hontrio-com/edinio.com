@@ -35,6 +35,12 @@ Git pastrata (`git mv`).
 | `audituri/PIXELS_TRACKING_AUDIT.md` | Pixelii si urmarirea, auditul din 07.2026 (Faza 0 + 1) |
 | `audituri/PRODUCTION_AUDIT_REPORT.md` | Raportul de productie initial |
 
+## Lucrari in curs
+
+| Folder | Ce contine |
+| --- | --- |
+| `editor-magazin/` | Editorul unic al magazinului (din 24.10.2026, ramura LOCALA `editor-magazin`): `PLAN.md` (deciziile, etapele, starea si cum se reia) si `REGISTRU.md` (tot ce productia nu are inca si ce se verifica dupa push) |
+
 ## Centrul de ajutor
 
 | Fisier | Ce contine |

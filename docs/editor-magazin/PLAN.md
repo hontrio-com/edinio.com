@@ -4,6 +4,95 @@ Hotarat 24.10.2026: un singur „Editeaza magazinul", pe modelul Shopify (sabloa
 blocuri in sectiuni, stil global) plus un strat „Avansat" strans implicit. Fara panza libera
 (Elementor).
 
+## Stare si reluare (citeste intai)
+
+**Ultima stare, 24.10.2026:** etapa 1 facuta si comisa local (`c2714932`). Urmeaza:
+
+1. **Proba vizuala a etapei 1, NEFACUTA.** Extensia Chrome nu era conectata. Pe
+   `localhost:3000` (serverul `npm run dev` al depozitului, baza DEMO), in Chrome-ul cu sesiunea
+   panoului (vezi memoria `proba-in-browser-pe-baza-demo`: poarta de abonament pe demo, contul de
+   proba): Setari > General (schimba sloganul si un link social, salveaza, reincarca, verifica
+   in magazin), Setari > Formular de comanda (un camp suplimentar + o extraoptiune, verifica in
+   formularul magazinului si totalul), Setari > Catalog („Ascunde produsele fara stoc"), apoi
+   `/dashboard/editor`: panourile mutate lipsesc, caseta „Le gasesti acum in Setari" duce la file.
+   La final, valorile de proba puse la loc.
+2. **Etapa 2**, dupa acordul proprietarului (el vrea etapele luate pe rand, cu oprire intre ele).
+
+**Cum se reia:** `git checkout editor-magazin` in `edinio/`, citeste fisierul asta si
+`REGISTRU.md`, apoi memoria `editor-magazin-unic`. Nimic nu se impinge, nimic nu atinge productia.
+
+## Deciziile proprietarului
+
+- 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat."
+- 24.10.2026: tot pe o ramura separata, local, productia neatinsa pana la final.
+- 24.10.2026: „Incepe cu etapa 1, le luam pe rand pana finalizam tot."
+- **INTREBARE DESCHISA, nepusa inca la vot:** teme intregi („alege un stil de magazin" la
+  inceput, care aseaza toate sectiunile deodata) sau doar sectiuni alese una cate una? De pus
+  inainte de etapa 4.
+
+## De ce Shopify si nu Elementor
+
+- Elementor (panza libera, orice element oriunde) e facut pentru designeri. Comerciantii fac cu el
+  magazine stricate pe telefon, lente, cu logica de comert (pret, variante, cos) fragila, si
+  tichete de suport „mi s-a stricat pagina".
+- Shopify (Online Store 2.0): pagina -> sectiuni -> blocuri in sectiuni, plus setari globale de
+  tema. Libertate mare, dar intre margini: telefonul nu se poate strica, spatierile sunt pe o
+  scara, pretul ramane legat de logica. E modelul pe care comerciantii il stiu deja.
+- „Absolut tot customizabil" si „foarte simplu" se bat cap in cap daca stau pe acelasi nivel. Se
+  impaca pe STRATURI, fiecare ascuns pana e nevoie de el:
+  1. Tema / stil global: culori, fonturi, butoane, colturi (exista: `StoreStyle`).
+  2. Sectiuni: adaugi, ordonezi, ascunzi, alegi un design (variantele devin puncte de pornire).
+  3. Blocuri in sectiune: titlu, text, buton, imagine, pret; muti, ascunzi, setezi.
+  4. „Avansat", strans implicit: spatieri, fundal, animatii, ascuns pe mobil, CSS/HTML.
+  90% din oameni raman la 1-2.
+
+## Ce NU facem
+
+- Pozitionare libera prin tragere.
+- Layout de telefon editat separat: telefonul se face singur, cel mult „ascuns pe mobil".
+- Checkoutul editabil vizual: doar culori si cateva texte. Acolo sunt banii, TVA-ul, rambursul.
+- Setari de business in editorul vizual (etapa 1 le-a scos).
+
+## Interfata tinta (etapa 2)
+
+- **Bara de sus:** „Editezi: Pagina de produs ▾" (alegi pagina), desktop / telefon, anuleaza /
+  refa, Salveaza / Publica, starea publicarii (comutatorul „Publicare" de azi ajunge aici).
+- **Stanga:** arborele de sectiuni si blocuri, „+ Adauga sectiune" (galerie cu miniaturi, exista
+  `VariantCard`). La clic pe un element, setarile lui intra in acelasi panou.
+- **Dreapta:** previzualizarea live (exista `RamaPreview` + protocolul `postMessage`).
+- Mai tarziu: clic pe element in previzualizare il selecteaza in arbore (etapa 3); istoric de
+  versiuni, „revino la ce era ieri" (etapa 7), plasa de siguranta pentru cei care se tem sa
+  atinga ceva.
+
+## Riscurile
+
+1. E cel mai mare proiect de interfata de pana acum: o unificare de modele de date, nu un ecran.
+2. Magazinele existente: modelul nou se DERIVA la citire din cel vechi (ca `{}` = clasic azi),
+   deci nicio migrare de date si nicio schimbare vizuala la lansare.
+3. Viteza vitrinei: sectiunile raman randate pe server, blocurile fara JS pe vitrina.
+4. Pagina de produs pe blocuri: personalizarea cu pret pe suprafata (`CampuriPersonalizare`,
+   `usePersonalizare`) ramane UN bloc legat de logica; vezi memoriile despre pretul autoritar.
+
+## Repere tehnice pentru etapele 2-4 (citite in cod pe 24.10.2026)
+
+- `components/editor/StoreEditor.tsx`: editorul vechi. Panouri ramase: Identitate vizuala,
+  Pagina produs, Pagina principala, Sectiuni produse, Publicare. Trimite DOAR cheile atinse
+  (`cheiAtinse` + `salveazaPanou`, `components/editor/chei-atinse.ts`); comutatoarele vechi scot
+  semnul din design prin `elibereazaComutatoare` (`lib/storefront/design/comutatoare-vechi.ts`).
+  Previzualizare: `RamaPreview` + `suprafete-preview.ts`, doar `?preview=1`, navigabila.
+- `components/store-editor/StoreDesignEditor.tsx` (`/dashboard/editor/design`): ciorna in
+  `storefront_design_draft`, publicare in `storefront_design`; protocolul cu iframe-ul in
+  `lib/storefront/design/preview-protocol.ts` (`?preview=1&editor=design`, marcheaza sectiunile,
+  blocheaza clicurile, doar pentru proprietar). De aici porneste clicul pe element din etapa 3.
+- `components/store-editor/SectionDesignBrowser.tsx` (`/dashboard/editor/sectiuni`): galeria de
+  variante cu miniaturi vii.
+- `lib/storefront/design/registry.ts` (sectiuni, variante, campuri cu `showIf`, implicite),
+  `parse.ts` (derivarea din `page_content`), `types.ts` (`enabled` / `enabledOverride`, trei stari).
+- Paginile: `components/pages/PageBuilder.tsx`, `BlockSettings.tsx`, `lib/pages/blocks.types.ts`,
+  tabela `custom_pages`.
+- Meniul panoului: `lib/navigatie-panou.ts` (sursa unica, proba `navigatia-nu-divergeaza`).
+  Lista de activare din panou trimite la `/dashboard/editor` pentru „Personalizeaza" si „Publica".
+
 ## Regulile de lucru
 
 - Ramura Git **`editor-magazin`**, DOAR LOCAL. Nu se impinge pe GitHub pana la final: o ramura

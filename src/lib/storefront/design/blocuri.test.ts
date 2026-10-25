@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { blocurileZonei, comutaBloc, completeazaBlocuri, mutaBloc, parseBlocuri, schemaBlocurilor, type ContextBlocuri } from "./blocuri";
 import { buildClassicDesign } from "./defaults";
-import { schimbaBlocurile, updateSection } from "./edit";
+import { completeazaBlocurileSectiunii, schimbaBlocurile, updateSection } from "./edit";
 import { parseStoreDesign } from "./parse";
 import type { BlockInstance, DesignContext } from "./types";
 
@@ -139,6 +139,17 @@ test("operatiile pe design intorc acelasi obiect cand n-au ce face (istoricul nu
   const mutat = schimbaBlocurile(d, id, (b, s) => mutaBloc(b, s, "pret", -1));
   assert.notEqual(mutat, d);
   assert.equal(tipuri(d.product.page.blocks!).indexOf("pret"), tipuri(mutat.product.page.blocks!).indexOf("pret") + 1, "originalul ramane neatins");
+});
+
+test("⚠ in editor, blocurile urmeaza varianta pe loc, fara sa astepte o recitire", () => {
+  // Fara asta, arborele ar fi aratat lista variantei vechi: tipurile Detaliat
+  // lipseau, iar cele doar din Clasic stateau pe dinafara oricarei zone.
+  const d = citit(buildClassicDesign(ctx()));
+  const id = d.product.page.id;
+  const schimbat = completeazaBlocurileSectiunii(updateSection(d, id, { variant: "detailed" }), id, {});
+  assert.deepEqual(tipuri(schimbat.product.page.blocks!).sort(), Object.keys(DETALIAT.tipuri).sort());
+  assert.equal(completeazaBlocurileSectiunii(schimbat, "hero", {}), schimbat, "sectiunea fara blocuri ramane neatinsa");
+  assert.deepEqual(completeazaBlocurileSectiunii(schimbat, id, {}), schimbat, "a doua trecere nu mai schimba nimic");
 });
 
 test("la schimbarea variantei, ochiul si ordinea se pastreaza pe tipurile comune", () => {

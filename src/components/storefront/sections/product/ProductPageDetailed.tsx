@@ -2,8 +2,9 @@
 
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
-import { Fragment, useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import { blocurileZonei, completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { MarcajBloc } from "@/components/storefront/MarcajBloc";
 import type { BlockInstance } from "@/lib/storefront/design/types";
 import { legaturaBrand } from "@/lib/storefront/brand-href";
 import Image from "next/image";
@@ -628,6 +629,8 @@ export function ProductPageDetailed({
   }, [editare.linie, pers, variantsData]);
 
   const chrome = useStoreChromeOptional();
+  // Id-ul paginii de produs in design, pentru marcajele blocurilor din editor.
+  const idPagina = chrome?.design?.product.page.id ?? "product_page";
   /* Unde se intoarce omul dupa ce salveaza sau renunta. */
   const inapoiLaCos = chrome?.cartHref ?? `${basePath}/cos`;
   // In magazinul cu un singur produs cosul e ascuns peste tot: fara header, fara
@@ -1354,7 +1357,9 @@ export function ProductPageDetailed({
           </div>
 
           <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 flex flex-col gap-4">
-            {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "cumparare").map((b) => <Fragment key={b.id}>{bucati[b.type]}</Fragment>)}
+            {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "cumparare").map((b) => (
+              <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{bucati[b.type]}</MarcajBloc>
+            ))}
           </div>
 
           {/*
@@ -1366,7 +1371,9 @@ export function ProductPageDetailed({
             cade oricum dupa butoane, unde ii e locul.
           */}
           <div className="lg:col-start-1 lg:row-start-2 flex flex-col gap-4">
-            {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "sub_galerie").map((b) => <Fragment key={b.id}>{subGalerie[b.type]}</Fragment>)}
+            {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "sub_galerie").map((b) => (
+              <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{subGalerie[b.type]}</MarcajBloc>
+            ))}
           </div>
         </div>
       </div>
@@ -1428,7 +1435,9 @@ export function ProductPageDetailed({
             </div>
           )}
 
-          {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => <Fragment key={b.id}>{jos[b.type]}</Fragment>)}
+          {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => (
+            <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{jos[b.type]}</MarcajBloc>
+          ))}
 
           {/* ─── Bara lipita jos, pe telefon ─────────────────────────────── */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3 flex items-center gap-3"

@@ -2,7 +2,7 @@
 
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
-import { Fragment, useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import {
@@ -51,6 +51,7 @@ import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import { blocurileZonei, completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { MarcajBloc } from "@/components/storefront/MarcajBloc";
 import type { BlockInstance } from "@/lib/storefront/design/types";
 
 /** Schema blocurilor variantei (`blocuri.ts`): zonele, ordinea implicita, cele obligatorii. */
@@ -587,6 +588,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   }, [editare.linie, pers, variantsData]);
 
   const chrome = useStoreChromeOptional();
+  // Id-ul paginii de produs in design, pentru marcajele blocurilor din editor.
+  const idPagina = chrome?.design?.product.page.id ?? "product_page";
   /* Unde se intoarce omul dupa ce salveaza sau renunta. */
   const inapoiLaCos = chrome?.cartHref ?? `${basePath}/cos`;
   /*
@@ -1120,7 +1123,9 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       // automata l-ar lasa sa se dilate la latimea unui tabel sau a unei imagini
       // din descrierea scurta, largind si coloana galeriei.
       <div className="flex flex-col gap-3 lg:gap-4 min-w-0">
-        {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "cumparare").map((b) => <Fragment key={b.id}>{bucati[b.type]}</Fragment>)}
+        {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "cumparare").map((b) => (
+          <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{bucati[b.type]}</MarcajBloc>
+        ))}
       </div>
     );
   }
@@ -1421,7 +1426,9 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           ramane transparente. */}
       {demo ? null : (
       <>
-      {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => <Fragment key={b.id}>{jos[b.type]}</Fragment>)}
+      {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => (
+        <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{jos[b.type]}</MarcajBloc>
+      ))}
 
       {/* Sticky bottom bar (mobile) */}
       {!modalOpen && (

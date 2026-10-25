@@ -3,7 +3,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { cutiaSectiunii, sectiuneaDeSub } from "@/lib/storefront/design/contur-editor";
-import { ETICHETA_ATTR, PREVIEW_MESSAGE, SECTION_ATTR, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
+import { ETICHETA_ATTR, PREVIEW_MESSAGE, isPreviewMessage, selectorMarcaj } from "@/lib/storefront/design/preview-protocol";
 
 /**
  * Conturul sectiunilor in previzualizarea editorului unic (etapa 3 din
@@ -38,7 +38,8 @@ export default function ConturEditor() {
 
     function pune(strat: HTMLDivElement | null, id: string | null) {
       if (!strat) return;
-      const marcaj = id ? document.querySelector<HTMLElement>(`[${SECTION_ATTR}="${CSS.escape(id)}"]`) : null;
+      // Un id de bloc (`<sectiune>/<bloc>`) isi cauta marcajul de bloc, altfel cel de sectiune.
+      const marcaj = id ? document.querySelector<HTMLElement>(selectorMarcaj(id)) : null;
       const cutie = cutiaSectiunii(marcaj);
       if (!marcaj || !cutie) {
         strat.style.display = "none";

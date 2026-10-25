@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { sectiuneaDeSub } from "@/lib/storefront/design/contur-editor";
 import {
   PREVIEW_MESSAGE,
-  SECTION_ATTR,
   isPreviewMessage,
+  selectorMarcaj,
 } from "@/lib/storefront/design/preview-protocol";
 import { primaCutie } from "@/lib/storefront/design/scroll-target";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
@@ -47,7 +48,7 @@ export function useDesignPreview(
         // `primaCutie`, nu direct elementul: invelisul de sectiune are
         // `display: contents` si nu genereaza cutie, deci `scrollIntoView()` pe
         // el returneaza imediat, fara sa deruleze nimic. Vezi `scroll-target.ts`.
-        primaCutie(document.querySelector(`[${SECTION_ATTR}="${CSS.escape(msg.sectionId)}"]`))
+        primaCutie(document.querySelector(selectorMarcaj(msg.sectionId)))
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
@@ -75,9 +76,8 @@ export function useDesignPreview(
     // Click pe o sectiune -> selectie in lista din editor.
     function onClick(event: MouseEvent) {
       opreste(event);
-      const id = (event.target as HTMLElement | null)
-        ?.closest(`[${SECTION_ATTR}]`)
-        ?.getAttribute(SECTION_ATTR);
+      // Blocul, cand e unul sub clic, altfel sectiunea (`sectiuneaDeSub`).
+      const id = sectiuneaDeSub(event.target as Element | null)?.id;
       if (!id) return;
       window.parent.postMessage({ [PREVIEW_MESSAGE]: "select", sectionId: id }, window.location.origin);
     }

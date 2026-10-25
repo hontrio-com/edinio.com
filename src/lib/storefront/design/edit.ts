@@ -1,6 +1,6 @@
 import { newSectionId, section } from "./defaults";
 import { firstVariant, SECTION_REGISTRY, sectionMeta, variantMeta } from "./registry";
-import { schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
+import { completeazaBlocuri, schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
 import type { BlockInstance, SectionInstance, SectionKind, StoreDesign } from "./types";
 
 /**
@@ -156,6 +156,28 @@ export function schimbaBlocurile(
   if (urmatoarele === tinta.blocks) return design;
   const next = clone(design);
   findSection(next, idSectiune)!.blocks = [...urmatoarele];
+  return next;
+}
+
+/**
+ * Lista completa de blocuri a sectiunii, pe schema variantei ei de ACUM.
+ *
+ * Dupa o schimbare de varianta, ciorna din editor ar fi pastrat lista variantei
+ * vechi pana la urmatoarea citire: tipurile noi lipseau din arbore, iar cele
+ * fara loc in noua varianta stateau pe dinafara. Parserul face acelasi lucru la
+ * citire; aici se face pe loc, cu continutul de pe ecran.
+ */
+export function completeazaBlocurileSectiunii(
+  design: StoreDesign,
+  idSectiune: string,
+  pageContent: Record<string, unknown>,
+): StoreDesign {
+  const tinta = findSection(design, idSectiune);
+  const schema = tinta ? schemaBlocurilor(tinta.kind, tinta.variant) : null;
+  if (!tinta || !schema) return design;
+  const next = clone(design);
+  const s = findSection(next, idSectiune)!;
+  s.blocks = completeazaBlocuri(s.blocks, schema, { pageContent, setari: s.settings });
   return next;
 }
 

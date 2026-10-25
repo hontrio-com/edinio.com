@@ -1,4 +1,4 @@
-import { ETICHETA_ATTR, SECTION_ATTR } from "./preview-protocol";
+import { BLOC_ATTR, ETICHETA_ATTR, SECTION_ATTR } from "./preview-protocol";
 
 /**
  * Geometria conturului din previzualizarea editorului (etapa 3 din
@@ -71,13 +71,17 @@ export interface ElementCuStramosi {
 }
 
 /**
- * Sectiunea de sub mouse (sau de sub deget): id-ul si numele ei, din marcajul pus
- * de `MarcajSectiune` in modul editor. `null` in afara oricarei sectiuni: butonul
+ * Ce e sub mouse (sau sub deget): blocul, cand e unul, altfel sectiunea; id-ul si
+ * numele, din marcajele puse in modul editor (`MarcajBloc`, `MarcajSectiune`).
+ * Blocul are intaietate: sta in interiorul sectiunii lui, iar omul arata spre
+ * bucata, nu spre toata pagina. `null` in afara oricarei sectiuni: butonul
  * flotant de telefon, bannerul de cookie-uri, spatiul dintre containere.
  */
 export function sectiuneaDeSub(tinta: ElementCuStramosi | null | undefined): { id: string; eticheta: string } | null {
-  const marcaj = tinta?.closest(`[${SECTION_ATTR}]`);
-  const id = marcaj?.getAttribute(SECTION_ATTR);
-  if (!marcaj || !id) return null;
-  return { id, eticheta: marcaj.getAttribute(ETICHETA_ATTR) || id };
+  for (const atribut of [BLOC_ATTR, SECTION_ATTR]) {
+    const marcaj = tinta?.closest(`[${atribut}]`);
+    const id = marcaj?.getAttribute(atribut);
+    if (marcaj && id) return { id, eticheta: marcaj.getAttribute(ETICHETA_ATTR) || id };
+  }
+  return null;
 }

@@ -151,3 +151,9 @@ export function despartireId(id: string): { sectiune: string; bloc: string | nul
   const i = id.indexOf("/");
   return i < 0 ? { sectiune: id, bloc: null } : { sectiune: id.slice(0, i), bloc: id.slice(i + 1) };
 }
+
+/** Selectorul marcajului pentru un id din protocol: de bloc sau de sectiune. */
+export function selectorMarcaj(id: string): string {
+  const atribut = id.includes("/") ? BLOC_ATTR : SECTION_ATTR;
+  return `[${atribut}="${id.replace(/["\\]/g, "\\$&")}"]`;
+}

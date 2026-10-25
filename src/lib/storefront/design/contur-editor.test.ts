@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { cutiaSectiunii, sectiuneaDeSub, type Dreptunghi, type ElementDeMasurat } from "./contur-editor";
-import { ETICHETA_ATTR, SECTION_ATTR } from "./preview-protocol";
+import { BLOC_ATTR, ETICHETA_ATTR, SECTION_ATTR, despartireId, idBloc, selectorMarcaj } from "./preview-protocol";
 
 /**
  * Conturul din previzualizarea editorului (etapa 3): cutia unei sectiuni al
@@ -51,15 +51,36 @@ test("o sectiune care n-a randat nimic n-are cutie", () => {
   assert.equal(cutiaSectiunii(null), null);
 });
 
-/** O tinta de eveniment al carei marcaj de sectiune are atributele date. */
-function tinta(atribute: Record<string, string> | null) {
+/** O tinta de eveniment al carei marcaj de sectiune (si, optional, de bloc) are atributele date. */
+function tinta(atribute: Record<string, string> | null, bloc: Record<string, string> | null = null) {
   return {
-    closest: (selector: string) =>
-      atribute && selector === `[${SECTION_ATTR}]`
+    closest: (selector: string) => {
+      if (bloc && selector === `[${BLOC_ATTR}]`) return { getAttribute: (nume: string) => bloc[nume] ?? null };
+      return atribute && selector === `[${SECTION_ATTR}]`
         ? { getAttribute: (nume: string) => atribute[nume] ?? null }
-        : null,
+        : null;
+    },
   };
 }
+
+test("⚠ sub mouse, blocul are intaietate fata de sectiunea lui", () => {
+  // Omul arata spre pret, nu spre toata pagina de produs.
+  const sub = sectiuneaDeSub(tinta(
+    { [SECTION_ATTR]: "product_page", [ETICHETA_ATTR]: "Pagina de produs" },
+    { [BLOC_ATTR]: "product_page/pret", [ETICHETA_ATTR]: "Prețul" },
+  ));
+  assert.deepEqual(sub, { id: "product_page/pret", eticheta: "Prețul" });
+});
+
+test("id-ul de bloc se desparte inapoi, iar selectorul il cauta pe marcajul potrivit", () => {
+  assert.equal(idBloc("product_page", "pret"), "product_page/pret");
+  assert.deepEqual(despartireId(idBloc("product_page", "pret")), { sectiune: "product_page", bloc: "pret" });
+  assert.deepEqual(despartireId("hero"), { sectiune: "hero", bloc: null });
+  assert.equal(selectorMarcaj("product_page/pret"), `[${BLOC_ATTR}="product_page/pret"]`);
+  assert.equal(selectorMarcaj("hero"), `[${SECTION_ATTR}="hero"]`);
+  // Ghilimelele dintr-un id nu sparg selectorul.
+  assert.equal(selectorMarcaj('x"y'), `[${SECTION_ATTR}="x\\"y"]`);
+});
 
 test("sectiunea de sub mouse: id-ul si numele din marcaj", () => {
   assert.deepEqual(

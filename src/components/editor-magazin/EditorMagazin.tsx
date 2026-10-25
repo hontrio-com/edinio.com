@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { DesignGallery } from "@/components/store-editor/DesignGallery";
 import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
 import { newProductSection } from "@/lib/store-sections";
-import { addSection, ID_BARA_ANUNT, toateSectiunile, updateSection } from "@/lib/storefront/design/edit";
+import { addSection, completeazaBlocurileSectiunii, ID_BARA_ANUNT, toateSectiunile, updateSection } from "@/lib/storefront/design/edit";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { PREVIEW_MESSAGE, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
@@ -452,7 +452,11 @@ export function EditorMagazin({
               motivIndisponibil={motivIndisponibil}
               onClose={() => setGalerieDesign(null)}
               onPick={(variant) => {
-                ciorna.aplica((d: StoreDesign) => updateSection(d, sectiuneGalerie.id, { variant }));
+                // Blocurile urmeaza varianta pe loc (Clasic si Detaliat au alte zone):
+                // altfel arborele ar fi aratat lista variantei vechi pana la o recitire.
+                ciorna.aplica((d: StoreDesign) => completeazaBlocurileSectiunii(
+                  updateSection(d, sectiuneGalerie.id, { variant }), sectiuneGalerie.id, continutSalvat.pageContent as Record<string, unknown>,
+                ));
                 setGalerieDesign(null);
                 setVedereMobil("previzualizare");
               }}

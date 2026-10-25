@@ -253,7 +253,7 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - [x] 4.3 (25.10; estimarea livrarii ramane a continutului, vezi `DE_CE.livrare`) Detaliat randat din blocuri (cumparare, sub galerie, jos).
 - [x] 4.4 (25.10, `ArboreBlocuri`, `PanouBloc`, `ContinutBloc`, noduri `produs_*`) Editorul: blocurile in arbore sub „Pagina de produs” (pe zone, sageti, ochi), panoul
       blocului (setari + continutul lui), comutatoarele dublate scoase.
-- [ ] 4.5 Previzualizarea: marcaj pe bloc, contur si clic pe bloc.
+- [x] 4.5 (25.10, `MarcajBloc`, `selectorMarcaj`; filele Detaliat raman fara marcaj propriu) Previzualizarea: marcaj pe bloc, contur si clic pe bloc.
 - [ ] 4.6 Porti + proba in Chrome.
 - [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a).
 

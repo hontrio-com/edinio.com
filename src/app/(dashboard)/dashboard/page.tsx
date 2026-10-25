@@ -41,11 +41,18 @@ import {
 import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
 import { AjutorConfigurare } from "@/components/dashboard/AjutorConfigurare";
 import { COOKIE_AJUTOR_ASCUNS, esteContNou } from "@/lib/dashboard/ajutor-configurare";
+import { CALE_AUTORIZARE, cerereInAsteptare } from "@/lib/hontrio/in-asteptare";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
+
+  /*
+   * Cererea de conectare venita de la Hontrio, cand omul a trebuit intai sa se logheze: logarea se
+   * termina mereu aici, fara adresa de intoarcere. Vezi `cerereInAsteptare`.
+   */
+  if (await cerereInAsteptare()) redirect(CALE_AUTORIZARE);
 
   // `custom_domain_healthy` intra in select fiindca bara de stare nu are voie sa
   // dea verde pe un domeniu dovedit mort. `null` inseamna doar „neverificat".

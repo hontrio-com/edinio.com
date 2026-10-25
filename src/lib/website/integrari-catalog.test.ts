@@ -19,6 +19,7 @@ import {
 } from "./integrari-catalog";
 import { PROVIDER_LOGOS, logoSize, type LogoKey } from "./logos";
 import { CURIERI_CU_LOCKERE } from "../shipping/curieri-cu-puncte";
+import { HONTRIO_LIVE } from "@/lib/hontrio/config";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const PANOU = join(AICI, "..", "..", "app", "(dashboard)", "dashboard", "features", "page.tsx");
@@ -255,7 +256,14 @@ test("catalogul nu rămâne în urma panoului", () => {
     INTEGRARI.map((i) => radacina(PROVIDER_LOGOS[i.cheie].src.split("/").pop() ?? "")),
   );
 
-  const lipsa = [...alePanoului].filter((r) => !aleNoastre.has(r));
+  /*
+    ⚠ SINGURA SCUTIRE: Hontrio, CAT TIMP `HONTRIO_LIVE` E STINS (25.10.2026). Cardul lui din panou
+    il vad atunci numai magazinele deja conectate, deci nu e o integrare „care se poate activa
+    azi" pentru nimeni altcineva, iar site-ul n-are de ce s-o anunte inaintea lansarii. Scutirea
+    e legata de intrerupator, nu scrisa ca lista: aprins `HONTRIO_LIVE`, proba cade pana cand
+    Hontrio intra si in catalogul site-ului.
+  */
+  const lipsa = [...alePanoului].filter((r) => !aleNoastre.has(r) && !(r === "hontrio" && !HONTRIO_LIVE));
   assert.deepEqual(
     lipsa,
     [],

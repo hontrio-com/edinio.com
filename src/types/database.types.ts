@@ -3852,6 +3852,102 @@ export type Database = {
         ]
       }
       /*
+        Adaugate de mana, din `migrations/2027-01-30-conector-hontrio.sql` (vezi nota de la
+        `indexnow_trimise` despre de ce nu se regenereaza fisierul intreg).
+      */
+      hontrio_coduri: {
+        Row: {
+          amprenta: string
+          aprobat_de: string | null
+          business_id: string
+          code_challenge: string
+          conexiune_id: string | null
+          creat_la: string
+          expira_la: string
+          folosit_la: string | null
+          redirect_uri: string
+        }
+        Insert: {
+          amprenta: string
+          aprobat_de?: string | null
+          business_id: string
+          code_challenge: string
+          conexiune_id?: string | null
+          creat_la?: string
+          expira_la: string
+          folosit_la?: string | null
+          redirect_uri: string
+        }
+        Update: {
+          amprenta?: string
+          aprobat_de?: string | null
+          business_id?: string
+          code_challenge?: string
+          conexiune_id?: string | null
+          creat_la?: string
+          expira_la?: string
+          folosit_la?: string | null
+          redirect_uri?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hontrio_coduri_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hontrio_coduri_conexiune_id_fkey"
+            columns: ["conexiune_id"]
+            isOneToOne: false
+            referencedRelation: "hontrio_conexiuni"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hontrio_conexiuni: {
+        Row: {
+          amprenta: string
+          aprobat_de: string | null
+          business_id: string
+          creat_la: string
+          id: string
+          motiv_revocare: string | null
+          revocat_la: string | null
+          ultima_folosire: string | null
+        }
+        Insert: {
+          amprenta: string
+          aprobat_de?: string | null
+          business_id: string
+          creat_la?: string
+          id?: string
+          motiv_revocare?: string | null
+          revocat_la?: string | null
+          ultima_folosire?: string | null
+        }
+        Update: {
+          amprenta?: string
+          aprobat_de?: string | null
+          business_id?: string
+          creat_la?: string
+          id?: string
+          motiv_revocare?: string | null
+          revocat_la?: string | null
+          ultima_folosire?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hontrio_conexiuni_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      /*
         ⚠ ADAUGATA DE MANA (04.09.2026), nu prin regenerare.
 
         Regenerarea completa a fisierului rupe ~40 de locuri: `store_settings` e

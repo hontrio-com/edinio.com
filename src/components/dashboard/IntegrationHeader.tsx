@@ -61,6 +61,9 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   "google-ads": { src: "/integrations/google-ads.svg", alt: "Google Ads" },
   "google-analytics": { src: "/integrations/google-analytics.svg", alt: "Google Analytics" },
   "google-merchant": { src: "/integrations/google-merchant-center.svg", alt: "Google Merchant Center" },
+  /* Aici cuvantul „HONTRIO", la 32px inaltime. Cardul din lista foloseste semnul patrat (`hontrio.png`):
+     cuvantul are raportul 7,3 si in locasul cardului ar fi iesit de 9px. */
+  hontrio: { src: "/integrations/hontrio-text.png", alt: "Hontrio" },
   olx: { src: "/integrations/olx.svg", alt: "OLX" },
   aboutyou: { src: "/integrations/aboutyou.png", alt: "About You" },
   trendyol: { src: "/integrations/trendyol.svg", alt: "Trendyol" },

@@ -287,6 +287,14 @@ const API_FARA_POARTA = [
    * autentificare la fiecare citire ar fi cost curat.
    */
   "/api/pepita/",
+  /*
+   * Hontrio: intrarea in autorizare, schimbul codului si rutele de citire. Le cheama serverul
+   * Hontrio, cu jetonul lui, fara cookie; o sincronizare citeste zeci de pagini la rand, deci aceeasi
+   * socoteala ca la Pepita. Intrarea in autorizare (`/autorizare`) e o navigare de browser, dar nu
+   * atinge nimic al contului: doar verifica cererea si o tine minte. Aprobarea propriu-zisa e o
+   * actiune de server din panou, care trece prin poarta.
+   */
+  "/api/hontrio/",
   // aterizari OAuth
   "/api/google-analytics/oauth/callback",
   "/api/google-merchant/oauth/callback",

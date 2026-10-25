@@ -6,9 +6,28 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. **Etapa 2 IN
-LUCRU** (acordul lui: „Da”, 25.10.2026). Planul ei si ce s-a bifat: sectiunea „Etapa 2: planul de
-lucru", mai jos.
+**Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. **Etapa 2: pasii
+2.1-2.6 facuti si comisi local (`7b675992`), porti verzi (tsc, 10.994 de probe, lint pe fisierele
+atinse, build:ci). RAMANE 2.7, proba in Chrome**, oprita la jumatate: sesiunea din Chrome-ul lui a
+trecut in timpul probei pe contul lui de administrator (`de000000-0001`, Casa Lumen), deci nu se
+mai poate proba pe `floraria-mirei` fara contul de proba. Intrebarea pusa lui: cu ce cont continuam.
+Planul etapei si bifele: sectiunea „Etapa 2: planul de lucru”, mai jos.
+
+Ce s-a probat deja in Chrome (25.10, pe `floraria-mirei`, inainte de schimbarea sesiunii): editorul
+se deschide cu bara, arborele si previzualizarea; „Editezi: Pagina de produs” muta previzualizarea
+pe produs, cu semnele de editor, fara pasi in istoricul ferestrei; o setare a paginii de produs
+(firimiturile) se vede pe loc; „Anuleaza” o desface; galeria „Schimba designul” se deschide peste
+previzualizare, iar „Detaliat” se aplica pe loc, cu setarile lui in panou. Salvarea ciornei de dupa
+a cazut cu „Magazin negasit”: cererea a plecat cu sesiunea de administrator, iar serverul a refuzat
+corect un magazin care nu era al ei. Starea magazinului de proba a fost pusa la loc din
+starea salvata inainte (copie: `arhiva/date/floraria-mirei-demo-stare-2026-10-25.json`, in
+afara depozitului) si verificata.
+
+Ramase de probat (2.7): ochiul pe o sectiune derivata si ordinea pe Acasa (pe un magazin fara
+pagina din Pagini ca pagina principala), „Adauga sectiune” cu miniaturi, un rand de produse adaugat
+si sters, continut salvat (recenzii) si previzualizarea reincarcata, Stil (culoarea vie, salvarea),
+cosul pe pagina (adresa trece pe `/cos`), Publica si Renunta, butonul „Vizibil/Ascuns” (cu punerea
+la loc), telefonul (cadru de 390 px, meniul „...”), rutele vechi care redirectioneaza.
 
 **Proba vizuala a etapei 1, facuta 25.10.2026** pe `localhost:3000` (baza DEMO, contul
 `onboarding-proba-cf99b5@edinio-demo.test`, magazinul `floraria-mirei`; data abonamentului mutata

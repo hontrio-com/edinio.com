@@ -12,6 +12,8 @@ import { construiesteFatete } from "@/lib/storefront/catalog/facets";
 import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
 import { toateSectiunile } from "@/lib/storefront/design/edit";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionKind } from "@/lib/storefront/design/types";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
@@ -48,8 +50,8 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   if (!kind || !sectionMeta(kind) || !variantParam || !variantMeta(kind, variantParam)) notFound();
 
   const supabase = await createClient();
-  const { data: business } = await supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single();
-  if (!business) notFound();
+  const { data: businessCitit } = await supabase.from("businesses").select(COLOANE_BUSINESS_PUBLIC).eq("slug", slug).single();
+  if (!businessCitit) notFound();
 
   /*
    * Ciorna, pentru proprietar. Publicatul, pentru oricine altcineva.
@@ -62,19 +64,21 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
    * lucruri diferite.
    */
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: storeSettings } = await createAdminClient()
-    .from("store_settings")
-    .select("page_content, storefront_design, storefront_design_draft")
-    .eq("business_id", business.id)
-    .single();
-  const esteProprietar = !!user && user.id === business.user_id;
-  const designDeCitit = esteProprietar && storeSettings?.storefront_design_draft
-    ? storeSettings.storefront_design_draft
-    : storeSettings?.storefront_design;
-  // Randul FARA coloana de ciorna, singurul care are voie sa plece catre client.
-  const faraCiorna = storeSettings
-    ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest; })()
-    : {};
+  const esteProprietar = !!user && user.id === businessCitit.user_id;
+  // Ciorna se citeste separat (`ciornaDeRandat`), numai pentru proprietar: randul de setari pleaca
+  // catre client, deci n-o cere. Etapa 6: si identitatea nepublicata (logo, culoare, fonturi).
+  const [{ data: storeSettings }, ciorna] = await Promise.all([
+    createAdminClient()
+      .from("store_settings")
+      .select("page_content, storefront_design")
+      .eq("business_id", businessCitit.id)
+      .single(),
+    ciornaDeRandat(createAdminClient(), businessCitit.id, esteProprietar),
+  ]);
+  const business = magazinCuCiorna(businessCitit, ciorna.continut);
+  const designDeCitit = ciorna.ciorna ?? storeSettings?.storefront_design;
+  // Randul de setari, fara coloana de ciorna: singurul care are voie sa plece catre client.
+  const faraCiorna = storeSettings ?? {};
   const produseDemo = demoProducts(business.id);
   const paginaProdusDemo = demoProductPage(business.id);
   /*
@@ -95,7 +99,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   // Continutul e demonstrativ, identitatea magazinului nu: designul se alege cu
   // logo-ul, culorile si fontul lui, dar cu bannere, categorii si produse care
   // exista mereu, ca fiecare varianta sa se vada intreaga.
-  const realPageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const realPageContent = pcCuCiorna((storeSettings?.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as StorePageContent;
   const pageContent: StorePageContent = {
     ...realPageContent,
     menu: DEMO_MENU,

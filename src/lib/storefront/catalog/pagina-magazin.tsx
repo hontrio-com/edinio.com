@@ -25,6 +25,8 @@ import { radacinaMagazinCuFiltre, slugCategorie } from "@/lib/storefront/categor
 import { shopHref, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
+import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { citesteFiltreDinAdresa } from "@/lib/storefront/catalog/url";
@@ -89,12 +91,12 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
   const { business, esteProprietar: isOwner } = acces;
 
   const admin = createAdminClient();
-  const { data: storeSettings } = await admin
+  const { data: setariCitite } = await admin
     .from("store_settings")
     // Coloanele de TVA: descrierea din `CollectionPage` scrie „fără TVA" langa pret
     // exact cand o scrie si `<head>`-ul (`preturiFaraTva`). Nu pleaca in browser,
     // vezi `setariDeTrimis`.
-    .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, storefront_design_draft, vat_enabled, prices_include_vat")
+    .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, prices_include_vat")
     .eq("business_id", business.id)
     .single();
 
@@ -110,12 +112,19 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
   // fiindca prima oara cele doua suprafete au divergat tacut exact aici.
   const isPreview = sp.preview === "1";
   const esteEditorDesign = esteEditorDeDesign(sp as { preview?: string; editor?: string }, isOwner);
-  const useDraft = esteEditorDesign && !!storeSettings?.storefront_design_draft;
-  const resolved = resolveDesign(useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design, {
-    primaryColor: business.primary_color ?? "#07c527",
+  // Ciorna se citeste separat (`ciornaDeRandat`), nu in randul de setari care pleaca in browser.
+  // Etapa 6: in editor, si continutul ei nepublicat, peste `page_content` si `business`.
+  const ciorna = await ciornaDeRandat(admin, business.id, esteEditorDesign);
+  const storeSettings = setariCitite && {
+    ...setariCitite,
+    page_content: pcCuCiorna((setariCitite.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as typeof setariCitite.page_content,
+  };
+  const magazin = magazinCuCiorna(business, ciorna.continut);
+  const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
+    primaryColor: magazin.primary_color ?? "#07c527",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
+    coverUrl: magazin.cover_url,
     tagline: business.tagline,
   });
   // Citite o data, aici: le cer si felierea de pe server (`perPage`), si titlul
@@ -601,19 +610,16 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
     || "toate";
 
   /*
-   * Ciorna de design nu are voie sa iasa din functia asta.
-   *
-   * `storeSettings` ajunge INTREG ca prop la o componenta de client, iar React
-   * serializeaza props-urile in HTML: coloana de ciorna — pana la 200 KB de
-   * design nepublicat — ar ajunge in pagina fiecarui vizitator anonim. Tipul
-   * propului n-o contine, dar un tip nu curata nimic la executie.
+   * `storeSettings` ajunge INTREG ca prop la o componenta de client, iar React serializeaza
+   * props-urile in HTML. Coloana de ciorna nici nu se mai cere in rand (o citeste
+   * `ciornaDeRandat`, numai pentru proprietar in editor).
    */
   const setariDeTrimis = storeSettings
     ? (() => {
         // Coloanele de TVA s-au cerut doar pentru descriere. Grila nu le citeste, deci
         // n-au ce cauta in props: ce e acolo ajunge in HTML-ul fiecarui vizitator.
         const { vat_enabled: _tva, prices_include_vat: _preturiCuTva, ...rest } = storeSettings;
-        return { ...rest, storefront_design_draft: null };
+        return rest;
       })()
     : null;
 
@@ -673,7 +679,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
       ) : null}
     <MiniStoreRenderer
       surface="shop"
-      business={pentruBrowser(business)}
+      business={pentruBrowser(magazin)}
       products={products}
       storeSettings={setariDeTrimis as never}
       basePath={basePath}

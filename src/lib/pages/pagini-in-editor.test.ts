@@ -25,8 +25,9 @@ test("⚠⚠ modul editor cere proprietarul SI semnele de editor; altfel pagina 
   assert.match(s, /\{esteEditorDesign \? \(\s*<PaginaVie[\s\S]*?\{blocuriServer\}\s*<\/PaginaVie>\s*\) : blocuriServer\}/);
   // CSS-ul salvat nu se bate cu cel scris in editor.
   assert.match(s, /\{pageCss && !esteEditorDesign \? <style/);
-  // Antetul si subsolul din ciorna, doar in editor (`designDeRandat` cere semnul).
-  assert.match(s, /resolveDesign\(await designDeRandat\(createAdminClient\(\), business\.id, storeSettings\?\.storefront_design, esteEditorDesign\)/);
+  // Antetul si subsolul din ciorna, doar in editor (`ciornaDeRandat` cere semnul), cu continutul ei (etapa 6).
+  assert.match(s, /const ciorna = await ciornaDeRandat\(createAdminClient\(\), business\.id, esteEditorDesign\);/);
+  assert.match(s, /resolveDesign\(ciorna\.ciorna \?\? storeSettings\?\.storefront_design, \{/);
 });
 
 test("⚠ pagina aleasa ca pagina principala trimite la radacina, dar NU in editor", () => {

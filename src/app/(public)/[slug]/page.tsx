@@ -27,6 +27,8 @@ import { citesteFiltreDinAdresa, scrieFiltre } from "@/lib/storefront/catalog/ur
 import { metadataPaginiiPrincipale } from "@/lib/storefront/catalog/metadata-acasa";
 import { grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -206,13 +208,13 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * de numarul total din rezumat. Citite in acelasi val cu produsele, palierul
    * server ar fi adus si tot catalogul, SI pagina.
    */
-  const [{ data: storeSettings }, categoriesData, rezumatRaspuns] = await Promise.all([
+  const [{ data: setariCitite }, categoriesData, rezumatRaspuns, ciorna] = await Promise.all([
     createAdminClient()
       .from("store_settings")
       // Coloanele de TVA sunt necesare pentru eticheta de langa pret: prima pagina
       // randeaza pagina de produs cand magazinul e „un singur produs". Vezi ruta
       // /product/[productSlug], unde lipseau la fel.
-      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, storefront_design_draft, vat_enabled, prices_include_vat, show_vat_label")
+      .select("id, business_id, page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, prices_include_vat, show_vat_label")
       .eq("business_id", business.id)
       .single(),
     fetchAllRows("storefront.home.categories", (from, to) =>
@@ -234,26 +236,28 @@ export default async function SlugPage({ params, searchParams }: Props) {
       .eq("fara_imagini", false)
       .eq("fara_stoc_ascuns", false)
       .maybeSingle(),
+    // Ciorna proprietarului, numai in editor; pentru oricine altcineva nicio citire.
+    ciornaDeRandat(createAdminClient(), business.id, esteEditorDesign),
   ]);
 
   /*
-   * Ciorna de design nu are voie sa iasa din functia asta.
+   * Ciorna nu are voie sa iasa din functia asta, deci nu se cere in randul de setari: o citeste
+   * `ciornaDeRandat`, separat. `storeSettings` ajunge INTREG ca prop la componente de client, iar
+   * React serializeaza props-urile in HTML: cat timp coloana de ciorna era in rand, pana la 200 KB
+   * de design nepublicat ajungeau in pagina fiecarui vizitator anonim.
    *
-   * `storeSettings` ajunge INTREG ca prop la componente de client, iar React
-   * serializeaza props-urile in HTML: coloana de ciorna — pana la 200 KB de
-   * design nepublicat — ajungea in pagina fiecarui vizitator anonim, desi
-   * migratia promitea exact contrariul. Tipul propului n-o contine, dar un tip
-   * nu curata nimic la executie.
+   * Ciorna se randeaza DOAR in editorul de design: pana la Publica, vizitatorii vad neaparat
+   * versiunea publicata. ⚠ Nu pe `preview=1`: il punea si editorul vechi, care nu stia nimic de
+   * ciorne, iar o ciorna ramasa deturna previzualizarea fara sa spuna de ce.
+   *
+   * Etapa 6: in editor, si continutul nepublicat al ciornei, peste `page_content` si `business`.
    */
-  // Ciorna se randeaza DOAR in editorul de design: pana la Publica, vizitatorii
-  // vad neaparat versiunea publicata.
-  //
-  // ⚠ Nu pe `preview=1`. Il pune si „Editeaza magazinul", care nu stie nimic
-  // despre ciorne: acolo o ciorna ramasa de la celalalt editor deturna
-  // previzualizarea, iar comerciantul isi salva modificarile si vedea in dreapta
-  // alt magazin, fara sa i se spuna de ce.
-  const useDraft = esteEditorDesign && !!storeSettings?.storefront_design_draft;
-  const designDeRandat = useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design;
+  const storeSettings = setariCitite && {
+    ...setariCitite,
+    page_content: pcCuCiorna((setariCitite.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as typeof setariCitite.page_content,
+  };
+  const magazin = magazinCuCiorna(business, ciorna.continut);
+  const designDeRandat = ciorna.ciorna ?? storeSettings?.storefront_design;
 
   /*
    * Designul se rezolva AICI, inaintea citirii datelor, nu dupa.
@@ -265,10 +269,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * nu se intampla nimic, fiindca serverul nu ceruse produsele.
    */
   const resolvedMagazin = resolveDesign(designDeRandat, {
-    primaryColor: business.primary_color ?? "#07c527",
+    primaryColor: magazin.primary_color ?? "#07c527",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
+    coverUrl: magazin.cover_url,
     tagline: business.tagline,
   });
 
@@ -313,9 +317,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
     }
     : resolvedMagazin;
 
-  const setariDeTrimis = storeSettings
-    ? (() => { const { storefront_design_draft: _ciorna, ...rest } = storeSettings; return rest as typeof storeSettings; })()
-    : storeSettings;
+  // Randul nu mai are coloana de ciorna (o citeste `ciornaDeRandat`), deci pleaca asa cum e.
+  const setariDeTrimis = storeSettings;
 
   const pcCatalog = (storeSettings?.page_content as Record<string, unknown>) ?? {};
   const faraImagini = pcCatalog.hide_products_without_images === true;
@@ -593,10 +596,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
       // cos din header n-are unde sa duca.
       const opsResolved = resolveDesign(designDeRandat, {
-        primaryColor: business.primary_color ?? "#07c527",
+        primaryColor: magazin.primary_color ?? "#07c527",
         pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
         features: (business.features as Record<string, unknown>) ?? {},
-        coverUrl: business.cover_url,
+        coverUrl: magazin.cover_url,
         tagline: business.tagline,
       });
       // Categoriile pentru header/footer se aduc ca pe orice alta ruta fara
@@ -606,7 +609,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       // cosul nu reapare.
       const opsSearchCategories = await loadSearchCategories(business.id, opsResolved.design);
       const opsChrome = buildChromeData({
-        business,
+        business: magazin,
         pageContent: (storeSettings?.page_content ?? {}) as StorePageContent,
         basePath,
         design: opsResolved.design,
@@ -653,7 +656,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
               <ProductPageDinDesign
                 paginaImplicita={opsResolved.design.product.page}
                 doarImplicit
-                business={pentruBrowser(business)}
+                business={pentruBrowser(magazin)}
                 product={product}
                 storeSettings={setariDeTrimis as never}
                 basePath={basePath}
@@ -771,7 +774,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
               blocks={grup}
               hideNoImage={pc.hide_products_without_images === true}
               hideOutOfStock={pc.hide_out_of_stock_products === true}
-              color={business.primary_color ?? "#07c527"}
+              color={magazin.primary_color ?? "#07c527"}
               basePath={basePath}
               storeSlug={business.slug}
               social={(business.social ?? {}) as Record<string, string>}
@@ -798,7 +801,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       {stilPagina?.css ? <style dangerouslySetInnerHTML={{ __html: stilPagina.css }} /> : null}
       <MiniStoreRenderer
         paginaProprie={paginaProprie}
-        business={pentruBrowser(business)}
+        business={pentruBrowser(magazin)}
         products={products}
         /*
          * Ce s-a INTAMPLAT, nu ce s-a decis.

@@ -17,7 +17,8 @@ import { cuSemnePastrate, sirDinSp } from "@/lib/storefront/preview-sticky";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
-import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CheckoutPageClient } from "@/components/storefront/sections/checkout/CheckoutPageClient";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
@@ -73,12 +74,15 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   // In editorul de design: ciorna proprietarului, ca o comanda aleasa „pagina”
   // sa se vada inainte de Publica. Vezi `ciorna-proprietarului.ts`.
   const esteEditorDesign = esteEditorDeDesign(semneDeEditor(sp), isOwner);
-  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
-  const resolved = resolveDesign(await designDeRandat(admin, business.id, storeSettings?.storefront_design, esteEditorDesign), {
-    primaryColor: business.primary_color ?? "#07c527",
+  // Etapa 6: in editor, continutul nepublicat al ciornei peste ce e in magazin. Numai proprietarul.
+  const ciorna = await ciornaDeRandat(admin, business.id, esteEditorDesign);
+  const magazin = magazinCuCiorna(business, ciorna.continut);
+  const pageContent = pcCuCiorna((storeSettings?.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as StorePageContent;
+  const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
+    primaryColor: magazin.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
+    coverUrl: magazin.cover_url,
     tagline: business.tagline,
   });
 
@@ -134,7 +138,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({
     searchCategories,
-    business: business as never,
+    business: magazin as never,
     pageContent,
     basePath,
     design: resolved.design,
@@ -147,7 +151,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
           <MarcajSectiune sectiune={resolved.design.commerce.checkout}>
             <CheckoutPageClient
               variant={resolved.design.commerce.checkout.variant}
-              color={business.primary_color ?? "#07c527"}
+              color={magazin.primary_color ?? "#07c527"}
               basePath={basePath}
               businessId={business.id}
               shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}

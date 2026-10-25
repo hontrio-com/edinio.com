@@ -512,8 +512,13 @@ Citit in cod inainte:
 - [x] 6.2 (25.10, `store-design.actions.ts`, `publicare-cu-continut.test.ts`; 3 probe, 5 din 5 mutatii prinse; `comutatoare-vechi.ts` sters odata cu singura lui folosire) Serverul: `saveDesignDraft` (context cu continutul, garda pe tot), `publishDesign`
       (continut, apoi design), stergerea lui `elibereazaComutatoare`. Probe. Pana la 6.4 editorul nu
       trimite inca `continut`, deci ciorna si publicarea se poarta exact ca inainte.
-- [ ] 6.3 Magazinul in modul editor: rutele pun continutul ciornei peste date. Probe, si ca un
-      vizitator nu-l vede niciodata.
+- [x] 6.3 (25.10, `ciornaDeRandat` in `ciorna-proprietarului.ts`; 6 rute: acasa, pagina proprie, produs,
+      Magazin (si categorie, brand, cautare), cos, comanda, plus miniaturile de sectiune; 4 probe, 6 din 6
+      mutatii prinse) Magazinul in modul editor: rutele pun continutul ciornei peste date. Probe, si ca un
+      vizitator nu-l vede niciodata. Coloana de ciorna nu se mai cere in niciun rand de setari (pagina
+      principala si Magazin o cereau si o taiau inainte de randare): o citeste numai `ciornaDeRandat`,
+      numai pentru proprietar in editor. Layoutul magazinului (culoarea bannerului de cookie) nu stie de
+      modul editor si ramane pe culoarea publicata.
 - [ ] 6.4 Editorul: continutul in ciorna, fara „Salvează” pe sectiuni, istoric comun, imaginile
       urcate la alegere, reincarcarea previzualizarii, bara si iesirea. Probe.
 - [ ] 6.5 REGISTRU (comportamentul nou, ghidurile de ajutor), porti, proba in Chrome pe magazinul

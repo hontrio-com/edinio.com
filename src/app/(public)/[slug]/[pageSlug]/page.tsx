@@ -34,7 +34,8 @@ import { fonturiDinBlocuri } from "@/lib/pages/fonturi";
 import { claseFonturi, toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
 import { PaginaVie } from "@/components/pages/PaginaVie";
 import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
-import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { SCRIPT_ANIMATII } from "@/lib/pages/animatii";
 import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
 import { areTitluPrincipal, descriereDinBlocuri, titlulPrincipal } from "@/lib/pages/titlul-principal";
@@ -338,9 +339,12 @@ export default async function CustomPage({ params, searchParams }: Props) {
   // Formularele blocurilor de contact le citeste `BlocuriPagina`.
   const { data: storeSettings } = await createAdminClient().from("store_settings").select("page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown").eq("business_id", business.id).single();
 
+  // Etapa 6: in editor, continutul nepublicat al ciornei peste ce e in magazin. Numai proprietarul.
+  const ciorna = await ciornaDeRandat(createAdminClient(), business.id, esteEditorDesign);
+  const magazin = magazinCuCiorna(business, ciorna.continut);
   // Meniul si marimile de logo se citesc acum in buildChromeData, dintr-un
   // singur loc pentru toate paginile publice.
-  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
+  const pageContent = pcCuCiorna((storeSettings?.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as StorePageContent;
 
   // Custom domain detection (links honour basePath).
   const headersList = await headers();
@@ -367,7 +371,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
   const dateStructuratePromise = page.is_published
     ? dateStructuratePagina(supabase, business, page, blocks)
     : Promise.resolve(null);
-  const color = business.primary_color ?? "#07c527";
+  const color = magazin.primary_color ?? "#07c527";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
 
@@ -383,11 +387,11 @@ export default async function CustomPage({ params, searchParams }: Props) {
   // Acelasi design ca pagina de magazin: bara de anunt, header si footer vin din
   // aceeasi configuratie, ca alegerea comerciantului sa nu se opreasca la
   // pagina principala.
-  const resolved = resolveDesign(await designDeRandat(createAdminClient(), business.id, storeSettings?.storefront_design, esteEditorDesign), {
+  const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
     primaryColor: color,
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
+    coverUrl: magazin.cover_url,
     tagline: business.tagline,
   });
   const [searchCategories, dateStructurate] = await Promise.all([
@@ -396,7 +400,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
   ]);
   const chrome = buildChromeData({
     searchCategories,
-    business,
+    business: magazin,
     pageContent: pageContent as StorePageContent,
     basePath,
     design: resolved.design,

@@ -23,7 +23,8 @@ import { ProductPageDinDesign } from "@/components/storefront/sections/product/P
 import { resolveProductOffers } from "@/lib/offers/offers";
 import { esteEditorDeDesign, sablonImpusDin, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import { areSabloanePeCategorii, lantulProdusului, paginaSablonului, sablonulProdusului } from "@/lib/storefront/design/sabloane-produs";
-import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
+import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -273,12 +274,15 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
   // In editorul de design se randeaza ciorna proprietarului si pagina asculta
   // editorul (`StorePageShell`), ca pe pagina principala. Vezi `ciorna-proprietarului.ts`.
   const esteEditorDesign = esteEditorDeDesign(semneDeEditor(sp), user?.id === business.user_id);
-  const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
-  const resolved = resolveDesign(await designDeRandat(createAdminClient(), business.id, storeSettings?.storefront_design, esteEditorDesign), {
-    primaryColor: business.primary_color ?? "#07c527",
+  // Etapa 6: in editor, continutul nepublicat al ciornei peste ce e in magazin. Numai proprietarul.
+  const ciorna = await ciornaDeRandat(createAdminClient(), business.id, esteEditorDesign);
+  const magazin = magazinCuCiorna(business, ciorna.continut);
+  const pageContent = pcCuCiorna((storeSettings?.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as StorePageContent;
+  const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
+    primaryColor: magazin.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
+    coverUrl: magazin.cover_url,
     tagline: business.tagline,
   });
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
@@ -301,7 +305,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     : sablonulProdusului(resolved.design.product, product.id, categoriiProdusului);
   const chrome = buildChromeData({
     searchCategories,
-    business: business as never,
+    business: magazin as never,
     pageContent,
     basePath,
     design: resolved.design,
@@ -340,7 +344,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             paginaImplicita={paginaProdusului}
             categoriiProdusului={categoriiProdusului}
             sablonImpus={sablonImpus}
-            business={pentruBrowser(business) as never}
+            business={pentruBrowser(magazin) as never}
             product={product}
             storeSettings={storeSettings as never}
             basePath={basePath}

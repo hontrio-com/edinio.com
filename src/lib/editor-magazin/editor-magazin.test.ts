@@ -10,7 +10,7 @@ import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { FEREASTRA_LIPIRE_MS, MAX_ISTORIC, anuleaza, istoricGol, noteaza, reface } from "./istoric";
 import { adresaPrevizualizarii, notaPaginii, PAGINI_EDITOR, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
 import { contextDesign, rederiva } from "./derivare";
-import { CHEI_CONTINUT, CHEI_RETRASE, felContinut, nodulCheii } from "./noduri";
+import { CHEI_CONTINUT, CHEI_RETRASE, felBloc, felContinut, nodulCheii } from "./noduri";
 
 /*
  * Logica editorului unic (etapa 2, 25.10.2026), fara React: anuleaza/refa,
@@ -260,6 +260,24 @@ test("fiecare sectiune a designului are un nod de continut", () => {
   for (const s of toate) assert.ok(felContinut(s), `${s.kind} (${s.id}) n-are nod`);
   assert.equal(felContinut(d.home.find((s) => s.id === "featured")!), "recomandate");
   assert.equal(felContinut(d.home.find((s) => s.id === "r1")!), "rand");
+});
+
+test("⚠ blocurile cu continut au fiecare nodul lor, cu cheile lor; restul n-au nod", () => {
+  // O salvare din „Beneficiile” nu are voie sa ia cu ea ce s-a scris intre timp
+  // in „Întrebările frecvente”: de aceea un nod pe bloc, nu unul pe pagina.
+  const cuNod = { beneficii: "benefits_section", cum_functioneaza: "how_it_works_section", intrebari: "faq_section", livrare: "delivery_estimate", cumparare: "button_effect" };
+  for (const [tip, cheie] of Object.entries(cuNod)) {
+    const nod = felBloc(tip);
+    assert.ok(nod, tip);
+    assert.deepEqual(CHEI_CONTINUT[nod], [cheie], tip);
+  }
+  for (const tip of ["titlu", "pret", "variante", "incredere", "dovada", "insigna", "oferte", "descriere"]) {
+    assert.equal(felBloc(tip), null, tip);
+  }
+  // Comutatoarele de vizibilitate dublate de ochiul blocului au iesit din editor.
+  for (const cheie of ["trust_badges_enabled", "show_social_proof", "show_quality_badge", "trust_badges"]) {
+    assert.ok(CHEI_RETRASE[cheie], cheie);
+  }
 });
 
 // ── Ce scrie fiecare nod ─────────────────────────────────────────────────────

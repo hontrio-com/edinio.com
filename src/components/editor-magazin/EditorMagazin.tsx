@@ -7,7 +7,7 @@ import { newProductSection } from "@/lib/store-sections";
 import { addSection, ID_BARA_ANUNT, toateSectiunile, updateSection } from "@/lib/storefront/design/edit";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { PREVIEW_MESSAGE, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
+import { PREVIEW_MESSAGE, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { firstVariant } from "@/lib/storefront/design/registry";
 import type { SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
@@ -16,6 +16,7 @@ import { adresaPrevizualizarii, paginaSectiunii, sectiunilePaginii, type CheiePa
 import { ArboreSectiuni } from "./ArboreSectiuni";
 import { BaraEditor } from "./BaraEditor";
 import { GalerieAdauga } from "./GalerieAdauga";
+import { PanouBloc } from "./PanouBloc";
 import { PanouNod } from "./PanouNod";
 import { PanouStil } from "./continut/PanouStil";
 import { useCiornaDesign } from "./useCiornaDesign";
@@ -172,6 +173,8 @@ export function EditorMagazin({
     ];
     return laPornire.some((s) => s.id === sectiuneInitiala) ? sectiuneInitiala : null;
   });
+  /** Blocul deschis in panou (etapa 4), din sectiunea `selectat`. */
+  const [blocSelectat, setBlocSelectat] = useState<string | null>(null);
   /** Randul din arbore de sub mouse: conturul lui se vede in previzualizare. */
   const [peste, setPeste] = useState<string | null>(null);
   const [galerieDesign, setGalerieDesign] = useState<string | null>(null);
@@ -209,6 +212,8 @@ export function EditorMagazin({
 
   // Un nod disparut (un rand sters, o sectiune scoasa prin Anuleaza) nu are panou:
   // `sectiuneSelectata` e `null`, deci se vede arborele, fara stare de curatat.
+  // La fel un bloc care nu mai e al sectiunii (alta varianta, fara el).
+  const blocDeschis = (blocSelectat && sectiuneSelectata?.blocks?.find((b) => b.id === blocSelectat)) || null;
 
   // ── Ce se trimite catre previzualizare ──
   /**
@@ -250,7 +255,9 @@ export function EditorMagazin({
    * Sectiuni, si randul din arbore de sub mouse, doar cand arborele se vede. Ce
    * se deseneaza decide previzualizarea (`ConturEditor`); selectia ramane aici.
    */
-  const selectatVazut = fila === "sectiuni" && sectiuneSelectata ? sectiuneSelectata.id : null;
+  const selectatVazut = fila !== "sectiuni" || !sectiuneSelectata
+    ? null
+    : blocDeschis ? idBloc(sectiuneSelectata.id, blocDeschis.id) : sectiuneSelectata.id;
   const pesteVazut = sectiuneSelectata ? null : peste;
   const evidentiereAcum = useRef({ selectat: selectatVazut, peste: pesteVazut });
   useEffect(() => { evidentiereAcum.current = { selectat: selectatVazut, peste: pesteVazut }; }, [selectatVazut, pesteVazut]);
@@ -285,12 +292,26 @@ export function EditorMagazin({
     // Arborele dispare sub panou fara sa mai primeasca „mouse-ul a iesit”.
     setPeste(null);
     setSelectat(id);
+    setBlocSelectat(null);
     arataInPrevizualizare(id);
   }, [arataInPrevizualizare]);
+
+  const selecteazaBloc = useCallback((idSectiune: string, idBlocului: string) => {
+    setPeste(null);
+    setSelectat(idSectiune);
+    setBlocSelectat(idBlocului);
+    arataInPrevizualizare(idBloc(idSectiune, idBlocului));
+  }, [arataInPrevizualizare]);
+
+  const inapoiLaArbore = useCallback(() => {
+    setSelectat(null);
+    setBlocSelectat(null);
+  }, []);
 
   const schimbaPagina = useCallback((p: CheiePagina) => {
     setPagina(p);
     setSelectat(null);
+    setBlocSelectat(null);
     setPeste(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
@@ -309,13 +330,15 @@ export function EditorMagazin({
          * in sertar, previzualizarea arata prima pagina. Atunci editorul trece pe
          * pagina ei, altfel clicul n-ar fi avut ce nod sa deschida.
          */
-        const id = e.data.sectionId;
+        // Un bloc vine ca `<sectiune>/<bloc>` (`preview-protocol.ts`).
+        const { sectiune: id, bloc } = despartireId(e.data.sectionId);
         const unde = paginaSectiunii(design, id, pagina, pagini);
         if (!unde) return;
         if (unde !== pagina) schimbaPagina(unde);
         setFila("sectiuni");
         setPeste(null);
         setSelectat(id);
+        setBlocSelectat(bloc);
         setVedereMobil("panou");
       }
     }
@@ -385,13 +408,22 @@ export function EditorMagazin({
           <div className="flex-1 overflow-y-auto px-4 pt-4">
             {fila === "stil" ? (
               <PanouStil continut={continut} />
+            ) : sectiuneSelectata && blocDeschis ? (
+              <PanouBloc
+                key={`${sectiuneSelectata.id}/${blocDeschis.id}`}
+                sectiune={sectiuneSelectata}
+                bloc={blocDeschis}
+                ciorna={ciorna}
+                continut={continut}
+                onInapoi={inapoiLaArbore}
+              />
             ) : sectiuneSelectata ? (
               <PanouNod
                 key={sectiuneSelectata.id}
                 sectiune={sectiuneSelectata}
                 ciorna={ciorna}
                 continut={continut}
-                onInapoi={() => setSelectat(null)}
+                onInapoi={inapoiLaArbore}
                 onSchimbaDesignul={(id) => { setGalerieDesign(id); setVedereMobil("previzualizare"); }}
                 businessId={magazin.id}
                 categorii={categorii}
@@ -403,6 +435,7 @@ export function EditorMagazin({
               <div className="pb-6">
                 <ArboreSectiuni
                   ciorna={ciorna} pagina={pagina} magazin={pagini} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
+                  blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc}
                   nesalvat={nesalvat} onAdauga={() => { setAdaugaDeschis(true); setVedereMobil("previzualizare"); }}
                   paginaAcasa={paginaAcasa}
                 />

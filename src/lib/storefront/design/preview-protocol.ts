@@ -133,3 +133,21 @@ export const SECTION_ATTR = "data-st-section";
 
 /** Numele sectiunii, langa id, ca stratul de contur sa-l scrie fara sa caute in design. */
 export const ETICHETA_ATTR = "data-st-eticheta";
+
+/**
+ * Atributul pus pe fiecare bloc randat in editor (etapa 4), cu id-ul lui intreg:
+ * `<sectiune>/<bloc>`. In mesaje (`select`, `evidentiere`) un bloc circula sub
+ * acelasi id; id-urile de sectiune nu contin „/”, deci nu se pot confunda.
+ */
+export const BLOC_ATTR = "data-st-bloc";
+
+/** Id-ul unui bloc in protocol. */
+export function idBloc(idSectiune: string, idBlocului: string): string {
+  return `${idSectiune}/${idBlocului}`;
+}
+
+/** Sectiunea si, daca e cazul, blocul dintr-un id din protocol. */
+export function despartireId(id: string): { sectiune: string; bloc: string | null } {
+  const i = id.indexOf("/");
+  return i < 0 ? { sectiune: id, bloc: null } : { sectiune: id.slice(0, i), bloc: id.slice(i + 1) };
+}

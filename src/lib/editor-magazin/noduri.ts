@@ -33,6 +33,14 @@ export type FelContinut =
   | "despre"
   | "contact"
   | "produs"
+  // Blocurile paginii de produs care au continut al lor (etapa 4): fiecare isi
+  // salveaza cheile separat, ca o salvare in „Beneficiile” sa nu ia cu ea ce s-a
+  // scris intre timp in „Întrebările frecvente”.
+  | "produs_beneficii"
+  | "produs_pasi"
+  | "produs_intrebari"
+  | "produs_livrare"
+  | "produs_cumparare"
   | "magazin"
   | "card"
   | "cos"
@@ -92,10 +100,12 @@ export const CHEI_CONTINUT: Record<FelContinut | typeof NOD_STIL, readonly strin
   galerie: [],
   despre: [],
   contact: [],
-  produs: [
-    "trust_badges_enabled", "trust_badges", "benefits_section", "how_it_works_section", "faq_section",
-    "image_zoom", "delivery_estimate", "show_social_proof", "show_quality_badge", "button_effect",
-  ],
+  produs: ["image_zoom"],
+  produs_beneficii: ["benefits_section"],
+  produs_pasi: ["how_it_works_section"],
+  produs_intrebari: ["faq_section"],
+  produs_livrare: ["delivery_estimate"],
+  produs_cumparare: ["button_effect"],
   magazin: [],
   card: ["show_category_badges", "new_badge", "price_range_display"],
   cos: ["sticky_cart_bar"],
@@ -114,7 +124,27 @@ export const CHEI_RETRASE: Readonly<Record<string, string>> = {
   show_shipping_progress: "vizibilitatea pragului de transport o da ochiul din arbore",
   hero_show_content: "varianta hero-ului se alege din galerie („Doar imagini” / „Imagine cu text peste”)",
   delivery_time: "se completeaza in Setari > Livrare; editorul doar o citea",
+  trust_badges_enabled: "vizibilitatea garantiilor de pe pagina de produs o da ochiul blocului „Garantiile”",
+  show_social_proof: "vizibilitatea contorului de vizitatori o da ochiul blocului lui",
+  show_quality_badge: "vizibilitatea etichetei „Calitate verificata” o da ochiul blocului ei",
+  trust_badges: "cardurile nu le afiseaza nicio varianta a paginii de produs (texte fixe in cod); vezi REGISTRU.md, D",
 };
+
+/**
+ * Nodul de continut al unui bloc din pagina de produs, cand blocul are continut
+ * de scris in editor; `null` cand continutul vine din alta parte (fisa produsului,
+ * Oferte, Setari) sau blocul n-are deloc.
+ */
+export function felBloc(tip: string): FelContinut | null {
+  switch (tip) {
+    case "beneficii": return "produs_beneficii";
+    case "cum_functioneaza": return "produs_pasi";
+    case "intrebari": return "produs_intrebari";
+    case "livrare": return "produs_livrare";
+    case "cumparare": return "produs_cumparare";
+    default: return null;
+  }
+}
 
 /** Nodul caruia ii apartine o cheie, sau `null` cand nu e a niciunuia. */
 export function nodulCheii(cheie: string): FelContinut | typeof NOD_STIL | null {

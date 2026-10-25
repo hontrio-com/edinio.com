@@ -1,13 +1,16 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronRight, Eye, EyeOff, Plus } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { PageIcon } from "@/components/pages/icon-registry";
 import { Callout } from "@/components/ui/callout";
 import { SectionList } from "@/components/store-editor/SectionList";
-import { comutaBaraDeAnunt, duplicateSection, ID_BARA_ANUNT, moveSection, removeSection, toggleSection } from "@/lib/storefront/design/edit";
+import { comutaBloc, mutaBloc, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { comutaBaraDeAnunt, duplicateSection, ID_BARA_ANUNT, moveSection, removeSection, schimbaBlocurile, toggleSection } from "@/lib/storefront/design/edit";
+import { idBloc } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
-import { felContinut, type FelContinut } from "@/lib/editor-magazin/noduri";
+import { felBloc, felContinut, type FelContinut } from "@/lib/editor-magazin/noduri";
 import { notaPaginii, PAGINI_EDITOR, sectiunilePaginii, type CheiePagina, type MagazinPentruPagini } from "@/lib/editor-magazin/pagini";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import type { CiornaDesign } from "./useCiornaDesign";
@@ -20,6 +23,80 @@ import type { CiornaDesign } from "./useCiornaDesign";
  * ochiul, se duplica si se sterg (`SectionList`, mutat din editorul de design).
  * Clic pe un rand deschide setarile lui in acelasi panou.
  */
+
+/**
+ * Blocurile unei sectiuni, sub randul ei, pe zone (etapa 4): sagetile le muta in
+ * zona lor, ochiul le ascunde pe cele optionale, lacatul spune de ce restul nu se
+ * ascund, iar clicul deschide panoul blocului. Fara tragere: blocurile sunt mici,
+ * iar sagetile merg si pe telefon, si de la tastatura.
+ */
+function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, nesalvat }: {
+  sectiune: SectionInstance;
+  aplica: CiornaDesign["aplica"];
+  blocSelectat: string | null;
+  onSelectBloc: (idSectiune: string, idBlocului: string) => void;
+  onPeste: (id: string | null) => void;
+  nesalvat: (fel: FelContinut | null) => boolean;
+}) {
+  const schema = schemaBlocurilor(sectiune.kind, sectiune.variant);
+  const blocuri = sectiune.blocks;
+  if (!schema || !blocuri) return null;
+  const schimba = (operatia: Parameters<typeof schimbaBlocurile>[2], cheie: string) =>
+    aplica((d: StoreDesign) => schimbaBlocurile(d, sectiune.id, operatia), cheie);
+  const actiune = "w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:pointer-events-none";
+
+  return (
+    <div className="ml-4 mt-1 mb-1 pl-3 border-l border-border space-y-2.5">
+      {schema.zone.map((zona) => {
+        const aleZonei = blocuri.filter((b) => schema.tipuri[b.type]?.zona === zona.id);
+        if (aleZonei.length === 0) return null;
+        return (
+          <div key={zona.id}>
+            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{zona.label}</p>
+            <ul className="space-y-1">
+              {aleZonei.map((b, i) => {
+                const meta = schema.tipuri[b.type];
+                const id = idBloc(sectiune.id, b.id);
+                return (
+                  <li key={b.id} onMouseEnter={() => onPeste(id)} onMouseLeave={() => onPeste(null)}
+                    className={`rounded-lg border bg-surface ${blocSelectat === b.id ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
+                    <div className="flex items-center gap-0.5 pl-2 pr-1">
+                      <button type="button" onClick={() => onSelectBloc(sectiune.id, b.id)} className="flex-1 min-w-0 flex items-center gap-2 py-2 text-left">
+                        <PageIcon name={meta.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className={`text-xs font-medium truncate ${b.enabled ? "text-foreground" : "text-muted-foreground"}`}>{meta.label}</span>
+                        {!b.enabled && <span className="shrink-0 text-[10px] text-muted-foreground">ascuns</span>}
+                        {nesalvat(felBloc(b.type)) && <PunctNesalvat />}
+                      </button>
+                      <button type="button" disabled={i === 0} aria-label={`Mută mai sus: ${meta.label}`} className={actiune}
+                        onClick={() => schimba((l, s) => mutaBloc(l, s, b.id, -1), "ordine-blocuri")}>
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" disabled={i === aleZonei.length - 1} aria-label={`Mută mai jos: ${meta.label}`} className={actiune}
+                        onClick={() => schimba((l, s) => mutaBloc(l, s, b.id, 1), "ordine-blocuri")}>
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                      {meta.obligatoriu ? (
+                        <span title={meta.obligatoriu} className="w-7 h-7 flex items-center justify-center text-muted-foreground/60">
+                          <Lock className="h-3 w-3" aria-hidden="true" />
+                          <span className="sr-only">{meta.obligatoriu}</span>
+                        </span>
+                      ) : (
+                        <button type="button" aria-label={b.enabled ? `Ascunde: ${meta.label}` : `Arată: ${meta.label}`} className={actiune}
+                          onClick={() => schimba((l, s) => comutaBloc(l, s, b.id), `ochi-bloc:${sectiune.id}:${b.id}`)}>
+                          {b.enabled ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Randul unei sectiuni fixe (bara de anunt, antet, subsol, pagina de produs...). */
 function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi, onPeste }: {
@@ -72,12 +149,15 @@ function Titlu({ children }: { children: React.ReactNode }) {
   return <p className="px-1 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
 }
 
-export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, onPeste, nesalvat, onAdauga, paginaAcasa }: {
+export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa }: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
   magazin: MagazinPentruPagini;
   selectat: string | null;
   onSelect: (id: string) => void;
+  /** Blocul deschis in panou, din sectiunea `selectat`. */
+  blocSelectat: string | null;
+  onSelectBloc: (idSectiune: string, idBlocului: string) => void;
   /** Mouse-ul pe un rand (id) sau iesit (`null`): conturul din previzualizare. */
   onPeste: (id: string | null) => void;
   /** Are nodul continut nesalvat? */
@@ -145,8 +225,16 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, on
       ) : (
         <ul className="space-y-1.5">
           {sectiuni.map((s) => (
-            <RandFix key={s.id} sectiune={s} eticheta={sectionMeta(s.kind)?.label ?? s.kind} selectat={selectat === s.id}
-              nesalvat={nesalvat(felContinut(s))} onSelect={() => onSelect(s.id)} onPeste={onPeste} />
+            <Fragment key={s.id}>
+              <RandFix sectiune={s} eticheta={sectionMeta(s.kind)?.label ?? s.kind} selectat={selectat === s.id && !blocSelectat}
+                nesalvat={nesalvat(felContinut(s))} onSelect={() => onSelect(s.id)} onPeste={onPeste} />
+              {s.blocks && (
+                <li>
+                  <ArboreBlocuri sectiune={s} aplica={aplica} blocSelectat={selectat === s.id ? blocSelectat : null}
+                    onSelectBloc={onSelectBloc} onPeste={onPeste} nesalvat={nesalvat} />
+                </li>
+              )}
+            </Fragment>
           ))}
         </ul>
       )}

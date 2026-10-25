@@ -62,21 +62,21 @@ const aprinsIn = (cheie: string) => (c: ContextBlocuri) => obiect(c.pageContent[
 // Motivele, o singura data: aceleasi in ambele variante. Le citeste omul in
 // editor, deci cu diacritice.
 const DE_CE = {
-  titlu: "E titlul principal al paginii (H1), după care o găsește Google.",
-  pret: "Prețul trebuie să se vadă înainte de comandă.",
-  variante: "Fără ele clientul nu poate alege mărimea sau culoarea.",
-  stoc: "Anunță stocul și precomanda, cu termenul ei.",
-  personalizare: "Câmpurile intră în preț și în comandă.",
-  cumparare: "Comanda, coșul și nota despre garanția legală (OUG 18/2026).",
-  set: "Apare doar când ai o ofertă așezată lângă preț; se reglează din Oferte.",
-  oferte: "Apar doar când ai oferte pentru produs; se reglează din Oferte.",
+  titlu: "Nu se ascunde: e titlul principal al paginii (H1), după care o găsește Google.",
+  pret: "Nu se ascunde: prețul trebuie să se vadă înainte de comandă.",
+  variante: "Nu se ascunde: fără ele clientul nu poate alege mărimea sau culoarea.",
+  stoc: "Nu se ascunde: anunță stocul și precomanda, cu termenul ei.",
+  personalizare: "Nu se ascunde: câmpurile intră în preț și în comandă.",
+  cumparare: "Nu se ascunde: comanda, coșul și nota despre garanția legală (OUG 18/2026).",
+  set: "Se arată doar când ai o ofertă așezată lângă preț; o reglezi din Oferte.",
+  oferte: "Se arată doar când ai oferte pentru produs; le reglezi din Oferte.",
   /*
    * Fara ochi, dar nu din motive de bani: comutatorul ei ramane in continut,
    * fiindca il citeste si varianta Detaliat, unde estimarea e un rand din caseta
    * „Detalii produs”, nu o bucata a ei. Scos de acolo, cine foloseste Detaliat
    * n-ar mai fi avut cum s-o porneasca sau s-o opreasca.
    */
-  livrare: "Se arată când pornești „Estimarea livrării” mai jos, și tot de acolo o oprești.",
+  livrare: "Se arată când pornești „Arată estimarea livrării” mai jos; tot de acolo o oprești.",
 };
 
 /** Clasic: coloana de cumparare langa galerie, apoi sectiunile de sub produs. */

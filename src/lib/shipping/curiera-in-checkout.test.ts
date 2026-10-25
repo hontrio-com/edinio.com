@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { FARA_API_DE_TARIF, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
 import { normalizeazaPuncteCuriera } from "@/lib/curiera/puncte";
+import { CURIERI_CU_LOCKERE } from "@/lib/shipping/curieri-cu-puncte";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -109,9 +110,11 @@ test("⚠ fiecare configurare citita e si CERUTA in select, la cotare si la punc
 
 test("⚠ curiera e in CURIERI_CU_LOCKERE, iar lista si ramurile de puncte spun acelasi lucru", () => {
   const s = sursaCurata();
-  const lista = /const CURIERI_CU_LOCKERE = new Set\(\[([^\]]*)\]\)/.exec(s)?.[1];
-  assert.ok(lista, "CURIERI_CU_LOCKERE nu mai e o lista literala pe un rand");
-  const curieri = [...lista.matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
+  /* Din 25.10.2026 lista sta in `curieri-cu-puncte` (o citeste si panoul de livrare), deci se
+     importa. Cotarea trebuie sa foloseasca CHIAR lista aceea: o copie locala ar putea minti. */
+  assert.match(s, /import \{ CURIERI_CU_LOCKERE \} from "@\/lib\/shipping\/curieri-cu-puncte";/);
+  assert.doesNotMatch(s, /const CURIERI_CU_LOCKERE\b/, "cotarea are iar o copie a ei a listei");
+  const curieri = [...CURIERI_CU_LOCKERE].sort();
   assert.ok(curieri.includes("curiera"), "Curiera nu mai poate cere puncte: paza o refuza inaintea citirii");
 
   /* Un curier in lista fara ramura ar costa o citire ca sa intoarca []; o ramura fara lista n-ar rula. */

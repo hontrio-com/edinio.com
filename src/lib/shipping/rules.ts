@@ -22,6 +22,39 @@ export interface ShippingZone {
   price: number;
   auto_price?: boolean;
   label?: string;
+  /**
+   * Pretul fix al livrarii la punct (locker, punct de ridicare), scris de comerciant, in
+   * locul cotatiei curierului sau al tarifului zonei. Lipsa = ca pana la 25.10.2026: punctul
+   * costa cat livrarea la adresa. Vezi `aplicaPretulLaPunct`.
+   */
+  locker_price?: number;
+  /**
+   * Sameday: se ofera si punctele PUDO („Sameday Point”, tejghele in magazine partenere), pe
+   * langa easybox. Lipsa = DA, ca pana acum; doar `false` le scoate. Vezi `aratiSamedayPoint`.
+   */
+  pudo?: boolean;
+}
+
+/**
+ * Pretul fix la punct, pus peste optiunile de baza ale fiecarui curier care il are in zona.
+ *
+ * E pret de BAZA: se pune inaintea filtrului de rezerve la 0 lei si a regulilor, deci
+ * regulile (transport gratuit peste o suma, adaos) se aplica peste el, iar o cotatie picata
+ * nu mai duce punctul la zero. Optiunile la adresa raman neatinse. Intoarce optiuni noi.
+ */
+export function aplicaPretulLaPunct<T extends { courier?: string; deliveryType: string; price: number }>(
+  options: T[],
+  zones: Record<string, ShippingZone>,
+): T[] {
+  return options.map((o) => {
+    const fix = o.deliveryType === "locker" && o.courier ? zones[o.courier]?.locker_price : undefined;
+    return typeof fix === "number" ? { ...o, price: fix } : o;
+  });
+}
+
+/** Se ofera „Sameday Point” (PUDO) la checkout? Doar `pudo: false` in zona il scoate. */
+export function aratiSamedayPoint(zone: ShippingZone | undefined): boolean {
+  return zone?.pudo !== false;
 }
 
 export type ShippingCondition =
@@ -293,6 +326,13 @@ export function parseShippingZones(raw: unknown): Record<string, ShippingZone> {
     if (typeof z.auto_price === "boolean") zona.auto_price = z.auto_price;
     const eticheta = toStr(z.label).trim();
     if (eticheta) zona.label = eticheta;
+    /* ⚠ Pretul la punct numai cand e chiar un numar: casuta golita din panou trimite sir gol
+       sau nimic, si inseamna „ca la adresa”, nu „gratuit”. `toNum` ar fi facut din ea un 0. */
+    const laPunct = z.locker_price;
+    if (laPunct !== null && laPunct !== undefined && laPunct !== "" && Number.isFinite(Number(laPunct))) {
+      zona.locker_price = round2(Math.max(0, Number(laPunct)));
+    }
+    if (typeof z.pudo === "boolean") zona.pudo = z.pudo;
 
     iesire[cheie] = zona;
   }

@@ -18,6 +18,7 @@ import {
   SINONIME_CATEGORIE,
 } from "./integrari-catalog";
 import { PROVIDER_LOGOS, logoSize, type LogoKey } from "./logos";
+import { CURIERI_CU_LOCKERE } from "../shipping/curieri-cu-puncte";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const PANOU = join(AICI, "..", "..", "app", "(dashboard)", "dashboard", "features", "page.tsx");
@@ -465,23 +466,16 @@ test("punct de ridicare arată exact curierii unde cumpărătorul chiar alege pu
     comerciantul după comandă, deci un „locker" pe cardul lui ar promite
     cumpărătorului o alegere pe care n-o are.
 
-    Sursa adevărului e `CURIERI_CU_LOCKERE` din `shipping.actions.ts`, citită de
-    aici ca să nu ajungă două liste ale aceluiași lucru.
+    Sursa adevărului e `CURIERI_CU_LOCKERE` din `shipping/curieri-cu-puncte`, lista
+    pe care o folosește cotarea punctelor, importată de aici ca să nu ajungă două
+    liste ale aceluiași lucru.
   */
   const ID_LA_CHEIE: Record<string, LogoKey> = {
     sameday: "sameday", "fan-courier": "fanCourier", dpd: "dpd", cargus: "cargus",
     gls: "gls", posta: "postaRomana", innoship: "innoship", packeta: "packeta",
     smartship: "smartship", shipo: "shipo", ups: "ups", curiera: "curiera", epacket: "epacket",
   };
-  const sursa = readFileSync(
-    join(AICI, "..", "..", "lib", "actions", "shipping.actions.ts"),
-    "utf8",
-  );
-  const linia = /const CURIERI_CU_LOCKERE = new Set\(\[([^\]]+)\]\)/.exec(sursa);
-  assert.ok(linia, "n-am găsit CURIERI_CU_LOCKERE: s-a mutat sau i s-a schimbat forma");
-  const cuPuncte = new Set(
-    [...linia[1].matchAll(/"([^"]+)"/g)].map((m) => ID_LA_CHEIE[m[1]]),
-  );
+  const cuPuncte = new Set([...CURIERI_CU_LOCKERE].map((id) => ID_LA_CHEIE[id]));
   assert.equal(cuPuncte.has(undefined as unknown as LogoKey), false, "curier cu lockere fără cheie știută");
 
   const gasite = INTEGRARI.filter((i) => potrivire(i, "punct de ridicare")).map((i) => i.cheie);

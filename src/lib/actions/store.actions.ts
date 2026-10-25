@@ -605,7 +605,7 @@ export async function updateShippingConfig(
     shipping_enabled: boolean;
     free_shipping_threshold: number | null;
     min_order_amount: number | null;
-    shipping_zones: Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
+    shipping_zones: Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string; locker_price?: number; pudo?: boolean }>;
     // Clase de transport + reguli condiționale (Faza 1). Sanitizate defensiv la salvare.
     shipping_classes?: ShippingClass[];
     shipping_rules?: ShippingRule[];

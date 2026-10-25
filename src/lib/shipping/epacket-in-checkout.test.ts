@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { FARA_API_DE_TARIF, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
 import { despartaIdPunct, idPunctCheckout } from "@/lib/epacket/nomenclator";
+import { CURIERI_CU_LOCKERE } from "@/lib/shipping/curieri-cu-puncte";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -55,7 +56,7 @@ test("⚠⚠ ramura epacket exista in bucla, inaintea generic-ului, sincrona si 
 
 test("⚠ punctele: curier stiut, cache pe oras, fara filtrare la iesire, id cu reteaua", () => {
   const s = sursaCurata();
-  assert.match(s, /const CURIERI_CU_LOCKERE = new Set\(\[[^\]]*"epacket"[^\]]*\]\);/);
+  assert.equal(CURIERI_CU_LOCKERE.has("epacket"), true, "paza ar refuza punctele e-packet inaintea citirii");
   assert.match(s, /: courier === "epacket" \? `:\$\{\(city \?\? ""\)\.trim\(\)\.toLowerCase\(\)\}`/, "orasul nu intra in cheia de cache");
   assert.match(s, /const filtreaza = [^;]*courier !== "epacket"/, "lista e-packet s-ar filtra pe un oras scris altfel");
   const ramura = s.slice(s.indexOf('if (courier === "epacket") {'));

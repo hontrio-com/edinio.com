@@ -30,6 +30,7 @@ import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEnt
 import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
 import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
+import { CURIERI_CU_LOCKERE } from "@/lib/shipping/curieri-cu-puncte";
 import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import { deleteAccount, sendMfaOtp, verifyAndEnableMfaEmail, verifyAndDisableMfaEmail, schimbaParola } from "@/lib/actions/auth.actions";
 import { BillingSection } from "@/components/dashboard/BillingSection";
@@ -226,6 +227,10 @@ interface ShippingMethodConfig {
   price: number;
   auto_price?: boolean;
   label?: string;
+  /** Pretul fix la punct (locker); lipsa = cat la adresa. Vezi `aplicaPretulLaPunct`. */
+  locker_price?: number;
+  /** Sameday: arata si punctele PUDO („Sameday Point”); doar `false` le scoate. */
+  pudo?: boolean;
 }
 
 interface ShippingConfig {
@@ -1539,6 +1544,43 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                               />
                               <span className="text-xs text-muted-foreground">lei</span>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Livrarea la punct: pret propriu si, la Sameday, punctele PUDO (25.10.2026). */}
+                        {zone.enabled && canToggle && needsIntegration && CURIERI_CU_LOCKERE.has(method.id) && (
+                          <div className="px-3.5 pb-3 space-y-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">Preț la punct (locker):</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={zone.locker_price ?? ""}
+                                placeholder="ca la adresă"
+                                aria-label={`Preț la punct, ${method.label}`}
+                                onChange={(e) => {
+                                  // Casuta goala inseamna „cat la adresa”, nu „gratuit”.
+                                  const v = e.target.value.trim();
+                                  const locker_price = v === "" ? undefined : Math.max(0, parseFloat(v) || 0);
+                                  setShippingZones(z => ({ ...z, [method.id]: { ...zone, locker_price } }));
+                                }}
+                                className="w-24 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground text-right focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+                              />
+                              <span className="text-xs text-muted-foreground">lei</span>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">Lasă gol ca punctul să coste cât livrarea la adresă.</p>
+                            {method.id === "sameday" && (
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={zone.pudo !== false}
+                                  onChange={(e) => setShippingZones(z => ({ ...z, [method.id]: { ...zone, pudo: e.target.checked } }))}
+                                  className="accent-primary w-3.5 h-3.5"
+                                />
+                                <span className="text-xs text-foreground">Arată și Sameday Point (ridicare din magazinele partenere), pe lângă easybox</span>
+                              </label>
+                            )}
                           </div>
                         )}
 

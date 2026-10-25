@@ -10,8 +10,8 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 (blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
 sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte
 importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele paginii de produs, decizia lui:
-„Din editor, pe categorii”) FACUT si PROBAT** (pasii 4b.1-4b.4). **Etapa 4 e incheiata**; urmeaza etapa 5,
-doar cu acordul lui. Intrebarea despre teme a fost pusa si a ramas
+„Din editor, pe categorii”) FACUT si PROBAT** (pasii 4b.1-4b.4). **Etapa 4 e incheiata.** **Etapa 5
+(paginile proprii in editorul unic) IN LUCRU**, cu acordul lui („Continua”): planul in „Etapa 5”. Intrebarea despre teme a fost pusa si a ramas
 fara raspuns; etapa 4 nu depinde de ea, deci ramane deschisa pentru lista lui de la final. Planul si
 bifele: sectiunea „Etapa 4: planul de lucru”.
 
@@ -359,6 +359,58 @@ Shopify, cu coloana noua; sau amandoua.)
       publica a ramas Clasic, fara marcaje. Stergerea cu confirmare readuce Implicit; consola fara
       erori ale aplicatiei. Vazut: o ciorna desfacuta pana la starea publicata ramane in coloana
       (REGISTRU, D).
+
+## Etapa 5: planul de lucru (scris 25.10.2026, inainte de cod; acordul lui: „Continua”)
+
+Tinta din „Etapele”: paginile pe acelasi model, cu un convertor din `custom_pages` (blocurile
+editorului de pagini devin blocuri intr-o sectiune „Conținut liber”). Citit in cod inainte: paginile
+se fac azi intr-un ecran separat, `PageBuilder` (`/dashboard/pages/[id]/edit`): panza randata in
+panou (nu in cadru), ~20 de tipuri de blocuri (`blocks.types.ts`), coloane cu blocuri in ele
+(`block-tree.ts`), setarile fiecarui bloc (`BlockSettings`), titlul, adresa, publicarea, SEO si CSS
+ale paginii, salvare explicita cu versiune (`updatePage`, garda pe `updated_at`). Pe magazin pagina
+se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de panza editorului).
+
+### Deciziile etapei (de ce asa)
+
+1. **Paginile se editeaza in editorul unic**, nu intr-un ecran separat: „Editezi” primeste si
+   paginile proprii. Previzualizarea e pagina adevarata a magazinului, in cadru, cu antet si subsol,
+   ca restul editorului; arborele arata antetul, „Conținut liber” cu blocurile paginii (si cele din
+   coloane, sub ele) si subsolul.
+2. **Fara migratie: `custom_pages` ramane sursa.** „Conținut liber” e felul in care editorul
+   CITESTE `custom_pages.blocks` (convertorul e o derivare la citire, ca `{}` = clasic). Ce se
+   salveaza e tot randul paginii: blocurile, titlul, adresa, publicarea, SEO, CSS.
+3. **Pagina e CONTINUT, nu design**: se salveaza explicit, direct in magazin, cu aceeasi garda de
+   versiune ca azi (`updatePage`). Bara de sus spune „Pagină nesalvată”; „Ieși” si inchiderea
+   ferestrei intreaba, ca la continutul de azi. Anuleaza / Refa merg pe pagina cand pagina e cea
+   editata (un istoric al ei, `istoric.ts`), pe design in rest.
+4. **Previzualizarea vie** fara salvare: editorul trimite cadrului blocurile paginii (mesaj nou in
+   protocol), iar pagina, DOAR in modul editor, le randeaza prin acelasi `BlockRenderer`, cu datele
+   de previzualizare ale editorului de pagini (produse, pachete, formulare, plati, curieri: le
+   trimite tot editorul, o data). Pe magazinul public nu se schimba nimic.
+5. **Clic si contur pe blocuri**, prin mecanismul din etapele 3-4: sectiunea `pagina:<id>`, blocurile
+   `pagina:<id>/<bloc>`.
+6. **Se refoloseste tot ce exista**: setarile blocurilor (`BlockSettings`), operatiile pe arbore
+   (`block-tree.ts`), paleta (`BLOCK_PALETTE_ORDER`, `createBlock`, integrarile active), campurile SEO.
+   Nimic din modelul blocurilor nu se schimba.
+7. **Ecranul vechi se retrage la final**: `/dashboard/pages/[id]/edit` trimite in editor
+   (`?pagina=pagina:<id>`), iar lista „Pagini” deschide editorul. Lista paginilor, formularele si
+   mesajele raman unde sunt.
+8. **Nu intra acum:** sectiuni din tema puse in jurul continutului liber (blocul „Din pagina
+   principală” face deja asta), articolele de blog, sabloanele de pagina.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [ ] 5.1 Logica fara React: cheile paginilor proprii in „Editezi”, adresa previzualizarii lor,
+      mesajul de protocol cu blocurile, id-urile marcajelor, starea paginii (modificari, salvare cu
+      versiune, istoric). Probe.
+- [ ] 5.2 Magazinul: in modul editor, pagina proprie randeaza blocurile primite de la editor, cu
+      marcaje pe blocuri; public, neschimbata. Probe.
+- [ ] 5.3 Editorul: paginile in „Editezi”, arborele „Conținut liber” (blocuri, coloane, sageti,
+      duplicare, stergere, „Adaugă bloc”), panoul blocului (`BlockSettings`), panoul paginii (titlu,
+      adresa, publicare, SEO, CSS), salvarea si iesirea. Probe.
+- [ ] 5.4 Ecranul vechi trimite in editor; lista „Pagini” si „Deschide pagina” (pagina principala)
+      duc in editor. REGISTRU.
+- [ ] 5.5 Porti + proba in Chrome (pe o pagina TEMPORARA a magazinului de proba, stearsa la final).
 
 ## Deciziile proprietarului
 

@@ -89,7 +89,7 @@ function inCampDeScris(t: EventTarget | null): boolean {
  */
 export function EditorMagazin({
   magazin, pageContent, designInitial, designPublicat, cioarnaInitiala, categorii, planGratuit,
-  pagini, paginaAcasa, paginaInitiala, sectiuneInitiala,
+  pagini, paginaAcasa, paginaInitiala, sectiuneInitiala, iesire,
 }: {
   magazin: MagazinEditor;
   pageContent: Record<string, unknown>;
@@ -102,6 +102,8 @@ export function EditorMagazin({
   paginaAcasa: { id: string; titlu: string; publicata: boolean } | null;
   paginaInitiala: CheiePagina;
   sectiuneInitiala: string | null;
+  /** Unde duce „Ieși” (`iesireaEditorului`). */
+  iesire: string;
 }) {
   const ciorna = useCiornaDesign({
     businessId: magazin.id, designInitial, publicatInitial: designPublicat, cioarnaInitiala,
@@ -594,6 +596,7 @@ export function EditorMagazin({
         continutNesalvat={continut.oriceNesalvat || paginaDeschisa.modificata} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
         paginiProprii={paginiAfisate.paginiProprii}
         anulare={istoricPagina ?? undefined}
+        laIesire={iesire}
       />
 
       <div className="flex flex-1 min-h-0">

@@ -11,18 +11,18 @@ import { idBloc } from "@/lib/storefront/design/preview-protocol";
 import type { CheiePaginaProprie } from "@/lib/editor-magazin/pagini";
 import type { PaginaDeschisa } from "./usePaginaProprie";
 
-/** Unde se adauga urmatorul bloc: in pagina, sau intr-o coloana a unui bloc de coloane. */
+/** Unde se adauga urmatorul bloc: in pagina, sau intr-o coloana a unui bloc de coloane; `dupa` = sub ce bloc. */
 export type TintaBloc =
-  | { fel: "sus"; index: number }
-  | { fel: "coloana"; idColoane: string; coloana: number; index: number };
+  | { fel: "sus"; index: number; dupa?: string }
+  | { fel: "coloana"; idColoane: string; coloana: number; index: number; dupa?: string };
 
 const actiune = "w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:pointer-events-none";
 
 /**
  * Arborele unei pagini proprii (etapa 5 din `docs/editor-magazin/PLAN.md`), intre antet si subsol:
  * setarile paginii, apoi „Conținut liber” cu blocurile ei, iar sub un bloc de coloane, blocurile din
- * fiecare coloana. Sagetile muta, „⧉” duplica, cosul sterge, clicul deschide setarile blocului; trecerea
- * cu mouse-ul incadreaza blocul in previzualizare. Operatiile sunt cele din editorul de pagini de pana
+ * fiecare coloana. „+” adauga un bloc chiar sub el, sagetile muta, „⧉” duplica, cosul sterge, clicul
+ * deschide setarile blocului; trecerea cu mouse-ul incadreaza blocul in previzualizare. Operatiile sunt cele din editorul de pagini de pana
  * acum (`block-tree.ts`), deci pagina iese la fel.
  */
 export function ArborePagina({ cheie, pagina, blocSelectat, setariDeschise, onSelectBloc, onSetari, onAdauga, onPeste }: {
@@ -50,7 +50,8 @@ export function ArborePagina({ cheie, pagina, blocSelectat, setariDeschise, onSe
   const blocuri = stare.blocks;
   const schimba = (fn: (bs: Block[]) => Block[], ch: string) => pagina.aplica((s: StarePagina) => ({ ...s, blocks: fn(s.blocks) }), ch);
 
-  const rand = (b: Block, i: number, frati: Block[]) => {
+  /** Un rand de bloc; `sub(index, eticheta)` = tinta unui bloc nou pus pe pozitia `index`, in acelasi loc. */
+  const rand = (b: Block, i: number, frati: Block[], sub: (index: number, dupa: string) => TintaBloc) => {
     const eticheta = BLOCK_META[b.type]?.label ?? b.type;
     const rezumat = rezumatBloc(b);
     const id = idBloc(cheie, b.id);
@@ -65,6 +66,10 @@ export function ArborePagina({ cheie, pagina, blocSelectat, setariDeschise, onSe
                 <span className="block text-xs font-medium text-foreground truncate">{eticheta}</span>
                 {rezumat && <span className="block text-[11px] text-muted-foreground truncate">{rezumat}</span>}
               </span>
+            </button>
+            <button type="button" aria-label={`Adaugă un bloc sub: ${eticheta}`} title="Adaugă un bloc dedesubt" className={actiune}
+              onClick={() => onAdauga(sub(i + 1, rezumat ? `${eticheta}: ${rezumat}` : eticheta))}>
+              <Plus className="h-3.5 w-3.5" />
             </button>
             <button type="button" disabled={i === 0} aria-label={`Mută mai sus: ${eticheta}`} className={actiune}
               onClick={() => schimba((bs) => moveBlockInTree(bs, b.id, -1), "ordine-pagina")}>
@@ -91,7 +96,11 @@ export function ArborePagina({ cheie, pagina, blocSelectat, setariDeschise, onSe
               return (
                 <div key={ci}>
                   <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Coloana {ci + 1}</p>
-                  {dinColoana.length > 0 && <ul className="space-y-1">{dinColoana.map((nb, ni) => rand(nb, ni, dinColoana))}</ul>}
+                  {dinColoana.length > 0 && (
+                    <ul className="space-y-1">
+                      {dinColoana.map((nb, ni) => rand(nb, ni, dinColoana, (index, dupa) => ({ fel: "coloana", idColoane: b.id, coloana: ci, index, dupa })))}
+                    </ul>
+                  )}
                   <button type="button" onClick={() => onAdauga({ fel: "coloana", idColoane: b.id, coloana: ci, index: dinColoana.length })}
                     className="mt-1 w-full h-8 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-1.5">
                     <Plus className="h-3 w-3" /> Adaugă în coloană
@@ -122,7 +131,7 @@ export function ArborePagina({ cheie, pagina, blocSelectat, setariDeschise, onSe
         {blocuri.length === 0 ? (
           <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">Pagina e goală. Adaugă primul bloc ca să începi.</p>
         ) : (
-          <ul className="space-y-1">{blocuri.map((b, i) => rand(b, i, blocuri))}</ul>
+          <ul className="space-y-1">{blocuri.map((b, i) => rand(b, i, blocuri, (index, dupa) => ({ fel: "sus", index, dupa })))}</ul>
         )}
       </div>
 

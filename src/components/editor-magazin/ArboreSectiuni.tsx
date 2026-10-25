@@ -1,8 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import Link from "next/link";
-import { ArrowUpRight, ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Lock, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { PageIcon } from "@/components/pages/icon-registry";
 import { Callout } from "@/components/ui/callout";
 import { SectionList } from "@/components/store-editor/SectionList";
@@ -177,8 +176,8 @@ export function ArboreSectiuni({
   /** Pagina proprie (etapa 5): arborele ei ia locul sectiunilor, sub titlul ei. */
   continutPagina?: React.ReactNode;
   titluPagina?: string;
-  /** Deschide in editor pagina proprie aleasa ca pagina principala (in locul ecranului vechi). */
-  onDeschidePagina?: (id: string) => void;
+  /** Deschide in editor pagina proprie aleasa ca pagina principala. */
+  onDeschidePagina: (id: string) => void;
 }) {
   const { design, aplica } = ciorna;
   const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
@@ -213,15 +212,9 @@ export function ArboreSectiuni({
             Pagina principală este pagina „{paginaAcasa.titlu}”, făcută în Pagini. Ce secțiuni apar și în ce ordine alegi acolo;
             aici schimbi cum arată fiecare.
           </p>
-          {onDeschidePagina ? (
-            <button type="button" onClick={() => onDeschidePagina(paginaAcasa.id)} className="mt-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline">
-              Deschide pagina <ChevronRight className="h-3 w-3" />
-            </button>
-          ) : (
-            <Link href={`/dashboard/pages/${paginaAcasa.id}`} className="mt-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline">
-              Deschide pagina <ArrowUpRight className="h-3 w-3" />
-            </Link>
-          )}
+          <button type="button" onClick={() => onDeschidePagina(paginaAcasa.id)} className="mt-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline">
+            Deschide pagina <ChevronRight className="h-3 w-3" />
+          </button>
         </Callout>
       )}
       {continutPagina ?? (eListaPaginii ? (

@@ -3,7 +3,7 @@ import { newBlockId } from "./blocks.types";
 
 /**
  * Pure tree helpers for the custom-page block model. Shared by the editor
- * (PageBuilder), the public sanitizer (prepare-blocks) and the server actions.
+ * (`ArborePagina`, `EditorMagazin`), the public sanitizer (prepare-blocks) and the server actions.
  *
  * A page is a flat list of blocks with ONE level of nesting: a `columns` block
  * can hold child blocks per column, in `items[i].blocks`. These helpers walk and

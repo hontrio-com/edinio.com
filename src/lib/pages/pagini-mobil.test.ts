@@ -38,29 +38,39 @@ test("pragurile `pg-*` sunt cele de ecran pe magazin si se opresc in cadrul de t
 });
 
 test("in editor blocul primeste cursorul (efectele la trecere), dar un clic doar il selecteaza", () => {
-  const src = readFileSync(new URL("../../components/pages/PageBuilder.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(src, /pointer-events-none">\s*<BlockRenderer/, "previzualizarea fara cursor nu arata efectele");
-  const f = src.slice(src.indexOf("function Previzualizare"));
-  assert.match(f, /onClickCapture=\{\(e\) => \{ e\.preventDefault\(\); e\.stopPropagation\(\); onSelect\(\); \}\}/);
-  assert.match(f, /onSubmitCapture=\{\(e\) => e\.preventDefault\(\)\}/);
-  assert.equal((src.match(/<Previzualizare onSelect=/g) ?? []).length, 3, "toate cele trei locuri care randeaza un bloc in editor");
+  /*
+   * Din etapa 5 pagina se editeaza in editorul unic: previzualizarea e chiar pagina magazinului, in
+   * cadru. Clicurile si trimiterile le opreste `useDesignPreview`, in faza de captura, iar videourile
+   * si hartile nu mai prind clicul (`pg-previzualizare`), deci clicul pe ele selecteaza blocul.
+   */
+  const vie = readFileSync(new URL("../../components/pages/PaginaVie.tsx", import.meta.url), "utf8");
+  assert.match(vie, /className="contents pg-previzualizare"/);
+  const css = readFileSync(new URL("../../app/stil-comun.css", import.meta.url), "utf8");
+  assert.match(css, /\.pg-previzualizare iframe, \.pg-previzualizare video \{ pointer-events: none; \}/);
+  const hook = readFileSync(new URL("../../components/storefront/useDesignPreview.ts", import.meta.url), "utf8");
+  assert.match(hook, /document\.addEventListener\("click", onClick, true\);/);
+  assert.match(hook, /document\.addEventListener\("submit", opreste, true\);/);
 });
 
-test("fundalul paginii: alb implicit, cel ales pentru magazin daca exista, acelasi in editor si pe magazin", async () => {
+test("in editor un bloc ascuns pe dispozitivul vazut ramane, estompat si etichetat", () => {
+  // Altfel, pe telefon, un bloc „ascuns pe mobil” disparea din previzualizare si parea sters.
+  const vie = readFileSync(new URL("../../components/pages/PaginaVie.tsx", import.meta.url), "utf8");
+  assert.match(vie, /data-editor-device=\{dispozitiv\}/);
+  assert.match(vie, /const TELEFON = "\(max-width: 767\.98px\)";/);
+  const css = readFileSync(new URL("../../app/stil-comun.css", import.meta.url), "utf8");
+  assert.match(css, /@media \(max-width: 767\.98px\) \{ \.pg-ascuns-mobil \{ display: none !important; \} \}/, "acelasi prag ca pe magazin");
+  assert.match(css, /\[data-editor-device\] \.pg-ascuns-mobil,\s*\[data-editor-device\] \.pg-ascuns-desktop \{ display: block !important; \}/);
+});
+
+test("fundalul paginii: alb implicit, cel ales pentru magazin daca exista", async () => {
   const { fundalulPaginii } = await import("./fundal-pagina");
   assert.equal(fundalulPaginii("var(--color-background)"), "#FFFFFF", "fundalul implicit al magazinului e gri: paginile sunt albe");
   assert.equal(fundalulPaginii(undefined), "#FFFFFF");
   assert.equal(fundalulPaginii("#FDF2F8"), "#FDF2F8", "fundalul ales de comerciant ramane");
   assert.equal(fundalulPaginii("red;}body{display:none"), "#FFFFFF");
+  // In editorul unic previzualizarea e chiar pagina magazinului, deci si fundalul e acelasi.
   const publica = readFileSync(new URL("../../app/(public)/[slug]/[pageSlug]/page.tsx", import.meta.url), "utf8");
   assert.match(publica, /backgroundColor: fundalulPaginii\(resolved\.style\.colors\.background\)/);
-  // Datele editorului le citeste `dateEditorPagina` (si pentru editorul unic, etapa 5); ruta doar le da mai departe.
-  const date = readFileSync(new URL("./date-editor-pagina.ts", import.meta.url), "utf8");
-  assert.match(date, /fundalulPaginii\(resolveDesign\(ss\?\.storefront_design/);
-  const editor = readFileSync(new URL("../../app/(dashboard)/dashboard/pages/[pageId]/edit/page.tsx", import.meta.url), "utf8");
-  assert.match(editor, /fundal=\{d\.fundal\}/);
-  const builder = readFileSync(new URL("../../components/pages/PageBuilder.tsx", import.meta.url), "utf8");
-  assert.match(builder, /style=\{\{ backgroundColor: fundal \}\}/);
 });
 
 test("o pagina fara titlu, hero sau H1 ales primeste titlul paginii ca H1 ascuns", async () => {

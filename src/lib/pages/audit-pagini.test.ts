@@ -29,10 +29,14 @@ test("„Titlu mare” dintr-un text nu mai face un al doilea H1 pe pagina publi
 });
 
 test("editorul si pagina aseaza coloanele cu aceeasi functie", () => {
-  const editor = readFileSync(new URL("../../components/pages/PageBuilder.tsx", import.meta.url), "utf8");
+  // Din etapa 5 previzualizarea editorului e chiar pagina (`PaginaVie` -> `BlockRenderer`); arborele
+  // numara coloanele cu aceeasi functie, deci arata atatea coloane cate are pagina.
   const pagina = readFileSync(new URL("../../components/pages/blocks/StaticBlocks.tsx", import.meta.url), "utf8");
-  assert.match(editor, /const a = asezareColoane\(block\)/);
   assert.match(pagina, /const a = asezareColoane\(block\)/);
+  const vie = readFileSync(new URL("../../components/pages/PaginaVie.tsx", import.meta.url), "utf8");
+  assert.match(vie, /<BlockRenderer\s+blocks=\{viu\.blocks\}/);
+  const arbore = readFileSync(new URL("../../components/editor-magazin/ArborePagina.tsx", import.meta.url), "utf8");
+  assert.match(arbore, /asezareColoane\(b\)\.count/);
 });
 
 test("adresa schimbata a unei pagini muta si intrarea din meniu", () => {

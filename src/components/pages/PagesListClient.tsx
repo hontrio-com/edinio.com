@@ -11,7 +11,7 @@ import { deletePage, duplicatePage, seteazaPaginaAcasa, updateStoreMenu } from "
 import { PaginaNoua } from "./PaginaNoua";
 import { meniuCuAcasa, newMenuItemId, type MenuItem } from "@/lib/pages/menu";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
-import type { CheiePagina } from "@/lib/editor-magazin/pagini";
+import { adresaEditoruluiPentruPagina, type CheiePagina } from "@/lib/editor-magazin/pagini";
 
 interface PageRow { id: string; slug: string; title: string; is_published: boolean; updated_at: string }
 interface Business { id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string }
@@ -263,7 +263,7 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
                 className="w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-colors">
                 <Trash2 className="h-4 w-4 text-red-500" />
               </button>
-              <Link href={`/dashboard/pages/${p.id}/edit`}
+              <Link href={adresaEditoruluiPentruPagina(p.id)}
                 className="flex items-center gap-1.5 px-3 h-9 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors">
                 <Pencil className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Editează</span>
               </Link>

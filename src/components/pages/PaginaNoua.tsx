@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { slugify } from "@/lib/utils/slugify";
 import { createPage } from "@/lib/actions/page.actions";
+import { adresaEditoruluiPentruPagina } from "@/lib/editor-magazin/pagini";
 import { problemaTitlului, validatePageSlug } from "@/lib/pages/reserved-slugs";
 import { DESPRE_SABLOANE, SABLOANE, type Sablon } from "@/lib/pages/sabloane";
 import { TIPURI_PAGINA_PROPRIE, type TipPaginaProprie } from "@/lib/pages/blocks.types";
@@ -87,7 +88,7 @@ export function PaginaNoua({ businessId, adresaBaza, onClose }: {
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      router.push(`/dashboard/pages/${res.pageId}/edit`);
+      router.push(adresaEditoruluiPentruPagina(res.pageId));
     });
   }
 

@@ -1915,7 +1915,7 @@
 [data-editor-device="mobile"] .pg-celula section.py-8 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
 [data-editor-device="mobile"] .pg-celula section > .px-4 { padding-left: 0; padding-right: 0; }
 
-/* Previzualizarea din editor (`Previzualizare` in PageBuilder): blocul primeste
+/* Previzualizarea paginii proprii in editorul unic (`PaginaVie`): blocul primeste
    cursorul, dar cadrele nu, ca un clic pe ele sa selecteze blocul. */
 .pg-previzualizare iframe, .pg-previzualizare video { pointer-events: none; }
 .pg-previzualizare a, .pg-previzualizare button, .pg-previzualizare summary, .pg-previzualizare label { cursor: pointer; }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { comutaBaraDeAnunt, ID_BARA_ANUNT, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
@@ -11,7 +11,7 @@ import { adaugaSablon } from "@/lib/storefront/design/sabloane-produs";
 import { EDITOR_PARAM, EDITOR_VALUE, cheiaPaginiiProprii, despartireId, esteEditorDeDesign, idBloc, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { FEREASTRA_LIPIRE_MS, MAX_ISTORIC, anuleaza, istoricGol, noteaza, reface } from "./istoric";
-import { adresaPrevizualizarii, idPaginaProprie, notaPaginii, PAGINI_EDITOR, paginaCeruta, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
+import { adresaEditoruluiPentruPagina, adresaPrevizualizarii, iesireaEditorului, idPaginaProprie, notaPaginii, PAGINI_EDITOR, paginaCeruta, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
 import { deSalvat, paginaModificata, reductorPagina, rezumatBloc, type StarePagina, type StarePaginiiDeschise } from "./pagina-proprie";
 import { contextDesign, rederiva } from "./derivare";
 import { CHEI_CONTINUT, CHEI_RETRASE, felBloc, felContinut, nodulCheii } from "./noduri";
@@ -519,8 +519,6 @@ test("⚠⚠ datele unei pagini proprii se dau doar proprietarului ei", () => {
   const date = faraComentarii("src/lib/pages/date-editor-pagina.ts");
   assert.match(date, /^import "server-only";/);
   assert.match(date, /\.from\("businesses"\)[\s\S]*?\.eq\("id", page\.business_id\)\s*\.eq\("user_id", userId\)\s*\.maybeSingle\(\);\s*if \(!business\) return null;/);
-  // Si ruta editorului de pagini citeste prin aceeasi functie: o singura copie a regulii.
-  assert.match(faraComentarii("src/app/(dashboard)/dashboard/pages/[pageId]/edit/page.tsx"), /dateEditorPagina\(supabase, pageId, user\.id\)/);
 });
 
 test("⚠⚠ editorul deschide din adresa doar paginile proprii ale magazinului", () => {
@@ -553,4 +551,49 @@ test("⚠⚠ salvarea paginii pleaca cu versiunea si nu socoteste salvat ce n-a 
   assert.match(s, /\} catch \{\s*setSalvez\(false\);\s*toast\.error\([^;]*\);\s*return null;\s*\}/);
   assert.match(s, /if \("error" in res\) \{\s*toast\.error\([^;]*\);\s*return null;\s*\}\s*despacha\(\{ tip: "salvata", id: d\.id, trimisa, slug: res\.slug, versiune: res\.versiune \}\);/);
   assert.equal(s.match(/tip: "salvata"/g)?.length, 1);
+});
+
+// ── Ecranul vechi se retrage (5.4) ───────────────────────────────────────────
+
+test("⚠⚠ adresa editorului pentru o pagina proprie o deschide chiar pe ea, iar „Ieși” duce inapoi in „Pagini”", () => {
+  const adresa = new URL(adresaEditoruluiPentruPagina(PAGINA), "https://x.ro");
+  assert.equal(adresa.pathname, "/dashboard/editor");
+  assert.equal(paginaCeruta(adresa.searchParams.get("pagina"), cuPagini()), `pagina:${PAGINA}`);
+  assert.equal(iesireaEditorului(adresa.searchParams.get("din")), "/dashboard/pages");
+  // Orice altceva duce in panou: adresa nu poate trimite omul in alta parte.
+  for (const din of [undefined, null, "", "https://rau.ro", "/dashboard/pages", ["pagini"]]) assert.equal(iesireaEditorului(din), "/dashboard");
+});
+
+test("⚠⚠ nimic nu mai deschide editorul de pagini vechi: ruta lui trimite in editorul unic", () => {
+  assert.ok(!existsSync(path.join(RAD, "src/components/pages/PageBuilder.tsx")), "o a doua copie a editorului de pagini");
+  assert.match(faraComentarii("src/app/(dashboard)/dashboard/pages/[pageId]/edit/page.tsx"), /redirect\(adresaEditoruluiPentruPagina\(pageId\)\);/);
+  assert.match(faraComentarii("src/components/pages/PagesListClient.tsx"), /<Link href=\{adresaEditoruluiPentruPagina\(p\.id\)\}/);
+  assert.match(faraComentarii("src/components/pages/PaginaNoua.tsx"), /router\.push\(adresaEditoruluiPentruPagina\(res\.pageId\)\);/);
+  // Nicio legatura scrisa de mana spre ruta veche (sau spre `/dashboard/pages/<id>`, care nu exista).
+  const legaturi: string[] = [];
+  const cauta = (dosar: string) => {
+    for (const intrare of readdirSync(path.join(RAD, dosar), { withFileTypes: true })) {
+      const rel = `${dosar}/${intrare.name}`;
+      if (intrare.isDirectory()) cauta(rel);
+      else if (/\.tsx?$/.test(intrare.name) && !/\.test\.ts$/.test(intrare.name)) {
+        // `/dashboard/pages/${id}...` = o pagina anume; formularele (`/dashboard/pages/forms/...`) nu se potrivesc.
+        for (const m of faraComentarii(rel).matchAll(/["`]\/dashboard\/pages\/\$\{[^`"]*/g)) legaturi.push(`${rel}: ${m[0]}`);
+      }
+    }
+  };
+  cauta("src");
+  assert.deepEqual(legaturi, []);
+  // „Ieși” duce unde spune adresa, validata pe server.
+  assert.match(faraComentarii("src/app/(dashboard)/dashboard/editor/page.tsx"), /iesire=\{iesireaEditorului\(sp\.din\)\}/);
+  assert.match(faraComentarii("src/components/editor-magazin/BaraEditor.tsx"), /router\.push\(laIesire\);/);
+});
+
+test("⚠ un bloc nou se pune chiar sub blocul ales, si in coloane, nu doar la sfarsitul paginii", () => {
+  // Editorul de pagini retras avea „+” intre oricare doua blocuri; fara el, un bloc de sus cerea zeci de sageti.
+  const arbore = faraComentarii("src/components/editor-magazin/ArborePagina.tsx");
+  assert.match(arbore, /onClick=\{\(\) => onAdauga\(sub\(i \+ 1, /);
+  assert.match(arbore, /rand\(b, i, blocuri, \(index, dupa\) => \(\{ fel: "sus", index, dupa \}\)\)/);
+  assert.match(arbore, /rand\(nb, ni, dinColoana, \(index, dupa\) => \(\{ fel: "coloana", idColoane: b\.id, coloana: ci, index, dupa \}\)\)/);
+  const editor = faraComentarii("src/components/editor-magazin/EditorMagazin.tsx");
+  assert.match(editor, /blocks: t\.fel === "sus" \? insertAtTop\(s\.blocks, t\.index, nou\) : insertIntoColumn\(s\.blocks, t\.idColoane, t\.coloana, t\.index, nou\)/);
 });

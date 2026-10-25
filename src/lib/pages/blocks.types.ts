@@ -1,7 +1,7 @@
 /**
  * Block contract for the custom-page builder. The page `blocks` column stores a
  * `Block[]` JSON array. Both the public renderer (`BlockRenderer`) and the
- * dashboard editor (`PageBuilder`) are driven by these types.
+ * dashboard editor (the unified store editor, `components/editor-magazin`) are driven by these types.
  *
  * Design rule: a page is a VERTICAL STACK of full-width blocks (no absolute /
  * free positioning). That keeps it far simpler than Elementor and responsive by

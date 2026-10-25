@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { BLOCK_META, type Block } from "@/lib/pages/blocks.types";
 import { cheieAnimatie } from "@/lib/pages/animatii";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
@@ -21,6 +21,15 @@ import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 export const ETICHETA_CONTINUT_LIBER = "Conținut liber";
 
 const FARA_DATE: DatePrevizualizarePagina = { products: [], bundles: [], forms: [], plati: [], curieri: [] };
+
+/** Telefon sau calculator, dupa latimea cadrului: acelasi prag ca `pg-ascuns-mobil` (`stil-comun.css`). */
+const TELEFON = "(max-width: 767.98px)";
+function abonareLatime(cb: () => void) {
+  const m = window.matchMedia(TELEFON);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+}
+const dispozitivulCadrului = () => (window.matchMedia(TELEFON).matches ? "mobile" : "desktop");
 
 /**
  * Pagina proprie in previzualizarea editorului unic (etapa 5 din `docs/editor-magazin/PLAN.md`).
@@ -55,6 +64,7 @@ export function PaginaVie({ pageId, cssInitial, ctx, children }: {
     return () => window.removeEventListener("message", laMesaj);
   }, [pageId]);
 
+  const dispozitiv = useSyncExternalStore(abonareLatime, dispozitivulCadrului, () => "desktop");
   const sectiune = cheiaPaginiiProprii(pageId);
   const css = sanitizeCss(viu ? viu.css : cssInitial);
   const marcheazaBloc = (b: Block, continut: ReactNode) => (
@@ -65,7 +75,12 @@ export function PaginaVie({ pageId, cssInitial, ctx, children }: {
   );
 
   return (
-    <div {...{ [SECTION_ATTR]: sectiune, [ETICHETA_ATTR]: ETICHETA_CONTINUT_LIBER }} className="contents">
+    /*
+      `pg-previzualizare`: videourile si hartile nu mai prind clicul, deci clicul pe ele selecteaza blocul.
+      `data-editor-device`: un bloc ascuns pe dispozitivul vazut ramane, estompat si etichetat, ca sa se
+      poata alege si scoate din ascundere (`stil-comun.css`). Amandoua numai aici, in editor.
+    */
+    <div {...{ [SECTION_ATTR]: sectiune, [ETICHETA_ATTR]: ETICHETA_CONTINUT_LIBER }} data-editor-device={dispozitiv} className="contents pg-previzualizare">
       {css ? <style dangerouslySetInnerHTML={{ __html: css }} /> : null}
       {viu ? (
         <BlockRenderer

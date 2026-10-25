@@ -8,7 +8,7 @@ import { CampCuloare } from "./CampCuloare";
 import { CampImagine } from "./CampImagine";
 import { Grup, Range, Segmentat, Select, Toggle } from "./campuri";
 
-/** Reda animatia blocului selectat, in editor (vezi `cheieAnimatie` din PageBuilder). */
+/** Reda animatia blocului selectat, in editor (vezi `cheieAnimatie` din `lib/pages/animatii.ts`). */
 export const RedaAnimatia = createContext<(() => void) | null>(null);
 
 type Ascuns = "width" | "align" | "bg" | "padding" | "box";

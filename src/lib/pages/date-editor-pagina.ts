@@ -11,8 +11,7 @@ import type { Block, PageSeo, ProductsBlock } from "@/lib/pages/blocks.types";
 import { flattenBlocks } from "@/lib/pages/block-tree";
 import type { FormDef, FormField } from "@/lib/pages/forms.types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
-import { parseStoreDesign, resolveDesign } from "@/lib/storefront/design/parse";
-import { fundalulPaginii } from "@/lib/pages/fundal-pagina";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { curataHtmlPentruEditor } from "@/lib/pages/prepare-blocks";
 import { shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveAllBundlesBlocks, type PachetPagina } from "@/lib/pages/resolve-bundles";
@@ -49,16 +48,14 @@ export interface DateEditorPagina {
   legaturi: Omit<DateLegaturi, "businessId">;
   estePaginaAcasa: boolean;
   randuriProduse: { id: string; titlu: string; oprit: boolean }[];
-  /** Fundalul paginii, acelasi ca pe magazin (`fundalulPaginii`). */
-  fundal: string;
   isAdmin: boolean;
 }
 
 /**
  * Datele editorului pentru o pagina proprie, doar pentru PROPRIETARUL ei; `null` altfel.
  *
- * Mutate din ruta editorului de pagini (`/dashboard/pages/[id]/edit`) ca sa le foloseasca si editorul
- * unic (etapa 5 din `docs/editor-magazin/PLAN.md`), fara o a doua copie. `supabase` e clientul
+ * Erau ale editorului de pagini (`/dashboard/pages/[id]/edit`, retras in etapa 5 din
+ * `docs/editor-magazin/PLAN.md`: ruta trimite acum in editorul unic). `supabase` e clientul
  * utilizatorului: RLS si `user_id` pazesc amandoua.
  */
 export async function dateEditorPagina(
@@ -112,8 +109,6 @@ export async function dateEditorPagina(
   const permalinkuri = permalinkuriDin(pc);
   // Cu o pagina proprie ca pagina principala, catalogul are pagina lui (`aplicaPaginaAcasa`).
   const catalogPePagina = shopOnPage(aplicaPaginaAcasa(parseStoreDesign(ss?.storefront_design, { primaryColor: business.primary_color ?? "#07c527", pageContent: pc, features: {} }), pc));
-  // Acelasi fundal ca pe magazin (vezi `fundalulPaginii`).
-  const fundal = fundalulPaginii(resolveDesign(ss?.storefront_design, { primaryColor: business.primary_color ?? "#07c527", pageContent: pc, features: {} }).style.colors.background);
 
   /*
     Previzualizarea blocurilor de produse (26.09.2026, auditul paginilor): editorul
@@ -185,7 +180,6 @@ export async function dateEditorPagina(
     },
     estePaginaAcasa: citestePaginaAcasa(pc) === page.id,
     randuriProduse: parseProductSections(pc.product_sections).map((r) => ({ id: r.id, titlu: r.title, oprit: !r.enabled })),
-    fundal,
     isAdmin,
   };
 }

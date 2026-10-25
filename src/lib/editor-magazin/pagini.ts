@@ -36,6 +36,19 @@ export function estePagina(v: unknown): v is CheiePaginaFixa {
   return PAGINI_EDITOR.some((p) => p.cheie === v);
 }
 
+/** Unde duce „Ieși”: in panou, sau inapoi in „Pagini”, cand editorul s-a deschis de acolo (`?din=pagini`). */
+export function iesireaEditorului(din: unknown): string {
+  return din === "pagini" ? "/dashboard/pages" : "/dashboard";
+}
+
+/**
+ * Editorul unic deschis pe o pagina proprie (etapa 5): din „Pagini”, dupa „Pagină nouă” si din ruta
+ * veche a editorului de pagini. Editorul o deschide doar daca e a magazinului (`paginaCeruta`).
+ */
+export function adresaEditoruluiPentruPagina(id: string): string {
+  return `/dashboard/editor?pagina=${encodeURIComponent(cheiaPaginiiProprii(id))}&din=pagini`;
+}
+
 export function estePaginaProprie(cheie: CheiePagina): cheie is CheiePaginaProprie {
   return cheie.startsWith(PREFIX_PAGINA_PROPRIE);
 }

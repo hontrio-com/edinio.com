@@ -11,8 +11,8 @@ const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-su
 /**
  * Setarile unei pagini proprii: titlul, adresa, SEO si CSS-ul ei.
  *
- * Mutate din `PageBuilder` (25.10.2026) ca sa le foloseasca si editorul unic (etapa 5 din
- * `docs/editor-magazin/PLAN.md`), fara o a doua copie.
+ * Venite din editorul de pagini de pana acum (`PageBuilder`, retras in etapa 5 din
+ * `docs/editor-magazin/PLAN.md`); in editorul unic stau in panoul „Setările paginii” (`PanouPagina`).
  */
 export function SetariPagina({ title, slug, seo, css, publicBase, blocks, onTitle, onSlug, onSeo, onCss }: {
   title: string; slug: string; seo: PageSeo; css: string; publicBase: string; blocks: Block[];

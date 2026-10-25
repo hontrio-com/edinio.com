@@ -133,7 +133,10 @@ export function PanouAdaugaBloc({ tinta, date, onBloc, onAcasa, onInapoi }: {
     <div className="space-y-5 pb-6">
       <Antet
         titlu={tinta.fel === "coloana" ? "Adaugă în coloană" : "Adaugă un bloc"}
-        subtitlu={tinta.fel === "coloana" ? `Coloana ${tinta.coloana + 1}` : "La sfârșitul paginii; îl muți apoi cu săgețile"}
+        subtitlu={[
+          tinta.fel === "coloana" ? `Coloana ${tinta.coloana + 1}` : null,
+          tinta.dupa ? `sub „${tinta.dupa}”` : tinta.fel === "sus" ? "La sfârșitul paginii" : null,
+        ].filter(Boolean).join(", ")}
         icon={<Plus className="h-4 w-4" />}
         onInapoi={onInapoi}
       />

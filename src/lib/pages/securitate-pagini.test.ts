@@ -57,11 +57,9 @@ test("editorul primeste HTML-ul bogat curatat (text, coloane, coloane in coloane
     assert.ok(!/onerror/i.test(h), h);
     assert.ok(h.includes("<p>ok</p>"), h);
   }
-  // Ambele editoare citesc pagina prin `dateEditorPagina` (etapa 5): curatarea se face acolo, o data.
+  // Editorul unic citeste pagina prin `dateEditorPagina` (etapa 5): curatarea se face acolo.
   const date = readFileSync(new URL("./date-editor-pagina.ts", import.meta.url), "utf8");
   assert.match(date, /blocks: curataHtmlPentruEditor\(/);
-  const editor = readFileSync(new URL("../../app/(dashboard)/dashboard/pages/[pageId]/edit/page.tsx", import.meta.url), "utf8");
-  assert.match(editor, /initialBlocks=\{d\.pagina\.blocks\}/);
   const actiune = readFileSync(new URL("../actions/editor-pagini.actions.ts", import.meta.url), "utf8");
   assert.match(actiune, /return dateEditorPagina\(supabase, pageId, user\.id\);/);
 });

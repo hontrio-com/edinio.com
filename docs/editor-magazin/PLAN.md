@@ -412,8 +412,13 @@ se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de
       adresa, publicare, SEO, CSS), salvarea si iesirea. Probe. Spre alta pagina cu pagina nesalvata:
       „Rămân / Renunță la ele / Salvează și treci”; pagina lasata se uita (la intoarcere se citeste din
       nou). Anuleaza / Refa: pe pagina, dar pe design cand panoul arata antetul sau subsolul.
-- [ ] 5.4 Ecranul vechi trimite in editor; lista „Pagini” si „Deschide pagina” (pagina principala)
-      duc in editor. REGISTRU.
+- [x] 5.4 (25.10, `adresaEditoruluiPentruPagina`, `iesireaEditorului`; `PageBuilder` sters; 4 probe noi si
+      4 mutate pe editorul unic, 3 din 3 mutatii prinse) Ecranul vechi trimite in editor; lista „Pagini” si „Deschide pagina” (pagina principala)
+      duc in editor. REGISTRU. Pastrate din editorul retras: „+” sub orice bloc (in arbore), clicul pe
+      video / harta selecteaza blocul (`pg-previzualizare`), blocurile ascunse pe dispozitivul vazut
+      raman estompate (`data-editor-device` in `PaginaVie`), „Redă animația”. „Ieși” duce inapoi in
+      „Pagini” cand editorul s-a deschis de acolo. Legatura „Deschide pagina” veche ducea la
+      `/dashboard/pages/<id>`, ruta inexistenta (doar pe ramura, nicicand in productie).
 - [ ] 5.5 Porti + proba in Chrome (pe o pagina TEMPORARA a magazinului de proba, stearsa la final).
 
 ## Deciziile proprietarului

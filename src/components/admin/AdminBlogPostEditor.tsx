@@ -194,8 +194,8 @@ export function AdminBlogPostEditor({
 
     Editorul ăsta era singurul loc din panou unde se scrie mult text și nu
     exista nicio plasă. Restul panoului are deja tiparul `dirty` +
-    `beforeunload` în cinci locuri (PageBuilder, FormBuilder, StoreDesignEditor
-    și încă două).
+    `beforeunload` în mai multe locuri (paginile din editorul unic, `usePaginaProprie`;
+    FormBuilder și altele).
 
     ⚠ `beforeunload` NU E DE AJUNS, ȘI E CALEA MAI PUȚIN PROBABILĂ. Butonul
     „← Articole” de sus e un `<Link>`, adică navigare pe client: browserul nu

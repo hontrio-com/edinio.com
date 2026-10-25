@@ -20,11 +20,9 @@ import type { CiornaDesign } from "./useCiornaDesign";
  * (comutatorul „Publicare” din editorul vechi).
  *
  * Din 25.10.2026 editorul ocupa tot ecranul, fara bara laterala si bara de sus a
- * panoului (`CadruPanou`), deci tot de aici se iese: „Ieși” duce la panou.
+ * panoului (`CadruPanou`), deci tot de aici se iese: „Ieși” duce la panou, sau inapoi in „Pagini”
+ * cand editorul s-a deschis de acolo (`iesireaEditorului`).
  */
-
-/** Unde duce „Ieși”. */
-const IESIREA = "/dashboard";
 
 const DISPOZITIVE = [
   ["mobil", Smartphone, "Telefon"],
@@ -35,7 +33,7 @@ const DISPOZITIVE = [
 export function BaraEditor({
   pagina, onPagina, ciorna, dispozitiv, onDispozitiv, onReincarca, adresaPublica,
   publicat, publicareInCurs, onComutaPublicarea, continutNesalvat, vedereMobil, onVedereMobil, ingust = false,
-  paginiProprii = [], anulare,
+  paginiProprii = [], anulare, laIesire = "/dashboard",
 }: {
   pagina: CheiePagina;
   onPagina: (p: CheiePagina) => void;
@@ -57,6 +55,8 @@ export function BaraEditor({
   paginiProprii?: PaginaProprieEditor[];
   /** Anuleaza / Refa altceva decat designul: pagina proprie deschisa, cand ea e cea editata. */
   anulare?: { poateAnula: boolean; poateReface: boolean; anuleaza: () => void; reface: () => void };
+  /** Unde duce „Ieși”. */
+  laIesire?: string;
 }) {
   const ist = anulare ?? ciorna;
   const [confirma, setConfirma] = useState(false);
@@ -73,7 +73,7 @@ export function BaraEditor({
       setIesire(null);
       return;
     }
-    router.push(IESIREA);
+    router.push(laIesire);
   }
 
   function iesi() {

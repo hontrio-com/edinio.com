@@ -9,7 +9,7 @@ import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
-import { paginaCeruta as paginaDinAdresa, type PaginaProprieEditor } from "@/lib/editor-magazin/pagini";
+import { iesireaEditorului, paginaCeruta as paginaDinAdresa, type PaginaProprieEditor } from "@/lib/editor-magazin/pagini";
 import { EditorMagazin } from "@/components/editor-magazin/EditorMagazin";
 import { ScheletEditor } from "@/components/editor-magazin/ScheletEditor";
 
@@ -23,7 +23,7 @@ export const metadata = { title: "Editează magazinul" };
  * vechi redirectioneaza aici. Vezi `docs/editor-magazin/PLAN.md`.
  */
 interface Props {
-  searchParams: Promise<{ pagina?: string; sectiune?: string }>;
+  searchParams: Promise<{ pagina?: string; sectiune?: string; din?: string }>;
 }
 
 export default async function EditorPage({ searchParams }: Props) {
@@ -40,16 +40,18 @@ export default async function EditorPage({ searchParams }: Props) {
           // Validata in `ContinutEditor`, fata de paginile magazinului (o pagina proprie straina nu se deschide).
           paginaCeruta={typeof sp.pagina === "string" ? sp.pagina : null}
           sectiuneCeruta={typeof sp.sectiune === "string" && sp.sectiune.length <= 64 ? sp.sectiune : null}
+          iesire={iesireaEditorului(sp.din)}
         />
       </Suspense>
     </>
   );
 }
 
-async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta }: {
+async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire }: {
   userId: string;
   paginaCeruta: string | null;
   sectiuneCeruta: string | null;
+  iesire: string;
 }) {
   const supabase = await createClient();
 
@@ -146,6 +148,7 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta }: {
       paginaAcasa={paginaAcasa}
       paginaInitiala={paginaDinAdresa(paginaCeruta, { paginiProprii })}
       sectiuneInitiala={sectiuneCeruta}
+      iesire={iesire}
     />
   );
 }

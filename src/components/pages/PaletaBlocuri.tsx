@@ -12,8 +12,8 @@ import { BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, type BlockType, typ
  * Paleta de blocuri a paginilor proprii: blocurile obisnuite, sectiunile paginii principale si
  * blocurile din integrari.
  *
- * Mutata din `PageBuilder` (25.10.2026) ca s-o foloseasca si editorul unic (etapa 5 din
- * `docs/editor-magazin/PLAN.md`); invelisul (fereastra, panoul) e al fiecaruia.
+ * Venita din editorul de pagini de pana acum (`PageBuilder`, retras in etapa 5 din
+ * `docs/editor-magazin/PLAN.md`); in editorul unic sta in panoul „Adaugă bloc” (`PanouAdaugaBloc`).
  */
 
 /** Pictograma fiecarui tip de bloc (`BLOCK_META[tip].icon`): paleta si arborele editorului unic. */

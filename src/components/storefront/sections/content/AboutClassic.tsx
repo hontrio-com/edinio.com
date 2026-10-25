@@ -2,10 +2,15 @@
 
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
-/** Sectiunea „Despre noi", varianta classic. Textul vine din `businesses.description`. */
+/**
+ * Sectiunea „Despre noi", varianta classic. Textul vine din `businesses.description`.
+ *
+ * ⚠ Fara a doua poarta pe `features.show_about`: pornit sau oprit spune `enabled`
+ * din design, derivat din flagul acela cat timp ochiul din editor n-a spus altceva.
+ */
 export function AboutClassic() {
-  const { business, features } = useStoreChrome();
-  if (features.show_about === false || !business.description) return null;
+  const { business } = useStoreChrome();
+  if (!business.description) return null;
 
   return (
     <section className="mb-16">

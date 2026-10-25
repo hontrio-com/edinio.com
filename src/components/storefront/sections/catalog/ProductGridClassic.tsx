@@ -40,9 +40,19 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
     interogareFiltre,
     totalFiltrate,
     catalogSeIncarca,
+    design,
   } = useStorefront();
 
-  const areRecomandate = pageContent.show_featured_section === true;
+  /*
+   * Randul „Recomandate" e aprins cand e aprins IN DESIGN, ca la randare.
+   * Citit din `show_featured_section`, titlul grilei ramanea „Produse" cand
+   * ochiul din editor aprindea randul, si „Toate produsele" cand il stingea.
+   * Flagul ramane doar pentru paginile care nu-si pun designul in context
+   * (miniaturile din galerie).
+   */
+  const areRecomandate = design
+    ? design.home.some((s) => s.kind === "product_row" && s.settings.mode === "featured" && s.enabled)
+    : pageContent.show_featured_section === true;
   const cauta = !!search || categoryFilter !== "toate";
 
   const mergiLa = (n: number) => {

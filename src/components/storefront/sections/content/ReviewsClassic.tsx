@@ -10,11 +10,15 @@ const STAR_PATH =
 /**
  * Sectiunea de recenzii, varianta classic: media pe cinci stele in antet, apoi
  * o grila de carduri. Continutul vine din `page_content.reviews_section`.
+ *
+ * ⚠ Fara a doua poarta pe `reviews_section.enabled`: pornit sau oprit spune
+ * `enabled` din design, derivat din flagul acela cat timp ochiul din editor n-a
+ * spus altceva. Verificat si aici, flagul bloca ochiul.
  */
 export function ReviewsClassic() {
   const { pageContent, color } = useStoreChrome();
   const reviews = pageContent.reviews_section;
-  if (!reviews?.enabled || reviews.items.length === 0) return null;
+  if (!reviews?.items?.length) return null;
 
   const numar = reviews.items.length;
   const medie = (reviews.items.reduce((s, r) => s + r.rating, 0) / numar).toFixed(1);

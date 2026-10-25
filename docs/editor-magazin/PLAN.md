@@ -82,7 +82,7 @@ arbore pe care il regleaza.
 
 ### Pasii (bifati pe masura ce se fac)
 
-- [ ] 2.1 Poarta unica: componentele derivate citesc doar `enabled` din design; lista de randuri
+- [x] 2.1 Poarta unica (25.10, proba `poarta-unica.test.ts`, 4/4 mutanti): componentele derivate citesc doar `enabled` din design; lista de randuri
       nu mai filtreaza pe comutatorul vechi; titlul „Toate produsele" din grila se ia din design.
 - [ ] 2.2 Previzualizarea vie pe pagina de produs, cos si comanda (ciorna + protocol).
 - [ ] 2.3 Logica fara React: istoricul pentru anuleaza/refa, re-derivarea, adresa previzualizarii

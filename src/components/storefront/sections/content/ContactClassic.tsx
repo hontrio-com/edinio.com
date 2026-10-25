@@ -8,18 +8,21 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
  * fiecare afisat doar daca e completat in setari.
  */
 export function ContactClassic() {
-  const { business, features, color } = useStoreChrome();
+  const { business, color } = useStoreChrome();
   const areDate = !!(business.phone || business.email || business.store_address);
   /*
-   * `!== true`, nu `=== false`: sectiunea e OPRITA implicit si apare doar cand
-   * comerciantul o cere. Datele de contact sunt oricum in footer, la fel si
-   * identitatea firmei, care nici nu se poate ascunde.
+   * Sectiunea e OPRITA implicit: `defaults.ts` o deriva din `show_contact === true`,
+   * deci apare doar cand comerciantul o cere. Datele de contact sunt oricum in
+   * footer, la fel si identitatea firmei, care nici nu se poate ascunde.
    *
-   * A doua poarta pe acelasi comutator: `SectionRenderer` verifica deja `enabled`
-   * din design. Se tin la fel dinadins, ca sectiunea sa nu reapara pe vreo cale
-   * care ar randa-o direct.
+   * ⚠ Fara a doua poarta pe `features.show_contact`. Era tinuta dinadins, ca
+   * sectiunea sa nu apara pe vreo cale care o randeaza direct; o singura cale
+   * exista, `SectionRenderer`, si aceea cere `enabled`. Iar comutatorul care
+   * scria `show_contact` (`FeaturesClient`) nu mai e montat nicaieri, deci poarta
+   * tinea sectiunea stinsa pentru totdeauna: ochiul din editor o aprindea si nu
+   * aparea nimic.
    */
-  if (features.show_contact !== true || !areDate) return null;
+  if (!areDate) return null;
 
   const iconBox = { backgroundColor: `${color}20`, color };
 

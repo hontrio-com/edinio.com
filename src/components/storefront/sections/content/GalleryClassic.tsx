@@ -6,10 +6,14 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 /**
  * Galeria foto a magazinului, varianta classic. Imaginile vin din
  * `businesses.gallery`; click deschide lightbox-ul paginii.
+ *
+ * ⚠ Fara a doua poarta pe `features.show_gallery`: pornit sau oprit spune
+ * `enabled` din design, derivat din flagul acela cat timp ochiul din editor n-a
+ * spus altceva.
  */
 export function GalleryClassic() {
-  const { gallery, features, openLightbox } = useStoreChrome();
-  if (features.show_gallery === false || gallery.length === 0) return null;
+  const { gallery, openLightbox } = useStoreChrome();
+  if (gallery.length === 0) return null;
 
   return (
     <section className="mb-16">

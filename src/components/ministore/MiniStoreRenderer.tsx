@@ -920,9 +920,13 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Custom product sections — curated rows shown above the main catalog. Resolved
   // from the already-loaded product list (no extra queries); empty ones are dropped.
+  //
+  // ⚠ Fara filtru pe `enabled` din `page_content`. Randul ajunge pe pagina doar
+  // daca sectiunea lui e `enabled` in design, derivata chiar din flagul acela cat
+  // timp ochiul din editor n-a spus altceva (`parse.ts`). Filtrat si aici, un rand
+  // oprit in continut ramanea gol desi ochiul il aprindea.
   const productSections = useMemo(() => {
     return parseProductSections(pageContent.product_sections)
-      .filter(s => s.enabled)
       // Pe palierul server randurile sunt deja rezolvate, dupa ACELEASI reguli,
       // in `catalog_randuri`. Aruncarea celor goale ramane aici, ca sa fie un
       // singur loc care decide ce se afiseaza.
@@ -1658,6 +1662,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     freeShippingThreshold,
     openLightbox: setLightboxUrl,
     esteEditorDesign: editorDesign,
+    // Designul EFECTIV, ca pe paginile cu `StorePageShell`: sectiunile care
+    // depind de alta sectiune (titlul grilei, de randul „Recomandate") il citesc
+    // de aici, nu din flagul vechi din `page_content`.
+    design,
   };
 
   return (

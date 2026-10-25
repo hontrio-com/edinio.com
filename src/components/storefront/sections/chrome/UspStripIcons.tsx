@@ -20,7 +20,13 @@ const TRUST_ICONS: Record<string, ElementType> = {
  */
 export function UspStripIcons() {
   const { pageContent, color } = useStoreChrome();
-  const pornita = pageContent.show_trust_strip_on_store === true;
+  /*
+   * ⚠ Fara a doua poarta pe `show_trust_strip_on_store`. Sectiunea ajunge aici
+   * doar daca e `enabled` in design, iar `enabled` se deriva chiar din flagul
+   * acela cat timp ochiul din editor n-a spus altceva (`parse.ts`). Verificat
+   * inca o data aici, flagul bloca ochiul: stingea banda, dar n-o putea aprinde.
+   * Acelasi lucru s-a reparat in august la „Recomandate" si la bara de anunt.
+   */
   /*
    * ⚠ Implicitul e AICI, nu doar in editor.
    *
@@ -31,7 +37,7 @@ export function UspStripIcons() {
    * niciodata. Vezi `insigne-implicite.ts`.
    */
   const badges = insigneDeAratat(pageContent.store_trust_badges);
-  if (!pornita || badges.length === 0) return null;
+  if (badges.length === 0) return null;
 
   return (
     <section className="border-b border-border bg-surface">

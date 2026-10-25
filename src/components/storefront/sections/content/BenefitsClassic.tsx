@@ -5,11 +5,15 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 /**
  * Sectiunea „De ce sa alegi produsele noastre", varianta classic.
  * Continutul vine din `page_content.store_benefits_section`.
+ *
+ * ⚠ Fara a doua poarta pe `store_benefits_section.enabled`: pornit sau oprit
+ * spune `enabled` din design, derivat din flagul acela cat timp ochiul din
+ * editor n-a spus altceva. Verificat si aici, flagul bloca ochiul.
  */
 export function BenefitsClassic() {
   const { pageContent, color } = useStoreChrome();
   const benefits = pageContent.store_benefits_section;
-  if (!benefits?.enabled || benefits.items.length === 0) return null;
+  if (!benefits?.items?.length) return null;
 
   return (
     <section className="mb-16">

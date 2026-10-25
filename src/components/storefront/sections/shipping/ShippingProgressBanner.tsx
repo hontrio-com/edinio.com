@@ -8,14 +8,18 @@ import { computeCartPricing } from "@/lib/storefront/cart/pricing";
 
 /**
  * Bara de progres catre pragul de livrare gratuita, varianta classic.
- * Se afiseaza doar cand comerciantul a pornit-o SI a setat un prag.
+ * Se afiseaza doar cand sectiunea e pornita in design SI magazinul are un prag.
+ *
+ * ⚠ Fara a doua poarta pe `show_shipping_progress`: `enabled` din design se
+ * deriva chiar din flagul acela cat timp ochiul din editor n-a spus altceva, iar
+ * verificat inca o data aici, flagul bloca ochiul. Pragul ramane: fara el bara
+ * n-are ce numara.
  */
 export function ShippingProgressBanner() {
-  const { pageContent, color, freeShippingThreshold } = useStorefront();
+  const { color, freeShippingThreshold } = useStorefront();
   const { total } = useCart();
 
-  const pornita = pageContent.show_shipping_progress === true && freeShippingThreshold !== null;
-  if (!pornita || !freeShippingThreshold) return null;
+  if (!freeShippingThreshold) return null;
 
   // Aceeasi aritmetica pe care o folosesc sertarul si paginile de cos.
   const { shippingIsFree: isFree, freeShippingPct: pct } = computeCartPricing({

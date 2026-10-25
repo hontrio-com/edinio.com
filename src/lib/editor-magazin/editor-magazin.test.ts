@@ -5,6 +5,7 @@ import path from "node:path";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { comutaBaraDeAnunt, ID_BARA_ANUNT, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { adaugaSablon } from "@/lib/storefront/design/sabloane-produs";
 import { EDITOR_PARAM, EDITOR_VALUE, esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { FEREASTRA_LIPIRE_MS, MAX_ISTORIC, anuleaza, istoricGol, noteaza, reface } from "./istoric";
@@ -119,6 +120,34 @@ test("magazinul cu un singur produs: pagina principala ESTE pagina de produs", (
   const m = magazin({ unSingurProdus: true });
   assert.deepEqual(sectiunilePaginii(d, "acasa", m).map((s) => s.kind), ["product_page"]);
   assert.match(adresaPrevizualizarii("produs", d, m), /^\/floraria\?/);
+});
+
+test("⚠⚠ cu sabloane, previzualizarea paginii de produs IMPUNE sablonul editat (4b)", () => {
+  const d = salvat(buildClassicDesign(ctx()));
+  // Fara sabloane adresa ramane cea de dinainte: nicio schimbare pentru magazinele de azi.
+  assert.doesNotMatch(adresaPrevizualizarii("produs", d, magazin()), /sablon=/);
+
+  const r = adaugaSablon(d, "Tablouri")!;
+  const m = magazin();
+  const implicit = new URL(adresaPrevizualizarii("produs", r.design, m), "https://x.ro");
+  assert.equal(implicit.searchParams.get("sablon"), r.design.product.page.id, "Implicit e impus si el: altfel produsul si-ar arata sablonul lui");
+  const ales = new URL(adresaPrevizualizarii("produs", r.design, m, { sablon: r.id, slug: "tablou-mare" }), "https://x.ro");
+  assert.equal(ales.searchParams.get("sablon"), r.id);
+  assert.match(ales.pathname, /^\/floraria\/[a-z-]+\/tablou-mare$/, "produsul care foloseste sablonul, cand s-a gasit unul");
+  assert.ok(esteEditorDeDesign(semneDeEditor(Object.fromEntries(ales.searchParams)), true));
+  // Pe celelalte pagini si in magazinul cu un singur produs nu se impune nimic.
+  assert.doesNotMatch(adresaPrevizualizarii("acasa", r.design, m), /sablon=/);
+  assert.doesNotMatch(adresaPrevizualizarii("produs", r.design, magazin({ unSingurProdus: true })), /sablon=/);
+});
+
+test("⚠ arborele paginii de produs arata sablonul editat, iar clicul pe orice sablon duce pe pagina de produs", () => {
+  const d = salvat(buildClassicDesign(ctx()));
+  const r = adaugaSablon(d, "Tablouri")!;
+  const m = magazin();
+  assert.deepEqual(sectiunilePaginii(r.design, "produs", m, r.id).map((s) => s.id), [r.id]);
+  assert.deepEqual(sectiunilePaginii(r.design, "produs", m).map((s) => s.id), [r.design.product.page.id]);
+  assert.equal(paginaSectiunii(r.design, r.id, "acasa", m), "produs");
+  assert.equal(paginaSectiunii(r.design, r.id, "acasa", magazin({ unSingurProdus: true })), null, "fara sabloane la un singur produs");
 });
 
 test("fiecare pagina isi arata sectiunile ei", () => {

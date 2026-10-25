@@ -345,7 +345,7 @@ Shopify, cu coloana noua; sau amandoua.)
 - [x] 4b.2 (25.10, `sabloane-in-magazin.test.ts`; categoria produsului e un NUME, deci ruta o cauta dupa nume si urca pe `parent_id`) Magazinul: alegerea in `ProductPageDinDesign` (design viu, produs, lantul de categorii),
       marcajul mutat acolo, id-ul paginii dat variantelor; ruta citeste lantul doar cand trebuie;
       `sablon=` in editor. Probe.
-- [ ] 4b.3 Editorul: randul „Șablon”, panoul sablonului, arborele pe sablonul ales, previzualizarea pe
+- [x] 4b.3 (25.10, `SelectorSablon`, `PanouSablon`, `produsPentruSablon`; probe in `editor-magazin.test.ts`) Editorul: randul „Șablon”, panoul sablonului, arborele pe sablonul ales, previzualizarea pe
       un produs al sablonului (actiune care gaseste unul). Probe.
 - [ ] 4b.4 Porti + proba in Chrome.
 

@@ -9,6 +9,9 @@ import { resolveStyle } from "@/lib/storefront/design/defaults";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { PREVIEW_MESSAGE, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { firstVariant } from "@/lib/storefront/design/registry";
+import { adaugaSablon, categoriiAcoperite, MAX_SABLOANE } from "@/lib/storefront/design/sabloane-produs";
+import { produsPentruSablon } from "@/lib/actions/editor-sabloane.actions";
+import { toast } from "sonner";
 import type { SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
 import type { FelContinut } from "@/lib/editor-magazin/noduri";
@@ -18,6 +21,7 @@ import { BaraEditor } from "./BaraEditor";
 import { GalerieAdauga } from "./GalerieAdauga";
 import { PanouBloc } from "./PanouBloc";
 import { PanouNod } from "./PanouNod";
+import { PanouSablon } from "./PanouSablon";
 import { PanouStil } from "./continut/PanouStil";
 import { useCiornaDesign } from "./useCiornaDesign";
 import { useContinutMagazin, type SalvareContinut } from "./useContinutMagazin";
@@ -95,7 +99,41 @@ export function EditorMagazin({
   // ── Pagina aleasa si adresa previzualizarii ei ──
   const [pagina, setPagina] = useState<CheiePagina>(paginaInitiala);
   const design = ciorna.design;
-  const adresa = useMemo(() => adresaPrevizualizarii(pagina, design, pagini), [pagina, design, pagini]);
+
+  // ── Sablonul paginii de produs editat (etapa 4b) ──
+  /** `null` = Implicit. Un sablon sters (sau scos prin Anuleaza) cade singur pe Implicit. */
+  const [sablonEditat, setSablonEditat] = useState<string | null>(null);
+  const sablonActiv = design.product.sabloane?.some((s) => s.page.id === sablonEditat) ? sablonEditat : null;
+  /** Panoul sablonului (nume, categorii, produse) deschis in locul arborelui. */
+  const [setariSablon, setSetariSablon] = useState(false);
+  /**
+   * Un produs care chiar foloseste sablonul editat, pentru previzualizare. Cererea e un SIR (id,
+   * exceptiile, numele categoriilor acoperite): se reface doar cand se schimba ce acopera sablonul,
+   * nu la fiecare modificare de design.
+   */
+  const cerereProdus = useMemo(() => {
+    const s = design.product.sabloane?.find((x) => x.page.id === sablonActiv);
+    if (!s) return null;
+    const alte = new Set((design.product.sabloane ?? []).filter((x) => x !== s).flatMap((x) => x.categorii));
+    const acoperite = categoriiAcoperite(categorii, s.categorii, alte);
+    return JSON.stringify({ id: s.page.id, produse: s.produse, nume: categorii.filter((c) => acoperite.has(c.id)).map((c) => c.name) });
+  }, [design.product.sabloane, sablonActiv, categorii]);
+  const [produsSablon, setProdusSablon] = useState<{ cerere: string; slug: string | null } | null>(null);
+  useEffect(() => {
+    if (!cerereProdus) return;
+    const { produse, nume } = JSON.parse(cerereProdus) as { produse: string[]; nume: string[] };
+    let anulat = false;
+    produsPentruSablon(magazin.id, produse, nume)
+      .then((slug) => { if (!anulat) setProdusSablon({ cerere: cerereProdus, slug }); })
+      .catch(() => { /* ramane produsul obisnuit, cu sablonul impus */ });
+    return () => { anulat = true; };
+  }, [cerereProdus, magazin.id]);
+  const slugSablon = produsSablon && produsSablon.cerere === cerereProdus ? produsSablon.slug : null;
+
+  const adresa = useMemo(
+    () => adresaPrevizualizarii(pagina, design, pagini, { sablon: sablonActiv, slug: slugSablon }),
+    [pagina, design, pagini, sablonActiv, slugSablon],
+  );
 
   // ── Previzualizarea ──
   const rama = useRef<HTMLIFrameElement>(null);
@@ -193,9 +231,9 @@ export function EditorMagazin({
   const noduri = useMemo<SectionInstance[]>(() => [
     ...(design.chrome.announcement ? [design.chrome.announcement] : []),
     design.chrome.header,
-    ...sectiunilePaginii(design, pagina, pagini),
+    ...sectiunilePaginii(design, pagina, pagini, sablonActiv),
     design.chrome.footer,
-  ], [design, pagina, pagini]);
+  ], [design, pagina, pagini, sablonActiv]);
   /**
    * Bara de anunt poate lipsi din design. Nodul ei ramane deschis cu o sectiune
    * de umplutura, ca omul sa-i poata scrie textul si sa o aprinda din ochi.
@@ -315,6 +353,7 @@ export function EditorMagazin({
     setPeste(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
+    setSetariSablon(false);
   }, []);
 
   // ── Mesajele din previzualizare ──
@@ -335,6 +374,9 @@ export function EditorMagazin({
         const unde = paginaSectiunii(design, id, pagina, pagini);
         if (!unde) return;
         if (unde !== pagina) schimbaPagina(unde);
+        // Pagina unui sablon de produs: arborele trece pe sablonul ei (4b).
+        if (unde === "produs") setSablonEditat(design.product.sabloane?.some((s) => s.page.id === id) ? id : null);
+        setSetariSablon(false);
         setFila("sectiuni");
         setPeste(null);
         setSelectat(id);
@@ -364,6 +406,27 @@ export function EditorMagazin({
     const nou = urmator.home.find((s) => !inainte.has(s.id));
     if (nou) setSelectat(nou.id);
   }, [continut, design, ciorna]);
+
+  /** Un sablon nou al paginii de produs, pornit de la Implicit, deschis pe loc in setarile lui (4b). */
+  const sablonNou = useCallback(() => {
+    const r = adaugaSablon(design, `Șablon ${(design.product.sabloane?.length ?? 0) + 1}`);
+    if (!r) {
+      toast.error(`Poți avea cel mult ${MAX_SABLOANE} șabloane.`);
+      return;
+    }
+    ciorna.aplica(r.design);
+    setSablonEditat(r.id);
+    setSelectat(null);
+    setBlocSelectat(null);
+    setSetariSablon(true);
+  }, [design, ciorna]);
+
+  const alegeSablon = useCallback((id: string | null) => {
+    setSablonEditat(id);
+    setSelectat(null);
+    setBlocSelectat(null);
+    setSetariSablon(false);
+  }, []);
 
   /** Cate bannere are magazinul, pentru design-urile de hero care cer cel putin unul. */
   const numarBannere = resolveHeroBanners(continutSalvat.pageContent, continutSalvat.coverUrl).banners.length;
@@ -409,6 +472,17 @@ export function EditorMagazin({
           <div className="flex-1 overflow-y-auto px-4 pt-4">
             {fila === "stil" ? (
               <PanouStil continut={continut} />
+            ) : setariSablon && sablonActiv ? (
+              <PanouSablon
+                key={sablonActiv}
+                design={design}
+                sablonId={sablonActiv}
+                ciorna={ciorna}
+                categorii={categorii}
+                businessId={magazin.id}
+                onInapoi={() => setSetariSablon(false)}
+                onSters={() => { setSetariSablon(false); setSablonEditat(null); }}
+              />
             ) : sectiuneSelectata && blocDeschis ? (
               <PanouBloc
                 key={`${sectiuneSelectata.id}/${blocDeschis.id}`}
@@ -439,6 +513,7 @@ export function EditorMagazin({
                   blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc}
                   nesalvat={nesalvat} onAdauga={() => { setAdaugaDeschis(true); setVedereMobil("previzualizare"); }}
                   paginaAcasa={paginaAcasa}
+                  sablon={sablonActiv} onSablon={alegeSablon} onSablonNou={sablonNou} onSetariSablon={() => setSetariSablon(true)}
                 />
               </div>
             )}

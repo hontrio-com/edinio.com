@@ -1,5 +1,6 @@
 import { cartHref, cartOnPage, checkoutHref, checkoutOnPage, shopOnPage } from "@/lib/storefront/design/commerce";
-import { PREVIEW_QUERY } from "@/lib/storefront/design/preview-protocol";
+import { PREVIEW_QUERY, SABLON_PARAM } from "@/lib/storefront/design/preview-protocol";
+import { paginaSablonului } from "@/lib/storefront/design/sabloane-produs";
 import { hrefCatalogPropriu, hrefProdus } from "@/lib/storefront/permalinkuri";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 
@@ -51,12 +52,18 @@ export interface MagazinPentruPagini {
  * sectiune fiecare: galeria, varianta aleasa si pretul impart aceeasi stare,
  * deci se taie in blocuri abia in etapa 4.
  */
-export function sectiunilePaginii(design: StoreDesign, pagina: CheiePagina, m: MagazinPentruPagini): SectionInstance[] {
+export function sectiunilePaginii(
+  design: StoreDesign,
+  pagina: CheiePagina,
+  m: MagazinPentruPagini,
+  /** Sablonul de produs editat (etapa 4b); `null` = Implicit. */
+  sablon: string | null = null,
+): SectionInstance[] {
   switch (pagina) {
     case "acasa":
       return m.unSingurProdus ? [design.product.page] : design.home;
     case "produs":
-      return [design.product.page];
+      return [paginaSablonului(design.product, sablon)];
     case "magazin":
       return [design.shop.page];
     case "cos":
@@ -83,6 +90,8 @@ export function paginaSectiunii(
 ): CheiePagina | null {
   const comune = [design.chrome.announcement, design.chrome.header, design.chrome.footer];
   if (comune.some((s) => s?.id === id)) return curenta;
+  // Pagina oricarui sablon de produs (4b) e tot „Pagina de produs”, oricare e sablonul editat acum.
+  if (!m.unSingurProdus && (design.product.sabloane ?? []).some((s) => s.page.id === id)) return "produs";
   const ordinea = [curenta, ...PAGINI_EDITOR.map((p) => p.cheie).filter((p) => p !== curenta)];
   return ordinea.find((p) => sectiunilePaginii(design, p, m).some((s) => s.id === id)) ?? null;
 }
@@ -95,14 +104,24 @@ export function paginaSectiunii(
  * `notaPaginii` spune de ce. O adresa catre o pagina inexistenta ar redirecta si
  * ar pierde semnele de editor pe drum.
  */
-export function adresaPrevizualizarii(pagina: CheiePagina, design: StoreDesign, m: MagazinPentruPagini): string {
+export function adresaPrevizualizarii(
+  pagina: CheiePagina,
+  design: StoreDesign,
+  m: MagazinPentruPagini,
+  /**
+   * Pagina de produs cand designul are sabloane (etapa 4b): sablonul editat (`null` = Implicit) si,
+   * daca s-a gasit, un produs care chiar il foloseste.
+   */
+  produs: { sablon?: string | null; slug?: string | null } = {},
+): string {
   const radacina = `/${m.slug}`;
+  const produsSlug = produs.slug ?? m.produsSlug;
   const cale = (() => {
     switch (pagina) {
       case "acasa":
         return radacina;
       case "produs":
-        return !m.unSingurProdus && m.produsSlug ? hrefProdus(radacina, m.produsSlug, m.prefixProdus) : radacina;
+        return !m.unSingurProdus && produsSlug ? hrefProdus(radacina, produsSlug, m.prefixProdus) : radacina;
       case "magazin":
         return shopOnPage(design) ? hrefCatalogPropriu(radacina, m.prefixMagazin) : radacina;
       case "cos":
@@ -111,7 +130,13 @@ export function adresaPrevizualizarii(pagina: CheiePagina, design: StoreDesign, 
         return checkoutOnPage(design) ? checkoutHref(radacina) : radacina;
     }
   })();
-  return `${cale}?${PREVIEW_QUERY}`;
+  /*
+   * Cu sabloane, pagina de produs IMPUNE sablonul editat: altfel produsul din previzualizare ar fi
+   * aratat sablonul LUI, nu pe cel din arbore. Fara sabloane, adresa ramane cea de dinainte.
+   */
+  const cuSabloane = pagina === "produs" && !m.unSingurProdus && (design.product.sabloane?.length ?? 0) > 0;
+  const sablon = cuSabloane ? `&${SABLON_PARAM}=${encodeURIComponent(paginaSablonului(design.product, produs.sablon ?? null).id)}` : "";
+  return `${cale}?${PREVIEW_QUERY}${sablon}`;
 }
 
 /**

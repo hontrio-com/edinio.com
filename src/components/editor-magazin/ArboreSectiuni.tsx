@@ -14,6 +14,7 @@ import { felBloc, felContinut, type FelContinut } from "@/lib/editor-magazin/nod
 import { notaPaginii, PAGINI_EDITOR, sectiunilePaginii, type CheiePagina, type MagazinPentruPagini } from "@/lib/editor-magazin/pagini";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import type { CiornaDesign } from "./useCiornaDesign";
+import { SelectorSablon } from "./SelectorSablon";
 
 /**
  * Arborele paginii alese: ce e sus pe toate paginile, sectiunile paginii, ce e
@@ -149,7 +150,10 @@ function Titlu({ children }: { children: React.ReactNode }) {
   return <p className="px-1 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
 }
 
-export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa }: {
+export function ArboreSectiuni({
+  ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa,
+  sablon, onSablon, onSablonNou, onSetariSablon,
+}: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
   magazin: MagazinPentruPagini;
@@ -165,9 +169,14 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, bl
   onAdauga: () => void;
   /** Pagina din „Pagini” aleasa ca pagina principala, daca exista. */
   paginaAcasa: { id: string; titlu: string; publicata: boolean } | null;
+  /** Sablonul paginii de produs editat (etapa 4b); `null` = Implicit. */
+  sablon: string | null;
+  onSablon: (id: string | null) => void;
+  onSablonNou: () => void;
+  onSetariSablon: () => void;
 }) {
   const { design, aplica } = ciorna;
-  const sectiuni = sectiunilePaginii(design, pagina, magazin);
+  const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
   const eListaPaginii = pagina === "acasa" && !magazin.unSingurProdus;
   const nota = notaPaginii(pagina, design, magazin);
   const numePagina = PAGINI_EDITOR.find((p) => p.cheie === pagina)?.eticheta ?? "";
@@ -190,6 +199,9 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, bl
       </ul>
 
       <Titlu>{numePagina}</Titlu>
+      {pagina === "produs" && !magazin.unSingurProdus && (
+        <SelectorSablon design={design} sablon={sablon} onSablon={onSablon} onNou={onSablonNou} onSetari={onSetariSablon} />
+      )}
       {eListaPaginii && paginaAcasa && (
         <Callout variant="warning" className="mb-2 text-xs">
           <p>

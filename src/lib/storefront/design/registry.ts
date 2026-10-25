@@ -33,6 +33,13 @@ interface FieldBase {
   label: string;
   help?: string;
   showIf?: ShowIf;
+  /**
+   * Campul nu mai apare in editor, fiindca alt control il inlocuieste (motivul
+   * sta aici). Ramane insa citit si curatat la parsare: valorile salvate de el
+   * dau mai departe vizibilitatea implicita a blocurilor (`blocuri.ts`), iar
+   * scos de tot, parserul le-ar fi aruncat si paginile s-ar fi schimbat.
+   */
+  retras?: string;
 }
 
 export type Field =
@@ -868,15 +875,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
               { value: "bottom", label: "Sub imagine" },
             ],
           },
-          { key: "showDetails", type: "toggle", label: "Arata caseta „Detalii produs”" },
-          { key: "showSpecsSummary", type: "toggle", label: "Arata un rezumat al specificatiilor" },
+          { key: "showDetails", type: "toggle", label: "Arata caseta „Detalii produs”", retras: "ochiul blocului „Caseta Detalii produs”" },
+          { key: "showSpecsSummary", type: "toggle", label: "Arata un rezumat al specificatiilor", retras: "ochiul blocului „Rezumatul specificațiilor”" },
+          // Fara `showIf` pe rezumat: comutatorul lui a iesit din editor, iar
+          // rezumatul il aprinde acum ochiul blocului, nu el.
           {
             key: "specsCount", type: "range", label: "Cate specificatii in rezumat",
             min: 3, max: 12, step: 1, unit: " randuri",
-            showIf: { key: "showSpecsSummary", equals: true },
           },
-          { key: "showTiers", type: "toggle", label: "Arata reducerile de cantitate", help: "Se completeaza din fisa produsului. Preturile de treapta se aplica la comanda directa." },
-          { key: "showContact", type: "toggle", label: "Arata telefonul si WhatsApp sub produs" },
+          { key: "showTiers", type: "toggle", label: "Arata reducerile de cantitate", help: "Se completeaza din fisa produsului. Preturile de treapta se aplica la comanda directa.", retras: "ochiul blocului „Reducerile de cantitate”" },
+          { key: "showContact", type: "toggle", label: "Arata telefonul si WhatsApp sub produs", retras: "ochiul blocului „Telefon și WhatsApp”" },
         ],
         defaults: {
           ...PDP_DEFAULTS_COMUNE,

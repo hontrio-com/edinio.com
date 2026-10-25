@@ -62,12 +62,12 @@ test("vizibilitatea implicita vine din comutatoarele vechi, ca nicio pagina sa n
     },
     setari: {},
   });
-  for (const t of ["insigna", "dovada", "livrare", "beneficii", "cum_functioneaza", "intrebari", "incredere"]) {
+  for (const t of ["insigna", "dovada", "beneficii", "cum_functioneaza", "intrebari", "incredere"]) {
     assert.equal(pornite.find((b) => b.type === t)?.enabled, true, t);
   }
   // Fara nimic aprins: cele cu comutator „pornit doar daca” sunt stinse, garantiile raman (implicit aprinse).
   const implicite = completeazaBlocuri(undefined, CLASIC, gol);
-  for (const t of ["insigna", "dovada", "livrare", "beneficii", "cum_functioneaza", "intrebari"]) {
+  for (const t of ["insigna", "dovada", "beneficii", "cum_functioneaza", "intrebari"]) {
     assert.equal(implicite.find((b) => b.type === t)?.enabled, false, t);
   }
   assert.equal(implicite.find((b) => b.type === "incredere")?.enabled, true);

@@ -719,9 +719,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const touchStartX = useRef<number>(0);
   const thumbStripRef = useRef<HTMLDivElement>(null);
 
-  // Fara poarta pe `delivery_estimate.enabled`: casuta se aseaza doar cand blocul
-  // „Estimarea livrarii” e aprins, iar implicitul blocului e chiar comutatorul acela.
   const deliveryDates = useMemo(() => {
+    // Comutatorul ramane al continutului: blocul „Estimarea livrarii” n-are ochi
+    // (il citeste si Detaliat, unde estimarea e un rand din „Detalii produs”).
+    if (!deliveryEstimate?.enabled) return null;
     // Zilele vin din acelasi loc ca cele trimise catre Google (procesare +
     // tranzit, Setari → Livrare), cu rezerva pe `min_days`/`max_days`. Socotite
     // separat, casuta si microdatele aceleiasi pagini se departau la prima

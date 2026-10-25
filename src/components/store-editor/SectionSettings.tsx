@@ -29,7 +29,8 @@ export function SectionSettings({
   cuTitlu?: boolean;
 }) {
   const meta = variantMeta(section.kind, section.variant);
-  const fields = meta?.fields ?? [];
+  // Campurile retrase raman in date (le citesc blocurile), dar nu in panou.
+  const fields = (meta?.fields ?? []).filter((f) => !f.retras);
   // Nota apare si la variantele fara niciun reglaj: e singurul loc unde poate fi
   // spus ca elementul care defineste designul se porneste din alt ecran.
   const nota = meta?.note;

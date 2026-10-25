@@ -250,7 +250,7 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
       operatiile de editare (muta, ochi, setari). Probe.
 - [x] 4.2 (25.10, harti `bucati` / `jos` + `blocurile-au-bucati.test.ts`) Clasic randat din blocuri (cumparare + jos). Probe: obligatoriile mereu, fara dubluri,
       lista implicita = asezarea de azi.
-- [ ] 4.3 Detaliat randat din blocuri (cumparare, sub galerie, jos).
+- [x] 4.3 (25.10; estimarea livrarii ramane a continutului, vezi `DE_CE.livrare`) Detaliat randat din blocuri (cumparare, sub galerie, jos).
 - [ ] 4.4 Editorul: blocurile in arbore sub „Pagina de produs” (pe zone, sageti, ochi), panoul
       blocului (setari + continutul lui), comutatoarele dublate scoase.
 - [ ] 4.5 Previzualizarea: marcaj pe bloc, contur si clic pe bloc.

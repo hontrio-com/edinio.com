@@ -36,8 +36,10 @@ export interface BlocMeta {
   icon: string;
   zona: string;
   /**
-   * Motivul pentru care blocul nu se poate ascunde: bani, lege sau comanda.
-   * Il citeste editorul, langa locul unde ar fi stat ochiul.
+   * Motivul pentru care blocul n-are ochi: bani, lege, comanda, sau o bucata pe
+   * care o aprinde chiar continutul ei (ofertele, estimarea livrarii). Blocul se
+   * aseaza mereu; bucata insasi decide daca are ce arata. Il citeste editorul,
+   * langa locul unde ar fi stat ochiul.
    */
   obligatoriu?: string;
   /**
@@ -68,6 +70,13 @@ const DE_CE = {
   cumparare: "Comanda, coșul și nota despre garanția legală (OUG 18/2026).",
   set: "Apare doar când ai o ofertă așezată lângă preț; se reglează din Oferte.",
   oferte: "Apar doar când ai oferte pentru produs; se reglează din Oferte.",
+  /*
+   * Fara ochi, dar nu din motive de bani: comutatorul ei ramane in continut,
+   * fiindca il citeste si varianta Detaliat, unde estimarea e un rand din caseta
+   * „Detalii produs”, nu o bucata a ei. Scos de acolo, cine foloseste Detaliat
+   * n-ar mai fi avut cum s-o porneasca sau s-o opreasca.
+   */
+  livrare: "Se arată când pornești „Estimarea livrării” mai jos, și tot de acolo o oprești.",
 };
 
 /** Clasic: coloana de cumparare langa galerie, apoi sectiunile de sub produs. */
@@ -82,7 +91,7 @@ const BLOCURI_CLASIC: SchemaBlocuri = {
     descriere_scurta: { label: "Descrierea scurtă", icon: "MessageCircle", zona: "cumparare" },
     pret: { label: "Prețul", icon: "Tag", zona: "cumparare", obligatoriu: DE_CE.pret },
     pachet: { label: "Conținutul pachetului", icon: "Package", zona: "cumparare" },
-    livrare: { label: "Estimarea livrării", icon: "Calendar", zona: "cumparare", implicit: aprinsIn("delivery_estimate") },
+    livrare: { label: "Estimarea livrării", icon: "Calendar", zona: "cumparare", obligatoriu: DE_CE.livrare },
     variante: { label: "Variantele", icon: "Palette", zona: "cumparare", obligatoriu: DE_CE.variante },
     stoc: { label: "Stocul", icon: "PackageCheck", zona: "cumparare", obligatoriu: DE_CE.stoc },
     personalizare: { label: "Personalizarea", icon: "PenTool", zona: "cumparare", obligatoriu: DE_CE.personalizare },

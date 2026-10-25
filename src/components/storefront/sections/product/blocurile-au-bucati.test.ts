@@ -46,3 +46,36 @@ test("⚠⚠ Clasic: fiecare zona are exact bucatile blocurilor ei, in ordinea i
     assert.match(text, new RegExp(`blocurileZonei\\(blocuriPagina, SCHEMA_BLOCURI, "${zona}"\\)`), zona);
   }
 });
+
+test("⚠⚠ Detaliat: la fel, pe cele patru zone, iar filele isi iau ordinea din blocuri", () => {
+  const schema = schemaBlocurilor("product_page", "detailed")!;
+  const text = sursa("ProductPageDetailed.tsx");
+  assert.deepEqual(schema.zone.map((z) => z.id), ["cumparare", "sub_galerie", "file", "jos"]);
+  assert.deepEqual(cheileHartii(text, "bucati"), ordineaZonei(schema, "cumparare"));
+  assert.deepEqual(cheileHartii(text, "subGalerie"), ordineaZonei(schema, "sub_galerie"));
+  assert.deepEqual(cheileHartii(text, "jos"), ordineaZonei(schema, "jos"));
+  // Filele nu sunt bucati de JSX, ci butoane cu continut ascuns: harta lor e alta.
+  const inceput = text.indexOf("const fileDupaTip: Record<");
+  assert.ok(inceput >= 0, "harta filelor lipseste");
+  const corp = text.slice(inceput, text.indexOf("\n  };", inceput));
+  assert.deepEqual([...corp.matchAll(/^ {4}([a-z_]+): \{ id:/gm)].map((m) => m[1]), ordineaZonei(schema, "file"));
+  for (const zona of ["cumparare", "sub_galerie", "file", "jos"]) {
+    assert.match(text, new RegExp(`blocurileZonei\\(blocuriPagina, SCHEMA_BLOCURI, "${zona}"\\)`), zona);
+  }
+});
+
+test("portile duble au iesit: comutatoarele vechi le citeste doar schema blocurilor", () => {
+  // Citite si in componenta, ele ar fi stins o bucata pe care ochiul tocmai o
+  // aprinsese, ca in etapa 2 la sectiuni.
+  for (const fisier of ["ProductPageClassic.tsx", "ProductPageDetailed.tsx"]) {
+    // Fara comentarii: cele care explica regula numesc chiar cheile vechi.
+    const text = sursa(fisier).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    for (const poarta of [
+      "trust_badges_enabled", "show_social_proof", "show_quality_badge",
+      "benefitsSection?.enabled", "howItWorksSection?.enabled", "faqSection?.enabled",
+      "setari.showDetails", "setari.showSpecsSummary", "setari.showTiers", "setari.showContact",
+    ]) {
+      assert.ok(!text.includes(poarta), `${fisier}: ${poarta}`);
+    }
+  }
+});

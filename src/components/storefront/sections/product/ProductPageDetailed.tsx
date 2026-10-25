@@ -2,7 +2,9 @@
 
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
-import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { Fragment, useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { blocurileZonei, completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import type { BlockInstance } from "@/lib/storefront/design/types";
 import { legaturaBrand } from "@/lib/storefront/brand-href";
 import Image from "next/image";
 import {
@@ -219,6 +221,9 @@ function Stepper({ valoare, seteaza, maxim }: { valoare: number; seteaza: (n: nu
   );
 }
 
+/** Schema blocurilor variantei (`blocuri.ts`): zonele, ordinea implicita, cele obligatorii. */
+const SCHEMA_BLOCURI = schemaBlocurilor("product_page", "detailed")!;
+
 /* ─── Pagina ─────────────────────────────────────────────────────────────── */
 
 type FilaActiva = "descriere" | "specificatii" | "intrebari";
@@ -234,6 +239,7 @@ export function ProductPageDetailed({
   isHome = false,
   productOffers = [],
   setari = {},
+  blocuri,
   demo = false,
   permisIncarcare = null,
 }: {
@@ -248,6 +254,8 @@ export function ProductPageDetailed({
   productOffers?: ResolvedOffer[];
   /** Reglajele variantei, din `design.product.page.settings`. Vezi registry. */
   setari?: Record<string, unknown>;
+  /** Blocurile paginii (`design.product.page.blocks`); se completeaza aici, pe schema Detaliat. */
+  blocuri?: BlockInstance[];
   /** Miniatura din catalogul de design-uri: pagina se randeaza inerta. Vezi `classic`. */
   /**
    * Permisul de incarcare a fisierelor, emis pe SERVER cand s-a randat pagina.
@@ -344,7 +352,14 @@ export function ProductPageDetailed({
   const hasShortDesc = shortDesc !== "" && shortDesc !== "<p></p>";
   const hasLongDesc = !!product.description && product.description !== "<p></p>";
 
-  const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
+  /*
+   * Blocurile paginii (etapa 4 din `docs/editor-magazin/PLAN.md`): ordinea si
+   * vizibilitatea bucatilor. Ochiul din editor e singurul lor control; cat timp
+   * omul nu l-a atins, vizibilitatea o dau comutatoarele vechi (garantiile,
+   * contorul, beneficiile, intrebarile, reglajele `showDetails`...), citite in
+   * `completeazaBlocuri`, deci aici nu mai verifica nimeni a doua oara.
+   */
+  const blocuriPagina = completeazaBlocuri(blocuri, SCHEMA_BLOCURI, { pageContent: pageContent as Record<string, unknown>, setari });
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
@@ -354,7 +369,6 @@ export function ProductPageDetailed({
   /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
   const deliveryTime = pageContent.delivery_time;
   const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
-  const showSocialProof = pageContent.show_social_proof === true;
 
   /* Variante — aceiasi helperi ca in grila, ca pretul afisat sa fie acelasi pe
      care il accepta serverul la plasarea comenzii. */
@@ -631,11 +645,7 @@ export function ProductPageDetailed({
   const cerePersonalizarea = cerePersonalizare(product.page_sections);
   const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
   const miniaturiInStanga = setari.galleryThumbs !== "bottom";
-  const arataDetalii = setari.showDetails !== false;
-  const arataRezumatSpec = setari.showSpecsSummary !== false;
   const cateSpecificatii = Number(setari.specsCount) > 0 ? Number(setari.specsCount) : SPECIFICATII_LANGA_GALERIE;
-  const arataTrepte = setari.showTiers !== false;
-  const arataContact = setari.showContact !== false;
   // Liniile purtate in comanda: tot cosul in afara produsului curent, care se
   // comanda separat, cu cantitatea din formular.
   const cartItems = useMemo(
@@ -797,13 +807,501 @@ export function ProductPageDetailed({
     { icon: ShieldCheck, text: "Plata securizata" },
   ];
 
-  const file: { id: FilaActiva; eticheta: string; areContinut: boolean }[] = [
-    { id: "descriere", eticheta: "Descriere", areContinut: hasLongDesc },
-    { id: "specificatii", eticheta: "Specificatii", areContinut: specifications.length > 0 },
-    { id: "intrebari", eticheta: "Intrebari frecvente", areContinut: !!faqSection?.enabled && (faqSection.items?.length ?? 0) > 0 },
-  ];
-  const fileVizibile = file.filter((f) => f.areContinut);
+  // Filele, in ordinea si cu vizibilitatea blocurilor zonei „file”. Intrebarile
+  // nu mai verifica `faq_section.enabled`: il citeste blocul, ca implicit.
+  const fileDupaTip: Record<string, { id: FilaActiva; eticheta: string; areContinut: boolean }> = {
+    descriere: { id: "descriere", eticheta: "Descriere", areContinut: hasLongDesc },
+    specificatii: { id: "specificatii", eticheta: "Specificatii", areContinut: specifications.length > 0 },
+    intrebari: { id: "intrebari", eticheta: "Intrebari frecvente", areContinut: (faqSection?.items?.length ?? 0) > 0 },
+  };
+  const fileVizibile = blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "file")
+    .map((b) => fileDupaTip[b.type])
+    .filter((f) => f?.areContinut);
+  const areFila = (id: FilaActiva) => fileVizibile.some((f) => f.id === id);
   const filaCurenta = fileVizibile.some((f) => f.id === fila) ? fila : fileVizibile[0]?.id;
+
+  // Bucatile paginii, fiecare sub tipul blocului ei (etapa 4): se aseaza in
+  // ordinea blocurilor zonei lor; cele ascunse din ochi nu se mai aseaza deloc.
+  const bucati: Record<string, ReactNode> = {
+    titlu: (
+      <>
+        <h1 className="text-[26px] lg:text-[32px] font-normal text-foreground leading-tight tracking-tight">
+          {product.name}
+        </h1>
+      </>
+    ),
+    brand: (
+      <>
+        {brand !== "" && (
+          <p className="text-[13px] text-muted-foreground -mt-2">
+            Brand:{" "}
+            {hrefBrand ? (
+              <a href={hrefBrand} className="font-semibold hover:underline" style={{ color }}>{brand}</a>
+            ) : (
+              <span className="font-semibold" style={{ color }}>{brand}</span>
+            )}
+          </p>
+        )}
+      </>
+    ),
+    descriere_scurta: (
+      <>
+        {hasShortDesc && (
+          <div className="policy-content text-sm text-muted-foreground leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: shortDesc }} />
+        )}
+      </>
+    ),
+    dovada: (
+      <>
+        <div><SocialProof count={viewerCount} color={color} /></div>
+      </>
+    ),
+    pret: (
+      <>
+        <hr className="border-border" />
+
+        {/* Pret */}
+        <div className="flex items-end gap-3 flex-wrap">
+          {showPriceRange ? (
+            <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">
+              {formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)}
+            </span>
+          ) : (
+            <>
+              <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{pretAfisat}</span>
+              {hasDiscount && (
+                <span className="text-lg text-muted-foreground line-through mb-0.5">{formatPrice(displayComparePrice!)}</span>
+              )}
+            </>
+          )}
+          {eticheta && (
+            <span className="text-sm text-muted-foreground mb-0.5">({eticheta})</span>
+          )}
+        </div>
+
+        {/*
+          Eticheta a fost mutata LANGA pret (mai sus, in randul pretului):
+          ca rand separat sub el, se citea ca o nota de subsol si se pierdea.
+          Aici a ramas doar comutatorul care o stinge.
+        */}
+      </>
+    ),
+    variante: (
+      <>
+        {/* Variante */}
+        {variantsData && (
+          <div className="flex flex-col gap-4 pt-1">
+            {variantsData.options.map((optiune) => (
+              <div key={optiune.id ?? optiune.name}>
+                <p className="text-[13px] text-muted-foreground mb-2">
+                  {optiune.name}:{" "}
+                  {selectedOptions[optiune.name]
+                    ? <span className="text-foreground font-medium">{selectedOptions[optiune.name]}</span>
+                    : <span className="italic">alege</span>}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {optiune.values.map((valoare) => {
+                    const ales = selectedOptions[optiune.name] === valoare;
+                    const disponibil = isValueAvailable(variantsData, selectedOptions, optiune.name, valoare);
+                    const poza = pozeOptiuni.get(optiune.name)?.get(valoare);
+                    const alege = () => alegeValoare(optiune.name, valoare);
+
+                    // Optiunea care poarta fotografii se alege din fotografii,
+                    // ca in model: culoarea se vede, nu se citeste.
+                    if (poza) return (
+                      <button key={valoare} type="button" disabled={!disponibil}
+                        aria-pressed={ales} aria-label={valoare} title={valoare} onClick={alege}
+                        className="relative w-16 h-16 rounded-md overflow-hidden bg-muted/20 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+                        style={{ border: `2px solid ${ales ? color : "var(--color-border)"}` }}>
+                        <Image src={poza} alt="" fill sizes="64px" className="object-contain p-1" />
+                      </button>
+                    );
+
+                    return (
+                      <button key={valoare} type="button" disabled={!disponibil}
+                        aria-pressed={ales} onClick={alege}
+                        className="min-w-[76px] px-4 py-2.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:line-through"
+                        style={ales
+                          ? { borderColor: color, color, backgroundColor: `${color}0F` }
+                          : { borderColor: "var(--color-border)" }}>
+                        {valoare}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {Object.keys(selectedOptions).length > 0 && (
+              <button type="button" onClick={() => { setSelectedOptions({}); setActiveSlide(0); }}
+                className="self-start text-[13px] text-muted-foreground underline hover:text-foreground transition-colors">
+                Sterge selectia
+              </button>
+            )}
+          </div>
+        )}
+      </>
+    ),
+    stoc: (
+      <>
+        {/* Stoc */}
+        <div className="text-sm">
+          {isOutOfStock ? (
+            <span className="font-medium text-muted-foreground">Stoc epuizat</span>
+          ) : isPreorder ? (
+            <span className="font-medium" style={{ color }}>
+              Disponibil la precomanda
+              {termenPreco && <span className="block text-[13px] font-normal text-muted-foreground">{termenPreco}</span>}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 font-medium" style={{ color }}>
+              <Check size={15} />
+              {stocRamas === null || stocRamas <= 0 || stocRamas > 10
+                ? "In stoc"
+                : stocRamas === 1
+                  ? "Ultima bucata in stoc"
+                  : `Ultimele ${stocRamas} bucati in stoc`}
+            </span>
+          )}
+        </div>
+
+        {combinatieIndisponibila && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Aceasta combinatie nu este disponibila.
+          </p>
+        )}
+      </>
+    ),
+    personalizare: (
+      <>
+        {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
+        {pers.definitie && (
+          <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" numeroteaza={pers.definitie?.numeroteaza !== false} />
+        )}
+      </>
+    ),
+    cumparare: (
+      <>
+        {/*
+          ⚠ ACELASI ANUNT CA IN CELALALT MODEL — vezi `ProductPageClassic`. Fara el, pagina
+          arata ca una obisnuita, cu campurile misterios pre-completate.
+        */}
+        {editare.activ && (
+          <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+            <p className="font-medium text-foreground">Editezi un produs din cos</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Modificarile inlocuiesc linia de acum. Cat timp nu salvezi, cosul ramane neatins.
+            </p>
+          </div>
+        )}
+        {editare.disparuta && (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+            <p className="font-medium text-amber-700 dark:text-amber-400">Linia nu mai e in cos</p>
+            <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+              A fost stearsa intre timp. Ce ai completat aici se pastreaza: apasa
+              „Adauga in cos” ca sa o pui din nou.
+            </p>
+          </div>
+        )}
+
+        {/* Cantitate + cele doua actiuni */}
+        <div className="flex flex-col gap-2.5 pt-1">
+          <div className="flex items-stretch gap-2.5">
+            <Stepper valoare={cantitate} seteaza={setCantitate}
+              maxim={stocRamas !== null && stocRamas > 0 ? stocRamas : null} />
+            {(arataButonCos || editare.activ) && (
+              <button type="button" onClick={adaugaInCos}
+                disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+                className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                style={{ backgroundColor: color }}>
+                {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
+                <span className="truncate">{editare.activ ? "Salveaza" : adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Perechea din model: cosul poarta culoarea magazinului, comanda
+              directa e neagra. Butonul comun ii da si efectele alese de
+              comerciant, doar forma difera. */}
+          {/*
+            ⚠ „Comanda acum" DISPARE cat timp editam — aceeasi hotarare ca in celalalt model:
+            lasat, ar fi trimis o comanda directa si ar fi lasat linia stricata in cos.
+          */}
+          {!editare.activ && <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
+            needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
+            onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
+            clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            eticheta={
+              <>
+                <CreditCard size={18} />
+                {isOutOfStock ? "Stoc epuizat"
+                  : needsVariant ? "Selecteaza optiunile"
+                  : isPreorder ? "Precomanda acum"
+                  : "Comanda acum"}
+              </>
+            } />}
+
+          {/* Reducerile de cantitate, sub butonul de comanda: acolo se uita
+              omul cand se intreaba „cat costa daca iau mai multe?". */}
+          {!editare.activ && (
+            <TabelPraguri
+              randuri={randuriDePraguri}
+              /* ⚠ Se misca selectorul PAGINII, nu se deschide o fereastra
+                 cu alta cantitate. Macheta asta are deja „- 1 +" deasupra
+                 butonului: o cantitate paralela, nevazuta, ar fi facut
+                 pagina sa arate 1 si comanda sa plece cu 10. */
+              laAlegere={(cantitateCeruta) => setCantitate(cantitateCeruta)}
+            />
+          )}
+          {/* ⚠ Anularea, la fel de la indemana ca salvarea — vezi nota din `ProductPageClassic`. */}
+          {editare.activ && (
+            <a href={inapoiLaCos} onClick={() => editare.incheieEditarea()}
+              className="w-full h-11 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors">
+              Renunta la modificari
+            </a>
+          )}
+          <p aria-live="polite" className="sr-only">{adaugat ? "Produsul a fost adaugat in cos" : ""}</p>
+          {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
+          {!editare.activ && (
+            <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
+          )}
+          {/*
+            SETUL, LANGA PRET. Se vede doar daca oferta chiar cere asezarea asta;
+            implicita ramane banda lata de mai jos, deci ofertele care exista nu se muta.
+          */}
+          {!demo && aseza.langaPret.length > 0 && (
+            <div ref={refSetSus}>
+              <SetulDeLangaPret oferte={aseza.langaPret} color={color}
+                anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+                indisponibil={ancoraIndisponibila}
+                onBuyTogether={handleBuyTogether} />
+            </div>
+          )}
+        </div>
+      </>
+    ),
+    trepte: (
+      <>
+        {/* Trepte de cantitate: existau in date, dar se vedeau abia in
+            formularul de comanda — adica dupa ce clientul decisese cate ia.
+            Preturile de treapta le onoreaza doar comanda directa, deci
+            fiecare rand duce acolo, cu numarul lui de bucati: altfel ar sta
+            langa un buton de cos care le ignora. */}
+        {quantityTiers && quantityTiers.length > 1 && (
+          <div className="rounded-md border border-border overflow-hidden mt-1">
+            <p className="px-4 py-2.5 text-sm font-semibold text-foreground bg-muted/40 border-b border-border">
+              Cumperi mai multe, platesti mai putin
+            </p>
+            <ul>
+              {quantityTiers.slice(1).map((treapta) => (
+                <li key={treapta.qty} className="border-b border-border last:border-0">
+                  <button type="button" disabled={isOutOfStock || needsVariant}
+                    onClick={() => { setCantitate(treapta.qty); setFbtOffer(undefined); setModalOpen(true); }}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    <span className="text-sm text-foreground">
+                      <span className="font-semibold">{treapta.qty} bucati</span>
+                      {treapta.badge ? <span className="text-muted-foreground"> · {treapta.badge}</span> : null}
+                    </span>
+                    <span className="text-sm font-bold shrink-0" style={{ color }}>{formatPrice(treapta.price)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
+    ),
+    contact: (
+      <>
+        {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista */}
+        {(business.phone || business.whatsapp) && (
+          <div className="flex items-center gap-4 flex-wrap text-[13px] pt-1">
+            <span className="text-muted-foreground">Ai intrebari despre produs?</span>
+            {business.phone && (
+              <a href={`tel:${business.phone}`} className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
+                <Phone size={14} /> {business.phone}
+              </a>
+            )}
+            {business.whatsapp && (
+              <a href={`https://wa.me/${String(business.whatsapp).replace(/[^0-9]/g, "")}`}
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
+                <MessageCircle size={14} /> WhatsApp
+              </a>
+            )}
+          </div>
+        )}
+      </>
+    ),
+  };
+
+  const subGalerie: Record<string, ReactNode> = {
+    detalii: (
+      <>
+        {/* Un magazin poate sa nu fi completat niciunul dintre randuri: un
+            chenar cu titlu si nimic sub el arata a eroare, nu a informatie. */}
+        {areDetalii && (
+        <div className="rounded-md border border-border divide-y divide-border">
+          <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
+            Detalii produs
+          </p>
+          <div className="flex flex-col gap-2 px-4 py-3.5">
+            {termenPreco && (
+              <RandMeta eticheta="Livrare (precomanda)">{termenPreco}</RandMeta>
+            )}
+            {dateLivrare && !termenPreco && (
+              <RandMeta eticheta={deliveryEstimate?.text || "Livrare estimata"}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar size={13} className="text-muted-foreground" />
+                  {dateLivrare.de} - {dateLivrare.pana}
+                </span>
+              </RandMeta>
+            )}
+            {codProdus !== "" && <RandMeta eticheta="Cod produs">{codProdus}</RandMeta>}
+            {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
+            {categorie !== "" && (
+              <RandMeta eticheta="Categorie">
+                <a href={hrefCategorie(radacinaCatalog, categorie, chrome?.categoriiPePagina)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
+              </RandMeta>
+            )}
+            {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}
+            {product.weight_grams ? <RandMeta eticheta="Greutate">{product.weight_grams} g</RandMeta> : null}
+          </div>
+        </div>
+        )}
+      </>
+    ),
+    rezumat: (
+      <>
+        {/* Primele specificatii urca aici, langa imagine: pe o pagina care
+            se lauda ca e „detaliata", tabelul complet nu poate incepe abia
+            dupa doua ecrane de derulare. */}
+        {specifications.length > 0 && (
+          <div className="rounded-md border border-border divide-y divide-border">
+            <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
+              Pe scurt
+            </p>
+            <dl className="flex flex-col gap-2 px-4 py-3.5">
+              {specifications.slice(0, cateSpecificatii).map((spec, i) => (
+                <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-0.5 sm:gap-3 text-[13px]">
+                  <dt className="sm:w-36 sm:shrink-0 text-muted-foreground">{spec.label}</dt>
+                  <dd className="text-foreground font-medium min-w-0">{spec.value}</dd>
+                </div>
+              ))}
+            </dl>
+            {specifications.length > SPECIFICATII_LANGA_GALERIE && (
+              <button type="button" onClick={() => { setFila("specificatii"); fileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                className="w-full px-4 py-2.5 text-[13px] font-semibold text-left hover:bg-muted/30 transition-colors" style={{ color }}>
+                Vezi toate specificatiile
+              </button>
+            )}
+          </div>
+        )}
+      </>
+    ),
+    incredere: (
+      <>
+        <ul className="rounded-md border border-border divide-y divide-border">
+          {insigneIncredere.map(({ icon: Icon, text }) => (
+            <li key={text} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-muted-foreground">
+              <Icon size={15} style={{ color }} />
+              {text}
+            </li>
+          ))}
+        </ul>
+      </>
+    ),
+  };
+
+  const jos: Record<string, ReactNode> = {
+    continut_pachet: (
+      <>
+        {/* ─── Continutul pachetului ───────────────────────────────────── */}
+        {product.is_bundle && bundleComponents.length > 0 && (
+          <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+            <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
+            {/* `grid-cols-1` din acelasi motiv ca la grila eroului, dar aici
+                numele componentei e cel care umfla pista: `truncate` inseamna
+                `white-space: nowrap`, iar `overflow: hidden` nu taie
+                min-content-ul unei cutii-bloc, doar ce se vede din ea. Fara
+                plafon, un nume de patruzeci de caractere cerea 529px intr-o
+                coloana de 352 si scotea pagina din ecran. */}
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {bundleComponents.map((c) => (
+                <li key={c.id} className="flex items-center gap-3 rounded-md border border-border p-3">
+                  <div className="relative w-14 h-14 shrink-0 rounded-md overflow-hidden bg-muted/20">
+                    {c.image_url
+                      ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
+                      : <Package size={20} className="text-muted-foreground/40 absolute inset-0 m-auto" />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">{c.quantity} buc.</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
+    ),
+    oferte: (
+      <>
+        {/* ─── Merge bine cu ───────────────────────────────────────────── */}
+        {/* Invelisul nestilizat e doar tinta observatorului de afisari; fratii
+            lui sunt tot blocuri, deci asezarea ramane neschimbata. */}
+        {productOffers.length > 0 && (
+          <div ref={refOferteJos}>
+            <ProductOffers offers={aseza.subProdus} basePath={basePath} color={color}
+              anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
+              ancoraIndisponibila={ancoraIndisponibila}
+              onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+          </div>
+        )}
+      </>
+    ),
+    beneficii: (
+      <>
+        {/* ─── Beneficii ───────────────────────────────────────────────── */}
+        {benefitsSection && (benefitsSection.items?.length ?? 0) > 0 && (
+          <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+            <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
+            {/* `grid-cols-1` ca peste tot in fisier: textele de aici se rup
+                la spatii, deci azi nu umfla pista, dar un singur sir fara
+                spatii scris de comerciant (o adresa, un cod) ar face-o. */}
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {benefitsSection.items.map((b, i) => (
+                <li key={i} className="rounded-md border border-border p-4">
+                  <p className="font-semibold text-foreground text-sm mb-1">{b.title}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </>
+    ),
+    cum_functioneaza: (
+      <>
+        {/* ─── Cum functioneaza ────────────────────────────────────────── */}
+        {howItWorksSection && (howItWorksSection.steps?.length ?? 0) > 0 && (
+          <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+            <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
+            <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {howItWorksSection.steps.map((s, i) => (
+                <li key={i} className="rounded-md border border-border p-4">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white mb-2"
+                    style={{ backgroundColor: color }}>{i + 1}</span>
+                  <p className="font-semibold text-foreground text-sm mb-1">{s.title}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </>
+    ),
+  };
 
   return (
     <>
@@ -856,282 +1354,7 @@ export function ProductPageDetailed({
           </div>
 
           <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 flex flex-col gap-4">
-            <h1 className="text-[26px] lg:text-[32px] font-normal text-foreground leading-tight tracking-tight">
-              {product.name}
-            </h1>
-
-            {brand !== "" && (
-              <p className="text-[13px] text-muted-foreground -mt-2">
-                Brand:{" "}
-                {hrefBrand ? (
-                  <a href={hrefBrand} className="font-semibold hover:underline" style={{ color }}>{brand}</a>
-                ) : (
-                  <span className="font-semibold" style={{ color }}>{brand}</span>
-                )}
-              </p>
-            )}
-
-            {hasShortDesc && (
-              <div className="policy-content text-sm text-muted-foreground leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: shortDesc }} />
-            )}
-
-            {showSocialProof && <div><SocialProof count={viewerCount} color={color} /></div>}
-
-            <hr className="border-border" />
-
-            {/* Pret */}
-            <div className="flex items-end gap-3 flex-wrap">
-              {showPriceRange ? (
-                <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">
-                  {formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)}
-                </span>
-              ) : (
-                <>
-                  <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{pretAfisat}</span>
-                  {hasDiscount && (
-                    <span className="text-lg text-muted-foreground line-through mb-0.5">{formatPrice(displayComparePrice!)}</span>
-                  )}
-                </>
-              )}
-              {eticheta && (
-                <span className="text-sm text-muted-foreground mb-0.5">({eticheta})</span>
-              )}
-            </div>
-
-            {/*
-              Eticheta a fost mutata LANGA pret (mai sus, in randul pretului):
-              ca rand separat sub el, se citea ca o nota de subsol si se pierdea.
-              Aici a ramas doar comutatorul care o stinge.
-            */}
-
-            {/* Variante */}
-            {variantsData && (
-              <div className="flex flex-col gap-4 pt-1">
-                {variantsData.options.map((optiune) => (
-                  <div key={optiune.id ?? optiune.name}>
-                    <p className="text-[13px] text-muted-foreground mb-2">
-                      {optiune.name}:{" "}
-                      {selectedOptions[optiune.name]
-                        ? <span className="text-foreground font-medium">{selectedOptions[optiune.name]}</span>
-                        : <span className="italic">alege</span>}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {optiune.values.map((valoare) => {
-                        const ales = selectedOptions[optiune.name] === valoare;
-                        const disponibil = isValueAvailable(variantsData, selectedOptions, optiune.name, valoare);
-                        const poza = pozeOptiuni.get(optiune.name)?.get(valoare);
-                        const alege = () => alegeValoare(optiune.name, valoare);
-
-                        // Optiunea care poarta fotografii se alege din fotografii,
-                        // ca in model: culoarea se vede, nu se citeste.
-                        if (poza) return (
-                          <button key={valoare} type="button" disabled={!disponibil}
-                            aria-pressed={ales} aria-label={valoare} title={valoare} onClick={alege}
-                            className="relative w-16 h-16 rounded-md overflow-hidden bg-muted/20 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
-                            style={{ border: `2px solid ${ales ? color : "var(--color-border)"}` }}>
-                            <Image src={poza} alt="" fill sizes="64px" className="object-contain p-1" />
-                          </button>
-                        );
-
-                        return (
-                          <button key={valoare} type="button" disabled={!disponibil}
-                            aria-pressed={ales} onClick={alege}
-                            className="min-w-[76px] px-4 py-2.5 rounded-md border text-sm font-medium transition-colors disabled:opacity-35 disabled:cursor-not-allowed disabled:line-through"
-                            style={ales
-                              ? { borderColor: color, color, backgroundColor: `${color}0F` }
-                              : { borderColor: "var(--color-border)" }}>
-                            {valoare}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-                {Object.keys(selectedOptions).length > 0 && (
-                  <button type="button" onClick={() => { setSelectedOptions({}); setActiveSlide(0); }}
-                    className="self-start text-[13px] text-muted-foreground underline hover:text-foreground transition-colors">
-                    Sterge selectia
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Stoc */}
-            <div className="text-sm">
-              {isOutOfStock ? (
-                <span className="font-medium text-muted-foreground">Stoc epuizat</span>
-              ) : isPreorder ? (
-                <span className="font-medium" style={{ color }}>
-                  Disponibil la precomanda
-                  {termenPreco && <span className="block text-[13px] font-normal text-muted-foreground">{termenPreco}</span>}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 font-medium" style={{ color }}>
-                  <Check size={15} />
-                  {stocRamas === null || stocRamas <= 0 || stocRamas > 10
-                    ? "In stoc"
-                    : stocRamas === 1
-                      ? "Ultima bucata in stoc"
-                      : `Ultimele ${stocRamas} bucati in stoc`}
-                </span>
-              )}
-            </div>
-
-            {combinatieIndisponibila && (
-              <p role="status" className="text-sm text-muted-foreground">
-                Aceasta combinatie nu este disponibila.
-              </p>
-            )}
-
-            {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
-            {pers.definitie && (
-              <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" numeroteaza={pers.definitie?.numeroteaza !== false} />
-            )}
-
-            {/*
-              ⚠ ACELASI ANUNT CA IN CELALALT MODEL — vezi `ProductPageClassic`. Fara el, pagina
-              arata ca una obisnuita, cu campurile misterios pre-completate.
-            */}
-            {editare.activ && (
-              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
-                <p className="font-medium text-foreground">Editezi un produs din cos</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Modificarile inlocuiesc linia de acum. Cat timp nu salvezi, cosul ramane neatins.
-                </p>
-              </div>
-            )}
-            {editare.disparuta && (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-                <p className="font-medium text-amber-700 dark:text-amber-400">Linia nu mai e in cos</p>
-                <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
-                  A fost stearsa intre timp. Ce ai completat aici se pastreaza: apasa
-                  „Adauga in cos” ca sa o pui din nou.
-                </p>
-              </div>
-            )}
-
-            {/* Cantitate + cele doua actiuni */}
-            <div className="flex flex-col gap-2.5 pt-1">
-              <div className="flex items-stretch gap-2.5">
-                <Stepper valoare={cantitate} seteaza={setCantitate}
-                  maxim={stocRamas !== null && stocRamas > 0 ? stocRamas : null} />
-                {(arataButonCos || editare.activ) && (
-                  <button type="button" onClick={adaugaInCos}
-                    disabled={isOutOfStock || needsVariant || (!demo && !cos)}
-                    className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-                    style={{ backgroundColor: color }}>
-                    {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
-                    <span className="truncate">{editare.activ ? "Salveaza" : adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Perechea din model: cosul poarta culoarea magazinului, comanda
-                  directa e neagra. Butonul comun ii da si efectele alese de
-                  comerciant, doar forma difera. */}
-              {/*
-                ⚠ „Comanda acum" DISPARE cat timp editam — aceeasi hotarare ca in celalalt model:
-                lasat, ar fi trimis o comanda directa si ar fi lasat linia stricata in cos.
-              */}
-              {!editare.activ && <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
-                needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
-                onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
-                clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-                eticheta={
-                  <>
-                    <CreditCard size={18} />
-                    {isOutOfStock ? "Stoc epuizat"
-                      : needsVariant ? "Selecteaza optiunile"
-                      : isPreorder ? "Precomanda acum"
-                      : "Comanda acum"}
-                  </>
-                } />}
-
-              {/* Reducerile de cantitate, sub butonul de comanda: acolo se uita
-                  omul cand se intreaba „cat costa daca iau mai multe?". */}
-              {!editare.activ && (
-                <TabelPraguri
-                  randuri={randuriDePraguri}
-                  /* ⚠ Se misca selectorul PAGINII, nu se deschide o fereastra
-                     cu alta cantitate. Macheta asta are deja „- 1 +" deasupra
-                     butonului: o cantitate paralela, nevazuta, ar fi facut
-                     pagina sa arate 1 si comanda sa plece cu 10. */
-                  laAlegere={(cantitateCeruta) => setCantitate(cantitateCeruta)}
-                />
-              )}
-              {/* ⚠ Anularea, la fel de la indemana ca salvarea — vezi nota din `ProductPageClassic`. */}
-              {editare.activ && (
-                <a href={inapoiLaCos} onClick={() => editare.incheieEditarea()}
-                  className="w-full h-11 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors">
-                  Renunta la modificari
-                </a>
-              )}
-              <p aria-live="polite" className="sr-only">{adaugat ? "Produsul a fost adaugat in cos" : ""}</p>
-              {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
-              {!editare.activ && (
-                <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
-              )}
-              {/*
-                SETUL, LANGA PRET. Se vede doar daca oferta chiar cere asezarea asta;
-                implicita ramane banda lata de mai jos, deci ofertele care exista nu se muta.
-              */}
-              {!demo && aseza.langaPret.length > 0 && (
-                <div ref={refSetSus}>
-                  <SetulDeLangaPret oferte={aseza.langaPret} color={color}
-                    anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
-                    indisponibil={ancoraIndisponibila}
-                    onBuyTogether={handleBuyTogether} />
-                </div>
-              )}
-            </div>
-
-            {/* Trepte de cantitate: existau in date, dar se vedeau abia in
-                formularul de comanda — adica dupa ce clientul decisese cate ia.
-                Preturile de treapta le onoreaza doar comanda directa, deci
-                fiecare rand duce acolo, cu numarul lui de bucati: altfel ar sta
-                langa un buton de cos care le ignora. */}
-            {arataTrepte && quantityTiers && quantityTiers.length > 1 && (
-              <div className="rounded-md border border-border overflow-hidden mt-1">
-                <p className="px-4 py-2.5 text-sm font-semibold text-foreground bg-muted/40 border-b border-border">
-                  Cumperi mai multe, platesti mai putin
-                </p>
-                <ul>
-                  {quantityTiers.slice(1).map((treapta) => (
-                    <li key={treapta.qty} className="border-b border-border last:border-0">
-                      <button type="button" disabled={isOutOfStock || needsVariant}
-                        onClick={() => { setCantitate(treapta.qty); setFbtOffer(undefined); setModalOpen(true); }}
-                        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                        <span className="text-sm text-foreground">
-                          <span className="font-semibold">{treapta.qty} bucati</span>
-                          {treapta.badge ? <span className="text-muted-foreground"> · {treapta.badge}</span> : null}
-                        </span>
-                        <span className="text-sm font-bold shrink-0" style={{ color }}>{formatPrice(treapta.price)}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista */}
-            {arataContact && (business.phone || business.whatsapp) && (
-              <div className="flex items-center gap-4 flex-wrap text-[13px] pt-1">
-                <span className="text-muted-foreground">Ai intrebari despre produs?</span>
-                {business.phone && (
-                  <a href={`tel:${business.phone}`} className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
-                    <Phone size={14} /> {business.phone}
-                  </a>
-                )}
-                {business.whatsapp && (
-                  <a href={`https://wa.me/${String(business.whatsapp).replace(/[^0-9]/g, "")}`}
-                    target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
-                    <MessageCircle size={14} /> WhatsApp
-                  </a>
-                )}
-              </div>
-            )}
+            {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "cumparare").map((b) => <Fragment key={b.id}>{bucati[b.type]}</Fragment>)}
           </div>
 
           {/*
@@ -1143,73 +1366,7 @@ export function ProductPageDetailed({
             cade oricum dupa butoane, unde ii e locul.
           */}
           <div className="lg:col-start-1 lg:row-start-2 flex flex-col gap-4">
-            {/* Un magazin poate sa nu fi completat niciunul dintre randuri: un
-                chenar cu titlu si nimic sub el arata a eroare, nu a informatie. */}
-            {arataDetalii && areDetalii && (
-            <div className="rounded-md border border-border divide-y divide-border">
-              <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
-                Detalii produs
-              </p>
-              <div className="flex flex-col gap-2 px-4 py-3.5">
-                {termenPreco && (
-                  <RandMeta eticheta="Livrare (precomanda)">{termenPreco}</RandMeta>
-                )}
-                {dateLivrare && !termenPreco && (
-                  <RandMeta eticheta={deliveryEstimate?.text || "Livrare estimata"}>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Calendar size={13} className="text-muted-foreground" />
-                      {dateLivrare.de} - {dateLivrare.pana}
-                    </span>
-                  </RandMeta>
-                )}
-                {codProdus !== "" && <RandMeta eticheta="Cod produs">{codProdus}</RandMeta>}
-                {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
-                {categorie !== "" && (
-                  <RandMeta eticheta="Categorie">
-                    <a href={hrefCategorie(radacinaCatalog, categorie, chrome?.categoriiPePagina)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
-                  </RandMeta>
-                )}
-                {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}
-                {product.weight_grams ? <RandMeta eticheta="Greutate">{product.weight_grams} g</RandMeta> : null}
-              </div>
-            </div>
-            )}
-
-            {/* Primele specificatii urca aici, langa imagine: pe o pagina care
-                se lauda ca e „detaliata", tabelul complet nu poate incepe abia
-                dupa doua ecrane de derulare. */}
-            {arataRezumatSpec && specifications.length > 0 && (
-              <div className="rounded-md border border-border divide-y divide-border">
-                <p className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-foreground bg-muted/40">
-                  Pe scurt
-                </p>
-                <dl className="flex flex-col gap-2 px-4 py-3.5">
-                  {specifications.slice(0, cateSpecificatii).map((spec, i) => (
-                    <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-0.5 sm:gap-3 text-[13px]">
-                      <dt className="sm:w-36 sm:shrink-0 text-muted-foreground">{spec.label}</dt>
-                      <dd className="text-foreground font-medium min-w-0">{spec.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {specifications.length > SPECIFICATII_LANGA_GALERIE && (
-                  <button type="button" onClick={() => { setFila("specificatii"); fileRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-                    className="w-full px-4 py-2.5 text-[13px] font-semibold text-left hover:bg-muted/30 transition-colors" style={{ color }}>
-                    Vezi toate specificatiile
-                  </button>
-                )}
-              </div>
-            )}
-
-            {trustBadgesEnabled && (
-              <ul className="rounded-md border border-border divide-y divide-border">
-                {insigneIncredere.map(({ icon: Icon, text }) => (
-                  <li key={text} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-muted-foreground">
-                    <Icon size={15} style={{ color }} />
-                    {text}
-                  </li>
-                ))}
-              </ul>
-            )}
+            {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "sub_galerie").map((b) => <Fragment key={b.id}>{subGalerie[b.type]}</Fragment>)}
           </div>
         </div>
       </div>
@@ -1242,13 +1399,13 @@ export function ProductPageDetailed({
                 „Detaliat".
               */}
               <div className="pt-6">
-                {hasLongDesc && (
+                {areFila("descriere") && (
                   <div hidden={filaCurenta !== "descriere"}
                     className="policy-content text-muted-foreground leading-relaxed text-sm max-w-3xl"
                     dangerouslySetInnerHTML={{ __html: product.description! }} />
                 )}
 
-                {specifications.length > 0 && (
+                {areFila("specificatii") && (
                   <dl hidden={filaCurenta !== "specificatii"} className="max-w-3xl divide-y divide-border">
                     {specifications.map((spec, i) => (
                       <div key={`${spec.label}-${i}`} className="flex flex-col sm:flex-row gap-1 sm:gap-4 py-2.5 text-sm">
@@ -1259,9 +1416,9 @@ export function ProductPageDetailed({
                   </dl>
                 )}
 
-                {faqSection?.enabled && (
+                {areFila("intrebari") && (
                   <div hidden={filaCurenta !== "intrebari"} className="max-w-3xl">
-                    {(faqSection.items ?? []).map((faq, i) => (
+                    {(faqSection?.items ?? []).map((faq, i) => (
                       <FAQItem key={i} faq={faq} isOpen={faqOpen === i}
                         onToggle={() => setFaqOpen(faqOpen === i ? null : i)} />
                     ))}
@@ -1271,80 +1428,7 @@ export function ProductPageDetailed({
             </div>
           )}
 
-          {/* ─── Continutul pachetului ───────────────────────────────────── */}
-          {product.is_bundle && bundleComponents.length > 0 && (
-            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
-              <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
-              {/* `grid-cols-1` din acelasi motiv ca la grila eroului, dar aici
-                  numele componentei e cel care umfla pista: `truncate` inseamna
-                  `white-space: nowrap`, iar `overflow: hidden` nu taie
-                  min-content-ul unei cutii-bloc, doar ce se vede din ea. Fara
-                  plafon, un nume de patruzeci de caractere cerea 529px intr-o
-                  coloana de 352 si scotea pagina din ecran. */}
-              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {bundleComponents.map((c) => (
-                  <li key={c.id} className="flex items-center gap-3 rounded-md border border-border p-3">
-                    <div className="relative w-14 h-14 shrink-0 rounded-md overflow-hidden bg-muted/20">
-                      {c.image_url
-                        ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
-                        : <Package size={20} className="text-muted-foreground/40 absolute inset-0 m-auto" />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
-                      <p className="text-xs text-muted-foreground">{c.quantity} buc.</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* ─── Merge bine cu ───────────────────────────────────────────── */}
-          {/* Invelisul nestilizat e doar tinta observatorului de afisari; fratii
-              lui sunt tot blocuri, deci asezarea ramane neschimbata. */}
-          {productOffers.length > 0 && (
-            <div ref={refOferteJos}>
-              <ProductOffers offers={aseza.subProdus} basePath={basePath} color={color}
-                anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
-                ancoraIndisponibila={ancoraIndisponibila}
-                onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
-            </div>
-          )}
-
-          {/* ─── Beneficii ───────────────────────────────────────────────── */}
-          {benefitsSection?.enabled && (benefitsSection.items?.length ?? 0) > 0 && (
-            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
-              <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
-              {/* `grid-cols-1` ca peste tot in fisier: textele de aici se rup
-                  la spatii, deci azi nu umfla pista, dar un singur sir fara
-                  spatii scris de comerciant (o adresa, un cod) ar face-o. */}
-              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {benefitsSection.items.map((b, i) => (
-                  <li key={i} className="rounded-md border border-border p-4">
-                    <p className="font-semibold text-foreground text-sm mb-1">{b.title}</p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{b.desc}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* ─── Cum functioneaza ────────────────────────────────────────── */}
-          {howItWorksSection?.enabled && (howItWorksSection.steps?.length ?? 0) > 0 && (
-            <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
-              <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
-              <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {howItWorksSection.steps.map((s, i) => (
-                  <li key={i} className="rounded-md border border-border p-4">
-                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white mb-2"
-                      style={{ backgroundColor: color }}>{i + 1}</span>
-                    <p className="font-semibold text-foreground text-sm mb-1">{s.title}</p>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
+          {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => <Fragment key={b.id}>{jos[b.type]}</Fragment>)}
 
           {/* ─── Bara lipita jos, pe telefon ─────────────────────────────── */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3 flex items-center gap-3"

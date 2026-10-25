@@ -92,7 +92,8 @@ import { NUME_CURIER_EPACKET } from "@/lib/epacket/client";
 import { judetDupaCodAuto } from "@/lib/ro/judete";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import { euCountryByIso2 } from "@/lib/eu-countries";
-import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
+import { aplicaPretulLaPunct, applyShippingRules, aratiSamedayPoint, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
+import { CURIERI_CU_LOCKERE } from "@/lib/shipping/curieri-cu-puncte";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { semneazaPunctul } from "@/lib/shipping/punctul-ales-e-semnat";
 import { reteaSameday, reteaSmartship, reteauaPunctului, serviciulShipo, tipPunctFanCuImplicit } from "@/lib/shipping/reteaua-punctului";
@@ -518,7 +519,7 @@ export async function getShippingOptions(
    */
   if (settings.shipping_enabled !== true) return [];
 
-  const zones = (settings.shipping_zones ?? {}) as Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
+  const zones = (settings.shipping_zones ?? {}) as Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string; locker_price?: number; pudo?: boolean }>;
   const enabledZones = Object.entries(zones).filter(([, z]) => z.enabled);
 
   // No courier enabled in shipping_zones — nothing to show
@@ -1039,7 +1040,9 @@ export async function getShippingOptions(
          * comerciantul. ⚠ Optiunea de easybox NU poarta campul, si asta nu e o scapare: lasat
          * gol acolo, amprenta ei ramane identica cu ce se semna ieri. Vezi `amprentaPlanului`.
          */
-        promises.push(
+        /* ⚠ Si numai cand comerciantul nu l-a scos din Setari > Livrare (`pudo: false`, 25.10.2026):
+           unii vor doar easybox, fiindca la punctele din magazine coletul sta altfel. */
+        if (aratiSamedayPoint(zone)) promises.push(
           getSamedayPudoServiceId(samedayConfig!)
             .catch(() => null)
             .then((idPudo) => {
@@ -2239,6 +2242,16 @@ export async function getShippingOptions(
    * curierilor fara API de tarif, unde `price` E pretul, nu o rezerva. Vezi
    * `optiuni-de-rezerva.ts` pentru de ce nu se taie toate rezervele.
    */
+  /*
+   * ═══ PRETUL FIX LA PUNCT (25.10.2026) ═══
+   *
+   * `locker_price` din zona curierului inlocuieste, la optiunile la punct, cotatia sau tariful
+   * zonei. AICI, inaintea filtrului de rezerve la 0 lei si a regulilor: e pret de baza, deci
+   * regulile se aplica peste el, iar o cotatie picata nu mai duce punctul la zero. Fara
+   * `locker_price`, optiunile ies neatinse. Vezi `aplicaPretulLaPunct`.
+   */
+  options = aplicaPretulLaPunct(options, zones);
+
   const zonaCurierului = new Map(enabledZones);
   const taiate: string[] = [];
   options = options.filter((o) => {
@@ -3441,7 +3454,7 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 }
 
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
-const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups", "curiera", "epacket"]);
+// `CURIERI_CU_LOCKERE` sta in `@/lib/shipping/curieri-cu-puncte`: o citeste si panoul de livrare.
 
 /**
  * Un punct de ridicare, cu fisa lui semnata de server.

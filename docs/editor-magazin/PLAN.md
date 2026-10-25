@@ -505,8 +505,10 @@ Citit in cod inainte:
 
 ### Pasii (bifati pe masura ce se fac)
 
-- [ ] 6.1 Logica fara React: forma lui `continut`, parserul lui (lista alba, plafon), suprapunerea
-      peste `page_content`, `business` si contextul parserului, amprenta pentru garda. Probe.
+- [x] 6.1 (25.10, `continut-ciorna.ts`, garda in `draft-guard.ts`; 9 probe, 6 din 6 mutatii prinse) Logica fara React: forma lui `continut`, parserul lui (lista alba, plafon), suprapunerea
+      peste `page_content`, `business` si contextul parserului, amprenta pentru garda. Probe. Amprenta
+      continutului e JSON cu cheile ordonate: `jsonb` isi rearanjeaza cheile, iar valorile din `pc` nu
+      trec printr-un parser care sa le refaca ordinea.
 - [ ] 6.2 Serverul: `saveDesignDraft` (context cu continutul, garda pe tot), `publishDesign`
       (continut, apoi design), stergerea lui `elibereazaComutatoare`. Probe.
 - [ ] 6.3 Magazinul in modul editor: rutele pun continutul ciornei peste date. Probe, si ca un

@@ -1,3 +1,4 @@
+import { amprentaContinut, contextCuCiorna, continutDinCiorna } from "./continut-ciorna";
 import { isEmptyDesign, parseStoreDesign } from "./parse";
 import type { DesignContext } from "./types";
 
@@ -24,6 +25,9 @@ import type { DesignContext } from "./types";
  * aceleiasi cioarne sa nu para un conflict. Asta cere ca parserul sa fie
  * idempotent — in baza sta deja `parse(design)`, iar clientul trimite `design` —
  * si exact asta verifica testul din `draft-guard.test.ts`.
+ *
+ * Din etapa 6 ciorna tine si continutul nepublicat (`continut`, vezi `continut-ciorna.ts`), deci
+ * amprenta il cuprinde: o fila care schimba doar un text tot schimba ciorna celeilalte.
  */
 export function ciornaAFostSchimbata(inBazaRaw: unknown, baza: unknown, ctx: DesignContext): boolean {
   return amprenta(inBazaRaw, ctx) !== amprenta(baza, ctx);
@@ -39,5 +43,8 @@ export function ciornaAFostSchimbata(inBazaRaw: unknown, baza: unknown, ctx: Des
  */
 function amprenta(raw: unknown, ctx: DesignContext): string | null {
   if (raw === null || raw === undefined || isEmptyDesign(raw)) return null;
-  return JSON.stringify(parseStoreDesign(raw, ctx));
+  // Designul se parseaza cu continutul ciornei lui: un rand de produse care exista doar in ciorna
+  // ar fi iesit altfel din design ca orfan.
+  const continut = continutDinCiorna(raw);
+  return `${JSON.stringify(parseStoreDesign(raw, contextCuCiorna(ctx, continut)))}|${amprentaContinut(continut)}`;
 }

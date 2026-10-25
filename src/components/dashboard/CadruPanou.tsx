@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { esteEcranIntreg } from "@/lib/editor-magazin/ecran-intreg";
 
@@ -28,10 +28,16 @@ export function CadruPanou({ banda, laterala, sus, jos, children }: {
 }) {
   const ecranIntreg = esteEcranIntreg(usePathname());
 
+  /*
+   * Fiecare slot in `Fragment`-ul lui, cu cheie. Un element trimis de pe server ca proprietate
+   * poate sosi „lenes” (`$L…` in RSC), iar cand se rezolva DUPA randarea de aici, marcajul de
+   * copil static nu mai ajunge pe el: React striga atunci „Each child in a list should have a
+   * unique key” desi lista e scrisa de mana (vazut la proba 4.7, pe `BottomNav`).
+   */
   if (ecranIntreg) {
     return (
       <div className="h-dvh flex flex-col overflow-hidden">
-        {banda}
+        <Fragment key="banda">{banda}</Fragment>
         <main className="flex-1 min-h-0">{children}</main>
       </div>
     );
@@ -39,13 +45,13 @@ export function CadruPanou({ banda, laterala, sus, jos, children }: {
 
   return (
     <>
-      {banda}
-      {laterala}
+      <Fragment key="banda">{banda}</Fragment>
+      <Fragment key="laterala">{laterala}</Fragment>
       <div className="lg:pl-[var(--sidebar-width)]">
         {sus}
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>
       </div>
-      {jos}
+      <Fragment key="jos">{jos}</Fragment>
     </>
   );
 }

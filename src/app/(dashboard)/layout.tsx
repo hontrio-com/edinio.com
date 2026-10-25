@@ -190,33 +190,38 @@ export default async function DashboardLayout({ children }: { children: React.Re
             isAdmin={esteAdminConfirmat(user, profile.role)}
           />
         }
-        sus={
-          <>
-            {profile.plan === "free" && profile.plan_expires_at && (
-              <TrialBanner planExpiresAt={profile.plan_expires_at} zileRamase={zileRamase(profile.plan_expires_at)} />
-            )}
-            {suspendedBusiness?.suspended_until && (
-              <GracePeriodBanner zileRamase={zileRamase(suspendedBusiness.suspended_until)} />
-            )}
-            {showPastDueBanner && <PaymentPastDueBanner />}
-            <DashboardTopbar
-              userFullName={profile.full_name}
-              /* ⚠ Desenat pe server din id-ul utilizatorului: acelasi id da mereu
-                 acelasi chip, deci si conturile de azi il capata pe al lor, fara
-                 nicio schimbare in baza. Biblioteca nu ajunge in pachetul
-                 browserului. */
-              avatarSvg={avatarUtilizator(user.id, 28)}
-              plan={profile.plan}
-              recentOrders={recentOrders}
-              notifications={notifications}
-              ordersSeenAt={profile.orders_seen_at}
-              currentBusiness={currentBusiness}
-              smsoEnabled={smsoEnabled}
-              unreadSupportCount={unreadSupportCount}
-              isAdmin={esteAdminConfirmat(user, profile.role)}
-            />
-          </>
-        }
+        /*
+          Lista cu chei, nu fragment: un fragment cu mai multi copii, trimis de pe server
+          unei componente de client, ajunge acolo ca lista fara chei (avertisment React,
+          vazut la proba 4.7). Nici `div` in jur: bara de sus e `sticky` si s-ar fi
+          lipit doar in interiorul lui.
+        */
+        sus={[
+          profile.plan === "free" && profile.plan_expires_at ? (
+            <TrialBanner key="proba" planExpiresAt={profile.plan_expires_at} zileRamase={zileRamase(profile.plan_expires_at)} />
+          ) : null,
+          suspendedBusiness?.suspended_until ? (
+            <GracePeriodBanner key="gratie" zileRamase={zileRamase(suspendedBusiness.suspended_until)} />
+          ) : null,
+          showPastDueBanner ? <PaymentPastDueBanner key="restanta" /> : null,
+          <DashboardTopbar
+            key="bara"
+            userFullName={profile.full_name}
+            /* ⚠ Desenat pe server din id-ul utilizatorului: acelasi id da mereu
+               acelasi chip, deci si conturile de azi il capata pe al lor, fara
+               nicio schimbare in baza. Biblioteca nu ajunge in pachetul
+               browserului. */
+            avatarSvg={avatarUtilizator(user.id, 28)}
+            plan={profile.plan}
+            recentOrders={recentOrders}
+            notifications={notifications}
+            ordersSeenAt={profile.orders_seen_at}
+            currentBusiness={currentBusiness}
+            smsoEnabled={smsoEnabled}
+            unreadSupportCount={unreadSupportCount}
+            isAdmin={esteAdminConfirmat(user, profile.role)}
+          />,
+        ]}
         jos={<BottomNav isAdmin={esteAdminConfirmat(user, profile.role)} />}
       >
         {children}

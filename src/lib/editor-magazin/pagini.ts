@@ -13,12 +13,16 @@ import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types
  * principala, sau un arbore care arata cosul cand in dreapta e produsul.
  */
 
+/**
+ * `scurt` e numele din lista „Editezi” pe telefon: langa „Ieși” (4.7) lista are vreo 70 px de
+ * text, iar trei pagini incepeau cu acelasi „Pagina”, deci aratau la fel.
+ */
 export const PAGINI_EDITOR = [
-  { cheie: "acasa", eticheta: "Pagina principală" },
-  { cheie: "produs", eticheta: "Pagina de produs" },
-  { cheie: "magazin", eticheta: "Pagina Magazin" },
-  { cheie: "cos", eticheta: "Coșul" },
-  { cheie: "comanda", eticheta: "Finalizarea comenzii" },
+  { cheie: "acasa", eticheta: "Pagina principală", scurt: "Acasă" },
+  { cheie: "produs", eticheta: "Pagina de produs", scurt: "Produs" },
+  { cheie: "magazin", eticheta: "Pagina Magazin", scurt: "Magazin" },
+  { cheie: "cos", eticheta: "Coșul", scurt: "Coșul" },
+  { cheie: "comanda", eticheta: "Finalizarea comenzii", scurt: "Comanda" },
 ] as const;
 
 export type CheiePagina = (typeof PAGINI_EDITOR)[number]["cheie"];

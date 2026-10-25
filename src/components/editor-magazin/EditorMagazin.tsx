@@ -393,7 +393,7 @@ export function EditorMagazin({
         pagina={pagina} onPagina={schimbaPagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}
         publicat={continut.publicat} publicareInCurs={continut.publicareInCurs} onComutaPublicarea={continut.comutaPublicarea}
-        continutNesalvat={continut.oriceNesalvat} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil}
+        continutNesalvat={continut.oriceNesalvat} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
       />
 
       <div className="flex flex-1 min-h-0">

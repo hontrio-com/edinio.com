@@ -8,7 +8,8 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 **Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
 (blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
-sa iti dau la final lista cu toate mentiunile mele”. **Urmeaza 4b** (sabloane de produs pe categorie
+sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte
+importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **Urmeaza 4b** (sabloane de produs pe categorie
 sau pe produs), cu plan separat scris inainte de cod. Intrebarea despre teme a fost pusa si a ramas
 fara raspuns; etapa 4 nu depinde de ea, deci ramane deschisa pentru lista lui de la final. Planul si
 bifele: sectiunea „Etapa 4: planul de lucru”.
@@ -284,12 +285,22 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - [x] 4.5 (25.10, `MarcajBloc`, `selectorMarcaj`; filele Detaliat raman fara marcaj propriu) Previzualizarea: marcaj pe bloc, contur si clic pe bloc.
 - [x] 4.6 Porti + proba in Chrome. 25.10: tot ce e in „Stare si reluare”, plus trei reparatii gasite
       de proba (numele casetei pachetului, nota blocurilor de pachet, titlul panoului care se taia).
-- [ ] 4.7 (25.10, cerut de el, intercalat inainte de 4b) **Editorul pe tot ecranul.** Fara bara
+- [x] 4.7 (25.10, cerut de el, intercalat inainte de 4b) **Editorul pe tot ecranul.** Fara bara
       laterala, bannere, bara de sus si meniul de jos ale panoului (`CadruPanou`, regula in
       `ecran-intreg.ts`; bara de impersonare ramane); „Ieși” in bara editorului, cu intrebare cand
       e continut nesalvat sau design nepublicat („Publică și ieși”). Cu ocazia asta, salvarea
       ciornei trece printr-o coada (`coada-salvarii.ts`): o scriere pe drum, baza citita la plecare,
-      golita la iesire, asteptata de Publica si Renunta. Cod si probe facute; RAMANE proba in Chrome.
+      golita la iesire, asteptata de Publica si Renunta. **Probat in Chrome pe 25.10** (demo, contul de
+      proba, cu acordul lui; starea pusa la loc si verificata): din bara laterala, editorul se deschide
+      pe tot ecranul (pagina = fereastra, 855 px, fara bara laterala si fara bara de sus); „Ieși” fara
+      modificari duce direct in panou; o modificare de design urmata de „Ieși” la 282 ms (inaintea
+      salvarii automate de la 1,2 s) a ajuns in ciorna; textul nesalvat cere „Ieși fără să salvez”, iar
+      „Rămân” il pastreaza; Biblioteca Media isi pastreaza cadrul; Media -> Editor pe client, tot ecranul.
+      Proba a gasit doua lucruri, reparate: (1) avertisment React „Each child in a list should have a
+      unique key” din `CadruPanou` (un element trimis de pe server ca proprietate sosea „lenes”, iar
+      marcajul de copil static nu-l mai prindea; fiecare slot sta acum in `Fragment`-ul lui, cu cheie);
+      (2) pe telefon (386 px) lista paginilor ajunsese sa arate doar „Pa”: acum arata nume scurte
+      („Acasă”, „Produs”...), iar „Vezi” ramane doar cu pictograma sub 420 px.
 - [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a).
 
 ## Deciziile proprietarului

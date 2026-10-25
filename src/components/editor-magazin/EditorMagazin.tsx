@@ -155,6 +155,8 @@ export function EditorMagazin({
   const [blocPagina, setBlocPagina] = useState<string | null>(null);
   const [setariPaginii, setSetariPaginii] = useState(false);
   const [tintaBloc, setTintaBloc] = useState<TintaBloc | null>(null);
+  /** De cate ori s-a cerut „Redă animația”, pe bloc; pleaca in cadru cu blocurile. */
+  const [reluari, setReluari] = useState<Record<string, number>>({});
   // In `useMemo`: un apel liber al lui `findBlock` in randare facea React Compiler sa trateze tot ce
   // deriva din el ca valoare schimbatoare, si pierdea stabilitatea setterelor din tot componentul.
   const starePagina = paginaDeschisa.stare;
@@ -323,19 +325,19 @@ export function EditorMagazin({
    * de previzualizare (produse, pachete, formulare, plati, curieri) doar la deschidere si la fiecare
    * „ready”, ca tastarea sa nu care de fiecare data zecile de produse. Vezi `PaginaVie`.
    */
-  const paginaAcum = useRef({ id: idPagina, stare: paginaDeschisa.stare, date: paginaDeschisa.date });
+  const paginaAcum = useRef({ id: idPagina, stare: paginaDeschisa.stare, date: paginaDeschisa.date, reluari });
   useEffect(() => {
-    paginaAcum.current = { id: idPagina, stare: paginaDeschisa.stare, date: paginaDeschisa.date };
-  }, [idPagina, paginaDeschisa.stare, paginaDeschisa.date]);
+    paginaAcum.current = { id: idPagina, stare: paginaDeschisa.stare, date: paginaDeschisa.date, reluari };
+  }, [idPagina, paginaDeschisa.stare, paginaDeschisa.date, reluari]);
   const trimitePagina = useCallback((cuDate: boolean) => {
-    const { id, stare, date } = paginaAcum.current;
+    const { id, stare, date, reluari: r } = paginaAcum.current;
     if (!id || !stare || !date) return;
     rama.current?.contentWindow?.postMessage({
-      [PREVIEW_MESSAGE]: "pagina", id, blocks: stare.blocks, css: stare.css,
+      [PREVIEW_MESSAGE]: "pagina", id, blocks: stare.blocks, css: stare.css, reluari: r,
       ...(cuDate ? { date: { products: date.products, bundles: date.pachete, forms: date.forms, plati: date.integrari.plati, curieri: date.integrari.curieri } } : {}),
     }, window.location.origin);
   }, []);
-  useEffect(() => { trimitePagina(false); }, [paginaDeschisa.stare, trimitePagina]);
+  useEffect(() => { trimitePagina(false); }, [paginaDeschisa.stare, reluari, trimitePagina]);
   useEffect(() => { trimitePagina(true); }, [paginaDeschisa.date, trimitePagina]);
 
   /*
@@ -625,7 +627,8 @@ export function EditorMagazin({
               <PanouPagina stare={paginaDeschisa.stare} pagina={paginaDeschisa} date={paginaDeschisa.date} onInapoi={() => setSetariPaginii(false)} />
             ) : idPagina && blocPaginaDeschis && paginaDeschisa.date ? (
               <PanouBlocPagina key={blocPaginaDeschis.id} bloc={blocPaginaDeschis} pagina={paginaDeschisa} date={paginaDeschisa.date}
-                titluPagina={paginaDeschisa.stare?.titlu ?? ""} onInapoi={() => setBlocPagina(null)} />
+                titluPagina={paginaDeschisa.stare?.titlu ?? ""} onInapoi={() => setBlocPagina(null)}
+                onRedaAnimatia={() => setReluari((r) => ({ ...r, [blocPaginaDeschis.id]: (r[blocPaginaDeschis.id] ?? 0) + 1 }))} />
             ) : sectiuneSelectata && blocDeschis ? (
               <PanouBloc
                 key={`${sectiuneSelectata.id}/${blocDeschis.id}`}

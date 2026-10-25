@@ -1,4 +1,4 @@
-import type { AnimatieIntrare, BlockStyle, EfectButon, EfectImagine } from "./blocks.types";
+import type { AnimatieIntrare, Block, BlockStyle, EfectButon, EfectImagine } from "./blocks.types";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -80,6 +80,19 @@ export function atributeAnimatie(style?: BlockStyle): { attrs: Record<string, st
 export function clasaEfectButon(e?: EfectButon | string | null): string {
   if (!e || e === "none") return "";
   return `fx-${e}`;
+}
+
+/**
+ * Cheia sub care se randeaza un bloc in editor: cu setarile animatiei si de cate ori s-a cerut
+ * „Redă animația”, ca orice schimbare sa remonteze blocul si animatia sa se vada din nou, pe loc.
+ *
+ * ⚠ Fara remontare, blocul caruia i se alege o animatie primea `data-anim` fara `data-anim-in`:
+ * scriptul paginii (`pornesteAnimatiile`) vede doar noduri NOI, deci blocul ramanea ascuns
+ * (`opacity: 0`) in previzualizarea editorului unic.
+ */
+export function cheieAnimatie(b: Block, reluare: number): string {
+  const s = b.style;
+  return s?.anim && s.anim !== "none" ? `${b.id}:${s.anim}:${s.animSpeed ?? ""}:${s.animDelay ?? 0}:${reluare}` : b.id;
 }
 
 export function clasaEfectImagine(e?: EfectImagine | string | null): string {

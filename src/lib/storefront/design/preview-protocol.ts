@@ -161,6 +161,8 @@ export interface PreviewPaginaMessage {
   blocks: Block[];
   css: string;
   date?: DatePrevizualizarePagina;
+  /** De cate ori s-a cerut „Redă animația”, pe id de bloc (vezi `cheieAnimatie`). */
+  reluari?: Record<string, number>;
 }
 
 export type PreviewMessage =

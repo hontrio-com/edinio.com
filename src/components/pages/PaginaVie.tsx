@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { BLOCK_META, type Block } from "@/lib/pages/blocks.types";
+import { cheieAnimatie } from "@/lib/pages/animatii";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
 import { titlulPrincipal } from "@/lib/pages/titlul-principal";
 import {
@@ -40,7 +41,7 @@ export function PaginaVie({ pageId, cssInitial, ctx, children }: {
   ctx: Pick<BlockRendererCtx, "color" | "basePath" | "storeSlug" | "social" | "businessId" | "estePaginaAcasa">;
   children: ReactNode;
 }) {
-  const [viu, setViu] = useState<{ blocks: Block[]; css: string; date: DatePrevizualizarePagina } | null>(null);
+  const [viu, setViu] = useState<{ blocks: Block[]; css: string; date: DatePrevizualizarePagina; reluari: Record<string, number> } | null>(null);
 
   useEffect(() => {
     function laMesaj(e: MessageEvent) {
@@ -48,7 +49,7 @@ export function PaginaVie({ pageId, cssInitial, ctx, children }: {
       const mesaj = e.data;
       // Doar pentru pagina asta: alta pagina deschisa in editor nu-si muta blocurile aici.
       if (mesaj[PREVIEW_MESSAGE] !== "pagina" || mesaj.id !== pageId) return;
-      setViu((inainte) => ({ blocks: mesaj.blocks, css: mesaj.css, date: mesaj.date ?? inainte?.date ?? FARA_DATE }));
+      setViu((inainte) => ({ blocks: mesaj.blocks, css: mesaj.css, date: mesaj.date ?? inainte?.date ?? FARA_DATE, reluari: mesaj.reluari ?? {} }));
     }
     window.addEventListener("message", laMesaj);
     return () => window.removeEventListener("message", laMesaj);
@@ -57,7 +58,8 @@ export function PaginaVie({ pageId, cssInitial, ctx, children }: {
   const sectiune = cheiaPaginiiProprii(pageId);
   const css = sanitizeCss(viu ? viu.css : cssInitial);
   const marcheazaBloc = (b: Block, continut: ReactNode) => (
-    <div {...{ [BLOC_ATTR]: idBloc(sectiune, b.id), [ETICHETA_ATTR]: BLOCK_META[b.type]?.label ?? b.type }} className="contents">
+    // Cheia animatiei: o animatie aleasa sau reluata remonteaza blocul, iar scriptul paginii il porneste.
+    <div key={cheieAnimatie(b, viu?.reluari[b.id] ?? 0)} {...{ [BLOC_ATTR]: idBloc(sectiune, b.id), [ETICHETA_ATTR]: BLOCK_META[b.type]?.label ?? b.type }} className="contents">
       {continut}
     </div>
   );

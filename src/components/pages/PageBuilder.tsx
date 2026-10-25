@@ -34,17 +34,8 @@ import { toateClaseleDeFont } from "./fonturi-incarcate";
 import { titlulPrincipal } from "@/lib/pages/titlul-principal";
 import { cn } from "@/lib/utils/cn";
 import { RedaAnimatia } from "./editor/ControaleAspect";
+import { cheieAnimatie } from "@/lib/pages/animatii";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
-
-/**
- * Cheia sub care se randeaza un bloc in editor. Include setarile animatiei (si
- * un numar pentru „Reda animatia”), ca orice schimbare sa remonteze blocul si
- * animatia sa se vada din nou, pe loc.
- */
-function cheieAnimatie(b: Block, reluare: number): string {
-  const s = b.style;
-  return s?.anim && s.anim !== "none" ? `${b.id}:${s.anim}:${s.animSpeed ?? ""}:${s.animDelay ?? 0}:${reluare}` : b.id;
-}
 
 interface BuilderBusiness {
   id: string; slug: string; custom_domain: string | null;

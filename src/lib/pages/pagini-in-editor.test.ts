@@ -53,3 +53,24 @@ test("invelisul blocurilor e optional: fara el, `BlockRenderer` randeaza exact c
   // Pagina publica nu-l da niciodata.
   assert.doesNotMatch(sursa("src/components/pages/BlocuriPagina.tsx"), /marcheazaBloc/);
 });
+
+test("⚠⚠ o animatie aleasa sau reluata in editor remonteaza blocul, altfel el ramane ascuns", async () => {
+  /*
+   * Scriptul paginii (`pornesteAnimatiile`) porneste doar blocurile NOI. Un bloc vechi caruia i se
+   * alege o animatie primea `data-anim` fara `data-anim-in` si ramanea la `opacity: 0`.
+   */
+  const { cheieAnimatie } = await import("./animatii");
+  const b = { id: "b1", type: "heading", text: "T" } as never as Parameters<typeof cheieAnimatie>[0];
+  assert.equal(cheieAnimatie(b, 0), "b1", "fara animatie, cheia e id-ul: blocul nu se remonteaza la fiecare litera");
+  const cu = (style: Record<string, unknown>, reluare = 0) => cheieAnimatie({ ...b, style } as never, reluare);
+  const chei = [cu({ anim: "fade" }), cu({ anim: "zoom-in" }), cu({ anim: "fade", animSpeed: "slow" }), cu({ anim: "fade", animDelay: 300 }), cu({ anim: "fade" }, 1)];
+  assert.equal(new Set(["b1", ...chei]).size, 6, "fiecare schimbare a animatiei (si fiecare reluare) da alta cheie");
+  assert.equal(cu({ anim: "none" }), "b1");
+  // Previzualizarea foloseste cheia pe fiecare bloc (si pe cele din coloane: `marcheazaBloc` e in ctx).
+  assert.match(sursa(VIE), /<div key=\{cheieAnimatie\(b, viu\?\.reluari\[b\.id\] \?\? 0\)\}/);
+  // In editor scriptul animatiilor e mereu in pagina: blocurile pot primi animatii oricand.
+  assert.match(sursa(RUTA), /\{\(areAnimatii \|\| esteEditorDesign\) && <script dangerouslySetInnerHTML=\{\{ __html: SCRIPT_ANIMATII \}\} \/>\}/);
+  // „Redă animația” din panoul blocului ajunge in previzualizare.
+  assert.match(sursa("src/components/editor-magazin/PanouriPagina.tsx"), /<RedaAnimatia\.Provider value=\{onRedaAnimatia\}>/);
+  assert.match(sursa("src/components/editor-magazin/EditorMagazin.tsx"), /\[PREVIEW_MESSAGE\]: "pagina", id, blocks: stare\.blocks, css: stare\.css, reluari: r,/);
+});

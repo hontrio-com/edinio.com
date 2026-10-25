@@ -3,6 +3,7 @@
 import { ArrowLeft, Plus, Settings2 } from "lucide-react";
 import { BlockSettings } from "@/components/pages/BlockSettings";
 import { FurnizorLegaturi } from "@/components/pages/editor/CampLink";
+import { RedaAnimatia } from "@/components/pages/editor/ControaleAspect";
 import { toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
 import { IconitaBloc, PaletaBlocuri } from "@/components/pages/PaletaBlocuri";
 import { SetariPagina } from "@/components/pages/SetariPagina";
@@ -43,12 +44,14 @@ const integrariSetari = (d: DateEditorPagina) => ({
   curieri: d.integrari.curieri.map((m) => m.nume),
 });
 
-export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi }: {
+export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi, onRedaAnimatia }: {
   bloc: Block;
   pagina: PaginaDeschisa;
   date: DateEditorPagina;
   titluPagina: string;
   onInapoi: () => void;
+  /** „Redă animația”: blocul se remonteaza in previzualizare (`cheieAnimatie`). */
+  onRedaAnimatia: () => void;
 }) {
   const eticheta = BLOCK_META[bloc.type]?.label ?? bloc.type;
   const rezumat = rezumatBloc(bloc);
@@ -58,22 +61,24 @@ export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi }: {
       <div className={cn("space-y-5 pb-6", toateClaseleDeFont())}>
         <Antet titlu={eticheta} subtitlu={rezumat ? `${titluPagina} · ${rezumat}` : titluPagina}
           icon={<IconitaBloc tip={bloc.type} className="h-4 w-4" />} onInapoi={onInapoi} />
-        <BlockSettings
-          key={bloc.id}
-          block={bloc}
-          // Cheia tine campurile atinse: tastarea intr-un camp e un singur pas la Anuleaza.
-          onChange={(patch) => pagina.aplica(
-            (s: StarePagina) => ({ ...s, blocks: updateBlockInTree(s.blocks, bloc.id, patch) }),
-            `bloc:${bloc.id}:${Object.keys(patch).sort().join(",")}`,
-          )}
-          categories={date.categorii}
-          forms={date.forms}
-          businessId={date.business.id}
-          isAdmin={date.isAdmin}
-          integrari={integrariSetari(date)}
-          pachete={date.pachete}
-          randuriProduse={date.randuriProduse}
-        />
+        <RedaAnimatia.Provider value={onRedaAnimatia}>
+          <BlockSettings
+            key={bloc.id}
+            block={bloc}
+            // Cheia tine campurile atinse: tastarea intr-un camp e un singur pas la Anuleaza.
+            onChange={(patch) => pagina.aplica(
+              (s: StarePagina) => ({ ...s, blocks: updateBlockInTree(s.blocks, bloc.id, patch) }),
+              `bloc:${bloc.id}:${Object.keys(patch).sort().join(",")}`,
+            )}
+            categories={date.categorii}
+            forms={date.forms}
+            businessId={date.business.id}
+            isAdmin={date.isAdmin}
+            integrari={integrariSetari(date)}
+            pachete={date.pachete}
+            randuriProduse={date.randuriProduse}
+          />
+        </RedaAnimatia.Provider>
       </div>
     </FurnizorLegaturi>
   );

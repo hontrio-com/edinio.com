@@ -9,6 +9,7 @@ import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { MarcajSectiune } from "@/components/storefront/SectionRenderer";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { checkoutOnPage } from "@/lib/storefront/design/commerce";
@@ -143,16 +144,18 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     <StorefrontThemeScope style={resolved.style}>
       <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen flex flex-col">
         <main className="flex-1">
-          <CheckoutPageClient
-            variant={resolved.design.commerce.checkout.variant}
-            color={business.primary_color ?? "#07c527"}
-            basePath={basePath}
-            businessId={business.id}
-            shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
-            freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
-            emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
-            initialDiscountCode={code ?? null}
-          />
+          <MarcajSectiune sectiune={resolved.design.commerce.checkout}>
+            <CheckoutPageClient
+              variant={resolved.design.commerce.checkout.variant}
+              color={business.primary_color ?? "#07c527"}
+              basePath={basePath}
+              businessId={business.id}
+              shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
+              freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
+              emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
+              initialDiscountCode={code ?? null}
+            />
+          </MarcajSectiune>
         </main>
       </StorePageShell>
     </StorefrontThemeScope>

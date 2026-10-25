@@ -42,6 +42,7 @@ export function SectionList({
   primaMutabila,
   ultimaMutabila,
   marcaj,
+  onPeste,
 }: {
   sections: SectionInstance[];
   selectedId: string | null;
@@ -59,6 +60,8 @@ export function SectionList({
   ultimaMutabila: number;
   /** Ceva de aratat langa numele randului (de exemplu „continut nesalvat”). */
   marcaj?: (s: SectionInstance) => React.ReactNode;
+  /** Mouse-ul a intrat pe un rand (id) sau a iesit (`null`): conturul din previzualizare. */
+  onPeste?: (id: string | null) => void;
 }) {
   const sensors = useSensors(
     // Un prag mic de miscare: fara el, orice click pe rand ar porni o tragere.
@@ -99,6 +102,7 @@ export function SectionList({
               onDuplicate={() => onDuplicate(s.id)}
               onRemove={() => onRemove(s.id)}
               marcaj={marcaj?.(s)}
+              onPeste={onPeste}
             />
           ))}
         </ul>
@@ -119,6 +123,7 @@ function SectionRow({
   onDuplicate,
   onRemove,
   marcaj,
+  onPeste,
 }: {
   section: SectionInstance;
   index: number;
@@ -131,6 +136,7 @@ function SectionRow({
   onDuplicate: () => void;
   onRemove: () => void;
   marcaj?: React.ReactNode;
+  onPeste?: (id: string | null) => void;
 }) {
   const mutabila = index >= primaMutabila && index <= ultimaMutabila;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id, disabled: !mutabila });
@@ -153,6 +159,8 @@ function SectionRow({
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
+      onMouseEnter={() => onPeste?.(section.id)}
+      onMouseLeave={() => onPeste?.(null)}
       className={`rounded-xl border bg-surface transition-shadow ${
         selected ? "border-primary ring-1 ring-primary/20" : "border-border"
       } ${isDragging ? "shadow-lg opacity-90" : ""}`}

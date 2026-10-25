@@ -12,7 +12,7 @@ import { firstVariant } from "@/lib/storefront/design/registry";
 import type { SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
 import type { FelContinut } from "@/lib/editor-magazin/noduri";
-import { adresaPrevizualizarii, sectiunilePaginii, type CheiePagina, type MagazinPentruPagini } from "@/lib/editor-magazin/pagini";
+import { adresaPrevizualizarii, paginaSectiunii, sectiunilePaginii, type CheiePagina, type MagazinPentruPagini } from "@/lib/editor-magazin/pagini";
 import { ArboreSectiuni } from "./ArboreSectiuni";
 import { BaraEditor } from "./BaraEditor";
 import { GalerieAdauga } from "./GalerieAdauga";
@@ -172,6 +172,8 @@ export function EditorMagazin({
     ];
     return laPornire.some((s) => s.id === sectiuneInitiala) ? sectiuneInitiala : null;
   });
+  /** Randul din arbore de sub mouse: conturul lui se vede in previzualizare. */
+  const [peste, setPeste] = useState<string | null>(null);
   const [galerieDesign, setGalerieDesign] = useState<string | null>(null);
   const [adaugaDeschis, setAdaugaDeschis] = useState(false);
   const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
@@ -243,19 +245,22 @@ export function EditorMagazin({
    */
   useEffect(() => { trimiteDesignul(); }, [design, ctxStil, trimiteDesignul]);
 
-  useEffect(() => {
-    function laMesaj(e: MessageEvent) {
-      if (e.origin !== window.location.origin || !isPreviewMessage(e.data)) return;
-      if (e.data[PREVIEW_MESSAGE] === "ready") trimiteDesignul();
-      else if (e.data[PREVIEW_MESSAGE] === "select") {
-        setFila("sectiuni");
-        setSelectat(e.data.sectionId);
-        setVedereMobil("panou");
-      }
-    }
-    window.addEventListener("message", laMesaj);
-    return () => window.removeEventListener("message", laMesaj);
-  }, [trimiteDesignul]);
+  /*
+   * Conturul din previzualizare (etapa 3): nodul deschis in panou, doar pe fila
+   * Sectiuni, si randul din arbore de sub mouse, doar cand arborele se vede. Ce
+   * se deseneaza decide previzualizarea (`ConturEditor`); selectia ramane aici.
+   */
+  const selectatVazut = fila === "sectiuni" && sectiuneSelectata ? sectiuneSelectata.id : null;
+  const pesteVazut = sectiuneSelectata ? null : peste;
+  const evidentiereAcum = useRef({ selectat: selectatVazut, peste: pesteVazut });
+  useEffect(() => { evidentiereAcum.current = { selectat: selectatVazut, peste: pesteVazut }; }, [selectatVazut, pesteVazut]);
+  const trimiteEvidentierea = useCallback(() => {
+    rama.current?.contentWindow?.postMessage(
+      { [PREVIEW_MESSAGE]: "evidentiere", ...evidentiereAcum.current },
+      window.location.origin,
+    );
+  }, []);
+  useEffect(() => { trimiteEvidentierea(); }, [selectatVazut, pesteVazut, trimiteEvidentierea]);
 
   /** Adu sectiunea in dreptul ochilor, in previzualizare. */
   const arataInPrevizualizare = useCallback((id: string) => {
@@ -277,6 +282,8 @@ export function EditorMagazin({
 
   // ── Actiuni ──
   const selecteaza = useCallback((id: string) => {
+    // Arborele dispare sub panou fara sa mai primeasca „mouse-ul a iesit”.
+    setPeste(null);
     setSelectat(id);
     arataInPrevizualizare(id);
   }, [arataInPrevizualizare]);
@@ -284,9 +291,37 @@ export function EditorMagazin({
   const schimbaPagina = useCallback((p: CheiePagina) => {
     setPagina(p);
     setSelectat(null);
+    setPeste(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
   }, []);
+
+  // ── Mesajele din previzualizare ──
+  useEffect(() => {
+    function laMesaj(e: MessageEvent) {
+      if (e.origin !== window.location.origin || !isPreviewMessage(e.data)) return;
+      const tip = e.data[PREVIEW_MESSAGE];
+      if (tip === "ready") trimiteDesignul();
+      else if (tip === "conturGata") trimiteEvidentierea();
+      else if (tip === "select") {
+        /*
+         * Sectiunea poate sta pe alta pagina decat cea aleasa: pe „Coșul” cu cos
+         * in sertar, previzualizarea arata prima pagina. Atunci editorul trece pe
+         * pagina ei, altfel clicul n-ar fi avut ce nod sa deschida.
+         */
+        const id = e.data.sectionId;
+        const unde = paginaSectiunii(design, id, pagina, pagini);
+        if (!unde) return;
+        if (unde !== pagina) schimbaPagina(unde);
+        setFila("sectiuni");
+        setPeste(null);
+        setSelectat(id);
+        setVedereMobil("panou");
+      }
+    }
+    window.addEventListener("message", laMesaj);
+    return () => window.removeEventListener("message", laMesaj);
+  }, [trimiteDesignul, trimiteEvidentierea, design, pagina, pagini, schimbaPagina]);
 
   const adaugaSectiune = useCallback(async (kind: SectionKind) => {
     setAdaugaDeschis(false);
@@ -367,7 +402,7 @@ export function EditorMagazin({
             ) : (
               <div className="pb-6">
                 <ArboreSectiuni
-                  ciorna={ciorna} pagina={pagina} magazin={pagini} selectat={selectat} onSelect={selecteaza}
+                  ciorna={ciorna} pagina={pagina} magazin={pagini} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
                   nesalvat={nesalvat} onAdauga={() => { setAdaugaDeschis(true); setVedereMobil("previzualizare"); }}
                   paginaAcasa={paginaAcasa}
                 />

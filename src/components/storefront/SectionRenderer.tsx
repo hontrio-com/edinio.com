@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, type ComponentType } from "react";
+import { Fragment, type ComponentType, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { groupSections, sectionLayout } from "@/lib/storefront/design/group-sections";
-import { SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
+import { ETICHETA_ATTR, SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
+import { sectionMeta } from "@/lib/storefront/design/registry";
 import { useStoreChrome } from "./StorefrontProvider";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { AnnouncementMarquee } from "./sections/chrome/AnnouncementMarquee";
@@ -195,11 +196,52 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
  * click. Vezi `preview-protocol.ts`.
  */
 function Marcata({ section, estePrima = false }: { section: SectionInstance; estePrima?: boolean }) {
-  const { esteEditorDesign } = useStoreChrome();
-  if (!esteEditorDesign) return <SectionOne section={section} estePrima={estePrima} />;
   return (
-    <div {...{ [SECTION_ATTR]: section.id }} className="contents">
+    <MarcajSectiune sectiune={section}>
       <SectionOne section={section} estePrima={estePrima} />
+    </MarcajSectiune>
+  );
+}
+
+/**
+ * Invelisul de editor, pentru orice sectiune: cele din lista de mai sus si cele
+ * randate direct de pagina lor (pagina de produs, Magazinul, cosul, comanda), care
+ * pana la etapa 3 n-aveau marcaj si nu se puteau alege din previzualizare.
+ *
+ * In afara editorului de design intoarce copiii neatinsi: niciun element in plus
+ * pe magazinul public. Numele sectiunii sta langa id, ca stratul de contur
+ * (`ConturEditor`) sa-l scrie fara sa caute in design.
+ */
+export function MarcajSectiune({ sectiune, children }: {
+  sectiune: Pick<SectionInstance, "id" | "kind">;
+  children: ReactNode;
+}) {
+  const { esteEditorDesign } = useStoreChrome();
+  if (!esteEditorDesign) return <>{children}</>;
+  const eticheta = sectionMeta(sectiune.kind)?.label ?? sectiune.kind;
+  return (
+    <div {...{ [SECTION_ATTR]: sectiune.id, [ETICHETA_ATTR]: eticheta }} className="contents">
+      {children}
+      <LocGol eticheta={eticheta} />
+    </div>
+  );
+}
+
+/**
+ * Locul unei sectiuni aprinse care n-a randat nimic, DOAR in editor.
+ *
+ * Galeria fara imagini, recenziile fara recenzii, pragul de transport fara
+ * valoare: aprinse in arbore, dar fara nicio cutie in previzualizare, deci nu
+ * se puteau nici vedea, nici apasa. Apare numai cand e singurul copil al
+ * invelisului (`only:`), adica exact cand sectiunea n-a pus nimic langa el; fara
+ * efecte si fara masuratori, deci fara clipire la hidratare.
+ */
+function LocGol({ eticheta }: { eticheta: string }) {
+  return (
+    <div className="hidden only:block max-w-6xl mx-auto px-4 py-3">
+      <div className="rounded-xl border-2 border-dashed border-[#93c5fd] bg-[#eff6ff] px-4 py-5 text-center text-sm text-[#1d4ed8]">
+        Secțiunea „{eticheta}” e goală, deci nu apare în magazin. Apasă aici ca s-o completezi.
+      </div>
     </div>
   );
 }

@@ -22,19 +22,21 @@ import type { CiornaDesign } from "./useCiornaDesign";
  */
 
 /** Randul unei sectiuni fixe (bara de anunt, antet, subsol, pagina de produs...). */
-function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi }: {
+function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi, onPeste }: {
   sectiune: SectionInstance | null;
   eticheta: string;
   selectat: boolean;
   nesalvat: boolean;
   onSelect: () => void;
   ochi?: { pornit: boolean; onComuta: () => void };
+  onPeste: (id: string | null) => void;
 }) {
   const meta = sectiune ? sectionMeta(sectiune.kind) : undefined;
   const varianta = sectiune ? variantMeta(sectiune.kind, sectiune.variant) : undefined;
   const aprinsa = sectiune?.enabled ?? false;
   return (
-    <li className={`rounded-xl border bg-surface ${selectat ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
+    <li onMouseEnter={() => onPeste(sectiune?.id ?? null)} onMouseLeave={() => onPeste(null)}
+      className={`rounded-xl border bg-surface ${selectat ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
       <div className="flex items-center gap-1 pl-3 pr-1.5 py-1">
         <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center gap-2.5 py-2 text-left">
           <PageIcon name={meta?.icon ?? "Square"} className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -70,12 +72,14 @@ function Titlu({ children }: { children: React.ReactNode }) {
   return <p className="px-1 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
 }
 
-export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, nesalvat, onAdauga, paginaAcasa }: {
+export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, onPeste, nesalvat, onAdauga, paginaAcasa }: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
   magazin: MagazinPentruPagini;
   selectat: string | null;
   onSelect: (id: string) => void;
+  /** Mouse-ul pe un rand (id) sau iesit (`null`): conturul din previzualizare. */
+  onPeste: (id: string | null) => void;
   /** Are nodul continut nesalvat? */
   nesalvat: (fel: FelContinut | null) => boolean;
   onAdauga: () => void;
@@ -99,10 +103,10 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, ne
       <Titlu>Sus, pe toate paginile</Titlu>
       <ul className="space-y-1.5">
         <RandFix sectiune={bara} eticheta="Bara de anunț" selectat={selectat === (bara?.id ?? ID_BARA_ANUNT)}
-          nesalvat={nesalvat("anunt")} onSelect={() => onSelect(bara?.id ?? ID_BARA_ANUNT)}
+          nesalvat={nesalvat("anunt")} onSelect={() => onSelect(bara?.id ?? ID_BARA_ANUNT)} onPeste={onPeste}
           ochi={{ pornit: bara?.enabled === true, onComuta: () => aplica((d: StoreDesign) => comutaBaraDeAnunt(d), "ochi:anunt") }} />
         <RandFix sectiune={design.chrome.header} eticheta="Antet" selectat={selectat === design.chrome.header.id}
-          nesalvat={nesalvat("header")} onSelect={() => onSelect(design.chrome.header.id)} />
+          nesalvat={nesalvat("header")} onSelect={() => onSelect(design.chrome.header.id)} onPeste={onPeste} />
       </ul>
 
       <Titlu>{numePagina}</Titlu>
@@ -130,6 +134,7 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, ne
             primaMutabila={0}
             ultimaMutabila={design.home.length - 1}
             marcaj={marcaj}
+            onPeste={onPeste}
           />
           <button type="button" onClick={onAdauga}
             className="mt-2 w-full h-11 rounded-xl border border-dashed border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-2">
@@ -141,7 +146,7 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, ne
         <ul className="space-y-1.5">
           {sectiuni.map((s) => (
             <RandFix key={s.id} sectiune={s} eticheta={sectionMeta(s.kind)?.label ?? s.kind} selectat={selectat === s.id}
-              nesalvat={nesalvat(felContinut(s))} onSelect={() => onSelect(s.id)} />
+              nesalvat={nesalvat(felContinut(s))} onSelect={() => onSelect(s.id)} onPeste={onPeste} />
           ))}
         </ul>
       )}
@@ -149,7 +154,7 @@ export function ArboreSectiuni({ ciorna, pagina, magazin, selectat, onSelect, ne
       <Titlu>Jos, pe toate paginile</Titlu>
       <ul className="space-y-1.5">
         <RandFix sectiune={design.chrome.footer} eticheta="Subsol" selectat={selectat === design.chrome.footer.id}
-          nesalvat={nesalvat("footer")} onSelect={() => onSelect(design.chrome.footer.id)} />
+          nesalvat={nesalvat("footer")} onSelect={() => onSelect(design.chrome.footer.id)} onPeste={onPeste} />
       </ul>
     </div>
   );

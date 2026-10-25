@@ -63,6 +63,27 @@ export function sectiunilePaginii(design: StoreDesign, pagina: CheiePagina, m: M
 }
 
 /**
+ * Pe ce pagina din editor sta o sectiune, pentru un clic dat in previzualizare.
+ *
+ * Intai pagina aleasa: antetul, subsolul si bara de anunt sunt pe toate, deci
+ * raman acolo. Apoi celelalte, in ordinea din lista. Cazul pentru care exista:
+ * pe „Coșul” cu cos in sertar previzualizarea arata prima pagina, iar un clic pe
+ * banner nu avea niciun nod de deschis, deci nu facea nimic. `null` cand
+ * sectiunea nu e pe nicio pagina (de exemplu una stinsa intre timp).
+ */
+export function paginaSectiunii(
+  design: StoreDesign,
+  id: string,
+  curenta: CheiePagina,
+  m: MagazinPentruPagini,
+): CheiePagina | null {
+  const comune = [design.chrome.announcement, design.chrome.header, design.chrome.footer];
+  if (comune.some((s) => s?.id === id)) return curenta;
+  const ordinea = [curenta, ...PAGINI_EDITOR.map((p) => p.cheie).filter((p) => p !== curenta)];
+  return ordinea.find((p) => sectiunilePaginii(design, p, m).some((s) => s.id === id)) ?? null;
+}
+
+/**
  * Adresa previzualizarii pentru pagina aleasa, in modul editor.
  *
  * Cand pagina nu exista ca pagina (cos in sertar, comanda in fereastra, produse

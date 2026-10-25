@@ -20,6 +20,7 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
+import { MarcajSectiune } from "@/components/storefront/SectionRenderer";
 import { resolveProductOffers } from "@/lib/offers/offers";
 import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
@@ -318,19 +319,21 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen">
           {/* Varianta din designul VIU: in editor se schimba fara reincarcare. */}
-          <ProductPageDinDesign
-            variantImplicita={resolved.design.product.page.variant}
-            setariImplicite={resolved.design.product.page.settings}
-            business={pentruBrowser(business) as never}
-            product={product}
-            storeSettings={storeSettings as never}
-            basePath={basePath}
-            hasCardPayment={hasCardPayment}
-            bundleComponents={bundleComponents}
-            altMap={altMap}
-            productOffers={productOffers}
-            permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
-          />
+          <MarcajSectiune sectiune={resolved.design.product.page}>
+            <ProductPageDinDesign
+              variantImplicita={resolved.design.product.page.variant}
+              setariImplicite={resolved.design.product.page.settings}
+              business={pentruBrowser(business) as never}
+              product={product}
+              storeSettings={storeSettings as never}
+              basePath={basePath}
+              hasCardPayment={hasCardPayment}
+              bundleComponents={bundleComponents}
+              altMap={altMap}
+              productOffers={productOffers}
+              permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
+            />
+          </MarcajSectiune>
         </StorePageShell>
       </StorefrontThemeScope>
     </>

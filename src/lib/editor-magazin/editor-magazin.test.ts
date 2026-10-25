@@ -8,7 +8,7 @@ import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { EDITOR_PARAM, EDITOR_VALUE, esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { FEREASTRA_LIPIRE_MS, MAX_ISTORIC, anuleaza, istoricGol, noteaza, reface } from "./istoric";
-import { adresaPrevizualizarii, notaPaginii, PAGINI_EDITOR, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
+import { adresaPrevizualizarii, notaPaginii, PAGINI_EDITOR, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
 import { contextDesign, rederiva } from "./derivare";
 import { CHEI_CONTINUT, CHEI_RETRASE, felContinut, nodulCheii } from "./noduri";
 
@@ -129,6 +129,37 @@ test("fiecare pagina isi arata sectiunile ei", () => {
   assert.deepEqual(sectiunilePaginii(d, "magazin", m).map((s) => s.kind), ["shop_page"]);
   assert.deepEqual(sectiunilePaginii(d, "cos", m).map((s) => s.kind), ["cart_drawer"]);
   assert.deepEqual(sectiunilePaginii(d, "comanda", m).map((s) => s.kind), ["checkout"]);
+});
+
+// ── Clicul din previzualizare (etapa 3) ─────────────────────────────────────
+
+test("⚠⚠ clicul pe o sectiune de pe alta pagina muta editorul pe pagina ei", () => {
+  /*
+   * Pe „Coșul”, cu cos in sertar, previzualizarea arata prima pagina. Clicul pe
+   * banner nu gasea niciun nod pe pagina cosului si nu facea nimic.
+   */
+  const d = buildClassicDesign(ctx());
+  const m = magazin();
+  assert.equal(paginaSectiunii(d, "hero", "cos", m), "acasa");
+  assert.equal(paginaSectiunii(d, "catalog", "comanda", m), "acasa");
+  assert.equal(paginaSectiunii(d, d.product.page.id, "acasa", m), "produs");
+});
+
+test("antetul si subsolul raman pe pagina aleasa: sunt pe toate", () => {
+  const d = buildClassicDesign(ctx());
+  for (const { cheie } of PAGINI_EDITOR) {
+    assert.equal(paginaSectiunii(d, d.chrome.header.id, cheie, magazin()), cheie);
+    assert.equal(paginaSectiunii(d, d.chrome.footer.id, cheie, magazin()), cheie);
+  }
+});
+
+test("pagina aleasa are intaietate, iar o sectiune de nicaieri nu muta nimic", () => {
+  const d = buildClassicDesign(ctx());
+  // Magazinul cu un singur produs are pagina de produs si pe „Pagina principală”.
+  const m = magazin({ unSingurProdus: true });
+  assert.equal(paginaSectiunii(d, d.product.page.id, "acasa", m), "acasa");
+  assert.equal(paginaSectiunii(d, d.product.page.id, "produs", m), "produs");
+  assert.equal(paginaSectiunii(d, "nu_exista", "acasa", magazin()), null);
 });
 
 // ── Bara de anunt ────────────────────────────────────────────────────────────

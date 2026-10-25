@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { CartProvider } from "@/components/storefront/cart/CartProvider";
 import { ChromeSection } from "@/components/storefront/SectionRenderer";
 import { StoreChromeProvider } from "@/components/storefront/StorefrontProvider";
@@ -21,6 +22,9 @@ import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
  * la fiecare trecere.
  */
 const FARA_STIL = {} as ResolvedStyle;
+
+/** Conturul sectiunilor, doar in editor: magazinul public nu descarca nimic din el. */
+const ConturEditor = dynamic(() => import("@/components/storefront/ConturEditor"), { ssr: false });
 
 /**
  * Invelisul paginilor publice care nu au catalog: pagini custom, politici,
@@ -134,6 +138,7 @@ export function StorePageShell({
           deschideComanda={() => setComandaDeschisa(true)}
           inchideComanda={() => setComandaDeschisa(false)}
         />
+        {esteEditorDesign && <ConturEditor />}
         {lightbox && (
           <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out"
             onClick={() => setLightbox(null)}>

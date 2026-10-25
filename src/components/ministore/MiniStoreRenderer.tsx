@@ -45,7 +45,7 @@ import { variantMeta } from "@/lib/storefront/design/registry";
 import { meniuCuAcasa } from "@/lib/pages/menu";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
-import { ChromeSection, SectionRenderer } from "@/components/storefront/SectionRenderer";
+import { ChromeSection, MarcajSectiune, SectionRenderer } from "@/components/storefront/SectionRenderer";
 import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { headerAreCautare, standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { useDesignPreview } from "@/components/storefront/useDesignPreview";
@@ -88,6 +88,8 @@ const CheckoutClassic = dynamic(
 );
 const VARIANTE_COS: Record<string, typeof CartDrawerClassic> = { classic: CartDrawerClassic };
 const VARIANTE_COMANDA: Record<string, typeof CheckoutClassic> = { classic: CheckoutClassic };
+/** Conturul sectiunilor, doar in editor: magazinul public nu descarca nimic din el. */
+const ConturEditor = dynamic(() => import("@/components/storefront/ConturEditor"), { ssr: false });
 
 /*
  * Implicitele goale ale fatetelor, ca CONSTANTE de modul.
@@ -1682,7 +1684,9 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       )}
       {surface === "shop" ? (
         <main>
-          <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings} />
+          <MarcajSectiune sectiune={design.shop.page}>
+            <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings} />
+          </MarcajSectiune>
         </main>
       ) : (
         <FurnizorSloturiBlocuri sloturi={paginaProprie?.sloturi}>
@@ -1691,6 +1695,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       )}
 
       <ChromeSection section={design.chrome.footer} />
+      {editorDesign && <ConturEditor />}
 
       {/* Floating buttons */}
       <div className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>

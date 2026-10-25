@@ -6,9 +6,10 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapele 1 si 2 FACUTE, comise local si PROBATE pe ecran. Urmeaza
-etapa 3 (clic in previzualizare), doar dupa acordul lui (lucram etapa cu etapa). Inainte de etapa
-4 ramane de pus intrebarea despre teme (sectiunea „Deciziile proprietarului”).
+**Ultima stare, 25.10.2026:** etapele 1 si 2 FACUTE, comise local si PROBATE pe ecran. **Etapa 3
+(clic in previzualizare) IN LUCRU**, cu acordul lui („Da”, 25.10): planul si bifele in sectiunea
+„Etapa 3: planul de lucru”. Inainte de etapa 4 ramane de pus intrebarea despre teme (sectiunea
+„Deciziile proprietarului”).
 
 **Proba etapei 2 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO). Prima jumatate a cazut:
 sesiunea din Chrome-ul lui trecuse pe contul lui de administrator. A doua, cu acordul lui, prin
@@ -137,6 +138,54 @@ arbore pe care il regleaza.
       sterse (`StoreEditor`, `StoreDesignEditor`, `SectionDesignBrowser`, `ProductSectionsEditor`).
 - [x] 2.7 Porti + proba in Chrome pe demo. 25.10: tot ce e in „Stare si reluare”, plus cinci
       reparatii gasite de proba; porti verzi (tsc, 10.995 de probe, lint pe fisierele atinse, build:ci).
+
+## Etapa 3: planul de lucru (scris 25.10.2026, inainte de cod)
+
+Acordul lui: „Da”, 25.10.2026, dupa raportul etapei 2. Tinta din „Etapele”: clic in
+previzualizare, contur la trecerea mouse-ului, selectie la clic.
+
+Ce exista deja (mostenit din editorul de design): sectiunile de pe Acasa si antetul / subsolul au
+`data-st-section` (invelis `display: contents`, `Marcata` din `SectionRenderer.tsx`); clicul pe
+una trimite `select` si editorul o deschide in panou; editorul trimite `scrollTo`. Ce lipseste:
+niciun contur (nici la trecerea mouse-ului, nici pe sectiunea deschisa), pagina de produs,
+Magazinul, cosul si comanda n-au marcaj (clicul pe ele nu face nimic), iar o sectiune aprinsa dar
+goala nu are nicio cutie, deci nu se poate nici vedea, nici apasa.
+
+### Deciziile etapei (de ce asa)
+
+1. **Conturul se deseneaza in previzualizare**, intr-un strat deasupra paginii, fara clicuri
+   (`pointer-events: none`). Cutia se calculeaza din copiii invelisului (care n-are cutie a lui) si
+   se reface la derulare, la redimensionare si cand se schimba pagina. Stratul se incarca doar in
+   modul editor (`next/dynamic`): vitrina publica nu primeste niciun octet in plus.
+2. **Doua contururi.** „Peste”: subtire, cu numele sectiunii, cand mouse-ul e pe ea in
+   previzualizare SAU pe randul ei din arbore. „Selectat”: gros, pe nodul deschis in panou.
+   Selectia are o singura sursa, editorul; previzualizarea doar deseneaza ce i se spune (mesaj nou,
+   `evidentiere`, trimis si dupa fiecare „ready”, ca sa supravietuiasca navigarii).
+3. **Fiecare pagina din „Editezi” e clicabila**: pagina de produs, Magazinul, cosul si comanda
+   primesc marcajul sectiunii lor, ca Acasa.
+4. **Sectiunile aprinse, dar goale, primesc in editor un loc gol cu numele lor** (galerie fara
+   imagini, recenzii fara recenzii, prag de transport fara valoare). In magazin nu se schimba
+   nimic: locul gol exista doar in invelisul de editor si se ascunde din CSS (`:only-child`) cand
+   sectiunea randeaza ceva. Fara efecte si fara masuratori.
+5. **Clicul pe o sectiune care nu e pe pagina aleasa muta editorul pe pagina ei.** Exemplu: pe
+   „Cosul”, cu cos in sertar, previzualizarea arata prima pagina; clicul pe banner deschide
+   „Pagina principala” cu bannerul, in loc sa nu faca nimic.
+6. **Blocurile (`data-bloc`) vin in etapa 4**, odata cu blocurile; stratul de contur le va primi
+   fara schimbari.
+7. Ramane pe mai tarziu, de discutat: sertarul cosului si fereastra comenzii deschise singure in
+   previzualizare cand le selectezi; butoane pe sectiunea selectata, direct in previzualizare.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 3.1 (25.10, `contur-editor.ts` + probe) Logica fara React: cutia unei sectiuni din cutiile copiilor, id-ul sectiunii de sub
+      mouse, pagina pe care sta o sectiune; mesajul `evidentiere` in protocol; probe.
+- [x] 3.2 (25.10, `ConturEditor.tsx`) Stratul de contur in previzualizare, in ambele gazde (`MiniStoreRenderer`,
+      `StorePageShell`), incarcat doar in editor.
+- [x] 3.3 (25.10, `MarcajSectiune`) Marcajul pe pagina de produs, Magazin, cos si comanda.
+- [x] 3.4 (25.10, `LocGol`, `only:`) Locul gol pentru sectiunile aprinse fara continut, doar in editor.
+- [x] 3.5 (25.10) Editorul trimite selectia si trecerea peste randurile arborelui; clicul de pe alta
+      pagina muta pagina.
+- [ ] 3.6 Porti + proba in Chrome (cere sesiunea contului de proba: il intreb atunci).
 
 ## Deciziile proprietarului
 

@@ -92,11 +92,33 @@ export interface PreviewSelectMessage {
   sectionId: string;
 }
 
+/**
+ * Editor -> preview: ce sectiune e deschisa in panou si peste ce rand din arbore
+ * e mouse-ul. Previzualizarea doar deseneaza conturul; selectia o tine editorul.
+ */
+export interface PreviewEvidentiereMessage {
+  [PREVIEW_MESSAGE]: "evidentiere";
+  selectat: string | null;
+  peste: string | null;
+}
+
+/**
+ * Preview -> editor: stratul de contur s-a montat, trimite-mi evidentierea.
+ *
+ * Separat de „ready”: stratul se incarca la cerere, dupa hidratare, deci
+ * raspunsul la „ready” ajunge de obicei inaintea lui si s-ar pierde.
+ */
+export interface PreviewConturGataMessage {
+  [PREVIEW_MESSAGE]: "conturGata";
+}
+
 export type PreviewMessage =
   | PreviewDesignMessage
   | PreviewScrollMessage
   | PreviewReadyMessage
-  | PreviewSelectMessage;
+  | PreviewSelectMessage
+  | PreviewEvidentiereMessage
+  | PreviewConturGataMessage;
 
 export function isPreviewMessage(data: unknown): data is PreviewMessage {
   return (
@@ -108,3 +130,6 @@ export function isPreviewMessage(data: unknown): data is PreviewMessage {
 
 /** Atributul pus pe fiecare sectiune randata, ca preview-ul sa stie ce s-a atins. */
 export const SECTION_ATTR = "data-st-section";
+
+/** Numele sectiunii, langa id, ca stratul de contur sa-l scrie fara sa caute in design. */
+export const ETICHETA_ATTR = "data-st-eticheta";

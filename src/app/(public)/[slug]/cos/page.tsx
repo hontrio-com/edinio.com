@@ -5,6 +5,7 @@ import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { MarcajSectiune } from "@/components/storefront/SectionRenderer";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
@@ -148,24 +149,26 @@ export default async function CosPage({ params, searchParams }: Props) {
     <StorefrontThemeScope style={resolved.style}>
       <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen flex flex-col">
         <main className="flex-1">
-          <CartPageClient
-            variant={resolved.design.commerce.cartDrawer.variant}
-            settings={resolved.design.commerce.cartDrawer.settings}
-            color={business.primary_color ?? "#07c527"}
-            basePath={basePath}
-            businessId={business.id}
-            shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
-            freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
-            minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
-            vat={{
-              vat_enabled: storeSettings?.vat_enabled ?? false,
-              vat_rate: Number(storeSettings?.vat_rate ?? 19),
-              prices_include_vat: storeSettings?.prices_include_vat ?? true,
-              show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
-            }}
-            comandaPePagina={checkoutOnPage(resolved.design)}
-            emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
-          />
+          <MarcajSectiune sectiune={resolved.design.commerce.cartDrawer}>
+            <CartPageClient
+              variant={resolved.design.commerce.cartDrawer.variant}
+              settings={resolved.design.commerce.cartDrawer.settings}
+              color={business.primary_color ?? "#07c527"}
+              basePath={basePath}
+              businessId={business.id}
+              shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}
+              freeShippingThreshold={pragTransportGratuit(storeSettings?.free_shipping_threshold)}
+              minOrderAmount={storeSettings?.min_order_amount ? Number(storeSettings.min_order_amount) : null}
+              vat={{
+                vat_enabled: storeSettings?.vat_enabled ?? false,
+                vat_rate: Number(storeSettings?.vat_rate ?? 19),
+                prices_include_vat: storeSettings?.prices_include_vat ?? true,
+                show_vat_breakdown: storeSettings?.show_vat_breakdown ?? true,
+              }}
+              comandaPePagina={checkoutOnPage(resolved.design)}
+              emailFieldConfig={pageContent.checkout_config?.email_field ?? { enabled: true, required: false }}
+            />
+          </MarcajSectiune>
         </main>
       </StorePageShell>
     </StorefrontThemeScope>

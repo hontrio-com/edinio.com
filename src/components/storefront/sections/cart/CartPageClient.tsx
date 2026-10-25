@@ -8,6 +8,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
 import { checkoutHref } from "@/lib/storefront/design/commerce";
 import { CartPageSection } from "./CartPageSection";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Pagina de cos, cu tot ce tine de client: modelul ales, evenimentele si drumul
@@ -48,6 +49,12 @@ export function CartPageClient({
   emailFieldConfig: { enabled: boolean; required: boolean };
 }) {
   const { items, total, count, lineUnit } = useCart();
+  /*
+   * Modelul din designul VIU, cand pagina e in editorul de design: acolo o alta
+   * varianta de cos ajunge prin mesaj, fara reincarcare. In afara editorului
+   * designul din context e chiar cel din care a citit ruta, deci nu se schimba nimic.
+   */
+  const viu = useStoreChromeOptional()?.design?.commerce.cartDrawer;
   const [comandaDeschisa, setComandaDeschisa] = useState(false);
   // Ref, nu stare: e un semn ca evenimentul a plecat, nu ceva ce se randeaza.
   const vazut = useRef(false);
@@ -94,8 +101,8 @@ export function CartPageClient({
   return (
     <>
       <CartPageSection
-        variant={variant}
-        settings={settings}
+        variant={viu?.variant ?? variant}
+        settings={viu?.settings ?? settings}
         color={color}
         basePath={basePath}
         businessId={businessId}

@@ -11,6 +11,8 @@ import { cartOnPage, checkoutOnPage } from "@/lib/storefront/design/commerce";
 import { cuSemnePastrate, sirDinSp } from "@/lib/storefront/preview-sticky";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
+import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CartPageClient } from "@/components/storefront/sections/cart/CartPageClient";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
@@ -81,8 +83,11 @@ export default async function CosPage({ params, searchParams }: Props) {
       .single(),
   ]);
 
+  // In editorul de design: ciorna proprietarului, ca un cos ales „pagina" sa se
+  // vada inainte de Publica. Vezi `ciorna-proprietarului.ts`.
+  const esteEditorDesign = esteEditorDeDesign(semneDeEditor(sp), isOwner);
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
-  const resolved = resolveDesign(storeSettings?.storefront_design, {
+  const resolved = resolveDesign(await designDeRandat(admin, business.id, storeSettings?.storefront_design, esteEditorDesign), {
     primaryColor: business.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
@@ -135,7 +140,7 @@ export default async function CosPage({ params, searchParams }: Props) {
 
   return (
     <StorefrontThemeScope style={resolved.style}>
-      <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
+      <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen flex flex-col">
         <main className="flex-1">
           <CartPageClient
             variant={resolved.design.commerce.cartDrawer.variant}

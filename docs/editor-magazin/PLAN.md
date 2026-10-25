@@ -84,7 +84,8 @@ arbore pe care il regleaza.
 
 - [x] 2.1 Poarta unica (25.10, proba `poarta-unica.test.ts`, 4/4 mutanti): componentele derivate citesc doar `enabled` din design; lista de randuri
       nu mai filtreaza pe comutatorul vechi; titlul „Toate produsele" din grila se ia din design.
-- [ ] 2.2 Previzualizarea vie pe pagina de produs, cos si comanda (ciorna + protocol).
+- [x] 2.2 Previzualizarea vie pe pagina de produs, cos si comanda (ciorna + protocol). 25.10,
+      `ciorna-proprietarului.ts` + proba ei; cosul si comanda citesc varianta din designul viu.
 - [ ] 2.3 Logica fara React: istoricul pentru anuleaza/refa, re-derivarea, adresa previzualizarii
       pe pagina aleasa, nodurile arborelui pe pagina, aprinderea barei de anunt cand lipseste.
 - [ ] 2.4 Ecranul: bara de sus, arborele, panoul nodului (design + setari + continut),

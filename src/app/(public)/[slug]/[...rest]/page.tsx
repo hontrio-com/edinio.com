@@ -56,7 +56,7 @@ export default async function RestNegasit({ params, searchParams }: Props) {
   const t = await tinta(slug, rest);
   if (!t) notFound();
   if (!t.curent) permanentRedirect(await adresaCurenta(slug, t.fel, [t.valoare], sp));
-  if (t.fel === "produs") return PaginaProdus({ slug, productSlug: t.valoare });
+  if (t.fel === "produs") return PaginaProdus({ slug, productSlug: t.valoare, sp });
   if (t.fel === "magazin") return RandeazaMagazin({ slug, sp, categorieSlug: t.valoare });
   return RandeazaMagazin({ slug, sp, brandSlug: t.valoare });
 }

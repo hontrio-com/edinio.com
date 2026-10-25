@@ -19,8 +19,10 @@ import { enrichStoreProduct } from "@/lib/storefront/product-data";
 import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
-import { ProductPageSection } from "@/components/storefront/sections/product/ProductPageSection";
+import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
 import { resolveProductOffers } from "@/lib/offers/offers";
+import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
+import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -43,6 +45,8 @@ import { adresaCurenta, setareaPermalinkurilorMagazinului } from "@/lib/storefro
 interface Props {
   slug: string;
   productSlug: string;
+  /** Adresa cererii: din ea se afla daca pagina e deschisa in editorul de design. */
+  sp?: Record<string, string | string[] | undefined>;
 }
 
 // UUID v4 pattern to detect legacy product links
@@ -154,19 +158,20 @@ function permisulProdusului(businessId: string, productId: string, pageSections:
   return semneazaPermisul(businessId, productId, campurileDeIncarcare(definitie));
 }
 
-export async function PaginaProdus({ slug, productSlug }: Props) {
+export async function PaginaProdus({ slug, productSlug, sp }: Props) {
   const supabase = await createClient();
 
   // business + product in parallel (publication gated by RLS on both tables).
   // Produsul vine din aceeasi functie cache()-uita ca generateMetadata, deci o
   // singura interogare pe products serveste ambele.
-  const [{ data: business }, product] = await Promise.all([
+  const [{ data: business }, product, { data: { user } }] = await Promise.all([
     supabase
       .from("businesses")
       .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, primary_color, is_published, custom_domain, social, gallery, features")
       .eq("slug", slug)
       .single(),
     getProductCached(slug, productSlug),
+    supabase.auth.getUser(),
   ]);
 
   if (!business || !product || product.business_id !== business.id || !product.is_active) notFound();
@@ -263,8 +268,12 @@ export async function PaginaProdus({ slug, productSlug }: Props) {
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
 
   // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.
+  //
+  // In editorul de design se randeaza ciorna proprietarului si pagina asculta
+  // editorul (`StorePageShell`), ca pe pagina principala. Vezi `ciorna-proprietarului.ts`.
+  const esteEditorDesign = esteEditorDeDesign(semneDeEditor(sp), user?.id === business.user_id);
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
-  const resolved = resolveDesign(storeSettings?.storefront_design, {
+  const resolved = resolveDesign(await designDeRandat(createAdminClient(), business.id, storeSettings?.storefront_design, esteEditorDesign), {
     primaryColor: business.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
@@ -307,10 +316,11 @@ export async function PaginaProdus({ slug, productSlug }: Props) {
         dangerouslySetInnerHTML={{ __html: jsonLdSafe(breadcrumbJsonLd) }}
       />
       <StorefrontThemeScope style={resolved.style}>
-        <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen">
-          <ProductPageSection
-            variant={resolved.design.product.page.variant}
-                setari={resolved.design.product.page.settings}
+        <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen">
+          {/* Varianta din designul VIU: in editor se schimba fara reincarcare. */}
+          <ProductPageDinDesign
+            variantImplicita={resolved.design.product.page.variant}
+            setariImplicite={resolved.design.product.page.settings}
             business={pentruBrowser(business) as never}
             product={product}
             storeSettings={storeSettings as never}

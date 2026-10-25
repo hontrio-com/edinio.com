@@ -24,5 +24,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProductDetailPage({ params, searchParams }: Props) {
   const [{ slug, productSlug }, sp] = await Promise.all([params, searchParams]);
   await redirectioneazaDacaPrefixulEAltul(slug, "produs", [productSlug], sp);
-  return PaginaProdus({ slug, productSlug });
+  return PaginaProdus({ slug, productSlug, sp });
 }

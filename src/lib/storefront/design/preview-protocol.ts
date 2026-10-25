@@ -55,6 +55,19 @@ export function esteEditorDeDesign(
   return sp.preview === "1" && sp[EDITOR_PARAM] === EDITOR_VALUE && esteProprietar;
 }
 
+/**
+ * Semnele de editor dintr-o adresa, in forma pe care o cere `esteEditorDeDesign`.
+ *
+ * Next da parametrii ca sir SAU ca lista (`?preview=1&preview=1`); o lista nu e
+ * un semn, deci ramane `undefined`, nu primul ei element.
+ */
+export function semneDeEditor(
+  sp: Record<string, string | string[] | undefined> | undefined,
+): { preview?: string; editor?: string } {
+  const unul = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
+  return { preview: unul(sp?.preview), editor: unul(sp?.[EDITOR_PARAM]) };
+}
+
 /** Editor -> preview: designul de randat acum. */
 export interface PreviewDesignMessage {
   [PREVIEW_MESSAGE]: "design";

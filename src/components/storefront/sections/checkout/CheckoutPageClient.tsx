@@ -6,6 +6,7 @@ import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { CheckoutPageSection } from "./CheckoutPageSection";
+import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 
 /**
  * Pagina de finalizare, cu evenimentele de palnie legate de incarcarea ei.
@@ -33,6 +34,8 @@ export function CheckoutPageClient({
   initialDiscountCode: string | null;
 }) {
   const { items, total, count, lineUnit } = useCart();
+  // Modelul din designul VIU, ca la pagina de cos: in editor se schimba fara reincarcare.
+  const viu = useStoreChromeOptional()?.design?.commerce.checkout.variant;
   // Ref, nu stare: e un semn ca evenimentele au plecat, nu ceva ce se randeaza.
   const trimis = useRef(false);
 
@@ -56,7 +59,7 @@ export function CheckoutPageClient({
 
   return (
     <CheckoutPageSection
-      variant={variant}
+      variant={viu ?? variant}
       open
       onClose={() => {}}
       {...props}

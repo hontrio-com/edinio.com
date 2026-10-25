@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EDITOR_PARAM, EDITOR_VALUE, PREVIEW_QUERY, esteEditorDeDesign } from "./preview-protocol";
+import { EDITOR_PARAM, EDITOR_VALUE, PREVIEW_QUERY, esteEditorDeDesign, semneDeEditor } from "./preview-protocol";
 
 /**
  * Separarea dintre „previzualizare" si „editorul de design".
@@ -44,4 +44,15 @@ test("sirul folosit de iframe chiar trece propria verificare", () => {
   // testul inchide cercul, citind sirul ca pe o adresa reala.
   const sp = Object.fromEntries(new URLSearchParams(PREVIEW_QUERY));
   assert.equal(esteEditorDeDesign(sp, true), true);
+});
+
+test("semnele din adresa: doar sirurile simple sunt semne", () => {
+  // Ce da Next pe ruta: sir, lista (parametru repetat) sau nimic.
+  assert.deepEqual(semneDeEditor({ preview: "1", [EDITOR_PARAM]: EDITOR_VALUE }), { preview: "1", editor: EDITOR_VALUE });
+  assert.deepEqual(semneDeEditor({ preview: ["1", "1"], [EDITOR_PARAM]: EDITOR_VALUE }), { preview: undefined, editor: EDITOR_VALUE });
+  assert.deepEqual(semneDeEditor(undefined), { preview: undefined, editor: undefined });
+  // Si cercul inchis: adresa iframe-ului, citita ca de o ruta, deschide modul.
+  const sp = Object.fromEntries(new URLSearchParams(PREVIEW_QUERY));
+  assert.equal(esteEditorDeDesign(semneDeEditor(sp), true), true);
+  assert.equal(esteEditorDeDesign(semneDeEditor({ preview: ["1"], [EDITOR_PARAM]: EDITOR_VALUE }), true), false);
 });

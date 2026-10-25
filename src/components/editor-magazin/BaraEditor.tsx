@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ExternalLink, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Check, ExternalLink, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -16,7 +17,13 @@ import type { CiornaDesign } from "./useCiornaDesign";
  * Aici stau lucrurile care privesc tot ecranul, nu un nod: ce pagina editezi, cum
  * o vezi, Anuleaza / Refa, Publica, si daca magazinul e deschis pentru clienti
  * (comutatorul „Publicare” din editorul vechi).
+ *
+ * Din 25.10.2026 editorul ocupa tot ecranul, fara bara laterala si bara de sus a
+ * panoului (`CadruPanou`), deci tot de aici se iese: „Ieși” duce la panou.
  */
+
+/** Unde duce „Ieși”. */
+const IESIREA = "/dashboard";
 
 const DISPOZITIVE = [
   ["mobil", Smartphone, "Telefon"],
@@ -44,12 +51,39 @@ export function BaraEditor({
   onVedereMobil: (v: "panou" | "previzualizare") => void;
 }) {
   const [confirma, setConfirma] = useState(false);
+  const router = useRouter();
+  /** „intreaba” = fereastra de iesire deschisa; „pleaca” = ciorna se trimite, apoi se iese. */
+  const [iesire, setIesire] = useState<"intreaba" | "pleaca" | null>(null);
+
+  async function pleaca(cuPublicare = false) {
+    setIesire("pleaca");
+    /* Ciorna de design se salveaza singura, dar la o secunda dupa ultima modificare: aici pleaca
+       pe loc si se asteapta. Altfel ultima modificare dinaintea iesirii nu mai ajungea in baza. */
+    const ok = cuPublicare ? await ciorna.publica() : await ciorna.salveazaAcum();
+    if (!ok) {
+      setIesire(null);
+      return;
+    }
+    router.push(IESIREA);
+  }
+
+  function iesi() {
+    if (continutNesalvat || ciorna.areModificari) setIesire("intreaba");
+    else void pleaca();
+  }
+
   const stare = ciorna.salvez
     ? "Se salvează ciorna..."
     : ciorna.areModificari ? "Modificări de design nepublicate" : "Designul e publicat";
 
   return (
     <div className="h-14 shrink-0 border-b border-border bg-surface px-3 flex items-center gap-2">
+      <button type="button" onClick={iesi} disabled={iesire === "pleaca"} title="Ieși din editor, înapoi în panou" aria-label="Ieși din editor"
+        className="h-9 shrink-0 px-2.5 rounded-lg border border-border text-xs font-medium inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-60 transition-colors">
+        {iesire === "pleaca" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeft className="h-4 w-4" />}
+        <span className="hidden sm:inline">Ieși</span>
+      </button>
+
       {/* Pe telefon lista ia locul ramas: cu latime fixa, trecea peste Anuleaza. */}
       <label className="flex-1 sm:flex-none flex items-center gap-2 min-w-0">
         <span className="hidden xl:inline text-xs text-muted-foreground">Editezi</span>
@@ -167,6 +201,31 @@ export function BaraEditor({
               onClick={async () => { await onComutaPublicarea(); setConfirma(false); }}>
               {publicat ? "Da, ascunde magazinul" : "Da, fă-l vizibil"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Iesirea cu ceva neterminat: continutul nesalvat se pierde, designul nepublicat ramane in ciorna. */}
+      <Dialog open={iesire === "intreaba"} onOpenChange={(deschis) => { if (!deschis) setIesire(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{continutNesalvat ? "Ieși fără să salvezi conținutul?" : "Ieși fără să publici?"}</DialogTitle>
+            <DialogDescription>
+              {continutNesalvat
+                ? `Ai conținut nesalvat: dacă ieși acum, se pierde.${ciorna.areModificari ? " Modificările de design rămân în ciornă." : ""}`
+                : "Modificările de design rămân în ciornă și le regăsești aici data viitoare. Clienții văd magazinul ca până acum."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIesire(null)}>Rămân</Button>
+            {continutNesalvat ? (
+              <Button variant="destructive" onClick={() => void pleaca()}>Ieși fără să salvez</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => void pleaca()}>Ieși</Button>
+                <Button disabled={ciorna.publicaInCurs} onClick={() => void pleaca(true)}>Publică și ieși</Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

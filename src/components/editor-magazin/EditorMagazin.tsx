@@ -383,11 +383,12 @@ export function EditorMagazin({
 
   return (
     /*
-      Inaltimea ecranului MINUS bara de sus a panoului (3.5rem) si, pe telefon,
-      bara de navigare de jos (5rem): altfel partea de jos a ramei se taia si
-      aparea a doua bara de derulare, a paginii.
+      Tot ecranul (25.10.2026): fara cadrul panoului (`CadruPanou`), editorul umple
+      `main`, care e ecranul minus, cel mult, bara de impersonare. Inainte scadea
+      bara de sus si meniul de jos, dar nu si bannerul de abonament, iar pagina
+      capata a doua bara de derulare.
     */
-    <div className="flex flex-col h-[calc(100dvh-3.5rem-5rem)] lg:h-[calc(100dvh-3.5rem)] overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       <BaraEditor
         pagina={pagina} onPagina={schimbaPagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}

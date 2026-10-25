@@ -1,4 +1,17 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import { esteEcranIntreg } from "@/lib/editor-magazin/ecran-intreg";
+import { ScheletEditor } from "@/components/editor-magazin/ScheletEditor";
+
+/**
+ * Incarcarea rutelor de sub `/dashboard/editor`. Editorul ia tot ecranul (`CadruPanou`), deci
+ * scheletul lui il umple; Biblioteca Media (`/editor/media`, fara incarcare proprie) e o pagina
+ * obisnuita a panoului si pastreaza scheletul de dinainte.
+ */
 export default function Loading() {
+  const ecranIntreg = esteEcranIntreg(usePathname());
+  if (ecranIntreg) return <ScheletEditor />;
   return (
     <div className="p-6 max-w-5xl mx-auto animate-pulse space-y-6">
       <div className="space-y-2">

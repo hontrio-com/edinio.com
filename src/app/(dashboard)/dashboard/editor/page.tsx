@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { MarkEditorVisited } from "@/components/dashboard/MarkEditorVisited";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { Skeleton } from "@/components/ui/skeleton";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
@@ -12,6 +11,7 @@ import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
 import { estePagina, type CheiePagina } from "@/lib/editor-magazin/pagini";
 import { EditorMagazin } from "@/components/editor-magazin/EditorMagazin";
+import { ScheletEditor } from "@/components/editor-magazin/ScheletEditor";
 
 export const metadata = { title: "Editează magazinul" };
 
@@ -42,23 +42,6 @@ export default async function EditorPage({ searchParams }: Props) {
         />
       </Suspense>
     </>
-  );
-}
-
-function ScheletEditor() {
-  return (
-    <div className="flex flex-col h-[calc(100dvh-3.5rem-5rem)] lg:h-[calc(100dvh-3.5rem)]">
-      <div className="h-14 border-b border-border px-4 flex items-center gap-3">
-        <Skeleton className="h-9 w-48" />
-        <Skeleton className="h-9 w-24 ml-auto" />
-      </div>
-      <div className="flex flex-1 min-h-0">
-        <div className="w-full lg:w-[360px] border-r border-border p-3 space-y-2">
-          {Array.from({ length: 9 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
-        </div>
-        <div className="hidden lg:block flex-1 p-5"><Skeleton className="h-full w-full rounded-xl" /></div>
-      </div>
-    </div>
   );
 }
 

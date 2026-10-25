@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { toast } from "sonner";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
 import { anuleaza, istoricGol, noteaza, reface, type Istoric } from "@/lib/editor-magazin/istoric";
+import { creeazaCoadaSalvarii, type CoadaSalvarii } from "@/lib/editor-magazin/coada-salvarii";
 import { rederiva } from "@/lib/editor-magazin/derivare";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 
@@ -111,35 +112,50 @@ export function useCiornaDesign({
 
   /*
    * Salvarea ciornei, amanata: tragerea unei sectiuni produce zeci de schimbari
-   * pe secunda. Efectul depinde DOAR de `design`; indicatorul pe care il scrie
-   * sta in afara dependentelor, altfel s-ar re-declansa singur.
+   * pe secunda. Coada (`coada-salvarii.ts`, 25.10.2026) tine o singura scriere pe
+   * drum, iar scrierea isi citeste baza si compara cu ce e deja salvat abia cand
+   * ii vine randul. Inainte baza se lua la programare: o modificare facuta cat
+   * scrierea de dinainte era pe drum pleca cu baza veche si garda o respingea, iar
+   * un Anuleaza pana la starea salvata lasa in baza o ciorna care nu se vedea.
    */
+  const coada = useRef<CoadaSalvarii<{ design: StoreDesign; gen: number }> | null>(null);
   useEffect(() => {
-    if (amprenta(design) === salvatAmprenta.current) return;
-    const gen = epoca.current;
-    const baza = cioarnaInBaza.current;
-    const id = setTimeout(async () => {
-      if (gen !== epoca.current) return;
-      setSalvez(true);
-      let res: Awaited<ReturnType<typeof saveDesignDraft>>;
-      try {
-        res = await saveDesignDraft(businessId, design, baza);
-      } catch {
+    const c = creeazaCoadaSalvarii<{ design: StoreDesign; gen: number }>({
+      intarziere: 1200,
+      scrie: async ({ design: deSalvat, gen }) => {
+        if (gen !== epoca.current) return true;
+        if (amprenta(deSalvat) === salvatAmprenta.current) return true;
+        setSalvez(true);
+        let res: Awaited<ReturnType<typeof saveDesignDraft>>;
+        try {
+          res = await saveDesignDraft(businessId, deSalvat, cioarnaInBaza.current);
+        } catch {
+          setSalvez(false);
+          toast.error("Nu am putut salva ciorna. Verifică legătura la internet; încercăm din nou la următoarea modificare.");
+          return false;
+        }
         setSalvez(false);
-        toast.error("Nu am putut salva ciorna. Verifică legătura la internet; încercăm din nou la următoarea modificare.");
-        return;
-      }
-      setSalvez(false);
-      if (gen !== epoca.current) return;
-      if ("error" in res) {
-        toast.error(res.error);
-        return;
-      }
-      salvatAmprenta.current = amprenta(design);
-      cioarnaInBaza.current = design;
-    }, 1200);
-    return () => clearTimeout(id);
-  }, [design, businessId]);
+        if (gen !== epoca.current) return true;
+        if ("error" in res) {
+          toast.error(res.error);
+          return false;
+        }
+        salvatAmprenta.current = amprenta(deSalvat);
+        cioarnaInBaza.current = deSalvat;
+        return true;
+      },
+    });
+    coada.current = c;
+    // Plecarea din editor (orice navigare in aplicatie) trimite pe loc ce mai era programat.
+    return () => { void c.goleste(); };
+  }, [businessId]);
+
+  useEffect(() => {
+    coada.current?.programeaza({ design, gen: epoca.current });
+  }, [design]);
+
+  /** Trimite pe loc ciorna programata si asteapta scrierea; `false` = n-a ajuns in baza. Pentru „Ieși”. */
+  const salveazaAcum = useCallback(async () => (coada.current ? coada.current.goleste() : true), []);
 
   // Iesirea cu modificari nepublicate merita un avertisment.
   useEffect(() => {
@@ -180,32 +196,40 @@ export function useCiornaDesign({
     setPublicat((p) => rederiva(p, ctx));
   }, []);
 
-  const publica = useCallback(async () => {
+  /** `true` cand designul a ajuns in magazin („Publică și ieși” pleaca doar atunci). */
+  const publica = useCallback(async (): Promise<boolean> => {
     epoca.current += 1;
     const dePublicat = designAcum.current;
     setPublicaInCurs(true);
+    // Scrierea de pe drum intai: ajunsa DUPA publicare, ar fi reinviat ciorna golita de ea.
+    coada.current?.anuleaza();
+    await coada.current?.goleste();
     let res: Awaited<ReturnType<typeof publishDesign>>;
     try {
       res = await publishDesign(businessId, dePublicat);
     } catch {
       setPublicaInCurs(false);
       toast.error("Nu am primit răspuns de la server, deci nu știm dacă s-a publicat. Reîncarcă pagina înainte să încerci din nou.");
-      return;
+      return false;
     }
     setPublicaInCurs(false);
     if ("error" in res) {
       toast.error(res.error);
-      return;
+      return false;
     }
     setPublicat(dePublicat);
     salvatAmprenta.current = amprenta(dePublicat);
     // Publicarea goleste coloana de ciorna; urmatoarea salvare porneste de la `null`.
     cioarnaInBaza.current = null;
     toast.success("Modificările sunt acum în magazin.");
+    return true;
   }, [businessId]);
 
   const renunta = useCallback(async () => {
     epoca.current += 1;
+    // La fel ca la Publica: o scriere ajunsa dupa golire ar fi reinviat ciorna.
+    coada.current?.anuleaza();
+    await coada.current?.goleste();
     let res: Awaited<ReturnType<typeof discardDesignDraft>>;
     try {
       res = await discardDesignDraft(businessId);
@@ -237,6 +261,7 @@ export function useCiornaDesign({
     rederivaDupaContinut,
     publica,
     renunta,
+    salveazaAcum,
   };
 }
 

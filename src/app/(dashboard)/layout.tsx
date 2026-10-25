@@ -17,6 +17,7 @@ import { esteAdminConfirmat } from "@/lib/admin-guard";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
+import { CadruPanou } from "@/components/dashboard/CadruPanou";
 import { NotificariToast } from "@/components/ui/NotificariToast";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -128,7 +129,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className={`${fontAplicatie.variable} zona-aplicatie min-h-screen bg-background`}>
       <ScrollToTop />
-      {esteImpersonare && <ImpersonationBanner />}
       {/*
         ⚠ AICI NU MAI STAU PIXELII, si e reparatia zilei de 03.09.2026.
 
@@ -174,41 +174,53 @@ export default async function DashboardLayout({ children }: { children: React.Re
         Nu e un defect: fara acord, a nu masura e raspunsul corect. Dar inseamna
         ca retargetarea din aplicatie acopera numai pe cine a acceptat pe site.
       */}
-      <Sidebar
-        currentBusiness={currentBusiness}
-        plan={profile.plan}
-        smsoEnabled={smsoEnabled}
-        unreadSupportCount={unreadSupportCount}
-        unreadReturnsCount={unreadReturnsCount}
-        isAdmin={esteAdminConfirmat(user, profile.role)}
-      />
-      <div className="lg:pl-[var(--sidebar-width)]">
-        {profile.plan === "free" && profile.plan_expires_at && (
-          <TrialBanner planExpiresAt={profile.plan_expires_at} zileRamase={zileRamase(profile.plan_expires_at)} />
-        )}
-        {suspendedBusiness?.suspended_until && (
-          <GracePeriodBanner zileRamase={zileRamase(suspendedBusiness.suspended_until)} />
-        )}
-        {showPastDueBanner && <PaymentPastDueBanner />}
-        <DashboardTopbar
-          userFullName={profile.full_name}
-          /* ⚠ Desenat pe server din id-ul utilizatorului: acelasi id da mereu
-             acelasi chip, deci si conturile de azi il capata pe al lor, fara
-             nicio schimbare in baza. Biblioteca nu ajunge in pachetul
-             browserului. */
-          avatarSvg={avatarUtilizator(user.id, 28)}
-          plan={profile.plan}
-          recentOrders={recentOrders}
-          notifications={notifications}
-          ordersSeenAt={profile.orders_seen_at}
-          currentBusiness={currentBusiness}
-          smsoEnabled={smsoEnabled}
-          unreadSupportCount={unreadSupportCount}
-          isAdmin={esteAdminConfirmat(user, profile.role)}
-        />
-        <main className="min-h-screen pb-20 lg:pb-0">{children}</main>
-      </div>
-      <BottomNav isAdmin={esteAdminConfirmat(user, profile.role)} />
+      {/*
+        Bara laterala, bannerele, bara de sus si meniul de jos trec prin `CadruPanou`:
+        in editorul magazinului nu se deseneaza, iar editorul ia tot ecranul (25.10.2026).
+      */}
+      <CadruPanou
+        banda={esteImpersonare ? <ImpersonationBanner /> : null}
+        laterala={
+          <Sidebar
+            currentBusiness={currentBusiness}
+            plan={profile.plan}
+            smsoEnabled={smsoEnabled}
+            unreadSupportCount={unreadSupportCount}
+            unreadReturnsCount={unreadReturnsCount}
+            isAdmin={esteAdminConfirmat(user, profile.role)}
+          />
+        }
+        sus={
+          <>
+            {profile.plan === "free" && profile.plan_expires_at && (
+              <TrialBanner planExpiresAt={profile.plan_expires_at} zileRamase={zileRamase(profile.plan_expires_at)} />
+            )}
+            {suspendedBusiness?.suspended_until && (
+              <GracePeriodBanner zileRamase={zileRamase(suspendedBusiness.suspended_until)} />
+            )}
+            {showPastDueBanner && <PaymentPastDueBanner />}
+            <DashboardTopbar
+              userFullName={profile.full_name}
+              /* ⚠ Desenat pe server din id-ul utilizatorului: acelasi id da mereu
+                 acelasi chip, deci si conturile de azi il capata pe al lor, fara
+                 nicio schimbare in baza. Biblioteca nu ajunge in pachetul
+                 browserului. */
+              avatarSvg={avatarUtilizator(user.id, 28)}
+              plan={profile.plan}
+              recentOrders={recentOrders}
+              notifications={notifications}
+              ordersSeenAt={profile.orders_seen_at}
+              currentBusiness={currentBusiness}
+              smsoEnabled={smsoEnabled}
+              unreadSupportCount={unreadSupportCount}
+              isAdmin={esteAdminConfirmat(user, profile.role)}
+            />
+          </>
+        }
+        jos={<BottomNav isAdmin={esteAdminConfirmat(user, profile.role)} />}
+      >
+        {children}
+      </CadruPanou>
       <NotificariToast />
     </div>
   );

@@ -284,6 +284,12 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - [x] 4.5 (25.10, `MarcajBloc`, `selectorMarcaj`; filele Detaliat raman fara marcaj propriu) Previzualizarea: marcaj pe bloc, contur si clic pe bloc.
 - [x] 4.6 Porti + proba in Chrome. 25.10: tot ce e in „Stare si reluare”, plus trei reparatii gasite
       de proba (numele casetei pachetului, nota blocurilor de pachet, titlul panoului care se taia).
+- [ ] 4.7 (25.10, cerut de el, intercalat inainte de 4b) **Editorul pe tot ecranul.** Fara bara
+      laterala, bannere, bara de sus si meniul de jos ale panoului (`CadruPanou`, regula in
+      `ecran-intreg.ts`; bara de impersonare ramane); „Ieși” in bara editorului, cu intrebare cand
+      e continut nesalvat sau design nepublicat („Publică și ieși”). Cu ocazia asta, salvarea
+      ciornei trece printr-o coada (`coada-salvarii.ts`): o scriere pe drum, baza citita la plecare,
+      golita la iesire, asteptata de Publica si Renunta. Cod si probe facute; RAMANE proba in Chrome.
 - [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a).
 
 ## Deciziile proprietarului
@@ -291,9 +297,12 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
 - 24.10.2026: tot pe o ramura separata, local, productia neatinsa pana la final.
 - 24.10.2026: „Incepe cu etapa 1, le luam pe rand pana finalizam tot.”
-- **INTREBARE DESCHISA, nepusa inca la vot:** teme intregi („alege un stil de magazin” la
-  inceput, care aseaza toate sectiunile deodata) sau doar sectiuni alese una cate una? De pus
-  inainte de etapa 4.
+- **INTREBARE DESCHISA:** teme intregi („alege un stil de magazin” la inceput, care aseaza toate
+  sectiunile deodata) sau doar sectiuni alese una cate una? Pusa pe 25.10, inainte de etapa 4;
+  fara raspuns inca, ramasa pentru lista lui de la final.
+- 25.10.2026, „mentiune foarte importanta”: „cand esti aici la Editeaza magazinul nu trebuie sa
+  mai apara nici Sidebar, nici Topbar, sa fie intreaga pagina asta cu editarea ca sa fie mult
+  loc”. Facut in 4.7: editorul ia tot ecranul, se iese cu „Ieși” din bara lui.
 
 ## De ce Shopify si nu Elementor
 

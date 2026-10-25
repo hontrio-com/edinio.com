@@ -6,10 +6,11 @@ import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { comutaBaraDeAnunt, ID_BARA_ANUNT, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { adaugaSablon } from "@/lib/storefront/design/sabloane-produs";
-import { EDITOR_PARAM, EDITOR_VALUE, esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
+import { EDITOR_PARAM, EDITOR_VALUE, cheiaPaginiiProprii, despartireId, esteEditorDeDesign, idBloc, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { FEREASTRA_LIPIRE_MS, MAX_ISTORIC, anuleaza, istoricGol, noteaza, reface } from "./istoric";
-import { adresaPrevizualizarii, notaPaginii, PAGINI_EDITOR, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
+import { adresaPrevizualizarii, idPaginaProprie, notaPaginii, PAGINI_EDITOR, paginaCeruta, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
+import { deSalvat, paginaModificata, type StarePagina } from "./pagina-proprie";
 import { contextDesign, rederiva } from "./derivare";
 import { CHEI_CONTINUT, CHEI_RETRASE, felBloc, felContinut, nodulCheii } from "./noduri";
 
@@ -148,6 +149,61 @@ test("⚠ arborele paginii de produs arata sablonul editat, iar clicul pe orice 
   assert.deepEqual(sectiunilePaginii(r.design, "produs", m).map((s) => s.id), [r.design.product.page.id]);
   assert.equal(paginaSectiunii(r.design, r.id, "acasa", m), "produs");
   assert.equal(paginaSectiunii(r.design, r.id, "acasa", magazin({ unSingurProdus: true })), null, "fara sabloane la un singur produs");
+});
+
+// ── Paginile proprii (etapa 5) ───────────────────────────────────────────────
+
+const PAGINA = "11111111-2222-4333-8444-555555555555";
+const cuPagini = (over: Partial<MagazinPentruPagini> = {}) =>
+  magazin({ paginiProprii: [{ id: PAGINA, titlu: "Despre noi", slug: "despre-noi", publicata: true }], ...over });
+
+test("⚠⚠ pagina ceruta in adresa: una fixa, una proprie A MAGAZINULUI, altfel Acasa", () => {
+  const m = cuPagini();
+  assert.equal(paginaCeruta("produs", m), "produs");
+  assert.equal(paginaCeruta(`pagina:${PAGINA}`, m), `pagina:${PAGINA}`);
+  assert.equal(paginaCeruta("pagina:alt-magazin", m), "acasa", "o pagina straina nu se deschide");
+  assert.equal(paginaCeruta(`pagina:${PAGINA}`, magazin()), "acasa", "fara lista, nicio pagina proprie");
+  assert.equal(paginaCeruta(["produs"], m), "acasa");
+  assert.equal(idPaginaProprie(`pagina:${PAGINA}`), PAGINA);
+  assert.equal(idPaginaProprie("acasa"), null);
+});
+
+test("⚠ pagina proprie: previzualizarea la adresa ei, in modul editor, fara sectiuni de design", () => {
+  const d = buildClassicDesign(ctx());
+  const m = cuPagini();
+  const adresa = adresaPrevizualizarii(`pagina:${PAGINA}`, d, m);
+  assert.match(adresa, /^\/floraria\/despre-noi\?/);
+  assert.ok(esteEditorDeDesign(semneDeEditor(Object.fromEntries(new URL(adresa, "https://x.ro").searchParams)), true));
+  assert.match(adresaPrevizualizarii("pagina:straina", d, m), /^\/floraria\?/);
+  assert.deepEqual(sectiunilePaginii(d, `pagina:${PAGINA}`, m), []);
+  assert.equal(notaPaginii(`pagina:${PAGINA}`, d, m), null);
+  assert.match(notaPaginii(`pagina:${PAGINA}`, d, cuPagini({ paginiProprii: [{ id: PAGINA, titlu: "x", slug: "x", publicata: false }] }))!, /nu e publicată/);
+});
+
+test("⚠⚠ clicul pe continutul sau pe un bloc al paginii proprii duce pe pagina ei", () => {
+  const d = buildClassicDesign(ctx());
+  const m = cuPagini();
+  const sectiune = cheiaPaginiiProprii(PAGINA);
+  assert.equal(sectiune, `pagina:${PAGINA}`);
+  assert.equal(paginaSectiunii(d, sectiune, "acasa", m), sectiune);
+  // Un bloc vine ca `<sectiune>/<bloc>`; editorul il desparte inainte sa caute pagina.
+  const { sectiune: s, bloc } = despartireId(idBloc(sectiune, "b_abc_1"));
+  assert.equal(s, sectiune);
+  assert.equal(bloc, "b_abc_1");
+  assert.equal(paginaSectiunii(d, "pagina:straina", "acasa", m), null);
+  // Antetul ramane pe pagina aleasa, si cand ea e o pagina proprie.
+  assert.equal(paginaSectiunii(d, d.chrome.header.id, sectiune, m), sectiune);
+});
+
+test("starea paginii: „nesalvat” se judeca pe tot randul; salvarea trimite tot, cu versiunea", () => {
+  const s: StarePagina = { titlu: "Despre", slug: "despre", publicata: true, blocks: [], css: "", seo: {} };
+  assert.equal(paginaModificata(s, s), false);
+  assert.equal(paginaModificata(s, { ...s }), false, "o copie identica nu e o modificare");
+  assert.equal(paginaModificata(s, { ...s, titlu: "Despre noi" }), true);
+  assert.equal(paginaModificata(s, { ...s, seo: { title: "x" } }), true);
+  assert.deepEqual(deSalvat(s, "2026-10-25T10:00:00Z"), {
+    title: "Despre", slug: "despre", blocks: [], page_css: "", seo: {}, is_published: true, versiune: "2026-10-25T10:00:00Z",
+  });
 });
 
 test("fiecare pagina isi arata sectiunile ei", () => {

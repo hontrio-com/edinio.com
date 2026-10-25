@@ -1,4 +1,9 @@
 import type { ResolvedStyle, StoreDesign } from "./types";
+import type { Block } from "@/lib/pages/blocks.types";
+import type { PublicForm } from "@/lib/pages/forms.types";
+import type { MetodaAfisata } from "@/lib/pages/integrari-pagini";
+import type { PachetPagina } from "@/lib/pages/resolve-bundles";
+import type { PageProduct } from "@/components/pages/blocks/ProductsBlock";
 
 /**
  * Protocolul dintre editor si preview-ul din iframe.
@@ -124,13 +129,48 @@ export interface PreviewConturGataMessage {
   [PREVIEW_MESSAGE]: "conturGata";
 }
 
+/**
+ * Paginile proprii in editorul unic (etapa 5). In previzualizare, continutul unei pagini proprii e
+ * sectiunea `pagina:<id>`, iar blocurile ei `pagina:<id>/<bloc>`; aceeasi cheie o are pagina in
+ * „Editezi”, deci un clic in cadru spune singur pe ce pagina e.
+ */
+export const PREFIX_PAGINA_PROPRIE = "pagina:";
+
+export function cheiaPaginiiProprii(id: string): `pagina:${string}` {
+  return `${PREFIX_PAGINA_PROPRIE}${id}`;
+}
+
+/** Ce mai trebuie blocurilor ca sa se randeze fara server: aceleasi date ca panza editorului vechi. */
+export interface DatePrevizualizarePagina {
+  products: PageProduct[];
+  bundles: PachetPagina[];
+  forms: PublicForm[];
+  plati: MetodaAfisata[];
+  curieri: MetodaAfisata[];
+}
+
+/**
+ * Editor -> preview: blocurile paginii proprii editate, inainte de salvare (etapa 5).
+ *
+ * Pagina din cadru le randeaza NUMAI daca e chiar pagina `id` si e deschisa in editor; pe magazinul
+ * public mesajul nu are cine sa-l asculte. `date` vine o singura data, cand se deschide pagina.
+ */
+export interface PreviewPaginaMessage {
+  [PREVIEW_MESSAGE]: "pagina";
+  id: string;
+  blocks: Block[];
+  css: string;
+  date?: DatePrevizualizarePagina;
+}
+
 export type PreviewMessage =
   | PreviewDesignMessage
   | PreviewScrollMessage
   | PreviewReadyMessage
   | PreviewSelectMessage
   | PreviewEvidentiereMessage
-  | PreviewConturGataMessage;
+  | PreviewConturGataMessage
+  | PreviewPaginaMessage;
 
 export function isPreviewMessage(data: unknown): data is PreviewMessage {
   return (

@@ -400,7 +400,7 @@ se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de
 
 ### Pasii (bifati pe masura ce se fac)
 
-- [ ] 5.1 Logica fara React: cheile paginilor proprii in „Editezi”, adresa previzualizarii lor,
+- [x] 5.1 (25.10, `pagini.ts`, `pagina-proprie.ts`, protocolul; 4 probe noi) Logica fara React: cheile paginilor proprii in „Editezi”, adresa previzualizarii lor,
       mesajul de protocol cu blocurile, id-urile marcajelor, starea paginii (modificari, salvare cu
       versiune, istoric). Probe.
 - [ ] 5.2 Magazinul: in modul editor, pagina proprie randeaza blocurile primite de la editor, cu

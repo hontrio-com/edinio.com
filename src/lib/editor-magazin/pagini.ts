@@ -1,5 +1,5 @@
 import { cartHref, cartOnPage, checkoutHref, checkoutOnPage, shopOnPage } from "@/lib/storefront/design/commerce";
-import { PREVIEW_QUERY, SABLON_PARAM } from "@/lib/storefront/design/preview-protocol";
+import { PREFIX_PAGINA_PROPRIE, PREVIEW_QUERY, SABLON_PARAM, cheiaPaginiiProprii } from "@/lib/storefront/design/preview-protocol";
 import { paginaSablonului } from "@/lib/storefront/design/sabloane-produs";
 import { hrefCatalogPropriu, hrefProdus } from "@/lib/storefront/permalinkuri";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
@@ -26,10 +26,31 @@ export const PAGINI_EDITOR = [
   { cheie: "comanda", eticheta: "Finalizarea comenzii", scurt: "Comanda" },
 ] as const;
 
-export type CheiePagina = (typeof PAGINI_EDITOR)[number]["cheie"];
+export type CheiePaginaFixa = (typeof PAGINI_EDITOR)[number]["cheie"];
+/** O pagina proprie, facuta in „Pagini” (etapa 5): `pagina:<custom_pages.id>`. */
+export type CheiePaginaProprie = `pagina:${string}`;
+export type CheiePagina = CheiePaginaFixa | CheiePaginaProprie;
 
-export function estePagina(v: unknown): v is CheiePagina {
+/** Una din paginile fixe ale editorului. */
+export function estePagina(v: unknown): v is CheiePaginaFixa {
   return PAGINI_EDITOR.some((p) => p.cheie === v);
+}
+
+export function estePaginaProprie(cheie: CheiePagina): cheie is CheiePaginaProprie {
+  return cheie.startsWith(PREFIX_PAGINA_PROPRIE);
+}
+
+/** Id-ul paginii proprii din cheie; `null` pentru paginile fixe. */
+export function idPaginaProprie(cheie: CheiePagina): string | null {
+  return estePaginaProprie(cheie) ? cheie.slice(PREFIX_PAGINA_PROPRIE.length) : null;
+}
+
+/** O pagina proprie, cat ii trebuie editorului: numele din „Editezi” si adresa ei. */
+export interface PaginaProprieEditor {
+  id: string;
+  titlu: string;
+  slug: string;
+  publicata: boolean;
 }
 
 /** Ce stie editorul despre magazin, cat ii trebuie ca sa aleaga pagina si adresa. */
@@ -42,6 +63,27 @@ export interface MagazinPentruPagini {
   prefixMagazin?: string;
   /** Magazinul vinde un singur produs: pagina principala ESTE pagina lui. */
   unSingurProdus: boolean;
+  /** Paginile proprii ale magazinului (etapa 5), in ordinea din „Pagini”. */
+  paginiProprii?: PaginaProprieEditor[];
+}
+
+/** Pagina proprie a cheii, daca e a magazinului; `null` pentru paginile fixe si pentru cele straine. */
+export function paginaProprie(cheie: CheiePagina, m: Pick<MagazinPentruPagini, "paginiProprii">): PaginaProprieEditor | null {
+  const id = idPaginaProprie(cheie);
+  return id ? (m.paginiProprii ?? []).find((p) => p.id === id) ?? null : null;
+}
+
+/**
+ * Pagina ceruta in adresa editorului (`?pagina=`): una fixa, o pagina proprie A MAGAZINULUI, sau
+ * Acasa. Una straina (alt magazin, stearsa intre timp) nu se deschide.
+ */
+export function paginaCeruta(v: unknown, m: Pick<MagazinPentruPagini, "paginiProprii">): CheiePagina {
+  if (estePagina(v)) return v;
+  if (typeof v === "string" && v.startsWith(PREFIX_PAGINA_PROPRIE)) {
+    const cheie = cheiaPaginiiProprii(v.slice(PREFIX_PAGINA_PROPRIE.length));
+    if (paginaProprie(cheie, m)) return cheie;
+  }
+  return "acasa";
 }
 
 /**
@@ -59,6 +101,8 @@ export function sectiunilePaginii(
   /** Sablonul de produs editat (etapa 4b); `null` = Implicit. */
   sablon: string | null = null,
 ): SectionInstance[] {
+  // O pagina proprie n-are sectiuni de design: continutul ei e al ei (`custom_pages`), in arborele lui.
+  if (estePaginaProprie(pagina)) return [];
   switch (pagina) {
     case "acasa":
       return m.unSingurProdus ? [design.product.page] : design.home;
@@ -90,9 +134,14 @@ export function paginaSectiunii(
 ): CheiePagina | null {
   const comune = [design.chrome.announcement, design.chrome.header, design.chrome.footer];
   if (comune.some((s) => s?.id === id)) return curenta;
+  // Continutul unei pagini proprii (etapa 5) e sectiunea `pagina:<id>`: pagina ei, daca e a magazinului.
+  if (id.startsWith(PREFIX_PAGINA_PROPRIE)) {
+    const cheie = cheiaPaginiiProprii(id.slice(PREFIX_PAGINA_PROPRIE.length));
+    return paginaProprie(cheie, m) ? cheie : null;
+  }
   // Pagina oricarui sablon de produs (4b) e tot „Pagina de produs”, oricare e sablonul editat acum.
   if (!m.unSingurProdus && (design.product.sabloane ?? []).some((s) => s.page.id === id)) return "produs";
-  const ordinea = [curenta, ...PAGINI_EDITOR.map((p) => p.cheie).filter((p) => p !== curenta)];
+  const ordinea: CheiePagina[] = [curenta, ...PAGINI_EDITOR.map((p) => p.cheie).filter((p) => p !== curenta)];
   return ordinea.find((p) => sectiunilePaginii(design, p, m).some((s) => s.id === id)) ?? null;
 }
 
@@ -115,6 +164,15 @@ export function adresaPrevizualizarii(
   produs: { sablon?: string | null; slug?: string | null } = {},
 ): string {
   const radacina = `/${m.slug}`;
+  /*
+   * O pagina proprie se previzualizeaza la adresa ei, chiar daca e aleasa ca pagina principala:
+   * in modul editor ruta ei nu mai trimite la radacina (acolo continutul ei e taiat intre sectiunile
+   * magazinului). Una straina cade pe pagina principala.
+   */
+  if (estePaginaProprie(pagina)) {
+    const p = paginaProprie(pagina, m);
+    return `${p ? `${radacina}/${encodeURIComponent(p.slug)}` : radacina}?${PREVIEW_QUERY}`;
+  }
   const produsSlug = produs.slug ?? m.produsSlug;
   const cale = (() => {
     switch (pagina) {
@@ -146,6 +204,11 @@ export function adresaPrevizualizarii(
  * ecran vechi: „Design sectiuni” nu mai exista.
  */
 export function notaPaginii(pagina: CheiePagina, design: StoreDesign, m: MagazinPentruPagini): string | null {
+  if (estePaginaProprie(pagina)) {
+    const p = paginaProprie(pagina, m);
+    if (!p) return "Pagina nu mai există. Alege alta din „Editezi”.";
+    return p.publicata ? null : "Pagina nu e publicată: clienții n-o văd încă. O publici din setările ei.";
+  }
   switch (pagina) {
     case "acasa":
       return m.unSingurProdus

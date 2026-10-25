@@ -53,9 +53,7 @@ export default function ConturEditor() {
       const text = marcaj.getAttribute(ETICHETA_ATTR) || id || "";
       // Doar cand se schimba: o scriere identica tot inlocuieste nodul de text.
       if (eticheta.textContent !== text) eticheta.textContent = text;
-      // Langa marginea de sus a ferestrei (antetul, o sectiune derulata pe jumatate)
-      // eticheta intra in contur, altfel ar iesi din ecran.
-      eticheta.style.top = cutie.sus < INALTIME_ETICHETA ? "0px" : `-${INALTIME_ETICHETA}px`;
+      eticheta.style.top = `${pozitiaEtichetei(cutie.sus)}px`;
     }
 
     function deseneaza() {
@@ -139,6 +137,18 @@ export default function ConturEditor() {
     </div>,
     document.body,
   );
+}
+
+/**
+ * Unde sta eticheta, fata de marginea de sus a conturului.
+ *
+ * Deasupra lui cand incape. Altfel inauntru, lipita de marginea de sus a
+ * ferestrei: o sectiune derulata pe jumatate are marginea de sus deasupra
+ * ecranului, iar eticheta pusa acolo disparea odata cu ea (vazut la proba din
+ * 25.10.2026, pe bannerul selectat).
+ */
+function pozitiaEtichetei(sus: number): number {
+  return sus >= INALTIME_ETICHETA ? -INALTIME_ETICHETA : Math.max(0, -sus);
 }
 
 function strat(grosime: number, fundal: string): CSSProperties {

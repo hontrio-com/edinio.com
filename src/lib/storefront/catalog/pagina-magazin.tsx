@@ -169,7 +169,13 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
   }
 
   // Fara pagina de catalog, brandul pleaca pe prima pagina ca filtru (`?brand=`).
-  if (!esteCautare && !shopOnPage(resolved.design)) {
+  //
+  // ⚠ In editorul de design NU. Previzualizarea vine aici in clipa in care
+  // proprietarul alege un design de tip pagina pentru „Pagina Magazin”, iar
+  // ciorna ajunge in baza abia dupa o secunda: redirectat pe ciorna veche, cadrul
+  // ramanea pe prima pagina (vazut 25.10.2026, ca la cos). Varianta o da designul
+  // primit prin mesaj.
+  if (!esteCautare && !shopOnPage(resolved.design) && !esteEditorDesign) {
     redirect(radacinaMagazinCuFiltre(basePath, brandPagina ? { ...sp, [CHEIE_BRAND]: valoareBrand(brandPagina.nume) } : sp));
   }
 

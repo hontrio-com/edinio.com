@@ -6,10 +6,25 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapele 1 si 2 FACUTE, comise local si PROBATE pe ecran. **Etapa 3
-(clic in previzualizare) IN LUCRU**, cu acordul lui („Da”, 25.10): planul si bifele in sectiunea
-„Etapa 3: planul de lucru”. Inainte de etapa 4 ramane de pus intrebarea despre teme (sectiunea
-„Deciziile proprietarului”).
+**Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. Urmeaza
+etapa 4 (blocuri in sectiuni), doar dupa acordul lui; INAINTE de ea se pune intrebarea despre teme
+(sectiunea „Deciziile proprietarului”).
+
+**Proba etapei 3 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO), prin impersonare, cu
+acordul lui (s-a conectat el ca administrator pe localhost; contul de admin din baza demo are parola
+lui de demo, nu pe cea din productie). Aceeasi stare de dinainte, pusa la loc si verificata la fel.
+Ce merge cap-coada: conturul cu numele sectiunii sub mouse si de pe randul din arbore; clicul in
+previzualizare deschide nodul, cu contur gros si eticheta plina; locul gol (Categorii, Galerie,
+Despre noi) se vede si se poate apasa; pagina de produs, cosul, comanda si „Pagina Magazin”
+(alese temporar ca pagini, apoi Renunta) se aleg din previzualizare; pe „Coșul” cu cos in sertar,
+clicul pe banner muta editorul pe „Pagina principală”. Magazinul public: 0 marcaje, 0 locuri goale
+(numarate in HTML), iar `/cos` fara semnele de editor redirectioneaza in continuare.
+Ce a gasit proba, reparat tot pe 25.10:
+1. Ruta „Pagina Magazin” (`pagina-magazin.tsx`) avea aceeasi cursa ca a cosului din etapa 2:
+   previzualizarea ajungea inaintea ciornei si era trimisa inapoi pe prima pagina. In editor nu
+   mai redirectioneaza. (In etapa 2 reparasem cosul si comanda, dar nu si ruta-sora a catalogului.)
+2. Eticheta sectiunii selectate disparea cand sectiunea era derulata pe jumatate (marginea ei de
+   sus iesea din ecran); acum sta lipita de marginea de sus a ferestrei.
 
 **Proba etapei 2 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO). Prima jumatate a cazut:
 sesiunea din Chrome-ul lui trecuse pe contul lui de administrator. A doua, cu acordul lui, prin
@@ -185,7 +200,8 @@ goala nu are nicio cutie, deci nu se poate nici vedea, nici apasa.
 - [x] 3.4 (25.10, `LocGol`, `only:`) Locul gol pentru sectiunile aprinse fara continut, doar in editor.
 - [x] 3.5 (25.10) Editorul trimite selectia si trecerea peste randurile arborelui; clicul de pe alta
       pagina muta pagina.
-- [ ] 3.6 Porti + proba in Chrome (cere sesiunea contului de proba: il intreb atunci).
+- [x] 3.6 Porti + proba in Chrome. 25.10: tot ce e in „Stare si reluare”, plus doua reparatii
+      gasite de proba; porti verzi (tsc, 11.006 probe, lint fara erori noi, build:ci).
 
 ## Deciziile proprietarului
 
@@ -331,6 +347,7 @@ Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, 
    anuleaza/refa, Salveaza/Publica), stanga arborele, dreapta previzualizarea. La inceput
    gazduieste editoarele existente. FACUT si PROBAT 25.10.2026 (planul si bifele mai sus).
 3. **Click in previzualizare**: `data-sectiune` / `data-bloc`, contur la hover, selectie la clic.
+   FACUT si PROBAT 25.10.2026 pentru sectiuni (planul si bifele mai sus); `data-bloc` vine cu etapa 4.
 4. **Blocuri in sectiuni**; pagina de produs sparta in blocuri cu context comun; sabloane de
    produs multiple.
 5. **Paginile** pe acelasi model; convertor din `custom_pages` (blocurile PageBuilder devin

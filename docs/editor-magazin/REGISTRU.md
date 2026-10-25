@@ -52,6 +52,13 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - **Randurile de produse fara pereche in continut ies din design la citire** (`parse.ts`, 25.10). Un rand sters din continut ramanea in designul salvat ca orfan: in magazin randa un invelis gol, in editor un rand fara cos de gunoi. Se intampla si in productie, cu editorul vechi: masurat 25.10, 2 din 25 de designuri publicate au cate un rand orfan, ciornele niciunul (SELECT pe `storefront_design->'home'`: `product_row` cu `mode` diferit de `featured`, al carui `sectionRef`/`id` nu e in `page_content.product_sections`). Vizual nu se schimba nimic: `CustomProductRow` intorcea deja `null` pentru ele. Dupa push: aceeasi numaratoare; designurile lor isi pierd orfanul la prima salvare.
   - Rutele `/cos` si `/checkout` nu mai redirectioneaza spre prima pagina cand le deschide proprietarul in editor (`?preview=1&editor=design`) si designul citit e pe sertar / fereastra: previzualizarea ajunge acolo inaintea ciornei. Pentru clienti, redirectarea ramane.
   - Pe ecrane sub 768 px, previzualizarea din editor e mereu cea de telefon; Anuleaza / Refa stau in meniul „...”.
+- **Etapa 3 (clic in previzualizare):**
+  - In editor: conturul cu numele sectiunii sub mouse si de pe randul din arbore; clicul deschide nodul, cu contur gros; pagina de produs, Magazinul, cosul si comanda se aleg si ele din previzualizare.
+  - Magazinul public, deschis normal (fara `?preview=1&editor=design`): niciun `data-st-section` si niciun text „e goală, deci nu apare în magazin” in HTML (masurat pe demo 25.10: 0 si 0); stratul `ConturEditor` nu se descarca.
+- **Schimbari de comportament de etapa 3, de urmarit dupa push:**
+  - Paginile de produs, Magazin, cos si comanda poarta marcajul de sectiune in modul editor (doar proprietarul, cu semnele de editor), ca Acasa.
+  - Sectiunile aprinse dar goale au in editor un loc gol cu numele lor; in magazin nu se schimba nimic.
+  - Ruta „Pagina Magazin” (`pagina-magazin.tsx`) nu mai redirectioneaza spre prima pagina in modul editor cand designul citit nu are pagina de catalog, din acelasi motiv ca `/cos` si `/checkout` in etapa 2. Pentru clienti, redirectarea ramane.
 
 ## D. Capturi si texte de ajutor
 - De refacut la final: `public/capturi/ajutor/design-si-pagini/cum-completezi-informatiile-generale-editor-design.webp` (cardul „Magazinul” din Setari > General). Fisierul vechi arata panoul scos din editor si a fost sters; ghidul arata substituentul pana atunci. Lista: `npm run capturi -- --lista`.

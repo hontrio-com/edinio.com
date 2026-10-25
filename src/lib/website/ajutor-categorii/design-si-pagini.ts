@@ -576,14 +576,14 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Setări > Formular de comandă.",
             "În cardul „Câmpuri standard”, pornește comutatorul de la „Cod discount” ca să îl arăți clienților.",
-            "Pornește comutatorul de la „Email” ca să adaugi câmpul de email.",
-            "Dacă l-ai pornit, apare rândul „Obligatoriu”. Pornește-l dacă vrei ca emailul să fie completat obligatoriu.",
+            "Comutatorul de la „Email” este pornit din start. Oprește-l dacă nu vrei câmpul de email în formular.",
+            "Cât timp e pornit, sub el apare rândul „Obligatoriu”. Pornește-l dacă vrei ca emailul să fie completat obligatoriu.",
             "Apasă „Salvează formularul de comandă”.",
           ],
           detalii: [
             { titlu: "Ce câmpuri sunt oricum incluse", text: "Textul din ecran spune că numele, telefonul, județul, orașul și adresa sunt mereu în formular. Aceste câmpuri nu pot fi ascunse." },
             { titlu: "Cod discount", text: "Este ascuns din start. Când îl pornești, clientul poate aplica un cod de reducere creat la Discounturi. Dacă nu folosești coduri, lasă-l ascuns, ca să nu inviți clientul să caute unul." },
-            { titlu: "Email", text: "Este oprit din start. Când îl pornești, clientul își poate scrie adresa de email pentru confirmarea comenzii." },
+            { titlu: "Email", text: "Este pornit din start, ca opțional: clientul își poate scrie adresa de email pentru confirmarea comenzii. Dacă îl oprești, câmpul nu mai apare. Excepție: când clientul alege livrarea la un punct GLS sau Shipo, câmpul apare oricum și e obligatoriu, fiindcă pe email îl anunță curierul când își poate ridica coletul." },
             { titlu: "Comutatorul Obligatoriu", text: "Apare doar cât timp „Email” este pornit. Sub el scrie că, oprit, câmpul apare ca opțional. Un câmp obligatoriu în plus poate opri comenzile de la clienții care nu vor să lase emailul." },
             { titlu: "Celelalte câmpuri opționale", text: "Tot în „Câmpuri standard” pornești „Cod poștal”, care ajunge pe AWB la toți curierii, și „Comenzi pe firmă”, unde clientul scrie CUI-ul, iar datele firmei vin din ANAF și ajung pe factură." },
           ],

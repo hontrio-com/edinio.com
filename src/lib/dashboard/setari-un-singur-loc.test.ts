@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 /*
@@ -81,4 +81,40 @@ test("⚠ comutatoarele de catalog se citesc in Setari exact ca in magazin (`===
   /* Perechea: asa le citeste magazinul. */
   assert.match(sursa("src/lib/storefront/catalog/pagina-magazin.tsx"), /pc\.hide_products_without_images === true/);
   assert.match(sursa("src/components/ministore/MiniStoreRenderer.tsx"), /pageContent\.show_empty_categories === true/);
+});
+
+/** Sursele aplicatiei, fara probe, cu cai relative la radacina. */
+function surseleAplicatiei(): string[] {
+  return (readdirSync(path.join(RADACINA, "src"), { recursive: true, withFileTypes: false }) as string[])
+    .map(String)
+    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+    .map((f) => path.join("src", f));
+}
+
+test("⚠ emailul din formularul de comanda are acelasi implicit in Setari si in magazin", () => {
+  /*
+   * Fara reglaj (`email_field` lipsa), magazinul ARATA campul, optional. Editorul
+   * vechi, si dupa el prima forma a filei din Setari, il citeau oprit: comutatorul
+   * spunea „oprit", iar formularul clientilor avea campul. Proba aduna FIECARE
+   * citire cu implicitul scris pe loc si cere ca toate sa spuna acelasi lucru.
+   */
+  const implicite = new Map<string, string[]>();
+  for (const fisier of surseleAplicatiei()) {
+    for (const m of cod(fisier).matchAll(/email_field \?\? (\{[^}]*\})/g)) {
+      const forma = m[1].replace(/\s+/g, " ");
+      implicite.set(forma, [...(implicite.get(forma) ?? []), fisier]);
+    }
+  }
+  const toate = [...implicite.values()].flat();
+  assert.ok(
+    toate.some((f) => f.endsWith("FormularComandaSetari.tsx")),
+    "Setarile nu mai citesc `email_field` cu un implicit scris pe loc; proba nu mai vede ecranul",
+  );
+  /* Azi: cele cinci cai ale magazinului si fila din Setari. Mai putine = s-a schimbat forma citirii. */
+  assert.ok(toate.length >= 6, `doar ${toate.length} citiri gasite; s-a schimbat forma lor?`);
+  assert.deepEqual(
+    [...implicite.keys()],
+    ["{ enabled: true, required: false }"],
+    `implicite diferite: ${JSON.stringify(Object.fromEntries(implicite), null, 2)}`,
+  );
 });

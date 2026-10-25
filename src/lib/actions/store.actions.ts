@@ -289,6 +289,15 @@ export async function updatePageContent(businessId: string, pageContent: Record<
   }
 
   revalidatePath("/dashboard/editor");
+  /*
+   * ⚠ Si Setarile: filele Formular de comanda si Catalog scriu tot pe aici, iar
+   * la schimbarea filei isi iau valorile din pagina. Next reface dupa o actiune
+   * doar pagina revalidata; ca azi o reface pe oricare e o purtare numita
+   * temporara in documentatia lui `revalidatePath`. Fara randul asta, fila
+   * redeschisa ar arata valorile de la incarcare, iar o noua salvare le-ar scrie
+   * inapoi.
+   */
+  revalidatePath("/dashboard/settings");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
 
   return { success: true };

@@ -59,7 +59,12 @@ export function FormularComandaSetari({ businessId, initial }: { businessId: str
   const extraoptiuni = config.extras ?? [];
   // Codul de reducere e ASCUNS din start: lipsa listei inseamna „ascuns".
   const reducereAscunsa = (config.hidden_fields ?? ["discount"]).includes("discount");
-  const email = config.email_field ?? { enabled: false, required: false };
+  /*
+   * ⚠ Emailul e ARATAT din start: asa il citeste magazinul (`checkout-core.ts`,
+   * `OrderModal.tsx`) cand reglajul lipseste. Editorul vechi il arata oprit, deci
+   * omul vedea „oprit" pe ecran si campul in formularul clientilor.
+   */
+  const email = config.email_field ?? { enabled: true, required: false };
   const codPostal = config.postal_field ?? { enabled: false, required: false };
   const firma = config.company_fields ?? { enabled: false };
 

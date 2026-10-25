@@ -6,17 +6,33 @@ blocuri in sectiuni, stil global) plus un strat „Avansat" strans implicit. Far
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 24.10.2026:** etapa 1 facuta si comisa local (`c2714932`). Urmeaza:
+**Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. Urmeaza
+**etapa 2**, dupa acordul proprietarului (el vrea etapele luate pe rand, cu oprire intre ele).
 
-1. **Proba vizuala a etapei 1, NEFACUTA.** Extensia Chrome nu era conectata. Pe
-   `localhost:3000` (serverul `npm run dev` al depozitului, baza DEMO), in Chrome-ul cu sesiunea
-   panoului (vezi memoria `proba-in-browser-pe-baza-demo`: poarta de abonament pe demo, contul de
-   proba): Setari > General (schimba sloganul si un link social, salveaza, reincarca, verifica
-   in magazin), Setari > Formular de comanda (un camp suplimentar + o extraoptiune, verifica in
-   formularul magazinului si totalul), Setari > Catalog („Ascunde produsele fara stoc"), apoi
-   `/dashboard/editor`: panourile mutate lipsesc, caseta „Le gasesti acum in Setari" duce la file.
-   La final, valorile de proba puse la loc.
-2. **Etapa 2**, dupa acordul proprietarului (el vrea etapele luate pe rand, cu oprire intre ele).
+**Proba vizuala a etapei 1, facuta 25.10.2026** pe `localhost:3000` (baza DEMO, contul
+`onboarding-proba-cf99b5@edinio-demo.test`, magazinul `floraria-mirei`; data abonamentului mutata
+o zi si pusa la loc, ca in memoria `proba-in-browser-pe-baza-demo`):
+- Setari > General: sloganul si linkul de Instagram (scris fara `https://`) s-au salvat, au ramas
+  la reincarcare, linkul a primit `https://`; in magazin: descrierea paginii = sloganul, iconita de
+  Instagram, butonul WhatsApp dupa bifa „acelasi numar". `store_name` a ramas NULL.
+- Setari > Formular de comanda: un camp si o extraoptiune de 12,50 lei; in formularul din cos
+  apar amandoua, iar bifa duce totalul de la 166,90 la 179,40 lei (comanda NU s-a trimis).
+- Setari > Catalog: „Ascunde produsele fara imagini" scoate singurul produs din magazin.
+- `/dashboard/editor`: panourile mutate lipsesc; cele trei trimiteri deschid filele din Setari.
+- Telefon (cadru de 390 px): General si Formular de comanda fara depasire orizontala.
+- Valorile de proba puse la loc in baza DEMO (starea de dinainte, citita intai).
+
+Ce a gasit proba si recitirea codului, reparat tot pe 25.10:
+1. Comutatorul „Email" arata OPRIT cand reglajul lipsea, iar magazinul arata campul (implicitul
+   lui e pornit, optional). Mostenit din editorul vechi. Acum Setarile citesc ca magazinul; o
+   proba aduna fiecare citire a lui `email_field` si cere un singur implicit; ghidul de ajutor
+   spunea si el „oprit din start".
+2. `updatePageContent` nu revalida `/dashboard/settings`. Filele Formular si Catalog isi iau
+   valorile din pagina cand le redeschizi; azi merge doar fiindca Next reface dupa o actiune
+   orice pagina, purtare numita temporara in documentatia lui `revalidatePath`.
+
+⚠ La proba in Chrome: un clic dat imediat dupa incarcare (inainte de hidratare) nu face nimic si
+nu da eroare. Dupa fiecare clic se citeste starea (`aria-checked`, baza), nu se presupune.
 
 **Cum se reia:** `git checkout editor-magazin` in `edinio/`, citeste fisierul asta si
 `REGISTRU.md`, apoi memoria `editor-magazin-unic`. Nimic nu se impinge, nimic nu atinge productia.

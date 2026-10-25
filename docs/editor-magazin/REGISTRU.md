@@ -89,6 +89,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   (stratul din `ConturEditor` are `z-index` maxim, ca sa stea peste orice sectiune). Pozitia e
   corecta, doar ca antetul ar trebui sa-l acopere. O limita de sus luata din antet trebuie sa
   ocoleasca sertarul cosului si antetul selectat chiar el; de facut cu proba ei, nu in treacat.
+- **Vazut la proba 4b.4: o ciorna desfacuta pana la starea publicata ramane in coloana.** Cand comerciantul
+  anuleaza manual tot ce schimbase, ecranul arata „Designul e publicat” si butonul Renunta dispare, dar
+  `storefront_design_draft` pastreaza o ciorna identica cu ce e publicat (salvarea automata o scrie). Nu
+  strica nimic (designul e acelasi), dar coloana nu mai e `NULL`. Golirea automata ar trebui sa treaca prin
+  garda de concurenta: un `discard` simplu ar sterge si ciorna altei file. Existenta inca de la etapa 2.
 - **De decis (etapa 4): contorul de vizitatori** afiseaza un numar nemasurat, fix pe produs (18-27); aprins la 9 magazine. Editorul nou o spune in panoul blocului. Ramane, sau iese?
 - `ProductForm` (galeria de imagini a produsului) foloseste tot dnd-kit fara `id` stabil, deci poate avea aceeasi nepotrivire de hidratare reparata in lista de sectiuni (`SectionList`, `useId`). In afara editorului, neatins.
 - Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”. Daca se muta in „Setari”, se schimba adresa (`/ajutor/<categorie>/<ghid>`), deci trebuie redirectari.

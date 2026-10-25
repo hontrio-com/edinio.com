@@ -9,8 +9,9 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 **Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
 (blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
 sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte
-importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **Urmeaza 4b** (sabloane de produs pe categorie
-sau pe produs), cu plan separat scris inainte de cod. Intrebarea despre teme a fost pusa si a ramas
+importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele paginii de produs, decizia lui:
+„Din editor, pe categorii”) FACUT si PROBAT** (pasii 4b.1-4b.4). **Etapa 4 e incheiata**; urmeaza etapa 5,
+doar cu acordul lui. Intrebarea despre teme a fost pusa si a ramas
 fara raspuns; etapa 4 nu depinde de ea, deci ramane deschisa pentru lista lui de la final. Planul si
 bifele: sectiunea „Etapa 4: planul de lucru”.
 
@@ -301,7 +302,7 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
       marcajul de copil static nu-l mai prindea; fiecare slot sta acum in `Fragment`-ul lui, cu cheie);
       (2) pe telefon (386 px) lista paginilor ajunsese sa arate doar „Pa”: acum arata nume scurte
       („Acasă”, „Produs”...), iar „Vezi” ramane doar cu pictograma sub 420 px.
-- [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a): vezi mai jos.
+- [x] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a): vezi mai jos.
 
 ## Etapa 4b: planul de lucru (scris 25.10.2026, inainte de cod)
 
@@ -347,7 +348,17 @@ Shopify, cu coloana noua; sau amandoua.)
       `sablon=` in editor. Probe.
 - [x] 4b.3 (25.10, `SelectorSablon`, `PanouSablon`, `produsPentruSablon`; probe in `editor-magazin.test.ts`) Editorul: randul „Șablon”, panoul sablonului, arborele pe sablonul ales, previzualizarea pe
       un produs al sablonului (actiune care gaseste unul). Probe.
-- [ ] 4b.4 Porti + proba in Chrome.
+- [x] 4b.4 Porti + proba in Chrome. 25.10, pe `floraria-mirei` (demo, contul de proba, cu acordul lui), cu
+      date TEMPORARE (magazinul n-are categorii): „Buchete” si sub ea „Trandafiri”, produsul mutat in
+      „Trandafiri”; toate sterse la final, starea verificata printr-o singura interogare. Ce merge:
+      „Șablon nou” deschide panoul; numele se schimba pe loc; bifata „Buchete”, „Trandafiri” apare „prin
+      părinte”; selectorul spune „Folosit de 1 categorie”; varianta Detaliat pe sablon se vede in
+      previzualizare (adresa cu `sablon=`, marcajul cu id-ul sablonului, produsul din „Trandafiri”);
+      Implicit ramane Clasic. ⚠ Dovada pe server: pagina produsului in modul editor FARA `sablon=` a
+      ales singura sablonul (Detaliat, marcajul lui), urcand de la „Trandafiri” la „Buchete”; pagina
+      publica a ramas Clasic, fara marcaje. Stergerea cu confirmare readuce Implicit; consola fara
+      erori ale aplicatiei. Vazut: o ciorna desfacuta pana la starea publicata ramane in coloana
+      (REGISTRU, D).
 
 ## Deciziile proprietarului
 

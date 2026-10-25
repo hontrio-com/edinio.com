@@ -11,9 +11,11 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte
 importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele paginii de produs, decizia lui:
 „Din editor, pe categorii”) FACUT si PROBAT** (pasii 4b.1-4b.4). **Etapa 4 e incheiata.** **Etapa 5
-(paginile proprii in editorul unic) IN LUCRU**, cu acordul lui („Continua”): planul in „Etapa 5”. Intrebarea despre teme a fost pusa si a ramas
-fara raspuns; etapa 4 nu depinde de ea, deci ramane deschisa pentru lista lui de la final. Planul si
-bifele: sectiunea „Etapa 4: planul de lucru”.
+(paginile proprii in editorul unic) FACUTA si PROBATA in Chrome** (pasii 5.1-5.5, ultimul comit de cod
+`0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Urmeaza
+etapa 6, DOAR cu acordul lui.** Intrebarea despre teme a fost pusa si a ramas fara raspuns; ramane
+deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
+„Etapa 5: planul de lucru”.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -419,7 +421,39 @@ se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de
       raman estompate (`data-editor-device` in `PaginaVie`), „Redă animația”. „Ieși” duce inapoi in
       „Pagini” cand editorul s-a deschis de acolo. Legatura „Deschide pagina” veche ducea la
       `/dashboard/pages/<id>`, ruta inexistenta (doar pe ramura, nicicand in productie).
-- [ ] 5.5 Porti + proba in Chrome (pe o pagina TEMPORARA a magazinului de proba, stearsa la final).
+- [x] 5.5 (25.10, porti verzi la `0b91caa1`: `tsc`, 11080 probe, `lint:prag`, `build:ci`) Porti + proba in Chrome (pe o pagina TEMPORARA a magazinului de proba, stearsa la final).
+      Pe `floraria-mirei` (baza DEMO), prin impersonare, la fel ca la etapele 2-4. Pagina „Proba editor 5”
+      facuta din „Pagini” > „Pagină nouă” (sablonul „Despre noi”, fara meniu, ciorna), apoi stearsa; starea
+      de dinainte pusa la loc si verificata printr-o singura interogare (paginile, amprentele `page_content`,
+      `storefront_design`, ciorna goala, meniul, abonamentul, 1 comanda ca inainte, paginile Casa Lumen).
+      Ce merge cap-coada:
+      - „Creează și editează” deschide editorul pe pagina noua (`?pagina=pagina:<id>&din=pagini`), cu nota
+        de ciorna; „Editează” din lista duce la fel; ruta veche `/dashboard/pages/<id>/edit` trimite acolo.
+      - Previzualizarea e pagina adevarata (`/floraria-mirei/proba-editor-5`, modul editor), cu antet,
+        subsol si marcaje pe continut si pe toate cele 7 blocuri; clicul pe un titlu deschide panoul
+        lui, cu contur; textul scris in panou se vede pe loc, inainte de salvare.
+      - Animatia aleasa pe un bloc VECHI: blocul se remonteaza, animatia ruleaza (750 ms) si blocul ramane
+        vizibil; „Redă animația” remonteaza blocul si o porneste din nou.
+      - „+” sub Hero: panoul spune „sub „Hero: Proba editor 5””, butonul ales intra al doilea, nu la coada;
+        Anuleaza il scoate, Refa il readuce.
+      - Spre „Acasă” cu pagina nesalvata: fereastra „Rămân / Renunță la ele / Salvează și treci”;
+        „Rămân” pastreaza tot. „Salvează pagina”: in baza, ordinea si textul blocurilor, animatia,
+        versiunea noua; istoricul ramane.
+      - Setarile paginii: titlu, adresa si publicare salvate; „Editezi” arata noul titlu fara „(ciornă)”,
+        iar previzualizarea trece singura pe adresa noua.
+      - „Doar desktop” pe un bloc, pe telefon (390 px): blocul ramane, estompat, cu „Ascuns pe telefon”.
+      - Modificat, apoi „Acasă” > „Renunță la ele”, apoi inapoi: pagina vine din nou din baza, fara
+        modificarea renuntata (reparatia din 5.3).
+      - „Deschide pagina” pe Acasa (magazinul are o pagina proprie ca pagina principala) o deschide in
+        editor, fara trimiterea la radacina.
+      - „Ieși” duce inapoi in „Pagini”.
+      - Pagina publica, pentru vizitator si pentru proprietar fara modul editor: 200, continutul salvat,
+        zero marcaje de editor (`data-st-section`, `data-st-bloc`, `data-editor-device`, `pg-previzualizare`).
+      - Consola: doar nepotrivirea de hidratare data de o extensie a Chrome-ului (`cz-shortcut-listen`),
+        nicio eroare sau avertisment din cod.
+      Ce a gasit proba: etichete fara diacritice venite din editorul vechi („Titlu pagina”, „Ce este aceasta
+      pagina?”, „Pagina obisnuita”, numele blocurilor din paleta: „Spatiu”, „Harta”, „Intrebari (FAQ)”).
+      Scrise in REGISTRU (D), la trecerea de diacritice deja planificata pentru `registry.ts`.
 
 ## Deciziile proprietarului
 

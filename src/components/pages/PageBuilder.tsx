@@ -7,24 +7,19 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   ArrowLeft, Monitor, Smartphone, Save, Loader2, Plus, X, Settings2,
-  ArrowUp, ArrowDown, Copy, Trash2, Eye,
-  Sparkles, Heading, Type, Image as ImageIcon, Images, MousePointerClick,
-  Columns3, MoveVertical, Minus, Video, MapPin, MessageCircleQuestion,
-  ShieldCheck, Package, Share2, Mail, Code, Square, Boxes, MailPlus, CreditCard, Truck, Plug, Home,
+  ArrowUp, ArrowDown, Copy, Trash2, Eye, Square,
 } from "lucide-react";
-import { SECTIUNI_ACASA } from "@/lib/pages/pagina-acasa";
 import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 import { BlockSettings, type IntegrariEditor } from "./BlockSettings";
 import type { PachetPagina } from "@/lib/pages/resolve-bundles";
 import type { MetodaAfisata } from "@/lib/pages/integrari-pagini";
 import { BlockShell } from "./BlockShell";
+import { SetariPagina } from "./SetariPagina";
+import { PaletaBlocuri } from "./PaletaBlocuri";
 import { updatePage } from "@/lib/actions/page.actions";
-import { SeoImageField } from "@/components/dashboard/SeoImageField";
-import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
-import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import {
-  createBlock, createBlockAcasa, BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, TIPURI_PAGINA_PROPRIE,
-  type Block, type BlockType, type ColumnsBlock, type PageSeo, type SectiuneAcasa, type TipPaginaProprie,
+  createBlock, createBlockAcasa, BLOCK_META,
+  type Block, type BlockType, type ColumnsBlock, type PageSeo, type SectiuneAcasa,
 } from "@/lib/pages/blocks.types";
 import {
   findBlock, updateBlockInTree, removeBlockFromTree, moveBlockInTree,
@@ -37,7 +32,6 @@ import type { FormDef } from "@/lib/pages/forms.types";
 import { FurnizorLegaturi, type DateLegaturi } from "./editor/CampLink";
 import { toateClaseleDeFont } from "./fonturi-incarcate";
 import { titlulPrincipal } from "@/lib/pages/titlul-principal";
-import { sugestiiSeo, type Nivel } from "@/lib/pages/sugestii-seo";
 import { cn } from "@/lib/utils/cn";
 import { RedaAnimatia } from "./editor/ControaleAspect";
 import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
@@ -52,27 +46,16 @@ function cheieAnimatie(b: Block, reluare: number): string {
   return s?.anim && s.anim !== "none" ? `${b.id}:${s.anim}:${s.animSpeed ?? ""}:${s.animDelay ?? 0}:${reluare}` : b.id;
 }
 
-const ICONS: Record<string, React.ElementType> = {
-  Sparkles, Heading, Type, Image: ImageIcon, Images, MousePointerClick, Columns3,
-  MoveVertical, Minus, Video, MapPin, MessageCircleQuestion, ShieldCheck, Package,
-  Share2, Mail, Code, Boxes, MailPlus, CreditCard, Truck, Home,
-};
-
 interface BuilderBusiness {
   id: string; slug: string; custom_domain: string | null;
   store_name: string | null; business_name: string; logo_url: string | null;
   primary_color: string; phone: string | null; social: Record<string, string>;
 }
 
-const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
-
 /** Where the block palette will insert the next block. */
 type InsertTarget =
   | { kind: "top"; index: number }
   | { kind: "column"; columnBlockId: string; columnIndex: number; index: number };
-
-/** Blocks that don't belong inside a column (no columns-in-columns; hero is full-bleed). */
-const COLUMN_EXCLUDED: BlockType[] = ["columns", "hero", "acasa"];
 
 export function PageBuilder({
   pageId, initialTitle, initialSlug, initialPublished, initialBlocks, initialCss, initialSeo,
@@ -385,7 +368,7 @@ export function PageBuilder({
                 <BlockSettings key={selected.id} block={selected} onChange={(patch) => patchBlock(selected.id, patch)} categories={categories} forms={forms} businessId={business.id} isAdmin={isAdmin} integrari={integrariSetari} pachete={pachete} randuriProduse={randuriProduse} />
               </RedaAnimatia.Provider>
             ) : (
-              <PageSettings
+              <SetariPagina
                 title={title} slug={slug} seo={seo} css={css} publicBase={publicBase} blocks={blocks}
                 onTitle={(v) => { setTitle(v); mark(); }} onSlug={(v) => { setSlug(v); mark(); }}
                 onSeo={(v) => { setSeo(v); mark(); }} onCss={(v) => { setCss(v); mark(); }}
@@ -402,7 +385,7 @@ export function PageBuilder({
             <span className="text-sm font-semibold">Setările paginii</span>
             <button type="button" onClick={() => setSetariPaginaMobil(false)} aria-label="Închide" className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
           </div>
-          <PageSettings
+          <SetariPagina
             title={title} slug={slug} seo={seo} css={css} publicBase={publicBase} blocks={blocks}
             onTitle={(v) => { setTitle(v); mark(); }} onSlug={(v) => { setSlug(v); mark(); }}
             onSeo={(v) => { setSeo(v); mark(); }} onCss={(v) => { setCss(v); mark(); }}
@@ -433,66 +416,13 @@ export function PageBuilder({
               <h3 id="titlu-paleta" className="text-base font-semibold">{palette.kind === "column" ? "Adaugă în coloană" : "Adaugă un bloc"}</h3>
               <button type="button" onClick={() => setPalette(null)} aria-label="Închide" className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center"><X className="h-4 w-4" /></button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {(palette.kind === "column" ? BLOCK_PALETTE_ORDER.filter((t) => !COLUMN_EXCLUDED.includes(t)) : BLOCK_PALETTE_ORDER).map((type) => {
-                const meta = BLOCK_META[type];
-                const Icon = ICONS[meta.icon] ?? Square;
-                return (
-                  <button key={type} type="button" onClick={() => addBlock(type, palette)}
-                    className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-colors">
-                    <Icon className="h-5 w-5 text-foreground" />
-                    <span className="text-xs font-medium text-foreground text-center">{meta.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {/*
-              Sectiunile paginii principale (01.10.2026). Numai sus, nu in
-              coloane. Apar mereu, cu o nota cand pagina nu e cea principala.
-            */}
-            {palette.kind === "top" && (
-              <div className="mt-5 border-t border-border pt-4">
-                <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Home className="h-3.5 w-3.5" /> Din pagina principală</p>
-                <p className="mb-2 text-[11px] text-muted-foreground">
-                  {estePaginaAcasa
-                    ? "Secțiunile magazinului, cu conținutul din Editează magazinul."
-                    : "Apar doar când pagina e setată ca pagina principală (Pagini > Acasa)."}
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {SECTIUNI_ACASA.map((s) => (
-                    <button key={s.cheie} type="button" onClick={() => addBlockAcasa(s.cheie, palette)} title={s.descriere}
-                      className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 transition-colors hover:border-primary hover:bg-primary/5">
-                      <Home className="h-5 w-5 text-foreground" />
-                      <span className="text-center text-xs font-medium text-foreground">{s.eticheta}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/*
-              Blocurile din integrari (25.09.2026): apar mereu, ca omul sa stie ca
-              exista, dar se pot adauga doar cand integrarea e activa. Stinse,
-              spun ce trebuie conectat.
-            */}
-            <div className="mt-5 border-t border-border pt-4">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Plug className="h-3.5 w-3.5" /> Din integrările tale</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {BLOCURI_INTEGRARI.map((type) => {
-                  const meta = BLOCK_META[type];
-                  const Icon = ICONS[meta.icon] ?? Square;
-                  const activ = integrareActiva[type];
-                  const lipsa = type === "newsletter" ? "Conectează Mailchimp, Brevo sau Klaviyo" : type === "payments" ? "Nicio plată activă" : "Niciun curier pornit";
-                  return (
-                    <button key={type} type="button" disabled={!activ} onClick={() => addBlock(type, palette)} title={activ ? undefined : lipsa}
-                      className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 transition-colors hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-border disabled:hover:bg-transparent">
-                      <Icon className="h-5 w-5 text-foreground" />
-                      <span className="text-center text-xs font-medium text-foreground">{meta.label}</span>
-                      {!activ && <span className="text-center text-[10px] leading-tight text-muted-foreground">{lipsa}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <PaletaBlocuri
+              inColoana={palette.kind === "column"}
+              estePaginaAcasa={estePaginaAcasa}
+              integrareActiva={integrareActiva}
+              onBloc={(type) => addBlock(type, palette)}
+              onAcasa={(sectiune) => addBlockAcasa(sectiune, palette)}
+            />
           </div>
         </>
       )}
@@ -617,164 +547,6 @@ function EditableColumns({
         })}
       </div>
     </BlockShell>
-  );
-}
-
-function PageSettings({ title, slug, seo, css, publicBase, blocks, onTitle, onSlug, onSeo, onCss }: {
-  title: string; slug: string; seo: PageSeo; css: string; publicBase: string; blocks: Block[];
-  onTitle: (v: string) => void; onSlug: (v: string) => void; onSeo: (v: PageSeo) => void; onCss: (v: string) => void;
-}) {
-  // `initialSeo` e un cast brut peste o coloana `Json`: o valoare veche sau
-  // necunoscuta la `tip` trebuie sa cada pe implicit, nu sa lase selectul gol.
-  const tipPaginaSelectat = TIPURI_PAGINA_PROPRIE.some((t) => t.valoare === seo.tip) ? seo.tip! : "pagina";
-  return (
-    <div className="space-y-5">
-      <div>
-        <label className="block text-xs font-semibold text-foreground mb-1.5">Titlu pagina</label>
-        <input value={title} onChange={(e) => onTitle(e.target.value)} className={inputCls} />
-      </div>
-      <div>
-        <label className="block text-xs font-semibold text-foreground mb-1.5">Link (slug)</label>
-        <input value={slug} onChange={(e) => onSlug(e.target.value)} className={inputCls} />
-        <p className="text-[11px] text-muted-foreground mt-1 break-all">{publicBase}/{slug}</p>
-      </div>
-      <div className="pt-2 border-t border-border">
-        <p className="text-xs font-semibold text-foreground mb-2">SEO</p>
-
-        {/*
-          CE ESTE pagina — se declara, nu se ghiceste.
-          Din alegerea asta ies datele structurate ale paginii publice: un articol
-          primeste titlu de articol, imagine si data publicarii; o pagina de blog
-          isi listeaza automat articolele. Implicitul ramane „Pagina obisnuita",
-          deci nicio pagina existenta nu-si schimba intelesul de la sine.
-        */}
-        <div className="mb-3">
-          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Ce este aceasta pagina?</label>
-          <select
-            value={tipPaginaSelectat}
-            onChange={(e) => onSeo({ ...seo, tip: e.target.value as TipPaginaProprie })}
-            className={inputCls}
-          >
-            {TIPURI_PAGINA_PROPRIE.map((t) => (
-              <option key={t.valoare} value={t.valoare}>{t.eticheta}</option>
-            ))}
-          </select>
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {TIPURI_PAGINA_PROPRIE.find((t) => t.valoare === tipPaginaSelectat)?.ajutor}
-          </p>
-        </div>
-
-        {tipPaginaSelectat === "articol" && (
-          <div className="mb-3 grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Autor (optional)</label>
-              <input value={seo.autor ?? ""} onChange={(e) => onSeo({ ...seo, autor: e.target.value })} placeholder="Numele magazinului" className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Data publicarii (optional)</label>
-              {/* Gol = data la care s-a creat pagina. Campul e pentru articolele
-                  aduse de pe un site vechi, care au o data reala, alta. */}
-              <input type="date" value={seo.dataPublicarii ?? ""} onChange={(e) => onSeo({ ...seo, dataPublicarii: e.target.value })} className={inputCls} />
-            </div>
-          </div>
-        )}
-
-        <SugestiiSeo title={title} slug={slug} seo={seo} blocks={blocks} />
-
-        <div className="mb-3">
-          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Cuvântul cheie principal (opțional)</label>
-          <input value={seo.focusKeyword ?? ""} onChange={(e) => onSeo({ ...seo, focusKeyword: e.target.value })} placeholder="Ex: lampadare din lemn" className={inputCls} />
-          <p className="text-[11px] text-muted-foreground mt-1">Căutarea pentru care vrei să apară pagina. Nu se afișează nicăieri; sugestiile de mai sus verifică dacă apare unde trebuie.</p>
-        </div>
-
-        <div className="mb-3">
-          <GooglePreview
-            title={seo.title?.trim() || title || "Titlu pagina"}
-            description={seo.description?.trim() || ""}
-            url={`${publicBase}/${slug}`}
-          />
-        </div>
-
-        <div className="mb-2">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-[11px] font-medium text-muted-foreground">Titlu SEO (optional)</label>
-            <CharCounter len={(seo.title ?? "").length} idealMin={SEO_TITLE_IDEAL_MIN} max={SEO_TITLE_MAX} />
-          </div>
-          <input value={seo.title ?? ""} onChange={(e) => onSeo({ ...seo, title: e.target.value })} placeholder={title || "Titlu pentru Google"} className={inputCls} />
-        </div>
-
-        <div className="mb-2">
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-[11px] font-medium text-muted-foreground">Descriere SEO (optional)</label>
-            <CharCounter len={(seo.description ?? "").length} idealMin={SEO_DESCRIPTION_IDEAL_MIN} max={SEO_DESCRIPTION_MAX} />
-          </div>
-          <textarea value={seo.description ?? ""} onChange={(e) => onSeo({ ...seo, description: e.target.value })} placeholder="Descriere scurta pentru rezultatele Google..." rows={2} className={`${inputCls} resize-none`} />
-        </div>
-        <input value={seo.keywords ?? ""} onChange={(e) => onSeo({ ...seo, keywords: e.target.value })} placeholder="Cuvinte cheie (optional, separate prin virgula)" className={`${inputCls} mt-2`} />
-        <p className="text-[11px] text-muted-foreground mt-1">Cuvintele cheie sunt aproape ignorate de Google azi: contează mai mult titlul, descrierea și imaginea de mai jos.</p>
-        <div className="mt-3">
-          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Imagine la distribuire (Facebook/WhatsApp)</label>
-          <SeoImageField value={seo.ogImage} onChange={(v) => onSeo({ ...seo, ogImage: v })} folder="pages-og" />
-        </div>
-        <label className="flex items-center gap-2 mt-3 text-xs text-foreground cursor-pointer select-none">
-          <input type="checkbox" checked={!!seo.noindex} onChange={(e) => onSeo({ ...seo, noindex: e.target.checked })} className="w-4 h-4 rounded accent-green-600" />
-          Ascunde din motoarele de cautare (noindex)
-        </label>
-        <details className="mt-3 rounded-lg border border-border p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-foreground">SEO avansat</summary>
-          <div className="mt-3 space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Titlu la distribuire (Facebook, WhatsApp)</label>
-              <input value={seo.ogTitle ?? ""} onChange={(e) => onSeo({ ...seo, ogTitle: e.target.value })} placeholder={seo.title || title} className={inputCls} />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Descriere la distribuire</label>
-              <textarea value={seo.ogDescription ?? ""} onChange={(e) => onSeo({ ...seo, ogDescription: e.target.value })} rows={2} placeholder={seo.description || "Ca descrierea pentru Google"} className={`${inputCls} resize-none`} />
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Adresă canonică</label>
-              <input value={seo.canonical ?? ""} onChange={(e) => onSeo({ ...seo, canonical: e.target.value })} placeholder={`${publicBase}/${slug}`} className={inputCls} />
-              <p className="text-[11px] text-muted-foreground mt-1">Doar dacă pagina e o copie a alteia: spune-i lui Google care e originalul. Gol = adresa acestei pagini.</p>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none">
-              <input type="checkbox" checked={!!seo.nofollow} onChange={(e) => onSeo({ ...seo, nofollow: e.target.checked })} className="w-4 h-4 rounded accent-green-600" />
-              Google să nu urmeze legăturile de pe pagină (nofollow)
-            </label>
-          </div>
-        </details>
-      </div>
-      <div className="pt-2 border-t border-border">
-        <label className="block text-xs font-semibold text-foreground mb-1.5">CSS personalizat (pagina)</label>
-        <textarea value={css} onChange={(e) => onCss(e.target.value)} placeholder=".clasa { color: red; }" rows={5} className={`${inputCls} font-mono text-xs resize-none`} />
-        <p className="text-[11px] text-muted-foreground mt-1">Se aplica doar pe aceasta pagina.</p>
-      </div>
-    </div>
-  );
-}
-
-
-/* Sugestiile SEO ale paginii, cu scor. Se recalculeaza la fiecare modificare, fara nicio cerere. */
-const CULOARE_NIVEL: Record<Nivel, string> = { bine: "bg-success", atentie: "bg-warning", problema: "bg-destructive" };
-
-function SugestiiSeo(p: { title: string; slug: string; seo: PageSeo; blocks: Block[] }) {
-  const { scor, sugestii } = sugestiiSeo(p);
-  const ton = scor >= 80 ? "text-success" : scor >= 55 ? "text-warning" : "text-destructive";
-  const deRezolvat = sugestii.filter((x) => x.nivel !== "bine").length;
-  return (
-    <details className="mb-3 rounded-lg border border-border" open={deRezolvat > 0}>
-      <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2.5">
-        <span className="text-xs font-semibold text-foreground">Sugestii SEO</span>
-        <span className={`text-sm font-bold tabular-nums ${ton}`}>{scor}/100</span>
-      </summary>
-      <ul className="space-y-2 border-t border-border px-3 py-3">
-        {sugestii.map((x, i) => (
-          <li key={i} className="flex items-start gap-2 text-[11px] leading-relaxed text-foreground/85">
-            <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${CULOARE_NIVEL[x.nivel]}`} />
-            {x.text}
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 

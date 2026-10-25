@@ -7,7 +7,7 @@ import { newProductSection } from "@/lib/store-sections";
 import { addSection, completeazaBlocurileSectiunii, ID_BARA_ANUNT, toateSectiunile, updateSection } from "@/lib/storefront/design/edit";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { PREVIEW_MESSAGE, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
+import { PREFIX_PAGINA_PROPRIE, PREVIEW_MESSAGE, cheiaPaginiiProprii, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { firstVariant } from "@/lib/storefront/design/registry";
 import { adaugaSablon, categoriiAcoperite, MAX_SABLOANE } from "@/lib/storefront/design/sabloane-produs";
 import { produsPentruSablon } from "@/lib/actions/editor-sabloane.actions";
@@ -15,16 +15,27 @@ import { toast } from "sonner";
 import type { SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
 import type { FelContinut } from "@/lib/editor-magazin/noduri";
-import { adresaPrevizualizarii, paginaSectiunii, sectiunilePaginii, type CheiePagina, type MagazinPentruPagini } from "@/lib/editor-magazin/pagini";
+import {
+  adresaPrevizualizarii, estePaginaProprie, idPaginaProprie, paginaProprie, paginaSectiunii, sectiunilePaginii,
+  type CheiePagina, type MagazinPentruPagini, type PaginaProprieEditor,
+} from "@/lib/editor-magazin/pagini";
+import { createBlock, createBlockAcasa, type BlockType, type SectiuneAcasa } from "@/lib/pages/blocks.types";
+import { findBlock, insertAtTop, insertIntoColumn } from "@/lib/pages/block-tree";
+import { Loader2, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ArborePagina, type TintaBloc } from "./ArborePagina";
 import { ArboreSectiuni } from "./ArboreSectiuni";
 import { BaraEditor } from "./BaraEditor";
 import { GalerieAdauga } from "./GalerieAdauga";
 import { PanouBloc } from "./PanouBloc";
 import { PanouNod } from "./PanouNod";
+import { PanouAdaugaBloc, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
 import { PanouSablon } from "./PanouSablon";
 import { PanouStil } from "./continut/PanouStil";
 import { useCiornaDesign } from "./useCiornaDesign";
 import { useContinutMagazin, type SalvareContinut } from "./useContinutMagazin";
+import { usePaginaProprie } from "./usePaginaProprie";
 
 type Cat = { id: string; name: string; parent_id: string | null; sort_order?: number };
 
@@ -130,9 +141,28 @@ export function EditorMagazin({
   }, [cerereProdus, magazin.id]);
   const slugSablon = produsSablon && produsSablon.cerere === cerereProdus ? produsSablon.slug : null;
 
+  // ── Pagina proprie deschisa (etapa 5) ──
+  /** Paginile proprii, cu ce s-a salvat de aici peste lista de la incarcare (titlu, adresa, publicare). */
+  const [paginiSalvate, setPaginiSalvate] = useState<Record<string, PaginaProprieEditor>>({});
+  const paginiAfisate = useMemo<MagazinPentruPagini>(
+    () => ({ ...pagini, paginiProprii: (pagini.paginiProprii ?? []).map((p) => paginiSalvate[p.id] ?? p) }),
+    [pagini, paginiSalvate],
+  );
+  const idPagina = idPaginaProprie(pagina);
+  const paginaDeschisa = usePaginaProprie(idPagina);
+  const { salveaza: salveazaPaginaDeschisa, aplica: aplicaPeEcran, inchide: inchidePagina } = paginaDeschisa;
+  /** Blocul paginii deschis in panou, setarile paginii, si unde se adauga urmatorul bloc. */
+  const [blocPagina, setBlocPagina] = useState<string | null>(null);
+  const [setariPaginii, setSetariPaginii] = useState(false);
+  const [tintaBloc, setTintaBloc] = useState<TintaBloc | null>(null);
+  // In `useMemo`: un apel liber al lui `findBlock` in randare facea React Compiler sa trateze tot ce
+  // deriva din el ca valoare schimbatoare, si pierdea stabilitatea setterelor din tot componentul.
+  const starePagina = paginaDeschisa.stare;
+  const blocPaginaDeschis = useMemo(() => (starePagina ? findBlock(starePagina.blocks, blocPagina) : null), [starePagina, blocPagina]);
+
   const adresa = useMemo(
-    () => adresaPrevizualizarii(pagina, design, pagini, { sablon: sablonActiv, slug: slugSablon }),
-    [pagina, design, pagini, sablonActiv, slugSablon],
+    () => adresaPrevizualizarii(pagina, design, paginiAfisate, { sablon: sablonActiv, slug: slugSablon }),
+    [pagina, design, paginiAfisate, sablonActiv, slugSablon],
   );
 
   // ── Previzualizarea ──
@@ -231,9 +261,9 @@ export function EditorMagazin({
   const noduri = useMemo<SectionInstance[]>(() => [
     ...(design.chrome.announcement ? [design.chrome.announcement] : []),
     design.chrome.header,
-    ...sectiunilePaginii(design, pagina, pagini, sablonActiv),
+    ...sectiunilePaginii(design, pagina, paginiAfisate, sablonActiv),
     design.chrome.footer,
-  ], [design, pagina, pagini, sablonActiv]);
+  ], [design, pagina, paginiAfisate, sablonActiv]);
   /**
    * Bara de anunt poate lipsi din design. Nodul ei ramane deschis cu o sectiune
    * de umplutura, ca omul sa-i poata scrie textul si sa o aprinda din ochi.
@@ -289,14 +319,37 @@ export function EditorMagazin({
   useEffect(() => { trimiteDesignul(); }, [design, ctxStil, trimiteDesignul]);
 
   /*
+   * Pagina proprie (etapa 5): blocurile de pe ecran pleaca in cadru la fiecare modificare, iar datele
+   * de previzualizare (produse, pachete, formulare, plati, curieri) doar la deschidere si la fiecare
+   * „ready”, ca tastarea sa nu care de fiecare data zecile de produse. Vezi `PaginaVie`.
+   */
+  const paginaAcum = useRef({ id: idPagina, stare: paginaDeschisa.stare, date: paginaDeschisa.date });
+  useEffect(() => {
+    paginaAcum.current = { id: idPagina, stare: paginaDeschisa.stare, date: paginaDeschisa.date };
+  }, [idPagina, paginaDeschisa.stare, paginaDeschisa.date]);
+  const trimitePagina = useCallback((cuDate: boolean) => {
+    const { id, stare, date } = paginaAcum.current;
+    if (!id || !stare || !date) return;
+    rama.current?.contentWindow?.postMessage({
+      [PREVIEW_MESSAGE]: "pagina", id, blocks: stare.blocks, css: stare.css,
+      ...(cuDate ? { date: { products: date.products, bundles: date.pachete, forms: date.forms, plati: date.integrari.plati, curieri: date.integrari.curieri } } : {}),
+    }, window.location.origin);
+  }, []);
+  useEffect(() => { trimitePagina(false); }, [paginaDeschisa.stare, trimitePagina]);
+  useEffect(() => { trimitePagina(true); }, [paginaDeschisa.date, trimitePagina]);
+
+  /*
    * Conturul din previzualizare (etapa 3): nodul deschis in panou, doar pe fila
    * Sectiuni, si randul din arbore de sub mouse, doar cand arborele se vede. Ce
    * se deseneaza decide previzualizarea (`ConturEditor`); selectia ramane aici.
    */
-  const selectatVazut = fila !== "sectiuni" || !sectiuneSelectata
-    ? null
-    : blocDeschis ? idBloc(sectiuneSelectata.id, blocDeschis.id) : sectiuneSelectata.id;
-  const pesteVazut = sectiuneSelectata ? null : peste;
+  let selectatVazut: string | null = null;
+  if (fila === "sectiuni") {
+    // Un bloc al paginii proprii: sectiunea ei e chiar cheia paginii (`pagina:<id>`).
+    if (idPagina && blocPaginaDeschis) selectatVazut = idBloc(pagina, blocPaginaDeschis.id);
+    else if (sectiuneSelectata) selectatVazut = blocDeschis ? idBloc(sectiuneSelectata.id, blocDeschis.id) : sectiuneSelectata.id;
+  }
+  const pesteVazut = sectiuneSelectata || blocPaginaDeschis || setariPaginii || tintaBloc ? null : peste;
   const evidentiereAcum = useRef({ selectat: selectatVazut, peste: pesteVazut });
   useEffect(() => { evidentiereAcum.current = { selectat: selectatVazut, peste: pesteVazut }; }, [selectatVazut, pesteVazut]);
   const trimiteEvidentierea = useCallback(() => {
@@ -313,7 +366,13 @@ export function EditorMagazin({
   }, []);
 
   // ── Anuleaza / Refa din tastatura ──
-  const { anuleaza, reface } = ciorna;
+  /*
+   * Pe o pagina proprie, pasul inapoi e al paginii (istoricul ei); al designului cand panoul arata o
+   * sectiune a designului (antetul, subsolul), ca Anuleaza sa desfaca ce se vede in panou.
+   */
+  const istoricPagina = idPagina && !sectiuneSelectata ? paginaDeschisa : null;
+  const anuleaza = istoricPagina ? istoricPagina.anuleaza : ciorna.anuleaza;
+  const reface = istoricPagina ? istoricPagina.reface : ciorna.reface;
   useEffect(() => {
     function laTasta(e: KeyboardEvent) {
       if (!(e.ctrlKey || e.metaKey) || inCampDeScris(e.target)) return;
@@ -354,14 +413,68 @@ export function EditorMagazin({
     setGalerieDesign(null);
     setAdaugaDeschis(false);
     setSetariSablon(false);
-  }, []);
+    setBlocPagina(null);
+    setSetariPaginii(false);
+    setTintaBloc(null);
+    // Pagina proprie lasata (salvata sau cu modificarile renuntate) nu ramane in memorie: la intoarcere
+    // se citeste din nou, altfel modificarile renuntate ar fi reaparut pe ecran.
+    inchidePagina();
+  }, [inchidePagina]);
+
+  /**
+   * Alta pagina, cand cea proprie deschisa are modificari nesalvate: intai intrebarea. Altfel munca
+   * se pierdea fara semn, fiindca editorul tine o singura pagina proprie deschisa.
+   */
+  const [schimbareCeruta, setSchimbareCeruta] = useState<CheiePagina | null>(null);
+  const cerePagina = useCallback((p: CheiePagina) => {
+    if (p === pagina) return;
+    if (paginaDeschisa.modificata) {
+      setSchimbareCeruta(p);
+      return;
+    }
+    schimbaPagina(p);
+  }, [pagina, paginaDeschisa.modificata, schimbaPagina]);
+
+  /** Salveaza pagina proprie; dupa reusita, lista din „Editezi” si adresa previzualizarii o urmeaza. */
+  const salveazaPagina = useCallback(async (): Promise<boolean> => {
+    if (!idPagina) return true;
+    const salvata = await salveazaPaginaDeschisa();
+    if (!salvata) return false;
+    setPaginiSalvate((m) => ({ ...m, [idPagina]: { id: idPagina, titlu: salvata.titlu, slug: salvata.slug, publicata: salvata.publicata } }));
+    return true;
+  }, [idPagina, salveazaPaginaDeschisa]);
+
+  const adaugaBlocPagina = useCallback((tip: BlockType) => {
+    const t = tintaBloc;
+    if (!t) return;
+    const nou = createBlock(tip, { inColumn: t.fel === "coloana" });
+    aplicaPeEcran((s) => ({
+      ...s,
+      blocks: t.fel === "sus" ? insertAtTop(s.blocks, t.index, nou) : insertIntoColumn(s.blocks, t.idColoane, t.coloana, t.index, nou),
+    }));
+    setTintaBloc(null);
+    setBlocPagina(nou.id);
+  }, [tintaBloc, aplicaPeEcran]);
+
+  /** O sectiune a paginii principale, numai sus, nu in coloane (are latimea ei). */
+  const adaugaAcasaPagina = useCallback((sectiune: SectiuneAcasa) => {
+    const t = tintaBloc;
+    if (!t || t.fel !== "sus") return;
+    const nou = createBlockAcasa(sectiune);
+    aplicaPeEcran((s) => ({ ...s, blocks: insertAtTop(s.blocks, t.index, nou) }));
+    setTintaBloc(null);
+    setBlocPagina(nou.id);
+  }, [tintaBloc, aplicaPeEcran]);
 
   // ── Mesajele din previzualizare ──
   useEffect(() => {
     function laMesaj(e: MessageEvent) {
       if (e.origin !== window.location.origin || !isPreviewMessage(e.data)) return;
       const tip = e.data[PREVIEW_MESSAGE];
-      if (tip === "ready") trimiteDesignul();
+      if (tip === "ready") {
+        trimiteDesignul();
+        trimitePagina(true);
+      }
       else if (tip === "conturGata") trimiteEvidentierea();
       else if (tip === "select") {
         /*
@@ -371,9 +484,29 @@ export function EditorMagazin({
          */
         // Un bloc vine ca `<sectiune>/<bloc>` (`preview-protocol.ts`).
         const { sectiune: id, bloc } = despartireId(e.data.sectionId);
-        const unde = paginaSectiunii(design, id, pagina, pagini);
+        const unde = paginaSectiunii(design, id, pagina, paginiAfisate);
         if (!unde) return;
-        if (unde !== pagina) schimbaPagina(unde);
+        if (unde !== pagina) {
+          // Pagina proprie nesalvata: intai intrebarea. Clicul nu se reia: dupa raspuns editorul e pe
+          // pagina sectiunii, iar sectiunea se alege din nou.
+          if (paginaDeschisa.modificata) {
+            setSchimbareCeruta(unde);
+            return;
+          }
+          schimbaPagina(unde);
+        }
+        // Continutul sau un bloc al paginii proprii (etapa 5): panoul blocului, nu al unei sectiuni.
+        if (estePaginaProprie(unde) && id.startsWith(PREFIX_PAGINA_PROPRIE)) {
+          setFila("sectiuni");
+          setPeste(null);
+          setSelectat(null);
+          setBlocSelectat(null);
+          setSetariPaginii(false);
+          setTintaBloc(null);
+          setBlocPagina(bloc);
+          setVedereMobil("panou");
+          return;
+        }
         // Pagina unui sablon de produs: arborele trece pe sablonul ei (4b).
         if (unde === "produs") setSablonEditat(design.product.sabloane?.some((s) => s.page.id === id) ? id : null);
         setSetariSablon(false);
@@ -386,7 +519,7 @@ export function EditorMagazin({
     }
     window.addEventListener("message", laMesaj);
     return () => window.removeEventListener("message", laMesaj);
-  }, [trimiteDesignul, trimiteEvidentierea, design, pagina, pagini, schimbaPagina]);
+  }, [trimiteDesignul, trimiteEvidentierea, trimitePagina, design, pagina, paginiAfisate, paginaDeschisa.modificata, schimbaPagina]);
 
   const adaugaSectiune = useCallback(async (kind: SectionKind) => {
     setAdaugaDeschis(false);
@@ -453,10 +586,12 @@ export function EditorMagazin({
     */
     <div className="flex flex-col h-full overflow-hidden">
       <BaraEditor
-        pagina={pagina} onPagina={schimbaPagina} ciorna={ciorna}
+        pagina={pagina} onPagina={cerePagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}
         publicat={continut.publicat} publicareInCurs={continut.publicareInCurs} onComutaPublicarea={continut.comutaPublicarea}
-        continutNesalvat={continut.oriceNesalvat} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
+        continutNesalvat={continut.oriceNesalvat || paginaDeschisa.modificata} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
+        paginiProprii={paginiAfisate.paginiProprii}
+        anulare={istoricPagina ?? undefined}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -483,6 +618,14 @@ export function EditorMagazin({
                 onInapoi={() => setSetariSablon(false)}
                 onSters={() => { setSetariSablon(false); setSablonEditat(null); }}
               />
+            ) : idPagina && tintaBloc && paginaDeschisa.date ? (
+              <PanouAdaugaBloc tinta={tintaBloc} date={paginaDeschisa.date} onBloc={adaugaBlocPagina} onAcasa={adaugaAcasaPagina}
+                onInapoi={() => setTintaBloc(null)} />
+            ) : idPagina && setariPaginii && paginaDeschisa.date && paginaDeschisa.stare ? (
+              <PanouPagina stare={paginaDeschisa.stare} pagina={paginaDeschisa} date={paginaDeschisa.date} onInapoi={() => setSetariPaginii(false)} />
+            ) : idPagina && blocPaginaDeschis && paginaDeschisa.date ? (
+              <PanouBlocPagina key={blocPaginaDeschis.id} bloc={blocPaginaDeschis} pagina={paginaDeschisa} date={paginaDeschisa.date}
+                titluPagina={paginaDeschisa.stare?.titlu ?? ""} onInapoi={() => setBlocPagina(null)} />
             ) : sectiuneSelectata && blocDeschis ? (
               <PanouBloc
                 key={`${sectiuneSelectata.id}/${blocDeschis.id}`}
@@ -509,15 +652,41 @@ export function EditorMagazin({
             ) : (
               <div className="pb-6">
                 <ArboreSectiuni
-                  ciorna={ciorna} pagina={pagina} magazin={pagini} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
+                  ciorna={ciorna} pagina={pagina} magazin={paginiAfisate} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
                   blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc}
                   nesalvat={nesalvat} onAdauga={() => { setAdaugaDeschis(true); setVedereMobil("previzualizare"); }}
                   paginaAcasa={paginaAcasa}
                   sablon={sablonActiv} onSablon={alegeSablon} onSablonNou={sablonNou} onSetariSablon={() => setSetariSablon(true)}
+                  onDeschidePagina={(id) => cerePagina(cheiaPaginiiProprii(id))}
+                  titluPagina={estePaginaProprie(pagina) ? (paginaDeschisa.stare?.titlu || paginaProprie(pagina, paginiAfisate)?.titlu) : undefined}
+                  continutPagina={estePaginaProprie(pagina) ? (
+                    <ArborePagina
+                      cheie={pagina}
+                      pagina={paginaDeschisa}
+                      blocSelectat={blocPagina}
+                      setariDeschise={setariPaginii}
+                      onSelectBloc={(id) => { setPeste(null); setSetariPaginii(false); setBlocPagina(id); arataInPrevizualizare(idBloc(pagina, id)); }}
+                      onSetari={() => { setPeste(null); setBlocPagina(null); setSetariPaginii(true); }}
+                      onAdauga={(t) => { setPeste(null); setTintaBloc(t); }}
+                      onPeste={setPeste}
+                    />
+                  ) : undefined}
                 />
               </div>
             )}
           </div>
+          {/* Pagina proprie se salveaza explicit, ca in editorul de pagini: direct in magazin (etapa 5). */}
+          {idPagina && paginaDeschisa.stare && (
+            <div className="shrink-0 border-t border-border bg-surface px-4 py-2.5 flex items-center gap-3">
+              <p className={`flex-1 min-w-0 text-[11px] leading-snug ${paginaDeschisa.modificata ? "text-amber-600" : "text-muted-foreground"}`}>
+                {paginaDeschisa.modificata ? "Pagina are modificări nesalvate. Salvarea o duce direct în magazin." : "Pagina e salvată."}
+              </p>
+              <Button size="sm" disabled={!paginaDeschisa.modificata || paginaDeschisa.salvez} onClick={() => void salveazaPagina()}>
+                {paginaDeschisa.salvez ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Salvează pagina
+              </Button>
+            </div>
+          )}
         </aside>
 
         <main className={`relative flex-1 min-w-0 flex-col bg-muted/30 ${vedereMobil === "previzualizare" || galerieDesign || adaugaDeschis ? "flex" : "hidden lg:flex"}`}>
@@ -549,6 +718,35 @@ export function EditorMagazin({
           </div>
         </main>
       </div>
+
+      {/* Alta pagina, cu pagina proprie nesalvata: munca nu se pierde fara intrebare (etapa 5). */}
+      {/* Cat se salveaza, fereastra ramane: altfel pagina s-ar fi schimbat sub un „Rămân” apasat intre timp. */}
+      <Dialog open={schimbareCeruta !== null} onOpenChange={(deschis) => { if (!deschis && !paginaDeschisa.salvez) setSchimbareCeruta(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pagina „{paginaDeschisa.stare?.titlu ?? ""}” are modificări nesalvate</DialogTitle>
+            <DialogDescription>Dacă treci la altă pagină fără să o salvezi, modificările se pierd.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={paginaDeschisa.salvez} onClick={() => setSchimbareCeruta(null)}>Rămân</Button>
+            <Button variant="outline" disabled={paginaDeschisa.salvez} onClick={() => {
+              const p = schimbareCeruta;
+              setSchimbareCeruta(null);
+              if (p) schimbaPagina(p);
+            }}>
+              Renunță la ele
+            </Button>
+            <Button disabled={paginaDeschisa.salvez} onClick={async () => {
+              const p = schimbareCeruta;
+              if (!(await salveazaPagina())) return;
+              setSchimbareCeruta(null);
+              if (p) schimbaPagina(p);
+            }}>
+              Salvează și treci
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

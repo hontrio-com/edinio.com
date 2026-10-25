@@ -405,9 +405,13 @@ se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de
       versiune, istoric). Probe.
 - [x] 5.2 (25.10, `PaginaVie`, `pagini-in-editor.test.ts`; in editor pagina principala nu mai trimite la radacina) Magazinul: in modul editor, pagina proprie randeaza blocurile primite de la editor, cu
       marcaje pe blocuri; public, neschimbata. Probe.
-- [ ] 5.3 Editorul: paginile in „Editezi”, arborele „Conținut liber” (blocuri, coloane, sageti,
+- [x] 5.3 (25.10, `usePaginaProprie` cu reductorul pur `reductorPagina`, `ArborePagina`, `PanouriPagina`;
+      `SetariPagina` si `PaletaBlocuri` scoase din `PageBuilder`, `dateEditorPagina` comuna cu ruta veche,
+      actiunea `datePaginaInEditor`; 11 probe noi, 8 din 8 mutatii prinse) Editorul: paginile in „Editezi”, arborele „Conținut liber” (blocuri, coloane, sageti,
       duplicare, stergere, „Adaugă bloc”), panoul blocului (`BlockSettings`), panoul paginii (titlu,
-      adresa, publicare, SEO, CSS), salvarea si iesirea. Probe.
+      adresa, publicare, SEO, CSS), salvarea si iesirea. Probe. Spre alta pagina cu pagina nesalvata:
+      „Rămân / Renunță la ele / Salvează și treci”; pagina lasata se uita (la intoarcere se citeste din
+      nou). Anuleaza / Refa: pe pagina, dar pe design cand panoul arata antetul sau subsolul.
 - [ ] 5.4 Ecranul vechi trimite in editor; lista „Pagini” si „Deschide pagina” (pagina principala)
       duc in editor. REGISTRU.
 - [ ] 5.5 Porti + proba in Chrome (pe o pagina TEMPORARA a magazinului de proba, stearsa la final).

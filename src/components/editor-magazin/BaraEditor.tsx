@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Dispozitiv } from "@/components/store-editor/RamaPreview";
-import { PAGINI_EDITOR, type CheiePagina } from "@/lib/editor-magazin/pagini";
+import { PAGINI_EDITOR, type CheiePagina, type PaginaProprieEditor } from "@/lib/editor-magazin/pagini";
+import { cheiaPaginiiProprii } from "@/lib/storefront/design/preview-protocol";
 import { cn } from "@/lib/utils/cn";
 import type { CiornaDesign } from "./useCiornaDesign";
 
@@ -34,6 +35,7 @@ const DISPOZITIVE = [
 export function BaraEditor({
   pagina, onPagina, ciorna, dispozitiv, onDispozitiv, onReincarca, adresaPublica,
   publicat, publicareInCurs, onComutaPublicarea, continutNesalvat, vedereMobil, onVedereMobil, ingust = false,
+  paginiProprii = [], anulare,
 }: {
   pagina: CheiePagina;
   onPagina: (p: CheiePagina) => void;
@@ -51,7 +53,12 @@ export function BaraEditor({
   onVedereMobil: (v: "panou" | "previzualizare") => void;
   /** Ecran sub 768 px: lista paginilor arata numele scurte. */
   ingust?: boolean;
+  /** Paginile proprii ale magazinului (etapa 5), in „Editezi”, sub cele fixe. */
+  paginiProprii?: PaginaProprieEditor[];
+  /** Anuleaza / Refa altceva decat designul: pagina proprie deschisa, cand ea e cea editata. */
+  anulare?: { poateAnula: boolean; poateReface: boolean; anuleaza: () => void; reface: () => void };
 }) {
+  const ist = anulare ?? ciorna;
   const [confirma, setConfirma] = useState(false);
   const router = useRouter();
   /** „intreaba” = fereastra de iesire deschisa; „pleaca” = ciorna se trimite, apoi se iese. */
@@ -92,15 +99,22 @@ export function BaraEditor({
         <select value={pagina} onChange={(e) => onPagina(e.target.value as CheiePagina)} aria-label="Pagina pe care o editezi"
           className="h-9 w-full sm:w-auto min-w-0 pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary">
           {PAGINI_EDITOR.map((p) => <option key={p.cheie} value={p.cheie}>{ingust ? p.scurt : p.eticheta}</option>)}
+          {paginiProprii.length > 0 && (
+            <optgroup label="Paginile tale">
+              {paginiProprii.map((p) => (
+                <option key={p.id} value={cheiaPaginiiProprii(p.id)}>{p.publicata ? p.titlu : `${p.titlu} (ciornă)`}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </label>
 
       <div className="hidden sm:flex items-center">
-        <button type="button" onClick={ciorna.anuleaza} disabled={!ciorna.poateAnula} title="Anulează (Ctrl+Z)" aria-label="Anulează"
+        <button type="button" onClick={ist.anuleaza} disabled={!ist.poateAnula} title="Anulează (Ctrl+Z)" aria-label="Anulează"
           className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors">
           <Undo2 className="h-4 w-4" />
         </button>
-        <button type="button" onClick={ciorna.reface} disabled={!ciorna.poateReface} title="Refă (Ctrl+Y)" aria-label="Refă"
+        <button type="button" onClick={ist.reface} disabled={!ist.poateReface} title="Refă (Ctrl+Y)" aria-label="Refă"
           className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors">
           <Redo2 className="h-4 w-4" />
         </button>
@@ -166,10 +180,10 @@ export function BaraEditor({
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={8} className="w-60 p-1.5">
-            <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ciorna.poateAnula} onClick={ciorna.anuleaza}>
+            <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ist.poateAnula} onClick={ist.anuleaza}>
               <Undo2 className="h-4 w-4" /> Anulează
             </DropdownMenuItem>
-            <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ciorna.poateReface} onClick={ciorna.reface}>
+            <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ist.poateReface} onClick={ist.reface}>
               <Redo2 className="h-4 w-4" /> Refă
             </DropdownMenuItem>
             <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => setConfirma(true)}>

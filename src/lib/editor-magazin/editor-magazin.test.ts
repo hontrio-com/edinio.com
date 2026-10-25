@@ -5,12 +5,14 @@ import path from "node:path";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { comutaBaraDeAnunt, ID_BARA_ANUNT, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { createBlock, type Block } from "@/lib/pages/blocks.types";
+import type { DateEditorPagina } from "@/lib/pages/date-editor-pagina";
 import { adaugaSablon } from "@/lib/storefront/design/sabloane-produs";
 import { EDITOR_PARAM, EDITOR_VALUE, cheiaPaginiiProprii, despartireId, esteEditorDeDesign, idBloc, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { FEREASTRA_LIPIRE_MS, MAX_ISTORIC, anuleaza, istoricGol, noteaza, reface } from "./istoric";
 import { adresaPrevizualizarii, idPaginaProprie, notaPaginii, PAGINI_EDITOR, paginaCeruta, paginaSectiunii, sectiunilePaginii, type MagazinPentruPagini } from "./pagini";
-import { deSalvat, paginaModificata, type StarePagina } from "./pagina-proprie";
+import { deSalvat, paginaModificata, reductorPagina, rezumatBloc, type StarePagina, type StarePaginiiDeschise } from "./pagina-proprie";
 import { contextDesign, rederiva } from "./derivare";
 import { CHEI_CONTINUT, CHEI_RETRASE, felBloc, felContinut, nodulCheii } from "./noduri";
 
@@ -204,6 +206,98 @@ test("starea paginii: „nesalvat” se judeca pe tot randul; salvarea trimite t
   assert.deepEqual(deSalvat(s, "2026-10-25T10:00:00Z"), {
     title: "Despre", slug: "despre", blocks: [], page_css: "", seo: {}, is_published: true, versiune: "2026-10-25T10:00:00Z",
   });
+});
+
+// ── Pagina proprie deschisa in editor (5.3): starea ei, fara React ───────────
+
+const dePeServer = (over: Partial<DateEditorPagina["pagina"]> = {}) => ({
+  pagina: { id: PAGINA, titlu: "Despre", slug: "despre", publicata: true, blocks: [], css: "", seo: {}, versiune: "v1", ...over },
+}) as unknown as DateEditorPagina;
+const nimicDeschis: StarePaginiiDeschise = { deschisa: null, lipsa: null };
+const deschide = () => reductorPagina(nimicDeschis, { tip: "incarcata", id: PAGINA, date: dePeServer() });
+const scrie = (s: StarePaginiiDeschise, fn: (p: StarePagina) => StarePagina, cheie: string | null, acum: number) =>
+  reductorPagina(s, { tip: "aplica", fn, cheie, acum });
+const deSalvatPeEcran = (s: StarePaginiiDeschise) => paginaModificata(s.deschisa!.salvata, s.deschisa!.curenta);
+
+test("pagina deschisa porneste salvata, cu versiunea citita de la server", () => {
+  const s = deschide();
+  assert.equal(s.deschisa?.id, PAGINA);
+  assert.equal(s.deschisa?.versiune, "v1");
+  assert.equal(s.deschisa?.curenta.titlu, "Despre");
+  assert.equal(deSalvatPeEcran(s), false);
+  assert.equal(s.deschisa?.istoric.trecut.length, 0);
+});
+
+test("o modificare care nu schimba nimic nu intra in istoric", () => {
+  const s = deschide();
+  assert.equal(scrie(s, (p) => p, "titlu", 1000), s, "aceeasi stare, nu una noua");
+});
+
+test("⚠⚠ tastarea in titlu e un singur pas: Anuleaza intoarce pagina salvata, Refa o readuce", () => {
+  let s = deschide();
+  s = scrie(s, (p) => ({ ...p, titlu: "D" }), "titlu", 1000);
+  s = scrie(s, (p) => ({ ...p, titlu: "De" }), "titlu", 1200);
+  s = scrie(s, (p) => ({ ...p, titlu: "Des" }), "titlu", 1400);
+  assert.equal(s.deschisa?.istoric.trecut.length, 1);
+  assert.equal(deSalvatPeEcran(s), true);
+  const inapoi = reductorPagina(s, { tip: "anuleaza" });
+  assert.equal(inapoi.deschisa?.curenta.titlu, "Despre");
+  assert.equal(deSalvatPeEcran(inapoi), false, "inapoi la ce e in baza: nimic de salvat");
+  assert.equal(reductorPagina(inapoi, { tip: "reface" }).deschisa?.curenta.titlu, "Des");
+  const neatinsa = deschide();
+  assert.equal(reductorPagina(neatinsa, { tip: "anuleaza" }), neatinsa, "fara istoric, Anuleaza nu face nimic");
+});
+
+test("⚠⚠ salvarea: ce a plecat devine „salvat”, iar ce s-a scris cat era pe drum ramane de salvat", () => {
+  let s = deschide();
+  s = scrie(s, (p) => ({ ...p, titlu: "Despre noi" }), "titlu", 1000);
+  const trimisa = s.deschisa!.curenta;
+  s = scrie(s, (p) => ({ ...p, css: ".x{}" }), "css", 1500);
+  s = reductorPagina(s, { tip: "salvata", id: PAGINA, trimisa, slug: "despre", versiune: "v2" });
+  assert.equal(s.deschisa?.versiune, "v2", "urmatoarea salvare pleaca cu versiunea noua, altfel garda o respinge");
+  assert.equal(s.deschisa?.salvata.titlu, "Despre noi");
+  assert.equal(s.deschisa?.curenta.css, ".x{}", "scrisul de pe drum nu se pierde");
+  assert.equal(deSalvatPeEcran(s), true, "si nu se socoteste salvat");
+  assert.equal(s.deschisa?.istoric.trecut.length, 2, "istoricul ramane dupa salvare");
+});
+
+test("⚠ adresa curatata de server ajunge si pe ecran, daca omul n-a schimbat-o intre timp", () => {
+  const s = scrie(deschide(), (p) => ({ ...p, slug: "Despre Noi" }), "slug", 1000);
+  const trimisa = s.deschisa!.curenta;
+  const salvata = reductorPagina(s, { tip: "salvata", id: PAGINA, trimisa, slug: "despre-noi", versiune: "v2" });
+  assert.equal(salvata.deschisa?.salvata.slug, "despre-noi");
+  assert.equal(salvata.deschisa?.curenta.slug, "despre-noi");
+  assert.equal(deSalvatPeEcran(salvata), false);
+  // A scris alta adresa cat era salvarea pe drum: ramane a lui, de salvat.
+  const rescrisa = scrie(s, (p) => ({ ...p, slug: "contact" }), "slug", 5000);
+  const dupa = reductorPagina(rescrisa, { tip: "salvata", id: PAGINA, trimisa, slug: "despre-noi", versiune: "v2" });
+  assert.equal(dupa.deschisa?.curenta.slug, "contact");
+  assert.equal(deSalvatPeEcran(dupa), true);
+});
+
+test("⚠⚠ pagina lasata se uita: la intoarcere se citeste din nou, fara modificarile renuntate", () => {
+  const s = scrie(deschide(), (p) => ({ ...p, titlu: "Renuntat" }), "titlu", 1000);
+  const inchisa = reductorPagina(s, { tip: "inchisa" });
+  assert.deepEqual(inchisa, nimicDeschis);
+  assert.equal(reductorPagina(inchisa, { tip: "inchisa" }), inchisa, "nimic deschis: aceeasi stare");
+  const lipsa = reductorPagina(s, { tip: "lipsa", id: PAGINA });
+  assert.deepEqual(lipsa, { deschisa: null, lipsa: PAGINA });
+  assert.deepEqual(reductorPagina(lipsa, { tip: "inchisa" }), nimicDeschis, "si o pagina lipsa se cauta din nou");
+  // Raspunsul salvarii altei pagini nu atinge pagina deschisa.
+  const deschisa = deschide();
+  const straina = reductorPagina(deschisa, { tip: "salvata", id: "alta", trimisa: deschisa.deschisa!.curenta, slug: "x", versiune: "v9" });
+  assert.equal(straina, deschisa);
+});
+
+test("randul unui bloc in arbore se recunoaste dupa textul lui", () => {
+  assert.equal(rezumatBloc({ ...createBlock("heading"), text: "Despre noi" } as Block), "Despre noi");
+  assert.equal(rezumatBloc({ ...createBlock("text"), html: "<p>Livram&nbsp;in <strong>toata</strong>\n tara</p>" } as Block), "Livram in toata tara");
+  const lung = rezumatBloc({ ...createBlock("heading"), text: "x".repeat(60) } as Block);
+  assert.equal(lung?.length, 40);
+  assert.ok(lung?.endsWith("…"));
+  assert.equal(rezumatBloc({ ...createBlock("image"), alt: "", caption: "Atelierul" } as Block), "Atelierul");
+  assert.equal(rezumatBloc({ ...createBlock("button"), label: "   " } as Block), null);
+  assert.equal(rezumatBloc(createBlock("spacer")), null);
 });
 
 test("fiecare pagina isi arata sectiunile ei", () => {
@@ -406,4 +500,57 @@ test("⚠⚠ fiecare nod scrie doar cheile lui, si niciuna retrasa", () => {
     }
   }
   assert.ok(verificate >= 30, `doar ${verificate} scrieri gasite; s-a schimbat forma lor?`);
+});
+
+// ── Pagina proprie in editor (5.3), pe sursa ─────────────────────────────────
+
+const EDITOR = "src/components/editor-magazin/EditorMagazin.tsx";
+const HOOK_PAGINA = "src/components/editor-magazin/usePaginaProprie.ts";
+
+test("⚠⚠ datele unei pagini proprii se dau doar proprietarului ei", () => {
+  /*
+   * `datePaginaInEditor` e o actiune de server: oricine o poate chema cu orice id. Pagina iese
+   * doar daca magazinul ei e al celui logat; altfel `null`, ca pentru o pagina lipsa.
+   */
+  const actiune = faraComentarii("src/lib/actions/editor-pagini.actions.ts");
+  assert.match(actiune, /^"use server";/);
+  assert.match(actiune, /\/\^\[0-9a-zA-Z-\]\{1,64\}\$\/\.test\(pageId\)\) return null;/);
+  assert.match(actiune, /if \(!user\) return null;\s*return dateEditorPagina\(supabase, pageId, user\.id\);/);
+  const date = faraComentarii("src/lib/pages/date-editor-pagina.ts");
+  assert.match(date, /^import "server-only";/);
+  assert.match(date, /\.from\("businesses"\)[\s\S]*?\.eq\("id", page\.business_id\)\s*\.eq\("user_id", userId\)\s*\.maybeSingle\(\);\s*if \(!business\) return null;/);
+  // Si ruta editorului de pagini citeste prin aceeasi functie: o singura copie a regulii.
+  assert.match(faraComentarii("src/app/(dashboard)/dashboard/pages/[pageId]/edit/page.tsx"), /dateEditorPagina\(supabase, pageId, user\.id\)/);
+});
+
+test("⚠⚠ editorul deschide din adresa doar paginile proprii ale magazinului", () => {
+  const s = faraComentarii("src/app/(dashboard)/dashboard/editor/page.tsx");
+  assert.match(s, /\.from\("custom_pages"\)\.select\("id, title, slug, is_published"\)\s*\.eq\("business_id", magazin\.id\)/);
+  assert.match(s, /paginaInitiala=\{paginaDinAdresa\(paginaCeruta, \{ paginiProprii \}\)\}/);
+});
+
+test("⚠⚠ munca nesalvata pe pagina nu se pierde fara intrebare", () => {
+  const s = faraComentarii(EDITOR);
+  // Pagina se schimba intr-un singur loc, care uita si pagina proprie de pe ecran.
+  assert.equal(s.match(/\bsetPagina\(/g)?.length, 1, "pagina se schimba doar prin `schimbaPagina`");
+  assert.match(s, /const schimbaPagina = useCallback\(\(p: CheiePagina\) => \{\s*setPagina\(p\);[\s\S]*?inchidePagina\(\);\s*\}, \[inchidePagina\]\);/);
+  // Bara, arborele si clicul din previzualizare intreaba intai, daca pagina are modificari.
+  assert.match(s, /const cerePagina = useCallback\(\(p: CheiePagina\) => \{\s*if \(p === pagina\) return;\s*if \(paginaDeschisa\.modificata\) \{\s*setSchimbareCeruta\(p\);\s*return;\s*\}\s*schimbaPagina\(p\);/);
+  assert.match(s, /onPagina=\{cerePagina\}/);
+  assert.match(s, /onDeschidePagina=\{\(id\) => cerePagina\(cheiaPaginiiProprii\(id\)\)\}/);
+  assert.match(s, /if \(unde !== pagina\) \{\s*if \(paginaDeschisa\.modificata\) \{\s*setSchimbareCeruta\(unde\);\s*return;\s*\}\s*schimbaPagina\(unde\);/);
+  // „Salvează și treci” trece doar dupa o salvare reusita.
+  assert.match(s, /if \(!\(await salveazaPagina\(\)\)\) return;\s*setSchimbareCeruta\(null\);\s*if \(p\) schimbaPagina\(p\);/);
+  // „Ieși” intreaba si pentru pagina; inchiderea ferestrei, prin hook.
+  assert.match(s, /continutNesalvat=\{continut\.oriceNesalvat \|\| paginaDeschisa\.modificata\}/);
+  assert.match(faraComentarii(HOOK_PAGINA), /if \(!modificata\) return;\s*const handler = \(e: BeforeUnloadEvent\) => e\.preventDefault\(\);\s*window\.addEventListener\("beforeunload", handler\);/);
+});
+
+test("⚠⚠ salvarea paginii pleaca cu versiunea si nu socoteste salvat ce n-a ajuns in baza", () => {
+  const s = faraComentarii(HOOK_PAGINA);
+  assert.match(s, /res = await updatePage\(d\.id, deSalvat\(trimisa, d\.versiune\)\);/);
+  // Fara raspuns sau cu eroare: nimic nu se marcheaza salvat.
+  assert.match(s, /\} catch \{\s*setSalvez\(false\);\s*toast\.error\([^;]*\);\s*return null;\s*\}/);
+  assert.match(s, /if \("error" in res\) \{\s*toast\.error\([^;]*\);\s*return null;\s*\}\s*despacha\(\{ tip: "salvata", id: d\.id, trimisa, slug: res\.slug, versiune: res\.versiune \}\);/);
+  assert.equal(s.match(/tip: "salvata"/g)?.length, 1);
 });

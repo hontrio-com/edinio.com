@@ -54,8 +54,11 @@ test("fundalul paginii: alb implicit, cel ales pentru magazin daca exista, acela
   assert.equal(fundalulPaginii("red;}body{display:none"), "#FFFFFF");
   const publica = readFileSync(new URL("../../app/(public)/[slug]/[pageSlug]/page.tsx", import.meta.url), "utf8");
   assert.match(publica, /backgroundColor: fundalulPaginii\(resolved\.style\.colors\.background\)/);
+  // Datele editorului le citeste `dateEditorPagina` (si pentru editorul unic, etapa 5); ruta doar le da mai departe.
+  const date = readFileSync(new URL("./date-editor-pagina.ts", import.meta.url), "utf8");
+  assert.match(date, /fundalulPaginii\(resolveDesign\(ss\?\.storefront_design/);
   const editor = readFileSync(new URL("../../app/(dashboard)/dashboard/pages/[pageId]/edit/page.tsx", import.meta.url), "utf8");
-  assert.match(editor, /fundalulPaginii\(resolveDesign\(ss\?\.storefront_design/);
+  assert.match(editor, /fundal=\{d\.fundal\}/);
   const builder = readFileSync(new URL("../../components/pages/PageBuilder.tsx", import.meta.url), "utf8");
   assert.match(builder, /style=\{\{ backgroundColor: fundal \}\}/);
 });

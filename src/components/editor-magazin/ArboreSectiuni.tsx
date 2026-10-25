@@ -152,7 +152,7 @@ function Titlu({ children }: { children: React.ReactNode }) {
 
 export function ArboreSectiuni({
   ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa,
-  sablon, onSablon, onSablonNou, onSetariSablon,
+  sablon, onSablon, onSablonNou, onSetariSablon, continutPagina, titluPagina, onDeschidePagina,
 }: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
@@ -174,12 +174,17 @@ export function ArboreSectiuni({
   onSablon: (id: string | null) => void;
   onSablonNou: () => void;
   onSetariSablon: () => void;
+  /** Pagina proprie (etapa 5): arborele ei ia locul sectiunilor, sub titlul ei. */
+  continutPagina?: React.ReactNode;
+  titluPagina?: string;
+  /** Deschide in editor pagina proprie aleasa ca pagina principala (in locul ecranului vechi). */
+  onDeschidePagina?: (id: string) => void;
 }) {
   const { design, aplica } = ciorna;
   const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
   const eListaPaginii = pagina === "acasa" && !magazin.unSingurProdus;
   const nota = notaPaginii(pagina, design, magazin);
-  const numePagina = PAGINI_EDITOR.find((p) => p.cheie === pagina)?.eticheta ?? "";
+  const numePagina = titluPagina ?? PAGINI_EDITOR.find((p) => p.cheie === pagina)?.eticheta ?? "";
   const bara = design.chrome.announcement;
   const marcaj = (s: SectionInstance) => (nesalvat(felContinut(s)) ? <PunctNesalvat /> : null);
 
@@ -208,12 +213,18 @@ export function ArboreSectiuni({
             Pagina principală este pagina „{paginaAcasa.titlu}”, făcută în Pagini. Ce secțiuni apar și în ce ordine alegi acolo;
             aici schimbi cum arată fiecare.
           </p>
-          <Link href={`/dashboard/pages/${paginaAcasa.id}`} className="mt-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline">
-            Deschide pagina <ArrowUpRight className="h-3 w-3" />
-          </Link>
+          {onDeschidePagina ? (
+            <button type="button" onClick={() => onDeschidePagina(paginaAcasa.id)} className="mt-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline">
+              Deschide pagina <ChevronRight className="h-3 w-3" />
+            </button>
+          ) : (
+            <Link href={`/dashboard/pages/${paginaAcasa.id}`} className="mt-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline">
+              Deschide pagina <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          )}
         </Callout>
       )}
-      {eListaPaginii ? (
+      {continutPagina ?? (eListaPaginii ? (
         <>
           <SectionList
             sections={design.home}
@@ -249,7 +260,7 @@ export function ArboreSectiuni({
             </Fragment>
           ))}
         </ul>
-      )}
+      ))}
 
       <Titlu>Jos, pe toate paginile</Titlu>
       <ul className="space-y-1.5">

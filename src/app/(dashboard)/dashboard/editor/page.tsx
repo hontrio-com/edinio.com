@@ -9,7 +9,7 @@ import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
-import { estePagina, type CheiePagina } from "@/lib/editor-magazin/pagini";
+import { paginaCeruta as paginaDinAdresa, type PaginaProprieEditor } from "@/lib/editor-magazin/pagini";
 import { EditorMagazin } from "@/components/editor-magazin/EditorMagazin";
 import { ScheletEditor } from "@/components/editor-magazin/ScheletEditor";
 
@@ -37,7 +37,8 @@ export default async function EditorPage({ searchParams }: Props) {
       <Suspense fallback={<ScheletEditor />}>
         <ContinutEditor
           userId={user.id}
-          paginaCeruta={estePagina(sp.pagina) ? sp.pagina : "acasa"}
+          // Validata in `ContinutEditor`, fata de paginile magazinului (o pagina proprie straina nu se deschide).
+          paginaCeruta={typeof sp.pagina === "string" ? sp.pagina : null}
           sectiuneCeruta={typeof sp.sectiune === "string" && sp.sectiune.length <= 64 ? sp.sectiune : null}
         />
       </Suspense>
@@ -47,7 +48,7 @@ export default async function EditorPage({ searchParams }: Props) {
 
 async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta }: {
   userId: string;
-  paginaCeruta: CheiePagina;
+  paginaCeruta: string | null;
   sectiuneCeruta: string | null;
 }) {
   const supabase = await createClient();
@@ -71,7 +72,7 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta }: {
   const setari = Array.isArray(brut) ? brut[0] ?? null : brut ?? null;
   const pageContent = (setari?.page_content as Record<string, unknown> | null) ?? {};
 
-  const [{ data: profil }, categorii, { data: produs }, paginaAcasa] = await Promise.all([
+  const [{ data: profil }, categorii, { data: produs }, paginaAcasa, { data: paginiRanduri }] = await Promise.all([
     supabase.from("users_profile").select("plan").eq("id", userId).single(),
     // Peste plafonul de 1000 de randuri al PostgREST: taxonomii importate mari.
     fetchAllRows("dashboard.editor.categories", (from, to) =>
@@ -90,7 +91,11 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta }: {
         .eq("id", id).eq("business_id", magazin.id).maybeSingle();
       return data ? { id: data.id, titlu: data.title, publicata: data.is_published } : null;
     })(),
+    // Paginile proprii, pentru „Editezi” (etapa 5), in ordinea din „Pagini”.
+    supabase.from("custom_pages").select("id, title, slug, is_published")
+      .eq("business_id", magazin.id).order("sort_order").order("created_at").limit(500),
   ]);
+  const paginiProprii: PaginaProprieEditor[] = (paginiRanduri ?? []).map((p) => ({ id: p.id, titlu: p.title, slug: p.slug, publicata: p.is_published }));
 
   const ctx = contextDesign({
     primaryColor: magazin.primary_color,
@@ -136,9 +141,10 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta }: {
         prefixProdus: permalinkuri.produs,
         prefixMagazin: permalinkuri.magazin,
         unSingurProdus: parseStoreMode(pageContent as never).mode === "one_product",
+        paginiProprii,
       }}
       paginaAcasa={paginaAcasa}
-      paginaInitiala={paginaCeruta}
+      paginaInitiala={paginaDinAdresa(paginaCeruta, { paginiProprii })}
       sectiuneInitiala={sectiuneCeruta}
     />
   );

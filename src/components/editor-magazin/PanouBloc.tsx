@@ -40,9 +40,11 @@ export function PanouBloc({ sectiune, bloc, ciorna, continut, onInapoi }: {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <PageIcon name={meta?.icon ?? "Square"} className="h-4 w-4 shrink-0 text-muted-foreground" />
+        {/* Fara `truncate`: langa buton, „Caseta „Pachetul conține”” se taia, iar „ascuns în
+            magazin” de la coada randului de dedesubt nu se mai vedea deloc (proba 4.6). */}
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-foreground truncate">{meta?.label ?? bloc.type}</h2>
-          <p className="text-[11px] text-muted-foreground truncate">
+          <h2 className="font-semibold text-foreground leading-snug break-words">{meta?.label ?? bloc.type}</h2>
+          <p className="text-[11px] text-muted-foreground leading-snug">
             {sectionMeta(sectiune.kind)?.label}{zona ? ` · ${zona.label}` : ""}{!bloc.enabled ? " · ascuns în magazin" : ""}
           </p>
         </div>

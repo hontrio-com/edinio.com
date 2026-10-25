@@ -90,7 +90,8 @@ const BLOCURI_CLASIC: SchemaBlocuri = {
     titlu: { label: "Titlul", icon: "Award", zona: "cumparare", obligatoriu: DE_CE.titlu },
     descriere_scurta: { label: "Descrierea scurtă", icon: "MessageCircle", zona: "cumparare" },
     pret: { label: "Prețul", icon: "Tag", zona: "cumparare", obligatoriu: DE_CE.pret },
-    pachet: { label: "Conținutul pachetului", icon: "Package", zona: "cumparare" },
+    /* „Caseta”, ca „Ce conține pachetul” de jos sa nu para acelasi bloc (proba 4.6). */
+    pachet: { label: "Caseta „Pachetul conține”", icon: "Package", zona: "cumparare" },
     livrare: { label: "Estimarea livrării", icon: "Calendar", zona: "cumparare", obligatoriu: DE_CE.livrare },
     variante: { label: "Variantele", icon: "Palette", zona: "cumparare", obligatoriu: DE_CE.variante },
     stoc: { label: "Stocul", icon: "PackageCheck", zona: "cumparare", obligatoriu: DE_CE.stoc },

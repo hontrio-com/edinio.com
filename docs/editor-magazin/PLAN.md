@@ -6,11 +6,39 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4
-(blocuri) IN LUCRU**, cu acordul lui: „Da, continua. O sa iti dau la final lista cu toate
-mentiunile mele”. Intrebarea despre teme a fost pusa si a ramas fara raspuns; etapa 4 nu depinde
-de ea (blocurile trebuie in ambele cazuri), deci ramane deschisa pentru lista lui de la final.
-Planul si bifele: sectiunea „Etapa 4: planul de lucru”.
+**Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
+(blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
+sa iti dau la final lista cu toate mentiunile mele”. **Urmeaza 4b** (sabloane de produs pe categorie
+sau pe produs), cu plan separat scris inainte de cod. Intrebarea despre teme a fost pusa si a ramas
+fara raspuns; etapa 4 nu depinde de ea, deci ramane deschisa pentru lista lui de la final. Planul si
+bifele: sectiunea „Etapa 4: planul de lucru”.
+
+Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
+Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
+
+**Proba etapei 4 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO), prin impersonare, cu
+acordul lui, la fel ca la etapele 2 si 3; starea de dinainte pusa la loc si verificata printr-o
+singura interogare (amprentele `page_content` si `storefront_design`, ciorna goala, data publicarii,
+abonamentul, 0 comenzi noi). Ce merge cap-coada:
+- Arborele: blocurile sub „Pagina de produs”, pe zone (Clasic: cumparare, sub produs; Detaliat:
+  coloana de cumparare, sub galerie, file, sub produs); lacatul cu motivul scris ca propozitie.
+- Sagetile: pretul urcat deasupra titlului se vede pe loc, si pe calculator, si pe telefon.
+- Ochiul: „Garanțiile” ascunse dispar din previzualizare; panoul spune „Arată”.
+- Clicul in previzualizare deschide panoul blocului (Pretul, Telefon si WhatsApp, Caseta „Detalii
+  produs”), cu contur gros; trecerea peste rand din arbore incadreaza blocul in previzualizare.
+- Clasic -> Detaliat: ordinea si ochiul se pastreaza pe tip (pretul tot primul, garantiile si
+  contorul tot ascunse); Anuleaza readuce Clasic cu ordinea mutata; Renunta goleste ciorna.
+Ce a gasit proba:
+1. **Doua blocuri cu nume aproape identice**: „Conținutul pachetului” (caseta de langa pret) si
+   „Ce conține pachetul” (lista mare de jos) arata aceeasi lista. Caseta se numeste acum „Caseta
+   „Pachetul conține””, ca „Caseta „Detalii produs”” din Detaliat. Reparat.
+2. **Ochiul lor parea mort**: amandoua apar doar la produsele de tip pachet, deci pe un produs
+   obisnuit ochiul nu schimba nimic. Panoul lor spune acum asta si trimite la Produse. Reparat.
+3. **Titlul panoului se taia** langa buton („Caseta „Pachetul …””), iar „ascuns în magazin” de la
+   coada randului de dedesubt nu se vedea deloc. Acum se rup pe doua randuri. Reparat.
+4. Conturul blocului selectat se deseneaza PESTE antetul lipicios cand blocul ajunge sub el la
+   derulare (stratul are `z-index` maxim). Comportament din etapa 3, nu regresie: trecut in
+   REGISTRU (D), de discutat.
 
 **Proba etapei 3 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO), prin impersonare, cu
 acordul lui (s-a conectat el ca administrator pe localhost; contul de admin din baza demo are parola
@@ -254,7 +282,8 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - [x] 4.4 (25.10, `ArboreBlocuri`, `PanouBloc`, `ContinutBloc`, noduri `produs_*`) Editorul: blocurile in arbore sub „Pagina de produs” (pe zone, sageti, ochi), panoul
       blocului (setari + continutul lui), comutatoarele dublate scoase.
 - [x] 4.5 (25.10, `MarcajBloc`, `selectorMarcaj`; filele Detaliat raman fara marcaj propriu) Previzualizarea: marcaj pe bloc, contur si clic pe bloc.
-- [ ] 4.6 Porti + proba in Chrome.
+- [x] 4.6 Porti + proba in Chrome. 25.10: tot ce e in „Stare si reluare”, plus trei reparatii gasite
+      de proba (numele casetei pachetului, nota blocurilor de pachet, titlul panoului care se taia).
 - [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a).
 
 ## Deciziile proprietarului

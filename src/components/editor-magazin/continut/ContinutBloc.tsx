@@ -166,6 +166,19 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
       return <Nota href="/dashboard/offers" eticheta="Oferte">Ofertele le creezi și le așezi din Oferte.</Nota>;
     case "contact":
       return <Nota href="/dashboard/settings" eticheta="Setări > General">Telefonul și WhatsApp-ul vin din Setări &gt; General.</Nota>;
+    /* Pe un produs obisnuit ochiul lor nu schimba nimic in previzualizare: nota spune de ce. */
+    case "pachet":
+      return (
+        <Nota href="/dashboard/products" eticheta="Produse">
+          Apare doar la produsele de tip pachet, lângă preț. Componentele le alegi în fișa pachetului.
+        </Nota>
+      );
+    case "continut_pachet":
+      return (
+        <Nota href="/dashboard/products" eticheta="Produse">
+          Apare doar la produsele de tip pachet, ca listă mare sub produs. Componentele le alegi în fișa pachetului.
+        </Nota>
+      );
     case "rezumat":
       return (
         <Nota href="/dashboard/products" eticheta="Produse">

@@ -74,6 +74,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 - Etichetele variantelor si ale campurilor din registru (`registry.ts`) sunt inca fara diacritice; in editorul unic apar langa texte cu diacritice. De facut o trecere separata, cu probele care le citesc.
 - Culoarea aleasa in Stil se vede pe loc in previzualizare doar unde magazinul citeste variabilele temei. Cosul plutitor si eticheta „Popular” de pe card o primesc ca proprietate de la server (`business.primary_color`) si se schimba abia dupa „Salveaza” (vazut la proba din 25.10). De rezolvat in etapa 6, cand culoarea trece in design.
 - **De decis (etapa 4): garantiile de pe pagina de produs.** Editorul vechi edita patru carduri (`trust_badges`), dar nicio varianta a paginii nu le afiseaza: Clasic si Detaliat au textele scrise in cod. Masurat 25.10: 44 de magazine le au salvate, 6 cu texte schimbate de comerciant (deci au scris ceva ce clientii nu vad). Editorul nou nu le mai ofera; datele raman in baza. Variante: le afisam (pagina se schimba pentru toate cele 44) sau le stergem.
+- **De discutat (vazut la proba 4.6): conturul blocului selectat trece peste antetul lipicios.** Cand
+  blocul selectat ajunge sub antet la derulare, conturul si eticheta lui se deseneaza peste antet
+  (stratul din `ConturEditor` are `z-index` maxim, ca sa stea peste orice sectiune). Pozitia e
+  corecta, doar ca antetul ar trebui sa-l acopere. O limita de sus luata din antet trebuie sa
+  ocoleasca sertarul cosului si antetul selectat chiar el; de facut cu proba ei, nu in treacat.
 - **De decis (etapa 4): contorul de vizitatori** afiseaza un numar nemasurat, fix pe produs (18-27); aprins la 9 magazine. Editorul nou o spune in panoul blocului. Ramane, sau iese?
 - `ProductForm` (galeria de imagini a produsului) foloseste tot dnd-kit fara `id` stabil, deci poate avea aceeasi nepotrivire de hidratare reparata in lista de sectiuni (`SectionList`, `useId`). In afara editorului, neatins.
 - Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”. Daca se muta in „Setari”, se schimba adresa (`/ajutor/<categorie>/<ghid>`), deci trebuie redirectari.

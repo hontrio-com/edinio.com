@@ -2,7 +2,7 @@
 
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
-import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
+import { Fragment, useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import {
@@ -50,6 +50,11 @@ import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvid
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
+import { blocurileZonei, completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import type { BlockInstance } from "@/lib/storefront/design/types";
+
+/** Schema blocurilor variantei (`blocuri.ts`): zonele, ordinea implicita, cele obligatorii. */
+const SCHEMA_BLOCURI = schemaBlocurilor("product_page", "classic")!;
 
 /* ─── Gallery ─────────────────────────────────────────────────────────────── */
 
@@ -157,7 +162,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false, permisIncarcare = null }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, demo = false, permisIncarcare = null }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -172,6 +177,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   productOffers?: ResolvedOffer[];
   /** Reglajele variantei, din `design.product.page.settings`. Vezi registry. */
   setari?: Record<string, unknown>;
+  /**
+   * Blocurile paginii, din `design.product.page.blocks`: in ce ordine se aseaza
+   * bucatile si care se vad. Lipsa sau venita din alta varianta, lista se
+   * completeaza aici, pe schema Clasic (`blocuri.ts`).
+   */
+  blocuri?: BlockInstance[];
   /**
    * Miniatura din catalogul de design-uri: pagina se randeaza inerta.
    *
@@ -287,7 +298,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const hasLongDesc = !!product.description && product.description !== "<p></p>";
   const topBlurb = hasShortDesc ? shortDesc : (hasLongDesc ? product.description : null);
 
-  const trustBadgesEnabled = pageContent.trust_badges_enabled !== false;
+  /*
+   * Blocurile paginii (etapa 4 din `docs/editor-magazin/PLAN.md`): ordinea si
+   * vizibilitatea bucatilor de mai jos. Ochiul din editor e singurul lor control;
+   * cat timp omul nu l-a atins, vizibilitatea o dau comutatoarele vechi
+   * (`trust_badges_enabled`, `benefits_section.enabled`...), citite in
+   * `completeazaBlocuri`, deci aici nu mai verifica nimeni a doua oara.
+   */
+  const blocuriPagina = completeazaBlocuri(blocuri, SCHEMA_BLOCURI, { pageContent: pageContent as Record<string, unknown>, setari });
   const benefitsSection = pageContent.benefits_section;
   const howItWorksSection = pageContent.how_it_works_section;
   const faqSection = pageContent.faq_section;
@@ -301,12 +319,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const deliveryEstimate = pageContent.delivery_estimate;
   /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
   const deliveryTime = pageContent.delivery_time;
-  const showQualityBadge = pageContent.show_quality_badge === true; // "Calitate verificata" badge — off unless enabled (ANPC/Omnibus: merchant opt-in)
   // Numar stabil, derivat din id-ul produsului: cu Math.random() serverul si
   // browserul scriau numere diferite in acelasi HTML (nepotrivire de hidratare).
   // Fix in miniatura, ca fiecare card din galerie sa arate acelasi numar.
   const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
-  const showSocialProof = pageContent.show_social_proof === true; // fake live-viewers counter — off unless enabled
 
   // Variante — sursa unica din lib/storefront/variants.ts. Un produs cu
   // `variants.enabled` dar fara nicio optiune NU e variabil: altfel butonul de
@@ -703,8 +719,9 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const touchStartX = useRef<number>(0);
   const thumbStripRef = useRef<HTMLDivElement>(null);
 
+  // Fara poarta pe `delivery_estimate.enabled`: casuta se aseaza doar cand blocul
+  // „Estimarea livrarii” e aprins, iar implicitul blocului e chiar comutatorul acela.
   const deliveryDates = useMemo(() => {
-    if (!deliveryEstimate?.enabled) return null;
     // Zilele vin din acelasi loc ca cele trimise catre Google (procesare +
     // tranzit, Setari → Livrare), cu rezerva pe `min_days`/`max_days`. Socotite
     // separat, casuta si microdatele aceleiasi pagini se departau la prima
@@ -777,271 +794,301 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // re-decodeaza, focusul de pe butonul apasat dispare, tranzitiile nu apuca sa
   // ruleze).
   function zonaDeCumparare() {
-    return (
-      // `min-w-0`: pe telefon divul e element de grila, iar dimensiunea minima
-      // automata l-ar lasa sa se dilate la latimea unui tabel sau a unei imagini
-      // din descrierea scurta, largind si coloana galeriei.
-      <div className="flex flex-col gap-3 lg:gap-4 min-w-0">
-        {/* Quality badge */}
-        {showQualityBadge && (
+    // Fiecare bucata, sub tipul blocului ei. Se aseaza mai jos, in ordinea
+    // blocurilor zonei; cele ascunse din ochi nu se mai aseaza deloc.
+    const bucati: Record<string, ReactNode> = {
+      insigna: (
+        <>
+          {/* Quality badge */}
           <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 w-fit" style={{ backgroundColor: `${color}1a` }}>
             <div className="flex">{[1, 2, 3, 4, 5].map(i => <Star key={i} size={11} style={{ color, fill: color }} />)}</div>
             <span className="text-[11px] font-semibold" style={{ color }}>Calitate verificata</span>
           </div>
-        )}
-
-        {/* Title */}
-        <h1 className="tracking-tight font-bold text-foreground leading-tight text-2xl lg:text-4xl">
-          {displayName}
-        </h1>
-
-        {topBlurb && (
-          <div
-            className="policy-content text-muted-foreground leading-relaxed text-sm lg:text-base"
-            // Sanitized server-side (see product route) before reaching the client.
-            dangerouslySetInnerHTML={{ __html: topBlurb }}
-          />
-        )}
-
-        {/* Price */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="tracking-tight font-bold text-foreground text-3xl lg:text-4xl">
-            {showPriceRange
-              ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-              : pretAfisat}
-          </span>
-          {hasDiscount && (
-            <>
-              <span className="text-lg text-muted-foreground line-through">{formatPrice(displayComparePrice!)}</span>
-              <span className="text-white text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: color }}>-{discountPct}%</span>
-            </>
+        </>
+      ),
+      titlu: (
+        <>
+          {/* Title */}
+          <h1 className="tracking-tight font-bold text-foreground leading-tight text-2xl lg:text-4xl">
+            {displayName}
+          </h1>
+        </>
+      ),
+      descriere_scurta: (
+        <>
+          {topBlurb && (
+            <div
+              className="policy-content text-muted-foreground leading-relaxed text-sm lg:text-base"
+              // Sanitized server-side (see product route) before reaching the client.
+              dangerouslySetInnerHTML={{ __html: topBlurb }}
+            />
           )}
-          {eticheta && (
-            <span className="text-sm text-muted-foreground">({eticheta})</span>
-          )}
-          {pageSections.customization?.enabled && pageSections.customization.fields.length > 0 && (
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: `${color}1a`, color }}>Personalizabil</span>
-          )}
-        </div>
-        {/* Eticheta sta acum LANGA pret, in randul lui, nu ca nota dedesubt. */}
-
-        {/* Bundle contents — shown prominently in the buy box */}
-        {product.is_bundle && bundleComponents.length > 0 && (
-          <div className="rounded-xl border border-border bg-muted/30 p-3">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pachetul conține</p>
-
-            {/* Mobile: clean stacked list (full names, no truncation) */}
-            <div className="space-y-1.5 sm:hidden">
-              {bundleComponents.map((c) => (
-                <div key={c.id} className="flex items-center gap-2.5 bg-surface border border-border rounded-lg p-1.5">
-                  <div className="relative w-9 h-9 rounded-md overflow-hidden bg-muted/40 shrink-0">
-                    {c.image_url
-                      ? <Image src={c.image_url} alt={c.name} fill sizes="36px" className="object-contain p-0.5" />
-                      : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-muted-foreground/50" /></div>}
-                  </div>
-                  <span className="text-sm text-foreground leading-snug flex-1 min-w-0">
-                    {c.quantity > 1 && <span className="font-bold">{c.quantity}× </span>}{c.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop: inline "A + B + C" chips */}
-            <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
-              {bundleComponents.map((c, i) => (
-                <div key={c.id} className="flex items-center gap-1.5">
-                  {i > 0 && <Plus size={14} className="text-muted-foreground shrink-0" />}
-                  <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg pl-1 pr-2 py-1">
-                    <div className="relative w-7 h-7 rounded-md overflow-hidden bg-muted/40 shrink-0">
-                      {c.image_url
-                        ? <Image src={c.image_url} alt={c.name} fill sizes="28px" className="object-contain" />
-                        : <div className="w-full h-full flex items-center justify-center"><Package size={12} className="text-muted-foreground/50" /></div>}
-                    </div>
-                    <span className="text-xs font-medium text-foreground max-w-[160px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {deliveryDates && !termenPreco && (
-          <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
-            <Calendar size={16} className="flex-shrink-0" style={{ color }} />
-            <div>
-              <p className="text-sm font-semibold text-foreground">
-                {deliveryEstimate?.text || "Estimare livrare"}
-              </p>
-              <p className="text-xs text-muted-foreground">{deliveryDates.min} - {deliveryDates.max}</p>
-            </div>
-          </div>
-        )}
-
-        {variantsData && variantsData.options.length > 0 && (
-          <div className="space-y-4">
-            {variantsData.options.map(option => (
-              <div key={option.id}>
-                <p className="text-sm font-semibold text-foreground mb-2">
-                  {option.name}
-                  {selectedOptions[option.name] && (
-                    <span className="font-normal text-muted-foreground ml-2">- {selectedOptions[option.name]}</span>
-                  )}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {option.values.map(val => {
-                    const isSelected = selectedOptions[option.name] === val;
-                    const available = isValueAvailable(variantsData, selectedOptions, option.name, val);
-                    return (
-                      <button key={val} type="button"
-                        onClick={() => setSelectedOptions(prev => ({
-                          ...prev,
-                          [option.name]: isSelected ? "" : val,
-                        }))}
-                        disabled={!available}
-                        className="px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all"
-                        style={isSelected
-                          ? { borderColor: color, backgroundColor: `${color}18`, color: "var(--color-foreground)" }
-                          : available
-                          ? { borderColor: "var(--color-border)", color: "var(--color-foreground)" }
-                          : { borderColor: "var(--color-border)", color: "var(--color-muted-foreground)", textDecoration: "line-through", cursor: "not-allowed" }
-                        }>
-                        {val}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-            {selectedComboTitle && !selectedCombo && (
-              <p className="text-sm text-red-500 font-medium">Aceasta combinatie nu este disponibila.</p>
+        </>
+      ),
+      pret: (
+        <>
+          {/* Price */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="tracking-tight font-bold text-foreground text-3xl lg:text-4xl">
+              {showPriceRange
+                ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
+                : pretAfisat}
+            </span>
+            {hasDiscount && (
+              <>
+                <span className="text-lg text-muted-foreground line-through">{formatPrice(displayComparePrice!)}</span>
+                <span className="text-white text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: color }}>-{discountPct}%</span>
+              </>
+            )}
+            {eticheta && (
+              <span className="text-sm text-muted-foreground">({eticheta})</span>
+            )}
+            {pageSections.customization?.enabled && pageSections.customization.fields.length > 0 && (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: `${color}1a`, color }}>Personalizabil</span>
             )}
           </div>
-        )}
+          {/* Eticheta sta acum LANGA pret, in randul lui, nu ca nota dedesubt. */}
+        </>
+      ),
+      pachet: (
+        <>
+          {/* Bundle contents — shown prominently in the buy box */}
+          {product.is_bundle && bundleComponents.length > 0 && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Pachetul conține</p>
 
-        {/* Stock indicators */}
-        {isPreorder && (
-          <div className="flex items-center gap-2 rounded-xl px-3 py-2 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-            <div className="min-w-0">
-              <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
-              {termenPreco && <p className="text-xs text-muted-foreground">{termenPreco}</p>}
+              {/* Mobile: clean stacked list (full names, no truncation) */}
+              <div className="space-y-1.5 sm:hidden">
+                {bundleComponents.map((c) => (
+                  <div key={c.id} className="flex items-center gap-2.5 bg-surface border border-border rounded-lg p-1.5">
+                    <div className="relative w-9 h-9 rounded-md overflow-hidden bg-muted/40 shrink-0">
+                      {c.image_url
+                        ? <Image src={c.image_url} alt={c.name} fill sizes="36px" className="object-contain p-0.5" />
+                        : <div className="w-full h-full flex items-center justify-center"><Package size={14} className="text-muted-foreground/50" /></div>}
+                    </div>
+                    <span className="text-sm text-foreground leading-snug flex-1 min-w-0">
+                      {c.quantity > 1 && <span className="font-bold">{c.quantity}× </span>}{c.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop: inline "A + B + C" chips */}
+              <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
+                {bundleComponents.map((c, i) => (
+                  <div key={c.id} className="flex items-center gap-1.5">
+                    {i > 0 && <Plus size={14} className="text-muted-foreground shrink-0" />}
+                    <div className="flex items-center gap-1.5 bg-surface border border-border rounded-lg pl-1 pr-2 py-1">
+                      <div className="relative w-7 h-7 rounded-md overflow-hidden bg-muted/40 shrink-0">
+                        {c.image_url
+                          ? <Image src={c.image_url} alt={c.name} fill sizes="28px" className="object-contain" />
+                          : <div className="w-full h-full flex items-center justify-center"><Package size={12} className="text-muted-foreground/50" /></div>}
+                      </div>
+                      <span className="text-xs font-medium text-foreground max-w-[160px] truncate">{c.quantity > 1 ? `${c.quantity}× ` : ""}{c.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-        {!isOutOfStock && !isPreorder && stocRamas !== null && stocRamas > 0 && stocRamas <= 10 && (
-          <motion.div className="flex items-center gap-2"
-            animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
-            <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
-            <span className="text-sm font-semibold text-red-600">
-              Doar {stocRamas} {stocRamas === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
-            </span>
-          </motion.div>
-        )}
+          )}
+        </>
+      ),
+      livrare: (
+        <>
+          {deliveryDates && !termenPreco && (
+            <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
+              <Calendar size={16} className="flex-shrink-0" style={{ color }} />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {deliveryEstimate?.text || "Estimare livrare"}
+                </p>
+                <p className="text-xs text-muted-foreground">{deliveryDates.min} - {deliveryDates.max}</p>
+              </div>
+            </div>
+          )}
+        </>
+      ),
+      variante: (
+        <>
+          {variantsData && variantsData.options.length > 0 && (
+            <div className="space-y-4">
+              {variantsData.options.map(option => (
+                <div key={option.id}>
+                  <p className="text-sm font-semibold text-foreground mb-2">
+                    {option.name}
+                    {selectedOptions[option.name] && (
+                      <span className="font-normal text-muted-foreground ml-2">- {selectedOptions[option.name]}</span>
+                    )}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {option.values.map(val => {
+                      const isSelected = selectedOptions[option.name] === val;
+                      const available = isValueAvailable(variantsData, selectedOptions, option.name, val);
+                      return (
+                        <button key={val} type="button"
+                          onClick={() => setSelectedOptions(prev => ({
+                            ...prev,
+                            [option.name]: isSelected ? "" : val,
+                          }))}
+                          disabled={!available}
+                          className="px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all"
+                          style={isSelected
+                            ? { borderColor: color, backgroundColor: `${color}18`, color: "var(--color-foreground)" }
+                            : available
+                            ? { borderColor: "var(--color-border)", color: "var(--color-foreground)" }
+                            : { borderColor: "var(--color-border)", color: "var(--color-muted-foreground)", textDecoration: "line-through", cursor: "not-allowed" }
+                          }>
+                          {val}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {selectedComboTitle && !selectedCombo && (
+                <p className="text-sm text-red-500 font-medium">Aceasta combinatie nu este disponibila.</p>
+              )}
+            </div>
+          )}
+        </>
+      ),
+      stoc: (
+        <>
+          {/* Stock indicators */}
+          {isPreorder && (
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2 border" style={{ backgroundColor: `${color}12`, borderColor: `${color}30` }}>
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+              <div className="min-w-0">
+                <span className="text-sm font-semibold text-foreground">Produs in precomanda</span>
+                {termenPreco && <p className="text-xs text-muted-foreground">{termenPreco}</p>}
+              </div>
+            </div>
+          )}
+          {!isOutOfStock && !isPreorder && stocRamas !== null && stocRamas > 0 && stocRamas <= 10 && (
+            <motion.div className="flex items-center gap-2"
+              animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+              <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+              <span className="text-sm font-semibold text-red-600">
+                Doar {stocRamas} {stocRamas === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
+              </span>
+            </motion.div>
+          )}
+        </>
+      ),
+      personalizare: (
+        <>
+          {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
+          {pers.definitie && (
+            <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" numeroteaza={pers.definitie?.numeroteaza !== false} />
+          )}
+        </>
+      ),
+      cumparare: (
+        <>
+          {/*
+            ⚠ OMUL TREBUIE SA STIE PE CE ECRAN E. Fara randul asta, pagina arata exact ca o pagina
+            obisnuita de produs, cu campurile misterios pre-completate — iar butonul de jos ar fi
+            parut ca adauga inca o bucata.
+          */}
+          {editare.activ && (
+            <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
+              <p className="font-medium text-foreground">Editezi un produs din cos</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Modificarile inlocuiesc linia de acum. Cat timp nu salvezi, cosul ramane neatins.
+              </p>
+            </div>
+          )}
+          {/*
+            ⚠ SI CAND LINIA NU MAI E. Se intampla daca omul o sterge din alta fila sau goleste cosul
+            intre timp. Pagina se poarta mai departe ca una obisnuita — deci butonul scrie iar
+            „Adauga in cos" — dar taciturnitatea ar fi fost o capcana: ar fi apasat „salveaza"
+            asteptand sa repare o linie care nu mai exista.
+          */}
+          {editare.disparuta && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+              <p className="font-medium text-amber-700 dark:text-amber-400">Linia nu mai e in cos</p>
+              <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                A fost stearsa intre timp. Ce ai completat aici se pastreaza: apasa „Adauga in cos”
+                ca sa o pui din nou.
+              </p>
+            </div>
+          )}
 
-        {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
-        {pers.definitie && (
-          <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" numeroteaza={pers.definitie?.numeroteaza !== false} />
-        )}
+          {/* CTA */}
+          {/*
+            ⚠ „Comanda acum" DISPARE cat timp editam o linie, si e o hotarare, nu o omisiune.
+            Lasat, el ar fi trimis o comanda directa cu configuratia noua — iar linia stricata din cos
+            ar fi ramas acolo, nereparata, langa o comanda pe care omul n-a vrut s-o dea inca.
+          */}
+          {!editare.activ && <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }} />}
 
-        {/*
-          ⚠ OMUL TREBUIE SA STIE PE CE ECRAN E. Fara randul asta, pagina arata exact ca o pagina
-          obisnuita de produs, cu campurile misterios pre-completate — iar butonul de jos ar fi
-          parut ca adauga inca o bucata.
-        */}
-        {editare.activ && (
-          <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">Editezi un produs din cos</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Modificarile inlocuiesc linia de acum. Cat timp nu salvezi, cosul ramane neatins.
-            </p>
-          </div>
-        )}
-        {/*
-          ⚠ SI CAND LINIA NU MAI E. Se intampla daca omul o sterge din alta fila sau goleste cosul
-          intre timp. Pagina se poarta mai departe ca una obisnuita — deci butonul scrie iar
-          „Adauga in cos" — dar taciturnitatea ar fi fost o capcana: ar fi apasat „salveaza"
-          asteptand sa repare o linie care nu mai exista.
-        */}
-        {editare.disparuta && (
-          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-            <p className="font-medium text-amber-700 dark:text-amber-400">Linia nu mai e in cos</p>
-            <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
-              A fost stearsa intre timp. Ce ai completat aici se pastreaza: apasa „Adauga in cos”
-              ca sa o pui din nou.
-            </p>
-          </div>
-        )}
+          {/* Reducerile de cantitate, sub butonul de comanda: acolo se uita omul
+              cand se intreaba „cat costa daca iau mai multe?". */}
+          {!editare.activ && (
+            <TabelPraguri
+              randuri={randuriDePraguri}
+              culoare={color}
+              laAlegere={(cantitate) => {
+                if (!pers.verifica()) return;
+                setFbtOffer(undefined);
+                setCantitateDinTabel(cantitate);
+                setModalOpen(true);
+              }}
+            />
+          )}
 
-        {/* CTA */}
-        {/*
-          ⚠ „Comanda acum" DISPARE cat timp editam o linie, si e o hotarare, nu o omisiune.
-          Lasat, el ar fi trimis o comanda directa cu configuratia noua — iar linia stricata din cos
-          ar fi ramas acolo, nereparata, langa o comanda pe care omul n-a vrut s-o dea inca.
-        */}
-        {!editare.activ && <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }} />}
+          {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
+              vrea sa se uite prin magazin inainte sa cumpere. */}
+          {(arataButonCos || editare.activ) && (
+            <button type="button" onClick={adaugaInCos} disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+              className="w-full py-3.5 text-base font-semibold rounded-xl border-2 bg-surface hover:bg-muted/40 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+              style={{ borderColor: color, color }}>
+              {adaugatInCos ? <Check size={18} /> : <ShoppingCart size={18} />}
+              {editare.activ ? "Salveaza modificarile" : adaugatInCos ? "Adaugat in cos" : "Adauga in cos"}
+            </button>
+          )}
 
-        {/* Reducerile de cantitate, sub butonul de comanda: acolo se uita omul
-            cand se intreaba „cat costa daca iau mai multe?". */}
-        {!editare.activ && (
-          <TabelPraguri
-            randuri={randuriDePraguri}
-            culoare={color}
-            laAlegere={(cantitate) => {
-              if (!pers.verifica()) return;
-              setFbtOffer(undefined);
-              setCantitateDinTabel(cantitate);
-              setModalOpen(true);
-            }}
-          />
-        )}
-
-        {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
-            vrea sa se uite prin magazin inainte sa cumpere. */}
-        {(arataButonCos || editare.activ) && (
-          <button type="button" onClick={adaugaInCos} disabled={isOutOfStock || needsVariant || (!demo && !cos)}
-            className="w-full py-3.5 text-base font-semibold rounded-xl border-2 bg-surface hover:bg-muted/40 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-            style={{ borderColor: color, color }}>
-            {adaugatInCos ? <Check size={18} /> : <ShoppingCart size={18} />}
-            {editare.activ ? "Salveaza modificarile" : adaugatInCos ? "Adaugat in cos" : "Adauga in cos"}
-          </button>
-        )}
-
-        {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
-        {!editare.activ && (
-          <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
-        )}
-        {/*
-          ⚠ ANULAREA TREBUIE SA FIE LA FEL DE USOARA CA SALVAREA. Fara ea, singura iesire era
-          butonul „inapoi" al browserului — care lasa steagul pus, deci urmatoarea deschidere a
-          paginii ar fi redeschis editarea. `incheieEditarea` sterge cheia; linia veche ramane
-          neatinsa, fiindca nimic n-a scris in cos.
-        */}
-        {editare.activ && (
-          <a
-            href={inapoiLaCos}
-            onClick={() => editare.incheieEditarea()}
-            className="w-full py-2.5 text-sm font-medium rounded-xl text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors"
-          >
-            Renunta la modificari
-          </a>
-        )}
-        <p aria-live="polite" className="sr-only">{adaugatInCos ? "Produsul a fost adaugat in cos" : ""}</p>
-
-        {/*
-          SETUL, LANGA PRET. Se vede doar daca oferta chiar cere asezarea asta;
-          implicita ramane banda lata de mai jos, deci ofertele care exista nu se muta.
-        */}
-        {!demo && aseza.langaPret.length > 0 && (
-          <div ref={refSetSus}>
-            <SetulDeLangaPret oferte={aseza.langaPret} color={color}
-              anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
-              indisponibil={ancoraIndisponibila}
-              onBuyTogether={handleBuyTogether} />
-          </div>
-        )}
-
-        {/* Trust mini */}
-        {trustBadgesEnabled && (
+          {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
+          {!editare.activ && (
+            <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 py-1 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
+          )}
+          {/*
+            ⚠ ANULAREA TREBUIE SA FIE LA FEL DE USOARA CA SALVAREA. Fara ea, singura iesire era
+            butonul „inapoi" al browserului — care lasa steagul pus, deci urmatoarea deschidere a
+            paginii ar fi redeschis editarea. `incheieEditarea` sterge cheia; linia veche ramane
+            neatinsa, fiindca nimic n-a scris in cos.
+          */}
+          {editare.activ && (
+            <a
+              href={inapoiLaCos}
+              onClick={() => editare.incheieEditarea()}
+              className="w-full py-2.5 text-sm font-medium rounded-xl text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors"
+            >
+              Renunta la modificari
+            </a>
+          )}
+          <p aria-live="polite" className="sr-only">{adaugatInCos ? "Produsul a fost adaugat in cos" : ""}</p>
+        </>
+      ),
+      set: (
+        <>
+          {/*
+            SETUL, LANGA PRET. Se vede doar daca oferta chiar cere asezarea asta;
+            implicita ramane banda lata de mai jos, deci ofertele care exista nu se muta.
+          */}
+          {!demo && aseza.langaPret.length > 0 && (
+            <div ref={refSetSus}>
+              <SetulDeLangaPret oferte={aseza.langaPret} color={color}
+                anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+                indisponibil={ancoraIndisponibila}
+                onBuyTogether={handleBuyTogether} />
+            </div>
+          )}
+        </>
+      ),
+      incredere: (
+        <>
+          {/* Trust mini */}
           <div className="grid grid-cols-3 gap-2 py-1">
             {[
               { icon: ShieldCheck, text: "Plata la livrare" },
@@ -1054,19 +1101,248 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               </div>
             ))}
           </div>
-        )}
-
-        {/* Doar pe desktop, ca pana acum. `flex-col` pe invelis, nu `block`:
-            pastilata e `inline-flex`, deci intr-un bloc s-ar stramta la latimea
-            textului in loc sa umple coloana, cum face azi. */}
-        {showSocialProof && (
+        </>
+      ),
+      dovada: (
+        <>
+          {/* Doar pe desktop, ca pana acum. `flex-col` pe invelis, nu `block`:
+              pastilata e `inline-flex`, deci intr-un bloc s-ar stramta la latimea
+              textului in loc sa umple coloana, cum face azi. */}
           <div className="hidden lg:flex lg:flex-col">
             <SocialProof count={viewerCount} color={color} />
           </div>
-        )}
+        </>
+      ),
+    };
+    return (
+      // `min-w-0`: pe telefon divul e element de grila, iar dimensiunea minima
+      // automata l-ar lasa sa se dilate la latimea unui tabel sau a unei imagini
+      // din descrierea scurta, largind si coloana galeriei.
+      <div className="flex flex-col gap-3 lg:gap-4 min-w-0">
+        {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "cumparare").map((b) => <Fragment key={b.id}>{bucati[b.type]}</Fragment>)}
       </div>
     );
   }
+
+  // Sectiunile de sub produs, fiecare sub tipul blocului ei, ca in zona de
+  // cumparare: se aseaza in ordinea blocurilor zonei „jos”.
+  const jos: Record<string, ReactNode> = {
+    oferte: (
+      <>
+        {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none.
+            Invelisul nestilizat e doar tinta observatorului de afisari: sectiunea isi
+            pastreaza fundalul, chenarul de sus si spatierea, deci nimic nu se muta. */}
+        <div ref={refOferteJos}>
+          <ProductOffers offers={aseza.subProdus} basePath={basePath} color={color}
+            anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+            ancoraIndisponibila={ancoraIndisponibila}
+            onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
+        </div>
+      </>
+    ),
+    beneficii: (
+      <>
+        {/* Benefits */}
+        {benefitsSection && (benefitsSection.items ?? []).length > 0 && (
+          <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
+            <div className="max-w-6xl mx-auto">
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">De ce sa alegi</p>
+                <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{benefitsSection.title}</h2>
+              </motion.div>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
+                {benefitsSection.items.map((b, i) => (
+                  <motion.div key={i}
+                    initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.08 }}
+                    className="bg-surface border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
+                      style={{ backgroundColor: `${color}20` }}>
+                      <span className="text-lg font-bold" style={{ color }}>{i + 1}</span>
+                    </div>
+                    <h3 className="font-semibold text-foreground text-base mb-2">{b.title}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">{b.desc}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+      </>
+    ),
+    cum_functioneaza: (
+      <>
+        {/* How it works */}
+        {howItWorksSection && (howItWorksSection.steps ?? []).length > 0 && (
+          <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
+            <div className="max-w-6xl mx-auto">
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-16">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Simplu de folosit</p>
+                <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{howItWorksSection.title}</h2>
+              </motion.div>
+              {/* Mobile */}
+              <div className="md:hidden flex flex-col gap-3">
+                {howItWorksSection.steps.map((step, i) => (
+                  <motion.div key={i}
+                    initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
+                    className="flex items-center gap-4 bg-surface border border-border rounded-xl p-4 shadow-sm">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-lg text-white"
+                      style={{ backgroundColor: color }}>
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground text-sm mb-0.5">{step.title}</h3>
+                      <p className="text-muted-foreground text-xs leading-relaxed">{step.desc}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              {/* Desktop */}
+              <div className="hidden md:grid md:grid-cols-3 gap-8 relative">
+                <div className="absolute top-12 left-[calc(16.66%+2rem)] right-[calc(16.66%+2rem)] h-px bg-gradient-to-r from-border via-border to-border" />
+                {howItWorksSection.steps.map((step, i) => (
+                  <motion.div key={i}
+                    initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.15 }}
+                    className="flex flex-col items-center text-center relative">
+                    <div className="w-24 h-24 rounded-full bg-surface border-2 border-border shadow-sm flex flex-col items-center justify-center mb-6 z-10">
+                      <span className="font-bold text-xl" style={{ color }}>{String(i + 1).padStart(2, "0")}</span>
+                    </div>
+                    <h3 className="font-semibold text-foreground text-xl mb-3">{step.title}</h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">{step.desc}</p>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+      </>
+    ),
+    descriere: (
+      <>
+        {/* Long description */}
+        {hasShortDesc && hasLongDesc && (
+          <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
+            <div className="max-w-3xl mx-auto">
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
+                <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Descriere</h2>
+              </motion.div>
+              <div className="policy-content text-muted-foreground leading-relaxed text-base"
+                dangerouslySetInnerHTML={{ __html: product.description ?? "" }} />
+            </div>
+          </section>
+        )}
+      </>
+    ),
+    continut_pachet: (
+      <>
+        {/* Bundle contents */}
+        {product.is_bundle && bundleComponents.length > 0 && (
+          <section className="py-12 md:py-24 px-4 md:px-6 bg-surface">
+            <div className="max-w-4xl mx-auto">
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-12">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Pachet</p>
+                <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Ce conține pachetul</h2>
+              </motion.div>
+              {/* `grid-cols-1` ca la grila eroului: numele componentelor se rup
+                  aici la spatii, deci pista nu se umfla azi, dar plafonul costa
+                  o clasa si inchide cazul. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {bundleComponents.map((c) => (
+                  <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-surface shadow-sm">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted/40 border border-border shrink-0">
+                      {c.image_url
+                        ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
+                        : <div className="w-full h-full flex items-center justify-center"><Package className="h-5 w-5 text-muted-foreground/50" /></div>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground leading-snug">{c.quantity > 1 ? `${c.quantity}x ` : ""}{c.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(c.price)}{c.out_of_stock ? " · indisponibil" : ""}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/*
+                * Randul apare doar cand afirmatia lui e ADEVARATA azi.
+                *
+                * `compare_at_price` se ingheata la salvarea pachetului, dar
+                * preturile de deasupra sunt citite LIVE. Cand comerciantul schimba
+                * pretul unei componente, cele doua se despart si aceeasi caseta
+                * spune doua lucruri: „Cumparate separat: 448,00" peste trei randuri
+                * care insumeaza altceva. Pe „Pachet Femei" insemna 448,00 lei peste
+                * trei randuri „Produs indisponibil · 0,00 lei".
+                */}
+              {Number(product.compare_at_price) > Number(product.price)
+                && Math.abs(bundleComponents.reduce((s, c) => s + c.price * c.quantity, 0) - Number(product.compare_at_price)) < 0.01 && (
+                <p className="text-center text-sm text-muted-foreground mt-6">
+                  Cumpărate separat: <span className="line-through">{formatPrice(Number(product.compare_at_price))}</span>
+                  {" · "}în pachet plătești <span className="font-bold" style={{ color }}>{formatPrice(Number(product.price))}</span>
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+      </>
+    ),
+    specificatii: (
+      <>
+        {/* Specifications */}
+        {specifications.length > 0 && (
+          <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
+            <div className="max-w-4xl mx-auto">
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Detalii tehnice</p>
+                <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Specificatii</h2>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
+                className="border border-border rounded-xl overflow-hidden shadow-sm">
+                {specifications.map((spec, i) => (
+                  // Randul se stivuieste pe telefon: cu eticheta fixata la 11rem si
+                  // px-6, pe un ecran de 320 px ramaneau 80 px pentru valoare.
+                  <div key={i}
+                    className={`flex flex-col gap-1 px-6 py-4 sm:flex-row sm:items-center sm:gap-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
+                    <span className="text-sm text-muted-foreground font-medium sm:w-44 sm:shrink-0">{spec.label}</span>
+                    <span className="text-sm font-semibold text-foreground">{spec.value}</span>
+                  </div>
+                ))}
+              </motion.div>
+            </div>
+          </section>
+        )}
+      </>
+    ),
+    intrebari: (
+      <>
+        {/* FAQ */}
+        {faqSection && (faqSection.items ?? []).length > 0 && (
+          <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
+            <div className="max-w-3xl mx-auto">
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Intrebari frecvente</p>
+                <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{faqSection.title}</h2>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
+                className="bg-surface border border-border rounded-xl shadow-sm px-4 md:px-8">
+                {faqSection.items.map((faq, i) => (
+                  <FAQItem key={i} faq={faq} isOpen={openFaq === i}
+                    onToggle={() => setOpenFaq(openFaq === i ? null : i)} />
+                ))}
+              </motion.div>
+            </div>
+          </section>
+        )}
+      </>
+    ),
+  };
 
   return (
     <>
@@ -1144,199 +1420,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           ramane transparente. */}
       {demo ? null : (
       <>
-      {/* Cross-sell offers ("Merge bine cu") — renders nothing if the store has none.
-          Invelisul nestilizat e doar tinta observatorului de afisari: sectiunea isi
-          pastreaza fundalul, chenarul de sus si spatierea, deci nimic nu se muta. */}
-      <div ref={refOferteJos}>
-        <ProductOffers offers={aseza.subProdus} basePath={basePath} color={color}
-          anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
-          ancoraIndisponibila={ancoraIndisponibila}
-          onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
-      </div>
-
-      {/* Benefits */}
-      {benefitsSection?.enabled && benefitsSection.items.length > 0 && (
-        <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
-          <div className="max-w-6xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">De ce sa alegi</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{benefitsSection.title}</h2>
-            </motion.div>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
-              {benefitsSection.items.map((b, i) => (
-                <motion.div key={i}
-                  initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.08 }}
-                  className="bg-surface border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
-                    style={{ backgroundColor: `${color}20` }}>
-                    <span className="text-lg font-bold" style={{ color }}>{i + 1}</span>
-                  </div>
-                  <h3 className="font-semibold text-foreground text-base mb-2">{b.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed">{b.desc}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* How it works */}
-      {howItWorksSection?.enabled && howItWorksSection.steps.length > 0 && (
-        <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
-          <div className="max-w-6xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-16">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Simplu de folosit</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{howItWorksSection.title}</h2>
-            </motion.div>
-            {/* Mobile */}
-            <div className="md:hidden flex flex-col gap-3">
-              {howItWorksSection.steps.map((step, i) => (
-                <motion.div key={i}
-                  initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="flex items-center gap-4 bg-surface border border-border rounded-xl p-4 shadow-sm">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-lg text-white"
-                    style={{ backgroundColor: color }}>
-                    {String(i + 1).padStart(2, "0")}
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground text-sm mb-0.5">{step.title}</h3>
-                    <p className="text-muted-foreground text-xs leading-relaxed">{step.desc}</p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-            {/* Desktop */}
-            <div className="hidden md:grid md:grid-cols-3 gap-8 relative">
-              <div className="absolute top-12 left-[calc(16.66%+2rem)] right-[calc(16.66%+2rem)] h-px bg-gradient-to-r from-border via-border to-border" />
-              {howItWorksSection.steps.map((step, i) => (
-                <motion.div key={i}
-                  initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.15 }}
-                  className="flex flex-col items-center text-center relative">
-                  <div className="w-24 h-24 rounded-full bg-surface border-2 border-border shadow-sm flex flex-col items-center justify-center mb-6 z-10">
-                    <span className="font-bold text-xl" style={{ color }}>{String(i + 1).padStart(2, "0")}</span>
-                  </div>
-                  <h3 className="font-semibold text-foreground text-xl mb-3">{step.title}</h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">{step.desc}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Long description */}
-      {hasShortDesc && hasLongDesc && (
-        <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
-          <div className="max-w-3xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Descriere</h2>
-            </motion.div>
-            <div className="policy-content text-muted-foreground leading-relaxed text-base"
-              dangerouslySetInnerHTML={{ __html: product.description ?? "" }} />
-          </div>
-        </section>
-      )}
-
-      {/* Bundle contents */}
-      {product.is_bundle && bundleComponents.length > 0 && (
-        <section className="py-12 md:py-24 px-4 md:px-6 bg-surface">
-          <div className="max-w-4xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-12">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Pachet</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Ce conține pachetul</h2>
-            </motion.div>
-            {/* `grid-cols-1` ca la grila eroului: numele componentelor se rup
-                aici la spatii, deci pista nu se umfla azi, dar plafonul costa
-                o clasa si inchide cazul. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {bundleComponents.map((c) => (
-                <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-surface shadow-sm">
-                  <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-muted/40 border border-border shrink-0">
-                    {c.image_url
-                      ? <Image src={c.image_url} alt={c.name} fill sizes="56px" className="object-contain p-1" />
-                      : <div className="w-full h-full flex items-center justify-center"><Package className="h-5 w-5 text-muted-foreground/50" /></div>}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground leading-snug">{c.quantity > 1 ? `${c.quantity}x ` : ""}{c.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(c.price)}{c.out_of_stock ? " · indisponibil" : ""}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/*
-              * Randul apare doar cand afirmatia lui e ADEVARATA azi.
-              *
-              * `compare_at_price` se ingheata la salvarea pachetului, dar
-              * preturile de deasupra sunt citite LIVE. Cand comerciantul schimba
-              * pretul unei componente, cele doua se despart si aceeasi caseta
-              * spune doua lucruri: „Cumparate separat: 448,00" peste trei randuri
-              * care insumeaza altceva. Pe „Pachet Femei" insemna 448,00 lei peste
-              * trei randuri „Produs indisponibil · 0,00 lei".
-              */}
-            {Number(product.compare_at_price) > Number(product.price)
-              && Math.abs(bundleComponents.reduce((s, c) => s + c.price * c.quantity, 0) - Number(product.compare_at_price)) < 0.01 && (
-              <p className="text-center text-sm text-muted-foreground mt-6">
-                Cumpărate separat: <span className="line-through">{formatPrice(Number(product.compare_at_price))}</span>
-                {" · "}în pachet plătești <span className="font-bold" style={{ color }}>{formatPrice(Number(product.price))}</span>
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Specifications */}
-      {specifications.length > 0 && (
-        <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
-          <div className="max-w-4xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Detalii tehnice</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Specificatii</h2>
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
-              className="border border-border rounded-xl overflow-hidden shadow-sm">
-              {specifications.map((spec, i) => (
-                // Randul se stivuieste pe telefon: cu eticheta fixata la 11rem si
-                // px-6, pe un ecran de 320 px ramaneau 80 px pentru valoare.
-                <div key={i}
-                  className={`flex flex-col gap-1 px-6 py-4 sm:flex-row sm:items-center sm:gap-4 ${i % 2 === 0 ? "bg-surface" : "bg-muted/30"} ${i !== specifications.length - 1 ? "border-b border-border" : ""}`}>
-                  <span className="text-sm text-muted-foreground font-medium sm:w-44 sm:shrink-0">{spec.label}</span>
-                  <span className="text-sm font-semibold text-foreground">{spec.value}</span>
-                </div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
-      )}
-
-      {/* FAQ */}
-      {faqSection?.enabled && faqSection.items.length > 0 && (
-        <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
-          <div className="max-w-3xl mx-auto">
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
-              <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Intrebari frecvente</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{faqSection.title}</h2>
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
-              className="bg-surface border border-border rounded-xl shadow-sm px-4 md:px-8">
-              {faqSection.items.map((faq, i) => (
-                <FAQItem key={i} faq={faq} isOpen={openFaq === i}
-                  onToggle={() => setOpenFaq(openFaq === i ? null : i)} />
-              ))}
-            </motion.div>
-          </div>
-        </section>
-      )}
+      {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => <Fragment key={b.id}>{jos[b.type]}</Fragment>)}
 
       {/* Sticky bottom bar (mobile) */}
       {!modalOpen && (

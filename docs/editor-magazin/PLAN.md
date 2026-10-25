@@ -248,7 +248,7 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - [x] 4.1 (25.10, `blocuri.ts` + `blocuri.test.ts`, 11 probe) Modelul: `blocks` pe sectiune, registrul blocurilor pe varianta (zone, obligatorii,
       setari), parserul (ordinea salvata, tipurile noi la locul lor, vizibilitatea derivata),
       operatiile de editare (muta, ochi, setari). Probe.
-- [ ] 4.2 Clasic randat din blocuri (cumparare + jos). Probe: obligatoriile mereu, fara dubluri,
+- [x] 4.2 (25.10, harti `bucati` / `jos` + `blocurile-au-bucati.test.ts`) Clasic randat din blocuri (cumparare + jos). Probe: obligatoriile mereu, fara dubluri,
       lista implicita = asezarea de azi.
 - [ ] 4.3 Detaliat randat din blocuri (cumparare, sub galerie, jos).
 - [ ] 4.4 Editorul: blocurile in arbore sub „Pagina de produs” (pe zone, sageti, ochi), panoul

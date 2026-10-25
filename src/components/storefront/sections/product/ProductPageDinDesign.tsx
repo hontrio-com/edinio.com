@@ -30,6 +30,9 @@ export function ProductPageDinDesign(
     <ProductPageSection
       variant={pagina?.variant ?? variantImplicita}
       setari={pagina?.settings ?? setariImplicite}
+      // Ordinea si vizibilitatea bucatilor (etapa 4). Lipsa, varianta isi
+      // completeaza singura lista implicita.
+      blocuri={pagina?.blocks}
       {...restul}
     />
   );

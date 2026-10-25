@@ -31,7 +31,10 @@ import { metadataMagazin, RandeazaMagazin } from "@/lib/storefront/catalog/pagin
 import { flattenBlocks } from "@/lib/pages/block-tree";
 import { fundalulPaginii } from "@/lib/pages/fundal-pagina";
 import { fonturiDinBlocuri } from "@/lib/pages/fonturi";
-import { claseFonturi } from "@/components/pages/fonturi-incarcate";
+import { claseFonturi, toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
+import { PaginaVie } from "@/components/pages/PaginaVie";
+import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
+import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import { SCRIPT_ANIMATII } from "@/lib/pages/animatii";
 import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
 import { areTitluPrincipal, descriereDinBlocuri, titlulPrincipal } from "@/lib/pages/titlul-principal";
@@ -285,6 +288,12 @@ export default async function CustomPage({ params, searchParams }: Props) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const isOwner = user?.id === business.user_id;
+  /*
+   * Pagina deschisa in editorul unic (etapa 5): proprietarul, cu semnele de editor. Atunci blocurile
+   * vin VII din editor (`PaginaVie`), antetul si subsolul din ciorna designului, iar pagina
+   * principala nu mai trimite la radacina. Pentru oricine altcineva, nimic nu se schimba.
+   */
+  const esteEditorDesign = esteEditorDeDesign(semneDeEditor(await searchParams), isOwner);
 
   // Unpublished business: show "coming soon" to visitors (owners can preview).
   if (!business.is_published && !isOwner) {
@@ -343,7 +352,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
    * Altfel acelasi continut ar fi stat la doua adrese. Ciorna nu: o pagina
    * nepublicata nu se deschide la radacina (vezi pagina principala).
    */
-  if (page.is_published && citestePaginaAcasa(pageContent) === page.id) {
+  if (page.is_published && citestePaginaAcasa(pageContent) === page.id && !esteEditorDesign) {
     permanentRedirect(basePath || "/");
   }
 
@@ -374,7 +383,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
   // Acelasi design ca pagina de magazin: bara de anunt, header si footer vin din
   // aceeasi configuratie, ca alegerea comerciantului sa nu se opreasca la
   // pagina principala.
-  const resolved = resolveDesign(storeSettings?.storefront_design, {
+  const resolved = resolveDesign(await designDeRandat(createAdminClient(), business.id, storeSettings?.storefront_design, esteEditorDesign), {
     primaryColor: color,
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
@@ -417,6 +426,24 @@ export default async function CustomPage({ params, searchParams }: Props) {
    * inexistent, nepublicat, suspendat, pagina lipsa sau ciorna — s-au decis
    * deja, deci sub `<Suspense>` nu mai poate ajunge niciun `notFound()`.
    */
+  const blocuriServer = (
+    <Suspense fallback={<ScheletBlocuri />}>
+      <BlocuriPagina
+        supabase={supabase}
+        businessId={business.id}
+        blocks={blocks}
+        hideNoImage={pageContent.hide_products_without_images === true}
+        hideOutOfStock={pageContent.hide_out_of_stock_products === true}
+        color={color}
+        basePath={basePath}
+        storeSlug={business.slug}
+        social={social}
+        pageId={page.id}
+        h1Id={h1Id}
+      />
+    </Suspense>
+  );
+
   return (
     <StorefrontThemeScope style={resolved.style}>
       {/* Deasupra tuturor blocurilor, deci in afara lui `<Suspense>`: nodul se
@@ -425,8 +452,9 @@ export default async function CustomPage({ params, searchParams }: Props) {
       {dateStructurate ? (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: dateStructurate }} />
       ) : null}
-      {pageCss ? <style dangerouslySetInnerHTML={{ __html: pageCss }} /> : null}
-      <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
+      {/* In editor CSS-ul il pune `PaginaVie`: cel de aici, salvat, s-ar fi batut cu cel scris acum. */}
+      {pageCss && !esteEditorDesign ? <style dangerouslySetInnerHTML={{ __html: pageCss }} /> : null}
+      <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen flex flex-col">
         {!page.is_published && isOwner && (
           <div className="bg-amber-50 border-b border-amber-200 text-amber-800 text-xs text-center py-2 px-4">
             Aceasta pagina este in modul ciorna (draft) si o vezi doar tu. Publica-o din panou pentru a o face vizibila.
@@ -434,7 +462,8 @@ export default async function CustomPage({ params, searchParams }: Props) {
         )}
         <main
           id={`edinio-page-${page.id}`}
-          className={`flex-1 ${claseFont}`}
+          /* In editor toate fonturile: un font ales acum trebuie sa se vada inainte de salvare (fisierele se descarca doar pentru cele folosite). */
+          className={`flex-1 ${esteEditorDesign ? toateClaseleDeFont() : claseFont}`}
           /* Alb, sau fundalul ales pentru magazin; acelasi ca in editor (`fundalulPaginii`). */
           style={{ backgroundColor: fundalulPaginii(resolved.style.colors.background) }}
           /* `data-anim-pornit` il pune scriptul animatiilor inainte de hidratare, dinadins. */
@@ -442,28 +471,23 @@ export default async function CustomPage({ params, searchParams }: Props) {
         >
           {/* Niciun bloc nu poate fi H1: titlul paginii, ascuns vederii, dar citit de motoare si de cititoarele de ecran. */}
           {!areTitluPrincipal(blocks) && <h1 className="sr-only">{page.title}</h1>}
-          <Suspense fallback={<ScheletBlocuri />}>
-            <BlocuriPagina
-              supabase={supabase}
-              businessId={business.id}
-              blocks={blocks}
-              hideNoImage={pageContent.hide_products_without_images === true}
-              hideOutOfStock={pageContent.hide_out_of_stock_products === true}
-              color={color}
-              basePath={basePath}
-              storeSlug={business.slug}
-              social={social}
+          {esteEditorDesign ? (
+            // In editor, blocurile vii din editor iau locul celor de pe server de la primul mesaj.
+            <PaginaVie
               pageId={page.id}
-              h1Id={h1Id}
-            />
-          </Suspense>
+              cssInitial={page.page_css ?? ""}
+              ctx={{ color, basePath, storeSlug: business.slug, social, businessId: business.id, estePaginaAcasa: citestePaginaAcasa(pageContent) === page.id }}
+            >
+              {blocuriServer}
+            </PaginaVie>
+          ) : blocuriServer}
           {/*
             Scriptul animatiilor, IN AFARA lui Suspense: urmareste el blocurile
             care sosesc pe flux (vezi `SCRIPT_ANIMATII`). Numai pe paginile care
             au macar o animatie.
           */}
-          {areAnimatii && <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANIMATII }} />}
-          {areAnimatii && <PornesteAnimatiile />}
+          {(areAnimatii || esteEditorDesign) && <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANIMATII }} />}
+          {(areAnimatii || esteEditorDesign) && <PornesteAnimatiile />}
         </main>
       </StorePageShell>
     </StorefrontThemeScope>

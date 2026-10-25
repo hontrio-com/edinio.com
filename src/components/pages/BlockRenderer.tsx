@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react";
 import type { Block } from "@/lib/pages/blocks.types";
 import {
   HeroBlockView, HeadingBlockView, TextBlockView, ImageBlockView, GalleryBlockView,
@@ -46,6 +47,12 @@ export interface BlockRendererCtx {
   curieri?: MetodaAfisata[];
   /** Editor: pagina e cea aleasa ca pagina principala (blocurile „Din pagina principala" chiar apar). */
   estePaginaAcasa?: boolean;
+  /**
+   * Doar in previzualizarea din editorul unic (etapa 5, `PaginaVie`): invelisul fiecarui bloc, cu
+   * marcajul lui, ca un clic sa-l deschida in arbore. Trece si in coloane (acelasi `ctx`). Pe
+   * magazinul public lipseste, deci nimic in plus in pagina.
+   */
+  marcheazaBloc?: (block: Block, continut: ReactNode) => ReactNode;
 }
 
 /**
@@ -56,9 +63,9 @@ export interface BlockRendererCtx {
 export function BlockRenderer({ blocks, ctx }: { blocks: Block[]; ctx: BlockRendererCtx }) {
   return (
     <>
-      {blocks.map((block) => (
-        <BlockOne key={block.id} block={block} ctx={ctx} />
-      ))}
+      {blocks.map((block) => (ctx.marcheazaBloc
+        ? <Fragment key={block.id}>{ctx.marcheazaBloc(block, <BlockOne block={block} ctx={ctx} />)}</Fragment>
+        : <BlockOne key={block.id} block={block} ctx={ctx} />))}
     </>
   );
 }

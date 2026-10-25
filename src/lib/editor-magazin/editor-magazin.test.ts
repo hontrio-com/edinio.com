@@ -636,3 +636,11 @@ test("bara spune o singura stare pentru tot: nepublicat sau publicat", () => {
   assert.match(s, /"Modificări nepublicate" : "Totul e publicat"/);
   assert.doesNotMatch(s, /de design nepublicate|Designul e publicat/);
 });
+
+test("⚠ codul culorii din Stil urmeaza ciorna, si la Anuleaza / Renunță (vazut la proba 6.5)", () => {
+  // O copie locala a culorii ramanea pe verdele renuntat cand bulina arata deja portocaliul publicat.
+  const s = faraComentarii("src/components/editor-magazin/continut/PanouStil.tsx");
+  assert.doesNotMatch(s, /useState\(culoare\)/);
+  assert.match(s, /const \[hexScris, setHexScris\] = useState<string \| null>\(null\);\s*const hex = hexScris \?\? culoare;/);
+  assert.match(s, /const alegeCuloare = \(c: string\) => \{ setHexScris\(null\); setCuloare\(c\); \};/);
+});

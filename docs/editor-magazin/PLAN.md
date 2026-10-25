@@ -13,8 +13,9 @@ importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele pagin
 „Din editor, pe categorii”) FACUT si PROBAT** (pasii 4b.1-4b.4). **Etapa 4 e incheiata.** **Etapa 5
 (paginile proprii in editorul unic) FACUTA si PROBATA in Chrome** (pasii 5.1-5.5, ultimul comit de cod
 `0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Etapa 6
-(un singur „Publică” pentru design si continut) IN LUCRU**, cu acordul lui („Continua”) si decizia
-lui: „Totul la „Publică””; planul in „Etapa 6”. Intrebarea despre teme a fost pusa si a ramas fara raspuns; ramane
+(un singur „Publică” pentru design si continut) FACUTA si PROBATA in Chrome** (pasii 6.1-6.5), cu acordul
+lui („Continua”) si decizia lui: „Totul la „Publică””. **Urmeaza etapa 7 (istoricul versiunilor), DOAR cu
+acordul lui.** Intrebarea despre teme a fost pusa si a ramas fara raspuns; ramane
 deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
 „Etapa 5: planul de lucru”.
 
@@ -526,9 +527,27 @@ Citit in cod inainte:
       acum „modificat, nepublicat”; o cheie adusa inapoi la valoarea publicata iese din ciorna. Bara spune
       „Modificări nepublicate” / „Totul e publicat”. Stergerea unui rand de produse intra si ea in ciorna
       (Anuleaza il aduce inapoi; din magazin dispare la „Publică”). Comutatorul „Vizibil” ramane pe loc.
-- [ ] 6.5 REGISTRU (comportamentul nou, ghidurile de ajutor), porti, proba in Chrome pe magazinul
+- [x] 6.5 (25.10, REGISTRU `d56a4914`; porti verzi: `tsc`, 11099+ probe, `lint:prag`, `build:ci`) REGISTRU (comportamentul nou, ghidurile de ajutor), porti, proba in Chrome pe magazinul
       de proba: modificat, previzualizat, magazinul public neschimbat pana la „Publică”,
       „Renunță”; starea pusa la loc.
+      Pe `floraria-mirei` (baza DEMO), prin impersonare (butonul adevarat), cu `page_content`, designul
+      publicat si coloanele de identitate salvate INTREGI inainte si puse la loc dupa (o interogare finala:
+      amprentele, data publicarii, ciorna goala, 1 comanda, pagina neatinsa). Ce merge cap-coada:
+      - Culoarea principala aleasa: variabilele temei se schimba pe loc; dupa salvarea in ciorna
+        previzualizarea se reincarca si TOT se vede in noua culoare, inclusiv cosul plutitor (REGISTRU D il
+        avea pana acum „abia dupa salvare”). In baza: `businesses.primary_color` neschimbat, ciorna cu
+        `continut.magazin.primary_color`. HTML: vizitatorul si proprietarul fara modul editor vad 49 de
+        aparitii ale culorii vechi si 0 ale celei noi; previzualizarea, 33 ale celei noi (una veche ramasa:
+        bannerul de cookie din layout, scris in REGISTRU D).
+      - Fundalul (`page_content.store_bg_color`) intra in `continut.pc`; Anuleaza il scoate din ciorna
+        (cheia adusa la valoarea publicata iese), Refa il readuce.
+      - „Publică”: culoarea si fundalul ajung in magazin, restul cheilor din `page_content` (formularul de
+        comanda, pagina principala, livrarea) neatinse, ciorna golita; vizitatorul vede noua culoare.
+      - „Renunță”: ciorna golita, previzualizarea reincarcata pe publicat.
+      - Panoul „Căutare și filtre”: fara „Salvează”; punctul „Modificat, nepublicat” apare in arbore.
+      Ce a gasit proba: dupa „Renunță” (si dupa Anuleaza) campul cu codul culorii din Stil arata inca
+      culoarea renuntata (copie locala a culorii). Reparat: campul arata ciorna, textul local doar cat e
+      scris pe jumatate; proba noua, mutatia prinsa. Vazut in browser dupa reparatie.
 
 ## Deciziile proprietarului
 

@@ -67,9 +67,15 @@ function CampImagine({ eticheta, previzualizare, onFisier, onScoate, onAlege, aj
 
 export function PanouStil({ continut }: { continut: ContinutMagazin }) {
   const { pc, seteaza, logo, setLogo, favicon, setFavicon, culoare, setCuloare } = continut;
-  const [hex, setHex] = useState(culoare);
+  /*
+   * Textul codului, DOAR cat e scris pe jumatate (`#12`): altfel campul arata culoarea din ciorna.
+   * Copia ei locala ramanea in urma la Anuleaza si la Renunta (vazut la proba 6.5, 25.10.2026):
+   * bulina era portocalie, campul scria inca verdele renuntat.
+   */
+  const [hexScris, setHexScris] = useState<string | null>(null);
+  const hex = hexScris ?? culoare;
   const fundal = pc.store_bg_color ?? "#FFFFFF";
-  const alegeCuloare = (c: string) => { setHex(c); setCuloare(c); };
+  const alegeCuloare = (c: string) => { setHexScris(null); setCuloare(c); };
 
   return (
     <div className="space-y-8">
@@ -100,7 +106,7 @@ export function PanouStil({ continut }: { continut: ContinutMagazin }) {
             <input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(culoare) ? culoare : "#07c527"} aria-label="Alege altă culoare"
               onChange={(e) => alegeCuloare(e.target.value)} className="w-8 h-8 rounded border border-border cursor-pointer" />
             <input type="text" value={hex} maxLength={7} placeholder="#07c527" aria-label="Codul culorii"
-              onChange={(e) => { setHex(e.target.value); if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) setCuloare(e.target.value); }}
+              onChange={(e) => { const v = e.target.value; if (/^#[0-9A-Fa-f]{6}$/.test(v)) alegeCuloare(v); else setHexScris(v); }}
               className="w-28 px-2 py-1.5 text-xs border border-border rounded-lg bg-surface font-mono focus:outline-none focus:border-primary" />
           </div>
         </Grup>

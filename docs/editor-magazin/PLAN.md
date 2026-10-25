@@ -12,8 +12,9 @@ sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ec
 importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele paginii de produs, decizia lui:
 „Din editor, pe categorii”) FACUT si PROBAT** (pasii 4b.1-4b.4). **Etapa 4 e incheiata.** **Etapa 5
 (paginile proprii in editorul unic) FACUTA si PROBATA in Chrome** (pasii 5.1-5.5, ultimul comit de cod
-`0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Urmeaza
-etapa 6, DOAR cu acordul lui.** Intrebarea despre teme a fost pusa si a ramas fara raspuns; ramane
+`0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Etapa 6
+(un singur „Publică” pentru design si continut) IN LUCRU**, cu acordul lui („Continua”) si decizia
+lui: „Totul la „Publică””; planul in „Etapa 6”. Intrebarea despre teme a fost pusa si a ramas fara raspuns; ramane
 deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
 „Etapa 5: planul de lucru”.
 
@@ -455,6 +456,67 @@ se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de
       pagina?”, „Pagina obisnuita”, numele blocurilor din paleta: „Spatiu”, „Harta”, „Intrebari (FAQ)”).
       Scrise in REGISTRU (D), la trecerea de diacritice deja planificata pentru `registry.ts`.
 
+## Etapa 6: planul de lucru (scris 25.10.2026, inainte de cod; decizia lui: „Totul la „Publică””)
+
+Tinta: un singur „Publică” pentru tot ce se regleaza in editor, designul si continutul (texte,
+liste, imagini, logo, culoare, fonturi, fundal). Pana la „Publică”, continutul modificat se vede
+doar in previzualizare; „Renunță” arunca tot. Ce vad clientii nu se schimba pana atunci.
+
+Citit in cod inainte:
+- Continutul sta in `page_content` (cheile din `CHEI_CONTINUT`, scrise doar de editorul unic;
+  Setarile scriu alte chei: SEO, modul magazinului, formularul, catalogul) si in `businesses`
+  (logo, coperta, culoarea, galeria). `updatePageContent` imbina pe chei si nu valideaza valorile:
+  le curata cititorii. `updateBusiness` aplica o lista alba de coloane.
+- Magazinul il citeste pe server: rutele incarca `business` si `page_content`, din ele ies
+  `buildChromeData` si contextul sectiunilor (care nu primesc props, citesc din context). In
+  modul editor, acasa, pagina proprie, produsul, cosul si comanda randeaza deja ciorna de design.
+- Ciorna de design: `storefront_design_draft`, salvata prin coada (`coada-salvarii.ts`) cu garda
+  de concurenta (`draft-guard.ts`), publicata de `publishDesign`, golita de `discardDesignDraft`.
+- Biblioteca Media socoteste „folosit” tot ce apare in randul `store_settings` (`select("*")`),
+  deci si ce e in ciorna: o imagine aleasa doar in ciorna nu poate fi stearsa ca nefolosita.
+
+### Deciziile etapei (de ce asa)
+
+1. **Continutul nepublicat sta in ciorna de design**, sub cheia `continut`: `pc` (cheile atinse
+   din `page_content`) si `magazin` (logo, coperta, culoare, galerie). Fara migratie si fara
+   coloana noua: o singura scriere pentru design si continut, deci o singura garda de
+   concurenta, iar „Renunță” (coloana `NULL`) le arunca pe amandoua deodata.
+2. **Doar cheile atinse, pe o lista alba**: `continut.pc` primeste numai cheile din
+   `CHEI_CONTINUT`, `continut.magazin` numai cele patru coloane, plus un plafon de marime.
+   `permalinks` si `pagina_acasa` nu pot intra. La publicare se scriu doar ele, imbinate pe chei
+   peste `page_content`, ca azi: ce scriu Setarile intre timp ramane.
+3. **Previzualizarea arata continutul din ciorna**: in modul editor (proprietarul, cu semnele de
+   editor), rutele pun `continut` peste `page_content` si `business` inainte de orice citire.
+   Pentru vizitatori nu se schimba nimic. Dupa ce o modificare de continut ajunge in ciorna,
+   previzualizarea se reincarca, ca azi dupa „Salvează”.
+4. **Parserul designului primeste contextul cu continutul din ciorna**, peste tot unde se
+   citeste ciorna (salvare, garda, rutele in editor, editorul, publicare): altfel un rand de
+   produse nou, existent doar in ciorna, ar fi scos din design ca orfan.
+5. **„Publică” scrie intai continutul** (`page_content` imbinat pe chei, apoi `businesses`), apoi
+   designul, parsat cu continutul nou, si goleste ciorna. Cazut la mijloc: ciorna ramane intreaga,
+   iar „Publică” se poate repeta (scrierile de continut sunt idempotente).
+6. **Fara „Salvează” pe sectiuni**: panourile scriu in ciorna, ca designul (salvare automata,
+   „Anulează / Refă” pe tot). Punctul din arbore inseamna „modificat, nepublicat”. Imaginile
+   (logo, favicon, bannere, galerie) se urca in clipa alegerii, ca ciorna sa tina adresa lor.
+7. **Raman pe loc**: comutatorul „Vizibil” (magazinul deschis clientilor), paginile proprii
+   („Salvează pagina”) si Setarile.
+8. **`elibereazaComutatoare` se sterge**: n-o mai cheama nimeni, iar ca actiune de server e un
+   capat public care ar fi rescris ciorna fara continut.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [ ] 6.1 Logica fara React: forma lui `continut`, parserul lui (lista alba, plafon), suprapunerea
+      peste `page_content`, `business` si contextul parserului, amprenta pentru garda. Probe.
+- [ ] 6.2 Serverul: `saveDesignDraft` (context cu continutul, garda pe tot), `publishDesign`
+      (continut, apoi design), stergerea lui `elibereazaComutatoare`. Probe.
+- [ ] 6.3 Magazinul in modul editor: rutele pun continutul ciornei peste date. Probe, si ca un
+      vizitator nu-l vede niciodata.
+- [ ] 6.4 Editorul: continutul in ciorna, fara „Salvează” pe sectiuni, istoric comun, imaginile
+      urcate la alegere, reincarcarea previzualizarii, bara si iesirea. Probe.
+- [ ] 6.5 REGISTRU (comportamentul nou, ghidurile de ajutor), porti, proba in Chrome pe magazinul
+      de proba: modificat, previzualizat, magazinul public neschimbat pana la „Publică”,
+      „Renunță”; starea pusa la loc.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -468,6 +530,8 @@ se randeaza prin `BlocuriPagina` -> `BlockRenderer` (dispecer pur, folosit si de
   loc”. Facut in 4.7: editorul ia tot ecranul, se iese cu „Ieși” din bara lui.
 - 25.10.2026, la intrebarea pentru 4b (de unde se alege sablonul unui produs): „Din editor, pe
   categorii”. Produsele anume intra ca exceptii, tot din editor.
+- 25.10.2026, la intrebarea pentru etapa 6 (cand ajunge continutul la clienti): „Totul la
+  „Publică””. Un singur buton, ca la Shopify; paginile din „Pagini” raman cu „Salvează pagina”.
 
 ## De ce Shopify si nu Elementor
 

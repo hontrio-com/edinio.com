@@ -301,7 +301,53 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
       marcajul de copil static nu-l mai prindea; fiecare slot sta acum in `Fragment`-ul lui, cu cheie);
       (2) pe telefon (386 px) lista paginilor ajunsese sa arate doar „Pa”: acum arata nume scurte
       („Acasă”, „Produs”...), iar „Vezi” ramane doar cu pictograma sub 420 px.
-- [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a).
+- [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a): vezi mai jos.
+
+## Etapa 4b: planul de lucru (scris 25.10.2026, inainte de cod)
+
+Tinta: mai multe sabloane ale paginii de produs (de exemplu „Tablouri” si „Textile”), fiecare cu
+varianta, reglajele si blocurile lui. **Decizia lui (25.10, intrebare cu trei variante): „Din editor,
+pe categorii”**: sablonul se face in editor, i se bifeaza categoriile, iar produsele anume intra ca
+exceptii; prin ciorna si Publica, fara migratii. (Celelalte doua: alegerea din fisa produsului, ca la
+Shopify, cu coloana noua; sau amandoua.)
+
+### Deciziile etapei (de ce asa)
+
+1. **Sabloanele stau in design**: `product.sabloane[]` = { id, nume, page, categorii[], produse[] },
+   unde `page` e o sectiune `product_page` intreaga (varianta, reglaje, blocuri). `product.page` de azi
+   ramane sablonul „Implicit”, al produselor fara alt sablon, deci un design fara sabloane arata exact
+   ca inainte.
+2. **Ce sablon primeste un produs**: intai cel care il are ca exceptie, apoi cel al categoriei lui sau
+   al celui mai apropiat parinte (o categorie acopera si subcategoriile, inclusiv pe cele facute mai
+   tarziu), apoi Implicit. O categorie si un produs stau la cel mult un sablon: parserul pastreaza
+   prima aparitie, editorul muta, nu dubleaza.
+3. **Plafoane**: 10 sabloane, 300 de categorii si 500 de produse pe sablon. Designul se citeste la
+   fiecare pagina; produsele sunt pentru exceptii, nu pentru cataloage intregi.
+4. **Alegerea se face pe client, din designul viu** (`ProductPageDinDesign`), ca previzualizarea sa
+   schimbe sablonul fara reincarcare. Marcajul sectiunii intra si el acolo, cu id-ul sablonului ales;
+   variantele primesc id-ul paginii ca proprietate (azi il citesc din `design.product.page`).
+5. **Lantul de categorii** (a produsului si parintii ei) il da ruta, si il citeste doar cand designul
+   are sabloane pe categorii sau cand pagina e deschisa in editor. Pe pagina publica a unui magazin
+   fara sabloane, nicio interogare in plus.
+6. **In editor**: sub „Pagina de produs”, un rand „Șablon” (Implicit, fiecare sablon, „+ Șablon nou”);
+   arborele si panourile lucreaza pe sablonul ales. Panoul sablonului: numele, categoriile (arbore cu
+   bife), produsele-exceptie (cautare), Șterge. Previzualizarea arata un produs care chiar foloseste
+   sablonul; cand nu exista inca niciunul, sablonul se impune prin adresa (`sablon=<id>`, doar in
+   modul editor), cu o nota.
+7. **Magazinul cu un singur produs nu primeste sabloane**: pagina lui e pagina principala; randul nu
+   apare.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 4b.1 (25.10, `sabloane-produs.ts` + 10 probe) Modelul: tipuri, parser (plafoane, dubluri, id-uri unice), `sablonulProdusului`, operatiile
+      (adauga, redenumeste, sterge, atribuie categorie / produs), sectiunile sabloanelor in
+      `toateSectiunile` / `findSection`. Probe.
+- [ ] 4b.2 Magazinul: alegerea in `ProductPageDinDesign` (design viu, produs, lantul de categorii),
+      marcajul mutat acolo, id-ul paginii dat variantelor; ruta citeste lantul doar cand trebuie;
+      `sablon=` in editor. Probe.
+- [ ] 4b.3 Editorul: randul „Șablon”, panoul sablonului, arborele pe sablonul ales, previzualizarea pe
+      un produs al sablonului (actiune care gaseste unul). Probe.
+- [ ] 4b.4 Porti + proba in Chrome.
 
 ## Deciziile proprietarului
 
@@ -314,6 +360,8 @@ cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
 - 25.10.2026, „mentiune foarte importanta”: „cand esti aici la Editeaza magazinul nu trebuie sa
   mai apara nici Sidebar, nici Topbar, sa fie intreaga pagina asta cu editarea ca sa fie mult
   loc”. Facut in 4.7: editorul ia tot ecranul, se iese cu „Ieși” din bara lui.
+- 25.10.2026, la intrebarea pentru 4b (de unde se alege sablonul unui produs): „Din editor, pe
+  categorii”. Produsele anume intra ca exceptii, tot din editor.
 
 ## De ce Shopify si nu Elementor
 

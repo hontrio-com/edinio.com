@@ -54,6 +54,8 @@ export function toateSectiunile(design: StoreDesign): SectionInstance[] {
     ...design.home,
     design.chrome.footer,
     design.product.page,
+    // Sabloanele paginii de produs (etapa 4b): fara ele, editorul nu le-ar gasi paginile.
+    ...(design.product.sabloane ?? []).map((s) => s.page),
     design.shop.page,
     design.commerce.productCard,
     design.commerce.cartDrawer,
@@ -77,6 +79,9 @@ function findSection(design: StoreDesign, id: string): SectionInstance | undefin
   if (dinHome) return dinHome;
 
   if (design.product.page.id === id) return design.product.page;
+  // Pagina unui sablon de produs (etapa 4b): varianta, reglajele si blocurile ei se editeaza la fel.
+  const dinSablon = design.product.sabloane?.find((s) => s.page.id === id);
+  if (dinSablon) return dinSablon.page;
   if (design.shop.page.id === id) return design.shop.page;
 
   return [design.commerce.productCard, design.commerce.cartDrawer, design.commerce.checkout]

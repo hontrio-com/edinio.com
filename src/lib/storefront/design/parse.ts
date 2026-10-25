@@ -3,6 +3,13 @@ import { aplicaPaginaAcasa } from "./pagina-acasa";
 import { completeazaBlocuri, parseBlocuri, schemaBlocurilor } from "./blocuri";
 import { firstVariant, sectionMeta, variantMeta, type Field } from "./registry";
 import {
+  ID_DE_ATRIBUIT,
+  MAX_CATEGORII_PE_SABLON,
+  MAX_NUME_SABLON,
+  MAX_PRODUSE_PE_SABLON,
+  MAX_SABLOANE,
+} from "./sabloane-produs";
+import {
   BUTTON_RADIUS_KEYS,
   BUTTON_STYLE_KEYS,
   CARD_RATIO_KEYS,
@@ -16,6 +23,7 @@ import {
   STYLE_COLOR_KEYS,
   type DesignContext,
   type ResolvedStyle,
+  type SablonProdus,
   type SectionInstance,
   type SectionKind,
   type StoreDesign,
@@ -304,6 +312,61 @@ function parseSectionList(raw: unknown, seenIds: Set<string>, max: number): Sect
       singletons.add(parsed.kind);
     }
     out.push(parsed);
+  }
+  return out;
+}
+
+/**
+ * Slotul paginii de produs: sablonul Implicit si, cand exista, sabloanele alternative (etapa 4b,
+ * `sabloane-produs.ts`). Lista goala nu se scrie, ca un design de dinainte sa ramana identic.
+ */
+function parseSlotProdus(
+  raw: Record<string, unknown>,
+  fallback: SectionInstance,
+  ctx: DesignContext,
+  seenIds: Set<string>,
+): StoreDesign["product"] {
+  const page = cuBlocuri(pickOne(raw.page, fallback, seenIds), ctx);
+  const sabloane = parseSabloane(raw.sabloane, ctx, seenIds);
+  return sabloane.length ? { page, sabloane } : { page };
+}
+
+/**
+ * Sabloanele, curatate: cel mult `MAX_SABLOANE`, fiecare cu o pagina de produs valida, cu id unic
+ * printre TOATE sectiunile designului. O categorie sau un produs stau la cel mult un sablon: prima
+ * aparitie castiga, celelalte se taie (alegerea ar fi depins altfel de ordinea din lista).
+ */
+function parseSabloane(raw: unknown, ctx: DesignContext, seenIds: Set<string>): SablonProdus[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SablonProdus[] = [];
+  const categoriiLuate = new Set<string>();
+  const produseLuate = new Set<string>();
+  for (const item of raw) {
+    if (out.length >= MAX_SABLOANE) break;
+    const r = obj(item);
+    const pagina = parseSection(r.page, seenIds);
+    if (!pagina || pagina.kind !== "product_page") continue;
+    const nume = (typeof r.nume === "string" ? r.nume.trim() : "").slice(0, MAX_NUME_SABLON);
+    out.push({
+      nume: nume || `Șablon ${out.length + 1}`,
+      page: cuBlocuri(pagina, ctx),
+      categorii: iduriUnice(r.categorii, categoriiLuate, MAX_CATEGORII_PE_SABLON),
+      produse: iduriUnice(r.produse, produseLuate, MAX_PRODUSE_PE_SABLON),
+    });
+  }
+  return out;
+}
+
+function iduriUnice(raw: unknown, luate: Set<string>, max: number): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const v of raw) {
+    if (out.length >= max) break;
+    if (typeof v !== "string") continue;
+    const id = v.trim();
+    if (!ID_DE_ATRIBUIT.test(id) || luate.has(id)) continue;
+    luate.add(id);
+    out.push(id);
   }
   return out;
 }
@@ -690,9 +753,7 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
       footer: pickOne(chromeRaw.footer, classic.chrome.footer, seenIds),
     },
     home,
-    product: {
-      page: cuBlocuri(pickOne(productRaw.page, classic.product.page, seenIds), ctx),
-    },
+    product: parseSlotProdus(productRaw, classic.product.page, ctx, seenIds),
     // Fara linia asta slotul ar disparea la prima salvare: parserul nu face
     // merge peste `raw`, construieste si returneaza un obiect literal, iar
     // server action-ul scrie exact acel obiect in baza.

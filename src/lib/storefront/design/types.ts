@@ -248,6 +248,23 @@ export interface ResolvedStyle {
 
 export const DESIGN_VERSION = 1;
 
+/**
+ * Un sablon alternativ al paginii de produs (etapa 4b din `docs/editor-magazin/PLAN.md`).
+ *
+ * Id-ul sablonului e id-ul paginii lui (`page.id`): editorul il gaseste ca pe orice sectiune, deci
+ * varianta, reglajele, ochiul si sagetile blocurilor merg pe el fara cod in plus.
+ */
+export interface SablonProdus {
+  /** Numele dat de comerciant („Tablouri”); se vede doar in editor. */
+  nume: string;
+  /** Pagina de produs a sablonului: varianta, reglajele, blocurile. */
+  page: SectionInstance;
+  /** Categoriile care il folosesc; o categorie acopera si subcategoriile ei. */
+  categorii: string[];
+  /** Produse anume, ca exceptii: castiga in fata categoriei. */
+  produse: string[];
+}
+
 export interface StoreDesign {
   version: typeof DESIGN_VERSION;
   style: StoreStyle;
@@ -284,7 +301,13 @@ export interface StoreDesign {
   };
   home: SectionInstance[];
   product: {
+    /** Sablonul „Implicit”: pagina tuturor produselor fara alt sablon. */
     page: SectionInstance;
+    /**
+     * Sabloanele alternative (etapa 4b, `sabloane-produs.ts`). Lipsesc cu totul cand nu e
+     * niciunul, ca un design de dinainte sa ramana identic la citire.
+     */
+    sabloane?: SablonProdus[];
   };
   /**
    * Pagina de catalog. Slot propriu, nu o intrare in `home`.

@@ -6,8 +6,9 @@ blocuri in sectiuni, stil global) plus un strat „Avansat" strans implicit. Far
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. Urmeaza
-**etapa 2**, dupa acordul proprietarului (el vrea etapele luate pe rand, cu oprire intre ele).
+**Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. **Etapa 2 IN
+LUCRU** (acordul lui: „Da", 25.10.2026). Planul ei si ce s-a bifat: sectiunea „Etapa 2: planul de
+lucru", mai jos.
 
 **Proba vizuala a etapei 1, facuta 25.10.2026** pe `localhost:3000` (baza DEMO, contul
 `onboarding-proba-cf99b5@edinio-demo.test`, magazinul `floraria-mirei`; data abonamentului mutata
@@ -36,6 +37,61 @@ nu da eroare. Dupa fiecare clic se citeste starea (`aria-checked`, baza), nu se 
 
 **Cum se reia:** `git checkout editor-magazin` in `edinio/`, citeste fisierul asta si
 `REGISTRU.md`, apoi memoria `editor-magazin-unic`. Nimic nu se impinge, nimic nu atinge productia.
+
+## Etapa 2: planul de lucru (scris 25.10.2026, inainte de cod)
+
+Un singur ecran la `/dashboard/editor`: bara de sus, arborele in stanga, previzualizarea in
+dreapta. Gazduieste ce exista: lista de sectiuni si galeria de design-uri (din editorul de design
+si din „Design sectiuni") si panourile de continut (din editorul vechi), fiecare sub nodul din
+arbore pe care il regleaza.
+
+### Deciziile etapei (de ce asa)
+
+1. **Doua feluri de salvare, spuse pe fata.** Designul (ce sectiuni apar, in ce ordine, ce
+   varianta, setarile de sectiune, stilul) e ciorna, salvata singura, si ajunge la clienti la
+   „Publica" din bara de sus; „Anuleaza / Refa" lucreaza pe el. Continutul (texte, imagini, logo,
+   culori, fonturi) se salveaza din panoul nodului si e in magazin imediat, ca azi. Motivul:
+   continutul sta in `page_content` si magazinul il randeaza pe server, deci nu se poate arata in
+   previzualizare inainte de salvare. Un singur „Publica" pentru tot cere continutul mutat in
+   design: asta e etapa 6.
+2. **Ochiul din arbore e SINGURUL control de vizibilitate.** Sectiunile derivate din continut
+   (beneficii pe scurt, prag transport, beneficii, recenzii, galerie, despre, contact, randurile
+   de produse) aveau o a doua poarta in componenta, pe comutatorul vechi: ochiul le putea stinge,
+   dar nu le putea aprinde. Poarta a doua se scoate (precedent: „Recomandate" si bara de anunt,
+   august 2026); `enabled` din design o contine deja, derivat din comutator cat timp ochiul n-a
+   spus altceva. Masurat in productie 25.10.2026: 25 de magazine cu design salvat, ZERO cu ochiul
+   folosit pe aceste sectiuni, zero randuri oprite in continut, deci niciun magazin nu se schimba.
+   Comutatoarele vechi de pornire nu mai apar in editor.
+3. **`elibereazaComutatoare` nu se mai cheama din editorul unic.** Exista ca sa impace doua
+   controale pentru acelasi lucru, in doua ecrane; aici e unul singur. Chemata la salvarea unui
+   text, ar fi sters semnul ochiului si ar fi reaprins o sectiune stinsa anume. Comutatorul
+   „Afiseaza continutul peste banner" pleaca si el: varianta hero-ului se alege din galerie.
+4. **Dupa o salvare de continut, designul se re-deriva pe client**, cu parserul (functie pura)
+   si contextul nou: randuri noi, varianta hero dupa bannere. Fara asta, ciorna din ecran ar fi
+   ramas cea derivata din continutul vechi si previzualizarea ar fi aratat altceva decat magazinul.
+5. **Previzualizarea vie pe toate paginile editate.** Pagina de produs, cosul si comanda primesc
+   protocolul (`esteEditorDeDesign`), ca acasa si pagina Magazin: ciorna proprietarului, mesajele
+   din editor, clic pe sectiune.
+6. **Rutele vechi redirectioneaza** catre editorul unic: `/dashboard/editor/design`,
+   `/dashboard/editor/sectiuni`, `/dashboard/store` (pagina „in curs de dezvoltare", moarta).
+7. **Pagina principala facuta in Pagini:** Acasa arata o nota cu legatura catre pagina; ordinea
+   si ce apare se aleg acolo (etapa 5 le aduce in acelasi model). Variantele si setarile
+   sectiunilor raman valabile, fiindca pagina le imprumuta din design.
+8. **Galeria primeste un editor de imagini.** Sectiunea exista, dar nimeni nu o putea umple (in
+   productie: zero magazine cu imagini in galerie).
+
+### Pasii (bifati pe masura ce se fac)
+
+- [ ] 2.1 Poarta unica: componentele derivate citesc doar `enabled` din design; lista de randuri
+      nu mai filtreaza pe comutatorul vechi; titlul „Toate produsele" din grila se ia din design.
+- [ ] 2.2 Previzualizarea vie pe pagina de produs, cos si comanda (ciorna + protocol).
+- [ ] 2.3 Logica fara React: istoricul pentru anuleaza/refa, re-derivarea, adresa previzualizarii
+      pe pagina aleasa, nodurile arborelui pe pagina, aprinderea barei de anunt cand lipseste.
+- [ ] 2.4 Ecranul: bara de sus, arborele, panoul nodului (design + setari + continut),
+      galeria de variante peste previzualizare, „Adauga sectiune".
+- [ ] 2.5 Continutul mutat din editorul vechi, pe noduri, plus stilul global si galeria.
+- [ ] 2.6 Rutele vechi redirectioneaza; meniul panoului; legatura din Pagini.
+- [ ] 2.7 Porti + proba in Chrome pe demo (pasii mai jos, cand ajungem acolo).
 
 ## Deciziile proprietarului
 

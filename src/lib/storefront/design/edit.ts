@@ -138,6 +138,35 @@ export function toggleSection(design: StoreDesign, id: string): StoreDesign {
   return updateSection(design, id, { enabled: nou, enabledOverride: nou });
 }
 
+/** Id-ul barei de anunt in designul derivat (`defaults.ts`). */
+export const ID_BARA_ANUNT = "announcement";
+
+/**
+ * Ochiul barei de anunt din editorul unic: o stinge, o aprinde, sau o ADUCE
+ * cand designul n-o are deloc.
+ *
+ * ⚠ Bara e singura sectiune care poate lipsi cu totul (`chrome.announcement`
+ * e `null`): asa ramane dupa o stergere din lista, si asa o salveaza parserul cand
+ * comutatorul vechi era oprit. Pana acum o aducea inapoi doar comutatorul vechi,
+ * iar in editorul unic el nu mai exista: fara asta, un magazin fara bara n-ar mai
+ * fi putut avea una niciodata. Se aduce cu id-ul din designul derivat si cu
+ * semnul ochiului, ca parserul sa n-o stinga la prima citire, si se scoate din
+ * lista celor sterse, ca sa nu fie scoasa din nou.
+ */
+export function comutaBaraDeAnunt(design: StoreDesign): StoreDesign {
+  const bara = design.chrome.announcement;
+  if (bara) return toggleSection(design, bara.id);
+  const variant = firstVariant("announcement");
+  if (!variant) return design;
+  const next = clone(design);
+  next.chrome.announcement = {
+    ...section(ID_BARA_ANUNT, "announcement", variant, true, variantMeta("announcement", variant)?.defaults ?? {}),
+    enabledOverride: true,
+  };
+  next.sterse = (next.sterse ?? []).filter((id) => id !== ID_BARA_ANUNT);
+  return next;
+}
+
 /**
  * Sterge o sectiune. Cele marcate ca ne-eliminabile (header, footer, catalogul)
  * nu pot fi scoase — fara ele magazinul n-ar mai fi un magazin.

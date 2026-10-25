@@ -3,7 +3,7 @@
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
 /**
- * Sectiunea „Despre noi", varianta classic. Textul vine din `businesses.description`.
+ * Sectiunea „Despre noi”, varianta classic. Textul vine din `businesses.description`.
  *
  * ⚠ Fara a doua poarta pe `features.show_about`: pornit sau oprit spune `enabled`
  * din design, derivat din flagul acela cat timp ochiul din editor n-a spus altceva.

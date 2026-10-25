@@ -69,7 +69,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
       .single(),
   ]);
 
-  // In editorul de design: ciorna proprietarului, ca o comanda aleasa „pagina"
+  // In editorul de design: ciorna proprietarului, ca o comanda aleasa „pagina”
   // sa se vada inainte de Publica. Vezi `ciorna-proprietarului.ts`.
   const esteEditorDesign = esteEditorDeDesign(semneDeEditor(sp), isOwner);
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;

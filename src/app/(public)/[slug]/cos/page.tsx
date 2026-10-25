@@ -83,7 +83,7 @@ export default async function CosPage({ params, searchParams }: Props) {
       .single(),
   ]);
 
-  // In editorul de design: ciorna proprietarului, ca un cos ales „pagina" sa se
+  // In editorul de design: ciorna proprietarului, ca un cos ales „pagina” sa se
   // vada inainte de Publica. Vezi `ciorna-proprietarului.ts`.
   const esteEditorDesign = esteEditorDeDesign(semneDeEditor(sp), isOwner);
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;

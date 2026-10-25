@@ -1663,7 +1663,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     openLightbox: setLightboxUrl,
     esteEditorDesign: editorDesign,
     // Designul EFECTIV, ca pe paginile cu `StorePageShell`: sectiunile care
-    // depind de alta sectiune (titlul grilei, de randul „Recomandate") il citesc
+    // depind de alta sectiune (titlul grilei, de randul „Recomandate”) il citesc
     // de aici, nu din flagul vechi din `page_content`.
     design,
   };

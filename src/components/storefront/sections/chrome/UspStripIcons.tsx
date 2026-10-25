@@ -25,7 +25,7 @@ export function UspStripIcons() {
    * doar daca e `enabled` in design, iar `enabled` se deriva chiar din flagul
    * acela cat timp ochiul din editor n-a spus altceva (`parse.ts`). Verificat
    * inca o data aici, flagul bloca ochiul: stingea banda, dar n-o putea aprinde.
-   * Acelasi lucru s-a reparat in august la „Recomandate" si la bara de anunt.
+   * Acelasi lucru s-a reparat in august la „Recomandate” si la bara de anunt.
    */
   /*
    * ⚠ Implicitul e AICI, nu doar in editor.

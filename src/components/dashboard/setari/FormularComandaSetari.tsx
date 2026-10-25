@@ -62,7 +62,7 @@ export function FormularComandaSetari({ businessId, initial }: { businessId: str
   /*
    * ⚠ Emailul e ARATAT din start: asa il citeste magazinul (`checkout-core.ts`,
    * `OrderModal.tsx`) cand reglajul lipseste. Editorul vechi il arata oprit, deci
-   * omul vedea „oprit" pe ecran si campul in formularul clientilor.
+   * omul vedea „oprit” pe ecran si campul in formularul clientilor.
    */
   const email = config.email_field ?? { enabled: true, required: false };
   const codPostal = config.postal_field ?? { enabled: false, required: false };

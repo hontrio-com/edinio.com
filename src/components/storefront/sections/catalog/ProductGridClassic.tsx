@@ -44,9 +44,9 @@ export function ProductGridClassic({ prioritate = false }: { prioritate?: boolea
   } = useStorefront();
 
   /*
-   * Randul „Recomandate" e aprins cand e aprins IN DESIGN, ca la randare.
-   * Citit din `show_featured_section`, titlul grilei ramanea „Produse" cand
-   * ochiul din editor aprindea randul, si „Toate produsele" cand il stingea.
+   * Randul „Recomandate” e aprins cand e aprins IN DESIGN, ca la randare.
+   * Citit din `show_featured_section`, titlul grilei ramanea „Produse” cand
+   * ochiul din editor aprindea randul, si „Toate produsele” cand il stingea.
    * Flagul ramane doar pentru paginile care nu-si pun designul in context
    * (miniaturile din galerie).
    */

@@ -96,7 +96,7 @@ test("derivarea are comutatoare de gasit (proba nu trece pe gol)", () => {
 test("⚠⚠ fiecare tip derivat din continut are componenta cunoscuta", () => {
   for (const [cheie, { tipuri }] of comutatoareDerivate()) {
     for (const tip of tipuri) {
-      assert.ok(COMPONENTA[tip], `„${tip}" se deriva din „${cheie}", dar proba nu-i stie componenta`);
+      assert.ok(COMPONENTA[tip], `„${tip}” se deriva din „${cheie}”, dar proba nu-i stie componenta`);
     }
   }
 });
@@ -114,11 +114,11 @@ test("⚠⚠ componentele derivate nu mai verifica comutatorul vechi", () => {
       if (unde === "features") {
         assert.doesNotMatch(text, new RegExp(`features\\.${cheie}\\b`), `${fisier} verifica inca features.${cheie}`);
       } else if (forma === "steag") {
-        assert.doesNotMatch(text, new RegExp(`\\b${cheie}\\b`), `${fisier} citeste inca „${cheie}"`);
+        assert.doesNotMatch(text, new RegExp(`\\b${cheie}\\b`), `${fisier} citeste inca „${cheie}”`);
       } else {
         // Obiectul sectiunii ramane sursa CONTINUTULUI (titlu, randuri); doar
         // `enabled` din el nu mai are voie sa decida.
-        assert.doesNotMatch(text, /\.enabled\b/, `${fisier} verifica inca „${cheie}.enabled"`);
+        assert.doesNotMatch(text, /\.enabled\b/, `${fisier} verifica inca „${cheie}.enabled”`);
       }
     }
   }

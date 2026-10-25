@@ -1,13 +1,13 @@
 # Editorul unic al magazinului
 
-Hotarat 24.10.2026: un singur „Editeaza magazinul", pe modelul Shopify (sabloane, sectiuni,
-blocuri in sectiuni, stil global) plus un strat „Avansat" strans implicit. Fara panza libera
+Hotarat 24.10.2026: un singur „Editeaza magazinul”, pe modelul Shopify (sabloane, sectiuni,
+blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. Fara panza libera
 (Elementor).
 
 ## Stare si reluare (citeste intai)
 
 **Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. **Etapa 2 IN
-LUCRU** (acordul lui: „Da", 25.10.2026). Planul ei si ce s-a bifat: sectiunea „Etapa 2: planul de
+LUCRU** (acordul lui: „Da”, 25.10.2026). Planul ei si ce s-a bifat: sectiunea „Etapa 2: planul de
 lucru", mai jos.
 
 **Proba vizuala a etapei 1, facuta 25.10.2026** pe `localhost:3000` (baza DEMO, contul
@@ -15,19 +15,19 @@ lucru", mai jos.
 o zi si pusa la loc, ca in memoria `proba-in-browser-pe-baza-demo`):
 - Setari > General: sloganul si linkul de Instagram (scris fara `https://`) s-au salvat, au ramas
   la reincarcare, linkul a primit `https://`; in magazin: descrierea paginii = sloganul, iconita de
-  Instagram, butonul WhatsApp dupa bifa „acelasi numar". `store_name` a ramas NULL.
+  Instagram, butonul WhatsApp dupa bifa „acelasi numar”. `store_name` a ramas NULL.
 - Setari > Formular de comanda: un camp si o extraoptiune de 12,50 lei; in formularul din cos
   apar amandoua, iar bifa duce totalul de la 166,90 la 179,40 lei (comanda NU s-a trimis).
-- Setari > Catalog: „Ascunde produsele fara imagini" scoate singurul produs din magazin.
+- Setari > Catalog: „Ascunde produsele fara imagini” scoate singurul produs din magazin.
 - `/dashboard/editor`: panourile mutate lipsesc; cele trei trimiteri deschid filele din Setari.
 - Telefon (cadru de 390 px): General si Formular de comanda fara depasire orizontala.
 - Valorile de proba puse la loc in baza DEMO (starea de dinainte, citita intai).
 
 Ce a gasit proba si recitirea codului, reparat tot pe 25.10:
-1. Comutatorul „Email" arata OPRIT cand reglajul lipsea, iar magazinul arata campul (implicitul
+1. Comutatorul „Email” arata OPRIT cand reglajul lipsea, iar magazinul arata campul (implicitul
    lui e pornit, optional). Mostenit din editorul vechi. Acum Setarile citesc ca magazinul; o
    proba aduna fiecare citire a lui `email_field` si cere un singur implicit; ghidul de ajutor
-   spunea si el „oprit din start".
+   spunea si el „oprit din start”.
 2. `updatePageContent` nu revalida `/dashboard/settings`. Filele Formular si Catalog isi iau
    valorile din pagina cand le redeschizi; azi merge doar fiindca Next reface dupa o actiune
    orice pagina, purtare numita temporara in documentatia lui `revalidatePath`.
@@ -42,22 +42,22 @@ nu da eroare. Dupa fiecare clic se citeste starea (`aria-checked`, baza), nu se 
 
 Un singur ecran la `/dashboard/editor`: bara de sus, arborele in stanga, previzualizarea in
 dreapta. Gazduieste ce exista: lista de sectiuni si galeria de design-uri (din editorul de design
-si din „Design sectiuni") si panourile de continut (din editorul vechi), fiecare sub nodul din
+si din „Design sectiuni”) si panourile de continut (din editorul vechi), fiecare sub nodul din
 arbore pe care il regleaza.
 
 ### Deciziile etapei (de ce asa)
 
 1. **Doua feluri de salvare, spuse pe fata.** Designul (ce sectiuni apar, in ce ordine, ce
    varianta, setarile de sectiune, stilul) e ciorna, salvata singura, si ajunge la clienti la
-   „Publica" din bara de sus; „Anuleaza / Refa" lucreaza pe el. Continutul (texte, imagini, logo,
+   „Publica” din bara de sus; „Anuleaza / Refa” lucreaza pe el. Continutul (texte, imagini, logo,
    culori, fonturi) se salveaza din panoul nodului si e in magazin imediat, ca azi. Motivul:
    continutul sta in `page_content` si magazinul il randeaza pe server, deci nu se poate arata in
-   previzualizare inainte de salvare. Un singur „Publica" pentru tot cere continutul mutat in
+   previzualizare inainte de salvare. Un singur „Publica” pentru tot cere continutul mutat in
    design: asta e etapa 6.
 2. **Ochiul din arbore e SINGURUL control de vizibilitate.** Sectiunile derivate din continut
    (beneficii pe scurt, prag transport, beneficii, recenzii, galerie, despre, contact, randurile
    de produse) aveau o a doua poarta in componenta, pe comutatorul vechi: ochiul le putea stinge,
-   dar nu le putea aprinde. Poarta a doua se scoate (precedent: „Recomandate" si bara de anunt,
+   dar nu le putea aprinde. Poarta a doua se scoate (precedent: „Recomandate” si bara de anunt,
    august 2026); `enabled` din design o contine deja, derivat din comutator cat timp ochiul n-a
    spus altceva. Masurat in productie 25.10.2026: 25 de magazine cu design salvat, ZERO cu ochiul
    folosit pe aceste sectiuni, zero randuri oprite in continut, deci niciun magazin nu se schimba.
@@ -65,7 +65,7 @@ arbore pe care il regleaza.
 3. **`elibereazaComutatoare` nu se mai cheama din editorul unic.** Exista ca sa impace doua
    controale pentru acelasi lucru, in doua ecrane; aici e unul singur. Chemata la salvarea unui
    text, ar fi sters semnul ochiului si ar fi reaprins o sectiune stinsa anume. Comutatorul
-   „Afiseaza continutul peste banner" pleaca si el: varianta hero-ului se alege din galerie.
+   „Afiseaza continutul peste banner” pleaca si el: varianta hero-ului se alege din galerie.
 4. **Dupa o salvare de continut, designul se re-deriva pe client**, cu parserul (functie pura)
    si contextul nou: randuri noi, varianta hero dupa bannere. Fara asta, ciorna din ecran ar fi
    ramas cea derivata din continutul vechi si previzualizarea ar fi aratat altceva decat magazinul.
@@ -73,7 +73,7 @@ arbore pe care il regleaza.
    protocolul (`esteEditorDeDesign`), ca acasa si pagina Magazin: ciorna proprietarului, mesajele
    din editor, clic pe sectiune.
 6. **Rutele vechi redirectioneaza** catre editorul unic: `/dashboard/editor/design`,
-   `/dashboard/editor/sectiuni`, `/dashboard/store` (pagina „in curs de dezvoltare", moarta).
+   `/dashboard/editor/sectiuni`, `/dashboard/store` (pagina „in curs de dezvoltare”, moarta).
 7. **Pagina principala facuta in Pagini:** Acasa arata o nota cu legatura catre pagina; ordinea
    si ce apare se aleg acolo (etapa 5 le aduce in acelasi model). Variantele si setarile
    sectiunilor raman valabile, fiindca pagina le imprumuta din design.
@@ -83,23 +83,23 @@ arbore pe care il regleaza.
 ### Pasii (bifati pe masura ce se fac)
 
 - [x] 2.1 Poarta unica (25.10, proba `poarta-unica.test.ts`, 4/4 mutanti): componentele derivate citesc doar `enabled` din design; lista de randuri
-      nu mai filtreaza pe comutatorul vechi; titlul „Toate produsele" din grila se ia din design.
+      nu mai filtreaza pe comutatorul vechi; titlul „Toate produsele” din grila se ia din design.
 - [x] 2.2 Previzualizarea vie pe pagina de produs, cos si comanda (ciorna + protocol). 25.10,
       `ciorna-proprietarului.ts` + proba ei; cosul si comanda citesc varianta din designul viu.
-- [ ] 2.3 Logica fara React: istoricul pentru anuleaza/refa, re-derivarea, adresa previzualizarii
+- [x] 2.3 (25.10, `src/lib/editor-magazin/`: istoric, pagini, derivare, noduri, continut; 20 de probe) Logica fara React: istoricul pentru anuleaza/refa, re-derivarea, adresa previzualizarii
       pe pagina aleasa, nodurile arborelui pe pagina, aprinderea barei de anunt cand lipseste.
 - [ ] 2.4 Ecranul: bara de sus, arborele, panoul nodului (design + setari + continut),
-      galeria de variante peste previzualizare, „Adauga sectiune".
+      galeria de variante peste previzualizare, „Adauga sectiune”.
 - [ ] 2.5 Continutul mutat din editorul vechi, pe noduri, plus stilul global si galeria.
 - [ ] 2.6 Rutele vechi redirectioneaza; meniul panoului; legatura din Pagini.
 - [ ] 2.7 Porti + proba in Chrome pe demo (pasii mai jos, cand ajungem acolo).
 
 ## Deciziile proprietarului
 
-- 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat."
+- 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
 - 24.10.2026: tot pe o ramura separata, local, productia neatinsa pana la final.
-- 24.10.2026: „Incepe cu etapa 1, le luam pe rand pana finalizam tot."
-- **INTREBARE DESCHISA, nepusa inca la vot:** teme intregi („alege un stil de magazin" la
+- 24.10.2026: „Incepe cu etapa 1, le luam pe rand pana finalizam tot.”
+- **INTREBARE DESCHISA, nepusa inca la vot:** teme intregi („alege un stil de magazin” la
   inceput, care aseaza toate sectiunile deodata) sau doar sectiuni alese una cate una? De pus
   inainte de etapa 4.
 
@@ -107,34 +107,34 @@ arbore pe care il regleaza.
 
 - Elementor (panza libera, orice element oriunde) e facut pentru designeri. Comerciantii fac cu el
   magazine stricate pe telefon, lente, cu logica de comert (pret, variante, cos) fragila, si
-  tichete de suport „mi s-a stricat pagina".
+  tichete de suport „mi s-a stricat pagina”.
 - Shopify (Online Store 2.0): pagina -> sectiuni -> blocuri in sectiuni, plus setari globale de
   tema. Libertate mare, dar intre margini: telefonul nu se poate strica, spatierile sunt pe o
   scara, pretul ramane legat de logica. E modelul pe care comerciantii il stiu deja.
-- „Absolut tot customizabil" si „foarte simplu" se bat cap in cap daca stau pe acelasi nivel. Se
+- „Absolut tot customizabil” si „foarte simplu” se bat cap in cap daca stau pe acelasi nivel. Se
   impaca pe STRATURI, fiecare ascuns pana e nevoie de el:
   1. Tema / stil global: culori, fonturi, butoane, colturi (exista: `StoreStyle`).
   2. Sectiuni: adaugi, ordonezi, ascunzi, alegi un design (variantele devin puncte de pornire).
   3. Blocuri in sectiune: titlu, text, buton, imagine, pret; muti, ascunzi, setezi.
-  4. „Avansat", strans implicit: spatieri, fundal, animatii, ascuns pe mobil, CSS/HTML.
+  4. „Avansat”, strans implicit: spatieri, fundal, animatii, ascuns pe mobil, CSS/HTML.
   90% din oameni raman la 1-2.
 
 ## Ce NU facem
 
 - Pozitionare libera prin tragere.
-- Layout de telefon editat separat: telefonul se face singur, cel mult „ascuns pe mobil".
+- Layout de telefon editat separat: telefonul se face singur, cel mult „ascuns pe mobil”.
 - Checkoutul editabil vizual: doar culori si cateva texte. Acolo sunt banii, TVA-ul, rambursul.
 - Setari de business in editorul vizual (etapa 1 le-a scos).
 
 ## Interfata tinta (etapa 2)
 
-- **Bara de sus:** „Editezi: Pagina de produs ▾" (alegi pagina), desktop / telefon, anuleaza /
-  refa, Salveaza / Publica, starea publicarii (comutatorul „Publicare" de azi ajunge aici).
-- **Stanga:** arborele de sectiuni si blocuri, „+ Adauga sectiune" (galerie cu miniaturi, exista
+- **Bara de sus:** „Editezi: Pagina de produs ▾” (alegi pagina), desktop / telefon, anuleaza /
+  refa, Salveaza / Publica, starea publicarii (comutatorul „Publicare” de azi ajunge aici).
+- **Stanga:** arborele de sectiuni si blocuri, „+ Adauga sectiune” (galerie cu miniaturi, exista
   `VariantCard`). La clic pe un element, setarile lui intra in acelasi panou.
 - **Dreapta:** previzualizarea live (exista `RamaPreview` + protocolul `postMessage`).
 - Mai tarziu: clic pe element in previzualizare il selecteaza in arbore (etapa 3); istoric de
-  versiuni, „revino la ce era ieri" (etapa 7), plasa de siguranta pentru cei care se tem sa
+  versiuni, „revino la ce era ieri” (etapa 7), plasa de siguranta pentru cei care se tem sa
   atinga ceva.
 
 ## Riscurile
@@ -164,7 +164,7 @@ arbore pe care il regleaza.
 - Paginile: `components/pages/PageBuilder.tsx`, `BlockSettings.tsx`, `lib/pages/blocks.types.ts`,
   tabela `custom_pages`.
 - Meniul panoului: `lib/navigatie-panou.ts` (sursa unica, proba `navigatia-nu-divergeaza`).
-  Lista de activare din panou trimite la `/dashboard/editor` pentru „Personalizeaza" si „Publica".
+  Lista de activare din panou trimite la `/dashboard/editor` pentru „Personalizeaza” si „Publica”.
 
 ## Regulile de lucru
 
@@ -193,7 +193,7 @@ Registrul sectiunilor: `lib/storefront/design/registry.ts` (antet, anunt, subsol
 sectiuni pe acasa, `product_page`, `shop_page`, card de produs, cos, checkout; ~160 de variante).
 Stilul global: `StoreStyle` -> variabile CSS `--st-*` (`lib/storefront/design/css-vars.ts`).
 
-### Panourile din „Editeaza magazinul", clasificate
+### Panourile din „Editeaza magazinul”, clasificate
 
 D = design (merge in editorul nou) · C = continut (devine bloc/setare de sectiune) ·
 S = setare de business (se muta in Setari, nu e design)
@@ -202,14 +202,14 @@ S = setare de business (se muta in Setari, nu e design)
 |---|---|---|
 | Informatii generale | nume, slogan, descriere, telefon, WhatsApp, email | S (Setari > Magazin); sloganul/descrierea se pot afisa prin blocuri |
 | Identitate vizuala | logo, favicon, culoare, fundal, fonturi, marime logo, bannere hero, efect buton | D (stil global + sectiunea Hero) |
-| Social media | linkuri | S, afisate de blocul „Social" din subsol |
-| Pagina produs | insigne de incredere, beneficii, „cum functioneaza", FAQ, recenzii, zoom, livrare estimata, bara lipicioasa, interval de pret, insigna „Nou" | C: blocuri ale sablonului Produs |
+| Social media | linkuri | S, afisate de blocul „Social” din subsol |
+| Pagina produs | insigne de incredere, beneficii, „cum functioneaza”, FAQ, recenzii, zoom, livrare estimata, bara lipicioasa, interval de pret, insigna „Nou” | C: blocuri ale sablonului Produs |
 | Pagina principala | bara de anunt, ordinea produselor, sortare, filtre, beneficii, recenzii, FAQ, insigne subsol, ascunderi de produse | D/C pentru sectiuni; regulile de catalog (ascunde fara poze/stoc, categorii goale, sortarea implicita) = S (Setari > Catalog) |
 | Sectiuni produse | `product_sections` (sectiuni pe produs/categorie) | C: blocuri ale sablonului Produs, cu conditie pe categorie |
 | Formular de comanda | campuri proprii, extraoptiuni cu pret, campuri ascunse, email, cod postal, firma, cod discount | **S** (Setari > Comanda). Atinge banii: NU intra in editorul vizual |
 | Publicare | magazin publicat/nepublicat, adresa | bara de sus a editorului nou |
 
-### Ce face pagina de produs „needitabila"
+### Ce face pagina de produs „needitabila”
 
 `product_page` e o singura sectiune (variante `classic` / `detailed` + comutatoare), fiindca
 galeria, varianta aleasa si pretul impart starea. Se rezolva cu un context de produs la nivelul
@@ -223,7 +223,7 @@ Antet / Subsol (globale)
 Sablon: Acasa | Produs (+ sabloane alternative pe categorie/produs) | Catalog | Pagina | Articol | Cos
   Sectiune (din registru; varianta = punct de pornire)
     Bloc (titlu, text, buton, imagine, pret, galerie, variante, ...)
-      Setari de baza  +  „Avansat" (spatieri, fundal, animatie, ascuns pe mobil, CSS)
+      Setari de baza  +  „Avansat” (spatieri, fundal, animatie, ascuns pe mobil, CSS)
 ```
 
 Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, TVA, ramburs.
@@ -241,7 +241,7 @@ Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, 
 4. **Blocuri in sectiuni**; pagina de produs sparta in blocuri cu context comun; sabloane de
    produs multiple.
 5. **Paginile** pe acelasi model; convertor din `custom_pages` (blocurile PageBuilder devin
-   blocuri intr-o sectiune „Continut liber").
+   blocuri intr-o sectiune „Continut liber”).
 6. **Retragerea `page_content`** ca sursa de design. Pana atunci parserul deriva modelul nou din
    cel vechi la citire (ca `{}` = clasic azi): zero migrare de date la lansare.
 7. Istoric de versiuni (revino la o publicare anterioara).

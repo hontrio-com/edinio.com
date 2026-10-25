@@ -95,7 +95,7 @@ test("⚠ emailul din formularul de comanda are acelasi implicit in Setari si in
   /*
    * Fara reglaj (`email_field` lipsa), magazinul ARATA campul, optional. Editorul
    * vechi, si dupa el prima forma a filei din Setari, il citeau oprit: comutatorul
-   * spunea „oprit", iar formularul clientilor avea campul. Proba aduna FIECARE
+   * spunea „oprit”, iar formularul clientilor avea campul. Proba aduna FIECARE
    * citire cu implicitul scris pe loc si cere ca toate sa spuna acelasi lucru.
    */
   const implicite = new Map<string, string[]>();

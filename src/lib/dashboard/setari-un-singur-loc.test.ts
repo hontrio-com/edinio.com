@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
+import { COLOANE_MAGAZIN_CIORNA } from "@/lib/storefront/design/continut-ciorna";
 
 /*
  * ⚠ O SETARE ARE UN SINGUR ECRAN.
@@ -59,14 +60,22 @@ test("⚠⚠ editorul scrie in `businesses` doar logo, coperta, culoarea, galeri
   /*
    * Restul coloanelor (nume, contact, adresa, retele, butoane) le scrie Setari >
    * General. Galeria e noua in etapa 2: sectiunea „Galerie” n-avea niciun ecran.
+   *
+   * Din etapa 6 primele patru trec prin ciorna (`continut.magazin`) si ajung in magazin la
+   * „Publică”; pe loc ramane doar comutatorul de publicare a magazinului.
    */
   const editor = codEditor();
   const apeluri = [...editor.matchAll(/updateBusiness\(\w+\.id, \{([^}]*)\}\)/g)];
-  assert.ok(apeluri.length >= 3, "nu am gasit scrierile editorului; s-a schimbat forma apelului?");
+  assert.equal(apeluri.length, 1, "nu am gasit scrierea pe loc a editorului; s-a schimbat forma apelului?");
   const chei = new Set(apeluri.flatMap((m) => m[1].split(",").map((p) => p.split(":")[0].trim()).filter(Boolean)));
-  assert.deepEqual([...chei].sort(), ["cover_url", "gallery", "is_published", "logo_url", "primary_color"]);
+  assert.deepEqual([...chei].sort(), ["is_published"]);
   /* Si nicio cale ocolita: `updateBusiness` chemat altfel decat cu un obiect scris pe loc. */
   assert.equal((editor.match(/updateBusiness\(/g) ?? []).length, apeluri.length);
+  // Prin ciorna: exact cele patru coloane, pe lista alba a parserului, si „Publică” le scrie doar pe ele.
+  assert.deepEqual([...COLOANE_MAGAZIN_CIORNA].sort(), ["cover_url", "gallery", "logo_url", "primary_color"]);
+  const prinCiorna = new Set([...editor.matchAll(/cuColoanele\(\w+, \{ (\w+):/g)].map((m) => m[1]));
+  assert.deepEqual([...prinCiorna].sort(), ["cover_url", "gallery", "logo_url", "primary_color"]);
+  assert.match(cod("src/lib/actions/store-design.actions.ts"), /\.from\("businesses"\)\s*\.update\(continut\.magazin as never\)/);
 });
 
 test("trimiterile din editor duc la file care exista in Setari", () => {

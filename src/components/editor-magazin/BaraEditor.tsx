@@ -45,7 +45,7 @@ export function BaraEditor({
   publicat: boolean;
   publicareInCurs: boolean;
   onComutaPublicarea: () => Promise<void>;
-  /** Exista continut nesalvat in vreun nod? */
+  /** Ceva care NU e inca in ciorna: o imagine care se urca, o pagina proprie nesalvata. */
   continutNesalvat: boolean;
   vedereMobil: "panou" | "previzualizare";
   onVedereMobil: (v: "panou" | "previzualizare") => void;
@@ -83,7 +83,7 @@ export function BaraEditor({
 
   const stare = ciorna.salvez
     ? "Se salvează ciorna..."
-    : ciorna.areModificari ? "Modificări de design nepublicate" : "Designul e publicat";
+    : ciorna.areModificari ? "Modificări nepublicate" : "Totul e publicat";
 
   return (
     <div className="h-14 shrink-0 border-b border-border bg-surface px-3 flex items-center gap-2">
@@ -227,15 +227,15 @@ export function BaraEditor({
         </DialogContent>
       </Dialog>
 
-      {/* Iesirea cu ceva neterminat: continutul nesalvat se pierde, designul nepublicat ramane in ciorna. */}
+      {/* Iesirea cu ceva neterminat: ce nu e inca in ciorna se pierde, restul ramane in ciorna. */}
       <Dialog open={iesire === "intreaba"} onOpenChange={(deschis) => { if (!deschis) setIesire(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{continutNesalvat ? "Ieși fără să salvezi conținutul?" : "Ieși fără să publici?"}</DialogTitle>
             <DialogDescription>
               {continutNesalvat
-                ? `Ai conținut nesalvat: dacă ieși acum, se pierde.${ciorna.areModificari ? " Modificările de design rămân în ciornă." : ""}`
-                : "Modificările de design rămân în ciornă și le regăsești aici data viitoare. Clienții văd magazinul ca până acum."}
+                ? `Ai conținut nesalvat: dacă ieși acum, se pierde.${ciorna.areModificari ? " Celelalte modificări rămân în ciornă." : ""}`
+                : "Modificările rămân în ciornă și le regăsești aici data viitoare. Clienții văd magazinul ca până acum."}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

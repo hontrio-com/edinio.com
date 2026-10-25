@@ -519,8 +519,13 @@ Citit in cod inainte:
       principala si Magazin o cereau si o taiau inainte de randare): o citeste numai `ciornaDeRandat`,
       numai pentru proprietar in editor. Layoutul magazinului (culoarea bannerului de cookie) nu stie de
       modul editor si ramane pe culoarea publicata.
-- [ ] 6.4 Editorul: continutul in ciorna, fara „Salvează” pe sectiuni, istoric comun, imaginile
-      urcate la alegere, reincarcarea previzualizarii, bara si iesirea. Probe.
+- [x] 6.4 (25.10, `lib/editor-magazin/ciorna.ts` cu reductorul comun si scrierea cheilor, `useCiornaDesign`,
+      `useContinutMagazin` rescris ca fata a ciornei, 21 de bare „Salvează” scoase; 7 probe pure + 4 pe sursa,
+      6 din 6 mutatii prinse) Editorul: continutul in ciorna, fara „Salvează” pe sectiuni, istoric comun, imaginile
+      urcate la alegere, reincarcarea previzualizarii, bara si iesirea. Probe. Punctul din arbore inseamna
+      acum „modificat, nepublicat”; o cheie adusa inapoi la valoarea publicata iese din ciorna. Bara spune
+      „Modificări nepublicate” / „Totul e publicat”. Stergerea unui rand de produse intra si ea in ciorna
+      (Anuleaza il aduce inapoi; din magazin dispare la „Publică”). Comutatorul „Vizibil” ramane pe loc.
 - [ ] 6.5 REGISTRU (comportamentul nou, ghidurile de ajutor), porti, proba in Chrome pe magazinul
       de proba: modificat, previzualizat, magazinul public neschimbat pana la „Publică”,
       „Renunță”; starea pusa la loc.

@@ -4,13 +4,13 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils/cn";
 import type { ContinutMagazin } from "../useContinutMagazin";
 import { EditorElemente, EditorIntrebari } from "./liste";
-import { BaraSalvare, Grup, Nota, RandComutator, inputMicCls } from "./ui";
+import { Grup, Nota, RandComutator, inputMicCls } from "./ui";
 
 /**
  * Continutul unui bloc din pagina de produs (etapa 4 din `docs/editor-magazin/PLAN.md`).
  *
- * Fiecare bloc cu continut de scris isi are aici editorul si bara lui de salvare
- * (nodurile `produs_*` din `noduri.ts`). Celelalte spun de unde vine ce arata:
+ * Fiecare bloc cu continut de scris isi are aici editorul (nodurile `produs_*` din `noduri.ts`);
+ * ce scrie omul intra in ciorna si ajunge la clienti la „Publică” (etapa 6). Celelalte spun de unde vine ce arata:
  * fisa produsului, Oferte sau Setari. Comutatoarele de vizibilitate nu mai sunt:
  * le inlocuieste ochiul blocului, singurul control (decizia 4).
  */
@@ -77,7 +77,6 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
           <EditorElemente titlu={beneficii.title} elemente={beneficii.items} eticheta="beneficiu"
             onTitlu={(title) => seteaza("produs_beneficii", (p) => ({ ...p, benefits_section: { ...p.benefits_section!, title } }))}
             onElemente={(items) => seteaza("produs_beneficii", (p) => ({ ...p, benefits_section: { ...p.benefits_section!, items } }))} />
-          <BaraSalvare continut={continut} nod="produs_beneficii" />
         </div>
       );
     }
@@ -88,7 +87,6 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
           <EditorElemente titlu={pasi.title} elemente={pasi.steps} eticheta="pas" maxim={5} numerotate
             onTitlu={(title) => seteaza("produs_pasi", (p) => ({ ...p, how_it_works_section: { ...p.how_it_works_section!, title } }))}
             onElemente={(steps) => seteaza("produs_pasi", (p) => ({ ...p, how_it_works_section: { ...p.how_it_works_section!, steps } }))} />
-          <BaraSalvare continut={continut} nod="produs_pasi" />
         </div>
       );
     }
@@ -99,7 +97,6 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
           <EditorIntrebari titlu={intrebari.title} intrebari={intrebari.items}
             onTitlu={(title) => seteaza("produs_intrebari", (p) => ({ ...p, faq_section: { ...p.faq_section!, title } }))}
             onIntrebari={(items) => seteaza("produs_intrebari", (p) => ({ ...p, faq_section: { ...p.faq_section!, items } }))} />
-          <BaraSalvare continut={continut} nod="produs_intrebari" />
         </div>
       );
     }
@@ -136,7 +133,6 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
               )}
             </div>
           </RandComutator>
-          <BaraSalvare continut={continut} nod="produs_livrare" />
         </div>
       );
     }
@@ -152,7 +148,6 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
             </div>
           </Grup>
           <Nota>Butonul „Adaugă în coș” îl pornești sau îl oprești din setările Paginii de produs.</Nota>
-          <BaraSalvare continut={continut} nod="produs_cumparare" />
         </div>
       );
     case "incredere":

@@ -140,9 +140,9 @@ function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi, onPes
   );
 }
 
-/** Semnul de langa un nod cu continut nesalvat. */
+/** Semnul de langa un nod cu continut schimbat in ciorna, inca nepublicat (etapa 6). */
 export function PunctNesalvat() {
-  return <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500" title="Conținut nesalvat" aria-label="Conținut nesalvat" />;
+  return <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500" title="Modificat, nepublicat" aria-label="Modificat, nepublicat" />;
 }
 
 function Titlu({ children }: { children: React.ReactNode }) {
@@ -163,7 +163,7 @@ export function ArboreSectiuni({
   onSelectBloc: (idSectiune: string, idBlocului: string) => void;
   /** Mouse-ul pe un rand (id) sau iesit (`null`): conturul din previzualizare. */
   onPeste: (id: string | null) => void;
-  /** Are nodul continut nesalvat? */
+  /** Are nodul continut schimbat in ciorna, inca nepublicat? */
   nesalvat: (fel: FelContinut | null) => boolean;
   onAdauga: () => void;
   /** Pagina din „Pagini” aleasa ca pagina principala, daca exista. */

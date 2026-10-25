@@ -6,7 +6,7 @@ import { ProductPicker } from "@/components/pages/ProductPicker";
 import { SECTION_MAX, type ProductSection, type SectionMode } from "@/lib/store-sections";
 import { cn } from "@/lib/utils/cn";
 import type { ContinutMagazin } from "../useContinutMagazin";
-import { BaraSalvare, Grup, Nota, inputCls } from "./ui";
+import { Grup, Nota, inputCls } from "./ui";
 
 /**
  * Un singur rand de produse, sub nodul lui din arbore.
@@ -16,8 +16,9 @@ import { BaraSalvare, Grup, Nota, inputCls } from "./ui";
  * deci ordinea si vizibilitatea le dau tragerea si ochiul, ca la orice sectiune.
  * Aici ramane ce e al randului: titlul, de unde vin produsele, asezarea.
  *
- * Randul traieste in `page_content.product_sections`, deci stergerea lui e o
- * salvare de continut: se cere o confirmare si se salveaza pe loc.
+ * Randul traieste in `page_content.product_sections`, deci stergerea lui e o modificare de
+ * continut: se cere o confirmare, apoi intra in ciorna (etapa 6), ca orice alta; Anuleaza il aduce
+ * inapoi, iar din magazin dispare la „Publică”.
  */
 
 type Cat = { id: string; name: string; parent_id: string | null; sort_order?: number };
@@ -53,7 +54,7 @@ export function ContinutRand({ continut, idRand, businessId, categorii, onSters 
   idRand: string;
   businessId: string;
   categorii: Cat[];
-  /** Dupa stergerea salvata: nodul nu mai exista, arborele trebuie sa se intoarca. */
+  /** Dupa stergere: nodul nu mai exista, arborele trebuie sa se intoarca. */
   onSters: () => void;
 }) {
   const { pc, seteaza } = continut;
@@ -155,7 +156,7 @@ export function ContinutRand({ continut, idRand, businessId, categorii, onSters 
       <div className="rounded-lg border border-border p-3 space-y-2">
         {confirmaStergerea ? (
           <>
-            <p className="text-xs text-foreground">Ștergi rândul „{rand.title || "fără titlu"}”? Dispare din magazin imediat.</p>
+            <p className="text-xs text-foreground">Ștergi rândul „{rand.title || "fără titlu"}”? Dispare din magazin la „Publică”; până atunci îl aduci înapoi cu Anulează.</p>
             <div className="flex gap-2">
               <button type="button" onClick={() => void stergeRandul()} disabled={sterge}
                 className="h-8 px-3 rounded-lg bg-destructive text-white text-xs font-semibold disabled:opacity-60">
@@ -172,7 +173,6 @@ export function ContinutRand({ continut, idRand, businessId, categorii, onSters 
           </button>
         )}
       </div>
-      <BaraSalvare continut={continut} nod="rand" />
     </div>
   );
 }

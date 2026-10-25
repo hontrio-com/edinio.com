@@ -5,6 +5,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { MarkEditorVisited } from "@/components/dashboard/MarkEditorVisited";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { ciornaCuContinut, contextCuCiorna, continutDinCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
@@ -111,9 +112,16 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire }: 
    * ramas. Ciorna se trimite SI ca ea insasi: salvarea o cere ca „baza”, iar
    * diferenta dintre „coloana goala” si „coloana cu designul publicat” decide
    * daca prima salvare trece. Vezi `draft-guard.ts`.
+   *
+   * Din etapa 6 ciorna tine si continutul nepublicat (`continut`): designul ei se parseaza CU el
+   * (altfel un rand de produse care exista doar in ciorna ar cadea ca orfan), iar baza garzii il
+   * poarta si ea.
    */
   const publicat = parseStoreDesign(setari?.storefront_design, ctx);
-  const ciorna = setari?.storefront_design_draft ? parseStoreDesign(setari.storefront_design_draft, ctx) : null;
+  const continutCiorna = continutDinCiorna(setari?.storefront_design_draft);
+  const ciorna = setari?.storefront_design_draft
+    ? parseStoreDesign(setari.storefront_design_draft, contextCuCiorna(ctx, continutCiorna))
+    : null;
   const permalinkuri = permalinkuriDin(pageContent);
 
   return (
@@ -134,7 +142,9 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire }: 
       pageContent={pageContent}
       designInitial={ciorna ?? publicat}
       designPublicat={publicat}
-      cioarnaInitiala={ciorna}
+      // Coloana asa cum e (designul parsat, cu continutul alaturi): baza garzii de concurenta.
+      cioarnaInitiala={ciorna ? ciornaCuContinut(ciorna, continutCiorna) : null}
+      continutCiornaInitial={continutCiorna}
       categorii={categorii}
       planGratuit={profil?.plan === "free" || profil?.plan === "trial" || !profil?.plan}
       pagini={{

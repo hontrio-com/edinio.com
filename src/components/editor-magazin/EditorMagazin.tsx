@@ -13,7 +13,7 @@ import { adaugaSablon, categoriiAcoperite, MAX_SABLOANE } from "@/lib/storefront
 import { produsPentruSablon } from "@/lib/actions/editor-sabloane.actions";
 import { toast } from "sonner";
 import type { SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
-import { contextDesign } from "@/lib/editor-magazin/derivare";
+import { contextCuCiorna, type ContinutCiorna } from "@/lib/storefront/design/continut-ciorna";
 import type { FelContinut } from "@/lib/editor-magazin/noduri";
 import {
   adresaPrevizualizarii, estePaginaProprie, idPaginaProprie, paginaProprie, paginaSectiunii, sectiunilePaginii,
@@ -34,7 +34,7 @@ import { PanouAdaugaBloc, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
 import { PanouSablon } from "./PanouSablon";
 import { PanouStil } from "./continut/PanouStil";
 import { useCiornaDesign } from "./useCiornaDesign";
-import { useContinutMagazin, type SalvareContinut } from "./useContinutMagazin";
+import { useContinutMagazin } from "./useContinutMagazin";
 import { usePaginaProprie } from "./usePaginaProprie";
 
 type Cat = { id: string; name: string; parent_id: string | null; sort_order?: number };
@@ -52,8 +52,6 @@ export interface MagazinEditor {
   features: unknown;
   gallery: unknown;
 }
-
-const HEX = /^#[0-9A-Fa-f]{6}$/;
 
 /** Sub pragul `md`, unde bara isi ascunde butoanele de dispozitiv. */
 const INTEROGARE_INGUST = "(max-width: 767px)";
@@ -75,27 +73,29 @@ function inCampDeScris(t: EventTarget | null): boolean {
  * Editorul unic al magazinului (etapa 2, 25.10.2026).
  *
  * Un ecran in locul a trei: arborele paginii in stanga, previzualizarea vie in
- * dreapta, bara de sus cu pagina aleasa, Anuleaza / Refa si Publica. Leaga doua
- * lucruri care pana acum traiau pe ecrane diferite:
+ * dreapta, bara de sus cu pagina aleasa, Anuleaza / Refa si Publica.
  *
- *  - ciorna de design (`useCiornaDesign`): ce sectiuni, in ce ordine, cu ce
- *    design. Ajunge la clienti la „Publica”.
- *  - continutul (`useContinutMagazin`): textele, listele, imaginile. Se salveaza
- *    din nodul lui, direct in magazin.
+ * Din etapa 6 (decizia lui: „Totul la „Publică””) o singura ciorna tine si designul, si
+ * continutul nepublicat (`useCiornaDesign`); `useContinutMagazin` e doar fata ei pentru
+ * panourile de continut. Totul ajunge la clienti la „Publică”.
  *
- * ⚠ CUSATURA DINTRE ELE: dupa o salvare de continut, designul derivat din
- * continut (randuri, hero) se recalculeaza (`rederivaDupaContinut`), iar
- * previzualizarea se reincarca, fiindca magazinul randeaza continutul pe server.
+ * ⚠ CUSATURA: designul se schimba in previzualizare prin mesaje, pe loc; continutul il randeaza
+ * magazinul pe server (din ciorna, in modul editor), deci previzualizarea se reincarca dupa ce o
+ * modificare de continut ajunge in baza (`onContinutInBaza`). Culoarea, fonturile si fundalul
+ * ajung si pe loc, prin stil.
  */
 export function EditorMagazin({
-  magazin, pageContent, designInitial, designPublicat, cioarnaInitiala, categorii, planGratuit,
+  magazin, pageContent, designInitial, designPublicat, cioarnaInitiala, continutCiornaInitial, categorii, planGratuit,
   pagini, paginaAcasa, paginaInitiala, sectiuneInitiala, iesire,
 }: {
   magazin: MagazinEditor;
   pageContent: Record<string, unknown>;
   designInitial: StoreDesign;
   designPublicat: StoreDesign;
-  cioarnaInitiala: StoreDesign | null;
+  /** Ce scrie in coloana de ciorna (designul cu `continut`); `null` cand e goala. */
+  cioarnaInitiala: unknown;
+  /** Continutul nepublicat din ciorna, la intrare. */
+  continutCiornaInitial: ContinutCiorna;
   categorii: Cat[];
   planGratuit: boolean;
   pagini: MagazinPentruPagini;
@@ -105,8 +105,24 @@ export function EditorMagazin({
   /** Unde duce „Ieși” (`iesireaEditorului`). */
   iesire: string;
 }) {
+  /** Reincarcarea previzualizarii, definita mai jos (are nevoie de cadru). */
+  const reincarcaAcum = useRef<() => void>(() => {});
+  const laContinutInBaza = useCallback(() => reincarcaAcum.current(), []);
   const ciorna = useCiornaDesign({
     businessId: magazin.id, designInitial, publicatInitial: designPublicat, cioarnaInitiala,
+    continutInitial: continutCiornaInitial,
+    continutPublicatInitial: {
+      pc: pageContent,
+      magazin: {
+        logo_url: magazin.logoUrl,
+        cover_url: magazin.coverUrl,
+        primary_color: magazin.primaryColor ?? "#07c527",
+        gallery: Array.isArray(magazin.gallery) ? magazin.gallery.filter((u): u is string => typeof u === "string" && !!u) : [],
+      },
+    },
+    features: magazin.features,
+    tagline: magazin.tagline,
+    onContinutInBaza: laContinutInBaza,
   });
 
   // ── Pagina aleasa si adresa previzualizarii ei ──
@@ -207,27 +223,9 @@ export function EditorMagazin({
     remonteaza();
   }, [adresa, remonteaza]);
 
-  // ── Continutul, si re-derivarea designului dupa fiecare salvare ──
-  const [continutSalvat, setContinutSalvat] = useState<SalvareContinut>({
-    pageContent, primaryColor: magazin.primaryColor, coverUrl: magazin.coverUrl,
-  });
-  const { rederivaDupaContinut } = ciorna;
-  const onSalvat = useCallback((s: SalvareContinut) => {
-    setContinutSalvat(s);
-    rederivaDupaContinut(contextDesign({
-      primaryColor: s.primaryColor, pageContent: s.pageContent, features: magazin.features,
-      coverUrl: s.coverUrl, tagline: magazin.tagline,
-    }));
-    reincarca();
-  }, [rederivaDupaContinut, magazin.features, magazin.tagline, reincarca]);
-  const continut = useContinutMagazin({
-    magazin: {
-      id: magazin.id, logo_url: magazin.logoUrl, cover_url: magazin.coverUrl, primary_color: magazin.primaryColor,
-      is_published: magazin.isPublished, gallery: magazin.gallery,
-    },
-    pageContentInitial: pageContent,
-    onSalvat,
-  });
+  // ── Continutul: tot in ciorna (etapa 6); previzualizarea se reincarca dupa ce ajunge in baza ──
+  useEffect(() => { reincarcaAcum.current = reincarca; }, [reincarca]);
+  const continut = useContinutMagazin({ magazin: { id: magazin.id, is_published: magazin.isPublished }, ciorna });
 
   // ── Ecranul ──
   const [fila, setFila] = useState<"sectiuni" | "stil">("sectiuni");
@@ -289,21 +287,10 @@ export function EditorMagazin({
 
   // ── Ce se trimite catre previzualizare ──
   /**
-   * Stilul se rezolva cu culoarea, fonturile si fundalul de PE ECRAN, nu din baza:
-   * asa o culoare noua se vede in dreapta inainte de salvare, ca designul.
+   * Stilul se rezolva cu ce e PE ECRAN, ciorna peste publicat: o culoare, un font sau un fundal nou
+   * se vede in dreapta pe loc, prin mesaj, inainte ca ciorna sa ajunga in baza.
    */
-  const ctxStil = useMemo(() => contextDesign({
-    primaryColor: HEX.test(continut.culoare) ? continut.culoare : continutSalvat.primaryColor,
-    pageContent: {
-      ...continutSalvat.pageContent,
-      font_titluri: continut.pc.font_titluri,
-      font_text: continut.pc.font_text,
-      store_bg_color: continut.pc.store_bg_color,
-    },
-    features: magazin.features,
-    coverUrl: continutSalvat.coverUrl,
-    tagline: magazin.tagline,
-  }), [continut.culoare, continut.pc.font_titluri, continut.pc.font_text, continut.pc.store_bg_color, continutSalvat, magazin.features, magazin.tagline]);
+  const ctxStil = useMemo(() => contextCuCiorna(ciorna.ctxPublicat, ciorna.continut), [ciorna.ctxPublicat, ciorna.continut]);
 
   const trimiteAcum = useRef({ design, ctxStil });
   useEffect(() => { trimiteAcum.current = { design, ctxStil }; }, [design, ctxStil]);
@@ -528,12 +515,10 @@ export function EditorMagazin({
   const adaugaSectiune = useCallback(async (kind: SectionKind) => {
     setAdaugaDeschis(false);
     if (kind === "product_row") {
-      // Randul traieste in continut: se adauga acolo si se salveaza pe loc, iar
-      // re-derivarea il aduce in arbore, inaintea catalogului.
+      // Randul traieste in continut: intra in ciorna, iar designul se re-deriva in acelasi pas
+      // (`aplicaContinut`), deci la urmatoarea randare randul e si in arbore, si selectat.
       const rand = newProductSection("selected");
       const ok = await continut.seteazaSiSalveaza("rand", (p) => ({ ...p, product_sections: [...(p.product_sections ?? []), rand] }));
-      // Re-derivarea s-a cerut in `onSalvat`, inaintea raspunsului de aici: la
-      // urmatoarea randare randul e si in design, si selectat.
       if (ok) setSelectat(rand.id);
       return;
     }
@@ -566,7 +551,7 @@ export function EditorMagazin({
   }, []);
 
   /** Cate bannere are magazinul, pentru design-urile de hero care cer cel putin unul. */
-  const numarBannere = resolveHeroBanners(continutSalvat.pageContent, continutSalvat.coverUrl).banners.length;
+  const numarBannere = resolveHeroBanners(ctxStil.pageContent, ctxStil.coverUrl ?? null).banners.length;
   const motivIndisponibil = useCallback((v: { requires?: { minBanners?: number } }): string | null => {
     const min = v.requires?.minBanners;
     if (!min || numarBannere >= min) return null;
@@ -593,7 +578,7 @@ export function EditorMagazin({
         pagina={pagina} onPagina={cerePagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}
         publicat={continut.publicat} publicareInCurs={continut.publicareInCurs} onComutaPublicarea={continut.comutaPublicarea}
-        continutNesalvat={continut.oriceNesalvat || paginaDeschisa.modificata} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
+        continutNesalvat={continut.incarc || paginaDeschisa.modificata} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
         paginiProprii={paginiAfisate.paginiProprii}
         anulare={istoricPagina ?? undefined}
         laIesire={iesire}
@@ -706,7 +691,7 @@ export function EditorMagazin({
                 // Blocurile urmeaza varianta pe loc (Clasic si Detaliat au alte zone):
                 // altfel arborele ar fi aratat lista variantei vechi pana la o recitire.
                 ciorna.aplica((d: StoreDesign) => completeazaBlocurileSectiunii(
-                  updateSection(d, sectiuneGalerie.id, { variant }), sectiuneGalerie.id, continutSalvat.pageContent as Record<string, unknown>,
+                  updateSection(d, sectiuneGalerie.id, { variant }), sectiuneGalerie.id, ctxStil.pageContent,
                 ));
                 setGalerieDesign(null);
                 setVedereMobil("previzualizare");

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ContinutMagazin } from "../useContinutMagazin";
-import { BaraSalvare, Nota, RandComutator } from "./ui";
+import { Nota, RandComutator } from "./ui";
 
 /**
  * Continutul paginii de produs, ca sectiune: ce tine de pagina intreaga.
@@ -25,7 +25,6 @@ export function ContinutProdus({ continut }: { continut: ContinutMagazin }) {
         pornit={pc.image_zoom?.enabled !== false}
         onSchimba={(v) => seteaza("produs", (p) => ({ ...p, image_zoom: { enabled: v } }))} />
 
-      <BaraSalvare continut={continut} nod="produs" />
     </div>
   );
 }

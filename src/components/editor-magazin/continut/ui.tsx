@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Check, Loader2, Save } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import type { ContinutMagazin, NodContinut } from "../useContinutMagazin";
 
 /**
  * Piesele comune ale panourilor de continut din editorul unic.
@@ -66,31 +65,6 @@ export function Nota({ children, href, eticheta }: { children: React.ReactNode; 
           <ArrowUpRight className="h-3 w-3" />
         </Link>
       )}
-    </div>
-  );
-}
-
-/**
- * Butonul de salvare al continutului unui nod.
- *
- * ⚠ Spune RASPICAT ca salvarea ajunge imediat in magazin. Designul din acelasi
- * ecran asteapta „Publica”; continutul nu. Doua feluri de salvare pe un ecran
- * sunt in regula doar daca fiecare isi spune felul (vezi `PLAN.md`, decizia 1).
- */
-export function BaraSalvare({ continut, nod }: { continut: ContinutMagazin; nod: NodContinut }) {
-  const nesalvat = continut.areNesalvate(nod);
-  const seSalveaza = continut.seSalveaza === nod;
-  const salvat = continut.salvatAcum === nod;
-  return (
-    <div className="sticky bottom-0 -mx-4 px-4 py-3 border-t border-border bg-surface/95 backdrop-blur flex items-center gap-3">
-      <p className="flex-1 min-w-0 text-[11px] leading-snug text-muted-foreground">
-        {nesalvat ? "Modificări nesalvate. Se aplică în magazin imediat ce salvezi." : "Conținutul se aplică în magazin imediat ce îl salvezi."}
-      </p>
-      <button type="button" onClick={() => void continut.salveaza(nod)} disabled={!nesalvat || seSalveaza}
-        className="shrink-0 h-9 px-3.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold inline-flex items-center gap-1.5 hover:opacity-90 transition-opacity disabled:opacity-50">
-        {seSalveaza ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : salvat ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-        {seSalveaza ? "Se salvează..." : salvat ? "Salvat" : "Salvează"}
-      </button>
     </div>
   );
 }

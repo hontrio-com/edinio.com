@@ -9,7 +9,7 @@ import {
   MAX_INSIGNE_FOOTER, TITLU_INSIGNE_IMPLICIT, type InsignaFooterStocata,
 } from "@/lib/storefront/footer-badges";
 import type { ContinutMagazin } from "../useContinutMagazin";
-import { BaraSalvare, Grup, Nota, RandComutator, inputCls, inputMicCls } from "./ui";
+import { Grup, Nota, RandComutator, inputCls, inputMicCls } from "./ui";
 
 /**
  * Continutul sectiunilor comune tuturor paginilor: bara de anunt, antetul si
@@ -47,7 +47,6 @@ export function ContinutAnunt({ continut }: { continut: ContinutMagazin }) {
         ajutor="Oprit, bara apare doar pe celelalte pagini ale magazinului."
         pornit={pc.show_announcement_on_store !== false}
         onSchimba={(v) => seteaza("anunt", (p) => ({ ...p, show_announcement_on_store: v }))} />
-      <BaraSalvare continut={continut} nod="anunt" />
     </div>
   );
 }
@@ -79,7 +78,6 @@ export function ContinutHeader({ continut, laStil }: { continut: ContinutMagazin
           <button type="button" onClick={laStil} className="text-xs font-medium text-primary hover:underline">Deschide Stil</button>
         </div>
       )}
-      <BaraSalvare continut={continut} nod="header" />
     </div>
   );
 }
@@ -107,8 +105,8 @@ export function ContinutFooter({ continut, planGratuit }: { continut: ContinutMa
   });
 
   /*
-   * Imaginea insignei se urca IMEDIAT, nu la salvare: lista traieste direct in
-   * `page_content`, deci n-are unde sa tina un fisier pana la apasarea butonului.
+   * Imaginea insignei se urca IMEDIAT: lista sta in ciorna (`continut`, etapa 6), care tine
+   * adrese, nu fisiere.
    * Randul apare abia dupa ce urcarea a reusit, ca sa nu ramana o insigna cu o
    * adresa `blob:` care dispare la reincarcare.
    */
@@ -216,7 +214,6 @@ export function ContinutFooter({ continut, planGratuit }: { continut: ContinutMa
           </RandComutator>
         )}
       </Grup>
-      <BaraSalvare continut={continut} nod="footer" />
     </div>
   );
 }

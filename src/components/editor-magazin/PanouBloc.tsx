@@ -13,8 +13,8 @@ import type { ContinutMagazin } from "./useContinutMagazin";
 /**
  * Panoul unui bloc (etapa 4): vizibilitatea lui si ce se scrie in el.
  *
- * Ochiul e ciorna, ca la sectiuni (ajunge la clienti la „Publica”); continutul
- * se salveaza din bara lui, direct in magazin. Un bloc fara ochi spune de ce,
+ * Ochiul si continutul sunt ciorna, ca la sectiuni: ajung la clienti la „Publică” (etapa 6).
+ * Un bloc fara ochi spune de ce,
  * in locul butonului: altfel omul l-ar fi cautat.
  */
 export function PanouBloc({ sectiune, bloc, ciorna, continut, onInapoi }: {

@@ -7,7 +7,7 @@ import { AlegeFonturi } from "@/components/editor/AlegeFonturi";
 import { NOD_STIL } from "@/lib/editor-magazin/noduri";
 import type { ContinutMagazin } from "../useContinutMagazin";
 import { ContinutCard } from "./ContinutComert";
-import { BaraSalvare, Grup } from "./ui";
+import { Grup } from "./ui";
 
 /**
  * Fila „Stil”: ce e comun tuturor paginilor. Logo, favicon, culori, fonturi si
@@ -123,7 +123,6 @@ export function PanouStil({ continut }: { continut: ContinutMagazin }) {
           onTitluri={(v) => seteaza(NOD_STIL, (p) => ({ ...p, font_titluri: v }))}
           onText={(v) => seteaza(NOD_STIL, (p) => ({ ...p, font_text: v }))} />
 
-        <BaraSalvare continut={continut} nod={NOD_STIL} />
       </div>
 
       <div className="space-y-4 pt-2 border-t border-border">

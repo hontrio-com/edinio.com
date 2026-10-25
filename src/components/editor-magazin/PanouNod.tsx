@@ -33,8 +33,8 @@ function campulSchimbat(inainte: Record<string, unknown>, dupa: Record<string, u
  * Setarile unui nod din arbore, in acelasi panou: designul, setarile sectiunii,
  * continutul ei.
  *
- * Primele doua sunt ciorna (ajung la clienti la „Publica”); continutul se
- * salveaza din bara lui, direct in magazin. Ordinea pe ecran urmeaza ordinea in
+ * Toate trei sunt ciorna din etapa 6, inclusiv continutul: ajung la clienti la „Publică”.
+ * Ordinea pe ecran urmeaza ordinea in
  * care isi pune omul intrebarile: cum arata, ce reglaje are, ce scrie in ea.
  */
 export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesignul, businessId, categorii, planGratuit, laStil, onRandSters }: {

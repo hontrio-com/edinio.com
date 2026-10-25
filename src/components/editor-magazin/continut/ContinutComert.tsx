@@ -1,7 +1,7 @@
 "use client";
 
 import type { ContinutMagazin } from "../useContinutMagazin";
-import { BaraSalvare, Nota, RandComutator, inputMicCls } from "./ui";
+import { Nota, RandComutator, inputMicCls } from "./ui";
 
 /**
  * Cardul de produs si cosul: reglaje care se vad pe orice pagina cu produse.
@@ -10,7 +10,7 @@ import { BaraSalvare, Nota, RandComutator, inputMicCls } from "./ui";
  * si in catalog, si in randuri, si in cautare.
  */
 
-export function ContinutCard({ continut, faraSalvare = false }: { continut: ContinutMagazin; faraSalvare?: boolean }) {
+export function ContinutCard({ continut }: { continut: ContinutMagazin }) {
   const { pc, seteaza } = continut;
   const set = (fn: (p: typeof pc) => typeof pc) => seteaza("card", fn);
   return (
@@ -32,7 +32,6 @@ export function ContinutCard({ continut, faraSalvare = false }: { continut: Cont
           : "Se arată doar prețul cel mai mic."}
         pornit={pc.price_range_display?.enabled !== false}
         onSchimba={(v) => set((p) => ({ ...p, price_range_display: { enabled: v } }))} />
-      {!faraSalvare && <BaraSalvare continut={continut} nod="card" />}
     </div>
   );
 }
@@ -47,7 +46,6 @@ export function ContinutCos({ continut }: { continut: ContinutMagazin }) {
       <Nota href="/dashboard/settings?sectiune=livrare" eticheta="Setări > Livrare">
         Pragul de livrare gratuită și comanda minimă, pe care le arată coșul, se aleg din Setări.
       </Nota>
-      <BaraSalvare continut={continut} nod="cos" />
     </div>
   );
 }

@@ -38,7 +38,7 @@ export function GalerieAdauga({ design, slug, onAdauga, onInchide }: {
   onInchide: () => void;
 }) {
   // Randul de produse nu se adauga din design (continutul lui sta in `page_content`),
-  // dar se poate adauga de aici: editorul il face in continut si il salveaza.
+  // dar se poate adauga de aici: editorul il face in continut, in ciorna (etapa 6).
   const tipuri: SectionKind[] = [...addableKinds(design), "product_row"];
 
   useEffect(() => {

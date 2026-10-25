@@ -8,7 +8,7 @@ import { MAX_ORDINE_MANUALA, type ModAsezare, type ModRest } from "@/lib/storefr
 import { MAX_HERO_BANNERS } from "@/lib/storefront/design/hero-banners";
 import type { ContinutMagazin } from "../useContinutMagazin";
 import { EditorCarduri, EditorElemente, EditorRecenzii } from "./liste";
-import { BaraSalvare, Grup, Nota, RandComutator, inputCls, inputMicCls } from "./ui";
+import { Grup, Nota, RandComutator, inputCls, inputMicCls } from "./ui";
 
 /**
  * Continutul sectiunilor paginii principale, fiecare sub nodul ei.
@@ -48,14 +48,16 @@ export function ContinutHero({ continut }: { continut: ContinutMagazin }) {
             <div className="flex items-center gap-2">
               <div className="relative flex-1 h-24 rounded-lg overflow-hidden border border-border bg-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={b.url} alt="" className="w-full h-full object-contain" />
+                <img src={b.url} alt="" className={`w-full h-full object-contain ${b.file ? "opacity-50" : ""}`} />
+                {/* Se urca in clipa alegerii (etapa 6): in ciorna intra abia adresa lui. */}
+                {b.file && <span className="absolute inset-0 flex items-center justify-center text-[11px] font-medium text-foreground">Se încarcă...</span>}
               </div>
               <div className="flex flex-col gap-1">
-                <button type="button" aria-label="Mută sus" disabled={i === 0} onClick={() => muta(b.id, -1)}
+                <button type="button" aria-label="Mută sus" disabled={i === 0 || !!b.file} onClick={() => muta(b.id, -1)}
                   className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
                   <ChevronUp className="h-3.5 w-3.5" />
                 </button>
-                <button type="button" aria-label="Mută jos" disabled={i === bannere.length - 1} onClick={() => muta(b.id, 1)}
+                <button type="button" aria-label="Mută jos" disabled={i === bannere.length - 1 || !!b.file} onClick={() => muta(b.id, 1)}
                   className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30">
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
@@ -94,7 +96,6 @@ export function ContinutHero({ continut }: { continut: ContinutMagazin }) {
         <p className="text-[10px] text-muted-foreground">Recomandat 16:9 (de exemplu 1920x1080). Cu mai multe bannere, se afișează ca un carusel.</p>
       </Grup>
       <Nota>Cum arată hero-ul (doar imagini, text peste imagine, cu categorii) alegi mai sus, la Design.</Nota>
-      <BaraSalvare continut={continut} nod="hero" />
     </div>
   );
 }
@@ -107,7 +108,6 @@ export function ContinutUsp({ continut }: { continut: ContinutMagazin }) {
         <EditorCarduri carduri={pc.store_trust_badges ?? []}
           onSchimba={(c) => seteaza("usp", (p) => ({ ...p, store_trust_badges: c }))} />
       </Grup>
-      <BaraSalvare continut={continut} nod="usp" />
     </div>
   );
 }
@@ -122,7 +122,6 @@ export function ContinutCautare({ continut }: { continut: ContinutMagazin }) {
       <RandComutator titlu="Filtre" ajutor="Butonul „Filtre” și panoul lui. Pagina Magazin nu e afectată."
         pornit={pc.filter_options?.enabled !== false}
         onSchimba={(v) => seteaza("cautare", (p) => ({ ...p, filter_options: { enabled: v } }))} />
-      <BaraSalvare continut={continut} nod="cautare" />
     </div>
   );
 }
@@ -138,7 +137,6 @@ export function ContinutRecomandate({ continut }: { continut: ContinutMagazin })
       <Nota href="/dashboard/products" eticheta="Mergi la Produse">
         În rând apar produsele marcate „Popular”. Le marchezi din lista de produse.
       </Nota>
-      <BaraSalvare continut={continut} nod="recomandate" />
     </div>
   );
 }
@@ -192,7 +190,6 @@ export function ContinutCatalog({ continut, businessId }: { continut: ContinutMa
       <Nota href="/dashboard/settings?sectiune=catalog" eticheta="Setări > Catalog">
         Ce produse apar în magazin (fără imagini, fără stoc, categorii goale) alegi din Setări.
       </Nota>
-      <BaraSalvare continut={continut} nod="catalog" />
     </div>
   );
 }
@@ -206,7 +203,6 @@ export function ContinutBeneficii({ continut }: { continut: ContinutMagazin }) {
       <EditorElemente titlu={s.title} elemente={s.items} eticheta="beneficiu"
         onTitlu={(title) => pune({ title })} onElemente={(items) => pune({ items })} />
       {s.items.length === 0 && <Nota>Secțiunea nu apare în magazin cât timp n-are niciun beneficiu.</Nota>}
-      <BaraSalvare continut={continut} nod="beneficii" />
     </div>
   );
 }
@@ -225,7 +221,6 @@ export function ContinutRecenzii({ continut }: { continut: ContinutMagazin }) {
           return "error" in r ? null : r.url;
         }} />
       {s.items.length === 0 && <Nota>Secțiunea nu apare în magazin cât timp n-are nicio recenzie.</Nota>}
-      <BaraSalvare continut={continut} nod="recenzii" />
     </div>
   );
 }
@@ -274,7 +269,6 @@ export function ContinutGalerie({ continut }: { continut: ContinutMagazin }) {
           excludeUrls={galerie} onSelect={(urls) => setGalerie((l) => [...l, ...urls.filter((u) => !l.includes(u))])} />
       </Grup>
       {galerie.length === 0 && <Nota>Secțiunea nu apare în magazin cât timp galeria e goală.</Nota>}
-      <BaraSalvare continut={continut} nod="galerie" />
     </div>
   );
 }

@@ -539,8 +539,8 @@ test("⚠⚠ munca nesalvata pe pagina nu se pierde fara intrebare", () => {
   assert.match(s, /if \(unde !== pagina\) \{\s*if \(paginaDeschisa\.modificata\) \{\s*setSchimbareCeruta\(unde\);\s*return;\s*\}\s*schimbaPagina\(unde\);/);
   // „Salvează și treci” trece doar dupa o salvare reusita.
   assert.match(s, /if \(!\(await salveazaPagina\(\)\)\) return;\s*setSchimbareCeruta\(null\);\s*if \(p\) schimbaPagina\(p\);/);
-  // „Ieși” intreaba si pentru pagina; inchiderea ferestrei, prin hook.
-  assert.match(s, /continutNesalvat=\{continut\.oriceNesalvat \|\| paginaDeschisa\.modificata\}/);
+  // „Ieși” intreaba si pentru pagina (si cat se urca o imagine, etapa 6); inchiderea ferestrei, prin hook.
+  assert.match(s, /continutNesalvat=\{continut\.incarc \|\| paginaDeschisa\.modificata\}/);
   assert.match(faraComentarii(HOOK_PAGINA), /if \(!modificata\) return;\s*const handler = \(e: BeforeUnloadEvent\) => e\.preventDefault\(\);\s*window\.addEventListener\("beforeunload", handler\);/);
 });
 
@@ -596,4 +596,43 @@ test("⚠ un bloc nou se pune chiar sub blocul ales, si in coloane, nu doar la s
   assert.match(arbore, /rand\(nb, ni, dinColoana, \(index, dupa\) => \(\{ fel: "coloana", idColoane: b\.id, coloana: ci, index, dupa \}\)\)/);
   const editor = faraComentarii("src/components/editor-magazin/EditorMagazin.tsx");
   assert.match(editor, /blocks: t\.fel === "sus" \? insertAtTop\(s\.blocks, t\.index, nou\) : insertIntoColumn\(s\.blocks, t\.idColoane, t\.coloana, t\.index, nou\)/);
+});
+
+// ── Totul la „Publică” (6.4), pe sursa ───────────────────────────────────────
+
+test("⚠⚠ editorul nu mai scrie continut direct in magazin: totul trece prin ciorna", () => {
+  for (const f of componente()) {
+    const t = faraComentarii(f);
+    assert.doesNotMatch(t, /updatePageContent\(/, f);
+    assert.doesNotMatch(t, /BaraSalvare/, f);
+  }
+  const ciorna = faraComentarii("src/components/editor-magazin/useCiornaDesign.ts");
+  assert.match(ciorna, /const coloana = ciornaCuContinut\(deSalvat\.design, deSalvat\.continut\);/);
+  assert.match(ciorna, /res = await saveDesignDraft\(businessId, coloana, cioarnaInBaza\.current\);/);
+  assert.match(ciorna, /res = await publishDesign\(businessId, ciornaCuContinut\(dePublicat\.design, dePublicat\.continut\)\);/);
+});
+
+test("⚠⚠ previzualizarea se reincarca dupa ce continutul ajunge in baza, si dupa „Renunță”", () => {
+  const ciorna = faraComentarii("src/components/editor-magazin/useCiornaDesign.ts");
+  assert.match(ciorna, /if \(amprentaNoua !== continutInBaza\.current\) \{\s*continutInBaza\.current = amprentaNoua;\s*laContinutInBaza\.current\(\);/);
+  // Renunta: ciorna (cu continut) dispare, deci previzualizarea, randata pe server din ea, se reface.
+  assert.match(ciorna, /despacha\(\{ tip: "inlocuieste", ciorna: goala \}\);[\s\S]*?laContinutInBaza\.current\(\);\s*\}\s*toast\.success\("Ai renunțat/);
+  const editor = faraComentarii(EDITOR);
+  assert.match(editor, /const laContinutInBaza = useCallback\(\(\) => reincarcaAcum\.current\(\), \[\]\);/);
+  assert.match(editor, /useEffect\(\(\) => \{ reincarcaAcum\.current = reincarca; \}, \[reincarca\]\);/);
+  // Stilul (culoare, fonturi, fundal) se vede pe loc, prin mesaj, din ciorna.
+  assert.match(editor, /const ctxStil = useMemo\(\(\) => contextCuCiorna\(ciorna\.ctxPublicat, ciorna\.continut\), \[ciorna\.ctxPublicat, ciorna\.continut\]\);/);
+});
+
+test("⚠⚠ editorul reia ciorna CU continutul ei, iar baza garzii il poarta", () => {
+  const s = faraComentarii("src/app/(dashboard)/dashboard/editor/page.tsx");
+  assert.match(s, /parseStoreDesign\(setari\.storefront_design_draft, contextCuCiorna\(ctx, continutCiorna\)\)/);
+  assert.match(s, /cioarnaInitiala=\{ciorna \? ciornaCuContinut\(ciorna, continutCiorna\) : null\}/);
+  assert.match(s, /continutCiornaInitial=\{continutCiorna\}/);
+});
+
+test("bara spune o singura stare pentru tot: nepublicat sau publicat", () => {
+  const s = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
+  assert.match(s, /"Modificări nepublicate" : "Totul e publicat"/);
+  assert.doesNotMatch(s, /de design nepublicate|Designul e publicat/);
 });

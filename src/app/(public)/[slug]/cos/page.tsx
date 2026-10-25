@@ -102,7 +102,13 @@ export default async function CosPage({ params, searchParams }: Props) {
 
   // Magazinul e pe sertar: aici n-are ce cauta nimeni. Redirect, nu 404 — un
   // link vechi catre cos trebuie sa duca la magazin, nu intr-o pagina de eroare.
-  if (!cartOnPage(resolved.design)) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
+  //
+  // ⚠ In editorul de design NU. Previzualizarea vine aici in clipa in care
+  // proprietarul alege un cos de tip pagina, iar ciorna ajunge in baza abia dupa
+  // o secunda: redirectat pe ciorna veche, cadrul se intorcea pe prima pagina, iar
+  // editorul credea ca arata cosul (vazut 25.10.2026). Varianta o da designul
+  // primit prin mesaj (`CartPageClient`), nu cel citit aici.
+  if (!cartOnPage(resolved.design) && !esteEditorDesign) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
 
   // Magazin suspendat sau abonament expirat. Pagina de magazin arata deja
   // „suspendat", dar de AICI se putea comanda mai departe, cu cosul din

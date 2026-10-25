@@ -356,7 +356,24 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
   const shopRaw = obj(r.shop);
   const commerceRaw = obj(r.commerce);
 
-  const home = parseSectionList(r.home, seenIds, MAX_HOME_SECTIONS);
+  /*
+   * Randurile de produse fara pereche in continut ies din lista.
+   *
+   * Randul se sterge din continut (`page_content.product_sections`), iar designul
+   * salvat ii pastra oglinda: in magazin nu randa nimic (`CustomProductRow` nu-si
+   * gasea randul), dar in editor ramanea un „Rand de produse” fara cos de gunoi
+   * (`removable: false`), pe care nimeni nu-l mai putea scoate (vazut 25.10.2026).
+   * „Recomandate” nu are pereche in continut, are comutatorul lui, si ramane.
+   */
+  const randuriDinContinut = new Set(
+    classic.home.filter((s) => s.kind === "product_row" && s.settings.mode === "custom").map((s) => s.id),
+  );
+  const areRandInContinut = (s: SectionInstance) =>
+    s.kind !== "product_row"
+    || s.id === "featured"
+    || s.settings.mode === "featured"
+    || randuriDinContinut.has(String(s.settings.sectionRef ?? s.id));
+  const home = parseSectionList(r.home, seenIds, MAX_HOME_SECTIONS).filter(areRandInContinut);
 
   /*
    * Randurile de produse traiesc in continuare in `page_content`, unde le pune

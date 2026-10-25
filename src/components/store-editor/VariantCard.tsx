@@ -36,10 +36,11 @@ function porneste() {
 /**
  * Cardul unei variante de design, cu miniatura randata live.
  *
- * Miniatura e magazinul REAL al comerciantului, intr-un iframe micsorat: logo,
- * culori, produse. Nu o captura facuta cu un magazin demonstrativ — asa se vede
- * cum ar arata la el, iar cand isi schimba logo-ul, cardul se actualizeaza
- * singur, fara sa refacem noi vreo imagine.
+ * Miniatura e o pagina randata live, intr-un iframe micsorat: logo-ul (daca
+ * are), culorile si fonturile sunt ale comerciantului, continutul (produse,
+ * bannere, categorii) e demonstrativ, ca fiecare varianta sa se vada intreaga
+ * (vezi `preview-sectiune/[slug]`). Cand isi schimba logo-ul sau culorile,
+ * cardul se actualizeaza singur, fara sa refacem noi vreo imagine.
  *
  * Se randeaza abia cand cardul se apropie de ecran: o sectiune poate ajunge la
  * zece variante, si fiecare miniatura e o pagina intreaga.

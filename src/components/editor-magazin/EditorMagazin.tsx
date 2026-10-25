@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { DesignGallery } from "@/components/store-editor/DesignGallery";
 import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
 import { newProductSection } from "@/lib/store-sections";
@@ -38,6 +38,15 @@ export interface MagazinEditor {
 }
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+/** Sub pragul `md`, unde bara isi ascunde butoanele de dispozitiv. */
+const INTEROGARE_INGUST = "(max-width: 767px)";
+function abonareEcranIngust(anunta: () => void) {
+  const mq = window.matchMedia(INTEROGARE_INGUST);
+  mq.addEventListener("change", anunta);
+  return () => mq.removeEventListener("change", anunta);
+}
+const citesteEcranIngust = () => window.matchMedia(INTEROGARE_INGUST).matches;
 
 /** Focusul e intr-un camp de scris? Atunci Ctrl+Z e al campului, nu al editorului. */
 function inCampDeScris(t: EventTarget | null): boolean {
@@ -166,6 +175,13 @@ export function EditorMagazin({
   const [galerieDesign, setGalerieDesign] = useState<string | null>(null);
   const [adaugaDeschis, setAdaugaDeschis] = useState(false);
   const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
+  /*
+   * Pe un ecran ingust butoanele de dispozitiv lipsesc din bara, iar magazinul de
+   * calculator, micsorat la latimea telefonului, nu se mai putea citi (vazut pe
+   * 390 px, 25.10.2026). Acolo previzualizarea e mereu cea de telefon.
+   */
+  const ecranIngust = useSyncExternalStore(abonareEcranIngust, citesteEcranIngust, () => false);
+  const dispozitivVazut: Dispozitiv = ecranIngust ? "mobil" : dispozitiv;
   const [vedereMobil, setVedereMobil] = useState<"panou" | "previzualizare">("panou");
 
   /** Nodurile paginii alese, plus ce e comun tuturor paginilor. */
@@ -380,7 +396,7 @@ export function EditorMagazin({
           )}
           <div className="flex-1 overflow-hidden flex justify-center p-3 lg:p-5">
             <div className="h-full w-full bg-surface rounded-xl border border-border shadow-sm overflow-hidden">
-              <RamaPreview src={src} dispozitiv={dispozitiv} cheie={cheieRama} rama={rama} titlu="Previzualizarea magazinului" />
+              <RamaPreview src={src} dispozitiv={dispozitivVazut} cheie={cheieRama} rama={rama} titlu="Previzualizarea magazinului" />
             </div>
           </div>
         </main>

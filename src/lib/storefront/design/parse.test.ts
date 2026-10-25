@@ -105,11 +105,13 @@ test("singleton-urile si id-urile duplicate se curata", () => {
       home: [
         { id: "a", kind: "hero", variant: "banners" },
         { id: "a", kind: "hero", variant: "overlay" },
-        { id: "b", kind: "product_row", variant: "grid" },
-        { id: "b", kind: "product_row", variant: "carousel" },
+        { id: "b", kind: "product_row", variant: "grid", settings: { mode: "custom", sectionRef: "b" } },
+        { id: "b", kind: "product_row", variant: "carousel", settings: { mode: "custom", sectionRef: "b" } },
       ],
     },
-    ctx,
+    // Randurile au pereche in continut: fara ea ies din design ca orfane (vezi
+    // testul randului STERS din continut), si n-ar mai fi ce numara aici.
+    { ...ctx, pageContent: { product_sections: [{ id: "b", layout: "grid", enabled: true }] } },
   );
   assert.equal(d.home.filter((s) => s.kind === "hero").length, 1, "hero e singleton");
   // Doua din configuratia salvata, plus cele derivate din `page_content`:
@@ -514,6 +516,31 @@ test("reasezarea randurilor nu misca sloturile, doar cine le ocupa", () => {
 
   const dupa = salvatSiCitit(salvat, { ...ctx, pageContent: randuri(["b", "a"]) });
   assert.deepEqual(dupa.home.map((s) => s.kind), inainte, "structura paginii ramane identica");
+});
+
+test("⚠⚠ un rand de produse STERS din continut iese si din design, nu ramane orfan", () => {
+  // Proba editorului unic, 25.10.2026: randul sters din panou ramanea in arbore,
+  // fara cos de gunoi (`removable: false`), si pleca la Publica in designul
+  // magazinului, unde randa un invelis gol.
+  const randuri = (ids: string[]) => ({
+    product_sections: ids.map((id) => ({ id, layout: "grid", enabled: true })),
+  });
+  const salvat = buildClassicDesign({ ...ctx, pageContent: randuri(["a", "b"]) });
+  const cuA = { ...ctx, pageContent: randuri(["a"]) };
+
+  const dupa = salvatSiCitit(salvat, cuA);
+  const ramase = dupa.home.filter((s) => s.kind === "product_row").map((s) => s.id);
+  assert.deepEqual(ramase, ["featured", "a"], "„Recomandate” ramane, randul sters pleaca");
+
+  // Aceeasi forma la a doua citire: garda de concurenta a ciornei compara forme parsate.
+  assert.deepEqual(salvatSiCitit(dupa, cuA), dupa);
+
+  // Un rand care isi gaseste perechea prin `sectionRef`, nu prin id, ramane.
+  const prinReferinta = {
+    ...salvat,
+    home: salvat.home.map((s) => (s.id === "a" ? { ...s, id: "alt_id", settings: { ...s.settings, sectionRef: "a" } } : s)),
+  };
+  assert.ok(byId(salvatSiCitit(prinReferinta, cuA).home, "alt_id"));
 });
 
 // ───────────────────────────────────────────────────────────────────────────

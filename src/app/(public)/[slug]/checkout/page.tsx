@@ -107,7 +107,9 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     });
   });
 
-  if (!checkoutOnPage(resolved.design)) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
+  // In editorul de design fara redirectare, din acelasi motiv ca pe ruta cosului:
+  // previzualizarea vine aici inainte ca ciorna cu pagina de comanda sa fie in baza.
+  if (!checkoutOnPage(resolved.design) && !esteEditorDesign) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
 
   // Magazin suspendat sau abonament expirat: pagina magazinului arata deja
   // „suspendat", dar aici se putea comanda mai departe cu cosul din localStorage.

@@ -6,28 +6,50 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapa 1 facuta, comisa local si PROBATA pe ecran. **Etapa 2: pasii
-2.1-2.6 facuti si comisi local (`7b675992`), porti verzi (tsc, 10.994 de probe, lint pe fisierele
-atinse, build:ci). RAMANE 2.7, proba in Chrome**, oprita la jumatate: sesiunea din Chrome-ul lui a
-trecut in timpul probei pe contul lui de administrator (`de000000-0001`, Casa Lumen), deci nu se
-mai poate proba pe `floraria-mirei` fara contul de proba. Intrebarea pusa lui: cu ce cont continuam.
-Planul etapei si bifele: sectiunea „Etapa 2: planul de lucru”, mai jos.
+**Ultima stare, 25.10.2026:** etapele 1 si 2 FACUTE, comise local si PROBATE pe ecran. Urmeaza
+etapa 3 (clic in previzualizare), doar dupa acordul lui (lucram etapa cu etapa). Inainte de etapa
+4 ramane de pus intrebarea despre teme (sectiunea „Deciziile proprietarului”).
 
-Ce s-a probat deja in Chrome (25.10, pe `floraria-mirei`, inainte de schimbarea sesiunii): editorul
-se deschide cu bara, arborele si previzualizarea; „Editezi: Pagina de produs” muta previzualizarea
-pe produs, cu semnele de editor, fara pasi in istoricul ferestrei; o setare a paginii de produs
-(firimiturile) se vede pe loc; „Anuleaza” o desface; galeria „Schimba designul” se deschide peste
-previzualizare, iar „Detaliat” se aplica pe loc, cu setarile lui in panou. Salvarea ciornei de dupa
-a cazut cu „Magazin negasit”: cererea a plecat cu sesiunea de administrator, iar serverul a refuzat
-corect un magazin care nu era al ei. Starea magazinului de proba a fost pusa la loc din
-starea salvata inainte (copie: `arhiva/date/floraria-mirei-demo-stare-2026-10-25.json`, in
-afara depozitului) si verificata.
+**Proba etapei 2 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO). Prima jumatate a cazut:
+sesiunea din Chrome-ul lui trecuse pe contul lui de administrator. A doua, cu acordul lui, prin
+„Conectare ca utilizator” din panoul de administrare de pe localhost (contul de proba), iesita la
+final prin „Iesi din impersonare”. Starea de dinainte: `arhiva/date/floraria-mirei-demo-stare-2026-10-25.json`
+(in afara depozitului); pusa la loc si verificata printr-o singura interogare (amprentele
+`page_content` si `storefront_design` identice, ciorna goala, 0 comenzi noi, data abonamentului
+inapoi pe 12.10). Ce merge cap-coada:
+- „Editezi: Pagina de produs” muta previzualizarea, fara pasi in istoricul ferestrei; setarile si
+  galeria „Schimba designul” se vad pe loc; Anuleaza / Refa.
+- Ochiul aprinde pe loc o sectiune derivata (beneficiile pe scurt), sagetile o muta, ciorna se
+  salveaza singura. (Pagina principala din Pagini scoasa temporar, ca Acasa sa fie cea clasica.)
+- „Adauga sectiune” cu miniaturi; randul de produse adaugat, cu titlu si produs, salvat, vazut,
+  sters cu confirmare. Recenziile: una salvata, sectiunea aprinsa, vazuta in previzualizare.
+- Stil: culoarea se vede pe loc, iar dupa salvare in tot magazinul.
+- Cosul ales „pagina”: previzualizarea trece pe `/cos`. Publica (ciorna golita), Renunta (istoricul
+  curatat), Vizibil / Ascuns cu confirmare, in ambele sensuri.
+- Telefonul (cadru de 390 px): bara incape, meniul „...”, previzualizarea la latime de telefon.
+- Cele trei rute vechi redirectioneaza.
 
-Ramase de probat (2.7): ochiul pe o sectiune derivata si ordinea pe Acasa (pe un magazin fara
-pagina din Pagini ca pagina principala), „Adauga sectiune” cu miniaturi, un rand de produse adaugat
-si sters, continut salvat (recenzii) si previzualizarea reincarcata, Stil (culoarea vie, salvarea),
-cosul pe pagina (adresa trece pe `/cos`), Publica si Renunta, butonul „Vizibil/Ascuns” (cu punerea
-la loc), telefonul (cadru de 390 px, meniul „...”), rutele vechi care redirectioneaza.
+Ce a gasit proba, reparat tot pe 25.10 (probe noi in `parse.test.ts`):
+1. **Randul de produse sters ramanea in design, orfan**: in arbore, fara cos de gunoi
+   (`removable: false`), iar la Publica pleca in magazin ca invelis gol. Exista si in productie, cu
+   editorul vechi: 2 din 25 de designuri publicate (masurat 25.10, fara efect vizibil acolo).
+   Parserul scoate acum randurile fara pereche in `page_content.product_sections`
+   („Recomandate” ramane). Un test vechi folosea tocmai randuri fara pereche: le-a primit.
+2. **Cosul (si comanda) ales „pagina”**: previzualizarea pleca spre `/cos` inainte ca ciorna sa
+   ajunga in baza (1,2 s), iar ruta redirectiona pe ciorna veche inapoi la prima pagina. In editor
+   (doar proprietarul, cu semnele de editor) rutele nu mai redirectioneaza.
+3. **Telefonul**: „Publica” iesea taiat din bara, Anuleaza / Refa se suprapuneau peste lista de
+   pagini; au trecut in meniul „...”, lista se strange. Previzualizarea arata magazinul de calculator
+   micsorat, ilizibil: sub 768 px e mereu cea de telefon.
+4. **Hidratare**: `aria-describedby` al tragerii din lista de sectiuni diferea intre server si
+   browser (dnd-kit numara intr-un contor al modulului); `useId` il face stabil.
+5. **Texte**: „ascunsa” langa „ascunsă” in acelasi arbore; „1 produse selectate”; nota de sub
+   fonturi fara diacritice; subtitlul galeriilor promitea „previzualizate cu magazinul tau”, desi
+   produsele din miniaturi sunt de exemplu (si comentariul din `VariantCard` spunea la fel, fals).
+
+Ramase, nereparate (in `REGISTRU.md`, D): culoarea din Stil se vede pe loc doar unde magazinul
+citeste variabilele temei; cosul plutitor si eticheta „Popular” o primesc ca proprietate de la
+server si se schimba abia la salvare (etapa 6, cand culoarea intra in design).
 
 **Proba vizuala a etapei 1, facuta 25.10.2026** pe `localhost:3000` (baza DEMO, contul
 `onboarding-proba-cf99b5@edinio-demo.test`, magazinul `floraria-mirei`; data abonamentului mutata
@@ -113,7 +135,8 @@ arbore pe care il regleaza.
       `continut/`; probele: nicio cheie veche pierduta, fiecare nod scrie doar cheile lui.
 - [x] 2.6 Rutele vechi redirectioneaza; meniul panoului; legatura din Pagini. 25.10; editoarele vechi
       sterse (`StoreEditor`, `StoreDesignEditor`, `SectionDesignBrowser`, `ProductSectionsEditor`).
-- [ ] 2.7 Porti + proba in Chrome pe demo (pasii mai jos, cand ajungem acolo).
+- [x] 2.7 Porti + proba in Chrome pe demo. 25.10: tot ce e in „Stare si reluare”, plus cinci
+      reparatii gasite de proba; porti verzi (tsc, 10.995 de probe, lint pe fisierele atinse, build:ci).
 
 ## Deciziile proprietarului
 
@@ -257,7 +280,7 @@ Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, 
    Editorul are trimiteri spre ele. Fara migratii. Detalii si ce se verifica: `REGISTRU.md`.
 2. **Un singur ecran**: `/dashboard/editor` cu bara de sus (alegi pagina, desktop/mobil,
    anuleaza/refa, Salveaza/Publica), stanga arborele, dreapta previzualizarea. La inceput
-   gazduieste editoarele existente.
+   gazduieste editoarele existente. FACUT si PROBAT 25.10.2026 (planul si bifele mai sus).
 3. **Click in previzualizare**: `data-sectiune` / `data-bloc`, contur la hover, selectie la clic.
 4. **Blocuri in sectiuni**; pagina de produs sparta in blocuri cu context comun; sabloane de
    produs multiple.

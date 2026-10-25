@@ -55,7 +55,7 @@ export function DesignGallery({
         <div className="min-w-0">
           <h2 className="font-semibold text-foreground truncate">Design pentru {meta?.label ?? section.kind}</h2>
           <p className="text-xs text-muted-foreground">
-            {variante.length} {variante.length === 1 ? "varianta" : "variante"} - previzualizate cu magazinul tau
+            {variante.length} {variante.length === 1 ? "variantă" : "variante"}, cu culorile și fonturile magazinului tău, pe conținut de exemplu
           </p>
         </div>
         {/* Aproape tot traficul unui magazin vine de pe telefon. */}

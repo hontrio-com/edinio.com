@@ -52,7 +52,7 @@ export function GalerieAdauga({ design, slug, onAdauga, onInchide }: {
       <div className="px-4 sm:px-6 py-3 border-b border-border flex items-center gap-3 bg-surface">
         <div className="min-w-0">
           <h2 className="font-semibold text-foreground">Adaugă o secțiune</h2>
-          <p className="text-xs text-muted-foreground">Previzualizate cu magazinul tău. Secțiunea nouă intră înaintea catalogului.</p>
+          <p className="text-xs text-muted-foreground">Cu culorile și fonturile magazinului tău, pe produse de exemplu. Secțiunea nouă intră înaintea catalogului.</p>
         </div>
         <button type="button" onClick={onInchide} aria-label="Închide"
           className="ml-auto w-10 h-10 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">

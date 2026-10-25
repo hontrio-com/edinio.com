@@ -50,15 +50,16 @@ export function BaraEditor({
 
   return (
     <div className="h-14 shrink-0 border-b border-border bg-surface px-3 flex items-center gap-2">
-      <label className="flex items-center gap-2 min-w-0">
+      {/* Pe telefon lista ia locul ramas: cu latime fixa, trecea peste Anuleaza. */}
+      <label className="flex-1 sm:flex-none flex items-center gap-2 min-w-0">
         <span className="hidden xl:inline text-xs text-muted-foreground">Editezi</span>
         <select value={pagina} onChange={(e) => onPagina(e.target.value as CheiePagina)} aria-label="Pagina pe care o editezi"
-          className="h-9 max-w-[180px] sm:max-w-none pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary">
+          className="h-9 w-full sm:w-auto min-w-0 pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary">
           {PAGINI_EDITOR.map((p) => <option key={p.cheie} value={p.cheie}>{p.eticheta}</option>)}
         </select>
       </label>
 
-      <div className="flex items-center">
+      <div className="hidden sm:flex items-center">
         <button type="button" onClick={ciorna.anuleaza} disabled={!ciorna.poateAnula} title="Anulează (Ctrl+Z)" aria-label="Anulează"
           className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors">
           <Undo2 className="h-4 w-4" />
@@ -113,15 +114,22 @@ export function BaraEditor({
           </button>
         )}
         {/*
-          Pe telefon nu incape tot in bara: Renunta, vizibilitatea magazinului si
-          previzualizarea stau intr-un meniu. Fara el, de pe telefon n-ar fi existat
-          niciun drum catre ele (in editorul vechi, „Publicare” era un panou).
+          Pe telefon nu incape tot in bara: Anuleaza / Refa, Renunta, vizibilitatea
+          magazinului si previzualizarea stau intr-un meniu. Fara el, de pe telefon
+          n-ar fi existat niciun drum catre ele (in editorul vechi, „Publicare” era
+          un panou), iar cu ele in bara, „Publica” iesea taiat din ecran pe 390 px.
         */}
         <DropdownMenu>
-          <DropdownMenuTrigger aria-label="Mai multe" className="sm:hidden w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground">
+          <DropdownMenuTrigger aria-label="Mai multe" className="sm:hidden w-9 h-9 shrink-0 rounded-lg border border-border flex items-center justify-center text-muted-foreground">
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={8} className="w-60 p-1.5">
+            <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ciorna.poateAnula} onClick={ciorna.anuleaza}>
+              <Undo2 className="h-4 w-4" /> Anulează
+            </DropdownMenuItem>
+            <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ciorna.poateReface} onClick={ciorna.reface}>
+              <Redo2 className="h-4 w-4" /> Refă
+            </DropdownMenuItem>
             <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => setConfirma(true)}>
               <span className={cn("w-2 h-2 rounded-full", publicat ? "bg-primary" : "bg-muted-foreground/50")} />
               {publicat ? "Magazin vizibil: ascunde-l" : "Magazin ascuns: fă-l vizibil"}

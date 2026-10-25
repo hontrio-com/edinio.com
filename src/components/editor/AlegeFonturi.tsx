@@ -28,7 +28,7 @@ export function AlegeFonturi({
       <Grila eticheta="Font titluri" mostra="Colectia noua" valoare={titluri ?? "geist"} onAlege={onTitluri} titlu />
       <Grila eticheta="Font text" mostra="Livrare rapida, retur 14 zile" valoare={text ?? "geist"} onAlege={onText} />
       <p className="text-[11px] text-muted-foreground">
-        Se aplica pe tot magazinul: pagina principala, produse, cos si paginile tale. Blocurile din Pagini cu font ales anume il pastreaza pe al lor.
+        Se aplică pe tot magazinul: pagina principală, produse, coș și paginile tale. Blocurile din Pagini cu font ales anume îl păstrează pe al lor.
       </p>
     </div>
   );

@@ -93,7 +93,7 @@ export function ProductPicker({ businessId, selectedIds, onChange, reordonabil =
       {selected.length > 0 && (
         <div className="space-y-1">
           <p className="text-[11px] text-muted-foreground">
-            {selected.length} produse selectate{maxim != null ? ` (maxim ${maxim})` : ""}
+            {selected.length} {selected.length === 1 ? "produs selectat" : "produse selectate"}{maxim != null ? ` (maxim ${maxim})` : ""}
           </p>
           {selected.map((p, i) => (
             <div key={p.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-muted/40 border border-border">

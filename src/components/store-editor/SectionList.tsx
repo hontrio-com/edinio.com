@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
+import { useId } from "react";
 import { PageIcon } from "@/components/pages/icon-registry";
 import { poateFiDuplicata } from "@/lib/storefront/design/edit";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
@@ -64,6 +65,12 @@ export function SectionList({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+  /*
+   * Id-ul descrierii pentru cititorul de ecran, la fel pe server si in browser.
+   * Fara el, dnd-kit il numara cu un contor al modulului, care pe server creste de
+   * la o cerere la alta: hidratarea gasea alt `aria-describedby` (vazut 25.10.2026).
+   */
+  const idDescriere = useId();
 
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -75,7 +82,7 @@ export function SectionList({
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext id={idDescriere} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
         <ul className="space-y-1.5">
           {sections.map((s, i) => (
@@ -155,7 +162,7 @@ function SectionRow({
           type="button"
           {...attributes}
           {...listeners}
-          aria-label={`Muta ${meta?.label ?? section.kind}`}
+          aria-label={`Mută ${meta?.label ?? section.kind}`}
           className="w-8 h-11 shrink-0 flex items-center justify-center text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
         >
           <GripVertical className="h-4 w-4" />
@@ -170,7 +177,7 @@ function SectionRow({
             </span>
             <span className="block text-[11px] text-muted-foreground truncate">
               {varianta?.label ?? section.variant}
-              {!section.enabled && " - ascunsa"}
+              {!section.enabled && " - ascunsă"}
             </span>
           </span>
         </button>
@@ -179,18 +186,18 @@ function SectionRow({
           {/* Alternativa la tragere: functioneaza si la tastatura, si pe mobil. */}
           <div className="hidden sm:flex flex-col">
             <button type="button" onClick={() => onMove(index, index - 1)} disabled={!mutabila || index === primaMutabila}
-              aria-label="Muta mai sus" className={`${actiune} h-5 w-7`}>
+              aria-label="Mută mai sus" className={`${actiune} h-5 w-7`}>
               <ChevronUp className="h-3.5 w-3.5" />
             </button>
             <button type="button" onClick={() => onMove(index, index + 1)} disabled={!mutabila || index === ultimaMutabila}
-              aria-label="Muta mai jos" className={`${actiune} h-5 w-7`}>
+              aria-label="Mută mai jos" className={`${actiune} h-5 w-7`}>
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
           </div>
 
           {poateFiStinsa && (
             <button type="button" onClick={onToggle} className={actiune}
-              aria-label={section.enabled ? "Ascunde sectiunea" : "Arata sectiunea"}>
+              aria-label={section.enabled ? "Ascunde secțiunea" : "Arată secțiunea"}>
               {section.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </button>
           )}
@@ -198,14 +205,14 @@ function SectionRow({
           {/* Aceeasi regula dupa care si executa `duplicateSection`, ca butonul
               sa nu existe acolo unde n-ar face nimic. */}
           {poateFiDuplicata(section.kind) && (
-            <button type="button" onClick={onDuplicate} className={actiune} aria-label="Duplica sectiunea">
+            <button type="button" onClick={onDuplicate} className={actiune} aria-label="Duplică secțiunea">
               <Copy className="h-4 w-4" />
             </button>
           )}
 
           {meta?.removable !== false && (
             <button type="button" onClick={onRemove}
-              className={`${actiune} hover:text-destructive`} aria-label="Sterge sectiunea">
+              className={`${actiune} hover:text-destructive`} aria-label="Șterge secțiunea">
               <Trash2 className="h-4 w-4" />
             </button>
           )}

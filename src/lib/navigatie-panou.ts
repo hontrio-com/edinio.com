@@ -68,9 +68,12 @@ export const MENIU_PANOU: IntrarePanou[] = [
   { href: "/dashboard/features", icon: Zap, label: "Integrari" },
   {
     href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
+    /*
+     * Un singur editor din 25.10.2026 (etapa 2 a editorului unic): „Design
+     * magazin” si „Design sectiuni” erau doua ecrane pentru acelasi magazin.
+     */
     children: [
-      { href: "/dashboard/editor", label: "Design magazin" },
-      { href: "/dashboard/editor/sectiuni", label: "Design sectiuni", beta: true },
+      { href: "/dashboard/editor", label: "Editorul" },
       { href: "/dashboard/editor/media", label: "Biblioteca Media" },
     ],
   },

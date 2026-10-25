@@ -1,0 +1,167 @@
+"use client";
+
+import { useState } from "react";
+import { Check, ExternalLink, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import type { Dispozitiv } from "@/components/store-editor/RamaPreview";
+import { PAGINI_EDITOR, type CheiePagina } from "@/lib/editor-magazin/pagini";
+import { cn } from "@/lib/utils/cn";
+import type { CiornaDesign } from "./useCiornaDesign";
+
+/**
+ * Bara de sus a editorului unic.
+ *
+ * Aici stau lucrurile care privesc tot ecranul, nu un nod: ce pagina editezi, cum
+ * o vezi, Anuleaza / Refa, Publica, si daca magazinul e deschis pentru clienti
+ * (comutatorul „Publicare” din editorul vechi).
+ */
+
+const DISPOZITIVE = [
+  ["mobil", Smartphone, "Telefon"],
+  ["tableta", Tablet, "Tabletă"],
+  ["desktop", Monitor, "Calculator"],
+] as const;
+
+export function BaraEditor({
+  pagina, onPagina, ciorna, dispozitiv, onDispozitiv, onReincarca, adresaPublica,
+  publicat, publicareInCurs, onComutaPublicarea, continutNesalvat, vedereMobil, onVedereMobil,
+}: {
+  pagina: CheiePagina;
+  onPagina: (p: CheiePagina) => void;
+  ciorna: CiornaDesign;
+  dispozitiv: Dispozitiv;
+  onDispozitiv: (d: Dispozitiv) => void;
+  onReincarca: () => void;
+  adresaPublica: string;
+  publicat: boolean;
+  publicareInCurs: boolean;
+  onComutaPublicarea: () => Promise<void>;
+  /** Exista continut nesalvat in vreun nod? */
+  continutNesalvat: boolean;
+  vedereMobil: "panou" | "previzualizare";
+  onVedereMobil: (v: "panou" | "previzualizare") => void;
+}) {
+  const [confirma, setConfirma] = useState(false);
+  const stare = ciorna.salvez
+    ? "Se salvează ciorna..."
+    : ciorna.areModificari ? "Modificări de design nepublicate" : "Designul e publicat";
+
+  return (
+    <div className="h-14 shrink-0 border-b border-border bg-surface px-3 flex items-center gap-2">
+      <label className="flex items-center gap-2 min-w-0">
+        <span className="hidden xl:inline text-xs text-muted-foreground">Editezi</span>
+        <select value={pagina} onChange={(e) => onPagina(e.target.value as CheiePagina)} aria-label="Pagina pe care o editezi"
+          className="h-9 max-w-[180px] sm:max-w-none pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary">
+          {PAGINI_EDITOR.map((p) => <option key={p.cheie} value={p.cheie}>{p.eticheta}</option>)}
+        </select>
+      </label>
+
+      <div className="flex items-center">
+        <button type="button" onClick={ciorna.anuleaza} disabled={!ciorna.poateAnula} title="Anulează (Ctrl+Z)" aria-label="Anulează"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors">
+          <Undo2 className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={ciorna.reface} disabled={!ciorna.poateReface} title="Refă (Ctrl+Y)" aria-label="Refă"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors">
+          <Redo2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="hidden md:flex bg-muted rounded-lg p-0.5 gap-0.5">
+        {DISPOZITIVE.map(([d, Icon, eticheta]) => (
+          <button key={d} type="button" onClick={() => onDispozitiv(d)} aria-label={eticheta} title={eticheta} aria-pressed={dispozitiv === d}
+            className={cn("h-8 w-9 rounded-md flex items-center justify-center transition-colors",
+              dispozitiv === d ? "bg-surface shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
+      <button type="button" onClick={onReincarca} title="Reîncarcă previzualizarea" aria-label="Reîncarcă previzualizarea"
+        className="hidden md:flex w-9 h-9 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        <RotateCw className="h-4 w-4" />
+      </button>
+      <a href={adresaPublica} target="_blank" rel="noopener noreferrer" title="Deschide magazinul într-o filă nouă" aria-label="Deschide magazinul într-o filă nouă"
+        className="hidden md:flex w-9 h-9 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        <ExternalLink className="h-4 w-4" />
+      </a>
+
+      <div className="ml-auto flex items-center gap-2 min-w-0">
+        {/* Pe telefon panoul si previzualizarea nu incap una langa alta. */}
+        <button type="button" onClick={() => onVedereMobil(vedereMobil === "panou" ? "previzualizare" : "panou")}
+          className="lg:hidden h-9 px-3 rounded-lg border border-border text-xs font-medium inline-flex items-center gap-1.5">
+          {vedereMobil === "panou" ? <><Smartphone className="h-3.5 w-3.5" /> Vezi</> : <><Paintbrush2 className="h-3.5 w-3.5" /> Editează</>}
+        </button>
+
+        <div className="hidden sm:block min-w-0 text-right">
+          <p className="text-[11px] text-muted-foreground truncate">{stare}</p>
+          {continutNesalvat && <p className="text-[11px] text-amber-600 truncate">Conținut nesalvat</p>}
+        </div>
+
+        <button type="button" onClick={() => setConfirma(true)} disabled={publicareInCurs}
+          title={publicat ? "Magazinul e vizibil pentru clienți" : "Magazinul e ascuns pentru clienți"}
+          className="hidden sm:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium items-center gap-1.5 hover:bg-muted transition-colors">
+          <span className={cn("w-2 h-2 rounded-full", publicat ? "bg-primary" : "bg-muted-foreground/50")} />
+          {publicat ? "Vizibil" : "Ascuns"}
+        </button>
+
+        {ciorna.areModificari && (
+          <button type="button" onClick={() => void ciorna.renunta()}
+            className="hidden sm:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors items-center">
+            Renunță
+          </button>
+        )}
+        {/*
+          Pe telefon nu incape tot in bara: Renunta, vizibilitatea magazinului si
+          previzualizarea stau intr-un meniu. Fara el, de pe telefon n-ar fi existat
+          niciun drum catre ele (in editorul vechi, „Publicare” era un panou).
+        */}
+        <DropdownMenu>
+          <DropdownMenuTrigger aria-label="Mai multe" className="sm:hidden w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground">
+            <MoreHorizontal className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={8} className="w-60 p-1.5">
+            <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => setConfirma(true)}>
+              <span className={cn("w-2 h-2 rounded-full", publicat ? "bg-primary" : "bg-muted-foreground/50")} />
+              {publicat ? "Magazin vizibil: ascunde-l" : "Magazin ascuns: fă-l vizibil"}
+            </DropdownMenuItem>
+            {ciorna.areModificari && (
+              <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => void ciorna.renunta()}>Renunță la modificările de design</DropdownMenuItem>
+            )}
+            <DropdownMenuItem className="rounded-lg p-2.5" onClick={onReincarca}><RotateCw className="h-4 w-4" /> Reîncarcă previzualizarea</DropdownMenuItem>
+            <DropdownMenuItem className="rounded-lg p-2.5" render={<a href={adresaPublica} target="_blank" rel="noopener noreferrer" />}>
+              <ExternalLink className="h-4 w-4" /> Deschide magazinul
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <button type="button" onClick={() => void ciorna.publica()} disabled={!ciorna.areModificari || ciorna.publicaInCurs}
+          className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none inline-flex items-center gap-1.5">
+          {ciorna.publicaInCurs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          Publică
+        </button>
+      </div>
+
+      <Dialog open={confirma} onOpenChange={setConfirma}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{publicat ? "Ascunzi magazinul?" : "Faci magazinul vizibil?"}</DialogTitle>
+            <DialogDescription>
+              {publicat
+                ? "Clienții nu-l vor mai putea deschide și nu vor mai putea comanda până îl faci din nou vizibil. Comenzile primite rămân."
+                : "Clienții îl vor putea deschide și vor putea comanda."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirma(false)}>Nu</Button>
+            <Button variant={publicat ? "destructive" : "default"} disabled={publicareInCurs}
+              onClick={async () => { await onComutaPublicarea(); setConfirma(false); }}>
+              {publicat ? "Da, ascunde magazinul" : "Da, fă-l vizibil"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

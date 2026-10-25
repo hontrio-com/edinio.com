@@ -11,6 +11,7 @@ import { deletePage, duplicatePage, seteazaPaginaAcasa, updateStoreMenu } from "
 import { PaginaNoua } from "./PaginaNoua";
 import { meniuCuAcasa, newMenuItemId, type MenuItem } from "@/lib/pages/menu";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
+import type { CheiePagina } from "@/lib/editor-magazin/pagini";
 
 interface PageRow { id: string; slug: string; title: string; is_published: boolean; updated_at: string }
 interface Business { id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string }
@@ -373,6 +374,7 @@ function PaginiDeSistem({
        */
       titlu: "Acasa",
       slug: "",
+      editor: "acasa",
       activa: true,
       inactivInsigna: "",
       inactivExplicatie: "",
@@ -380,6 +382,7 @@ function PaginiDeSistem({
     {
       titlu: "Magazin",
       slug: prefixCatalog,
+      editor: "magazin",
       activa: catalogPePagina,
       inactivInsigna: "PE ACASA",
       inactivExplicatie: "Acum produsele stau pe pagina principală, sub celelalte secțiuni.",
@@ -389,6 +392,7 @@ function PaginiDeSistem({
     {
       titlu: "Cos",
       slug: "cos",
+      editor: "cos",
       activa: cosPePagina,
       inactivInsigna: "IN FEREASTRA",
       inactivExplicatie: "Acum cosul se deschide ca sertar peste magazin.",
@@ -396,11 +400,12 @@ function PaginiDeSistem({
     {
       titlu: "Finalizare comanda",
       slug: "checkout",
+      editor: "comanda",
       activa: comandaPePagina,
       inactivInsigna: "IN FEREASTRA",
       inactivExplicatie: "Acum comanda se completeaza intr-o fereastra peste magazin.",
     },
-  ];
+  ] satisfies ({ editor: CheiePagina } & Record<string, unknown>)[];
 
   return (
     <div className="mb-8">
@@ -448,7 +453,8 @@ function PaginiDeSistem({
                 <ExternalLink className="h-4 w-4" />
               </a>
             )}
-            <Link href="/dashboard/editor/sectiuni"
+            {/* Direct pe pagina ei din editorul unic, nu in ecranul vechi „Design sectiuni”. */}
+            <Link href={`/dashboard/editor?pagina=${r.editor}`}
               className="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg border border-border hover:bg-muted transition-colors">
               Alege designul
             </Link>

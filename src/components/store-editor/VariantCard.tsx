@@ -56,6 +56,7 @@ export function VariantCard({
   peMobil = false,
   latimeFixa,
   versiune = 0,
+  etichetaButon = "Alege",
 }: {
   slug: string;
   kind: string;
@@ -83,6 +84,8 @@ export function VariantCard({
    * cardul marcat „Activ" arata starea de dinaintea publicarii.
    */
   versiune?: string | number;
+  /** Ce scrie pe buton: „Alege” in galeria de design-uri, „Adaugă” la sectiunile noi. */
+  etichetaButon?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const rama = useRef<HTMLIFrameElement>(null);
@@ -218,9 +221,9 @@ export function VariantCard({
             Activ
           </span>
         ) : (
-          <button type="button" onClick={onPick} aria-label={`Alege designul ${label}`}
+          <button type="button" onClick={onPick} aria-label={`${etichetaButon}: ${label}`}
             className="shrink-0 h-9 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity">
-            Alege
+            {etichetaButon}
           </button>
         )}
       </div>

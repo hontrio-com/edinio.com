@@ -25,7 +25,18 @@ function cod(f: string): string {
     .replace(/^\s*\/\/.*$/gm, "");
 }
 
-const EDITOR = "src/components/editor/StoreEditor.tsx";
+/**
+ * Editorul unic (etapa 2, 25.10.2026): tot ce e sub cele doua dosare ale lui.
+ * Pana atunci fusese un singur fisier, `components/editor/StoreEditor.tsx`.
+ */
+const DOSARE_EDITOR = ["src/components/editor-magazin", "src/lib/editor-magazin"];
+const fisiereEditor = (): string[] =>
+  DOSARE_EDITOR.flatMap((d) => (readdirSync(path.join(RADACINA, d), { recursive: true, withFileTypes: false }) as string[])
+    .map(String)
+    .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+    .map((f) => path.join(d, f)));
+/** Codul editorului, toate fisierele lipite, fara comentarii. */
+const codEditor = () => fisiereEditor().map(cod).join("\n");
 const SETARI = "src/components/dashboard/SettingsClient.tsx";
 
 const MUTATE_IN_SETARI: Record<string, string> = {
@@ -36,20 +47,24 @@ const MUTATE_IN_SETARI: Record<string, string> = {
 };
 
 test("⚠⚠ editorul nu mai atinge cheile mutate in Setari", () => {
-  const editor = cod(EDITOR);
+  const editor = codEditor();
+  assert.ok(fisiereEditor().length >= 10, "nu gasesc fisierele editorului unic");
   for (const [cheie, ecran] of Object.entries(MUTATE_IN_SETARI)) {
     assert.ok(!editor.includes(cheie), `„${cheie}” a aparut din nou in editor`);
     assert.ok(cod(ecran).includes(cheie), `„${cheie}” nu mai e in ${ecran}`);
   }
 });
 
-test("⚠⚠ editorul scrie in `businesses` doar logo, coperta, culoarea si publicarea", () => {
-  /* Restul coloanelor (nume, contact, adresa, retele, butoane) le scrie Setari > General. */
-  const editor = cod(EDITOR);
-  const apeluri = [...editor.matchAll(/updateBusiness\(business\.id, \{([^}]*)\}\)/g)];
-  assert.ok(apeluri.length >= 2, "nu am gasit scrierile editorului; s-a schimbat forma apelului?");
+test("⚠⚠ editorul scrie in `businesses` doar logo, coperta, culoarea, galeria si publicarea", () => {
+  /*
+   * Restul coloanelor (nume, contact, adresa, retele, butoane) le scrie Setari >
+   * General. Galeria e noua in etapa 2: sectiunea „Galerie” n-avea niciun ecran.
+   */
+  const editor = codEditor();
+  const apeluri = [...editor.matchAll(/updateBusiness\(\w+\.id, \{([^}]*)\}\)/g)];
+  assert.ok(apeluri.length >= 3, "nu am gasit scrierile editorului; s-a schimbat forma apelului?");
   const chei = new Set(apeluri.flatMap((m) => m[1].split(",").map((p) => p.split(":")[0].trim()).filter(Boolean)));
-  assert.deepEqual([...chei].sort(), ["cover_url", "is_published", "logo_url", "primary_color"]);
+  assert.deepEqual([...chei].sort(), ["cover_url", "gallery", "is_published", "logo_url", "primary_color"]);
   /* Si nicio cale ocolita: `updateBusiness` chemat altfel decat cu un obiect scris pe loc. */
   assert.equal((editor.match(/updateBusiness\(/g) ?? []).length, apeluri.length);
 });
@@ -60,8 +75,9 @@ test("trimiterile din editor duc la file care exista in Setari", () => {
   const navStart = setari.indexOf("const NAV_SECTIONS");
   const nav = setari.slice(navStart, setari.indexOf("];", navStart));
   const file = new Set([...nav.matchAll(/id: "([a-z-]+)"/g)].map((m) => m[1]));
-  const tinte = [...cod(EDITOR).matchAll(/\/dashboard\/settings\?sectiune=([a-z-]+)/g)].map((m) => m[1]);
-  assert.deepEqual(tinte.sort(), ["catalog", "formular-comanda", "general"]);
+  const tinte = [...new Set([...codEditor().matchAll(/\/dashboard\/settings\?sectiune=([a-z-]+)/g)].map((m) => m[1]))];
+  // Notele din noduri trimit la cele trei file mutate in etapa 1, si la Livrare.
+  for (const t of ["catalog", "formular-comanda", "general"]) assert.ok(tinte.includes(t), `editorul nu mai trimite la „${t}”`);
   for (const t of tinte) assert.ok(file.has(t), `fila „${t}” nu exista in NAV_SECTIONS`);
 });
 

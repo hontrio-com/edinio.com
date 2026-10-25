@@ -88,10 +88,12 @@ arbore pe care il regleaza.
       `ciorna-proprietarului.ts` + proba ei; cosul si comanda citesc varianta din designul viu.
 - [x] 2.3 (25.10, `src/lib/editor-magazin/`: istoric, pagini, derivare, noduri, continut; 20 de probe) Logica fara React: istoricul pentru anuleaza/refa, re-derivarea, adresa previzualizarii
       pe pagina aleasa, nodurile arborelui pe pagina, aprinderea barei de anunt cand lipseste.
-- [ ] 2.4 Ecranul: bara de sus, arborele, panoul nodului (design + setari + continut),
-      galeria de variante peste previzualizare, „Adauga sectiune”.
-- [ ] 2.5 Continutul mutat din editorul vechi, pe noduri, plus stilul global si galeria.
-- [ ] 2.6 Rutele vechi redirectioneaza; meniul panoului; legatura din Pagini.
+- [x] 2.4 Ecranul: bara de sus, arborele, panoul nodului (design + setari + continut),
+      galeria de variante peste previzualizare, „Adauga sectiune”. 25.10, `src/components/editor-magazin/`.
+- [x] 2.5 Continutul mutat din editorul vechi, pe noduri, plus stilul global si galeria. 25.10,
+      `continut/`; probele: nicio cheie veche pierduta, fiecare nod scrie doar cheile lui.
+- [x] 2.6 Rutele vechi redirectioneaza; meniul panoului; legatura din Pagini. 25.10; editoarele vechi
+      sterse (`StoreEditor`, `StoreDesignEditor`, `SectionDesignBrowser`, `ProductSectionsEditor`).
 - [ ] 2.7 Porti + proba in Chrome pe demo (pasii mai jos, cand ajungem acolo).
 
 ## Deciziile proprietarului

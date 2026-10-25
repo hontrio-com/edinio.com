@@ -449,7 +449,7 @@ const SHOP_DEFAULTS = {
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
   announcement: {
-    label: "Bara de anunt",
+    label: "Bara de anunț",
     icon: "Megaphone",
     scope: "chrome",
     singleton: true,
@@ -459,7 +459,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     },
   },
   header: {
-    label: "Header",
+    label: "Antet",
     icon: "PanelTop",
     scope: "chrome",
     singleton: true,
@@ -599,7 +599,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     },
   },
   footer: {
-    label: "Footer",
+    label: "Subsol",
     icon: "PanelBottom",
     scope: "chrome",
     singleton: true,
@@ -658,7 +658,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
 
   // --- Pagina magazin -----------------------------------------------------
   hero: {
-    label: "Hero",
+    label: "Banner principal",
     icon: "Image",
     scope: "home",
     singleton: true,
@@ -714,7 +714,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     },
   },
   catalog_toolbar: {
-    label: "Cautare si filtre",
+    label: "Căutare și filtre",
     icon: "Search",
     scope: "home",
     singleton: true,
@@ -752,7 +752,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
    * scrie; design-uri proprii de rand facem separat, mai tarziu.
    */
   product_row: {
-    label: "Rand de produse",
+    label: "Rând de produse",
     icon: "Rows3",
     scope: "home",
     singleton: false,
@@ -966,7 +966,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
   },
   cart_drawer: {
-    label: "Cos",
+    label: "Coș",
     icon: "ShoppingBag",
     scope: "commerce",
     singleton: true,
@@ -1021,7 +1021,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     },
   },
   checkout: {
-    label: "Finalizare comanda",
+    label: "Finalizarea comenzii",
     icon: "ClipboardList",
     scope: "commerce",
     singleton: true,

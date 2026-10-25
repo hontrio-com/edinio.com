@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { comutaBaraDeAnunt, ID_BARA_ANUNT, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
@@ -229,4 +229,47 @@ test("fiecare sectiune a designului are un nod de continut", () => {
   for (const s of toate) assert.ok(felContinut(s), `${s.kind} (${s.id}) n-are nod`);
   assert.equal(felContinut(d.home.find((s) => s.id === "featured")!), "recomandate");
   assert.equal(felContinut(d.home.find((s) => s.id === "r1")!), "rand");
+});
+
+// ── Ce scrie fiecare nod ─────────────────────────────────────────────────────
+
+const DOSAR_COMPONENTE = "src/components/editor-magazin";
+const componente = (): string[] =>
+  (readdirSync(path.join(RAD, DOSAR_COMPONENTE), { recursive: true, withFileTypes: false }) as string[])
+    .map(String).filter((f) => /\.tsx?$/.test(f)).map((f) => path.join(DOSAR_COMPONENTE, f));
+const faraComentarii = (f: string) => sursa(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+test("⚠⚠ editorul unic nu cheama `elibereazaComutatoare`", () => {
+  /*
+   * Decizia 3 din PLAN.md. Actiunea scoate semnul ochiului de pe sectiunile ale
+   * caror chei s-au salvat. In doua ecrane impaca doua controale; aici ar fi
+   * reaprins, la salvarea unui text, o sectiune stinsa anume din ochi.
+   */
+  assert.ok(componente().length >= 10, "nu gasesc componentele editorului");
+  for (const f of componente()) assert.doesNotMatch(faraComentarii(f), /elibereazaComutatoare/, f);
+});
+
+test("⚠⚠ fiecare nod scrie doar cheile lui, si niciuna retrasa", () => {
+  /*
+   * Fiecare nod isi salveaza cheile atinse. O cheie scrisa prin alt nod ar pleca
+   * in baza la salvarea lui, nu a celui pe care il vede omul; o cheie retrasa ar
+   * readuce un al doilea control pentru ce comanda ochiul.
+   */
+  let verificate = 0;
+  // Motorul de continut nu e un nod: dupa o salvare isi aliniaza copia din ecran
+  // cu ce a ajuns in baza (`setPcBrut`), fara sa noteze chei.
+  for (const f of componente().filter((x) => !x.endsWith("useContinutMagazin.ts"))) {
+    const text = faraComentarii(f);
+    const noduri = new Set<string>();
+    for (const m of text.matchAll(/seteaza(?:SiSalveaza)?\((?:"(\w+)"|(NOD_STIL))/g)) noduri.add(m[1] ?? "stil");
+    const chei = [...text.matchAll(/\.\.\.p, (\w+):/g)].map((m) => m[1]);
+    if (chei.length === 0) continue;
+    const permise = new Set([...noduri].flatMap((n) => CHEI_CONTINUT[n as keyof typeof CHEI_CONTINUT] ?? []));
+    for (const cheie of chei) {
+      assert.ok(!CHEI_RETRASE[cheie], `${f} scrie cheia retrasa „${cheie}”`);
+      assert.ok(permise.has(cheie), `${f} scrie „${cheie}”, care nu e a niciunui nod din fisier (${[...noduri].join(", ")})`);
+      verificate += 1;
+    }
+  }
+  assert.ok(verificate >= 30, `doar ${verificate} scrieri gasite; s-a schimbat forma lor?`);
 });

@@ -1,72 +1,10 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { SectionDesignBrowser } from "@/components/store-editor/SectionDesignBrowser";
-import { parseStoreDesign } from "@/lib/storefront/design/parse";
-import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import type { DesignContext } from "@/lib/storefront/design/types";
-
-export const metadata = { title: "Design sectiuni" };
-
 
 /**
- * Catalogul de design-uri pe sectiuni.
- *
- * Ruta e separata de editorul cu preview live pentru ca raspunde altei
- * intrebari: acolo se aseaza si se reordoneaza sectiunile, aici se alege cum
- * arata fiecare si i se regleaza setarile. Amandoua scriu in aceeasi ciorna.
+ * Fostul catalog „Design sectiuni”, absorbit in editorul unic (etapa 2,
+ * 25.10.2026): designul fiecarei sectiuni se alege acum din nodul ei, cu
+ * „Schimba designul”. Adresa ramane, ca linkurile vechi sa duca undeva.
  */
-export default async function SectionDesignPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, slug, primary_color, features, cover_url, tagline, store_settings(page_content, storefront_design, storefront_design_draft)")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!business) redirect("/dashboard");
-
-  const settings = Array.isArray(business.store_settings) ? business.store_settings[0] : business.store_settings;
-  const ctx: DesignContext = {
-    primaryColor: business.primary_color ?? "#07c527",
-    pageContent: (settings?.page_content as Record<string, unknown>) ?? {},
-    features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
-    tagline: business.tagline,
-  };
-
-  // ⚠ Ciorna se trimite SI ca ea insasi, nu doar topita in `designInitial`.
-  // Salvarea o cere inapoi ca „baza", iar acolo diferenta dintre „coloana e
-  // goala" si „coloana are exact designul publicat" decide daca prima salvare
-  // trece sau pica pe veci. Vezi `draft-guard.ts`.
-  const publicat = parseStoreDesign(settings?.storefront_design, ctx);
-  const cioarna = settings?.storefront_design_draft
-    ? parseStoreDesign(settings.storefront_design_draft, ctx)
-    : null;
-  const design = cioarna ?? publicat;
-
-  /*
-   * Cate bannere de hero are magazinul.
-   *
-   * Se citeste din ACELASI loc din care le citeste storefront-ul
-   * (`resolveHeroBanners`, cu tot cu caderea pe vechiul `cover_url`): scris
-   * altfel, catalogul ar fi spus ca nu exista banner exact la magazinele care au
-   * unul mostenit, si le-ar fi interzis un design pe care il pot folosi.
-   */
-  const numarBannere = resolveHeroBanners(ctx.pageContent, ctx.coverUrl).banners.length;
-
-  return (
-    <SectionDesignBrowser
-      businessId={business.id}
-      slug={business.slug}
-      designInitial={design}
-      designPublicat={publicat}
-      cioarnaInitiala={cioarna}
-      numarBannere={numarBannere}
-    />
-  );
+export default function SectionDesignPage() {
+  redirect("/dashboard/editor");
 }

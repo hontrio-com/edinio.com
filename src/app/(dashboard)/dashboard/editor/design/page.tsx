@@ -1,76 +1,10 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { StoreDesignEditor } from "@/components/store-editor/StoreDesignEditor";
-import { parseStoreDesign } from "@/lib/storefront/design/parse";
-import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import type { DesignContext } from "@/lib/storefront/design/types";
 
 /**
- * Editorul de design pe sectiuni.
- *
- * Ruta e separata de `/dashboard/editor` cat timp sistemul se construieste:
- * editorul vechi ramane intact si functional, iar cele doua se unesc dupa ce
- * variantele exista. Asta permite si testarea pe preview fara sa se atinga
- * fluxul pe care comerciantii il folosesc azi.
+ * Fostul editor de design („Ordinea sectiunilor”), absorbit in editorul unic
+ * (etapa 2, 25.10.2026). Adresa ramane, ca linkurile vechi si ghidurile sa duca
+ * undeva: in editorul unic, pe pagina principala.
  */
-export default async function DesignEditorPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, slug, primary_color, features, cover_url, tagline, store_settings(page_content, storefront_design, storefront_design_draft)")
-    .eq("user_id", user.id)
-    .single();
-
-  if (!business) redirect("/dashboard");
-
-  const settings = Array.isArray(business.store_settings) ? business.store_settings[0] : business.store_settings;
-  const ctx: DesignContext = {
-    primaryColor: business.primary_color ?? "#07c527",
-    pageContent: (settings?.page_content as Record<string, unknown>) ?? {},
-    features: (business.features as Record<string, unknown>) ?? {},
-    coverUrl: business.cover_url,
-    tagline: business.tagline,
-  };
-
-  // Ciorna, daca exista; altfel designul publicat. Un comerciant care revine in
-  // editor trebuie sa gaseasca exact unde a ramas. Publicatul se trimite separat,
-  // ca editorul sa stie ce vad clientii acum si sa poata spune daca exista
-  // modificari nepublicate.
-  //
-  // ⚠ Ciorna se trimite SI ca ea insasi, nu doar topita in `designInitial`.
-  // Salvarea o cere inapoi ca „baza", iar acolo diferenta dintre „coloana e
-  // goala" si „coloana are exact designul publicat" decide daca prima salvare
-  // trece sau pica pe veci. Vezi `draft-guard.ts`.
-  const publicat = parseStoreDesign(settings?.storefront_design, ctx);
-  const cioarna = settings?.storefront_design_draft
-    ? parseStoreDesign(settings.storefront_design_draft, ctx)
-    : null;
-  const design = cioarna ?? publicat;
-
-  /*
-   * Cate bannere de hero are magazinul.
-   *
-   * Se citeste din ACELASI loc din care le citeste storefront-ul
-   * (`resolveHeroBanners`, cu tot cu caderea pe vechiul `cover_url`): scris
-   * altfel, catalogul ar fi spus ca nu exista banner exact la magazinele care au
-   * unul mostenit, si le-ar fi interzis un design pe care il pot folosi.
-   */
-  const numarBannere = resolveHeroBanners(ctx.pageContent, ctx.coverUrl).banners.length;
-
-  return (
-    <StoreDesignEditor
-      businessId={business.id}
-      slug={business.slug}
-      designInitial={design}
-      designPublicat={publicat}
-      cioarnaInitiala={cioarna}
-      ctx={ctx}
-      numarBannere={numarBannere}
-    />
-  );
+export default function DesignEditorPage() {
+  redirect("/dashboard/editor?pagina=acasa");
 }

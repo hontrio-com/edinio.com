@@ -40,6 +40,7 @@ export function SectionList({
   onRemove,
   primaMutabila,
   ultimaMutabila,
+  marcaj,
 }: {
   sections: SectionInstance[];
   selectedId: string | null;
@@ -55,6 +56,8 @@ export function SectionList({
    */
   primaMutabila: number;
   ultimaMutabila: number;
+  /** Ceva de aratat langa numele randului (de exemplu „continut nesalvat”). */
+  marcaj?: (s: SectionInstance) => React.ReactNode;
 }) {
   const sensors = useSensors(
     // Un prag mic de miscare: fara el, orice click pe rand ar porni o tragere.
@@ -88,6 +91,7 @@ export function SectionList({
               onToggle={() => onToggle(s.id)}
               onDuplicate={() => onDuplicate(s.id)}
               onRemove={() => onRemove(s.id)}
+              marcaj={marcaj?.(s)}
             />
           ))}
         </ul>
@@ -107,6 +111,7 @@ function SectionRow({
   onToggle,
   onDuplicate,
   onRemove,
+  marcaj,
 }: {
   section: SectionInstance;
   index: number;
@@ -118,6 +123,7 @@ function SectionRow({
   onToggle: () => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  marcaj?: React.ReactNode;
 }) {
   const mutabila = index >= primaMutabila && index <= ultimaMutabila;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id, disabled: !mutabila });
@@ -158,8 +164,9 @@ function SectionRow({
         <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center gap-2.5 py-2 text-left">
           <PageIcon name={meta?.icon ?? "Square"} className="h-4 w-4 text-muted-foreground shrink-0" />
           <span className="min-w-0">
-            <span className={`block text-sm font-medium truncate ${section.enabled ? "text-foreground" : "text-muted-foreground"}`}>
-              {meta?.label ?? section.kind}
+            <span className={`flex items-center gap-1.5 text-sm font-medium ${section.enabled ? "text-foreground" : "text-muted-foreground"}`}>
+              <span className="truncate">{meta?.label ?? section.kind}</span>
+              {marcaj}
             </span>
             <span className="block text-[11px] text-muted-foreground truncate">
               {varianta?.label ?? section.variant}

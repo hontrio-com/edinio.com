@@ -1,37 +1,9 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { Pencil } from "lucide-react";
 
-export default async function StoreEditorPage() {
-  const supabase = await createClient();
-  const user = await getCachedUser();
-  if (!user) redirect("/login");
-
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("type", "ministore")
-    .limit(1)
-    .single();
-
-  if (!business) redirect("/dashboard");
-
-  return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-foreground">Editeaza magazinul</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Personalizeaza aspectul si setarile magazinului tau</p>
-      </div>
-
-      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-8 text-center">
-        <Pencil className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-        <p className="text-sm font-medium text-foreground mb-1">Editorul de magazin</p>
-        <p className="text-xs text-muted-foreground">
-          Aceasta sectiune este in curs de dezvoltare. Reveniti curand.
-        </p>
-      </div>
-    </div>
-  );
+/**
+ * Pagina „Editeaza magazinul... in curs de dezvoltare”, ramasa de la inceputuri
+ * si legata de nicaieri. Duce acum la editorul unic.
+ */
+export default function StoreEditorPage() {
+  redirect("/dashboard/editor");
 }

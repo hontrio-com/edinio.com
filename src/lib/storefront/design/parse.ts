@@ -1,5 +1,6 @@
 import { buildClassicDesign, newSectionId, resolveStyle, section } from "./defaults";
 import { aplicaPaginaAcasa } from "./pagina-acasa";
+import { completeazaBlocuri, parseBlocuri, schemaBlocurilor } from "./blocuri";
 import { firstVariant, sectionMeta, variantMeta, type Field } from "./registry";
 import {
   BUTTON_RADIUS_KEYS,
@@ -266,7 +267,28 @@ function parseSection(raw: unknown, seenIds: Set<string>): SectionInstance | nul
     ? { variantOverride: r.variantOverride }
     : null;
 
-  return { id, kind: k, variant, enabled: r.enabled !== false, ...enabledOverride, ...variantOverride, settings };
+  // Blocurile, curatate pe schema variantei; lista completa (tipurile lipsa,
+  // vizibilitatea derivata) o face `cuBlocuri`, care are si `page_content`.
+  const schema = schemaBlocurilor(k, variant);
+  const blocks = schema && Array.isArray(r.blocks) ? { blocks: parseBlocuri(r.blocks, schema) } : null;
+
+  return { id, kind: k, variant, enabled: r.enabled !== false, ...enabledOverride, ...variantOverride, settings, ...blocks };
+}
+
+/**
+ * Sectiunea cu lista ei completa de blocuri, cand varianta are blocuri.
+ *
+ * Vizibilitatea implicita a unui bloc vine din comutatorul vechi care facea
+ * acelasi lucru (`page_content` sau reglajele variantei), deci se recalculeaza
+ * la fiecare citire, ca a sectiunilor derivate; doar semnul ochiului ramane.
+ */
+function cuBlocuri(s: SectionInstance, ctx: DesignContext): SectionInstance {
+  const schema = schemaBlocurilor(s.kind, s.variant);
+  if (!schema) return s;
+  return {
+    ...s,
+    blocks: completeazaBlocuri(s.blocks, schema, { pageContent: ctx.pageContent as Record<string, unknown>, setari: s.settings }),
+  };
 }
 
 function parseSectionList(raw: unknown, seenIds: Set<string>, max: number): SectionInstance[] {
@@ -669,7 +691,7 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
     },
     home,
     product: {
-      page: pickOne(productRaw.page, classic.product.page, seenIds),
+      page: cuBlocuri(pickOne(productRaw.page, classic.product.page, seenIds), ctx),
     },
     // Fara linia asta slotul ar disparea la prima salvare: parserul nu face
     // merge peste `raw`, construieste si returneaza un obiect literal, iar

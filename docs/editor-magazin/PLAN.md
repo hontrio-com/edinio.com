@@ -6,9 +6,11 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. Urmeaza
-etapa 4 (blocuri in sectiuni), doar dupa acordul lui; INAINTE de ea se pune intrebarea despre teme
-(sectiunea „Deciziile proprietarului”).
+**Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4
+(blocuri) IN LUCRU**, cu acordul lui: „Da, continua. O sa iti dau la final lista cu toate
+mentiunile mele”. Intrebarea despre teme a fost pusa si a ramas fara raspuns; etapa 4 nu depinde
+de ea (blocurile trebuie in ambele cazuri), deci ramane deschisa pentru lista lui de la final.
+Planul si bifele: sectiunea „Etapa 4: planul de lucru”.
 
 **Proba etapei 3 in Chrome, 25.10.2026**, pe `floraria-mirei` (baza DEMO), prin impersonare, cu
 acordul lui (s-a conectat el ca administrator pe localhost; contul de admin din baza demo are parola
@@ -202,6 +204,58 @@ goala nu are nicio cutie, deci nu se poate nici vedea, nici apasa.
       pagina muta pagina.
 - [x] 3.6 Porti + proba in Chrome. 25.10: tot ce e in „Stare si reluare”, plus doua reparatii
       gasite de proba; porti verzi (tsc, 11.006 probe, lint fara erori noi, build:ci).
+
+## Etapa 4: planul de lucru (scris 25.10.2026, inainte de cod)
+
+Tinta din „Etapele”: blocuri in sectiuni, pagina de produs sparta in blocuri cu context comun,
+sabloane de produs multiple. Citit in cod inainte: pagina de produs e o singura sectiune cu doua
+variante, `ProductPageClassic.tsx` si `ProductPageDetailed.tsx` (cate ~1.400 de randuri). Toata
+logica (pretul afisat si cel trimis, variantele, personalizarea, pachetele, ofertele, pixelii,
+editarea unei linii din cos) sta in corpul componentei; zona de cumparare e o functie
+(`zonaDeCumparare`) cu bucatile intr-o ordine fixa, iar sub ea vin sectiuni de continut (beneficii,
+cum functioneaza, descriere, specificatii, intrebari). Detaliat are alta asezare: coloana de
+cumparare, un bloc sub galerie (detalii, rezumat, garantii) si file jos.
+
+### Deciziile etapei (de ce asa)
+
+1. **Blocuri doar pe pagina de produs, in etapa asta.** Ea e sectiunea monolitica. Sectiunile de
+   pe Acasa primesc blocuri in etapa 6, cand continutul lor intra in design: azi continutul lor
+   sta in `page_content`, cate unul pe sectiune, iar blocurile ar fi doar un al doilea strat de
+   ordine peste acelasi continut.
+2. **Un bloc e o bucata care exista deja pe pagina, cu zona ei fixa.** Fara tipuri noi si fara
+   dubluri in etapa asta (fiecare tip o data, id = tip). Comerciantul muta blocurile in interiorul
+   zonei, le ascunde pe cele optionale si le regleaza.
+3. **Blocurile de bani, de lege si de comanda nu se ascund:** titlul (H1-ul paginii), pretul,
+   variantele, stocul (anunta si precomanda), personalizarea (intra in pret), cumpararea (butoanele,
+   treptele, notificarea de garantie legala din OUG 18/2026) si ofertele (le conduce ecranul
+   Oferte). Se pot muta.
+4. **Ochiul e singurul control de vizibilitate si pentru blocuri**, ca in etapa 2. Comutatoarele
+   vechi (garantiile, beneficiile, cum functioneaza, intrebarile, estimarea livrarii, contorul de
+   vizitatori, eticheta de calitate; in Detaliat: detaliile, rezumatul, treptele, contactul) dau
+   valoarea implicita pana cand omul foloseste ochiul (`enabledOverride`, trei stari) si pleaca din
+   editor; cheile lor raman citite.
+5. **Blocurile sunt ale variantei.** Clasic si Detaliat au zone diferite; la schimbarea variantei,
+   ordinea si ochiul se pastreaza pe tip, iar tipurile noi isi iau locul implicit.
+6. **Codul de bani nu se muta.** Logica ramane in componenta variantei; doar bucatile de JSX se
+   aseaza dupa lista de blocuri. Probe: blocurile obligatorii apar mereu, in ambele variante;
+   lista implicita da exact asezarea de azi; nicio bucata nu apare de doua ori.
+7. **Previzualizarea:** blocurile primesc marcaj propriu, in interiorul sectiunii; conturul si
+   clicul merg pe bloc (mecanismul din etapa 3, extins).
+8. **Sabloanele de produs pe categorie sau pe produs vin in 4b**, dupa ce 4a e probat pe ecran.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 4.1 (25.10, `blocuri.ts` + `blocuri.test.ts`, 11 probe) Modelul: `blocks` pe sectiune, registrul blocurilor pe varianta (zone, obligatorii,
+      setari), parserul (ordinea salvata, tipurile noi la locul lor, vizibilitatea derivata),
+      operatiile de editare (muta, ochi, setari). Probe.
+- [ ] 4.2 Clasic randat din blocuri (cumparare + jos). Probe: obligatoriile mereu, fara dubluri,
+      lista implicita = asezarea de azi.
+- [ ] 4.3 Detaliat randat din blocuri (cumparare, sub galerie, jos).
+- [ ] 4.4 Editorul: blocurile in arbore sub „Pagina de produs” (pe zone, sageti, ochi), panoul
+      blocului (setari + continutul lui), comutatoarele dublate scoase.
+- [ ] 4.5 Previzualizarea: marcaj pe bloc, contur si clic pe bloc.
+- [ ] 4.6 Porti + proba in Chrome.
+- [ ] 4b Sabloane de produs alternative, pe categorie sau pe produs (plan separat, dupa 4a).
 
 ## Deciziile proprietarului
 

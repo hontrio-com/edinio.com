@@ -1,6 +1,7 @@
 import { newSectionId, section } from "./defaults";
 import { firstVariant, SECTION_REGISTRY, sectionMeta, variantMeta } from "./registry";
-import type { SectionInstance, SectionKind, StoreDesign } from "./types";
+import { schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
+import type { BlockInstance, SectionInstance, SectionKind, StoreDesign } from "./types";
 
 /**
  * Operatiile pe care le face editorul asupra unei configuratii de design.
@@ -136,6 +137,26 @@ export function toggleSection(design: StoreDesign, id: string): StoreDesign {
   if (!curenta) return design;
   const nou = !curenta.enabled;
   return updateSection(design, id, { enabled: nou, enabledOverride: nou });
+}
+
+/**
+ * Schimba blocurile unei sectiuni cu o operatie din `blocuri.ts` (`mutaBloc`,
+ * `comutaBloc`). Intoarce ACELASI design cand operatia n-a avut ce face, ca
+ * istoricul editorului sa nu noteze un pas gol.
+ */
+export function schimbaBlocurile(
+  design: StoreDesign,
+  idSectiune: string,
+  operatia: (blocuri: readonly BlockInstance[], schema: SchemaBlocuri) => readonly BlockInstance[],
+): StoreDesign {
+  const tinta = findSection(design, idSectiune);
+  const schema = tinta ? schemaBlocurilor(tinta.kind, tinta.variant) : null;
+  if (!tinta?.blocks || !schema) return design;
+  const urmatoarele = operatia(tinta.blocks, schema);
+  if (urmatoarele === tinta.blocks) return design;
+  const next = clone(design);
+  findSection(next, idSectiune)!.blocks = [...urmatoarele];
+  return next;
 }
 
 /** Id-ul barei de anunt in designul derivat (`defaults.ts`). */

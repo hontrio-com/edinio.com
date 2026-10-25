@@ -131,6 +131,29 @@ export interface SectionInstance {
    */
   variantOverride?: string;
   settings: Record<string, unknown>;
+  /**
+   * Bucatile sectiunii, in ordinea in care apar (etapa 4 din
+   * `docs/editor-magazin/PLAN.md`). Azi doar pagina de produs are; schema lor
+   * (zone, care sunt obligatorii) sta in `blocuri.ts`, pe varianta.
+   */
+  blocks?: BlockInstance[];
+}
+
+/**
+ * O bucata dintr-o sectiune: titlul, pretul, beneficiile paginii de produs.
+ *
+ * In etapa 4 fiecare tip apare o data, deci `id` = `type`. Vizibilitatea are
+ * aceleasi trei stari ca sectiunea (vezi `enabledOverride` de mai sus): fara
+ * semn, o da comutatorul vechi care facea acelasi lucru.
+ */
+export interface BlockInstance {
+  id: string;
+  type: string;
+  /** Starea EFECTIVA, cea pe care o citeste randarea. */
+  enabled: boolean;
+  /** Ce a cerut anume omul din ochiul blocului; lipseste cand nu l-a atins. */
+  enabledOverride?: boolean;
+  settings: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { resolveHeroBanners } from "./hero-banners";
+import { completeazaBlocuri, schemaBlocurilor } from "./blocuri";
 import { CHEIE_FONT_TEXT, CHEIE_FONT_TITLURI, fontDinPageContent } from "./fonturi-magazin";
 import {
   DESIGN_VERSION,
@@ -229,7 +230,11 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
     },
     home,
     product: {
-      page: section("product_page", "product_page", "classic"),
+      // Cu blocurile in ordinea de azi; vizibilitatea lor, din comutatoarele vechi.
+      page: {
+        ...section("product_page", "product_page", "classic"),
+        blocks: completeazaBlocuri(undefined, schemaBlocurilor("product_page", "classic")!, { pageContent: pc, setari: {} }),
+      },
     },
     // Implicitul e „fara pagina separata": produsele raman pe pagina principala,
     // exact ca pana acum. Aprins din start, ca alegerea unui design de pagina sa

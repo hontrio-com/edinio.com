@@ -5,7 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { ciornaAFostSchimbata } from "@/lib/storefront/design/draft-guard";
-import { faraSemnPeSectiuni } from "@/lib/storefront/design/comutatoare-vechi";
+import {
+  MAX_CONTINUT_BYTES,
+  ciornaCuContinut,
+  contextCuCiorna,
+  continutDinCiorna,
+  marimeContinut,
+  pcCuCiorna,
+} from "@/lib/storefront/design/continut-ciorna";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import type { Json } from "@/types/database.types";
 
@@ -16,6 +23,10 @@ import type { Json } from "@/types/database.types";
  * nu are voie sa se schimbe sub ochii clientilor in timp ce proprietarul se joaca
  * cu variantele. `storefront_design_draft` e vizibil doar proprietarului, in
  * `/{slug}?preview=1`; `storefront_design` e ce vad vizitatorii.
+ *
+ * Din etapa 6 ciorna tine si continutul nepublicat (`continut`: cheile atinse din `page_content`,
+ * plus logo, coperta, culoare, galerie; vezi `continut-ciorna.ts`), deci „Publică” il duce si pe el
+ * in magazin, iar „Renunță” il arunca odata cu designul.
  *
  * Validarea foloseste EXACT parserul de la citire (`parseStoreDesign`), nu o a
  * doua schema. Un al doilea strat ar diverge inevitabil de primul; asa, ce nu
@@ -29,6 +40,7 @@ type ActionResult = { error: string } | { success: true };
 
 interface OwnedStore {
   businessId: string;
+  userId: string;
   slug: string | null;
   ctx: DesignContext;
 }
@@ -56,6 +68,7 @@ async function loadOwnedStore(businessId: string): Promise<OwnedStore | { error:
   const settings = Array.isArray(biz.store_settings) ? biz.store_settings[0] : biz.store_settings;
   return {
     businessId: biz.id,
+    userId: user.id,
     slug: biz.slug,
     ctx: {
       primaryColor: biz.primary_color ?? "#07c527",
@@ -113,7 +126,11 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
 
-  const design = parseStoreDesign(raw, owned.ctx);
+  // Continutul nepublicat (etapa 6), pe lista alba; designul se parseaza CU el, altfel un rand de
+  // produse care exista doar in ciorna ar fi iesit din design ca orfan.
+  const continut = continutDinCiorna(raw);
+  if (marimeContinut(continut) > MAX_CONTINUT_BYTES) return { error: "Conținutul nepublicat e prea mare. Publică sau renunță la o parte din el." };
+  const design = parseStoreDesign(raw, contextCuCiorna(owned.ctx, continut));
   if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
 
   if (baza !== undefined) {
@@ -133,7 +150,7 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
 
   const result = await writeSettings(
     owned.businessId,
-    { storefront_design_draft: design as unknown as Json },
+    { storefront_design_draft: ciornaCuContinut(design, continut) as unknown as Json },
     "saveDesignDraft",
   );
   if ("error" in result) return result;
@@ -152,6 +169,11 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
  * spunea ca totul e publicat. Valoarea primita trece prin acelasi parser total
  * ca oricare alta, deci nu poate strica designul; fara ea se cade pe ciorna din
  * baza, ca pana acum.
+ *
+ * ⚠ Din etapa 6, INTAI continutul (`page_content` imbinat pe chei, apoi `businesses`), APOI
+ * designul, parsat cu continutul nou, si golirea ciornei. Cazut la mijloc, ciorna ramane intreaga
+ * si „Publică” se poate repeta: scrierile de continut sunt idempotente. Invers, un design publicat
+ * fara continutul lui ar fi putut arata in magazin un rand de produse inca nescris.
  */
 export async function publishDesign(businessId: string, deEcran?: unknown): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
@@ -167,12 +189,33 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
   const sursa = deEcran ?? row?.storefront_design_draft;
   if (!sursa) return { error: "Nu exista modificari de publicat." };
 
-  const design = parseStoreDesign(sursa, owned.ctx);
+  const continut = continutDinCiorna(sursa);
+  if (marimeContinut(continut) > MAX_CONTINUT_BYTES) return { error: "Conținutul nepublicat e prea mare. Publică sau renunță la o parte din el." };
+  const design = parseStoreDesign(sursa, contextCuCiorna(owned.ctx, continut));
   if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
+
+  // 1. Continutul. Doar cheile atinse, imbinate peste `page_content` citit acum (in `loadOwnedStore`):
+  //    ce au scris Setarile intre timp ramane, ca la `updatePageContent`.
+  if (Object.keys(continut.pc).length > 0) {
+    const scris = await writeSettings(owned.businessId, { page_content: pcCuCiorna(owned.ctx.pageContent, continut) as Json }, "publishDesign.continut");
+    if ("error" in scris) return scris;
+  }
+  if (Object.keys(continut.magazin).length > 0) {
+    const { error } = await supabase
+      .from("businesses")
+      .update(continut.magazin as never)
+      .eq("id", owned.businessId)
+      .eq("user_id", owned.userId);
+    if (error) {
+      logError({ action: "publishDesign.magazin", businessId: owned.businessId, message: error.message });
+      return { error: "Eroare la salvare." };
+    }
+  }
 
   const result = await writeSettings(
     owned.businessId,
     {
+      // Designul, parsat mai sus cu continutul ciornei, care acum e si in magazin.
       storefront_design: design as unknown as Json,
       storefront_design_draft: null,
       storefront_design_pub_at: new Date().toISOString(),
@@ -194,61 +237,6 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
     revalidatePath(`/${owned.slug}`, "layout");
   }
   return { success: true };
-}
-
-/**
- * Comutatorul vechi din „Editeaza magazinul" isi ia inapoi dreptul de a vorbi.
- *
- * ⚠ Aceeasi sectiune are doua controale: ochiul din editorul de design, care
- * scrie `enabledOverride`, si comutatorul din editorul magazinului, care scrie
- * in `page_content`. Semnul explicit bate derivarea — altfel ochiul s-ar anula
- * singur la fiecare citire — dar consecinta era ca, dupa prima folosire a
- * ochiului, comutatorul vechi murea TACUT: se misca, se salva, arata „Salvat",
- * si nu schimba nimic, la nesfarsit.
- *
- * Se curata SI publicatul, SI ciorna: comutatorul vechi scrie direct in ce vad
- * clientii, deci o ciorna care mai poarta semnul l-ar fi reinviat la prima
- * publicare.
- */
-export async function elibereazaComutatoare(
-  businessId: string,
-  sectiuni: string[],
-  variante: string[] = [],
-): Promise<ActionResult> {
-  if (sectiuni.length === 0 && variante.length === 0) return { success: true };
-  const owned = await loadOwnedStore(businessId);
-  if ("error" in owned) return owned;
-
-  const supabase = await createClient();
-  const { data: rand } = await supabase
-    .from("store_settings")
-    .select("storefront_design, storefront_design_draft")
-    .eq("business_id", owned.businessId)
-    .single();
-  // Nimic salvat inca inseamna niciun semn de scos: designul se deriva intreg.
-  if (!rand?.storefront_design && !rand?.storefront_design_draft) return { success: true };
-
-  /*
-   * Se scrie DOAR daca chiar era ceva de scos.
-   *
-   * Actiunea se cheama la fiecare salvare de panou care a atins un comutator, iar
-   * marea majoritate a comerciantilor n-au folosit niciodata ochiul din editorul
-   * de design: pentru ei n-ar exista niciun semn, si totusi am fi rescris de
-   * fiecare data ambele coloane de design. Nu doar risipa — scrisul in ciorna
-   * face garda de concurenta sa raporteze, pe drept, „modificat in alta fila"
-   * intr-un editor de design deschis in paralel.
-   */
-  const patch: Record<string, unknown> = {};
-  for (const coloana of ["storefront_design", "storefront_design_draft"] as const) {
-    const raw = rand?.[coloana];
-    if (!raw) continue;
-    const inainte = parseStoreDesign(raw, owned.ctx);
-    const dupa = faraSemnPeSectiuni(inainte, sectiuni, variante);
-    if (JSON.stringify(dupa) !== JSON.stringify(inainte)) patch[coloana] = dupa as unknown as Json;
-  }
-  if (Object.keys(patch).length === 0) return { success: true };
-
-  return writeSettings(owned.businessId, patch, "elibereazaComutatoare");
 }
 
 /** Renunta la modificarile nepublicate. Designul public ramane neatins. */

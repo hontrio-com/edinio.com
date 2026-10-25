@@ -467,7 +467,7 @@ const componente = (): string[] =>
     .map(String).filter((f) => /\.tsx?$/.test(f)).map((f) => path.join(DOSAR_COMPONENTE, f));
 const faraComentarii = (f: string) => sursa(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-test("⚠⚠ editorul unic nu cheama `elibereazaComutatoare`", () => {
+test("⚠⚠ editorul unic nu cheama `elibereazaComutatoare` (stearsa in etapa 6)", () => {
   /*
    * Decizia 3 din PLAN.md. Actiunea scoate semnul ochiului de pe sectiunile ale
    * caror chei s-au salvat. In doua ecrane impaca doua controale; aici ar fi

@@ -342,7 +342,7 @@ Shopify, cu coloana noua; sau amandoua.)
 - [x] 4b.1 (25.10, `sabloane-produs.ts` + 10 probe) Modelul: tipuri, parser (plafoane, dubluri, id-uri unice), `sablonulProdusului`, operatiile
       (adauga, redenumeste, sterge, atribuie categorie / produs), sectiunile sabloanelor in
       `toateSectiunile` / `findSection`. Probe.
-- [ ] 4b.2 Magazinul: alegerea in `ProductPageDinDesign` (design viu, produs, lantul de categorii),
+- [x] 4b.2 (25.10, `sabloane-in-magazin.test.ts`; categoria produsului e un NUME, deci ruta o cauta dupa nume si urca pe `parent_id`) Magazinul: alegerea in `ProductPageDinDesign` (design viu, produs, lantul de categorii),
       marcajul mutat acolo, id-ul paginii dat variantelor; ruta citeste lantul doar cand trebuie;
       `sablon=` in editor. Probe.
 - [ ] 4b.3 Editorul: randul „Șablon”, panoul sablonului, arborele pe sablonul ales, previzualizarea pe

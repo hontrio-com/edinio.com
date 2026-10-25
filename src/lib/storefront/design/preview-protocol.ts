@@ -68,6 +68,18 @@ export function semneDeEditor(
   return { preview: unul(sp?.preview), editor: unul(sp?.[EDITOR_PARAM]) };
 }
 
+/**
+ * Sablonul de produs impus de editor in previzualizare (etapa 4b): cand comerciantul editeaza un
+ * sablon pe care nu-l foloseste inca niciun produs, pagina il arata oricum. Ruta il citeste DOAR
+ * in modul editor; aici doar se curata: un singur id, din caracterele unui id de sectiune.
+ */
+export const SABLON_PARAM = "sablon";
+
+export function sablonImpusDin(sp: Record<string, string | string[] | undefined> | undefined): string | null {
+  const v = sp?.[SABLON_PARAM];
+  return typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null;
+}
+
 /** Editor -> preview: designul de randat acum. */
 export interface PreviewDesignMessage {
   [PREVIEW_MESSAGE]: "design";

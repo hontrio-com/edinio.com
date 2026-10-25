@@ -20,9 +20,9 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
-import { MarcajSectiune } from "@/components/storefront/SectionRenderer";
 import { resolveProductOffers } from "@/lib/offers/offers";
-import { esteEditorDeDesign, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
+import { esteEditorDeDesign, sablonImpusDin, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
+import { areSabloanePeCategorii, lantulProdusului, paginaSablonului, sablonulProdusului } from "@/lib/storefront/design/sabloane-produs";
 import { designDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
@@ -282,6 +282,23 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     tagline: business.tagline,
   });
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
+  /*
+   * Sablonul paginii (etapa 4b, `sabloane-produs.ts`). Lantul categoriei se citeste doar cand
+   * designul are sabloane pe categorii, sau in editor, unde o atribuire noua schimba sablonul pe
+   * loc; altfel pagina publica nu face nicio interogare in plus. Sablonul impus din adresa, doar
+   * in editor.
+   */
+  const sablonImpus = esteEditorDesign ? sablonImpusDin(sp) : null;
+  const categoriiProdusului =
+    product.category && (esteEditorDesign || areSabloanePeCategorii(resolved.design.product))
+      ? lantulProdusului(
+          (await createAdminClient().from("categories").select("id, name, parent_id").eq("business_id", business.id).limit(1000)).data ?? [],
+          product.category,
+        )
+      : [];
+  const paginaProdusului = sablonImpus
+    ? paginaSablonului(resolved.design.product, sablonImpus)
+    : sablonulProdusului(resolved.design.product, product.id, categoriiProdusului);
   const chrome = buildChromeData({
     searchCategories,
     business: business as never,
@@ -318,22 +335,21 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
       />
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen">
-          {/* Varianta din designul VIU: in editor se schimba fara reincarcare. */}
-          <MarcajSectiune sectiune={resolved.design.product.page}>
-            <ProductPageDinDesign
-              variantImplicita={resolved.design.product.page.variant}
-              setariImplicite={resolved.design.product.page.settings}
-              business={pentruBrowser(business) as never}
-              product={product}
-              storeSettings={storeSettings as never}
-              basePath={basePath}
-              hasCardPayment={hasCardPayment}
-              bundleComponents={bundleComponents}
-              altMap={altMap}
-              productOffers={productOffers}
-              permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
-            />
-          </MarcajSectiune>
+          {/* Varianta si sablonul din designul VIU: in editor se schimba fara reincarcare. Marcajul e inauntru. */}
+          <ProductPageDinDesign
+            paginaImplicita={paginaProdusului}
+            categoriiProdusului={categoriiProdusului}
+            sablonImpus={sablonImpus}
+            business={pentruBrowser(business) as never}
+            product={product}
+            storeSettings={storeSettings as never}
+            basePath={basePath}
+            hasCardPayment={hasCardPayment}
+            bundleComponents={bundleComponents}
+            altMap={altMap}
+            productOffers={productOffers}
+            permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
+          />
         </StorePageShell>
       </StorefrontThemeScope>
     </>

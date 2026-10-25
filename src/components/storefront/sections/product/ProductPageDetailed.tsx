@@ -241,6 +241,7 @@ export function ProductPageDetailed({
   productOffers = [],
   setari = {},
   blocuri,
+  idPagina: idPaginaSablon,
   demo = false,
   permisIncarcare = null,
 }: {
@@ -257,6 +258,8 @@ export function ProductPageDetailed({
   setari?: Record<string, unknown>;
   /** Blocurile paginii (`design.product.page.blocks`); se completeaza aici, pe schema Detaliat. */
   blocuri?: BlockInstance[];
+  /** Id-ul sectiunii paginii (sablonul ales, etapa 4b); lipsa = Implicit. Vezi `classic`. */
+  idPagina?: string;
   /** Miniatura din catalogul de design-uri: pagina se randeaza inerta. Vezi `classic`. */
   /**
    * Permisul de incarcare a fisierelor, emis pe SERVER cand s-a randat pagina.
@@ -629,8 +632,8 @@ export function ProductPageDetailed({
   }, [editare.linie, pers, variantsData]);
 
   const chrome = useStoreChromeOptional();
-  // Id-ul paginii de produs in design, pentru marcajele blocurilor din editor.
-  const idPagina = chrome?.design?.product.page.id ?? "product_page";
+  // Id-ul paginii de produs in design (sablonul ales), pentru marcajele blocurilor din editor.
+  const idPagina = idPaginaSablon ?? chrome?.design?.product.page.id ?? "product_page";
   /* Unde se intoarce omul dupa ce salveaza sau renunta. */
   const inapoiLaCos = chrome?.cartHref ?? `${basePath}/cos`;
   // In magazinul cu un singur produs cosul e ascuns peste tot: fara header, fara

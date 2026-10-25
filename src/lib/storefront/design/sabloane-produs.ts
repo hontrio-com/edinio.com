@@ -77,6 +77,44 @@ export function lantulCategoriei(
   return lant;
 }
 
+/**
+ * Lantul categoriei unui PRODUS. ⚠ Produsul isi tine categoria dupa NUME (`products.category`),
+ * nu dupa id; sabloanele tin id-ul, care nu se schimba la redenumire. Deci intai categoria cu
+ * numele produsului, apoi parintii ei. Un nume care nu mai e al niciunei categorii = niciun lant.
+ */
+export function lantulProdusului(
+  categorii: readonly { id: string; name: string; parent_id: string | null }[],
+  numeCategorie: string | null | undefined,
+): string[] {
+  const nume = numeCategorie?.trim();
+  if (!nume) return [];
+  return lantulCategoriei(categorii, categorii.find((c) => c.name.trim() === nume)?.id ?? null);
+}
+
+/**
+ * Categoriile pe care le acopera un sablon: cele bifate si urmasii lor, fara subarborii bifati la
+ * ALT sablon (`oprite`), fiindca acolo castiga sablonul mai apropiat. Oprit la cicluri.
+ */
+export function categoriiAcoperite(
+  categorii: readonly { id: string; parent_id: string | null }[],
+  bifate: readonly string[],
+  oprite: ReadonlySet<string> = new Set(),
+): Set<string> {
+  const copii = new Map<string, string[]>();
+  for (const c of categorii) {
+    if (c.parent_id) copii.set(c.parent_id, [...(copii.get(c.parent_id) ?? []), c.id]);
+  }
+  const acoperite = new Set<string>();
+  const deVazut = [...bifate];
+  while (deVazut.length) {
+    const id = deVazut.pop()!;
+    if (acoperite.has(id)) continue;
+    acoperite.add(id);
+    for (const copil of copii.get(id) ?? []) if (!oprite.has(copil)) deVazut.push(copil);
+  }
+  return acoperite;
+}
+
 // ---------------------------------------------------------------------------
 // Operatiile din editor. Fiecare intoarce ACELASI obiect cand n-are ce face,
 // ca istoricul editorului sa nu noteze un pas gol (vezi `edit.ts`).
@@ -120,6 +158,24 @@ export function stergeSablon(design: StoreDesign, id: string): StoreDesign {
   const sabloane = sabloanele(design);
   if (!sabloane.some((s) => s.page.id === id)) return design;
   return cuSabloane(design, sabloane.filter((s) => s.page.id !== id));
+}
+
+/**
+ * Lista intreaga de produse-exceptie a unui sablon, cum o da selectorul de produse: curatata,
+ * fara dubluri, plafonata, iar produsele ei pleaca de la orice alt sablon.
+ */
+export function seteazaProduseSablon(design: StoreDesign, id: string, iduri: readonly string[]): StoreDesign {
+  const sabloane = sabloanele(design);
+  const tinta = sabloane.find((s) => s.page.id === id);
+  if (!tinta) return design;
+  const noi = [...new Set(iduri.filter((v) => ID_DE_ATRIBUIT.test(v)))].slice(0, MAX_PRODUSE_PE_SABLON);
+  const acelasi = noi.length === tinta.produse.length && noi.every((v, i) => v === tinta.produse[i]);
+  if (acelasi) return design;
+  const luate = new Set(noi);
+  return cuSabloane(design, sabloane.map((s) => {
+    if (s === tinta) return { ...s, produse: noi };
+    return s.produse.some((v) => luate.has(v)) ? { ...s, produse: s.produse.filter((v) => !luate.has(v)) } : s;
+  }));
 }
 
 /**

@@ -9,7 +9,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
-import { MarcajSectiune } from "@/components/storefront/SectionRenderer";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { getStoreProduct, enrichStoreProduct } from "@/lib/storefront/product-data";
@@ -650,22 +649,21 @@ export default async function SlugPage({ params, searchParams }: Props) {
               esteEditorDesign={esteEditorDesign}
               className="min-h-screen"
             >
-              <MarcajSectiune sectiune={opsResolved.design.product.page}>
-                <ProductPageDinDesign
-                  variantImplicita={opsResolved.design.product.page.variant}
-                  setariImplicite={opsResolved.design.product.page.settings}
-                  business={pentruBrowser(business)}
-                  product={product}
-                  storeSettings={setariDeTrimis as never}
-                  basePath={basePath}
-                  hasCardPayment={hasCardPayment}
-                  bundleComponents={bundleComponents}
-                  altMap={altMap}
-                  productOffers={opsProductOffers}
-                  permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
-                  isHome
-                />
-              </MarcajSectiune>
+              {/* Un singur produs: pagina lui e pagina principala, deci mereu sablonul Implicit (4b). Marcajul e inauntru. */}
+              <ProductPageDinDesign
+                paginaImplicita={opsResolved.design.product.page}
+                doarImplicit
+                business={pentruBrowser(business)}
+                product={product}
+                storeSettings={setariDeTrimis as never}
+                basePath={basePath}
+                hasCardPayment={hasCardPayment}
+                bundleComponents={bundleComponents}
+                altMap={altMap}
+                productOffers={opsProductOffers}
+                permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
+                isHome
+              />
             </StorePageShell>
           </>
         </>

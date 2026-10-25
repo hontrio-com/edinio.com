@@ -8,11 +8,14 @@ import {
   adaugaSablon,
   areSabloanePeCategorii,
   atribuieLaSablon,
+  categoriiAcoperite,
   lantulCategoriei,
+  lantulProdusului,
   MAX_SABLOANE,
   paginaSablonului,
   redenumesteSablon,
   sablonulProdusului,
+  seteazaProduseSablon,
   stergeSablon,
 } from "./sabloane-produs";
 import type { DesignContext, StoreDesign } from "./types";
@@ -84,6 +87,31 @@ test("lantul categoriei urca pana la radacina si nu se blocheaza intr-un ciclu",
   assert.deepEqual(lantulCategoriei(categorii, null), []);
 });
 
+test("⚠ produsul isi tine categoria dupa NUME: lantul porneste de la categoria cu numele lui", () => {
+  const categorii = [
+    { id: TABLOURI, name: "Tablouri", parent_id: null },
+    { id: CANVAS, name: " Canvas ", parent_id: TABLOURI },
+  ];
+  assert.deepEqual(lantulProdusului(categorii, "Canvas"), [CANVAS, TABLOURI]);
+  assert.deepEqual(lantulProdusului(categorii, "Tablouri"), [TABLOURI]);
+  assert.deepEqual(lantulProdusului(categorii, "Redenumita intre timp"), [], "un nume fara categorie: Implicit");
+  assert.deepEqual(lantulProdusului(categorii, null), []);
+});
+
+test("categoriile acoperite: bifate si urmasii lor, fara subarborii altui sablon", () => {
+  const categorii = [
+    { id: TABLOURI, parent_id: null },
+    { id: CANVAS, parent_id: TABLOURI },
+    { id: "postere", parent_id: TABLOURI },
+    { id: "mici", parent_id: CANVAS },
+    { id: "c1", parent_id: "c2" },
+    { id: "c2", parent_id: "c1" },
+  ];
+  assert.deepEqual([...categoriiAcoperite(categorii, [TABLOURI])].sort(), [CANVAS, TABLOURI, "mici", "postere"].sort());
+  assert.deepEqual([...categoriiAcoperite(categorii, [TABLOURI], new Set([CANVAS]))].sort(), [TABLOURI, "postere"].sort());
+  assert.deepEqual([...categoriiAcoperite(categorii, ["c1"])].sort(), ["c1", "c2"], "ciclul nu blocheaza");
+});
+
 test("⚠⚠ parserul pastreaza sabloanele, idempotent, cu id-uri unice in tot designul", () => {
   const { design } = cuDouaSabloane();
   const o = citit(design);
@@ -144,6 +172,16 @@ test("⚠ bifata la alt sablon, categoria se muta; operatiile goale intorc acela
   const debifat = atribuieLaSablon(design, tablouri, "categorii", TABLOURI, false);
   assert.equal(sablonulProdusului(debifat.product, "alt", [TABLOURI]).id, design.product.page.id);
   assert.equal(redenumesteSablon(design, tablouri, " Postere ").product.sabloane![0].nume, "Postere");
+});
+
+test("lista de produse din selector: curatata, fara dubluri, mutata de la celelalte sabloane", () => {
+  const { design, tablouri, special } = cuDouaSabloane();
+  const alt = "55555555-5555-4555-8555-555555555555";
+  const d = seteazaProduseSablon(design, tablouri, [PRODUS, alt, alt, "nu e id!"]);
+  assert.deepEqual(d.product.sabloane!.find((s) => s.page.id === tablouri)!.produse, [PRODUS, alt]);
+  assert.deepEqual(d.product.sabloane!.find((s) => s.page.id === special)!.produse, [], "produsul a plecat de la „Special”");
+  assert.equal(seteazaProduseSablon(d, tablouri, [PRODUS, alt]), d, "aceeasi lista: acelasi obiect");
+  assert.equal(seteazaProduseSablon(d, "necunoscut", [alt]), d);
 });
 
 test("stergerea trece produsele inapoi pe Implicit si scoate cheia cand nu mai ramane niciun sablon", () => {

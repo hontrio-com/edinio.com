@@ -163,7 +163,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, demo = false, permisIncarcare = null }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, idPagina: idPaginaSablon, demo = false, permisIncarcare = null }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -184,6 +184,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
    * completeaza aici, pe schema Clasic (`blocuri.ts`).
    */
   blocuri?: BlockInstance[];
+  /**
+   * Id-ul sectiunii paginii, pentru marcajele blocurilor din editor: al sablonului ales pentru
+   * produs (etapa 4b, `ProductPageDinDesign`). Lipsa = sablonul Implicit, ca inainte.
+   */
+  idPagina?: string;
   /**
    * Miniatura din catalogul de design-uri: pagina se randeaza inerta.
    *
@@ -588,8 +593,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   }, [editare.linie, pers, variantsData]);
 
   const chrome = useStoreChromeOptional();
-  // Id-ul paginii de produs in design, pentru marcajele blocurilor din editor.
-  const idPagina = chrome?.design?.product.page.id ?? "product_page";
+  // Id-ul paginii de produs in design (sablonul ales), pentru marcajele blocurilor din editor.
+  const idPagina = idPaginaSablon ?? chrome?.design?.product.page.id ?? "product_page";
   /* Unde se intoarce omul dupa ce salveaza sau renunta. */
   const inapoiLaCos = chrome?.cartHref ?? `${basePath}/cos`;
   /*

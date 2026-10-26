@@ -13,7 +13,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 ## A. Migratii
 | nr | fisier | ce face | demo | productie |
 |---|---|---|---|---|
-| - | - | etapa 1 nu are migratii: datele au ramas in aceleasi coloane si chei | - | - |
+| - | - | etapele 1-6 nu au migratii: datele au ramas in aceleasi coloane si chei | - | - |
+| 1 | `migrations/2027-01-31-istoricul-publicarilor.sql` | Tabelul `storefront_design_versions` (etapa 7, istoricul publicarilor): o versiune la fiecare „Publică”, plus starea de dinainte la prima. RLS fara politici, niciun drept pentru `anon` si `authenticated`, doar `service_role` (verificarea e chiar in migratie). `on delete cascade` de la `businesses`. | **DA, 26.10.2026.** Verificat pe rezultat: RLS pornit, 0 politici, `anon` si `authenticated` fara niciun drept, `service_role` scrie si citeste. | **NU.** Aditiva: se aplica INAINTEA push-ului. Fara ea, „Publică” merge, dar istoricul ramane gol si fiecare publicare scrie o eroare in jurnal. `npm run verifica:coloane` cade pe tabelul asta pana e aplicata (anume). Apoi baseline-ul regenerat in acelasi commit. |
 
 ## B. Variabile de mediu noi
 | cheie | de ce | pusa in Vercel |

@@ -6651,6 +6651,44 @@ export type Database = {
           },
         ]
       }
+      storefront_design_versions: {
+        Row: {
+          business_id: string
+          continut: Json
+          created_at: string
+          design: Json
+          id: string
+          origine: string
+          publicat_de: string | null
+        }
+        Insert: {
+          business_id: string
+          continut: Json
+          created_at?: string
+          design: Json
+          id?: string
+          origine?: string
+          publicat_de?: string | null
+        }
+        Update: {
+          business_id?: string
+          continut?: Json
+          created_at?: string
+          design?: Json
+          id?: string
+          origine?: string
+          publicat_de?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storefront_design_versions_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stripe_events: {
         Row: {
           created_at: string

@@ -600,7 +600,9 @@ Citit in cod si masurat inainte:
       `ciorna.ts`; 14 probe noi, 14 din 14 mutatii prinse) Logica fara React: `scoase` in continutul ciornei (parser, suprapunere, amprenta, scrierea
       cheilor), instantaneul unei versiuni, ciorna facuta dintr-o versiune (diferenta fata de publicat),
       pasul „readu” in reductor (cu istoric), data afisata. Probe.
-- [ ] 7.2 Migratia (fisier, aplicata pe demo, verificata: RLS, drepturile lui `anon` si
+- [x] 7.2 (26.10, `migrations/2027-01-31-istoricul-publicarilor.sql`, aplicata DOAR pe demo; verificat pe
+      rezultat: RLS pornit, 0 politici, `anon` si `authenticated` fara niciun drept; tipurile; `verifica:coloane`
+      cere tabelul, deci cade inainte de push pana e aplicata in productie) Migratia (fisier, aplicata pe demo, verificata: RLS, drepturile lui `anon` si
       `authenticated`), tipurile, REGISTRU A.
 - [ ] 7.3 Serverul: `publishDesign` scrie versiunea (si starea de dinainte, la prima), plafonul;
       actiunile de listare si de citire, cu proprietarul verificat. Probe.

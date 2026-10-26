@@ -22,9 +22,6 @@ import type { Ciorna, ContinutPublicat } from "./ciorna";
  * Functii pure: actiunile de server, editorul si probele le folosesc la fel.
  */
 
-/** Tabelul versiunilor. Doar `service_role` il atinge (migratia din `REGISTRU.md`, A). */
-export const TABEL_VERSIUNI = "storefront_design_versions";
-
 /** Cate versiuni se pastreaza pe magazin; cele mai vechi se sterg la scriere. */
 export const VERSIUNI_PASTRATE = 30;
 

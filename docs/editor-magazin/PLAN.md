@@ -604,7 +604,8 @@ Citit in cod si masurat inainte:
       rezultat: RLS pornit, 0 politici, `anon` si `authenticated` fara niciun drept; tipurile; `verifica:coloane`
       cere tabelul, deci cade inainte de push pana e aplicata in productie) Migratia (fisier, aplicata pe demo, verificata: RLS, drepturile lui `anon` si
       `authenticated`), tipurile, REGISTRU A.
-- [ ] 7.3 Serverul: `publishDesign` scrie versiunea (si starea de dinainte, la prima), plafonul;
+- [x] 7.3 (26.10, `store-design.actions.ts`: `pastreazaVersiunea`, `listDesignVersions`, `getDesignVersion`;
+      `istoricul-publicarilor.test.ts`, 9 probe, 14 din 14 mutatii prinse) Serverul: `publishDesign` scrie versiunea (si starea de dinainte, la prima), plafonul;
       actiunile de listare si de citire, cu proprietarul verificat. Probe.
 - [ ] 7.4 Editorul: butonul „Istoric”, lista, „Readu în editor”. Probe.
 - [ ] 7.5 REGISTRU (C), porti, proba in Chrome pe magazinul de proba.

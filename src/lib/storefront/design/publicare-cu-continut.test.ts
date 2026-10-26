@@ -34,7 +34,9 @@ test("⚠⚠ ciorna se salveaza cu continutul ei, iar designul se parseaza CU el
 
 test("⚠⚠ „Publică” scrie INTAI continutul, apoi designul si golirea ciornei", () => {
   const f = functia(sursa(), "publishDesign");
-  const pc = f.indexOf("page_content: pcCuCiorna(owned.ctx.pageContent, continut)");
+  // Cheile scrise si cele scoase de o versiune readusa (etapa 7), peste `page_content` citit acum.
+  assert.match(f, /const pcNou = pcCuCiorna\(owned\.ctx\.pageContent, continut\);\s*if \(atingeCheiPc\(continut\)\) \{/);
+  const pc = f.indexOf("page_content: pcNou as Json");
   const magazin = f.indexOf('.from("businesses")');
   const design = f.indexOf("storefront_design: design as unknown as Json");
   assert.ok(pc > 0 && magazin > 0 && design > 0, "lipseste o scriere");
@@ -54,6 +56,6 @@ test("⚠⚠ `elibereazaComutatoare` nu mai exista: ar fi rescris ciorna fara co
   assert.ok(!existsSync("src/lib/storefront/design/comutatoare-vechi.ts"));
   // Fiecare actiune exportata verifica proprietarul inainte de orice.
   const exportate = [...s.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]);
-  assert.deepEqual(exportate.sort(), ["discardDesignDraft", "publishDesign", "saveDesignDraft"]);
+  assert.deepEqual(exportate.sort(), ["discardDesignDraft", "getDesignVersion", "listDesignVersions", "publishDesign", "saveDesignDraft"]);
   for (const nume of exportate) assert.match(functia(s, nume), /const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;/, nume);
 });

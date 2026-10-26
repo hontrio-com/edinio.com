@@ -2,16 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { esteUuid } from "@/lib/supabase/ids";
 import { logError } from "@/lib/error-logger";
+import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
+import { instantaneuContinut, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { ciornaAFostSchimbata } from "@/lib/storefront/design/draft-guard";
 import {
   MAX_CONTINUT_BYTES,
+  atingeCheiPc,
   ciornaCuContinut,
   contextCuCiorna,
   continutDinCiorna,
   marimeContinut,
   pcCuCiorna,
+  type ContinutCiorna,
 } from "@/lib/storefront/design/continut-ciorna";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import type { Json } from "@/types/database.types";
@@ -43,6 +49,8 @@ interface OwnedStore {
   userId: string;
   slug: string | null;
   ctx: DesignContext;
+  /** Coloanele din `businesses` pe care le regleaza editorul, asa cum sunt ACUM in magazin. */
+  magazin: ContinutPublicat["magazin"];
 }
 
 /**
@@ -59,7 +67,7 @@ async function loadOwnedStore(businessId: string): Promise<OwnedStore | { error:
 
   const { data: biz } = await supabase
     .from("businesses")
-    .select("id, slug, primary_color, features, cover_url, tagline, store_settings(page_content)")
+    .select("id, slug, logo_url, primary_color, features, cover_url, gallery, tagline, store_settings(page_content)")
     .eq("id", businessId)
     .eq("user_id", user.id)
     .single();
@@ -76,6 +84,12 @@ async function loadOwnedStore(businessId: string): Promise<OwnedStore | { error:
       features: (biz.features as Record<string, unknown>) ?? {},
       coverUrl: biz.cover_url,
       tagline: biz.tagline,
+    },
+    magazin: {
+      logo_url: biz.logo_url,
+      cover_url: biz.cover_url,
+      primary_color: biz.primary_color ?? "#07c527",
+      gallery: Array.isArray(biz.gallery) ? biz.gallery.filter((u): u is string => typeof u === "string" && !!u) : [],
     },
   };
 }
@@ -105,6 +119,72 @@ async function writeSettings(businessId: string, patch: Record<string, unknown>,
     return { error: "Eroare la salvare." };
   }
   return { success: true };
+}
+
+interface Instantaneu {
+  design: unknown;
+  continut: ContinutCiorna;
+}
+
+/**
+ * Pastreaza ca versiune ce tocmai a ajuns in magazin (etapa 7 din `docs/editor-magazin/PLAN.md`);
+ * cand magazinul n-are inca nicio versiune, si ce era in magazin inainte, ca si primul „Publică” sa
+ * se poata desface. Pastreaza cele mai noi `VERSIUNI_PASTRATE`.
+ *
+ * ⚠ Nu poate strica publicarea: magazinul e deja schimbat, deci o cadere ajunge doar in jurnal.
+ * ⚠ Clientul de serviciu (tabelul n-are politici), deci NUMAI cu `owned.businessId`, iar chemata doar
+ * dupa `loadOwnedStore`.
+ */
+async function pastreazaVersiunea(
+  owned: OwnedStore,
+  v: { inainte: Instantaneu & { la: string | null }; publicat: Instantaneu & { la: string } },
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { count, error: eNumar } = await admin
+      .from("storefront_design_versions")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", owned.businessId);
+    if (eNumar) throw new Error(eNumar.message);
+
+    const randuri: { business_id: string; design: Json; continut: Json; origine: string; publicat_de: string | null; created_at: string }[] = [];
+    if (count === 0) {
+      // Data ei e a publicarii de dinainte, cand exista; altfel o clipa inaintea celei de acum.
+      const inainteLa = v.inainte.la && Date.parse(v.inainte.la) < Date.parse(v.publicat.la)
+        ? v.inainte.la
+        : new Date(Date.parse(v.publicat.la) - 1000).toISOString();
+      randuri.push({
+        business_id: owned.businessId, design: v.inainte.design as Json, continut: v.inainte.continut as unknown as Json,
+        origine: "inainte", publicat_de: null, created_at: inainteLa,
+      });
+    }
+    randuri.push({
+      business_id: owned.businessId, design: v.publicat.design as Json, continut: v.publicat.continut as unknown as Json,
+      origine: "publicare", publicat_de: owned.userId, created_at: v.publicat.la,
+    });
+    const { error: eScris } = await admin.from("storefront_design_versions").insert(randuri);
+    if (eScris) throw new Error(eScris.message);
+
+    if ((count ?? 0) + randuri.length > VERSIUNI_PASTRATE) {
+      const { data: vechi, error: eVechi } = await admin
+        .from("storefront_design_versions")
+        .select("id")
+        .eq("business_id", owned.businessId)
+        .order("created_at", { ascending: false })
+        .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 99);
+      if (eVechi) throw new Error(eVechi.message);
+      if (vechi && vechi.length > 0) {
+        const { error: eSters } = await admin
+          .from("storefront_design_versions")
+          .delete()
+          .eq("business_id", owned.businessId)
+          .in("id", vechi.map((r) => r.id));
+        if (eSters) throw new Error(eSters.message);
+      }
+    }
+  } catch (e) {
+    logError({ action: "publishDesign.versiune", businessId: owned.businessId, message: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 /** Salveaza ciorna. Nu atinge ce vad vizitatorii. */
@@ -174,6 +254,9 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
  * designul, parsat cu continutul nou, si golirea ciornei. Cazut la mijloc, ciorna ramane intreaga
  * si „Publică” se poate repeta: scrierile de continut sunt idempotente. Invers, un design publicat
  * fara continutul lui ar fi putut arata in magazin un rand de produse inca nescris.
+ *
+ * Din etapa 7, la urma, ce a ajuns in magazin se pastreaza ca versiune (`pastreazaVersiunea`),
+ * cu chiar data publicarii.
  */
 export async function publishDesign(businessId: string, deEcran?: unknown): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
@@ -182,7 +265,7 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
   const supabase = await createClient();
   const { data: row } = await supabase
     .from("store_settings")
-    .select("storefront_design_draft")
+    .select("storefront_design_draft, storefront_design, storefront_design_pub_at")
     .eq("business_id", owned.businessId)
     .single();
 
@@ -194,10 +277,12 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
   const design = parseStoreDesign(sursa, contextCuCiorna(owned.ctx, continut));
   if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
 
-  // 1. Continutul. Doar cheile atinse, imbinate peste `page_content` citit acum (in `loadOwnedStore`):
-  //    ce au scris Setarile intre timp ramane, ca la `updatePageContent`.
-  if (Object.keys(continut.pc).length > 0) {
-    const scris = await writeSettings(owned.businessId, { page_content: pcCuCiorna(owned.ctx.pageContent, continut) as Json }, "publishDesign.continut");
+  // 1. Continutul. Doar cheile atinse (si cele scoase de o versiune readusa), imbinate peste
+  //    `page_content` citit acum (in `loadOwnedStore`): ce au scris Setarile intre timp ramane, ca la
+  //    `updatePageContent`.
+  const pcNou = pcCuCiorna(owned.ctx.pageContent, continut);
+  if (atingeCheiPc(continut)) {
+    const scris = await writeSettings(owned.businessId, { page_content: pcNou as Json }, "publishDesign.continut");
     if ("error" in scris) return scris;
   }
   if (Object.keys(continut.magazin).length > 0) {
@@ -212,17 +297,33 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
     }
   }
 
+  // Aceeasi data si pe versiune: asa stie istoricul care versiune e „În magazin acum”.
+  const publicatLa = new Date().toISOString();
   const result = await writeSettings(
     owned.businessId,
     {
       // Designul, parsat mai sus cu continutul ciornei, care acum e si in magazin.
       storefront_design: design as unknown as Json,
       storefront_design_draft: null,
-      storefront_design_pub_at: new Date().toISOString(),
+      storefront_design_pub_at: publicatLa,
     },
     "publishDesign",
   );
   if ("error" in result) return result;
+
+  // La urma, istoricul (etapa 7): abia acum, cand magazinul chiar s-a schimbat.
+  await pastreazaVersiunea(owned, {
+    inainte: {
+      design: row?.storefront_design ?? {},
+      continut: instantaneuContinut(owned.ctx.pageContent, owned.magazin),
+      la: row?.storefront_design_pub_at ?? null,
+    },
+    publicat: {
+      design,
+      continut: instantaneuContinut(pcNou, { ...owned.magazin, ...continut.magazin }),
+      la: publicatLa,
+    },
+  });
 
   revalidatePath("/dashboard/editor");
   if (owned.slug) {
@@ -253,4 +354,63 @@ export async function discardDesignDraft(businessId: string): Promise<ActionResu
 
   revalidatePath("/dashboard/editor");
   return { success: true };
+}
+
+/**
+ * Istoricul publicarilor (etapa 7), cele mai noi intai, cu data publicarii din magazin: lista scrie
+ * „În magazin acum” doar pe versiunea cu chiar data aceea (`esteInMagazin`).
+ */
+export async function listDesignVersions(
+  businessId: string,
+): Promise<{ versiuni: VersiuneInLista[]; publicatLa: string | null } | { error: string }> {
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+
+  const supabase = await createClient();
+  const [{ data, error }, { data: setari }] = await Promise.all([
+    createAdminClient()
+      .from("storefront_design_versions")
+      .select("id, created_at, origine")
+      .eq("business_id", owned.businessId)
+      .order("created_at", { ascending: false })
+      .limit(VERSIUNI_PASTRATE),
+    supabase.from("store_settings").select("storefront_design_pub_at").eq("business_id", owned.businessId).single(),
+  ]);
+  // ⚠ O citire cazuta NU e „n-ai nicio versiune”: lista goala ar fi mintit.
+  if (error) {
+    logError({ action: "listDesignVersions", businessId: owned.businessId, message: error.message });
+    return { error: "Nu am putut citi istoricul. Încearcă din nou." };
+  }
+  return {
+    versiuni: (data ?? []).map((r) => ({ id: r.id, la: r.created_at, origine: r.origine === "inainte" ? "inainte" : "publicare" })),
+    publicatLa: setari?.storefront_design_pub_at ?? null,
+  };
+}
+
+/**
+ * O versiune intreaga, pentru „Readu în editor”. Nu atinge magazinul: editorul o pune in ciorna, iar de
+ * acolo trece prin aceleasi porti ca orice ciorna (parserul, lista alba, plafoanele).
+ */
+export async function getDesignVersion(
+  businessId: string,
+  idVersiune: string,
+): Promise<{ design: unknown; continut: unknown; la: string } | { error: string }> {
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+  if (!esteUuid(idVersiune)) return { error: "Versiunea nu mai există." };
+
+  // ⚠ Si `business_id`, nu doar `id`: altfel se putea cere versiunea altui magazin.
+  const { data, error } = await createAdminClient()
+    .from("storefront_design_versions")
+    .select("design, continut, created_at")
+    .eq("id", idVersiune)
+    .eq("business_id", owned.businessId)
+    .maybeSingle();
+  // Doua mesaje, fiindca sunt doua lucruri: citirea noastra a cazut, sau versiunea nu (mai) e a lui.
+  if (error) {
+    logError({ action: "getDesignVersion", businessId: owned.businessId, message: error.message });
+    return { error: "Nu am putut citi versiunea acum. Încearcă din nou." };
+  }
+  if (!data) return { error: "Versiunea nu mai există." };
+  return { design: data.design, continut: data.continut, la: data.created_at };
 }

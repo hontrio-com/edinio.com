@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, ExternalLink, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, History, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -33,7 +33,7 @@ const DISPOZITIVE = [
 export function BaraEditor({
   pagina, onPagina, ciorna, dispozitiv, onDispozitiv, onReincarca, adresaPublica,
   publicat, publicareInCurs, onComutaPublicarea, continutNesalvat, vedereMobil, onVedereMobil, ingust = false,
-  paginiProprii = [], anulare, laIesire = "/dashboard",
+  paginiProprii = [], anulare, laIesire = "/dashboard", onIstoric,
 }: {
   pagina: CheiePagina;
   onPagina: (p: CheiePagina) => void;
@@ -57,6 +57,8 @@ export function BaraEditor({
   anulare?: { poateAnula: boolean; poateReface: boolean; anuleaza: () => void; reface: () => void };
   /** Unde duce „Ieși”. */
   laIesire?: string;
+  /** Deschide istoricul publicarilor (etapa 7). */
+  onIstoric: () => void;
 }) {
   const ist = anulare ?? ciorna;
   const [confirma, setConfirma] = useState(false);
@@ -117,6 +119,12 @@ export function BaraEditor({
         <button type="button" onClick={ist.reface} disabled={!ist.poateReface} title="Refă (Ctrl+Y)" aria-label="Refă"
           className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors">
           <Redo2 className="h-4 w-4" />
+        </button>
+        {/* Langa Anuleaza: tot un drum inapoi, dar peste publicari, nu peste pasii de acum (etapa 7). */}
+        <button type="button" onClick={onIstoric} title="Istoricul publicărilor: readu o versiune de dinainte" aria-label="Istoricul publicărilor"
+          className="h-9 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <History className="h-4 w-4" />
+          <span className="hidden xl:inline">Istoric</span>
         </button>
       </div>
 
@@ -186,12 +194,15 @@ export function BaraEditor({
             <DropdownMenuItem className="rounded-lg p-2.5" disabled={!ist.poateReface} onClick={ist.reface}>
               <Redo2 className="h-4 w-4" /> Refă
             </DropdownMenuItem>
+            <DropdownMenuItem className="rounded-lg p-2.5" onClick={onIstoric}>
+              <History className="h-4 w-4" /> Istoricul publicărilor
+            </DropdownMenuItem>
             <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => setConfirma(true)}>
               <span className={cn("w-2 h-2 rounded-full", publicat ? "bg-primary" : "bg-muted-foreground/50")} />
               {publicat ? "Magazin vizibil: ascunde-l" : "Magazin ascuns: fă-l vizibil"}
             </DropdownMenuItem>
             {ciorna.areModificari && (
-              <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => void ciorna.renunta()}>Renunță la modificările de design</DropdownMenuItem>
+              <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => void ciorna.renunta()}>Renunță la modificările nepublicate</DropdownMenuItem>
             )}
             <DropdownMenuItem className="rounded-lg p-2.5" onClick={onReincarca}><RotateCw className="h-4 w-4" /> Reîncarcă previzualizarea</DropdownMenuItem>
             <DropdownMenuItem className="rounded-lg p-2.5" render={<a href={adresaPublica} target="_blank" rel="noopener noreferrer" />}>

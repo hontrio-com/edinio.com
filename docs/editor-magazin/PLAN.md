@@ -607,7 +607,9 @@ Citit in cod si masurat inainte:
 - [x] 7.3 (26.10, `store-design.actions.ts`: `pastreazaVersiunea`, `listDesignVersions`, `getDesignVersion`;
       `istoricul-publicarilor.test.ts`, 9 probe, 14 din 14 mutatii prinse) Serverul: `publishDesign` scrie versiunea (si starea de dinainte, la prima), plafonul;
       actiunile de listare si de citire, cu proprietarul verificat. Probe.
-- [ ] 7.4 Editorul: butonul „Istoric”, lista, „Readu în editor”. Probe.
+- [x] 7.4 (26.10, `IstoricVersiuni.tsx`, `readuVersiunea` in `useCiornaDesign`, butonul in `BaraEditor`; 4 probe
+      pe sursa, 8 din 8 mutatii prinse; in treacat, meniul de pe telefon spunea inca „Renunță la modificările de
+      design”, desi din etapa 6 „Renunță” arunca si continutul) Editorul: butonul „Istoric”, lista, „Readu în editor”. Probe.
 - [ ] 7.5 REGISTRU (C), porti, proba in Chrome pe magazinul de proba.
 
 ## Deciziile proprietarului

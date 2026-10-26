@@ -28,6 +28,7 @@ import { ArborePagina, type TintaBloc } from "./ArborePagina";
 import { ArboreSectiuni } from "./ArboreSectiuni";
 import { BaraEditor } from "./BaraEditor";
 import { GalerieAdauga } from "./GalerieAdauga";
+import { IstoricVersiuni } from "./IstoricVersiuni";
 import { PanouBloc } from "./PanouBloc";
 import { PanouNod } from "./PanouNod";
 import { PanouAdaugaBloc, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
@@ -249,6 +250,8 @@ export function EditorMagazin({
   const [peste, setPeste] = useState<string | null>(null);
   const [galerieDesign, setGalerieDesign] = useState<string | null>(null);
   const [adaugaDeschis, setAdaugaDeschis] = useState(false);
+  /** Istoricul publicarilor (etapa 7), deschis peste editor. */
+  const [istoricDeschis, setIstoricDeschis] = useState(false);
   const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
   /*
    * Pe un ecran ingust butoanele de dispozitiv lipsesc din bara, iar magazinul de
@@ -394,6 +397,20 @@ export function EditorMagazin({
   const inapoiLaArbore = useCallback(() => {
     setSelectat(null);
     setBlocSelectat(null);
+  }, []);
+
+  /**
+   * O versiune readusa a intrat in ciorna: panoul deschis poate fi al unei sectiuni care in versiune
+   * nu exista, deci inapoi la arbore, si previzualizarea in fata (pe telefon e ascunsa sub panou).
+   */
+  const dupaVersiuneReadusa = useCallback(() => {
+    setIstoricDeschis(false);
+    setSelectat(null);
+    setBlocSelectat(null);
+    setGalerieDesign(null);
+    setAdaugaDeschis(false);
+    setSetariSablon(false);
+    setVedereMobil("previzualizare");
   }, []);
 
   const schimbaPagina = useCallback((p: CheiePagina) => {
@@ -582,7 +599,12 @@ export function EditorMagazin({
         paginiProprii={paginiAfisate.paginiProprii}
         anulare={istoricPagina ?? undefined}
         laIesire={iesire}
+        onIstoric={() => setIstoricDeschis(true)}
       />
+      {istoricDeschis && (
+        <IstoricVersiuni businessId={magazin.id} ciorna={ciorna} ocupat={continut.incarc}
+          onInchide={() => setIstoricDeschis(false)} onReadusa={dupaVersiuneReadusa} />
+      )}
 
       <div className="flex flex-1 min-h-0">
         <aside className={`w-full lg:w-[360px] shrink-0 flex-col border-r border-border bg-surface ${vedereMobil === "previzualizare" ? "hidden lg:flex" : "flex"}`}>

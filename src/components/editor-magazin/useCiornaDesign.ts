@@ -13,6 +13,7 @@ import {
   type ContinutPublicat,
 } from "@/lib/editor-magazin/ciorna";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
+import { ciornaDinVersiune } from "@/lib/editor-magazin/versiuni";
 import { CONTINUT_GOL, amprentaContinut, areContinut, ciornaCuContinut, type ContinutCiorna } from "@/lib/storefront/design/continut-ciorna";
 import type { StoreDesign } from "@/lib/storefront/design/types";
 
@@ -195,6 +196,14 @@ export function useCiornaDesign({
   const anuleazaPas = useCallback(() => despacha({ tip: "anuleaza" }), []);
   const refaPas = useCallback(() => despacha({ tip: "reface" }), []);
 
+  /**
+   * Readuce o versiune din istoric (etapa 7): in CIORNA, ca un pas pe care Anuleaza il desface, nu in
+   * magazin. Socotita fata de ce e publicat acum; ajunge la clienti abia la „Publică”.
+   */
+  const readuVersiunea = useCallback((v: { design: unknown; continut: unknown }) => {
+    despacha({ tip: "readu", ciorna: ciornaDinVersiune(v, continutPublicatAcum.current, ctxPublicatAcum.current), acum: Date.now() });
+  }, []);
+
   /** `true` cand ciorna (design si continut) a ajuns in magazin („Publică și ieși” pleaca doar atunci). */
   const publica = useCallback(async (): Promise<boolean> => {
     epoca.current += 1;
@@ -274,6 +283,7 @@ export function useCiornaDesign({
     poateReface: istoric.viitor.length > 0,
     anuleaza: anuleazaPas,
     reface: refaPas,
+    readuVersiunea,
     publica,
     renunta,
     salveazaAcum,

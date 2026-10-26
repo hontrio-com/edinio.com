@@ -644,3 +644,43 @@ test("⚠ codul culorii din Stil urmeaza ciorna, si la Anuleaza / Renunță (vaz
   assert.match(s, /const \[hexScris, setHexScris\] = useState<string \| null>\(null\);\s*const hex = hexScris \?\? culoare;/);
   assert.match(s, /const alegeCuloare = \(c: string\) => \{ setHexScris\(null\); setCuloare\(c\); \};/);
 });
+
+// ── Istoricul publicarilor (7.4), pe sursa ────────────────────────────────────
+
+const ISTORIC = "src/components/editor-magazin/IstoricVersiuni.tsx";
+
+test("⚠⚠ „Readu în editor” pune versiunea in CIORNA, ca un pas; niciodata direct in magazin", () => {
+  const s = faraComentarii(ISTORIC);
+  assert.doesNotMatch(s, /publishDesign|saveDesignDraft|publica\(/, "readusa, versiunea nu pleaca singura spre clienti");
+  // Abia dupa ce versiunea a venit intreaga de la server.
+  assert.match(s, /if \("error" in r\) \{\s*toast\.error\(r\.error\);\s*return;\s*\}\s*ciorna\.readuVersiunea\(r\);/);
+  const hook = faraComentarii("src/components/editor-magazin/useCiornaDesign.ts");
+  assert.match(hook, /despacha\(\{ tip: "readu", ciorna: ciornaDinVersiune\(v, continutPublicatAcum\.current, ctxPublicatAcum\.current\), acum: Date\.now\(\) \}\);/);
+});
+
+test("⚠⚠ cu modificari nepublicate, intai intrebarea; cat se urca o imagine sau se publica, nimic", () => {
+  const s = faraComentarii(ISTORIC);
+  assert.match(s, /const cere = \(v: VersiuneInLista\) => \{\s*if \(ciorna\.areModificari\) setIntreb\(v\.id\);\s*else void readu\(v\);\s*\};/);
+  assert.match(s, /le recuperezi cu Anulează/);
+  // Ambele butoane care readuc sunt oprite cat se urca o imagine, cat se publica si cat se aduce alta.
+  assert.equal(s.split("disabled={ocupat || ciorna.publicaInCurs || aduc !== null").length - 1, 2);
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /<IstoricVersiuni businessId=\{magazin\.id\} ciorna=\{ciorna\} ocupat=\{continut\.incarc\}/);
+});
+
+test("„În magazin acum” dupa data publicarii, nu dupa pozitia in lista", () => {
+  const s = faraComentarii(ISTORIC);
+  assert.match(s, /const inMagazin = esteInMagazin\(v\.la, lista\.publicatLa\);/);
+  assert.doesNotMatch(s, /versiuni\[0\]|index === 0|i === 0/);
+  // O citire cazuta e o eroare cu „Încearcă din nou”, nu o lista goala.
+  assert.match(s, /if \("error" in r\) setEroare\(r\.error\);\s*else setLista\(r\);/);
+});
+
+test("istoricul se deschide din bara si de pe telefon, din meniul „...”", () => {
+  const s = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
+  assert.match(s, /<button type="button" onClick=\{onIstoric\}[^>]*aria-label="Istoricul publicărilor"/);
+  assert.match(s, /<DropdownMenuItem className="rounded-lg p-2\.5" onClick=\{onIstoric\}>\s*<History className="h-4 w-4" \/> Istoricul publicărilor/);
+  // Din etapa 6 „Renunță” arunca si continutul, nu doar designul.
+  assert.doesNotMatch(s, /modificările de design/);
+  assert.match(faraComentarii(EDITOR), /onIstoric=\{\(\) => setIstoricDeschis\(true\)\}/);
+});

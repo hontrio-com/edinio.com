@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { newProductSection } from "@/lib/store-sections";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { updateSection } from "@/lib/storefront/design/edit";
-import { CONTINUT_GOL, type ContinutCiorna } from "@/lib/storefront/design/continut-ciorna";
+import { CONTINUT_GOL, parseContinutCiorna, type ContinutCiorna } from "@/lib/storefront/design/continut-ciorna";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import {
   amprentaCiornei,
@@ -99,4 +99,43 @@ test("amprenta ciornei cuprinde continutul", () => {
   const cu = { ...s.ciorna, continut: cuCheilePc(CONTINUT_GOL, { logo_size: 70 }, publicat) };
   assert.notEqual(amprentaCiornei(s.ciorna), amprentaCiornei(cu));
   assert.equal(amprentaCiornei(s.ciorna), amprentaCiornei({ ...s.ciorna }));
+});
+
+/* ═══ Etapa 7: cheile scoase si versiunea readusa ═══ */
+
+test("⚠⚠ o cheie scrisa de om nu mai e scoasa", () => {
+  const c0 = parseContinutCiorna({ scoase: ["logo_size", "store_bg_color"] });
+  const c1 = cuCheilePc(c0, { logo_size: 70 }, publicat);
+  assert.deepEqual(c1.pc, { logo_size: 70 });
+  assert.deepEqual(c1.scoase, ["store_bg_color"]);
+  // Adusa la valoarea publicata: nici scrisa, nici scoasa; ramane cea din magazin.
+  const c2 = cuCheilePc(c0, { logo_size: 36 }, publicat);
+  assert.deepEqual(c2.pc, {});
+  assert.deepEqual(c2.scoase, ["store_bg_color"]);
+  const c3 = cuCheilePc(c2, { store_bg_color: "#ffffff" }, publicat);
+  assert.deepEqual(c3.pc, { store_bg_color: "#ffffff" });
+  assert.equal("scoase" in c3, false, "lista goala nu ramane in ciorna");
+  assert.equal(cuCheilePc(c0, {}, publicat), c0, "fara schimbare, acelasi obiect");
+});
+
+test("dupa „Publică”, cheia scoasa lipseste si din publicat", () => {
+  const nou = dupaPublicare(publicat, parseContinutCiorna({ scoase: ["logo_size"] }));
+  assert.equal(Object.hasOwn(nou.pc, "logo_size"), false);
+  assert.deepEqual(nou.pc.reviews_section, publicat.pc.reviews_section);
+});
+
+test("⚠⚠ „readu” e un pas: Anuleaza aduce inapoi ciorna de dinainte, Refa versiunea", () => {
+  const s1 = scrieContinut(pornire(), (c) => cuCheilePc(c, { logo_size: 70 }, publicat));
+  const veche = buildClassicDesign(ctx);
+  const versiune = {
+    design: updateSection(veche, veche.chrome.header.id, { variant: "centered" }),
+    continut: parseContinutCiorna({ scoase: ["reviews_section"] }),
+  };
+  const s2 = reductorCiorna(s1, { tip: "readu", ciorna: versiune, acum: (ceas += 5_000) });
+  assert.deepEqual(s2.ciorna, versiune);
+  const inapoi = reductorCiorna(s2, { tip: "anuleaza" });
+  assert.deepEqual(inapoi.ciorna, s1.ciorna, "ciorna de dinainte, cu modificarea ei, revine");
+  assert.deepEqual(reductorCiorna(inapoi, { tip: "reface" }).ciorna, versiune);
+  // Versiunea care e deja pe ecran nu e un pas.
+  assert.equal(reductorCiorna(s2, { tip: "readu", ciorna: { ...versiune }, acum: (ceas += 5_000) }), s2);
 });

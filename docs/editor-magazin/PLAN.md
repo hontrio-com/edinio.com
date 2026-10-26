@@ -14,8 +14,10 @@ importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele pagin
 (paginile proprii in editorul unic) FACUTA si PROBATA in Chrome** (pasii 5.1-5.5, ultimul comit de cod
 `0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Etapa 6
 (un singur „Publică” pentru design si continut) FACUTA si PROBATA in Chrome** (pasii 6.1-6.5), cu acordul
-lui („Continua”) si decizia lui: „Totul la „Publică””. **Urmeaza etapa 7 (istoricul versiunilor), DOAR cu
-acordul lui.** Intrebarea despre teme a fost pusa si a ramas fara raspuns; ramane
+lui („Continua”) si decizia lui: „Totul la „Publică””. **Etapa 7 (istoricul versiunilor) IN LUCRU din
+26.10.2026**, cu acordul lui („Da, continua”); planul si bifele: „Etapa 7: planul de lucru”. Prima
+schimbare de schema a proiectului (tabelul versiunilor), doar pe demo; REGISTRU A. Intrebarea despre
+teme a fost pusa si a ramas fara raspuns; ramane
 deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
 „Etapa 5: planul de lucru”.
 
@@ -548,6 +550,62 @@ Citit in cod inainte:
       Ce a gasit proba: dupa „Renunță” (si dupa Anuleaza) campul cu codul culorii din Stil arata inca
       culoarea renuntata (copie locala a culorii). Reparat: campul arata ciorna, textul local doar cat e
       scris pe jumatate; proba noua, mutatia prinsa. Vazut in browser dupa reparatie.
+
+## Etapa 7: planul de lucru (scris 26.10.2026, inainte de cod; acordul lui: „Da, continua”)
+
+Tinta din „Etapele”: istoric de versiuni, „revino la ce era ieri”, plasa de siguranta pentru cei care
+se tem sa atinga ceva.
+
+Citit in cod si masurat inainte:
+- `publishDesign` scrie continutul (`page_content` imbinat pe chei, apoi cele patru coloane din
+  `businesses`), apoi designul si data publicarii, si goleste ciorna. Nu pastreaza nimic din ce era:
+  un „Publică” gresit nu se mai poate desface.
+- Blogul are deja un istoric (`blog_post_revisions`): RLS fara politici, doar `service_role`, un
+  plafon de versiuni, revenirea trece prin aceeasi cale ca salvarea, deci nimic nu se pierde.
+- Masurat in productie pe 26.10 (doar citire): 148 de magazine; continutul pe care il regleaza
+  editorul are cel mult 5,5 KB (p95: 2 KB), designul publicat cel mult 3,1 KB, deci o versiune are sub
+  10 KB. 25 de magazine au un design publicat. `primary_color` si `gallery` nu pot fi nule.
+
+### Deciziile etapei (de ce asa)
+
+1. **O versiune = ce a dus un „Publică” in magazin**: designul publicat si continutul editorului
+   (cheile din `CHEI_CONTINUT` aflate in `page_content`, plus logo, coperta, culoare, galerie), cu
+   data publicarii. Se scrie la fiecare „Publică” reusit. Inaintea primei versiuni a unui magazin se
+   pastreaza si starea de dinainte („Cum era înainte”), ca si primul „Publică” sa se poata desface.
+2. **Tabel nou, `storefront_design_versions`** (migratie aplicata doar pe demo pana la final;
+   REGISTRU A): RLS pornit fara politici, nimic pentru `anon` si `authenticated`, doar `service_role`,
+   ca `blog_post_revisions`. Se citeste si se scrie numai din actiunile de server, dupa verificarea
+   proprietarului, si numai cu `business_id`-ul magazinului lui. Se sterge odata cu magazinul.
+3. **Plafon: ultimele 30 de versiuni pe magazin**; cele mai vechi se sterg la scriere.
+4. **„Readu în editor” pune versiunea in CIORNA, nu in magazin**: se vede in previzualizare si ajunge
+   la clienti abia la „Publică”, care face la randul lui o versiune noua, deci nimic nu se pierde.
+   Pasul intra in Anuleaza / Refa: ce era in ciorna inainte revine cu Anuleaza.
+5. **O cheie care lipsea din versiune, dar exista acum, se scoate** (lista `scoase` in continutul
+   ciornei). Fara ea, revenirea la „Cum era înainte” ar fi pastrat, de pilda, fundalul ales dupa.
+   „Publică” o sterge din `page_content`, iar magazinul cade pe implicitul lui, ca la un magazin care
+   n-a atins-o niciodata. Previzualizarea si panourile o arata la fel.
+6. **Scrierea versiunii nu poate strica publicarea**: cazuta, „Publică” ramane reusit (magazinul e
+   deja schimbat) si caderea ajunge in jurnal. Versiunea poarta exact data publicarii, iar lista scrie
+   „În magazin acum” doar pe versiunea cu data din magazin: o versiune lipsa nu poate face lista sa
+   minta.
+7. **Raman pe dinafara**: paginile proprii („Salvează pagina”), Setarile si comutatorul „Vizibil”, care
+   nu trec prin „Publică”. O imagine stearsa intre timp din Biblioteca Media nu revine (lista o spune);
+   versiunile nu tin imaginile „folosite”, altfel nimic n-ar mai putea fi sters din biblioteca.
+8. **In bara de sus**: butonul „Istoric” (pe telefon, in meniul „...”) deschide lista: data, „În
+   magazin acum”, „Readu în editor”. Cu modificari nepublicate in ciorna, intai o intrebare.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 7.1 (26.10, `versiuni.ts` + `versiuni.test.ts`, `scoase` in `continut-ciorna.ts`, pasul `readu` in
+      `ciorna.ts`; 14 probe noi, 14 din 14 mutatii prinse) Logica fara React: `scoase` in continutul ciornei (parser, suprapunere, amprenta, scrierea
+      cheilor), instantaneul unei versiuni, ciorna facuta dintr-o versiune (diferenta fata de publicat),
+      pasul „readu” in reductor (cu istoric), data afisata. Probe.
+- [ ] 7.2 Migratia (fisier, aplicata pe demo, verificata: RLS, drepturile lui `anon` si
+      `authenticated`), tipurile, REGISTRU A.
+- [ ] 7.3 Serverul: `publishDesign` scrie versiunea (si starea de dinainte, la prima), plafonul;
+      actiunile de listare si de citire, cu proprietarul verificat. Probe.
+- [ ] 7.4 Editorul: butonul „Istoric”, lista, „Readu în editor”. Probe.
+- [ ] 7.5 REGISTRU (C), porti, proba in Chrome pe magazinul de proba.
 
 ## Deciziile proprietarului
 

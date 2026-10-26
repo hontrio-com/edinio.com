@@ -41,6 +41,13 @@ export interface ContinutCiorna {
   pc: Record<string, unknown>;
   /** Coloanele atinse din `businesses`. */
   magazin: ContinutMagazinCiorna;
+  /**
+   * Cheile din `page_content` care se SCOT la „Publică” (etapa 7): o versiune readusa din istoric in
+   * care cheia lipsea, desi acum exista. Scoasa, nu `null`: magazinul cade pe implicitul lui, ca la un
+   * magazin care n-a atins-o niciodata, iar un `null` scris ar fi fost o valoare noua. Ordonate, fara
+   * dubluri, niciuna si in `pc`; lipseste cand e goala, ca ciornele de pana acum sa-si pastreze amprenta.
+   */
+  scoase?: string[];
 }
 
 export const CONTINUT_GOL: ContinutCiorna = Object.freeze({ pc: Object.freeze({}), magazin: Object.freeze({}) }) as ContinutCiorna;
@@ -93,7 +100,12 @@ export function parseContinutCiorna(raw: unknown): ContinutCiorna {
   if (Array.isArray(m.gallery)) {
     magazin.gallery = m.gallery.map(imagine).filter((u): u is string => !!u).slice(0, MAX_GALERIE);
   }
-  return { pc, magazin };
+
+  // Tot pe lista alba; o cheie si scrisa, si scoasa ramane scrisa.
+  const scoase = Array.isArray(r.scoase)
+    ? [...new Set(r.scoase.filter((k): k is string => typeof k === "string" && CHEI_PC_CIORNA.has(k) && !Object.hasOwn(pc, k)))].sort()
+    : [];
+  return scoase.length > 0 ? { pc, magazin, scoase } : { pc, magazin };
 }
 
 /** Continutul unei cioarne asa cum sta in coloana (designul, cu `continut` alaturi). */
@@ -101,9 +113,14 @@ export function continutDinCiorna(ciorna: unknown): ContinutCiorna {
   return parseContinutCiorna(obiect(ciorna)[CHEIE_CONTINUT]);
 }
 
+/** Schimba ciorna ceva in `page_content` (o cheie scrisa sau una scoasa)? */
+export function atingeCheiPc(c: ContinutCiorna): boolean {
+  return Object.keys(c.pc).length > 0 || (c.scoase?.length ?? 0) > 0;
+}
+
 /** Are ciorna vreun continut nepublicat? */
 export function areContinut(c: ContinutCiorna): boolean {
-  return Object.keys(c.pc).length > 0 || Object.keys(c.magazin).length > 0;
+  return atingeCheiPc(c) || Object.keys(c.magazin).length > 0;
 }
 
 /**
@@ -114,9 +131,12 @@ export function ciornaCuContinut<T extends object>(design: T, continut: Continut
   return areContinut(continut) ? { ...design, [CHEIE_CONTINUT]: continut } : design;
 }
 
-/** `page_content` cu cheile din ciorna peste el. */
+/** `page_content` cu cheile din ciorna peste el, fara cele scoase. */
 export function pcCuCiorna<T extends Record<string, unknown>>(pc: T, continut: ContinutCiorna): T {
-  return Object.keys(continut.pc).length > 0 ? { ...pc, ...continut.pc } : pc;
+  if (!atingeCheiPc(continut)) return pc;
+  const out: Record<string, unknown> = { ...pc, ...continut.pc };
+  for (const cheie of continut.scoase ?? []) delete out[cheie];
+  return out as T;
 }
 
 /** Randul din `businesses` cu coloanele din ciorna peste el; doar cele atinse. */

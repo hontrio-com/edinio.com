@@ -45,6 +45,11 @@ export type ActiuneCiorna =
     }
   | { tip: "anuleaza" }
   | { tip: "reface" }
+  /**
+   * O versiune din istoric readusa in editor (etapa 7): un pas ca oricare altul, deci Anuleaza
+   * aduce inapoi ciorna de dinainte. Spre deosebire de `inlocuieste`, care uita tot.
+   */
+  | { tip: "readu"; ciorna: Ciorna; acum: number }
   /** Dupa Publica sau Renunta: o ciorna noua, fara istoric. */
   | { tip: "inlocuieste"; ciorna: Ciorna };
 
@@ -77,6 +82,10 @@ export function reductorCiorna(stare: StareCiorna, a: ActiuneCiorna): StareCiorn
       const pas = reface(stare.istoric, ciorna);
       return pas ? { ciorna: pas.stare, istoric: pas.istoric } : stare;
     }
+    case "readu":
+      // Versiunea care e deja pe ecran nu e un pas.
+      if (amprentaCiornei(a.ciorna) === amprentaCiornei(ciorna)) return stare;
+      return { ciorna: a.ciorna, istoric: noteaza(stare.istoric, ciorna, { cheie: null, acum: a.acum }) };
     case "inlocuieste":
       return stareInitiala(a.ciorna);
   }
@@ -100,15 +109,21 @@ export interface ContinutPublicat {
 /**
  * Scrie in ciorna cheile schimbate din `page_content`. O cheie adusa inapoi la valoarea publicata
  * iese din ciorna: punctul „nepublicat” din arbore si „Publică” nu mai au de ce sa o poarte.
+ * O cheie scrisa nu mai e nici scoasa (`scoase`, etapa 7): omul a ales o valoare pentru ea.
  * Intoarce ACELASI obiect cand nu se schimba nimic.
  */
 export function cuCheilePc(c: ContinutCiorna, schimbari: Record<string, unknown>, publicat: ContinutPublicat): ContinutCiorna {
   const pc = { ...c.pc };
+  const scoase = new Set(c.scoase ?? []);
   for (const [cheie, valoare] of Object.entries(schimbari)) {
+    scoase.delete(cheie);
     if (jsonCanonic(valoare) === jsonCanonic(publicat.pc[cheie])) delete pc[cheie];
     else pc[cheie] = valoare;
   }
-  return jsonCanonic(pc) === jsonCanonic(c.pc) ? c : { ...c, pc };
+  if (jsonCanonic(pc) === jsonCanonic(c.pc) && scoase.size === (c.scoase?.length ?? 0)) return c;
+  const urmator: ContinutCiorna = { pc, magazin: c.magazin };
+  if (scoase.size > 0) urmator.scoase = [...scoase].sort();
+  return urmator;
 }
 
 /** La fel, pentru coloanele din `businesses`. */

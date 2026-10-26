@@ -96,7 +96,8 @@ export function useContinutMagazin({ magazin, ciorna }: { magazin: MagazinPentru
     if (nod === NOD_STIL && (m.logo_url !== undefined || m.primary_color !== undefined)) return true;
     if (nod === "hero" && m.cover_url !== undefined) return true;
     if (nod === "galerie" && m.gallery !== undefined) return true;
-    return (CHEI_CONTINUT[nod] ?? []).some((cheie) => cheie in inCiorna.pc);
+    // Si o cheie scoasa de o versiune readusa (etapa 7): la „Publică” se schimba si ea.
+    return (CHEI_CONTINUT[nod] ?? []).some((cheie) => cheie in inCiorna.pc || (inCiorna.scoase ?? []).includes(cheie));
   }, [inCiorna]);
 
   // ── Identitatea: logo, favicon, culoare ──

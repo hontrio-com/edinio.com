@@ -154,3 +154,37 @@ test("⚠ garda vede si schimbarile de pe un rand care exista doar in ciorna", (
   assert.notDeepEqual(ascuns, design);
   assert.equal(ciornaAFostSchimbata(ciornaCuContinut(design, continut), ciornaCuContinut(ascuns, continut), ctx), true);
 });
+
+/* ═══ Etapa 7: cheile SCOASE de o versiune readusa din istoric ═══ */
+
+test("⚠⚠ cheile scoase: pe lista alba, ordonate, fara dubluri, niciuna si scrisa", () => {
+  const c = parseContinutCiorna({ pc: { logo_size: 40 }, scoase: ["store_bg_color", "permalinks", "logo_size", "store_bg_color", "font_text", 7, null] });
+  assert.deepEqual(c.scoase, ["font_text", "store_bg_color"]);
+  // Goala sau numai din afara listei: lipseste cu totul, deci cioarnele vechi isi pastreaza amprenta.
+  assert.deepEqual(parseContinutCiorna({ pc: {}, scoase: [] }), { pc: {}, magazin: {} });
+  assert.equal("scoase" in parseContinutCiorna({ scoase: ["permalinks", "pagina_acasa", "checkout_config"] }), false);
+  assert.equal("scoase" in parseContinutCiorna({ scoase: "store_bg_color" }), false);
+});
+
+test("⚠⚠ o cheie scoasa dispare din `page_content`: in previzualizare, in context si la „Publică”", () => {
+  const pc = { store_bg_color: "#111111", font_text: "inter", checkout_config: { extras: [] } };
+  const c = parseContinutCiorna({ pc: { logo_size: 50 }, scoase: ["store_bg_color"] });
+  assert.deepEqual(pcCuCiorna(pc, c), { font_text: "inter", checkout_config: { extras: [] }, logo_size: 50 });
+  // Doar scoase, fara nicio cheie scrisa: tot e continut nepublicat, si tot se aplica.
+  const doar = parseContinutCiorna({ scoase: ["store_bg_color"] });
+  assert.equal(areContinut(doar), true);
+  assert.deepEqual(pcCuCiorna(pc, doar), { font_text: "inter", checkout_config: { extras: [] } });
+  assert.equal(Object.hasOwn(contextCuCiorna({ ...ctx, pageContent: pc }, doar).pageContent, "store_bg_color"), false);
+  assert.equal(pc.store_bg_color, "#111111", "suprapunerea nu atinge obiectul primit");
+});
+
+test("⚠ cheile scoase intra in amprenta, in coloana si in garda", () => {
+  const design = buildClassicDesign(ctx);
+  const doar = parseContinutCiorna({ scoase: ["store_bg_color", "font_text"] });
+  assert.notEqual(amprentaContinut(doar), amprentaContinut(CONTINUT_GOL));
+  assert.equal(amprentaContinut(doar), amprentaContinut(parseContinutCiorna({ scoase: ["font_text", "store_bg_color"] })));
+  const scrisa = ciornaCuContinut(design, doar);
+  assert.deepEqual(continutDinCiorna(scrisa), doar, "drumul dus-intors prin coloana le pastreaza");
+  assert.equal(ciornaAFostSchimbata(scrisa, design, ctx), true, "alta fila a pierdut cheile scoase");
+  assert.equal(ciornaAFostSchimbata(scrisa, ciornaCuContinut(design, doar), ctx), false);
+});

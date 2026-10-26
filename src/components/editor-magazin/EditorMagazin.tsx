@@ -399,20 +399,6 @@ export function EditorMagazin({
     setBlocSelectat(null);
   }, []);
 
-  /**
-   * O versiune readusa a intrat in ciorna: panoul deschis poate fi al unei sectiuni care in versiune
-   * nu exista, deci inapoi la arbore, si previzualizarea in fata (pe telefon e ascunsa sub panou).
-   */
-  const dupaVersiuneReadusa = useCallback(() => {
-    setIstoricDeschis(false);
-    setSelectat(null);
-    setBlocSelectat(null);
-    setGalerieDesign(null);
-    setAdaugaDeschis(false);
-    setSetariSablon(false);
-    setVedereMobil("previzualizare");
-  }, []);
-
   const schimbaPagina = useCallback((p: CheiePagina) => {
     setPagina(p);
     setSelectat(null);
@@ -442,6 +428,24 @@ export function EditorMagazin({
     }
     schimbaPagina(p);
   }, [pagina, paginaDeschisa.modificata, schimbaPagina]);
+
+  /**
+   * O versiune readusa a intrat in ciorna (etapa 7): panoul deschis poate fi al unei sectiuni care in
+   * versiune nu exista, deci inapoi la arbore, si previzualizarea in fata (pe telefon e ascunsa sub
+   * panou). De pe o pagina proprie, editorul trece pe „Acasă”: acolo Anuleaza e al designului, deci
+   * scoate versiunea; pe pagina ar fi desfacut un pas al paginii (sau ar fi fost oprit). O pagina
+   * nesalvata intreaba inainte, ca la orice schimbare de pagina.
+   */
+  const dupaVersiuneReadusa = useCallback(() => {
+    setIstoricDeschis(false);
+    setSelectat(null);
+    setBlocSelectat(null);
+    setGalerieDesign(null);
+    setAdaugaDeschis(false);
+    setSetariSablon(false);
+    setVedereMobil("previzualizare");
+    if (idPagina) cerePagina("acasa");
+  }, [idPagina, cerePagina]);
 
   /** Salveaza pagina proprie; dupa reusita, lista din „Editezi” si adresa previzualizarii o urmeaza. */
   const salveazaPagina = useCallback(async (): Promise<boolean> => {

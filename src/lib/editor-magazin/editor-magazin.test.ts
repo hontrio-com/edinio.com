@@ -684,3 +684,12 @@ test("istoricul se deschide din bara si de pe telefon, din meniul „...”", ()
   assert.doesNotMatch(s, /modificările de design/);
   assert.match(faraComentarii(EDITOR), /onIstoric=\{\(\) => setIstoricDeschis\(true\)\}/);
 });
+
+test("⚠ readusa de pe o pagina proprie, editorul trece pe „Acasă”, unde Anuleaza o scoate (recitirea 7.5)", () => {
+  // Pe pagina proprie, Anuleaza din bara e al paginii: versiunea readusa n-ar mai fi avut cum sa fie anulata.
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /const dupaVersiuneReadusa = useCallback\(\(\) => \{[\s\S]*?if \(idPagina\) cerePagina\("acasa"\);\s*\}, \[idPagina, cerePagina\]\);/);
+  // Prin `cerePagina`, nu `schimbaPagina`: o pagina nesalvata intreaba inainte.
+  assert.doesNotMatch(e, /dupaVersiuneReadusa = useCallback\(\(\) => \{[^}]*schimbaPagina/);
+  assert.match(e, /onReadusa=\{dupaVersiuneReadusa\}/);
+});

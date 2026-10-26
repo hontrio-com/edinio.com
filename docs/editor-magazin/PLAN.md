@@ -15,8 +15,10 @@ importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele pagin
 `0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Etapa 6
 (un singur „Publică” pentru design si continut) FACUTA si PROBATA in Chrome** (pasii 6.1-6.5), cu acordul
 lui („Continua”) si decizia lui: „Totul la „Publică””. **Etapa 7 (istoricul versiunilor) IN LUCRU din
-26.10.2026**, cu acordul lui („Da, continua”); planul si bifele: „Etapa 7: planul de lucru”. Prima
-schimbare de schema a proiectului (tabelul versiunilor), doar pe demo; REGISTRU A. Intrebarea despre
+26.10.2026**, cu acordul lui („Da, continua”); planul si bifele: „Etapa 7: planul de lucru”. Codul e gata
+(7.1-7.4 si recitirea din 7.5, porti verzi); ramane proba in Chrome, care cere conectarea lui pe localhost
+si acordul pentru impersonare. Prima schimbare de schema a proiectului (tabelul versiunilor), doar pe
+demo; REGISTRU A. Intrebarea despre
 teme a fost pusa si a ramas fara raspuns; ramane
 deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
 „Etapa 5: planul de lucru”.

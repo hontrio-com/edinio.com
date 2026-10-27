@@ -70,7 +70,10 @@ export function IstoricVersiuni({ businessId, ciorna, ocupat, onInchide, onReadu
       toast.error(r.error);
       return;
     }
-    ciorna.readuVersiunea(r);
+    if (!ciorna.readuVersiunea(r)) {
+      toast.error("Chiar acum se publică sau se renunță la modificări. Încearcă din nou peste o clipă.");
+      return;
+    }
     toast.success(
       `${v.origine === "inainte" ? "Ai readus cum era magazinul înainte de istoric" : `Ai readus versiunea din ${inPropozitie(dataVersiunii(v.la, new Date()))}`}. ` +
       "O vezi în previzualizare; clienții o văd abia după „Publică”.",
@@ -134,7 +137,7 @@ export function IstoricVersiuni({ businessId, ciorna, ocupat, onInchide, onReadu
                       <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">În magazin acum</span>
                     )}
                     <Button size="sm" variant="outline" className="shrink-0"
-                      disabled={ocupat || ciorna.publicaInCurs || aduc !== null || dejaPeEcran}
+                      disabled={ocupat || ciorna.blocata || aduc !== null || dejaPeEcran}
                       title={dejaPeEcran ? "E deja ce vezi în editor." : undefined}
                       onClick={() => cere(v)}>
                       {aduc === v.id ? <Loader2 className="animate-spin" /> : <RotateCcw />}
@@ -146,7 +149,7 @@ export function IstoricVersiuni({ businessId, ciorna, ocupat, onInchide, onReadu
                       <p>Ai modificări nepublicate. Versiunea readusă le înlocuiește în editor; le recuperezi cu Anulează.</p>
                       <div className="mt-2 flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => setIntreb(null)}>Rămân la ele</Button>
-                        <Button size="sm" disabled={ocupat || ciorna.publicaInCurs || aduc !== null} onClick={() => void readu(v)}>
+                        <Button size="sm" disabled={ocupat || ciorna.blocata || aduc !== null} onClick={() => void readu(v)}>
                           Readu versiunea
                         </Button>
                       </div>

@@ -126,7 +126,8 @@ const cuSabloane = (design: StoreDesign, sabloane: SablonProdus[]): StoreDesign 
   product: sabloane.length ? { page: design.product.page, sabloane } : { page: design.product.page },
 });
 
-const numeCurat = (nume: string) => nume.trim().slice(0, MAX_NUME_SABLON);
+/** Numele asa cum intra in design: fara spatiile de la capete, cel mult `MAX_NUME_SABLON` caractere. */
+export const numeCurat = (nume: string) => nume.trim().slice(0, MAX_NUME_SABLON);
 
 /**
  * Un sablon nou, pornit de la pagina Implicit (aceeasi varianta, reglaje si blocuri), fara nicio

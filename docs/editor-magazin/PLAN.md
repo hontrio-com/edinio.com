@@ -639,6 +639,65 @@ Citit in cod si masurat inainte:
       Nimic de reparat. Vazut din nou, stiut din 4b.4 (REGISTRU D): dupa Anuleaza pana la starea publicata,
       coloana de ciorna ramane cu designul identic (fara `continut`); ecranul spune corect „Totul e publicat”.
 
+## Verificarea de dinaintea listei lui (ceruta 27.10.2026)
+
+Cererea lui, dupa etapa 7: „Mai fa tu o verificare inainte pe partea de Buguri, Design, Conflicte,
+Responsive, etc... Si dupa iti dau si eu lista mea”. Ramura are 162 de fisiere schimbate fata de `main`
+(+14918 / -6705). Fara agenti. Ce e defect clar se repara, cu proba lui; ce e de gust sau de decis intra
+in raport, pentru lista lui.
+
+- [x] V1 Conflicte: Git (fata de `origin/main` si fata de `conector-hontrio`, care are si el migratie si
+      `database.types.ts`); datele (cheile scrise de Setari fata de lista alba a ciornei; doua scrieri pe
+      acelasi rand); legaturile catre rutele vechi.
+      27.10: `origin/main` n-a mers mai departe de baza ramurii (`122bfbff`, dupa `git fetch`), deci unirea
+      e curata. `conector-hontrio` (3 comituri, pe `aa7b4fde`) atinge si el `dashboard/page.tsx` si
+      `database.types.ts` (se imbina singure) si are un conflict, dar cu `main`, nu cu noi
+      (`integrari-catalog.test.ts`, la fel si fara ramura asta). Migratiile nu se ciocnesc (30 vs 31).
+      Setarile scriu `checkout_config`, `seo`, `store_mode`, `one_product_id` si cele trei chei de
+      catalog: niciuna pe lista alba a ciornei, deci „Publică” nu le poate calca. Nicio legatura vie spre
+      rutele vechi (doar in teste si comentarii).
+- [x] V2 Buguri, pe datele reale (productia, doar citire, 27.10). In loc sa car datele aici, intrebarile
+      puse direct bazei:
+      - comutatoarele din care se deriva blocurile paginii de produs (`benefits_section`, `faq_section`,
+        `how_it_works_section`, `show_quality_badge`, `show_social_proof`, `trust_badges_enabled`) sunt
+        TOATE booleene, deci `=== true` din blocuri da la fel ca testul vechi „adevarat”;
+      - paginile de produs: 16 Clasic, 9 Detaliat, 123 fara design; 0 blocuri, 0 sabloane;
+      - cheile de pe lista alba au un singur tip fiecare (`favicon_url`: text sau `null`);
+      - 35 de pagini proprii la 15 magazine, 13 feluri de blocuri, toate cunoscute;
+      - sectiunile cu ochi atins (`enabledOverride`): 13 hero, plus „Despre” si „Contact” la un magazin,
+        ambele stinse si cu ochiul, si cu comutatorul. Deci scoaterea portilor vechi din componente
+        (`show_about`, `show_contact`, `show_gallery`, beneficii, recenzii, banda de incredere, pragul de
+        livrare, „Recomandate”) nu aprinde si nu stinge nimic la lansare.
+      Fara al doilea server cu `main` (memoria era la 92%, serverul local ocupa 4,3 GB): paginile de produs
+      comparate pe linii reale (`schimbari-reale.mjs`, mutarile ignorate). Clasic si Detaliat: doar
+      mutari in blocuri si portile de mai sus, mutate in blocuri cu aceleasi conditii.
+- [x] V3 Buguri, in cod: actiunile de server schimbate (`async`, autentificare, proprietar, intrari),
+      apoi logica din `lib/editor-magazin` si `lib/storefront/design`, apoi componentele cu stare.
+      Bine: toate actiunile noi verifica proprietarul; ciorna ajunge doar la proprietar, in editor
+      (`esteEditorDeDesign`); `MarcajBloc` / `MarcajSectiune` nu adauga nimic pe magazinul public;
+      Setarile scriu doar ce trece prin `pregatesteDateleGenerale`. Gasit si reparat (27.10):
+      1. **Modificarile facute cat se publica se pierdeau.** La intoarcere, „Publică” punea pe ecran ciorna
+         goala peste ce se schimbase intre timp, iar „Renunță” si Ctrl+Z ramaneau active in timpul ei.
+         Acum ciorna e `blocata` cat merg „Publică” / „Renunță” (si in hook, si `inert` pe ecran),
+         „Renunță” e oprit atunci, iar „Readu în editor” spune cand pasul n-a intrat.
+      2. **„Publică” mergea cat se urca o imagine**: imaginea ajungea in ciorna DUPA publicare, deci nu in
+         magazin. Acum „Publică” asteapta, iar bara spune „Se încarcă o imagine...”.
+      3. **Numele sablonului ramanea in urma la Anuleaza din bara** (copie locala; urmatoarea tasta il
+         scria la loc), acelasi defect ca la codul culorii din 6.5. Campul urmeaza acum designul.
+      4. `produsPentruSablon` cadea pe orice altceva decat liste (o actiune primeste orice).
+      Probe noi pe sursa, 16 din 16 mutatii prinse.
+- [x] V4 Texte: diacritice in panou, „ ” inchise, fara linie lunga, etichetele din `registry.ts`.
+      Scanerul (`texte-panou.mjs`, doar textele afisate, nu comentariile), pe randurile adaugate de
+      ramura: textele noi din editor sunt corecte. Reparat: trei mesaje din Setari > General fara
+      diacritice („nu pare corecta”, „trebuie sa inceapa”, „adresa web”). Neatinse, cu motiv: textele
+      magazinului (fara diacritice, regula lui), cuvintele-cheie de cautare din ajutor, etichetele
+      retrase din `registry.ts` (nu se mai arata) si textele vechi din `SettingsClient` si de pe prima
+      pagina a panoului, mutate doar (datorie de dinainte, in lista lui).
+- [ ] V5 Responsive si design, in Chrome: editorul la 390 / 768 / 1024 / 1280 / 1920 px, Setarile
+      mutate la 390 px, magazinul public (acasa, produs, categorie, cos, pagina proprie) la 390 / 768 px;
+      depasirea orizontala masurata; consola fara erori.
+- [ ] V6 Porti (`tsc`, probe, `lint:prag`, `build:ci`), raport, comit.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

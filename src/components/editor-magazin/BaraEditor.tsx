@@ -32,7 +32,7 @@ const DISPOZITIVE = [
 
 export function BaraEditor({
   pagina, onPagina, ciorna, dispozitiv, onDispozitiv, onReincarca, adresaPublica,
-  publicat, publicareInCurs, onComutaPublicarea, continutNesalvat, vedereMobil, onVedereMobil, ingust = false,
+  publicat, publicareInCurs, onComutaPublicarea, continutNesalvat, seIncarca = false, vedereMobil, onVedereMobil, ingust = false,
   paginiProprii = [], anulare, laIesire = "/dashboard", onIstoric,
 }: {
   pagina: CheiePagina;
@@ -47,6 +47,11 @@ export function BaraEditor({
   onComutaPublicarea: () => Promise<void>;
   /** Ceva care NU e inca in ciorna: o imagine care se urca, o pagina proprie nesalvata. */
   continutNesalvat: boolean;
+  /**
+   * O imagine se urca. „Publică” asteapta: imaginea ar fi ajuns in ciorna DUPA publicare, deci nu in
+   * magazin, desi omul o alesese inainte sa apese.
+   */
+  seIncarca?: boolean;
   vedereMobil: "panou" | "previzualizare";
   onVedereMobil: (v: "panou" | "previzualizare") => void;
   /** Ecran sub 768 px: lista paginilor arata numele scurte. */
@@ -83,9 +88,11 @@ export function BaraEditor({
     else void pleaca();
   }
 
-  const stare = ciorna.salvez
-    ? "Se salvează ciorna..."
-    : ciorna.areModificari ? "Modificări nepublicate" : "Totul e publicat";
+  const stare = seIncarca
+    ? "Se încarcă o imagine..."
+    : ciorna.salvez
+      ? "Se salvează ciorna..."
+      : ciorna.areModificari ? "Modificări nepublicate" : "Totul e publicat";
 
   return (
     <div className="h-14 shrink-0 border-b border-border bg-surface px-3 flex items-center gap-2">
@@ -161,7 +168,7 @@ export function BaraEditor({
 
         <div className="hidden sm:block min-w-0 text-right">
           <p className="text-[11px] text-muted-foreground truncate">{stare}</p>
-          {continutNesalvat && <p className="text-[11px] text-amber-600 truncate">Conținut nesalvat</p>}
+          {continutNesalvat && !seIncarca && <p className="text-[11px] text-amber-600 truncate">Conținut nesalvat</p>}
         </div>
 
         <button type="button" onClick={() => setConfirma(true)} disabled={publicareInCurs}
@@ -172,8 +179,8 @@ export function BaraEditor({
         </button>
 
         {ciorna.areModificari && (
-          <button type="button" onClick={() => void ciorna.renunta()}
-            className="hidden sm:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors items-center">
+          <button type="button" onClick={() => void ciorna.renunta()} disabled={ciorna.blocata}
+            className="hidden sm:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:pointer-events-none transition-colors items-center">
             Renunță
           </button>
         )}
@@ -202,7 +209,7 @@ export function BaraEditor({
               {publicat ? "Magazin vizibil: ascunde-l" : "Magazin ascuns: fă-l vizibil"}
             </DropdownMenuItem>
             {ciorna.areModificari && (
-              <DropdownMenuItem className="rounded-lg p-2.5" onClick={() => void ciorna.renunta()}>Renunță la modificările nepublicate</DropdownMenuItem>
+              <DropdownMenuItem className="rounded-lg p-2.5" disabled={ciorna.blocata} onClick={() => void ciorna.renunta()}>Renunță la modificările nepublicate</DropdownMenuItem>
             )}
             <DropdownMenuItem className="rounded-lg p-2.5" onClick={onReincarca}><RotateCw className="h-4 w-4" /> Reîncarcă previzualizarea</DropdownMenuItem>
             <DropdownMenuItem className="rounded-lg p-2.5" render={<a href={adresaPublica} target="_blank" rel="noopener noreferrer" />}>
@@ -211,7 +218,7 @@ export function BaraEditor({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <button type="button" onClick={() => void ciorna.publica()} disabled={!ciorna.areModificari || ciorna.publicaInCurs}
+        <button type="button" onClick={() => void ciorna.publica()} disabled={!ciorna.areModificari || ciorna.blocata || seIncarca}
           className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:pointer-events-none inline-flex items-center gap-1.5">
           {ciorna.publicaInCurs ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           Publică
@@ -256,7 +263,7 @@ export function BaraEditor({
             ) : (
               <>
                 <Button variant="outline" onClick={() => void pleaca()}>Ieși</Button>
-                <Button disabled={ciorna.publicaInCurs} onClick={() => void pleaca(true)}>Publică și ieși</Button>
+                <Button disabled={ciorna.blocata} onClick={() => void pleaca(true)}>Publică și ieși</Button>
               </>
             )}
           </DialogFooter>

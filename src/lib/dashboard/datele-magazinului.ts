@@ -109,12 +109,12 @@ export function normalizeazaLinkSocial(valoare: unknown): { url: string | null }
   try {
     adresa = new URL(cuSchema);
   } catch {
-    return { eroare: "nu pare o adresa web" };
+    return { eroare: "nu pare o adresă web" };
   }
   if (adresa.protocol !== "https:" && adresa.protocol !== "http:") {
-    return { eroare: "trebuie sa inceapa cu https://" };
+    return { eroare: "trebuie să înceapă cu https://" };
   }
-  if (!adresa.hostname.includes(".")) return { eroare: "nu pare o adresa web" };
+  if (!adresa.hostname.includes(".")) return { eroare: "nu pare o adresă web" };
   return { url: cuSchema };
 }
 
@@ -146,7 +146,7 @@ export function pregatesteDateleGenerale(intrare: unknown): DateGeneralePregatit
 
   const email = text(d.email);
   if (email && !FORMA_EMAIL.test(email)) {
-    return { ok: false, eroare: "Adresa de email nu pare corecta. Verifica sa aiba forma nume@domeniu.ro." };
+    return { ok: false, eroare: "Adresa de email nu pare corectă. Verifică să aibă forma nume@domeniu.ro." };
   }
 
   const socialBrut = (d.social && typeof d.social === "object" ? d.social : {}) as Record<string, unknown>;

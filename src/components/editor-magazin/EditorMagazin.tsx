@@ -599,7 +599,7 @@ export function EditorMagazin({
         pagina={pagina} onPagina={cerePagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}
         publicat={continut.publicat} publicareInCurs={continut.publicareInCurs} onComutaPublicarea={continut.comutaPublicarea}
-        continutNesalvat={continut.incarc || paginaDeschisa.modificata} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
+        continutNesalvat={continut.incarc || paginaDeschisa.modificata} seIncarca={continut.incarc} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
         paginiProprii={paginiAfisate.paginiProprii}
         anulare={istoricPagina ?? undefined}
         laIesire={iesire}
@@ -610,7 +610,11 @@ export function EditorMagazin({
           onInchide={() => setIstoricDeschis(false)} onReadusa={dupaVersiuneReadusa} />
       )}
 
-      <div className="flex flex-1 min-h-0">
+      {/*
+        Cat se publica sau se renunta, panoul si previzualizarea nu primesc nimic: ce s-ar fi
+        modificat intre timp ar fi fost calcat de ciorna golita la intoarcere (vezi `blocata`).
+      */}
+      <div className="flex flex-1 min-h-0" inert={ciorna.blocata}>
         <aside className={`w-full lg:w-[360px] shrink-0 flex-col border-r border-border bg-surface ${vedereMobil === "previzualizare" ? "hidden lg:flex" : "flex"}`}>
           <div className="px-3 pt-3 flex gap-1 border-b border-border" role="tablist">
             {([["sectiuni", "Secțiuni"], ["stil", "Stil"]] as const).map(([cheie, eticheta]) => (

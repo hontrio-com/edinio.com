@@ -84,6 +84,14 @@ test("un link social stricat opreste salvarea si spune care retea", () => {
   assert.match(!r.ok ? r.eroare : "", /TikTok/);
 });
 
+test("mesajele le citeste omul in panou, deci cu diacritice (verificarea din 27.10.2026)", () => {
+  const link = pregatesteDateleGenerale({ ...BAZA, social: { tiktok: "javascript:alert(1)" } });
+  assert.equal(!link.ok ? link.eroare : "", "Linkul de TikTok trebuie să înceapă cu https://. Scrie-l complet, de exemplu https://tiktok.com/magazinul-tau.");
+  assert.deepEqual(normalizeazaLinkSocial("@floraria"), { eroare: "nu pare o adresă web" });
+  const email = pregatesteDateleGenerale({ ...BAZA, email: "comenzi@floraria" });
+  assert.equal(!email.ok ? email.eroare : "", "Adresa de email nu pare corectă. Verifică să aibă forma nume@domeniu.ro.");
+});
+
 test("campurile goale devin NULL, ca in editorul vechi", () => {
   const r = pregatesteDateleGenerale({ ...BAZA, tagline: "   ", email: " ", store_city: "" });
   assert.ok(r.ok);

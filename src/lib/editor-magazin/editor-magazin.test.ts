@@ -653,7 +653,7 @@ test("⚠⚠ „Readu în editor” pune versiunea in CIORNA, ca un pas; nicioda
   const s = faraComentarii(ISTORIC);
   assert.doesNotMatch(s, /publishDesign|saveDesignDraft|publica\(/, "readusa, versiunea nu pleaca singura spre clienti");
   // Abia dupa ce versiunea a venit intreaga de la server.
-  assert.match(s, /if \("error" in r\) \{\s*toast\.error\(r\.error\);\s*return;\s*\}\s*ciorna\.readuVersiunea\(r\);/);
+  assert.match(s, /if \("error" in r\) \{\s*toast\.error\(r\.error\);\s*return;\s*\}\s*if \(!ciorna\.readuVersiunea\(r\)\) \{/);
   const hook = faraComentarii("src/components/editor-magazin/useCiornaDesign.ts");
   assert.match(hook, /despacha\(\{ tip: "readu", ciorna: ciornaDinVersiune\(v, continutPublicatAcum\.current, ctxPublicatAcum\.current\), acum: Date\.now\(\) \}\);/);
 });
@@ -662,8 +662,9 @@ test("⚠⚠ cu modificari nepublicate, intai intrebarea; cat se urca o imagine 
   const s = faraComentarii(ISTORIC);
   assert.match(s, /const cere = \(v: VersiuneInLista\) => \{\s*if \(ciorna\.areModificari\) setIntreb\(v\.id\);\s*else void readu\(v\);\s*\};/);
   assert.match(s, /le recuperezi cu Anulează/);
-  // Ambele butoane care readuc sunt oprite cat se urca o imagine, cat se publica si cat se aduce alta.
-  assert.equal(s.split("disabled={ocupat || ciorna.publicaInCurs || aduc !== null").length - 1, 2);
+  // Ambele butoane care readuc sunt oprite cat se urca o imagine, cat se publica (sau se renunta) si cat
+  // se aduce alta.
+  assert.equal(s.split("disabled={ocupat || ciorna.blocata || aduc !== null").length - 1, 2);
   const e = faraComentarii(EDITOR);
   assert.match(e, /<IstoricVersiuni businessId=\{magazin\.id\} ciorna=\{ciorna\} ocupat=\{continut\.incarc\}/);
 });
@@ -692,4 +693,53 @@ test("⚠ readusa de pe o pagina proprie, editorul trece pe „Acasă”, unde A
   // Prin `cerePagina`, nu `schimbaPagina`: o pagina nesalvata intreaba inainte.
   assert.doesNotMatch(e, /dupaVersiuneReadusa = useCallback\(\(\) => \{[^}]*schimbaPagina/);
   assert.match(e, /onReadusa=\{dupaVersiuneReadusa\}/);
+});
+
+// ── Verificarea de dinaintea listei lui (27.10.2026), pe sursa ─────────────────
+
+test("⚠⚠ cat se publica sau se renunta, ciorna nu primeste modificari (nici din panou, nici din Ctrl+Z)", () => {
+  // La intoarcere, Publica / Renunta pun pe ecran ciorna goala: o modificare facuta intre timp se pierdea fara semn.
+  const h = faraComentarii("src/components/editor-magazin/useCiornaDesign.ts");
+  assert.match(h, /\(urmatorul: StoreDesign \| \(\(d: StoreDesign\) => StoreDesign\), cheie\?: string\) => \{\s*if \(blocata\.current\) return;\s*despacha\(\{ tip: "aplica"/);
+  assert.match(h, /\(fn: \(c: ContinutCiorna\) => ContinutCiorna, cheie\?: string\) => \{\s*if \(blocata\.current\) return;\s*despacha\(\{ tip: "aplicaContinut"/);
+  assert.match(h, /const anuleazaPas = useCallback\(\(\) => \{ if \(!blocata\.current\) despacha\(\{ tip: "anuleaza" \}\); \}, \[\]\);/);
+  assert.match(h, /const refaPas = useCallback\(\(\) => \{ if \(!blocata\.current\) despacha\(\{ tip: "reface" \}\); \}, \[\]\);/);
+  assert.match(h, /\): boolean => \{\s*if \(blocata\.current\) return false;\s*despacha\(\{ tip: "readu"/);
+  // Publica si Renunta tin ciorna blocata pana la capat, pe orice drum (si pe cel cu eroare).
+  assert.match(h, /const publica = useCallback\(async \(\): Promise<boolean> => \{\s*if \(blocata\.current\) return false;\s*blocata\.current = true;\s*try \{[\s\S]*?\} finally \{\s*blocata\.current = false;\s*\}\s*\}, \[businessId\]\);/);
+  assert.match(h, /const renunta = useCallback\(async \(\) => \{\s*if \(blocata\.current\) return;\s*blocata\.current = true;\s*setRenuntaInCurs\(true\);\s*try \{[\s\S]*?\} finally \{\s*blocata\.current = false;\s*setRenuntaInCurs\(false\);\s*\}\s*\}, \[businessId\]\);/);
+  assert.match(h, /blocata: publicaInCurs \|\| renuntaInCurs,/);
+  // Ecranul e oprit cat dureaza, iar „Renunță” nu porneste peste o publicare (nici invers).
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /<div className="flex flex-1 min-h-0" inert=\{ciorna\.blocata\}>\s*<aside/);
+  const b = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
+  assert.match(b, /onClick=\{\(\) => void ciorna\.renunta\(\)\} disabled=\{ciorna\.blocata\}/);
+  assert.match(b, /disabled=\{ciorna\.blocata\} onClick=\{\(\) => void ciorna\.renunta\(\)\}>Renunță la modificările nepublicate/);
+  assert.match(b, /onClick=\{\(\) => void ciorna\.publica\(\)\} disabled=\{!ciorna\.areModificari \|\| ciorna\.blocata \|\| seIncarca\}/);
+  assert.match(b, /<Button disabled=\{ciorna\.blocata\} onClick=\{\(\) => void pleaca\(true\)\}>Publică și ieși<\/Button>/);
+  // Fereastra istoricului nu spune „Ai readus...” cand pasul n-a intrat.
+  assert.match(faraComentarii(ISTORIC), /if \(!ciorna\.readuVersiunea\(r\)\) \{\s*toast\.error\(/);
+});
+
+test("⚠ „Publică” asteapta imaginea care se urca: altfel ea ajungea in ciorna DUPA publicare", () => {
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /seIncarca=\{continut\.incarc\}/);
+  const b = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
+  assert.match(b, /const stare = seIncarca\s*\? "Se încarcă o imagine\.\.\."/);
+  assert.match(b, /\{continutNesalvat && !seIncarca && <p/);
+});
+
+test("⚠ numele sablonului urmeaza designul la Anuleaza / Refa din bara, nu o copie locala", () => {
+  // Copia locala ramanea pe textul vechi, iar urmatoarea tasta il scria la loc (ca la codul culorii, 6.5).
+  const s = faraComentarii("src/components/editor-magazin/PanouSablon.tsx");
+  assert.doesNotMatch(s, /useState\(sablon\?\.nume/);
+  assert.match(s, /const nume = scris && scris\.nume === sablon\.nume \? scris\.text : sablon\.nume;/);
+  assert.match(s, /setScris\(\{ text, nume: numeCurat\(text\) \|\| sablon\.nume \}\);/);
+  assert.match(s, /<input type="text" value=\{nume\}/);
+});
+
+test("actiunea care cauta produsul unui sablon primeste orice: nu cade pe altceva decat liste", () => {
+  const s = faraComentarii("src/lib/actions/editor-sabloane.actions.ts");
+  assert.match(s, /\(Array\.isArray\(produse\) \? produse : \[\]\)\.filter\(/);
+  assert.match(s, /\(Array\.isArray\(numeCategorii\) \? numeCategorii : \[\]\)\.filter\(/);
 });

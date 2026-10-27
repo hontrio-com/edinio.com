@@ -9,6 +9,7 @@ import {
   atribuieLaSablon,
   categoriiAcoperite,
   MAX_NUME_SABLON,
+  numeCurat,
   redenumesteSablon,
   seteazaProduseSablon,
   stergeSablon,
@@ -59,10 +60,17 @@ export function PanouSablon({ design, sablonId, ciorna, categorii, businessId, o
 }) {
   const sabloane = design.product.sabloane ?? [];
   const sablon = sabloane.find((s) => s.page.id === sablonId);
-  const [nume, setNume] = useState(sablon?.nume ?? "");
+  /**
+   * Textul scris si numele din design de dupa el. Campul arata textul (cu spatiile de la capete, sau
+   * gol) doar cat designul are inca numele acela; altfel arata numele din design. O copie locala
+   * simpla ramanea pe textul vechi dupa Anuleaza / Refa din bara, iar urmatoarea tasta il scria la loc
+   * (acelasi defect ca la codul culorii, proba 6.5; gasit la verificarea din 27.10.2026).
+   */
+  const [scris, setScris] = useState<{ text: string; nume: string } | null>(null);
   const [confirmaStergerea, setConfirmaStergerea] = useState(false);
   const ordonate = useMemo(() => inOrdineaArborelui(categorii), [categorii]);
   if (!sablon) return null;
+  const nume = scris && scris.nume === sablon.nume ? scris.text : sablon.nume;
 
   /** Sablonul la care e bifata direct fiecare categorie, cu numele lui. */
   const laSablon = new Map<string, string>();
@@ -92,8 +100,10 @@ export function PanouSablon({ design, sablonId, ciorna, categorii, businessId, o
       <Grup titlu="Numele">
         <input type="text" value={nume} maxLength={MAX_NUME_SABLON} className={inputCls} aria-label="Numele șablonului"
           onChange={(e) => {
-            setNume(e.target.value);
-            ciorna.aplica((d: StoreDesign) => redenumesteSablon(d, sablonId, e.target.value), `nume-sablon:${sablonId}`);
+            const text = e.target.value;
+            // Gol, numele ramane cel de acum: un sablon nu ramane fara nume (`redenumesteSablon`).
+            setScris({ text, nume: numeCurat(text) || sablon.nume });
+            ciorna.aplica((d: StoreDesign) => redenumesteSablon(d, sablonId, text), `nume-sablon:${sablonId}`);
           }} />
         <p className="text-[11px] text-muted-foreground">Se vede doar aici, în editor.</p>
       </Grup>

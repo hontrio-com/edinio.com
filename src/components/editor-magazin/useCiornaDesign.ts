@@ -68,6 +68,15 @@ export function useCiornaDesign({
   const [continutPublicat, setContinutPublicat] = useState<ContinutPublicat>(continutPublicatInitial);
   const [salvez, setSalvez] = useState(false);
   const [publicaInCurs, setPublicaInCurs] = useState(false);
+  const [renuntaInCurs, setRenuntaInCurs] = useState(false);
+  /**
+   * Cat „Publică” sau „Renunță” e pe drum, ciorna nu se mai schimba (verificarea de dinaintea listei
+   * lui, 27.10.2026). La intoarcere ele pun pe ecran ciorna goala, deci o modificare facuta intre timp
+   * se pierdea fara semn, iar salvarea ei, ajunsa dupa golire, cadea in garda de concurenta. Ecranul
+   * e oprit cat dureaza (`inert` in `EditorMagazin`); asta e plasa pentru Ctrl+Z si pentru orice alta
+   * cale.
+   */
+  const blocata = useRef(false);
 
   /** Contextul parserului din ce e PUBLICAT; continutul ciornei se pune peste el. */
   const ctxPublicat = useMemo(() => contextDesign({
@@ -183,86 +192,107 @@ export function useCiornaDesign({
    * un singur pas la Anuleaza (vezi `istoric.ts`).
    */
   const aplica = useCallback(
-    (urmatorul: StoreDesign | ((d: StoreDesign) => StoreDesign), cheie?: string) =>
-      despacha({ tip: "aplica", urmatorul, cheie: cheie ?? null, acum: Date.now() }),
+    (urmatorul: StoreDesign | ((d: StoreDesign) => StoreDesign), cheie?: string) => {
+      if (blocata.current) return;
+      despacha({ tip: "aplica", urmatorul, cheie: cheie ?? null, acum: Date.now() });
+    },
     [],
   );
   /** Aplica o modificare de continut; designul se re-deriva din el in acelasi pas. */
   const aplicaContinut = useCallback(
-    (fn: (c: ContinutCiorna) => ContinutCiorna, cheie?: string) =>
-      despacha({ tip: "aplicaContinut", fn, ctxPublicat: ctxPublicatAcum.current, cheie: cheie ?? null, acum: Date.now() }),
+    (fn: (c: ContinutCiorna) => ContinutCiorna, cheie?: string) => {
+      if (blocata.current) return;
+      despacha({ tip: "aplicaContinut", fn, ctxPublicat: ctxPublicatAcum.current, cheie: cheie ?? null, acum: Date.now() });
+    },
     [],
   );
-  const anuleazaPas = useCallback(() => despacha({ tip: "anuleaza" }), []);
-  const refaPas = useCallback(() => despacha({ tip: "reface" }), []);
+  const anuleazaPas = useCallback(() => { if (!blocata.current) despacha({ tip: "anuleaza" }); }, []);
+  const refaPas = useCallback(() => { if (!blocata.current) despacha({ tip: "reface" }); }, []);
 
   /**
    * Readuce o versiune din istoric (etapa 7): in CIORNA, ca un pas pe care Anuleaza il desface, nu in
-   * magazin. Socotita fata de ce e publicat acum; ajunge la clienti abia la „Publică”.
+   * magazin. Socotita fata de ce e publicat acum; ajunge la clienti abia la „Publică”. `false` cand
+   * n-a intrat (se publica sau se renunta chiar atunci), ca fereastra sa nu spuna ca a readus-o.
    */
-  const readuVersiunea = useCallback((v: { design: unknown; continut: unknown }) => {
+  const readuVersiunea = useCallback((v: { design: unknown; continut: unknown }): boolean => {
+    if (blocata.current) return false;
     despacha({ tip: "readu", ciorna: ciornaDinVersiune(v, continutPublicatAcum.current, ctxPublicatAcum.current), acum: Date.now() });
+    return true;
   }, []);
 
   /** `true` cand ciorna (design si continut) a ajuns in magazin („Publică și ieși” pleaca doar atunci). */
   const publica = useCallback(async (): Promise<boolean> => {
-    epoca.current += 1;
-    const dePublicat = ciornaAcum.current;
-    setPublicaInCurs(true);
-    // Scrierea de pe drum intai: ajunsa DUPA publicare, ar fi reinviat ciorna golita de ea.
-    coada.current?.anuleaza();
-    await coada.current?.goleste();
-    let res: Awaited<ReturnType<typeof publishDesign>>;
+    if (blocata.current) return false;
+    blocata.current = true;
     try {
-      res = await publishDesign(businessId, ciornaCuContinut(dePublicat.design, dePublicat.continut));
-    } catch {
+      epoca.current += 1;
+      const dePublicat = ciornaAcum.current;
+      setPublicaInCurs(true);
+      // Scrierea de pe drum intai: ajunsa DUPA publicare, ar fi reinviat ciorna golita de ea.
+      coada.current?.anuleaza();
+      await coada.current?.goleste();
+      let res: Awaited<ReturnType<typeof publishDesign>>;
+      try {
+        res = await publishDesign(businessId, ciornaCuContinut(dePublicat.design, dePublicat.continut));
+      } catch {
+        setPublicaInCurs(false);
+        toast.error("Nu am primit răspuns de la server, deci nu știm dacă s-a publicat. Reîncarcă pagina înainte să încerci din nou.");
+        return false;
+      }
       setPublicaInCurs(false);
-      toast.error("Nu am primit răspuns de la server, deci nu știm dacă s-a publicat. Reîncarcă pagina înainte să încerci din nou.");
-      return false;
+      if ("error" in res) {
+        toast.error(res.error);
+        return false;
+      }
+      // Continutul ciornei e acum in magazin: el e noul „publicat”, iar ciorna ramane fara continut.
+      const goala: Ciorna = { design: dePublicat.design, continut: CONTINUT_GOL };
+      setPublicat(dePublicat.design);
+      setContinutPublicat((p) => dupaPublicare(p, dePublicat.continut));
+      despacha({ tip: "inlocuieste", ciorna: goala });
+      salvatAmprenta.current = amprentaCiornei(goala);
+      continutInBaza.current = amprentaContinut(CONTINUT_GOL);
+      // Publicarea goleste coloana de ciorna; urmatoarea salvare porneste de la `null`.
+      cioarnaInBaza.current = null;
+      toast.success("Modificările sunt acum în magazin.");
+      return true;
+    } finally {
+      blocata.current = false;
     }
-    setPublicaInCurs(false);
-    if ("error" in res) {
-      toast.error(res.error);
-      return false;
-    }
-    // Continutul ciornei e acum in magazin: el e noul „publicat”, iar ciorna ramane fara continut.
-    const goala: Ciorna = { design: dePublicat.design, continut: CONTINUT_GOL };
-    setPublicat(dePublicat.design);
-    setContinutPublicat((p) => dupaPublicare(p, dePublicat.continut));
-    despacha({ tip: "inlocuieste", ciorna: goala });
-    salvatAmprenta.current = amprentaCiornei(goala);
-    continutInBaza.current = amprentaContinut(CONTINUT_GOL);
-    // Publicarea goleste coloana de ciorna; urmatoarea salvare porneste de la `null`.
-    cioarnaInBaza.current = null;
-    toast.success("Modificările sunt acum în magazin.");
-    return true;
   }, [businessId]);
 
   const renunta = useCallback(async () => {
-    epoca.current += 1;
-    // La fel ca la Publica: o scriere ajunsa dupa golire ar fi reinviat ciorna.
-    coada.current?.anuleaza();
-    await coada.current?.goleste();
-    let res: Awaited<ReturnType<typeof discardDesignDraft>>;
+    if (blocata.current) return;
+    blocata.current = true;
+    setRenuntaInCurs(true);
     try {
-      res = await discardDesignDraft(businessId);
-    } catch {
-      toast.error("Nu am primit răspuns de la server. Reîncarcă pagina ca să vezi ce a rămas.");
-      return;
+      epoca.current += 1;
+      // La fel ca la Publica: o scriere ajunsa dupa golire ar fi reinviat ciorna.
+      coada.current?.anuleaza();
+      await coada.current?.goleste();
+      let res: Awaited<ReturnType<typeof discardDesignDraft>>;
+      try {
+        res = await discardDesignDraft(businessId);
+      } catch {
+        toast.error("Nu am primit răspuns de la server. Reîncarcă pagina ca să vezi ce a rămas.");
+        return;
+      }
+      if ("error" in res) {
+        toast.error(res.error);
+        return;
+      }
+      const goala: Ciorna = { design: publicatAcum.current, continut: CONTINUT_GOL };
+      despacha({ tip: "inlocuieste", ciorna: goala });
+      salvatAmprenta.current = amprentaCiornei(goala);
+      cioarnaInBaza.current = null;
+      if (continutInBaza.current !== amprentaContinut(CONTINUT_GOL)) {
+        continutInBaza.current = amprentaContinut(CONTINUT_GOL);
+        laContinutInBaza.current();
+      }
+      toast.success("Ai renunțat la modificările nepublicate.");
+    } finally {
+      blocata.current = false;
+      setRenuntaInCurs(false);
     }
-    if ("error" in res) {
-      toast.error(res.error);
-      return;
-    }
-    const goala: Ciorna = { design: publicatAcum.current, continut: CONTINUT_GOL };
-    despacha({ tip: "inlocuieste", ciorna: goala });
-    salvatAmprenta.current = amprentaCiornei(goala);
-    cioarnaInBaza.current = null;
-    if (continutInBaza.current !== amprentaContinut(CONTINUT_GOL)) {
-      continutInBaza.current = amprentaContinut(CONTINUT_GOL);
-      laContinutInBaza.current();
-    }
-    toast.success("Ai renunțat la modificările nepublicate.");
   }, [businessId]);
 
   return {
@@ -277,6 +307,8 @@ export function useCiornaDesign({
     areModificari,
     salvez,
     publicaInCurs,
+    /** „Publică” sau „Renunță” e pe drum: ciorna nu primeste modificari pana se intoarce. */
+    blocata: publicaInCurs || renuntaInCurs,
     aplica,
     aplicaContinut,
     poateAnula: istoric.trecut.length > 0,

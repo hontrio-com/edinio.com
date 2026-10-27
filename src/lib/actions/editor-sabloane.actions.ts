@@ -18,14 +18,15 @@ export async function produsPentruSablon(businessId: string, produse: string[], 
   const { data: magazin } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).maybeSingle();
   if (!magazin) return null;
 
-  const iduri = produse.filter((v) => typeof v === "string" && /^[0-9a-zA-Z-]{1,64}$/.test(v)).slice(0, 50);
+  // O actiune de server primeste orice trimite browserul, oricat ar spune semnatura: nu doar liste.
+  const iduri = (Array.isArray(produse) ? produse : []).filter((v) => typeof v === "string" && /^[0-9a-zA-Z-]{1,64}$/.test(v)).slice(0, 50);
   if (iduri.length) {
     const { data } = await supabase.from("products").select("slug")
       .eq("business_id", businessId).eq("is_active", true).in("id", iduri).not("slug", "is", null).limit(1);
     if (data?.[0]?.slug) return data[0].slug;
   }
 
-  const nume = numeCategorii.filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim()).slice(0, 100);
+  const nume = (Array.isArray(numeCategorii) ? numeCategorii : []).filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim()).slice(0, 100);
   if (nume.length) {
     const { data } = await supabase.from("products").select("slug")
       .eq("business_id", businessId).eq("is_active", true).in("category", nume).not("slug", "is", null)

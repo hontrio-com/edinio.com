@@ -37,6 +37,7 @@ import type { Database } from "@/types/database.types";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { PLAN_LABELS, PLAN_PRICES, type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS } from "@/lib/plans";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils/cn";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
@@ -1169,7 +1170,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   </p>
                 </div>
                 <div className="px-5 py-4">
-                  <Link href={adresaSetarii()} className={buttonVariants({ variant: "outline" })}>
+                  {/* ⚠ Prin `cn`, ca `<Button>`: altfel `border-transparent` din baza butonului bate conturul variantei. */}
+                  <Link href={adresaSetarii()} className={cn(buttonVariants({ variant: "outline" }))}>
                     Deschide setările magazinului
                   </Link>
                 </div>

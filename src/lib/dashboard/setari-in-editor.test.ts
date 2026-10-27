@@ -64,7 +64,8 @@ test("⚠ Setarile nu mai au filele mutate, iar „General” trimite in editor"
   const file = new Set([...nav.matchAll(/id: "([a-z-]+)"/g)].map((m) => m[1]));
   for (const mutata of ["catalog", "formular-comanda"]) assert.ok(!file.has(mutata), `fila „${mutata}” e inca in Setari`);
   assert.ok(file.has("general"), "„General” (cu „Contul tău”) trebuie sa ramana");
-  assert.match(cod(SETARI), /<Link href=\{adresaSetarii\(\)\} className=\{buttonVariants\(\{ variant: "outline" \}\)\}>\s*Deschide setările magazinului/);
+  // Prin `cn`, ca `<Button>`: fara el, `border-transparent` din baza butonului batea conturul (proba din 27.10).
+  assert.match(cod(SETARI), /<Link href=\{adresaSetarii\(\)\} className=\{cn\(buttonVariants\(\{ variant: "outline" \}\)\)\}>\s*Deschide setările magazinului/);
 });
 
 test("⚠ adresele vechi ale filelor mutate duc in editor, pe setarea lor", () => {

@@ -786,7 +786,18 @@ Citit inainte:
       Mutanti: 39/39 prinsi (scapasera intai 3, toti pe starea din hook: catalogul si formularul lipsa din
       „nesalvate”, `setSalvat` scos; acoperiti cu o proba pe compunerea fiecarei salvari). Proba pe note
       cerea „macar una” pe fiecare setare; acum cere FIECARE nota spre o setare mutata, pe numele ei.
-- [ ] 8.5 REGISTRU, porti, proba in Chrome pe magazinul de proba.
+- [x] 8.5 (27.10: REGISTRU C si D; porti verzi: tsc, 11.154 probe / 0 cazute, lint:prag 51 = pragul, build:ci;
+      proba in Chrome pe `floraria-mirei`, contul de proba `9360c5a3`, prin impersonare, pe acordul zilei) REGISTRU,
+      porti, proba in Chrome pe magazinul de proba. Vazut pe ecran: `?sectiune=catalog` din Setari deschide editorul pe
+      „Catalog”; comutatorul schimbat aprinde punctul din lista si „Ieși” intreaba; „Salvează” scrie DOAR cele trei
+      chei (restul `page_content` neatins, nicio ciorna, bara ramane „Totul e publicat”); telefonul salvat apare
+      in antetul previzualizarii; „Cod discount” scrie `hidden_fields: []`, restul formularului pastrat; nota din
+      „Finalizarea comenzii” deschide formularul pe loc; Setari > General = „Contul tău” + butonul spre editor;
+      „Calculator” randat la 1518 px = latimea chenarului; arborele fara iconite; la 390 si 768 px filele si
+      panourile incap, fara depasire. GASIT si reparat: butonul „Deschide setările magazinului” n-avea contur
+      (`buttonVariants` fara `cn`: `border-transparent` din baza batea conturul variantei; `<Button>` trece prin
+      `cn`). Pus la loc: telefonul, `page_content`, `features` (salvarea generala scrie explicit butoanele
+      flotante, cu aceleasi valori ca implicitele), data abonamentului; verificat cu o singura comparatie.
 
 ## Deciziile proprietarului
 

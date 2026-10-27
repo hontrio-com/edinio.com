@@ -11,6 +11,9 @@ import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
 import { iesireaEditorului, paginaCeruta as paginaDinAdresa, type PaginaProprieEditor } from "@/lib/editor-magazin/pagini";
+import { catalogDinPageContent, setareDinAdresa } from "@/lib/editor-magazin/setari";
+import { dateleMagazinuluiDinRand } from "@/lib/dashboard/datele-magazinului";
+import { formularDinPageContent } from "@/lib/dashboard/formular-comanda";
 import { EditorMagazin } from "@/components/editor-magazin/EditorMagazin";
 import { ScheletEditor } from "@/components/editor-magazin/ScheletEditor";
 
@@ -24,7 +27,7 @@ export const metadata = { title: "Editează magazinul" };
  * vechi redirectioneaza aici. Vezi `docs/editor-magazin/PLAN.md`.
  */
 interface Props {
-  searchParams: Promise<{ pagina?: string; sectiune?: string; din?: string }>;
+  searchParams: Promise<{ pagina?: string; sectiune?: string; din?: string; fila?: string; setare?: string }>;
 }
 
 export default async function EditorPage({ searchParams }: Props) {
@@ -42,17 +45,21 @@ export default async function EditorPage({ searchParams }: Props) {
           paginaCeruta={typeof sp.pagina === "string" ? sp.pagina : null}
           sectiuneCeruta={typeof sp.sectiune === "string" && sp.sectiune.length <= 64 ? sp.sectiune : null}
           iesire={iesireaEditorului(sp.din)}
+          /* Fila „Setări” (etapa 8): din Setari, din ghiduri, din semnele de carte vechi. */
+          setareCeruta={setareDinAdresa(sp.fila, sp.setare)}
         />
       </Suspense>
     </>
   );
 }
 
-async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire }: {
+async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire, setareCeruta }: {
   userId: string;
   paginaCeruta: string | null;
   sectiuneCeruta: string | null;
   iesire: string;
+  /** `null` = fila obisnuita; „lista” = fila „Setări” fara o setare anume. */
+  setareCeruta: ReturnType<typeof setareDinAdresa>;
 }) {
   const supabase = await createClient();
 
@@ -62,9 +69,13 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire }: 
    * are nevoie editorul; restul (inclusiv parola SMTP) ramane pe server.
    * Acelasi magazin ca editorul vechi: cel mai nou al contului.
    */
+  /*
+   * Din etapa 8 si datele filei „Setări” (contactul, adresele, retelele, firma, numerotarea comenzilor):
+   * le vede doar proprietarul, ca in Setari, de unde au venit.
+   */
   const { data: rand } = await supabase
     .from("businesses")
-    .select("id, slug, custom_domain, is_published, logo_url, cover_url, primary_color, tagline, features, gallery, store_name, business_name, store_settings(page_content, storefront_design, storefront_design_draft)")
+    .select("id, slug, custom_domain, is_published, logo_url, cover_url, primary_color, tagline, description, features, gallery, store_name, business_name, phone, whatsapp, email, store_address, store_city, store_county, social, cui, reg_com, address, city, county, store_settings(page_content, storefront_design, storefront_design_draft, order_number_format)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -126,6 +137,15 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire }: 
 
   return (
     <EditorMagazin
+      // Comutatoarele catalogului se citesc ca in magazin (`=== true`), in `catalogDinPageContent`.
+      setariInitiale={{
+        generale: dateleMagazinuluiDinRand(magazin),
+        formatComanda: setari?.order_number_format ?? "sequential",
+        formular: formularDinPageContent(pageContent),
+        catalog: catalogDinPageContent(pageContent),
+      }}
+      filaInitiala={setareCeruta ? "setari" : "sectiuni"}
+      setareInitiala={setareCeruta && setareCeruta !== "lista" ? setareCeruta : null}
       magazin={{
         id: magazin.id,
         slug: magazin.slug,

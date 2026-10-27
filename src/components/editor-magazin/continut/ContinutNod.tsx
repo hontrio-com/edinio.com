@@ -56,15 +56,15 @@ export function ContinutNod({ sectiune, continut, businessId, categorii, planGra
         </Nota>
       );
     case "despre":
-      return <Nota href="/dashboard/settings?sectiune=general" eticheta="Setări > General">Textul vine din descrierea magazinului. Fără descriere, secțiunea nu apare.</Nota>;
+      return <Nota setare="general" eticheta="Setări > Informații generale">Textul vine din descrierea magazinului. Fără descriere, secțiunea nu apare.</Nota>;
     case "contact":
-      return <Nota href="/dashboard/settings?sectiune=general" eticheta="Setări > General">Telefonul, emailul și adresa magazinului se completează în Setări.</Nota>;
+      return <Nota setare="general" eticheta="Setări > Informații generale">Telefonul, emailul și adresa magazinului se completează în fila Setări.</Nota>;
     case "magazin":
-      return <Nota href="/dashboard/settings?sectiune=catalog" eticheta="Setări > Catalog">Ce produse apar în catalog alegi din Setări. Cum arată pagina alegi mai sus, la Design.</Nota>;
+      return <Nota setare="catalog" eticheta="Setări > Catalog">Ce produse apar în catalog alegi din fila Setări. Cum arată pagina alegi mai sus, la Design.</Nota>;
     case "comanda":
       return (
-        <Nota href="/dashboard/settings?sectiune=formular-comanda" eticheta="Setări > Formular de comandă">
-          Câmpurile formularului și opțiunile extra cu preț se aleg din Setări: acolo sunt banii, transportul și facturile.
+        <Nota setare="formular" eticheta="Setări > Formular de comandă">
+          Câmpurile formularului și opțiunile extra cu preț se aleg din fila Setări și se salvează direct: ating banii, transportul și facturile.
         </Nota>
       );
     default:

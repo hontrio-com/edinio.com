@@ -160,7 +160,7 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
     case "set":
       return <Nota href="/dashboard/offers" eticheta="Oferte">Ofertele le creezi și le așezi din Oferte.</Nota>;
     case "contact":
-      return <Nota href="/dashboard/settings" eticheta="Setări > General">Telefonul și WhatsApp-ul vin din Setări &gt; General.</Nota>;
+      return <Nota setare="general" eticheta="Setări > Informații generale">Telefonul și WhatsApp-ul vin din fila Setări, de la Informații generale.</Nota>;
     /* Pe un produs obisnuit ochiul lor nu schimba nimic in previzualizare: nota spune de ce. */
     case "pachet":
       return (

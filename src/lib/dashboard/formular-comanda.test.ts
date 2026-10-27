@@ -83,7 +83,10 @@ test("⚠⚠ fila trimite DOAR `checkout_config`, verificat si curatat", () => {
    * `updatePageContent` imbina pe chei de prim nivel. O cheie in plus, dintr-o copie
    * facuta la deschiderea paginii, ar scrie peste ce a schimbat intre timp alt ecran.
    */
-  const s = sursa("src/components/dashboard/setari/FormularComandaSetari.tsx");
+  // Din etapa 8 (27.10.2026) fila sta in editor; starea si salvarea ei, in `useSetariMagazin`, langa
+  // catalog (care trimite si el prin `updatePageContent`, cheile LUI): de aceea doar corpul formularului.
+  const tot = sursa("src/components/editor-magazin/setari/useSetariMagazin.ts");
+  const s = tot.slice(tot.indexOf("function useFormularComanda("), tot.indexOf("function useCatalog("));
   const apeluri = s.match(/updatePageContent\([^)]*\)/g) ?? [];
   assert.deepEqual(apeluri, ["updatePageContent(businessId, { checkout_config: curat })"]);
   assert.match(s, /const problema = problemaFormularului\(config\);\n\s*if \(problema\) \{ toast\.error\(problema\); return; \}/);

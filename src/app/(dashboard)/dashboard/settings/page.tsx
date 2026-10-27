@@ -17,8 +17,7 @@ import type { Database } from "@/types/database.types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { curieraGata, type CurieraConfig } from "@/lib/curiera/client";
 import { epacketGata, type EpacketConfig } from "@/lib/epacket/client";
-import { dateleMagazinuluiDinRand } from "@/lib/dashboard/datele-magazinului";
-import { formularDinPageContent } from "@/lib/dashboard/formular-comanda";
+import { adresaSetarii, FILE_MUTATE_IN_EDITOR } from "@/lib/editor-magazin/setari";
 
 interface Props {
   searchParams: Promise<{ plan_success?: string; domain_success?: string; sectiune?: string }>;
@@ -47,6 +46,12 @@ type ProfilSetari = Pick<
  */
 export default async function SettingsPage({ searchParams }: Props) {
   const { plan_success, domain_success, sectiune } = await searchParams;
+  /*
+   * Filele mutate in editor (etapa 8, lista lui de pe 27.10.2026): o adresa veche (semn de carte, ghid,
+   * legatura din alt ecran) duce la setarea lor din fila „Setări” a editorului, nu la „General”.
+   */
+  const mutata = sectiune ? FILE_MUTATE_IN_EDITOR[sectiune] : undefined;
+  if (mutata) redirect(adresaSetarii(mutata));
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -91,9 +96,9 @@ export default async function SettingsPage({ searchParams }: Props) {
 function ScheletSetari() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)]">
-      {/* coloana din stanga tine locul celor 18 file din NAV_SECTIONS */}
+      {/* coloana din stanga tine locul celor 16 file din NAV_SECTIONS */}
       <aside className="hidden lg:flex flex-col flex-shrink-0 w-52 border-r border-border py-6 px-2 space-y-1">
-        {Array.from({ length: 18 }).map((_, i) => (
+        {Array.from({ length: 16 }).map((_, i) => (
           <Skeleton key={i} className="h-9" />
         ))}
       </aside>
@@ -172,18 +177,9 @@ async function ContinutSetari({
    */
 
   /*
-   * Setari > General, > Formular de comanda si > Catalog: pana la 24.10.2026 se
-   * editau din „Editeaza magazinul". Comutatoarele de catalog se citesc ca in
-   * magazin (`=== true`), ca ecranul sa arate starea pe care o vad clientii.
+   * Datele magazinului, formularul de comanda si catalogul nu se mai citesc aici: din 27.10.2026 stau in
+   * fila „Setări” a editorului (etapa 8), care le citeste singura (`dashboard/editor/page.tsx`).
    */
-  const dateleMagazinului = dateleMagazinuluiDinRand(bizRow);
-  const formularComanda = formularDinPageContent(storeSettings?.page_content);
-  const pcCatalog = (storeSettings?.page_content ?? {}) as Record<string, unknown>;
-  const vizibilitateCatalog = {
-    hide_products_without_images: pcCatalog.hide_products_without_images === true,
-    hide_out_of_stock_products: pcCatalog.hide_out_of_stock_products === true,
-    show_empty_categories: pcCatalog.show_empty_categories === true,
-  };
 
   // One Product Store (Settings > Tip magazin): current mode + active products picker.
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
@@ -409,7 +405,6 @@ async function ContinutSetari({
       businessId={business?.id ?? null}
       businessData={business ?? null}
       storePolicies={(storeSettings?.store_policies as Record<string, unknown>) ?? {}}
-      orderNumberFormat={storeSettings?.order_number_format ?? "sequential"}
       vatSettings={{
         vat_enabled: storeSettings?.vat_enabled ?? false,
         vat_rate: storeSettings?.vat_rate ?? 19,
@@ -454,9 +449,6 @@ async function ContinutSetari({
       mfaEmailEnabled={profile?.mfa_email_enabled ?? false}
       planSuccess={planSuccess}
       domainSuccess={domainSuccess}
-      dateleMagazinului={dateleMagazinului}
-      formularComanda={formularComanda}
-      vizibilitateCatalog={vizibilitateCatalog}
     />
   );
 }

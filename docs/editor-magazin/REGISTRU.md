@@ -24,7 +24,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 ## C. Ce se verifica dupa push
 - Magazine reale fara design atins (`storefront_design = {}`): arata la fel ca inainte.
 - Un magazin cu design salvat: arata la fel ca inainte.
-- **Etapa 1 (Setari):**
+- **Etapa 1 (Setari):** ⚠ INLOCUITA de etapa 8 (27.10): ecranele de mai jos stau acum in editor, fila
+  „Setări” (vezi blocul „Etapa 8” mai jos). Regulile de salvare au ramas aceleasi; se verifica acolo.
   - Setari > General se deschide si salveaza (magazinul, contactul, retelele, datele firmei, formatul comenzii, un singur buton).
   - Setari > Formular de comanda: un camp suplimentar si o extraoptiune salvate apar in formularul magazinului; extraoptiunea se aduna la total.
   - Setari > Catalog: „Ascunde produsele fara stoc” scoate produsele din lista magazinului.
@@ -104,10 +105,22 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - „Readu în editor” pune versiunea in CIORNA: o vezi in previzualizare, magazinul deschis normal ramane neschimbat, Anuleaza o scoate. La „Publică”, cheile pe care versiunea nu le avea se SCOT din `page_content` (magazinul cade pe implicit); ce au scris Setarile ramane.
   - Drepturile, pe productie, dupa migratie: `has_table_privilege('anon' / 'authenticated', 'public.storefront_design_versions', …)` = fals pe tot; 0 politici; RLS pornit. Si prin aplicatie: cu cheia publica, o cerere pe tabel e refuzata.
   - Raman pe dinafara, spus si in fereastra istoricului: paginile din „Pagini”, Setarile, comutatorul „Vizibil”. O imagine stearsa intre timp din Biblioteca Media nu revine (versiunile NU o tin „folosita”).
+- **Etapa 8 (lista lui din 27.10: setarile in editor, previzualizarea lata, arborele fara iconite):**
+  - Editorul are a treia fila, „Setări”: „Informații generale”, „Social media”, „Datele firmei” (cu numerotarea comenzilor), „Formular de comandă”, „Catalog”. Primele trei au o singura stare si se salveaza impreuna (`updateGeneralSettings`, ca in Setari); formularul si catalogul, fiecare cu butonul lui (`updatePageContent`, doar cheile lor). Totul DIRECT in magazin, nu prin „Publică” (decizia lui); panoul o spune.
+  - De verificat dupa push, pe un magazin real (cu acordul lui): un camp schimbat la „Informații generale”, apoi „Salvează”: previzualizarea il arata, magazinul deschis normal la fel, fara „Publică”; bara editorului NU arata „Modificări nepublicate” din cauza lui.
+  - Formularul: un camp suplimentar si o extraoptiune salvate din editor apar in formularul magazinului; extraoptiunea se aduna la total. Catalogul: „Ascunde produsele fără stoc” le scoate din lista magazinului.
+  - Setari > General: doar „Contul tău” si butonul „Deschide setările magazinului”. Setarile nu mai au filele „Formular de comandă” si „Catalog”; `/dashboard/settings?sectiune=catalog` si `?sectiune=formular-comanda` (semne de carte, ghiduri vechi) duc in editor, pe setarea lor.
+  - Cu o setare scrisa si nesalvata: „Ieși” intreaba, iar inchiderea ferestrei avertizeaza. Lista din fila arata un punct langa setarea nesalvata.
+  - Notele din editor („Setări > Informații generale”, „Setări > Catalog”, „Setări > Formular de comandă”) deschid setarea pe loc; blocul „Rețele” din paginile proprii trimite la „Social media”.
+  - Previzualizarea „Calculator” ia toata latimea chenarului (peste 1280 px); telefonul si tableta raman la latimea lor. Arborele de sectiuni si blocuri e fara iconite.
+- **Schimbari de comportament de etapa 8, de urmarit dupa push:**
+  - ⚠ Comerciantii care au invatat Setari > General / Formular de comandă / Catalog dupa etapa 1 nu le mai gasesc acolo: cardul „Datele magazinului” din General ii trimite in editor. Si invers fata de restul editorului: aici „Salvează” scrie direct, fara „Publică”.
+  - Dupa o salvare din fila „Setări”, editorul cere din nou datele de pe server (`router.refresh()`): ciorna si pagina deschisa raman, previzualizarea se reincarca.
 
 ## D. Capturi si texte de ajutor
 - Etapa 7: centrul de ajutor nu are inca un ghid pentru istoricul publicarilor („Istoric” din bara editorului, „Readu în editor”, ce intra si ce nu). Se scrie la rescrierea grupului „Design magazin” de la final, cu captura lui.
-- De refacut la final: `public/capturi/ajutor/design-si-pagini/cum-completezi-informatiile-generale-editor-design.webp` (cardul „Magazinul” din Setari > General). Fisierul vechi arata panoul scos din editor si a fost sters; ghidul arata substituentul pana atunci. Lista: `npm run capturi -- --lista`.
+- De refacut la final: `public/capturi/ajutor/design-si-pagini/cum-completezi-informatiile-generale-editor-design.webp`, din etapa 8 panoul „Informații generale” din fila „Setări” a editorului (pana la etapa 8: cardul „Magazinul” din Setari > General). Ghidul arata substituentul pana atunci. Lista: `npm run capturi -- --lista`.
+- Etapa 8: ghidurile care trimiteau la Setari > General / Formular de comandă / Catalog spun acum „Editează magazinul, fila Setări, ...” (`setari.ts`, `design-si-pagini.ts`, `marketing-si-clienti.ts`, `marketplace.ts`, plus nota Trendyol din panou). Niciunul dintre ele nu are captura cu ecranele scoase (verificat 27.10). Textul juridic din `lib/website/gdpr.ts` („Setări → Profil / Setări → Magazin”) e al documentului de confidentialitate si NU s-a atins.
 - Grupul „Design magazin” din centrul de ajutor se rescrie INTREG la final: descrie editorul vechi, care se inlocuieste in etapele 2-6. Exemplu de text deja invechit: `cum-functioneaza-butonul-salveaza` spune ca butoanele scriu tot `page_content`, dar editorul salveaza de mult doar cheile atinse.
 - Etapa 2: grupul „Design magazin” descrie trei ecrane care nu mai exista („Design magazin”, „Ordinea sectiunilor”, „Design sectiuni”) si comutatoarele scoase. Exemplu: ghidul paginilor de sistem spune ca „Alege designul” duce in „Design sectiuni”. Se rescrie la final, odata cu restul grupului.
 - Etapa 6: ghidurile care spun „apasa Salveaza” in sectiunile editorului (de pilda `cum-functioneaza-butonul-salveaza`) descriu acum un buton care nu mai exista: continutul ajunge la clienti la „Publică”. Intra in rescrierea grupului „Design magazin” de la final.
@@ -128,4 +141,4 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   garda de concurenta: un `discard` simplu ar sterge si ciorna altei file. Existenta inca de la etapa 2.
 - **De decis (etapa 4): contorul de vizitatori** afiseaza un numar nemasurat, fix pe produs (18-27); aprins la 9 magazine. Editorul nou o spune in panoul blocului. Ramane, sau iese?
 - `ProductForm` (galeria de imagini a produsului) foloseste tot dnd-kit fara `id` stabil, deci poate avea aceeasi nepotrivire de hidratare reparata in lista de sectiuni (`SectionList`, `useId`). In afara editorului, neatins.
-- Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”. Daca se muta in „Setari”, se schimba adresa (`/ajutor/<categorie>/<ghid>`), deci trebuie redirectari.
+- ~~Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”.~~ Rezolvat de etapa 8: setarile s-au intors in editor, deci ghidurile lor stau iar langa el. Invers, cele din categoria „Setări” despre datele firmei, ANAF si numerotarea comenzilor descriu acum fila „Setări” a editorului; titlul categoriei ramane potrivit. O mutare intre categorii schimba adresa (`/ajutor/<categorie>/<ghid>`) si cere redirectari.

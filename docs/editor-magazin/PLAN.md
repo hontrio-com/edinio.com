@@ -770,10 +770,22 @@ Citit inainte:
       Previzualizarea pe toata latimea. Proba.
 - [x] 8.2 (27.10: fara `PageIcon` / `IconitaBloc` in `SectionList`, `ArboreSectiuni`, `ArborePagina`; proba pe
       sursa) Arborele fara iconite. Proba.
-- [ ] 8.3 Fila „Setări” in editor: componentele adaptate panoului ingust, starea comuna, salvarea,
-      reincarcarea, nesalvatul la „Ieși”; datele aduse de ruta editorului. Probe.
-- [ ] 8.4 Setarile din panou fara ele (General cu „Contul tău” si trimiterea), adresele vechi spre editor,
-      notele si ghidurile. Probe.
+- [x] 8.3 (27.10: `lib/editor-magazin/setari.ts` cu regulile pure, `setari/useSetariMagazin.ts` cu starea,
+      tinuta in `EditorMagazin`, `setari/PanouriSetari.tsx` si `setari/FilaSetari.tsx` pe stilul panoului;
+      dupa salvare `reincarcaAcum` + `router.refresh()`; nesalvatul intra in „Ieși” si in `beforeunload`;
+      ruta editorului aduce datele si citeste `?fila=setari&setare=...`) Fila „Setări” in editor:
+      componentele adaptate panoului ingust, starea comuna, salvarea, reincarcarea, nesalvatul la „Ieși”;
+      datele aduse de ruta editorului. Probe.
+- [x] 8.4 (27.10: Setarile fara filele „Formular de comandă” si „Catalog” si fara cardurile magazinului;
+      „General” pastreaza „Contul tău” si un buton „Deschide setările magazinului”; `?sectiune=catalog` si
+      `?sectiune=formular-comanda` redirectioneaza in editor, pe setare; cele trei componente vechi
+      sterse; notele din editor si blocul „Rețele” deschid setarea (`TrimitereSetare`, pe loc in editor);
+      ghidurile din `setari.ts`, `design-si-pagini.ts`, `marketing-si-clienti.ts`, `marketplace.ts` si nota
+      Trendyol spun noul drum; lista capturilor regenerata) Setarile din panou fara ele (General cu
+      „Contul tău” si trimiterea), adresele vechi spre editor, notele si ghidurile. Probe.
+      Mutanti: 39/39 prinsi (scapasera intai 3, toti pe starea din hook: catalogul si formularul lipsa din
+      „nesalvate”, `setSalvat` scos; acoperiti cu o proba pe compunerea fiecarei salvari). Proba pe note
+      cerea „macar una” pe fiecare setare; acum cere FIECARE nota spre o setare mutata, pe numele ei.
 - [ ] 8.5 REGISTRU, porti, proba in Chrome pe magazinul de proba.
 
 ## Deciziile proprietarului
@@ -816,7 +828,9 @@ Citit inainte:
 - Pozitionare libera prin tragere.
 - Layout de telefon editat separat: telefonul se face singur, cel mult „ascuns pe mobil”.
 - Checkoutul editabil vizual: doar culori si cateva texte. Acolo sunt banii, TVA-ul, rambursul.
-- Setari de business in editorul vizual (etapa 1 le-a scos).
+- Setari de business in editorul vizual (etapa 1 le-a scos). ⚠ Etapa 8 (27.10, cererea lui) a adus
+  datele magazinului, formularul de comanda si catalogul inapoi in editor, dar intr-o fila a lor,
+  „Setări”, salvate direct cu „Salvează”, nu prin „Publică”, si nu in arborele vizual.
 
 ## Interfata tinta (etapa 2)
 
@@ -926,6 +940,7 @@ Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, 
    FACUT 24.10.2026: Setari > General (magazinul, contactul, adresa, butoanele flotante,
    retelele, datele firmei, un singur buton), Setari > Formular de comanda, Setari > Catalog.
    Editorul are trimiteri spre ele. Fara migratii. Detalii si ce se verifica: `REGISTRU.md`.
+   ⚠ 27.10.2026, etapa 8: la cererea lui s-au mutat inapoi, in editor, fila „Setări” (vezi „Etapa 8”).
 2. **Un singur ecran**: `/dashboard/editor` cu bara de sus (alegi pagina, desktop/mobil,
    anuleaza/refa, Salveaza/Publica), stanga arborele, dreapta previzualizarea. La inceput
    gazduieste editoarele existente. FACUT si PROBAT 25.10.2026 (planul si bifele mai sus).

@@ -669,7 +669,7 @@ export function TrendyolListingEditor({
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground mb-2">
-            Datele de conformitate (producător, importatori) se iau din datele firmei tale, din Setări. Restul se
+            Datele de conformitate (producător, importatori) se iau din datele firmei tale, din fila Setări a editorului magazinului. Restul se
             deduc din produs, doar când sunt fără dubiu. Verifică-le înainte de trimitere.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

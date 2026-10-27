@@ -187,8 +187,8 @@ export function ContinutCatalog({ continut, businessId }: { continut: ContinutMa
           </div>
         )}
       </Grup>
-      <Nota href="/dashboard/settings?sectiune=catalog" eticheta="Setări > Catalog">
-        Ce produse apar în magazin (fără imagini, fără stoc, categorii goale) alegi din Setări.
+      <Nota setare="catalog" eticheta="Setări > Catalog">
+        Ce produse apar în magazin (fără imagini, fără stoc, categorii goale) alegi din fila Setări.
       </Nota>
     </div>
   );

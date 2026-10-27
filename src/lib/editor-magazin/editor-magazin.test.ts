@@ -540,7 +540,8 @@ test("⚠⚠ munca nesalvata pe pagina nu se pierde fara intrebare", () => {
   // „Salvează și treci” trece doar dupa o salvare reusita.
   assert.match(s, /if \(!\(await salveazaPagina\(\)\)\) return;\s*setSchimbareCeruta\(null\);\s*if \(p\) schimbaPagina\(p\);/);
   // „Ieși” intreaba si pentru pagina (si cat se urca o imagine, etapa 6); inchiderea ferestrei, prin hook.
-  assert.match(s, /continutNesalvat=\{continut\.incarc \|\| paginaDeschisa\.modificata\}/);
+  // Si setarile scrise si nesalvate din fila „Setări” (etapa 8).
+  assert.match(s, /continutNesalvat=\{continut\.incarc \|\| paginaDeschisa\.modificata \|\| setari\.nesalvate\.length > 0\}/);
   assert.match(faraComentarii(HOOK_PAGINA), /if \(!modificata\) return;\s*const handler = \(e: BeforeUnloadEvent\) => e\.preventDefault\(\);\s*window\.addEventListener\("beforeunload", handler\);/);
 });
 
@@ -601,7 +602,13 @@ test("⚠ un bloc nou se pune chiar sub blocul ales, si in coloane, nu doar la s
 // ── Totul la „Publică” (6.4), pe sursa ───────────────────────────────────────
 
 test("⚠⚠ editorul nu mai scrie continut direct in magazin: totul trece prin ciorna", () => {
-  for (const f of componente()) {
+  /*
+   * Afara: fila „Setări” (etapa 8, decizia lui din 27.10: „Direct, cu „Salvează””). Formularul de comanda
+   * si catalogul nu sunt continut de design, iar cheile lor nu sunt pe lista alba a ciornei
+   * (`setari-in-editor.test.ts`), deci „Publică” nu le atinge.
+   */
+  const SETARI_DIRECTE = path.join(DOSAR_COMPONENTE, "setari");
+  for (const f of componente().filter((x) => !x.startsWith(SETARI_DIRECTE))) {
     const t = faraComentarii(f);
     assert.doesNotMatch(t, /updatePageContent\(/, f);
     assert.doesNotMatch(t, /BaraSalvare/, f);
@@ -736,6 +743,88 @@ test("⚠ numele sablonului urmeaza designul la Anuleaza / Refa din bara, nu o c
   assert.match(s, /const nume = scris && scris\.nume === sablon\.nume \? scris\.text : sablon\.nume;/);
   assert.match(s, /setScris\(\{ text, nume: numeCurat\(text\) \|\| sablon\.nume \}\);/);
   assert.match(s, /<input type="text" value=\{nume\}/);
+});
+
+// ── Fila „Setări” (etapa 8, lista lui de pe 27.10.2026), pe sursa ─────────────
+
+const STARE_SETARI = "src/components/editor-magazin/setari/useSetariMagazin.ts";
+
+test("⚠⚠ fila „Setări” sta langa „Secțiuni” si „Stil”, iar notele o deschid pe loc", () => {
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /\[\["sectiuni", "Secțiuni"\], \["stil", "Stil"\], \["setari", "Setări"\]\]/);
+  assert.match(e, /\{fila === "setari" \? \(\s*<FilaSetari setari=\{setari\} deschisa=\{setareDeschisa\} onDeschide=\{setSetareDeschisa\} onInapoi=\{\(\) => setSetareDeschisa\(null\)\} \/>/);
+  assert.match(e, /const deschideSetarea = useCallback\(\(cheie: CheieSetare\) => \{\s*setFila\("setari"\);\s*setSetareDeschisa\(cheie\);\s*setVedereMobil\("panou"\);\s*\}, \[\]\);/);
+  assert.match(e, /<DeschideSetareaContext\.Provider value=\{deschideSetarea\}>/);
+  // Nota cu `setare` foloseste contextul (in editor) sau adresa (in afara lui).
+  const nav = faraComentarii("src/components/editor-magazin/navigare.tsx");
+  assert.match(nav, /const deschide = useContext\(DeschideSetareaContext\);\s*if \(deschide\) \{/);
+  assert.match(nav, /<Link href=\{adresaSetarii\(setare\)\}/);
+  assert.match(faraComentarii("src/components/editor-magazin/continut/ui.tsx"), /\{setare && eticheta \? \(\s*<TrimitereSetare setare=\{setare\}>/);
+});
+
+test("⚠⚠ setarile scrise raman pana la salvare, iar „Ieși” si inchiderea ferestrei intreaba", () => {
+  // Starea sta in editor (`useSetariMagazin` chemat din `EditorMagazin`), nu in panouri, care se inchid.
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /const setari = useSetariMagazin\(\{ businessId: magazin\.id, initiale: setariInitiale, dupaSalvare: dupaSalvareSetari \}\);/);
+  assert.doesNotMatch(faraComentarii("src/components/editor-magazin/setari/PanouriSetari.tsx"), /useState|useSetariMagazin\(/);
+  const s = faraComentarii(STARE_SETARI);
+  assert.match(s, /if \(!areNesalvate\) return;\s*const handler = \(e: BeforeUnloadEvent\) => e\.preventDefault\(\);/);
+});
+
+test("⚠ dupa fiecare salvare reusita, previzualizarea si datele editorului se reincarca", () => {
+  const s = faraComentarii(STARE_SETARI);
+  // Trei salvari (datele generale, formularul, catalogul), fiecare doar dupa raspunsul bun.
+  assert.equal(s.match(/if \("error" in rezultat\) \{ toast\.error\(rezultat\.error\); return; \}/g)?.length, 3);
+  assert.equal(s.match(/dupaSalvare\(\);/g)?.length, 3);
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /const dupaSalvareSetari = useCallback\(\(\) => \{\s*reincarcaAcum\.current\(\);\s*router\.refresh\(\);\s*\}, \[router\]\);/);
+});
+
+test("⚠ fiecare salvare socoteste salvat exact ce a trimis, iar „Ieși” intreaba de toate trei, pe nume", () => {
+  /*
+   * Gasit de mutanti (etapa 8): fara `setSalvat`, panoul ramanea „nesalvat” dupa o salvare reusita; fara
+   * formular sau catalog in `nesalvate`, „Ieși” si inchiderea ferestrei le pierdeau tacut. Hook-ul nu se
+   * poate rula aici (fara React), deci proba intreaba din ce se compune fiecare pas.
+   */
+  const s = faraComentarii(STARE_SETARI);
+  const corp = (de: string, pana: string) => s.slice(s.indexOf(de), s.indexOf(pana));
+  const salvari = [
+    { nume: "datele generale", c: corp("function useDateleGenerale(", "function useFormularComanda("), trimis: "trimise",
+      apel: /await updateGeneralSettings\(businessId, trimise\.date, trimise\.formatComanda\);/ },
+    { nume: "formularul", c: corp("function useFormularComanda(", "function useCatalog("), trimis: "curat",
+      apel: /await updatePageContent\(businessId, \{ checkout_config: curat \}\);/ },
+    { nume: "catalogul", c: corp("function useCatalog(", "export function useSetariMagazin("), trimis: "trimis",
+      apel: /await updatePageContent\(businessId, trimis\);/ },
+  ];
+  for (const { nume, c, trimis, apel } of salvari) {
+    assert.match(c, apel, `${nume}: nu mai pleaca ce credeam`);
+    // Abia dupa raspunsul bun, si chiar valoarea trimisa (nu una citita intre timp de pe ecran).
+    assert.match(
+      c,
+      new RegExp(`if \\("error" in rezultat\\) \\{ toast\\.error\\(rezultat\\.error\\); return; \\}\\s*(?:setConfig\\(${trimis}\\);\\s*)?setSalvat\\(${trimis}\\);`),
+      `${nume}: nu se socoteste salvat ce s-a trimis`,
+    );
+  }
+  const tot = corp("export function useSetariMagazin(", "export type SetariMagazin");
+  assert.match(tot, /\.\.\.generale\.modificate,/);
+  assert.match(tot, /\.\.\.\(formular\.modificat \? \["formular" as const\] : \[\]\),/);
+  assert.match(tot, /\.\.\.\(catalog\.modificat \? \["catalog" as const\] : \[\]\),/);
+  assert.match(tot, /const areNesalvate = nesalvate\.length > 0;/);
+});
+
+test("ruta editorului aduce setarile si citeste `?fila=setari&setare=...`", () => {
+  const p = faraComentarii("src/app/(dashboard)/dashboard/editor/page.tsx");
+  assert.match(p, /setareCeruta=\{setareDinAdresa\(sp\.fila, sp\.setare\)\}/);
+  assert.match(p, /generale: dateleMagazinuluiDinRand\(magazin\),/);
+  assert.match(p, /formular: formularDinPageContent\(pageContent\),/);
+  assert.match(p, /filaInitiala=\{setareCeruta \? "setari" : "sectiuni"\}/);
+  // Setarea ceruta ajunge deschisa (din Setari, `?sectiune=catalog`, se deschide chiar „Catalog”, nu lista).
+  assert.match(p, /setareInitiala=\{setareCeruta && setareCeruta !== "lista" \? setareCeruta : null\}/);
+  const e = faraComentarii(EDITOR);
+  assert.match(e, /const \[fila, setFila\] = useState<FilaEditor>\(filaInitiala\);/);
+  assert.match(e, /const \[setareDeschisa, setSetareDeschisa\] = useState<CheieSetare \| null>\(setareInitiala\);/);
+  // Coloanele noi din select (contactul, firma, retelele) sunt ale proprietarului: selectul cere `user_id`.
+  assert.match(p, /\.eq\("user_id", userId\)/);
 });
 
 test("actiunea care cauta produsul unui sablon primeste orice: nu cade pe altceva decat liste", () => {

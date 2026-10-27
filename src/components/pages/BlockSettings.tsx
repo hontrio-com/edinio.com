@@ -16,6 +16,7 @@ import type {
 } from "@/lib/pages/blocks.types";
 import { SECTIUNI_ACASA, VARIANTE_HERO } from "@/lib/pages/pagina-acasa";
 import { ProductPicker } from "./ProductPicker";
+import { TrimitereSetare } from "@/components/editor-magazin/navigare";
 import type { FormDef } from "@/lib/pages/forms.types";
 import { CampCuloare } from "./editor/CampCuloare";
 import { CampImagine } from "./editor/CampImagine";
@@ -506,7 +507,10 @@ export function BlockSettings({ block, onChange, categories, forms, businessId, 
       return (
         <div className="space-y-4">
           <Text label="Titlu" value={b.title} onChange={(v) => patch({ title: v })} />
-          <p className="text-xs text-muted-foreground">Linkurile rețelelor se preiau din <Link href="/dashboard/settings?sectiune=general" className="font-medium text-primary hover:underline">Setări &gt; General</Link>.</p>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>Linkurile rețelelor se preiau din fila Setări a editorului, de la Social media.</p>
+            <TrimitereSetare setare="social">Setări &gt; Social media</TrimitereSetare>
+          </div>
           <ControaleAspect style={b.style} onChange={setStyle} hide={["width"]} />
         </div>
       );

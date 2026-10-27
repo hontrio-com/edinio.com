@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
 import { DesignGallery } from "@/components/store-editor/DesignGallery";
 import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
 import { newProductSection } from "@/lib/store-sections";
@@ -34,9 +35,16 @@ import { PanouNod } from "./PanouNod";
 import { PanouAdaugaBloc, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
 import { PanouSablon } from "./PanouSablon";
 import { PanouStil } from "./continut/PanouStil";
+import { DeschideSetareaContext } from "./navigare";
+import { FilaSetari } from "./setari/FilaSetari";
+import { useSetariMagazin, type SetariInitiale } from "./setari/useSetariMagazin";
 import { useCiornaDesign } from "./useCiornaDesign";
 import { useContinutMagazin } from "./useContinutMagazin";
 import { usePaginaProprie } from "./usePaginaProprie";
+import type { CheieSetare } from "@/lib/editor-magazin/setari";
+
+/** Filele panoului din stanga; „Setări” din etapa 8 (lista lui, 27.10.2026). */
+export type FilaEditor = "sectiuni" | "stil" | "setari";
 
 type Cat = { id: string; name: string; parent_id: string | null; sort_order?: number };
 
@@ -87,7 +95,7 @@ function inCampDeScris(t: EventTarget | null): boolean {
  */
 export function EditorMagazin({
   magazin, pageContent, designInitial, designPublicat, cioarnaInitiala, continutCiornaInitial, categorii, planGratuit,
-  pagini, paginaAcasa, paginaInitiala, sectiuneInitiala, iesire,
+  pagini, paginaAcasa, paginaInitiala, sectiuneInitiala, iesire, setariInitiale, filaInitiala = "sectiuni", setareInitiala = null,
 }: {
   magazin: MagazinEditor;
   pageContent: Record<string, unknown>;
@@ -105,7 +113,13 @@ export function EditorMagazin({
   sectiuneInitiala: string | null;
   /** Unde duce „Ieși” (`iesireaEditorului`). */
   iesire: string;
+  /** Fila „Setări” (etapa 8): datele magazinului, formularul de comanda, catalogul, din baza. */
+  setariInitiale: SetariInitiale;
+  /** Fila si setarea cerute in adresa (`?fila=setari&setare=...`): din Setari, din ghiduri. */
+  filaInitiala?: FilaEditor;
+  setareInitiala?: CheieSetare | null;
 }) {
+  const router = useRouter();
   /** Reincarcarea previzualizarii, definita mai jos (are nevoie de cadru). */
   const reincarcaAcum = useRef<() => void>(() => {});
   const laContinutInBaza = useCallback(() => reincarcaAcum.current(), []);
@@ -228,8 +242,21 @@ export function EditorMagazin({
   useEffect(() => { reincarcaAcum.current = reincarca; }, [reincarca]);
   const continut = useContinutMagazin({ magazin: { id: magazin.id, is_published: magazin.isPublished }, ciorna });
 
+  // ── Setarile magazinului (etapa 8): salvate direct, fiecare cu butonul ei ──
+  /*
+   * Dupa o salvare: previzualizarea (numele, contactul, formularul se vad in magazin) si datele editorului
+   * de pe server (sloganul intra in derivarea hero-ului), ca ecranul sa nu ramana pe valorile de la intrare.
+   */
+  const dupaSalvareSetari = useCallback(() => {
+    reincarcaAcum.current();
+    router.refresh();
+  }, [router]);
+  const setari = useSetariMagazin({ businessId: magazin.id, initiale: setariInitiale, dupaSalvare: dupaSalvareSetari });
+
   // ── Ecranul ──
-  const [fila, setFila] = useState<"sectiuni" | "stil">("sectiuni");
+  const [fila, setFila] = useState<FilaEditor>(filaInitiala);
+  /** Setarea deschisa in fila „Setări”; `null` = lista lor. */
+  const [setareDeschisa, setSetareDeschisa] = useState<CheieSetare | null>(setareInitiala);
   /*
    * Sectiunea ceruta in adresa (`?sectiune=`, din ghiduri si din Pagini), doar
    * daca exista pe pagina ceruta: altfel panoul s-ar deschide pe un nod gol.
@@ -261,6 +288,13 @@ export function EditorMagazin({
   const ecranIngust = useSyncExternalStore(abonareEcranIngust, citesteEcranIngust, () => false);
   const dispozitivVazut: Dispozitiv = ecranIngust ? "mobil" : dispozitiv;
   const [vedereMobil, setVedereMobil] = useState<"panou" | "previzualizare">("panou");
+
+  /** O nota („se completeaza la Informații generale”) deschide setarea pe loc, in fila ei. */
+  const deschideSetarea = useCallback((cheie: CheieSetare) => {
+    setFila("setari");
+    setSetareDeschisa(cheie);
+    setVedereMobil("panou");
+  }, []);
 
   /** Nodurile paginii alese, plus ce e comun tuturor paginilor. */
   const noduri = useMemo<SectionInstance[]>(() => [
@@ -594,12 +628,13 @@ export function EditorMagazin({
       bara de sus si meniul de jos, dar nu si bannerul de abonament, iar pagina
       capata a doua bara de derulare.
     */
+    <DeschideSetareaContext.Provider value={deschideSetarea}>
     <div className="flex flex-col h-full overflow-hidden">
       <BaraEditor
         pagina={pagina} onPagina={cerePagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}
         publicat={continut.publicat} publicareInCurs={continut.publicareInCurs} onComutaPublicarea={continut.comutaPublicarea}
-        continutNesalvat={continut.incarc || paginaDeschisa.modificata} seIncarca={continut.incarc} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
+        continutNesalvat={continut.incarc || paginaDeschisa.modificata || setari.nesalvate.length > 0} seIncarca={continut.incarc} vedereMobil={vedereMobil} onVedereMobil={setVedereMobil} ingust={ecranIngust}
         paginiProprii={paginiAfisate.paginiProprii}
         anulare={istoricPagina ?? undefined}
         laIesire={iesire}
@@ -617,7 +652,7 @@ export function EditorMagazin({
       <div className="flex flex-1 min-h-0" inert={ciorna.blocata}>
         <aside className={`w-full lg:w-[360px] shrink-0 flex-col border-r border-border bg-surface ${vedereMobil === "previzualizare" ? "hidden lg:flex" : "flex"}`}>
           <div className="px-3 pt-3 flex gap-1 border-b border-border" role="tablist">
-            {([["sectiuni", "Secțiuni"], ["stil", "Stil"]] as const).map(([cheie, eticheta]) => (
+            {([["sectiuni", "Secțiuni"], ["stil", "Stil"], ["setari", "Setări"]] as const).map(([cheie, eticheta]) => (
               <button key={cheie} type="button" role="tab" aria-selected={fila === cheie} onClick={() => setFila(cheie)}
                 className={`h-9 px-3 -mb-px text-sm font-medium border-b-2 transition-colors ${fila === cheie ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
                 {eticheta}
@@ -625,7 +660,9 @@ export function EditorMagazin({
             ))}
           </div>
           <div className="flex-1 overflow-y-auto px-4 pt-4">
-            {fila === "stil" ? (
+            {fila === "setari" ? (
+              <FilaSetari setari={setari} deschisa={setareDeschisa} onDeschide={setSetareDeschisa} onInapoi={() => setSetareDeschisa(null)} />
+            ) : fila === "stil" ? (
               <PanouStil continut={continut} />
             ) : setariSablon && sablonActiv ? (
               <PanouSablon
@@ -769,6 +806,7 @@ export function EditorMagazin({
         </DialogContent>
       </Dialog>
     </div>
+    </DeschideSetareaContext.Provider>
   );
 }
 

@@ -12,7 +12,7 @@ import {
   Truck, Percent, Globe, Bell, Lock, Clock, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
   ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package, UserRound, Link2,
-  AlertTriangle, Infinity as InfinityIcon, LayoutGrid, ClipboardList,
+  AlertTriangle, Infinity as InfinityIcon,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -20,10 +20,7 @@ import { updateStorePolicies, updateVatSettings, updateNotificationsSettings, up
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { ContClientiSetari } from "@/components/dashboard/setari/ContClientiSetari";
 import { PermalinkuriSetari } from "@/components/dashboard/setari/PermalinkuriSetari";
-import { DateleMagazinului, type DateleMagazinuluiInitiale } from "@/components/dashboard/setari/DateleMagazinului";
-import { FormularComandaSetari } from "@/components/dashboard/setari/FormularComandaSetari";
-import type { ConfigFormular } from "@/lib/dashboard/formular-comanda";
-import { CatalogSetari, type VizibilitateCatalog } from "@/components/dashboard/setari/CatalogSetari";
+import { adresaSetarii } from "@/lib/editor-magazin/setari";
 import type { Permalinkuri } from "@/lib/storefront/permalinkuri";
 import type { StareaConturilor } from "@/lib/actions/cont-client.actions";
 import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
@@ -39,7 +36,7 @@ import { EmailSettingsClient, type EmailSettingsInitial } from "@/components/das
 import type { Database } from "@/types/database.types";
 import { buildPolicyTemplates } from "@/lib/policy-templates";
 import { PLAN_LABELS, PLAN_PRICES, type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS } from "@/lib/plans";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
 import { SeoImageField } from "@/components/dashboard/SeoImageField";
@@ -59,19 +56,21 @@ type UserProfile = Pick<
   "full_name" | "plan" | "plan_interval" | "plan_expires_at" | "payment_failed_at" | "mfa_email_enabled"
 >;
 
+/*
+ * ⚠ „Catalog” si „Formular de comanda” s-au mutat in fila „Setări” a editorului (etapa 8, lista lui de
+ * pe 27.10.2026), la fel datele magazinului din „General”. Adresele vechi duc acolo (`settings/page.tsx`).
+ */
 type SectionId =
-  | "general" | "tip-magazin" | "catalog" | "plan" | "facturare" | "livrare" | "formular-comanda"
+  | "general" | "tip-magazin" | "plan" | "facturare" | "livrare"
   | "taxe" | "plati" | "domeniu" | "seo" | "email" | "notificari" | "politici" | "cookies"
   | "conturi-clienti" | "permalinkuri" | "securitate";
 
 const NAV_SECTIONS: { id: SectionId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general",    label: "General",     icon: Settings  },
   { id: "tip-magazin", label: "Tip magazin", icon: Package  },
-  { id: "catalog",    label: "Catalog",     icon: LayoutGrid },
   { id: "plan",       label: "Plan",        icon: Zap       },
   { id: "facturare",  label: "Facturare",   icon: Receipt   },
   { id: "livrare",    label: "Livrare",     icon: Truck     },
-  { id: "formular-comanda", label: "Formular de comanda", icon: ClipboardList },
   { id: "taxe",       label: "Taxe",        icon: Percent   },
   { id: "plati",      label: "Metode de plata", icon: Wallet },
   { id: "domeniu",    label: "Domeniu",     icon: Globe     },
@@ -356,7 +355,6 @@ interface Props {
   businessId: string | null;
   businessData: BusinessData | null;
   storePolicies: Record<string, unknown>;
-  orderNumberFormat: string;
   vatSettings: VatSettings;
   notificationsConfig: NotificationsConfig;
   shippingConfig: ShippingConfig;
@@ -387,12 +385,6 @@ interface Props {
   permalinkuri: Permalinkuri;
   /** Domeniul propriu sau `edinio.com/<slug>`, fara protocol. */
   adresaMagazin: string;
-  /** Setari > General: magazinul, contactul, retelele si datele firmei. */
-  dateleMagazinului: DateleMagazinuluiInitiale;
-  /** Setari > Formular de comanda (`page_content.checkout_config`). */
-  formularComanda: ConfigFormular;
-  /** Setari > Catalog: ce produse si categorii apar in magazin. */
-  vizibilitateCatalog: VizibilitateCatalog;
 }
 
 function ComingSoon({ title }: { title: string }) {
@@ -407,7 +399,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin, dateleMagazinului, formularComanda, vizibilitateCatalog }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -1164,12 +1156,24 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
               </div>
 
-              {/* Magazinul, contactul, retelele si datele firmei: un singur buton de salvare. */}
-              <DateleMagazinului
-                businessId={businessId}
-                initial={dateleMagazinului}
-                orderNumberFormat={orderNumberFormat}
-              />
+              {/*
+                Magazinul, contactul, retelele, datele firmei si numerotarea comenzilor stau din 27.10.2026
+                in fila „Setări” a editorului (etapa 8, la cererea lui). Aici ramane drumul pana acolo.
+              */}
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-border">
+                  <p className="text-sm font-semibold text-foreground">Datele magazinului</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Numele, contactul, adresa, rețelele sociale, datele firmei, formularul de comandă și catalogul se editează în
+                    Editează magazinul, fila Setări. Se salvează tot direct în magazin.
+                  </p>
+                </div>
+                <div className="px-5 py-4">
+                  <Link href={adresaSetarii()} className={buttonVariants({ variant: "outline" })}>
+                    Deschide setările magazinului
+                  </Link>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1240,15 +1244,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
               </div>
             </div>
-          )}
-
-          {/* ── Catalog: ce produse si categorii apar in magazin ── */}
-          {activeSection === "catalog" && (
-            businessId ? (
-              <CatalogSetari businessId={businessId} initial={vizibilitateCatalog} />
-            ) : (
-              <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
-            )
           )}
 
           {/* ── Plan ── */}
@@ -1715,15 +1710,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </Button>
               </div>
             </div>
-          )}
-
-          {/* ── Formular de comanda (`page_content.checkout_config`) ── */}
-          {activeSection === "formular-comanda" && (
-            businessId ? (
-              <FormularComandaSetari businessId={businessId} initial={formularComanda} />
-            ) : (
-              <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
-            )
           )}
 
           {/* ── Taxe / TVA ── */}

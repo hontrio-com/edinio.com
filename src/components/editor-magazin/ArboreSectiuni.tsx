@@ -136,9 +136,12 @@ function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi, onPes
   );
 }
 
-/** Semnul de langa un nod cu continut schimbat in ciorna, inca nepublicat (etapa 6). */
-export function PunctNesalvat() {
-  return <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500" title="Modificat, nepublicat" aria-label="Modificat, nepublicat" />;
+/**
+ * Semnul de langa un nod cu continut schimbat in ciorna, inca nepublicat (etapa 6); in fila „Setări”
+ * (etapa 8), langa o setare scrisa si inca nesalvata.
+ */
+export function PunctNesalvat({ titlu = "Modificat, nepublicat" }: { titlu?: string }) {
+  return <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500" title={titlu} aria-label={titlu} />;
 }
 
 function Titlu({ children }: { children: React.ReactNode }) {

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import type { CheieSetare } from "@/lib/editor-magazin/setari";
+import { TrimitereSetare } from "../navigare";
 
 /**
  * Piesele comune ale panourilor de continut din editorul unic.
@@ -53,18 +55,26 @@ export function Grup({ titlu, children }: { titlu?: string; children: React.Reac
  *
  * Pentru sectiunile al caror continut nu se editeaza aici (datele de contact,
  * categoriile, pragul de livrare): fara ea, comerciantul vede sectiunea goala si
- * nu stie de unde se umple.
+ * nu stie de unde se umple. Cu `setare`, trimiterea deschide pe loc fila „Setări” a
+ * editorului (etapa 8); cu `href`, duce in alta parte a panoului (Setari > Livrare).
  */
-export function Nota({ children, href, eticheta }: { children: React.ReactNode; href?: string; eticheta?: string }) {
+export function Nota({ children, href, setare, eticheta }: {
+  children: React.ReactNode;
+  href?: string;
+  setare?: CheieSetare;
+  eticheta?: string;
+}) {
   return (
     <div className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground leading-relaxed space-y-1.5">
       <p>{children}</p>
-      {href && eticheta && (
+      {setare && eticheta ? (
+        <TrimitereSetare setare={setare}>{eticheta}</TrimitereSetare>
+      ) : href && eticheta ? (
         <Link href={href} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
           {eticheta}
           <ArrowUpRight className="h-3 w-3" />
         </Link>
-      )}
+      ) : null}
     </div>
   );
 }

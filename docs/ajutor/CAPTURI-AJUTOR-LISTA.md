@@ -13,7 +13,7 @@ Folder: `public/capturi/ajutor/design-si-pagini/`
 
 - [ ] **`cum-completezi-informatiile-generale-editor-design.webp`**  
       Cum completezi datele de bază ale magazinului — pasul 2 din 8  
-      *Cardul „Magazinul” din Setări > General, cu câmpurile Numele magazinului, Slogan și Descriere.*
+      *Panoul „Informații generale” din fila Setări a editorului, cu Numele magazinului, Slogan și Descriere.*
 
 ## Marketplace — 1 de făcut
 

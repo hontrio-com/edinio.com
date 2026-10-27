@@ -6,7 +6,7 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 25.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
+**Ultima stare, 27.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
 (blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
 sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte
 importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele paginii de produs, decizia lui:
@@ -14,11 +14,13 @@ importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele pagin
 (paginile proprii in editorul unic) FACUTA si PROBATA in Chrome** (pasii 5.1-5.5, ultimul comit de cod
 `0b91caa1`), cu acordul lui („Continua”): editorul de pagini separat (`PageBuilder`) e retras. **Etapa 6
 (un singur „Publică” pentru design si continut) FACUTA si PROBATA in Chrome** (pasii 6.1-6.5), cu acordul
-lui („Continua”) si decizia lui: „Totul la „Publică””. **Etapa 7 (istoricul versiunilor) IN LUCRU din
-26.10.2026**, cu acordul lui („Da, continua”); planul si bifele: „Etapa 7: planul de lucru”. Codul e gata
-(7.1-7.4 si recitirea din 7.5, porti verzi); ramane proba in Chrome, care cere conectarea lui pe localhost
-si acordul pentru impersonare. Prima schimbare de schema a proiectului (tabelul versiunilor), doar pe
-demo; REGISTRU A. Intrebarea despre
+lui („Continua”) si decizia lui: „Totul la „Publică””. **Etapa 7 (istoricul versiunilor) FACUTA si PROBATA
+in Chrome** (pasii 7.1-7.5, 26-27.10.2026), cu acordul lui („Da, continua”; pentru proba din 27.10:
+„Continua”); planul si bifele: „Etapa 7: planul de lucru”. Prima schimbare de schema a proiectului
+(tabelul versiunilor), doar pe demo; REGISTRU A o cere in productie INAINTEA push-ului. **Toate cele sapte
+etape din „Etapele” sunt facute.** Urmeaza lista lui de mentiuni (promisa „la final”) si inchiderea
+(REGISTRU A in productie, push, verificarile din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul
+lui. Intrebarea despre
 teme a fost pusa si a ramas fara raspuns; ramane
 deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
 „Etapa 5: planul de lucru”.
@@ -612,7 +614,30 @@ Citit in cod si masurat inainte:
 - [x] 7.4 (26.10, `IstoricVersiuni.tsx`, `readuVersiunea` in `useCiornaDesign`, butonul in `BaraEditor`; 4 probe
       pe sursa, 8 din 8 mutatii prinse; in treacat, meniul de pe telefon spunea inca „Renunță la modificările de
       design”, desi din etapa 6 „Renunță” arunca si continutul) Editorul: butonul „Istoric”, lista, „Readu în editor”. Probe.
-- [ ] 7.5 REGISTRU (C), porti, proba in Chrome pe magazinul de proba.
+- [x] 7.5 (26-27.10; REGISTRU C si D `f3e98ebb`; porti verzi la `f3e98ebb`: `tsc`, 11129 probe, `lint:prag`,
+      `build:ci`) REGISTRU (C), porti, proba in Chrome pe magazinul de proba.
+      27.10, pe `floraria-mirei` (baza DEMO), prin impersonare (butonul adevarat), cu acordul lui pentru ziua
+      respectiva („Continua”, dupa ce s-a conectat ca administrator pe localhost). Starea de dinainte salvata
+      intreaga (`page_content`, designul publicat, data publicarii, coloanele de identitate, abonamentul, pagina,
+      comenzile; 0 versiuni) si pusa la loc dupa „Ieși din impersonare”: designul brut luat din randul `inainte`,
+      apoi randurile de versiuni sterse. O singura interogare a comparat totul: amprentele `page_content` si
+      `storefront_design`, data publicarii, ciorna goala, identitatea, 1 comanda, 0 versiuni, pagina neatinsa.
+      Ce merge cap-coada:
+      - „Istoric” inainte de orice publicare: „Încă nu ai nicio versiune...”.
+      - Doua modificari (sectiunea „Căutare și filtre” ascunsa, fundalul verde deschis) si „Publică”: DOUA
+        versiuni in baza, `inainte` cu data publicarii de dinainte (27.09; designul brut, cu amprenta celui din
+        magazin; fara fundal) si `publicare` cu `created_at` = `storefront_design_pub_at`.
+      - Lista: „Azi, 18:06 / Publicare / În magazin acum” (butonul oprit, „E deja ce vezi în editor.”) si
+        „27 sept., 19:49 / Cum era magazinul înainte de istoric”.
+      - „Readu în editor” pe cea veche: mesajul, previzualizarea fara fundal si cu sectiunea la loc, ciorna cu
+        `continut = { pc: {}, scoase: ["store_bg_color"] }`; Anuleaza o scoate („Totul e publicat”), Refa o
+        readuce.
+      - Cu modificari nepublicate, „Readu în editor” intreaba intai; „Rămân la ele” nu schimba nimic.
+      - „Publică” cu versiunea readusa: `store_bg_color` SCOS din `page_content` (amprenta = cea de dinainte de
+        proba), sectiunea inapoi, a treia versiune; „În magazin acum” trece pe ea.
+      - Telefonul (cadru de 390 px): „...” > „Istoricul publicărilor” deschide aceeasi lista, fara depasire.
+      Nimic de reparat. Vazut din nou, stiut din 4b.4 (REGISTRU D): dupa Anuleaza pana la starea publicata,
+      coloana de ciorna ramane cu designul identic (fara `continut`); ecranul spune corect „Totul e publicat”.
 
 ## Deciziile proprietarului
 
@@ -772,4 +797,5 @@ Needitabil vizual: checkoutul (doar culori si cateva texte), calculele de pret, 
    blocuri intr-o sectiune „Continut liber”).
 6. **Retragerea `page_content`** ca sursa de design. Pana atunci parserul deriva modelul nou din
    cel vechi la citire (ca `{}` = clasic azi): zero migrare de date la lansare.
-7. Istoric de versiuni (revino la o publicare anterioara).
+7. Istoric de versiuni (revino la o publicare anterioara). FACUT si PROBAT 26-27.10.2026 (planul si
+   bifele mai sus).

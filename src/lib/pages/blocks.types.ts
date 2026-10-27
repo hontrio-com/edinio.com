@@ -677,6 +677,12 @@ export const BLOCK_PALETTE_ORDER: BlockType[] = [
  */
 export const BLOCURI_INTEGRARI: BlockType[] = ["newsletter", "payments", "couriers"];
 
+/**
+ * Blocurile care nu intra in coloane: fara coloane in coloane; eroul e pe toata latimea.
+ * Aici, nu in paleta: o citeste si curatarea „Conținutului liber” din design (etapa 9).
+ */
+export const EXCLUSE_DIN_COLOANE: BlockType[] = ["columns", "hero", "acasa"];
+
 const DEFAULT_TRUST = [
   { icon: "Truck", title: "Livrare rapida", desc: "Livrare in toata Romania prin curier." },
   { icon: "ShieldCheck", title: "Plata la livrare", desc: "Platesti cash curierului. Zero riscuri." },

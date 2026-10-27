@@ -1,6 +1,7 @@
 import { buildClassicDesign, newSectionId, resolveStyle, section } from "./defaults";
 import { aplicaPaginaAcasa } from "./pagina-acasa";
 import { completeazaBlocuri, parseBlocuri, schemaBlocurilor } from "./blocuri";
+import { parseBlocuriLibere } from "./continut-liber";
 import { firstVariant, sectionMeta, variantMeta, type Field } from "./registry";
 import {
   ID_DE_ATRIBUIT,
@@ -218,6 +219,8 @@ function sanitizeSettings(fields: Field[], raw: Record<string, unknown>): Record
  * randul salvat in page_content). Sunt validate explicit, nu prin `fields`.
  */
 function sanitizeInternalSettings(kind: SectionKind, raw: Record<string, unknown>): Record<string, unknown> {
+  // „Conținut liber” (etapa 9): blocurile paginilor proprii, cu forma lor, nu cu `fields`.
+  if (kind === "continut_liber") return { blocuri: parseBlocuriLibere(raw.blocuri) };
   if (kind !== "product_row") return {};
   const out: Record<string, unknown> = {};
   const mode = oneOf(raw.mode, ["featured", "custom", "selected", "category", "bundles"] as const);
@@ -293,10 +296,17 @@ function parseSection(raw: unknown, seenIds: Set<string>): SectionInstance | nul
 function cuBlocuri(s: SectionInstance, ctx: DesignContext): SectionInstance {
   const schema = schemaBlocurilor(s.kind, s.variant);
   if (!schema) return s;
-  return {
-    ...s,
-    blocks: completeazaBlocuri(s.blocks, schema, { pageContent: ctx.pageContent as Record<string, unknown>, setari: s.settings }),
-  };
+  const blocks = completeazaBlocuri(s.blocks, schema, { pageContent: ctx.pageContent as Record<string, unknown>, setari: s.settings });
+  /*
+   * Fara niciun bloc (Pagina Magazin fara „Conținut liber”, etapa 9), cheia lipseste cu totul: un
+   * `blocks: []` pus pe fiecare design de dinainte l-ar fi facut alt obiect la comparatia cioarnei.
+   */
+  if (blocks.length === 0) {
+    const restul = { ...s };
+    delete restul.blocks;
+    return restul;
+  }
+  return { ...s, blocks };
 }
 
 function parseSectionList(raw: unknown, seenIds: Set<string>, max: number): SectionInstance[] {
@@ -758,7 +768,8 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
     // merge peste `raw`, construieste si returneaza un obiect literal, iar
     // server action-ul scrie exact acel obiect in baza.
     shop: {
-      page: pickOne(shopRaw.page, classic.shop.page, seenIds),
+      // Cu blocurile ei (etapa 9: „Conținut liber” deasupra si sub produse).
+      page: cuBlocuri(pickOne(shopRaw.page, classic.shop.page, seenIds), ctx),
     },
     commerce: {
       productCard: pickOne(commerceRaw.productCard, classic.commerce.productCard, seenIds),

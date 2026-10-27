@@ -6,7 +6,7 @@ import {
   Sparkles, Square, Truck, Type, Video,
 } from "lucide-react";
 import { SECTIUNI_ACASA } from "@/lib/pages/pagina-acasa";
-import { BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, type BlockType, type SectiuneAcasa } from "@/lib/pages/blocks.types";
+import { BLOCK_META, BLOCK_PALETTE_ORDER, BLOCURI_INTEGRARI, EXCLUSE_DIN_COLOANE, type BlockType, type SectiuneAcasa } from "@/lib/pages/blocks.types";
 
 /**
  * Paleta de blocuri a paginilor proprii: blocurile obisnuite, sectiunile paginii principale si
@@ -27,9 +27,6 @@ export function IconitaBloc({ tip, className }: { tip: BlockType; className?: st
   const Icon = ICONITE[BLOCK_META[tip]?.icon] ?? Square;
   return <Icon className={className} />;
 }
-
-/** Blocurile care nu intra in coloane: fara coloane in coloane; eroul e pe toata latimea. */
-export const EXCLUSE_DIN_COLOANE: BlockType[] = ["columns", "hero", "acasa"];
 
 export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onBloc, onAcasa }: {
   /** Se adauga intr-o coloana: fara blocurile care nu intra acolo si fara sectiunile paginii principale. */

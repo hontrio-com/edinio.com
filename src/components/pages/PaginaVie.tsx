@@ -15,10 +15,11 @@ import {
   isPreviewMessage,
   type DatePrevizualizarePagina,
 } from "@/lib/storefront/design/preview-protocol";
+import { ETICHETA_CONTINUT_LIBER } from "@/lib/storefront/design/continut-liber";
 import { BlockRenderer, type BlockRendererCtx } from "./BlockRenderer";
 
-/** Numele continutului unei pagini proprii in arbore si pe contur (etapa 5). */
-export const ETICHETA_CONTINUT_LIBER = "Conținut liber";
+/** Numele continutului unei pagini proprii in arbore si pe contur (etapa 5); acelasi in magazin (etapa 9). */
+export { ETICHETA_CONTINUT_LIBER };
 
 const FARA_DATE: DatePrevizualizarePagina = { products: [], bundles: [], forms: [], plati: [], curieri: [] };
 

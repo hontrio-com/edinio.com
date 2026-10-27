@@ -32,8 +32,9 @@ function cheileHartii(text: string, nume: string): string[] {
   return [...corp.matchAll(cheie)].map((m) => m[1]);
 }
 
+/** Bucatile FIXE ale zonei, in ordinea schemei. „Conținut liber” (etapa 9) nu sta in harta: se repeta, deci se randeaza dupa id. */
 const ordineaZonei = (schema: SchemaBlocuri, zona: string) =>
-  Object.entries(schema.tipuri).filter(([, m]) => m.zona === zona).map(([t]) => t);
+  Object.entries(schema.tipuri).filter(([, m]) => m.zona === zona && !m.repetabil).map(([t]) => t);
 
 test("⚠⚠ Clasic: fiecare zona are exact bucatile blocurilor ei, in ordinea implicita", () => {
   const schema = schemaBlocurilor("product_page", "classic")!;
@@ -63,6 +64,8 @@ test("⚠⚠ Detaliat: la fel, pe cele patru zone, iar filele isi iau ordinea di
     assert.match(text, new RegExp(`blocurileZonei\\(blocuriPagina, SCHEMA_BLOCURI, "${zona}"\\)`), zona);
   }
 });
+
+test.todo("„Conținut liber” de sub produs se randeaza in ambele variante, dupa id (pasul 9.3)");
 
 test("portile duble au iesit: comutatoarele vechi le citeste doar schema blocurilor", () => {
   // Citite si in componenta, ele ar fi stins o bucata pe care ochiul tocmai o

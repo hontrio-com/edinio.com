@@ -50,6 +50,8 @@ export const HOME_KINDS = [
   "banner_cta",
   "brands",
   "rich_blocks",
+  /** „Conținut liber” (etapa 9): blocurile paginilor proprii, in `settings.blocuri` (`continut-liber.ts`). */
+  "continut_liber",
 ] as const;
 
 /**
@@ -133,8 +135,9 @@ export interface SectionInstance {
   settings: Record<string, unknown>;
   /**
    * Bucatile sectiunii, in ordinea in care apar (etapa 4 din
-   * `docs/editor-magazin/PLAN.md`). Azi doar pagina de produs are; schema lor
-   * (zone, care sunt obligatorii) sta in `blocuri.ts`, pe varianta.
+   * `docs/editor-magazin/PLAN.md`). Le au pagina de produs si, din etapa 9, Pagina
+   * Magazin (doar „Conținut liber”); schema lor (zone, care sunt obligatorii, care
+   * se repeta) sta in `blocuri.ts`, pe varianta.
    */
   blocks?: BlockInstance[];
 }
@@ -142,9 +145,10 @@ export interface SectionInstance {
 /**
  * O bucata dintr-o sectiune: titlul, pretul, beneficiile paginii de produs.
  *
- * In etapa 4 fiecare tip apare o data, deci `id` = `type`. Vizibilitatea are
- * aceleasi trei stari ca sectiunea (vezi `enabledOverride` de mai sus): fara
- * semn, o da comutatorul vechi care facea acelasi lucru.
+ * O bucata fixa apare o data, deci `id` = `type`. Un „Conținut liber” (etapa 9)
+ * se poate repeta: are id-ul lui si blocurile lui in `settings.blocuri`.
+ * Vizibilitatea are aceleasi trei stari ca sectiunea (vezi `enabledOverride` de
+ * mai sus): fara semn, o da comutatorul vechi care facea acelasi lucru.
  */
 export interface BlockInstance {
   id: string;

@@ -17,12 +17,18 @@ const CLASIC = schemaBlocurilor("product_page", "classic")!;
 const DETALIAT = schemaBlocurilor("product_page", "detailed")!;
 const gol: ContextBlocuri = { pageContent: {}, setari: {} };
 const tipuri = (l: readonly BlockInstance[]) => l.map((b) => b.type);
+/** Bucatile FIXE ale schemei, in ordinea ei: „Conținut liber” (etapa 9) nu se adauga singur. */
+const fixe = (schema: NonNullable<ReturnType<typeof schemaBlocurilor>>) => Object.keys(schema.tipuri).filter((t) => !schema.tipuri[t].repetabil);
 const ctx = (pageContent: Record<string, unknown> = {}): DesignContext => ({ primaryColor: "#07c527", pageContent, features: {} });
 const citit = (d: unknown, c = ctx()) => parseStoreDesign(JSON.parse(JSON.stringify(d)), c);
 
-test("doar pagina de produs are blocuri, cate o schema pe varianta", () => {
+test("pagina de produs are blocuri, cate o schema pe varianta; Pagina Magazin doar „Conținut liber”", () => {
   assert.ok(CLASIC && DETALIAT);
   assert.notEqual(CLASIC, DETALIAT);
+  // Etapa 9: Pagina Magazin are numai continut, pe aceeasi schema in orice varianta (si pe „none”).
+  const magazin = schemaBlocurilor("shop_page", "sidebar")!;
+  assert.equal(schemaBlocurilor("shop_page", "none"), magazin);
+  assert.deepEqual(fixe(magazin), []);
   assert.equal(schemaBlocurilor("hero", "overlay"), null);
   assert.equal(schemaBlocurilor("footer", "dark"), null);
 });
@@ -31,9 +37,9 @@ test("⚠⚠ lista implicita e asezarea de dinainte de blocuri, cu toate tipuril
   // Ordinea cheilor din schema e chiar ordinea din `zonaDeCumparare` si de sub
   // ea; o lista altfel asezata ar fi mutat bucati pe pagina tuturor magazinelor.
   const lista = completeazaBlocuri(undefined, CLASIC, gol);
-  assert.deepEqual(tipuri(lista), Object.keys(CLASIC.tipuri));
+  assert.deepEqual(tipuri(lista), fixe(CLASIC));
   assert.equal(new Set(tipuri(lista)).size, lista.length);
-  assert.deepEqual(tipuri(completeazaBlocuri(undefined, DETALIAT, gol)), Object.keys(DETALIAT.tipuri));
+  assert.deepEqual(tipuri(completeazaBlocuri(undefined, DETALIAT, gol)), fixe(DETALIAT));
 });
 
 test("⚠⚠ blocurile de bani, lege si comanda nu se pot ascunde", () => {
@@ -122,7 +128,7 @@ test("blocurile se muta doar in zona lor", () => {
 
 test("⚠⚠ designul citit are pagina de produs cu toate blocurile, si o a doua citire da acelasi lucru", () => {
   const d = citit(buildClassicDesign(ctx()));
-  assert.deepEqual(tipuri(d.product.page.blocks ?? []), Object.keys(CLASIC.tipuri));
+  assert.deepEqual(tipuri(d.product.page.blocks ?? []), fixe(CLASIC));
   assert.deepEqual(citit(d), d, "garda de concurenta a ciornei compara forme parsate");
   // Un design salvat inainte de blocuri le primeste la citire, cu vizibilitatea de azi.
   const vechi = JSON.parse(JSON.stringify(buildClassicDesign(ctx()))) as Record<string, unknown>;
@@ -147,7 +153,7 @@ test("⚠ in editor, blocurile urmeaza varianta pe loc, fara sa astepte o reciti
   const d = citit(buildClassicDesign(ctx()));
   const id = d.product.page.id;
   const schimbat = completeazaBlocurileSectiunii(updateSection(d, id, { variant: "detailed" }), id, {});
-  assert.deepEqual(tipuri(schimbat.product.page.blocks!).sort(), Object.keys(DETALIAT.tipuri).sort());
+  assert.deepEqual(tipuri(schimbat.product.page.blocks!).sort(), fixe(DETALIAT).sort());
   assert.equal(completeazaBlocurileSectiunii(schimbat, "hero", {}), schimbat, "sectiunea fara blocuri ramane neatinsa");
   assert.deepEqual(completeazaBlocurileSectiunii(schimbat, id, {}), schimbat, "a doua trecere nu mai schimba nimic");
 });
@@ -157,7 +163,7 @@ test("la schimbarea variantei, ochiul si ordinea se pastreaza pe tipurile comune
   const cuOchi = schimbaBlocurile(d, d.product.page.id, (b, s) => comutaBloc(b, s, "beneficii"));
   const detaliat = citit(updateSection(cuOchi, d.product.page.id, { variant: "detailed" }));
   const lista = detaliat.product.page.blocks!;
-  assert.deepEqual([...new Set(tipuri(lista))].sort(), Object.keys(DETALIAT.tipuri).sort());
+  assert.deepEqual([...new Set(tipuri(lista))].sort(), fixe(DETALIAT).sort());
   assert.equal(lista.find((b) => b.type === "beneficii")?.enabled, true, "ochiul de pe Clasic ramane");
   assert.ok(!lista.some((b) => b.type === "insigna"), "tipurile doar din Clasic ies");
 });

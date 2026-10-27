@@ -1,6 +1,8 @@
 import { newSectionId, section } from "./defaults";
 import { firstVariant, SECTION_REGISTRY, sectionMeta, variantMeta } from "./registry";
-import { completeazaBlocuri, schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
+import { completeazaBlocuri, esteContinut, schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
+import { blocuriDinSetari, reidentificaBlocuri } from "./continut-liber";
+import type { Block } from "@/lib/pages/blocks.types";
 import type { BlockInstance, SectionInstance, SectionKind, StoreDesign } from "./types";
 
 /**
@@ -156,9 +158,14 @@ export function schimbaBlocurile(
 ): StoreDesign {
   const tinta = findSection(design, idSectiune);
   const schema = tinta ? schemaBlocurilor(tinta.kind, tinta.variant) : null;
-  if (!tinta?.blocks || !schema) return design;
-  const urmatoarele = operatia(tinta.blocks, schema);
-  if (urmatoarele === tinta.blocks) return design;
+  if (!tinta || !schema) return design;
+  /*
+   * Fara lista = lista goala: Pagina Magazin fara „Conținut liber” (etapa 9) n-are cheia `blocks`
+   * (parserul n-o scrie goala), iar fara asta primul continut nu s-ar fi putut adauga niciodata.
+   */
+  const acum = tinta.blocks ?? [];
+  const urmatoarele = operatia(acum, schema);
+  if (urmatoarele === acum) return design;
   const next = clone(design);
   findSection(next, idSectiune)!.blocks = [...urmatoarele];
   return next;
@@ -182,7 +189,10 @@ export function completeazaBlocurileSectiunii(
   if (!tinta || !schema) return design;
   const next = clone(design);
   const s = findSection(next, idSectiune)!;
-  s.blocks = completeazaBlocuri(s.blocks, schema, { pageContent, setari: s.settings });
+  const blocuri = completeazaBlocuri(s.blocks, schema, { pageContent, setari: s.settings });
+  // Ca parserul (`cuBlocuri`): o lista goala nu se scrie, altfel ciorna ar fi alt obiect decat forma citita.
+  if (blocuri.length === 0) delete s.blocks;
+  else s.blocks = blocuri;
   return next;
 }
 
@@ -269,7 +279,56 @@ export function duplicateSection(design: StoreDesign, id: string): StoreDesign {
   const original = design.home[index];
   if (!poateFiDuplicata(original.kind)) return design;
   const next = clone(design);
-  next.home.splice(index + 1, 0, { ...structuredClone(original), id: newSectionId() });
+  const copia = structuredClone(original);
+  // „Conținut liber” (etapa 9): blocurile copiei primesc id-uri noi, altfel ar fi raspuns impreuna cu originalul.
+  const settings = original.kind === "continut_liber"
+    ? { ...copia.settings, blocuri: reidentificaBlocuri(blocuriDinSetari(copia.settings)) }
+    : copia.settings;
+  next.home.splice(index + 1, 0, { ...copia, id: newSectionId(), settings });
+  return next;
+}
+
+// ---------------------------------------------------------------------------
+// „Conținut liber” (etapa 9): blocurile dinauntrul unui container
+// ---------------------------------------------------------------------------
+
+/**
+ * Unde stau blocurile unui „Conținut liber”: o sectiune a paginii principale (`bloc: null`) sau un
+ * bloc repetabil al unei sectiuni (sub produs, pe Pagina Magazin). Id-urile de sectiune sunt unice in
+ * tot designul (parserul le pazeste), iar blocul se cauta doar in sectiunea lui.
+ */
+export interface CaleContinut {
+  sectiune: string;
+  bloc: string | null;
+}
+
+/** Blocurile containerului; `null` cand calea nu duce la un „Conținut liber”. */
+export function blocuriLaCale(design: StoreDesign, cale: CaleContinut): Block[] | null {
+  const s = findSection(design, cale.sectiune);
+  if (!s) return null;
+  if (cale.bloc === null) return s.kind === "continut_liber" ? blocuriDinSetari(s.settings) : null;
+  const schema = schemaBlocurilor(s.kind, s.variant);
+  const b = s.blocks?.find((x) => x.id === cale.bloc);
+  return b && schema && esteContinut(schema, b.type) ? blocuriDinSetari(b.settings) : null;
+}
+
+/**
+ * Schimba blocurile containerului cu o operatie din `block-tree.ts`. Intoarce ACELASI design cand
+ * calea nu duce nicaieri sau operatia n-a schimbat nimic, ca istoricul sa nu noteze un pas gol.
+ */
+export function schimbaBlocuriLaCale(design: StoreDesign, cale: CaleContinut, operatia: (blocuri: Block[]) => Block[]): StoreDesign {
+  const acum = blocuriLaCale(design, cale);
+  if (!acum) return design;
+  const noi = operatia(acum);
+  if (noi === acum) return design;
+  const next = clone(design);
+  const s = findSection(next, cale.sectiune)!;
+  if (cale.bloc === null) {
+    s.settings = { ...s.settings, blocuri: noi };
+  } else {
+    const b = s.blocks!.find((x) => x.id === cale.bloc)!;
+    b.settings = { ...b.settings, blocuri: noi };
+  }
   return next;
 }
 

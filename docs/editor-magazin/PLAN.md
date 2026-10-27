@@ -876,7 +876,16 @@ Citit inainte:
 
 ### Pasii (bifati pe masura ce se fac)
 
-- [ ] 9.1 Modelul: tipul `continut_liber` (catalog, galerie cu miniatura pe blocuri de exemplu), blocurile lui
+- [x] 9.1 (27.10: `lib/storefront/design/continut-liber.ts` cu forma blocurilor, `parseBlocuriLibere` stabila si
+      idempotenta, plafon 80 de blocuri si 10 continuturi pe sectiune; `continut_liber` in catalog, `full`; in
+      `blocuri.ts` tipul `repetabil` sub produs, la Clasic si Detaliat, si schema Paginii Magazin cu `continut_sus`
+      / `continut_jos`; `adaugaContinut`, `duplicaContinut`, `stergeContinut`; in `edit.ts` `CaleContinut`,
+      `blocuriLaCale`, `schimbaBlocuriLaCale`, duplicarea sectiunii cu id-uri noi. Magazinele de dinainte citesc
+      acelasi design: Pagina Magazin fara continut ramane fara cheia `blocks`. 17 probe noi, mutanti 26/26.
+      Gasit la probe: fara cheia `blocks`, `schimbaBlocurile` refuza primul continut pe Pagina Magazin, iar
+      `completeazaBlocurileSectiunii` scria `blocks: []`; amandoua reparate. Proba „bucatile zonei” cere acum
+      doar bucatile fixe; randarea continutului e `test.todo` pana la 9.3. Miniatura din galerie ramane la 9.4.)
+      Modelul: tipul `continut_liber` (catalog, galerie cu miniatura pe blocuri de exemplu), blocurile lui
       curatate la citire (tipuri cunoscute, coloane, adancime, numar), tipul repetabil in zona „Sub produs” si
       zonele Paginii Magazin; operatiile (adauga, duplica cu id-uri noi, sterge, muta). Probe pe functii pure.
 - [ ] 9.2 Salvarea si formularele: poarta `raw` si plafonul la ciorna si la „Publică”; contactul si newsletterul

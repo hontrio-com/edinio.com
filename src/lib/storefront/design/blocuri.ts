@@ -1,3 +1,4 @@
+import { ETICHETA_CONTINUT_LIBER, parseBlocuriLibere, reidentificaBlocuri, blocuriDinSetari } from "./continut-liber";
 import type { BlockInstance, SectionKind } from "./types";
 
 /**
@@ -47,6 +48,13 @@ export interface BlocMeta {
    * acelasi lucru, ca nicio pagina sa nu se schimbe la lansare. Lipsa = aprins.
    */
   implicit?: (ctx: ContextBlocuri) => boolean;
+  /**
+   * „Conținut liber” (etapa 9): blocul nu e o bucata fixa a paginii, ci un container cu blocurile
+   * paginilor proprii (`settings.blocuri`, vezi `continut-liber.ts`). Poate aparea de mai multe ori,
+   * fiecare cu id-ul lui; nu se adauga singur (pagina ramane cum era pana il pune omul) si se poate
+   * sterge.
+   */
+  repetabil?: true;
 }
 
 export interface SchemaBlocuri {
@@ -107,6 +115,7 @@ const BLOCURI_CLASIC: SchemaBlocuri = {
     continut_pachet: { label: "Ce conține pachetul", icon: "Boxes", zona: "jos" },
     specificatii: { label: "Specificațiile", icon: "Wrench", zona: "jos" },
     intrebari: { label: "Întrebările frecvente", icon: "Headphones", zona: "jos", implicit: aprinsIn("faq_section") },
+    continut_liber: { label: ETICHETA_CONTINUT_LIBER, icon: "PenTool", zona: "jos", repetabil: true },
   },
 };
 
@@ -140,34 +149,86 @@ const BLOCURI_DETALIAT: SchemaBlocuri = {
     oferte: { label: "Oferte sub produs", icon: "HandCoins", zona: "jos", obligatoriu: DE_CE.oferte },
     beneficii: { label: "Beneficiile", icon: "Sparkles", zona: "jos", implicit: aprinsIn("benefits_section") },
     cum_functioneaza: { label: "Cum funcționează", icon: "Rocket", zona: "jos", implicit: aprinsIn("how_it_works_section") },
+    continut_liber: { label: ETICHETA_CONTINUT_LIBER, icon: "PenTool", zona: "jos", repetabil: true },
+  },
+};
+
+/**
+ * Pagina Magazin (etapa 9): fara bucati fixe, doar „Conținut liber” deasupra si sub produse. Doua
+ * tipuri, nu unul, fiindca zona tine de tip; amandoua se cheama la fel pentru om.
+ *
+ * ⚠ Aceeasi schema pe TOATE variantele, si pe „none” (produsele pe pagina principala): altfel o
+ * plimbare prin galerie ar fi aruncat continutul la parsare. Randarea il arata doar pe `/magazin`
+ * (decizia lui din 27.10: „Doar pe /magazin”), cand pagina exista.
+ */
+const BLOCURI_MAGAZIN: SchemaBlocuri = {
+  zone: [
+    { id: "sus", label: "Deasupra produselor" },
+    { id: "jos", label: "Sub produse" },
+  ],
+  tipuri: {
+    continut_sus: { label: ETICHETA_CONTINUT_LIBER, icon: "PenTool", zona: "sus", repetabil: true },
+    continut_jos: { label: ETICHETA_CONTINUT_LIBER, icon: "PenTool", zona: "jos", repetabil: true },
   },
 };
 
 /** Schema blocurilor unei sectiuni, dupa tip si varianta; `null` cand sectiunea n-are blocuri. */
 export function schemaBlocurilor(kind: SectionKind, variant: string): SchemaBlocuri | null {
+  if (kind === "shop_page") return BLOCURI_MAGAZIN;
   if (kind !== "product_page") return null;
   return variant === "detailed" ? BLOCURI_DETALIAT : BLOCURI_CLASIC;
 }
 
+/** Cate „Conținut liber” poate avea o sectiune, pe toate zonele ei. */
+export const MAX_CONTINUTURI_PE_SECTIUNE = 10;
+
+/** Tipul e un „Conținut liber” (container cu blocuri), nu o bucata fixa a paginii. */
+export function esteContinut(schema: SchemaBlocuri, tip: string): boolean {
+  return schema.tipuri[tip]?.repetabil === true;
+}
+
+const ID_CONTINUT = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Id nou pentru un „Conținut liber” adaugat sau duplicat: nu se poate confunda cu un tip fix. */
+function idContinutNou(): string {
+  return `cl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
 /**
- * Blocurile salvate, curatate: doar tipurile schemei, fiecare o data, in ordinea
- * salvata. Setarile raman goale in etapa asta (niciun bloc nu are inca reglaje).
+ * Blocurile salvate, curatate: doar tipurile schemei, in ordinea salvata. O bucata fixa apare o
+ * data, cu id-ul = tipul si fara reglaje. Un „Conținut liber” (`repetabil`) apare de cate ori e
+ * salvat, cel mult `MAX_CONTINUTURI_PE_SECTIUNE`, cu id-ul lui si blocurile lui curatate.
+ *
+ * ⚠ Id-ul unui continut e STABIL: unul lipsa, stricat, dublat sau egal cu un tip fix primeste unul
+ * dupa pozitie, acelasi la fiecare citire (ca `parseBlocuriLibere`).
  */
 export function parseBlocuri(raw: unknown, schema: SchemaBlocuri): BlockInstance[] {
   if (!Array.isArray(raw)) return [];
   const vazute = new Set<string>();
   const out: BlockInstance[] = [];
-  for (const element of raw) {
+  let continuturi = 0;
+  raw.forEach((element, i) => {
     const r = obiect(element);
     const tip = typeof r.type === "string" ? r.type : "";
     const meta = schema.tipuri[tip];
-    if (!meta || vazute.has(tip)) continue;
-    vazute.add(tip);
+    if (!meta) return;
     // Semnul ochiului doar pe blocurile care se pot ascunde, si doar ca boolean:
     // cheia in plus, chiar goala, ar fi facut alt obiect la comparatia ciornei.
     const semn = !meta.obligatoriu && typeof r.enabledOverride === "boolean" ? { enabledOverride: r.enabledOverride } : null;
+    if (meta.repetabil) {
+      if (continuturi >= MAX_CONTINUTURI_PE_SECTIUNE) return;
+      continuturi += 1;
+      const dorit = typeof r.id === "string" && ID_CONTINUT.test(r.id) && !schema.tipuri[r.id] ? r.id : `${tip}_${i}`;
+      let id = dorit;
+      for (let n = 2; vazute.has(id); n += 1) id = `${dorit}_${n}`;
+      vazute.add(id);
+      out.push({ id, type: tip, enabled: r.enabled !== false, ...semn, settings: { blocuri: parseBlocuriLibere(obiect(r.settings).blocuri) } });
+      return;
+    }
+    if (vazute.has(tip)) return;
+    vazute.add(tip);
     out.push({ id: tip, type: tip, enabled: r.enabled !== false, ...semn, settings: {} });
-  }
+  });
   return out;
 }
 
@@ -185,8 +246,11 @@ export function completeazaBlocuri(
   schema: SchemaBlocuri,
   ctx: ContextBlocuri,
 ): BlockInstance[] {
-  const implicita = Object.keys(schema.tipuri);
-  const lista = (salvate ?? []).filter((b, i, toate) => schema.tipuri[b.type] && toate.findIndex((x) => x.type === b.type) === i);
+  // Ordinea implicita e a bucatilor fixe; un „Conținut liber” nu se adauga singur.
+  const implicita = Object.keys(schema.tipuri).filter((tip) => !schema.tipuri[tip].repetabil);
+  const lista = (salvate ?? []).filter((b, i, toate) => schema.tipuri[b.type] && (schema.tipuri[b.type].repetabil
+    ? toate.findIndex((x) => x.id === b.id) === i
+    : toate.findIndex((x) => x.type === b.type) === i));
   for (const [k, tip] of implicita.entries()) {
     if (lista.some((b) => b.type === tip)) continue;
     const stanga = implicita.slice(0, k).reverse().map((t) => lista.findIndex((b) => b.type === t)).find((i) => i >= 0);
@@ -198,7 +262,8 @@ export function completeazaBlocuri(
     const meta = schema.tipuri[b.type];
     const semn = meta.obligatoriu ? undefined : b.enabledOverride;
     const enabled = meta.obligatoriu ? true : (semn ?? (meta.implicit ? meta.implicit(ctx) : true));
-    return { id: b.type, type: b.type, enabled, ...(semn === undefined ? {} : { enabledOverride: semn }), settings: b.settings ?? {} };
+    // Un continut isi pastreaza id-ul (pot fi mai multe de acelasi tip); o bucata fixa are id-ul = tipul.
+    return { id: meta.repetabil ? b.id : b.type, type: b.type, enabled, ...(semn === undefined ? {} : { enabledOverride: semn }), settings: b.settings ?? {} };
   });
 }
 
@@ -229,4 +294,55 @@ export function comutaBloc(blocuri: readonly BlockInstance[], schema: SchemaBloc
   if (i < 0 || schema.tipuri[blocuri[i].type]?.obligatoriu) return blocuri;
   const nou = !blocuri[i].enabled;
   return blocuri.map((b, k) => (k === i ? { ...b, enabled: nou, enabledOverride: nou } : b));
+}
+
+// ---------------------------------------------------------------------------
+// „Conținut liber” (etapa 9): containerele se adauga, se duplica si se sterg
+// ---------------------------------------------------------------------------
+
+/** Cate continuturi are deja sectiunea, pe toate zonele. */
+function cateContinuturi(blocuri: readonly BlockInstance[], schema: SchemaBlocuri): number {
+  return blocuri.filter((b) => esteContinut(schema, b.type)).length;
+}
+
+/**
+ * Un „Conținut liber” nou, gol, de tipul `tip`: sub blocul `dupa` (cand e in aceeasi zona) sau la
+ * coada listei. Coada e capatul zonei lui: ordinea conteaza doar inauntrul zonei (`blocurileZonei`).
+ * Intoarce ACEEASI lista pentru un tip care nu e continut sau peste plafon.
+ */
+export function adaugaContinut(
+  blocuri: readonly BlockInstance[],
+  schema: SchemaBlocuri,
+  tip: string,
+  dupa?: string,
+): readonly BlockInstance[] {
+  const meta = schema.tipuri[tip];
+  if (!meta?.repetabil || cateContinuturi(blocuri, schema) >= MAX_CONTINUTURI_PE_SECTIUNE) return blocuri;
+  const iDupa = dupa ? blocuri.findIndex((b) => b.id === dupa && schema.tipuri[b.type]?.zona === meta.zona) : -1;
+  const pozitie = iDupa >= 0 ? iDupa + 1 : blocuri.length;
+  const urmatoarea = [...blocuri];
+  urmatoarea.splice(pozitie, 0, { id: idContinutNou(), type: tip, enabled: true, settings: { blocuri: [] } });
+  return urmatoarea;
+}
+
+/** Copia unui continut, imediat sub el, cu id-uri noi si pe blocurile dinauntru. */
+export function duplicaContinut(blocuri: readonly BlockInstance[], schema: SchemaBlocuri, id: string): readonly BlockInstance[] {
+  const i = blocuri.findIndex((b) => b.id === id);
+  if (i < 0 || !esteContinut(schema, blocuri[i].type) || cateContinuturi(blocuri, schema) >= MAX_CONTINUTURI_PE_SECTIUNE) return blocuri;
+  const original = blocuri[i];
+  const copia: BlockInstance = {
+    ...original,
+    id: idContinutNou(),
+    settings: { ...original.settings, blocuri: reidentificaBlocuri(blocuriDinSetari(original.settings)) },
+  };
+  const urmatoarea = [...blocuri];
+  urmatoarea.splice(i + 1, 0, copia);
+  return urmatoarea;
+}
+
+/** Sterge un continut. Bucatile fixe ale paginii nu se sterg: intoarce ACEEASI lista. */
+export function stergeContinut(blocuri: readonly BlockInstance[], schema: SchemaBlocuri, id: string): readonly BlockInstance[] {
+  const i = blocuri.findIndex((b) => b.id === id);
+  if (i < 0 || !esteContinut(schema, blocuri[i].type)) return blocuri;
+  return blocuri.filter((_, k) => k !== i);
 }

@@ -840,6 +840,21 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
+  /**
+   * „Conținut liber” (etapa 9 din `docs/editor-magazin/PLAN.md`): blocurile paginilor proprii pe
+   * pagina principala, in `settings.blocuri` (curatate de `parseBlocuriLibere`, nu de `fields`). Se
+   * poate pune de mai multe ori. `full`: blocurile isi aleg singure latimea, ca pe o pagina proprie.
+   */
+  continut_liber: {
+    label: "Conținut liber",
+    icon: "PenTool",
+    scope: "home",
+    singleton: false,
+    removable: true,
+    variants: {
+      blocuri: { label: "Blocuri", tags: ["simplu"], layout: "full", previewHeight: 420, fields: [], defaults: { blocuri: [] } },
+    },
+  },
 
   // --- Pagina de produs ---------------------------------------------------
   product_page: {

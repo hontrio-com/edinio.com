@@ -18,7 +18,11 @@ lui („Continua”) si decizia lui: „Totul la „Publică””. **Etapa 7 (i
 in Chrome** (pasii 7.1-7.5, 26-27.10.2026), cu acordul lui („Da, continua”; pentru proba din 27.10:
 „Continua”); planul si bifele: „Etapa 7: planul de lucru”. Prima schimbare de schema a proiectului
 (tabelul versiunilor), doar pe demo; REGISTRU A o cere in productie INAINTEA push-ului. **Toate cele sapte
-etape din „Etapele” sunt facute.** Urmeaza lista lui de mentiuni (promisa „la final”) si inchiderea
+etape din „Etapele” sunt facute.** Verificarea finala V1-V6 (27.10) e facuta. **Lista lui de mentiuni a venit pe
+27.10 (cinci puncte, citate in „Etapa 8”). Etapa 8 = punctele 1-4, FACUTA si PROBATA in Chrome** (pasii
+8.1-8.5, ultimul comit `6a520b67`): previzualizarea pe tot chenarul, arborele fara iconite, fila „Setări” in
+editor, scoasa din Setari. **URMEAZA etapa 9 = punctul 5 (blocuri ca la paginile proprii pe Acasa, Pagina
+Magazin si pagina de produs): INTAI planul ei scris aici, inainte de cod, apoi raport.** Dupa ea, inchiderea
 (REGISTRU A in productie, push, verificarile din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul
 lui. Intrebarea despre
 teme a fost pusa si a ramas fara raspuns; ramane

@@ -2,7 +2,6 @@
 
 import { Fragment } from "react";
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Lock, Plus } from "lucide-react";
-import { PageIcon } from "@/components/pages/icon-registry";
 import { Callout } from "@/components/ui/callout";
 import { SectionList } from "@/components/store-editor/SectionList";
 import { comutaBloc, mutaBloc, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
@@ -62,7 +61,6 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
                     className={`rounded-lg border bg-surface ${blocSelectat === b.id ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
                     <div className="flex items-center gap-0.5 pl-2 pr-1">
                       <button type="button" onClick={() => onSelectBloc(sectiune.id, b.id)} className="flex-1 min-w-0 flex items-center gap-2 py-2 text-left">
-                        <PageIcon name={meta.icon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <span className={`text-xs font-medium truncate ${b.enabled ? "text-foreground" : "text-muted-foreground"}`}>{meta.label}</span>
                         {!b.enabled && <span className="shrink-0 text-[10px] text-muted-foreground">ascuns</span>}
                         {nesalvat(felBloc(b.type)) && <PunctNesalvat />}
@@ -108,15 +106,13 @@ function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi, onPes
   ochi?: { pornit: boolean; onComuta: () => void };
   onPeste: (id: string | null) => void;
 }) {
-  const meta = sectiune ? sectionMeta(sectiune.kind) : undefined;
   const varianta = sectiune ? variantMeta(sectiune.kind, sectiune.variant) : undefined;
   const aprinsa = sectiune?.enabled ?? false;
   return (
     <li onMouseEnter={() => onPeste(sectiune?.id ?? null)} onMouseLeave={() => onPeste(null)}
       className={`rounded-xl border bg-surface ${selectat ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
       <div className="flex items-center gap-1 pl-3 pr-1.5 py-1">
-        <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center gap-2.5 py-2 text-left">
-          <PageIcon name={meta?.icon ?? "Square"} className="h-4 w-4 text-muted-foreground shrink-0" />
+        <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center py-2 text-left">
           <span className="min-w-0">
             <span className={`flex items-center gap-1.5 text-sm font-medium ${aprinsa || !ochi ? "text-foreground" : "text-muted-foreground"}`}>
               <span className="truncate">{eticheta}</span>

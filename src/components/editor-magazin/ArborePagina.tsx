@@ -1,7 +1,6 @@
 "use client";
 
 import { ChevronDown, ChevronRight, ChevronUp, Copy, Plus, Settings2, Trash2 } from "lucide-react";
-import { IconitaBloc } from "@/components/pages/PaletaBlocuri";
 import { ETICHETA_CONTINUT_LIBER } from "@/components/pages/PaginaVie";
 import { asezareColoane } from "@/components/pages/blocks/StaticBlocks";
 import { BLOCK_META, type Block } from "@/lib/pages/blocks.types";
@@ -60,8 +59,7 @@ export function ArborePagina({ cheie, pagina, blocSelectat, setariDeschise, onSe
         <div onMouseEnter={() => onPeste(id)} onMouseLeave={() => onPeste(null)}
           className={`rounded-lg border bg-surface ${blocSelectat === b.id ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
           <div className="flex items-center gap-0.5 pl-2 pr-1">
-            <button type="button" onClick={() => onSelectBloc(b.id)} className="flex-1 min-w-0 flex items-center gap-2 py-2 text-left">
-              <IconitaBloc tip={b.type} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <button type="button" onClick={() => onSelectBloc(b.id)} className="flex-1 min-w-0 flex items-center py-2 text-left">
               <span className="min-w-0">
                 <span className="block text-xs font-medium text-foreground truncate">{eticheta}</span>
                 {rezumat && <span className="block text-[11px] text-muted-foreground truncate">{rezumat}</span>}

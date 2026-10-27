@@ -1,16 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { latimeaRandarii, type Dispozitiv } from "@/lib/editor-magazin/previzualizare";
 
-/**
- * Latimile la care se randeaza previzualizarea, pe dispozitiv.
- *
- * Numere REALE de viewport, nu cat loc a ramas pe ecranul editorului. Asta e tot
- * defectul pe care il repara componenta asta.
- */
-export const LATIMI_DISPOZITIV = { mobil: 390, tableta: 768, desktop: 1280 } as const;
-
-export type Dispozitiv = keyof typeof LATIMI_DISPOZITIV;
+export { LATIMI_DISPOZITIV, type Dispozitiv } from "@/lib/editor-magazin/previzualizare";
 
 /**
  * Magazinul, randat la latimea unui dispozitiv si micsorat ca sa incapa.
@@ -68,7 +61,8 @@ export function RamaPreview({
     return () => observator.disconnect();
   }, []);
 
-  const latime = LATIMI_DISPOZITIV[dispozitiv];
+  // „Calculator” ia tot chenarul cand e mai lat de 1280 px (lista lui, 27.10.2026); vezi `latimeaRandarii`.
+  const latime = latimeaRandarii(dispozitiv, masura.latime);
   // Se micsoreaza, dar nu se mareste NICIODATA peste marimea reala: un telefon
   // de 390 desenat la 780 ar arata un magazin pe care nu-l vede nimeni asa.
   const scara = Math.min(masura.latime > 0 ? masura.latime / latime : 0, 1);

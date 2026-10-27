@@ -715,6 +715,67 @@ in raport, pentru lista lui.
       Bash (din PowerShell cad 3 doar fiindca n-au `grep`); `lint:prag` nu creste (51); `build:ci` 0.
       Raportul i-a fost dat; urmeaza lista lui.
 
+## Etapa 8: lista lui, partea intai (scris 27.10.2026, inainte de cod)
+
+Lista lui, data dupa verificare (27.10):
+1. „In bara aia acolo in stanga sa avem o Sectiune de Setari si acolo sa pui sectiunea aia veche cu
+   Informatii Generale, Social Media, Tipul de formular, etc...”
+2. „Vad ca ai pus la Setari Formularul de comanda, pune l tot aici la Setari cum ti am zis la punctul 1,
+   Catalog la fel, si tot ce era acolo”
+3. „Vad ca in Preview acolo in dreapta nu e full width pe tot chenarul, trebuie sa fie full width pe tot
+   chenarul sa nu avem spatiile alea goale in stanga si in dreapta”
+4. „Nu prea imi place acolo cum ai pus acele icons de scut la fiecare sectiune in parte, fa ceva mai Clean”
+5. „Vreau sa poti adauga Blocuri si aici exact ca la paginile Custom”
+
+Raspunsurile lui la intrebari (27.10): setarile din editor se salveaza DIRECT („Direct, cu „Salvează””);
+raman DOAR in editor („Doar în editor”); blocurile si pe pagina de produs („Și pe pagina de produs”);
+arborele FARA iconite („Fără iconițe”). Etapa 8 = punctele 1-4; punctul 5 (blocurile) e etapa 9, cu planul ei.
+
+Citit inainte:
+- Previzualizarea: `RamaPreview` randeaza „Calculator” la 1280 px si o centreaza; pe un ecran lat raman
+  benzi goale (la o fereastra de 1920 px, ~120 px de fiecare parte).
+- Scuturile: `PageIcon` cauta iconitele sectiunilor din `registry.ts` (Megaphone, PanelTop, Image,
+  Search...) in setul paginilor proprii (`PAGE_ICONS`), unde lipsesc, si cade pe scut. Un defect, nu o
+  alegere; el a ales oricum arborele fara iconite.
+- Setarile mutate la etapa 1: `DateleMagazinului` (magazinul, contactul, adresa, butoanele flotante,
+  retelele, datele firmei, numerotarea comenzilor; o singura salvare), `FormularComandaSetari`,
+  `CatalogSetari`. Scriu doar ce e al lor (`updateGeneralSettings`, `updatePageContent` pe chei), fara
+  atingere cu ciorna (V1). Fila „General” din Setari mai are „Contul tău” (numele utilizatorului).
+- Trimiteri spre ele: notele din editor (`ContinutNod`, `ContinutBloc`, `ContinutAcasa`), blocul „Rețele”
+  din paginile proprii, ~20 de randuri in centrul de ajutor (`setari.ts`, `design-si-pagini.ts`,
+  `marketing-si-clienti.ts`).
+- In productie niciun cont nu are doua magazine (Setarile luau cel mai VECHI, editorul cel mai NOU).
+
+### Deciziile etapei
+
+1. Previzualizarea „Calculator” ia toata latimea chenarului cand acesta e mai lat de 1280 px; sub 1280 se
+   micsoreaza ca pana acum (pragurile CSS raman cele de calculator). Telefonul si tableta raman la latimea lor.
+2. Arborele fara iconite: sectiunile, blocurile paginii de produs, blocurile paginilor proprii; raman numele
+   si randul mic de sub el. Iconitele raman doar unde se alege un tip nou (galeria „Adaugă secțiune”, paleta).
+3. A treia fila, „Setări”, langa „Secțiuni” si „Stil”: o lista ca arborele, cu „Informații generale” (nume,
+   slogan, descriere, contact, adresa, butoane flotante), „Social media”, „Datele firmei” (cu numerotarea
+   comenzilor), „Formular de comandă”, „Catalog”. Fiecare se deschide in panou, cu „Înapoi” si salvarea lui;
+   primele trei impart o singura stare si o singura salvare (ca azi), ca sa nu ramana jumatate nesalvata.
+4. Salvarea e DIRECTA, nu prin „Publică” (decizia lui), si fila o spune. Dupa salvare previzualizarea se
+   reincarca. Ce e scris si nesalvat intra in avertismentul de la „Ieși”.
+5. Din Setari pleaca filele „Formular de comandă” si „Catalog”, iar din „General” cardurile magazinului;
+   „General” pastreaza „Contul tău”, plus o trimitere spre editor. Adresele vechi
+   (`?sectiune=catalog`, `?sectiune=formular-comanda`) duc in editor, pe setarea ceruta.
+6. Notele din editor deschid setarea pe loc, fara navigare; ghidurile si restul trimiterilor spun noul drum:
+   „Editează magazinul > Setări > ...”.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 8.1 (27.10, `lib/editor-magazin/previzualizare.ts`: `latimeaRandarii`, folosita de `RamaPreview`; 4 probe)
+      Previzualizarea pe toata latimea. Proba.
+- [x] 8.2 (27.10: fara `PageIcon` / `IconitaBloc` in `SectionList`, `ArboreSectiuni`, `ArborePagina`; proba pe
+      sursa) Arborele fara iconite. Proba.
+- [ ] 8.3 Fila „Setări” in editor: componentele adaptate panoului ingust, starea comuna, salvarea,
+      reincarcarea, nesalvatul la „Ieși”; datele aduse de ruta editorului. Probe.
+- [ ] 8.4 Setarile din panou fara ele (General cu „Contul tău” si trimiterea), adresele vechi spre editor,
+      notele si ghidurile. Probe.
+- [ ] 8.5 REGISTRU, porti, proba in Chrome pe magazinul de proba.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -730,6 +791,9 @@ in raport, pentru lista lui.
   categorii”. Produsele anume intra ca exceptii, tot din editor.
 - 25.10.2026, la intrebarea pentru etapa 6 (cand ajunge continutul la clienti): „Totul la
   „Publică””. Un singur buton, ca la Shopify; paginile din „Pagini” raman cu „Salvează pagina”.
+- 27.10.2026, lista lui de la final (cinci puncte, in „Etapa 8”), si raspunsurile la intrebari: setarile
+  in editor, salvate direct, DOAR acolo; blocuri ca la paginile proprii si pe pagina de produs; arborele
+  fara iconite; previzualizarea pe toata latimea.
 
 ## De ce Shopify si nu Elementor
 

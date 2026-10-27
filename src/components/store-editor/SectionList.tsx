@@ -18,7 +18,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
 import { useId } from "react";
-import { PageIcon } from "@/components/pages/icon-registry";
 import { poateFiDuplicata } from "@/lib/storefront/design/edit";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
@@ -176,8 +175,8 @@ function SectionRow({
           <GripVertical className="h-4 w-4" />
         </button>
 
-        <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center gap-2.5 py-2 text-left">
-          <PageIcon name={meta?.icon ?? "Square"} className="h-4 w-4 text-muted-foreground shrink-0" />
+        {/* Fara iconita (lista lui, 27.10.2026: „fa ceva mai Clean”): numele si varianta ajung. */}
+        <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center py-2 text-left">
           <span className="min-w-0">
             <span className={`flex items-center gap-1.5 text-sm font-medium ${section.enabled ? "text-foreground" : "text-muted-foreground"}`}>
               <span className="truncate">{meta?.label ?? section.kind}</span>

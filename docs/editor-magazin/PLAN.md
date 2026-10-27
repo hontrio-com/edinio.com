@@ -21,8 +21,9 @@ in Chrome** (pasii 7.1-7.5, 26-27.10.2026), cu acordul lui („Da, continua”; 
 etape din „Etapele” sunt facute.** Verificarea finala V1-V6 (27.10) e facuta. **Lista lui de mentiuni a venit pe
 27.10 (cinci puncte, citate in „Etapa 8”). Etapa 8 = punctele 1-4, FACUTA si PROBATA in Chrome** (pasii
 8.1-8.5, ultimul comit `6a520b67`): previzualizarea pe tot chenarul, arborele fara iconite, fila „Setări” in
-editor, scoasa din Setari. **URMEAZA etapa 9 = punctul 5 (blocuri ca la paginile proprii pe Acasa, Pagina
-Magazin si pagina de produs): INTAI planul ei scris aici, inainte de cod, apoi raport.** Dupa ea, inchiderea
+editor, scoasa din Setari. **Etapa 9 = punctul 5 (blocuri ca la paginile proprii pe Acasa, Pagina Magazin si
+pagina de produs): PLANUL e scris (sectiunea „Etapa 9”, 27.10, dupa „Da” al lui), cu doua intrebari pentru el
+(zonele de pe produs si de pe Pagina Magazin); codul (9.1) porneste dupa raspunsurile lui.** Dupa ea, inchiderea
 (REGISTRU A in productie, push, verificarile din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul
 lui. Intrebarea despre
 teme a fost pusa si a ramas fara raspuns; ramane
@@ -802,6 +803,91 @@ Citit inainte:
       (`buttonVariants` fara `cn`: `border-transparent` din baza batea conturul variantei; `<Button>` trece prin
       `cn`). Pus la loc: telefonul, `page_content`, `features` (salvarea generala scrie explicit butoanele
       flotante, cu aceleasi valori ca implicitele), data abonamentului; verificat cu o singura comparatie.
+
+## Etapa 9: blocuri ca la paginile proprii (scris 27.10.2026, inainte de cod)
+
+Punctul 5 din lista lui: „Vreau sa poti adauga Blocuri si aici exact ca la paginile Custom”. La intrebare
+(27.10): „Și pe pagina de produs”. Deci: pe pagina principala, pe Pagina Magazin si pe pagina de produs.
+Inceput dupa „Da” al lui (27.10), cu planul intai.
+
+Citit inainte:
+- **Blocurile paginilor proprii:** 22 de tipuri (`lib/pages/blocks.types.ts`), operatiile pe arbore in
+  `block-tree.ts` (coloane cu blocuri in ele), panoul `BlockSettings`, paleta `PaletaBlocuri`. In editorul unic
+  (etapa 5): `ArborePagina` si `PanouriPagina`, legate de o pagina din `custom_pages` (`usePaginaProprie`,
+  salvare cu „Salvează pagina”). Datele panourilor (produse, categorii, formulare, pachete, integrari, legaturi,
+  randuri de produse) le aduce `dateEditorPagina`, tot pe o pagina anume.
+- **Randarea lor:** pe magazin, pe SERVER (`BlocuriPagina`: interogari pentru produse, pachete, formulare,
+  integrari), dupa `prepareBlocksForPublic` (granita de incredere: textul prin lista alba, codul cu JS in cadru
+  izolat, `raw` ignorat). Pagina principala proprie le trimite randului din client ca „sloturi”
+  (`FurnizorSloturiBlocuri` / `SlotBlocuri`, sectiunea `rich_blocks`, care exista doar la citire, nu in catalog).
+  In editor, `PaginaVie` le randeaza in client, pe loc, din mesajul editorului, cu datele de previzualizare.
+- **Designul:** pagina principala e o LISTA de sectiuni (`design.home`); Pagina Magazin (`shop.page`) si pagina
+  de produs (`product.page`, plus `product.sabloane[].page`) sunt cate O sectiune. Pagina de produs are blocuri
+  fixe pe zone (`blocuri.ts`): fiecare tip o data, fara reglaje; `parseBlocuri` arunca orice altceva. Parserul
+  pastreaza din `settings` doar campurile inregistrate ale sectiunii. Designul trece prin ciorna si „Publică”,
+  cu Anuleaza / Refa si istoric (etapele 6-7); plafon 200 KB (`MAX_DESIGN_BYTES`).
+- **Formularele:** contactul simplu si newsletterul isi cauta blocul in `custom_pages`, dupa `pageId` +
+  `blockId` (`submitPageForm`, `aboneazaNewsletter`); puse in design ar raspunde „Formularul nu mai există pe
+  pagină”. Contactul legat de un formular din „Formulare” (`formId`) nu are nevoie de pagina.
+- **Salvarea paginilor:** `gateRawBlocks` (semnul `raw` doar pentru admin) si plafon 400 KB; la incarcarea in
+  editor, `curataHtmlPentruEditor` (un `<img onerror>` scris direct in baza ar fi rulat pe originea panoului,
+  inclusiv la un admin care intra prin impersonare).
+- **Productia (doar citire, 27.10):** 25 de magazine cu design (cel mai mare 3,1 KB); 35 de pagini proprii
+  (blocurile: cel mai mare 31 KB, 95% sub 9 KB, mediana 2,3 KB); 4 blocuri de contact / newsletter; o
+  trimitere in ultimele 30 de zile.
+- Biblioteca Media citeste tot randul `store_settings` (`fetchCatalog`), deci pozele din blocurile puse in design
+  se socotesc folosite. Cu o pagina proprie ca pagina principala, „Acasă” e chiar pagina aceea (nota din arbore).
+
+### Deciziile etapei (propuse; cele marcate „intrebare” le hotaraste el)
+
+1. **Un tip nou de sectiune, „Conținut liber” (`continut_liber`), pe pagina principala.** Se adauga din „Adaugă
+   secțiune”, de cate ori e nevoie; se muta, se ascunde, se duplica si se sterge ca orice sectiune. Blocurile lui
+   sunt chiar blocurile paginilor proprii (toate, fara „Din pagina principală”), tinute in design. Deci intra in
+   ciorna si ajung la clienti la „Publică”, cu Anuleaza / Refa si istoric, ca restul editorului (decizia din etapa 6).
+2. **Pe pagina de produs: „Conținut liber” in zona „Sub produs”**, la Clasic si la Detaliat, de cate ori e nevoie
+   („+ Adaugă conținut liber” sub zona). Sta in pagina sablonului, deci fiecare sablon are continutul lui.
+   **Intrebare:** si in coloana de cumparare? Propunerea: nu acum (acolo sunt pretul, variantele si comanda).
+3. **Pe Pagina Magazin: doua zone, „Deasupra produselor” si „Sub produse”**, cu „Conținut liber”.
+   **Intrebare:** doar pe pagina principala a magazinului (`/magazin`) sau si pe paginile de categorie, brand si
+   cautare? Propunerea: doar pe `/magazin` (categoriile au descrierile lor, pentru Google).
+4. **In arbore, ca la o pagina proprie:** „Conținut liber” se deschide in blocurile lui (plus sub bloc, sageti,
+   duplica, sterge, coloane cu „Adaugă în coloană”); clicul deschide `BlockSettings`, „Adaugă bloc” deschide
+   `PaletaBlocuri` (blocurile de integrare doar cand integrarea e activa). Aceleasi piese ca la paginile proprii,
+   desprinse de `custom_pages` ca sa lucreze pe orice lista de blocuri: un bloc se regleaza exact la fel.
+5. **Previzualizarea pe loc, fara salvare:** mesajul de design duce deja sectiunile; in modul editor, magazinul
+   randeaza blocurile in client (`BlockRenderer`, ca `PaginaVie`), cu datele de previzualizare trimise o data.
+   Clicul in previzualizare alege blocul in arbore; mouse-ul pe rand il incadreaza.
+6. **Pe magazin, pe server:** `BlocuriPagina` + `prepareBlocksForPublic`, ca la paginile proprii, trimise ca
+   sloturi pe pagina principala, pe ruta produsului si pe Pagina Magazin. Fonturile si animatiile ca la pagini.
+   Fara H1 din blocuri: pagina are deja titlul ei (hero-ul, numele produsului, titlul catalogului).
+7. **Formularele merg si din design:** contactul simplu si newsletterul isi cauta blocul in designul PUBLICAT
+   (niciodata in ciorna), dupa id. Trimiterea se scrie fara pagina, cu locul ei („Pagina principală”, „Pagina
+   Magazin”, „Pagina de produs”), care apare in „Mesaje”. Id-urile blocurilor raman unice in tot designul
+   (duplicarea unei sectiuni le reface), altfel un formular ar raspunde in numele altuia.
+8. **Siguranta si plafoanele:** la salvarea cioarnei si la „Publică”, aceeasi poarta `raw` ca la pagini
+   (`gateRawBlocks`); parserul lasa doar tipurile cunoscute si o adancime marginita; la incarcarea in editor,
+   `curataHtmlPentruEditor`. Plafonul designului ramane 200 KB (cea mai mare pagina proprie de azi are 31 KB), cu
+   mesaj care spune ca e de la continut.
+9. **Datele panourilor:** partea de magazin din `dateEditorPagina` (produse, categorii, formulare, pachete,
+   integrari, legaturi, randuri de produse) se desprinde intr-o citire a magazinului, ceruta o data, cand se
+   deschide primul „Conținut liber”. Paginile proprii o folosesc si ele, deci nu exista doua copii.
+10. Cu o pagina proprie ca pagina principala, „Conținut liber” nu se ofera pe „Acasă” (pagina aceea are deja
+    blocuri; nota din arbore duce la ea).
+11. Fara migratii. Un magazin care nu adauga nimic ramane identic (designul fara tipul nou se citeste la fel).
+
+### Pasii (bifati pe masura ce se fac)
+
+- [ ] 9.1 Modelul: tipul `continut_liber` (catalog, galerie cu miniatura pe blocuri de exemplu), blocurile lui
+      curatate la citire (tipuri cunoscute, coloane, adancime, numar), tipul repetabil in zona „Sub produs” si
+      zonele Paginii Magazin; operatiile (adauga, duplica cu id-uri noi, sterge, muta). Probe pe functii pure.
+- [ ] 9.2 Salvarea si formularele: poarta `raw` si plafonul la ciorna si la „Publică”; contactul si newsletterul
+      cautate in designul publicat, cu locul in „Mesaje”. Probe si mutanti.
+- [ ] 9.3 Magazinul: sloturile randate pe server pe pagina principala, pe produs (pe sablon) si pe Pagina
+      Magazin; fonturi, animatii, fara H1. Probe; verificat pe magazinul demo.
+- [ ] 9.4 Editorul: arborele si panourile pe orice lista de blocuri, intrarile „Adaugă”, datele magazinului,
+      previzualizarea pe loc si clicul. Probe.
+- [ ] 9.5 Ghidul din centrul de ajutor, REGISTRU (C si D), porti, proba in Chrome pe magazinul de proba (cele trei
+      pagini, un sablon de produs, un formular trimis din design, „Publică”, „Renunță”, istoricul), totul pus la loc.
 
 ## Deciziile proprietarului
 

@@ -94,8 +94,9 @@ export default async function PageMessagesPage({
   const laOra = new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const list = (subs ?? []).map((s) => {
-    const d = s.data as { fields?: SubField[]; newsletter?: boolean } | null;
-    const pagina = s.page_id ? titluPagina.get(s.page_id) : undefined;
+    const d = s.data as { fields?: SubField[]; newsletter?: boolean; loc?: unknown } | null;
+    // Fara pagina: un „Conținut liber” din magazin (etapa 9), cu locul scris la trimitere.
+    const pagina = s.page_id ? titluPagina.get(s.page_id) : typeof d?.loc === "string" ? d.loc : undefined;
     const sursa = d?.newsletter ? `Newsletter${pagina ? ` · ${pagina}` : ""}`
       : [s.form_id ? numeForma.get(s.form_id) ?? "Formular șters" : "Formular de contact", pagina].filter(Boolean).join(" · ");
     return {

@@ -888,8 +888,16 @@ Citit inainte:
       Modelul: tipul `continut_liber` (catalog, galerie cu miniatura pe blocuri de exemplu), blocurile lui
       curatate la citire (tipuri cunoscute, coloane, adancime, numar), tipul repetabil in zona „Sub produs” si
       zonele Paginii Magazin; operatiile (adauga, duplica cu id-uri noi, sterge, muta). Probe pe functii pure.
-- [ ] 9.2 Salvarea si formularele: poarta `raw` si plafonul la ciorna si la „Publică”; contactul si newsletterul
-      cautate in designul publicat, cu locul in „Mesaje”. Probe si mutanti.
+- [x] 9.2 (27.10: semnul `raw` al codului personalizat nu intra deloc in design: `parseBlocuriLibere` il scoate, iar
+      parserul e chiar validarea de la salvare si de la „Publică”, deci nu mai trebuie o poarta pe rol de admin
+      (randarea oricum nu-l mai citeste). Plafonul de 200 KB ramane, cu mesaj care trimite la „Conținut liber”.
+      Formularele: componentele trimit calea containerului (`caleDesign`, `caleInText`), iar `submitPageForm` si
+      `aboneazaNewsletter` cauta blocul in designul PUBLICAT (`blocDinMagazinPublicat`, niciodata ciorna), numai
+      daca se vede in magazin (`blocDinMagazin`: sectiunea aprinsa, fara pagina principala proprie si fara modul cu
+      un produs; continutul aprins sub produs; Pagina Magazin cu pagina ei); trimiterea se scrie fara pagina, cu
+      locul, iar „Mesaje” il arata. 9 probe noi, mutanti 22/22.) Salvarea si formularele: poarta `raw` si plafonul
+      la ciorna si la „Publică”; contactul si newsletterul cautate in designul publicat, cu locul in „Mesaje”.
+      Probe si mutanti.
 - [ ] 9.3 Magazinul: sloturile randate pe server pe pagina principala, pe produs (pe sablon) si pe Pagina
       Magazin; fonturi, animatii, fara H1. Probe; verificat pe magazinul demo.
 - [ ] 9.4 Editorul: arborele si panourile pe orice lista de blocuri, intrarile „Adaugă”, datele magazinului,

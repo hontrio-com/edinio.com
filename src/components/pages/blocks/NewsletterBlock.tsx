@@ -14,8 +14,11 @@ const camp = "w-full rounded-xl border border-border bg-white px-4 py-3 text-sm 
  * Abonarea la newsletter. Adresa pleaca la furnizorii conectati (vezi
  * `aboneazaNewsletter`); bifa de acord e obligatorie si pe server.
  */
-export function NewsletterBlockView({ block, color, businessId, pageId, disabled }: {
-  block: NewsletterBlock; color: string; businessId: string; pageId?: string; disabled?: boolean;
+export function NewsletterBlockView({ block, color, businessId, pageId, caleDesign, disabled }: {
+  block: NewsletterBlock; color: string; businessId: string; pageId?: string;
+  /** „Conținut liber” din magazin (etapa 9): containerul blocului, in locul paginii. */
+  caleDesign?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   const [email, setEmail] = useState("");
@@ -32,12 +35,16 @@ export function NewsletterBlockView({ block, color, businessId, pageId, disabled
   function abonare(e: React.FormEvent) {
     e.preventDefault();
     setEroare(null);
-    if (disabled || !pageId) return;
+    // Fara pagina si fara container nu are unde se trimite (serverul nu si-ar gasi blocul).
+    if (disabled || (!pageId && caleDesign === undefined)) return;
     if (!acord) { setEroare("Bifează acordul ca să te poți abona."); return; }
     start(async () => {
       let r: Awaited<ReturnType<typeof aboneazaNewsletter>>;
       try {
-        r = await aboneazaNewsletter({ businessId, pageId, blockId: block.id, email, nume, telefon, acord, honeypot: hp });
+        r = await aboneazaNewsletter({
+          businessId, pageId, blockId: block.id, email, nume, telefon, acord, honeypot: hp,
+          ...(caleDesign !== undefined ? { cale: caleDesign } : {}),
+        });
       } catch {
         setEroare("Nu am primit răspuns. Încearcă din nou peste puțin timp.");
         return;

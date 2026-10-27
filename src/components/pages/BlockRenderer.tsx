@@ -31,6 +31,12 @@ export interface BlockRendererCtx {
   forms: PublicForm[];
   businessId: string;
   pageId?: string;
+  /**
+   * „Conținut liber” din magazin (etapa 9): containerul blocurilor in design, `sectiune` sau
+   * `sectiune/bloc` (`caleInText`). Formularele il trimit in locul paginii, iar serverul cauta blocul
+   * in designul publicat.
+   */
+  caleDesign?: string;
   /** Editor preview: disable live form submission. */
   preview?: boolean;
   /**
@@ -87,7 +93,7 @@ function BlockOne({ block, ctx }: { block: Block; ctx: BlockRendererCtx }) {
     case "trust":    return <TrustBlockView block={block} color={ctx.color} basePath={ctx.basePath} />;
     case "social":   return <SocialBlockView block={block} social={ctx.social} color={ctx.color} />;
     case "products": return <ProductsBlockView block={block} products={ctx.productsByBlock?.[block.id] ?? pickProducts(ctx.products, block)} color={ctx.color} basePath={ctx.basePath} storeSlug={ctx.storeSlug} />;
-    case "contact":  return <ContactFormBlockView block={block} form={block.formId ? ctx.forms.find((f) => f.id === block.formId) : undefined} businessId={ctx.businessId} pageId={ctx.pageId} color={ctx.color} disabled={ctx.preview} basePath={ctx.basePath} />;
+    case "contact":  return <ContactFormBlockView block={block} form={block.formId ? ctx.forms.find((f) => f.id === block.formId) : undefined} businessId={ctx.businessId} pageId={ctx.pageId} caleDesign={ctx.caleDesign} color={ctx.color} disabled={ctx.preview} basePath={ctx.basePath} />;
     case "html":     return <HtmlBlockView block={block} preview={ctx.preview} />;
     case "bundles": {
       const lista = ctx.bundlesByBlock?.[block.id]
@@ -96,7 +102,7 @@ function BlockOne({ block, ctx }: { block: Block; ctx: BlockRendererCtx }) {
           : ctx.bundles ?? []).slice(0, block.limit ?? 6);
       return <BundlesBlockView block={block} pachete={lista} color={ctx.color} basePath={ctx.basePath} storeSlug={ctx.storeSlug} />;
     }
-    case "newsletter": return <NewsletterBlockView block={block} color={ctx.color} businessId={ctx.businessId} pageId={ctx.pageId} disabled={ctx.preview} />;
+    case "newsletter": return <NewsletterBlockView block={block} color={ctx.color} businessId={ctx.businessId} pageId={ctx.pageId} caleDesign={ctx.caleDesign} disabled={ctx.preview} />;
     case "payments": return <PaymentsBlockView block={block} metode={ctx.plati ?? []} />;
     case "couriers": return <CouriersBlockView block={block} curieri={ctx.curieri ?? []} />;
     /*

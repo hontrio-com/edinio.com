@@ -28,6 +28,9 @@ import type { Database } from "@/types/database.types";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
 import { FELURI_PERMALINK, permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { CHEIE_PAGINA_ACASA, citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
+import { blocDinMagazin } from "@/lib/storefront/design/continut-publicat";
+import { caleDinText, type CaleContinut } from "@/lib/storefront/design/edit";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
 
 type DB = SupabaseClient<Database>;
 
@@ -514,11 +517,32 @@ export async function updateStoreMenu(
 
 /* ─── Public form submission ───────────────────────────────────────────────── */
 
+/**
+ * Blocul unui „Conținut liber” din magazin (etapa 9 din `docs/editor-magazin/PLAN.md`), cautat in
+ * designul PUBLICAT (`storefront_design`, niciodata ciorna) si numai daca se vede in magazin
+ * (`blocDinMagazin`, cu regulile randarii). `null` = nu exista sau nu se vede: nu primeste nimic.
+ */
+async function blocDinMagazinPublicat(
+  admin: ReturnType<typeof createAdminClient>,
+  businessId: string,
+  cale: CaleContinut,
+  idBloc: string,
+): Promise<{ bloc: Block; loc: string } | null> {
+  const { data } = await admin
+    .from("store_settings").select("storefront_design, page_content").eq("business_id", businessId).maybeSingle();
+  if (!data?.storefront_design) return null;
+  const pc = (data.page_content ?? {}) as Record<string, unknown>;
+  const design = parseStoreDesign(data.storefront_design, { primaryColor: "#07c527", pageContent: pc, features: {} });
+  return blocDinMagazin(design, pc, cale, idBloc);
+}
+
 export async function submitPageForm(input: {
   businessId: string;
   formId?: string | null;
   pageId?: string;
   blockId?: string;
+  /** „Conținut liber” din magazin (etapa 9): containerul blocului in design, in locul paginii. */
+  cale?: string;
   fields: { id?: string; label: string; value: string }[];
   honeypot?: string;
   /** Cat a stat formularul pe ecran pana la trimitere, in ms (capcana pentru roboti). */
@@ -612,6 +636,17 @@ export async function submitPageForm(input: {
     pagina = data;
   }
 
+  /*
+   * Blocul dintr-un „Conținut liber” al magazinului (etapa 9): nu sta intr-o pagina, ci in designul
+   * publicat. O cale data si negasita (alt magazin, ciorna, continut ascuns) nu primeste nimic.
+   */
+  let dinMagazin: { bloc: Block; loc: string } | null = null;
+  if (!input.pageId && input.cale !== undefined) {
+    const cale = caleDinText(input.cale);
+    dinMagazin = cale && input.blockId ? await blocDinMagazinPublicat(admin, biz.id, cale, input.blockId) : null;
+    if (!dinMagazin) return { error: "Formularul nu mai există pe pagină. Reîncarcă pagina." };
+  }
+
   if (input.formId) {
     const { data: form } = await admin
       .from("forms").select("id, name, fields, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
@@ -634,6 +669,12 @@ export async function submitPageForm(input: {
     if (block && block.type === "contact") definitie = campuriFormularSimplu(block as unknown as ContactBlock);
     if (block && block.emailEnabled === true) emailEnabled = true;
     if (page.title) title = page.title;
+  } else if (dinMagazin) {
+    // Acelasi bloc simplu de contact, citit din designul publicat (de incredere), nu din cerere.
+    const block = dinMagazin.bloc;
+    if (block.type === "contact") definitie = campuriFormularSimplu(block);
+    if (block.type === "contact" && block.emailEnabled === true) emailEnabled = true;
+    title = dinMagazin.loc;
   }
   if (!definitie) return { error: "Formularul nu mai există pe pagină. Reîncarcă pagina." };
   const verificat = valideazaTrimitere(definitie, fields);
@@ -645,7 +686,8 @@ export async function submitPageForm(input: {
     page_id: input.pageId ?? null,
     block_id: input.blockId ?? null,
     form_id: formId,
-    data: { fields: fields.map(({ label, value }) => ({ label, value })) } as never,
+    // Fara pagina, locul (etapa 9): „Mesaje” il arata in dreptul trimiterii.
+    data: { fields: fields.map(({ label, value }) => ({ label, value })), ...(dinMagazin ? { loc: dinMagazin.loc } : {}) } as never,
   });
   if (error) {
     logError({ action: "submitPageForm", message: error.message, details: { businessId: input.businessId } });
@@ -742,8 +784,11 @@ export async function submitPageForm(input: {
  */
 export async function aboneazaNewsletter(input: {
   businessId: string;
-  pageId: string;
+  /** Pagina proprie a blocului; lipseste cand blocul sta intr-un „Conținut liber” al magazinului (`cale`). */
+  pageId?: string;
   blockId: string;
+  /** „Conținut liber” din magazin (etapa 9): containerul blocului in designul publicat. */
+  cale?: string;
   email: string;
   nume?: string;
   telefon?: string;
@@ -763,10 +808,23 @@ export async function aboneazaNewsletter(input: {
   const { data: biz } = await admin.from("businesses").select("id, is_published").eq("id", input.businessId).single();
   if (!biz || !biz.is_published) return { error: "Magazin indisponibil." };
 
-  const { data: page } = await admin
-    .from("custom_pages").select("blocks, is_published")
-    .eq("id", input.pageId).eq("business_id", biz.id).single();
-  const block = page?.is_published ? findRawBlockById((page.blocks as Array<Record<string, unknown>> | null) ?? [], input.blockId) : null;
+  /*
+   * Blocul, de incredere: din pagina proprie publicata sau, fara pagina, din designul PUBLICAT al
+   * magazinului (etapa 9), numai daca se vede acolo.
+   */
+  let block: Record<string, unknown> | null = null;
+  let loc: string | null = null;
+  if (input.pageId) {
+    const { data: page } = await admin
+      .from("custom_pages").select("blocks, is_published")
+      .eq("id", input.pageId).eq("business_id", biz.id).single();
+    block = page?.is_published ? findRawBlockById((page.blocks as Array<Record<string, unknown>> | null) ?? [], input.blockId) : null;
+  } else {
+    const cale = caleDinText(input.cale);
+    const gasit = cale ? await blocDinMagazinPublicat(admin, biz.id, cale, input.blockId) : null;
+    block = gasit ? (gasit.bloc as unknown as Record<string, unknown>) : null;
+    loc = gasit?.loc ?? null;
+  }
   if (!block || block.type !== "newsletter") return { error: "Formularul nu mai există pe pagină." };
 
   const nume = block.askName === true ? String(input.nume ?? "").trim().slice(0, 120) : "";
@@ -780,8 +838,8 @@ export async function aboneazaNewsletter(input: {
     { label: "Acord newsletter", value: "Da" },
   ];
   const { error } = await admin.from("page_form_submissions").insert({
-    business_id: biz.id, page_id: input.pageId, block_id: input.blockId, form_id: null,
-    data: { fields: campuri, newsletter: true } as never,
+    business_id: biz.id, page_id: input.pageId ?? null, block_id: input.blockId, form_id: null,
+    data: { fields: campuri, newsletter: true, ...(loc ? { loc } : {}) } as never,
   });
   if (error) {
     logError({ action: "aboneazaNewsletter", message: error.message, details: { businessId: biz.id } });

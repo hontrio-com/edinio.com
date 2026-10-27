@@ -140,8 +140,11 @@ function FieldInput({ field, value, error, onChange, variant, labels, size, acce
   );
 }
 
-export function ContactFormBlockView({ block, form, businessId, pageId, color, disabled, basePath = "" }: {
-  block: ContactBlock; form?: PublicForm; businessId: string; pageId?: string; color: string; disabled?: boolean; basePath?: string;
+export function ContactFormBlockView({ block, form, businessId, pageId, caleDesign, color, disabled, basePath = "" }: {
+  block: ContactBlock; form?: PublicForm; businessId: string; pageId?: string;
+  /** „Conținut liber” din magazin (etapa 9): containerul blocului, in locul paginii. */
+  caleDesign?: string;
+  color: string; disabled?: boolean; basePath?: string;
 }) {
   const fields = form ? form.fields : campuriFormularSimplu(block);
   /* Momentul afisarii: serverul refuza (tacut) o trimitere mai rapida decat poate un om. */
@@ -194,6 +197,7 @@ export function ContactFormBlockView({ block, form, businessId, pageId, color, d
       try {
         res = await submitPageForm({
           businessId, formId: form?.id ?? null, pageId, blockId: block.id, fields: payload, honeypot: hp, durata,
+          ...(caleDesign !== undefined ? { cale: caleDesign } : {}),
         });
       } catch {
         /* ⚠ SINGURUL MANER DIN ARC CARE VORBESTE CU UN CUMPARATOR, nu cu comerciantul. Aici nu

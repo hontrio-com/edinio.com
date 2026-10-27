@@ -42,6 +42,12 @@ import type { Json } from "@/types/database.types";
 /** Plafon de marime, in stilul lui MAX_BLOCKS_BYTES din page.actions.ts. */
 const MAX_DESIGN_BYTES = 200_000;
 
+/**
+ * Peste plafon, aproape sigur din „Conținut liber” (etapa 9): restul designului are cativa KB (cel
+ * mai mare din productie, 3 KB pe 27.10.2026), deci mesajul spune unde sa taie.
+ */
+const PREA_MARE = "Designul e prea mare. Scurtează sau scoate din blocurile „Conținut liber”.";
+
 type ActionResult = { error: string } | { success: true };
 
 interface OwnedStore {
@@ -211,7 +217,7 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
   const continut = continutDinCiorna(raw);
   if (marimeContinut(continut) > MAX_CONTINUT_BYTES) return { error: "Conținutul nepublicat e prea mare. Publică sau renunță la o parte din el." };
   const design = parseStoreDesign(raw, contextCuCiorna(owned.ctx, continut));
-  if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
+  if (tooLarge(design)) return { error: PREA_MARE };
 
   if (baza !== undefined) {
     const supabase = await createClient();
@@ -275,7 +281,7 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
   const continut = continutDinCiorna(sursa);
   if (marimeContinut(continut) > MAX_CONTINUT_BYTES) return { error: "Conținutul nepublicat e prea mare. Publică sau renunță la o parte din el." };
   const design = parseStoreDesign(sursa, contextCuCiorna(owned.ctx, continut));
-  if (tooLarge(design)) return { error: "Configuratia de design e prea mare." };
+  if (tooLarge(design)) return { error: PREA_MARE };
 
   // 1. Continutul. Doar cheile atinse (si cele scoase de o versiune readusa), imbinate peste
   //    `page_content` citit acum (in `loadOwnedStore`): ce au scris Setarile intre timp ramane, ca la

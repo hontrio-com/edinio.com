@@ -63,6 +63,15 @@ function parseLista(raw: unknown, inColoana: boolean, loc: { ramase: number; vaz
     loc.vazute.add(id);
     loc.ramase -= 1;
     const bloc: Record<string, unknown> = { ...element, id, type: tip };
+    if (tip === "html") {
+      /*
+       * ⚠ Semnul `raw` (HTML lasat neatins, „aprobat de admin”) nu intra in design deloc. Randarea nu-l
+       * mai foloseste (`prepareBlocksForPublic`), iar la paginile proprii doar o poarta de la salvare il
+       * mai pazea; aici parserul e chiar poarta de la salvare, deci il scoate, fara alta verificare.
+       */
+      delete bloc.raw;
+      delete bloc.rawApprovedBy;
+    }
     if (tip === "columns") {
       const celule = Array.isArray(element.items) ? element.items.slice(0, MAX_CELULE) : [];
       bloc.items = celule.map((celula, ci) => {

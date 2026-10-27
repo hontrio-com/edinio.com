@@ -2,6 +2,7 @@ import { buildClassicDesign, newSectionId, resolveStyle, section } from "./defau
 import { aplicaPaginaAcasa } from "./pagina-acasa";
 import { completeazaBlocuri, parseBlocuri, schemaBlocurilor } from "./blocuri";
 import { parseBlocuriLibere } from "./continut-liber";
+import { faraBlocuriLibere, toateContinuturileDeRandat, type ContinutDeRandat } from "./continut-publicat";
 import { firstVariant, sectionMeta, variantMeta, type Field } from "./registry";
 import {
   ID_DE_ATRIBUIT,
@@ -781,8 +782,14 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
 
 /** Designul rezolvat pentru randare: sectiuni curate + stil cu implicitele aplicate. */
 export interface ResolvedDesign {
+  /** Pleaca la client (props): fara blocurile „Conținut liber” (`faraBlocuriLibere`). */
   design: StoreDesign;
   style: ResolvedStyle;
+  /**
+   * „Conținut liber” (etapa 9): blocurile de randat, DOAR pe server, pentru sloturi
+   * (`sloturiContinutLiber`). Separat, ca sa nu poata pleca din greseala la client odata cu `design`.
+   */
+  continut: ContinutDeRandat[];
 }
 
 export function resolveDesign(raw: unknown, ctx: DesignContext): ResolvedDesign {
@@ -791,8 +798,8 @@ export function resolveDesign(raw: unknown, ctx: DesignContext): ResolvedDesign 
     la CITIRE: editorul de design foloseste `parseStoreDesign`, deci ce salveaza
     el ramane ce a ales comerciantul. Vezi `pagina-acasa.ts`.
   */
-  const design = aplicaPaginaAcasa(parseStoreDesign(raw, ctx), ctx.pageContent);
-  return { design, style: resolveStyle(design.style, ctx) };
+  const complet = aplicaPaginaAcasa(parseStoreDesign(raw, ctx), ctx.pageContent);
+  return { design: faraBlocuriLibere(complet), style: resolveStyle(complet.style, ctx), continut: toateContinuturileDeRandat(complet) };
 }
 
 // Reexport pentru consumatorii care construiesc sectiuni noi din editor.

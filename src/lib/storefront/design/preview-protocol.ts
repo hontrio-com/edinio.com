@@ -165,6 +165,20 @@ export interface PreviewPaginaMessage {
   reluari?: Record<string, number>;
 }
 
+/**
+ * „Conținut liber” din magazin (etapa 9). Preview -> editor: pagina are continut si n-are inca datele
+ * blocurilor (produse, pachete, formulare, plati, curieri); le cere o singura data.
+ */
+export interface PreviewCereDateBlocuriMessage {
+  [PREVIEW_MESSAGE]: "cereDateBlocuri";
+}
+
+/** Editor -> preview: datele blocurilor, ca la paginile proprii (`DatePrevizualizarePagina`). */
+export interface PreviewDateBlocuriMessage {
+  [PREVIEW_MESSAGE]: "dateBlocuri";
+  date: DatePrevizualizarePagina;
+}
+
 export type PreviewMessage =
   | PreviewDesignMessage
   | PreviewScrollMessage
@@ -172,7 +186,9 @@ export type PreviewMessage =
   | PreviewSelectMessage
   | PreviewEvidentiereMessage
   | PreviewConturGataMessage
-  | PreviewPaginaMessage;
+  | PreviewPaginaMessage
+  | PreviewCereDateBlocuriMessage
+  | PreviewDateBlocuriMessage;
 
 export function isPreviewMessage(data: unknown): data is PreviewMessage {
   return (

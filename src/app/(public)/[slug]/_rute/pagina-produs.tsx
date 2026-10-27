@@ -26,6 +26,9 @@ import { areSabloanePeCategorii, lantulProdusului, paginaSablonului, sablonulPro
 import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
+import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
+import { sloturiContinutLiber } from "@/components/storefront/sloturi-pe-server";
+import { continuturiInSectiune, faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
@@ -303,6 +306,20 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
   const paginaProdusului = sablonImpus
     ? paginaSablonului(resolved.design.product, sablonImpus)
     : sablonulProdusului(resolved.design.product, product.id, categoriiProdusului);
+  /*
+   * „Conținut liber” de sub produs (etapa 9), randat pe server, pe pagina sablonului ales aici. In
+   * editor, o alta alegere de sablon facuta pe loc il arata din designul viu (`ContinutLiber`).
+   */
+  const sloturiContinut = sloturiContinutLiber(continuturiInSectiune(resolved.continut, paginaProdusului.id), {
+    supabase,
+    businessId: business.id,
+    hideNoImage: pageContent.hide_products_without_images === true,
+    hideOutOfStock: pageContent.hide_out_of_stock_products === true,
+    color: magazin.primary_color ?? "#07c527",
+    basePath,
+    storeSlug: business.slug,
+    social: (business.social ?? {}) as Record<string, string>,
+  });
   const chrome = buildChromeData({
     searchCategories,
     business: magazin as never,
@@ -340,13 +357,15 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen">
           {/* Varianta si sablonul din designul VIU: in editor se schimba fara reincarcare. Marcajul e inauntru. */}
+          <FurnizorSloturiBlocuri sloturi={sloturiContinut}>
           <ProductPageDinDesign
             paginaImplicita={paginaProdusului}
             categoriiProdusului={categoriiProdusului}
             sablonImpus={sablonImpus}
             business={pentruBrowser(magazin) as never}
             product={product}
-            storeSettings={storeSettings as never}
+            // Fara designul brut (etapa 9): ar fi dus in HTML toate blocurile „Conținut liber”, necuratate.
+            storeSettings={faraDesignulBrut(storeSettings) as never}
             basePath={basePath}
             hasCardPayment={hasCardPayment}
             bundleComponents={bundleComponents}
@@ -354,6 +373,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             productOffers={productOffers}
             permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
           />
+          </FurnizorSloturiBlocuri>
         </StorePageShell>
       </StorefrontThemeScope>
     </>

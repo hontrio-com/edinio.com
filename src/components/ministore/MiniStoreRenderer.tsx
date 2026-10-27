@@ -143,6 +143,17 @@ interface Props {
    * deja facut din blocurile ei, iar blocurile obisnuite sosesc aici randate pe
    * server, in `sloturi`. Vezi `lib/storefront/design/pagina-acasa.ts`.
    */
+  /**
+   * „Conținut liber” (etapa 9): blocurile containerelor randate pe server, dupa calea lor
+   * (`caleInText`). Pe pagina principala, ale sectiunilor `continut_liber`; pe Pagina Magazin, ale
+   * zonelor de deasupra si de sub produse (doar pe `/magazin`, vezi `continutMagazin`).
+   */
+  sloturiContinut?: Record<string, ReactNode>;
+  /**
+   * Pagina Magazin e chiar `/magazin`, nu o categorie, un brand sau o cautare: doar acolo apare
+   * continutul ei (decizia lui din 27.10: „Doar pe /magazin”). Il hotaraste serverul.
+   */
+  continutMagazin?: boolean;
   paginaProprie?: {
     sloturi: Record<string, ReactNode>;
     /** Blocurile paginii au deja titlul principal: fara H1-ul ascuns al magazinului. */
@@ -285,10 +296,15 @@ interface Props {
   samanta?: number;
 }
 
-function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, paginaBrand, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer, paginaProprie }: Props) {
+function StoreContent({ business, products, storeSettings, basePath: basePathProp, categories, initialPage = 1, initialSearch = "", initialCategory = "toate", initialOnSale = false, design: designProp, designStyle: designStyleProp, editorDesign = false, surface = "home", caleCategorie, initialDrillParentId = null, parinteCategorie = null, paginaBrand, fatete = FARA_FATETE, jetoane = FARA_JETOANE, initialSelectieFatete, initialPriceMin = "", initialPriceMax = "", initialInStock = false, initialSort = "", asezare = ASEZARE_IMPLICITA, samanta = 0, palier = "client", totalVizibileServer, totalFiltrateServer, numeCategoriiCuProduse, numeCategoriiStinse: numeStinseDeLaServer, intervalServer, featuredServer, sectiuniServer, paginaProprie, sloturiContinut, continutMagazin = false }: Props) {
   const { produs: prefixProdus, magazin: prefixCatalog } = usePermalinkuri();
   // In editor, designul vine live prin postMessage; in rest sunt exact props-urile.
   const { design: designDinEditor, style: designStyle } = useDesignPreview(designProp, designStyleProp, editorDesign);
+  // Sloturile paginii principale: grupurile paginii proprii si „Conținut liber” (etapa 9), randate pe server.
+  const sloturiAcasa = useMemo(
+    () => (paginaProprie || sloturiContinut ? { ...paginaProprie?.sloturi, ...sloturiContinut } : undefined),
+    [paginaProprie, sloturiContinut],
+  );
   /*
     Cu o pagina proprie ca pagina principala, lista de sectiuni e a PAGINII.
     Editorul de design trimite live designul lui, cu sectiunile clasice: luate
@@ -1685,11 +1701,14 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {surface === "shop" ? (
         <main>
           <MarcajSectiune sectiune={design.shop.page}>
-            <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings} />
+            <FurnizorSloturiBlocuri sloturi={sloturiContinut}>
+              <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings}
+                blocuri={continutMagazin ? design.shop.page.blocks : undefined} idPagina={design.shop.page.id} />
+            </FurnizorSloturiBlocuri>
           </MarcajSectiune>
         </main>
       ) : (
-        <FurnizorSloturiBlocuri sloturi={paginaProprie?.sloturi}>
+        <FurnizorSloturiBlocuri sloturi={sloturiAcasa}>
           <SectionRenderer sections={sectiuniDeAcasa} />
         </FurnizorSloturiBlocuri>
       )}

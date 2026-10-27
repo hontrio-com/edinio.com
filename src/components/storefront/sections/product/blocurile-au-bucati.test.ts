@@ -65,7 +65,18 @@ test("⚠⚠ Detaliat: la fel, pe cele patru zone, iar filele isi iau ordinea di
   }
 });
 
-test.todo("„Conținut liber” de sub produs se randeaza in ambele variante, dupa id (pasul 9.3)");
+test("⚠⚠ „Conținut liber” de sub produs se randeaza in ambele variante, dupa id (etapa 9)", () => {
+  // Altfel continutul ar fi aparut in editor si n-ar fi aratat nimic in magazin (`jos[tip]` lipseste).
+  for (const [fisier, variant] of [["ProductPageClassic.tsx", "classic"], ["ProductPageDetailed.tsx", "detailed"]] as const) {
+    const schema = schemaBlocurilor("product_page", variant)!;
+    assert.deepEqual(Object.entries(schema.tipuri).filter(([, m]) => m.repetabil).map(([t, m]) => `${t}:${m.zona}`), ["continut_liber:jos"], fisier);
+    assert.match(
+      sursa(fisier),
+      /blocurileZonei\(blocuriPagina, SCHEMA_BLOCURI, "jos"\)\.map\(\(b\) => \([\s\S]{0,400}?\{esteContinut\(SCHEMA_BLOCURI, b\.type\) \? <ContinutLiber cale=\{\{ sectiune: idPagina, bloc: b\.id \}\} \/> : jos\[b\.type\]\}/,
+      fisier,
+    );
+  }
+});
 
 test("portile duble au iesit: comutatoarele vechi le citeste doar schema blocurilor", () => {
   // Citite si in componenta, ele ar fi stins o bucata pe care ochiul tocmai o

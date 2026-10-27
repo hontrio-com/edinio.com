@@ -46,19 +46,16 @@ import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/
 import { normalizeazaDefinitia } from "@/lib/customization/definitie";
 import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/permis-incarcare";
 import { setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
-import { Suspense, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { sectiuniDinBlocuri } from "@/lib/storefront/design/pagina-acasa";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import { prepareBlocksForPublic } from "@/lib/pages/prepare-blocks";
-import { flattenBlocks } from "@/lib/pages/block-tree";
 import { titlulPrincipal } from "@/lib/pages/titlul-principal";
-import { fonturiDinBlocuri } from "@/lib/pages/fonturi";
-import { claseFonturi } from "@/components/pages/fonturi-incarcate";
 import { sanitizeCss } from "@/lib/pages/sanitize-css";
-import { SCRIPT_ANIMATII } from "@/lib/pages/animatii";
-import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
-import { BlocuriPagina } from "@/components/pages/BlocuriPagina";
+import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
+import { slotBlocuri, sloturiContinutLiber, type ComunSloturi } from "@/components/storefront/sloturi-pe-server";
+import { continuturiInSectiune, continuturiPeAcasa, faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
 import type { Block } from "@/lib/pages/blocks.types";
 
 /*
@@ -317,8 +314,12 @@ export default async function SlugPage({ params, searchParams }: Props) {
     }
     : resolvedMagazin;
 
-  // Randul nu mai are coloana de ciorna (o citeste `ciornaDeRandat`), deci pleaca asa cum e.
-  const setariDeTrimis = storeSettings;
+  /*
+   * Randul nu mai are coloana de ciorna (o citeste `ciornaDeRandat`). Designul BRUT nici el nu pleaca
+   * (etapa 9): clientul primeste designul rezolvat, fara blocurile „Conținut liber” (`faraBlocuriLibere`),
+   * iar coloana bruta le-ar fi dus pe toate, necuratate, in HTML-ul fiecarui vizitator.
+   */
+  const setariDeTrimis = faraDesignulBrut(storeSettings);
 
   const pcCatalog = (storeSettings?.page_content as Record<string, unknown>) ?? {};
   const faraImagini = pcCatalog.hide_products_without_images === true;
@@ -566,6 +567,20 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // catalog below if the product is missing/inactive (defence in depth — the
   // Settings toggle already requires a product before enabling this mode).
   const storeMode = parseStoreMode((storeSettings?.page_content as Json) ?? null);
+
+  // Ce e comun blocurilor randate pe server: pagina principala proprie si „Conținut liber” (etapa 9).
+  const pcSloturi = (storeSettings?.page_content ?? {}) as Record<string, unknown>;
+  const comunSloturi: ComunSloturi = {
+    supabase,
+    businessId: business.id,
+    hideNoImage: pcSloturi.hide_products_without_images === true,
+    hideOutOfStock: pcSloturi.hide_out_of_stock_products === true,
+    color: magazin.primary_color ?? "#07c527",
+    basePath,
+    storeSlug: business.slug,
+    social: (business.social ?? {}) as Record<string, string>,
+  };
+
   if (storeMode.mode === "one_product" && storeMode.productId) {
     const product = await getStoreProduct(business.id, storeMode.productId);
     if (product) {
@@ -653,6 +668,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
               className="min-h-screen"
             >
               {/* Un singur produs: pagina lui e pagina principala, deci mereu sablonul Implicit (4b). Marcajul e inauntru. */}
+              {/* „Conținut liber” de sub produs (etapa 9), randat aici, pe server. */}
+              <FurnizorSloturiBlocuri sloturi={sloturiContinutLiber(continuturiInSectiune(opsResolved.continut, opsResolved.design.product.page.id), comunSloturi)}>
               <ProductPageDinDesign
                 paginaImplicita={opsResolved.design.product.page}
                 doarImplicit
@@ -667,6 +684,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
                 permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
                 isHome
               />
+              </FurnizorSloturiBlocuri>
             </StorePageShell>
           </>
         </>
@@ -751,44 +769,25 @@ export default async function SlugPage({ params, searchParams }: Props) {
   let paginaProprie: { sloturi: Record<string, ReactNode>; areTitlu: boolean } | undefined;
   let stilPagina: { css: string } | null = null;
   if (paginaAcasa && caSectiuni) {
-    const toateBlocurile = flattenBlocks(blocuriAcasa);
     const sectiuneCuH1 = caSectiuni.home.some((s) => variantMeta(s.kind, s.variant)?.providesH1 === true);
     const h1Id = sectiuneCuH1 ? null : titlulPrincipal(blocuriAcasa);
-    const claseFont = claseFonturi(fonturiDinBlocuri(toateBlocurile));
-    const pc = (storeSettings?.page_content ?? {}) as Record<string, unknown>;
-    const animatii = toateBlocurile.some((b) => b.style?.anim && b.style.anim !== "none");
+    const pageId = paginaAcasa.id;
     paginaProprie = {
       areTitlu: h1Id !== null,
+      // Cate un grup intre doua sectiuni ale magazinului (`slotBlocuri`, comun cu „Conținut liber”).
       sloturi: Object.fromEntries(Object.entries(caSectiuni.grupuri).map(([cheie, grup]) => [
         cheie,
-        /*
-          ⚠ Scriptul animatiilor porneste pe PARINTELE lui si ii pune
-          `data-anim-pornit` inainte de hidratare, deci invelisul il ignora la
-          comparare. Pus langa `MiniStoreRenderer`, parintele era `<body>`.
-        */
-        <div key={cheie} className={claseFont || undefined} suppressHydrationWarning>
-          <Suspense fallback={null}>
-            <BlocuriPagina
-              supabase={supabase}
-              businessId={business.id}
-              blocks={grup}
-              hideNoImage={pc.hide_products_without_images === true}
-              hideOutOfStock={pc.hide_out_of_stock_products === true}
-              color={magazin.primary_color ?? "#07c527"}
-              basePath={basePath}
-              storeSlug={business.slug}
-              social={(business.social ?? {}) as Record<string, string>}
-              pageId={paginaAcasa.id}
-              h1Id={h1Id}
-            />
-          </Suspense>
-          {animatii && <script dangerouslySetInnerHTML={{ __html: SCRIPT_ANIMATII }} />}
-          {animatii && <PornesteAnimatiile />}
-        </div>,
+        slotBlocuri(cheie, grup, comunSloturi, { pageId, h1Id }),
       ])),
     };
     stilPagina = { css: sanitizeCss(paginaAcasa.page_css) };
   }
+
+  /*
+   * „Conținut liber” (etapa 9) pe pagina principala cu sectiuni: aceleasi sloturi, dupa calea
+   * containerului. Cu o pagina proprie aleasa in locul ei, sectiunile designului nu se randeaza aici.
+   */
+  const sloturiContinut = paginaProprie ? undefined : sloturiContinutLiber(continuturiPeAcasa(resolved.continut), comunSloturi);
 
   return (
     <>
@@ -801,6 +800,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       {stilPagina?.css ? <style dangerouslySetInnerHTML={{ __html: stilPagina.css }} /> : null}
       <MiniStoreRenderer
         paginaProprie={paginaProprie}
+        sloturiContinut={sloturiContinut}
         business={pentruBrowser(magazin)}
         products={products}
         /*

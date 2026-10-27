@@ -19,7 +19,7 @@ import type { FormField, PublicForm } from "@/lib/pages/forms.types";
  */
 export async function BlocuriPagina({
   supabase, businessId, blocks, hideNoImage, hideOutOfStock,
-  color, basePath, storeSlug, social, pageId, h1Id,
+  color, basePath, storeSlug, social, pageId, caleDesign, h1Id,
 }: {
   supabase: SupabaseClient<Database>;
   businessId: string;
@@ -30,7 +30,10 @@ export async function BlocuriPagina({
   basePath: string;
   storeSlug: string;
   social: Record<string, string>;
-  pageId: string;
+  /** Pagina proprie a blocurilor; lipseste la „Conținut liber” din magazin (etapa 9). */
+  pageId?: string;
+  /** „Conținut liber” din magazin: containerul in design (`caleInText`), pentru formulare. */
+  caleDesign?: string;
   h1Id: string | null;
 }) {
   // Resolve each products-block server-side with a hard cap (scales to huge catalogs).
@@ -70,7 +73,7 @@ export async function BlocuriPagina({
     <BlockRenderer
       blocks={blocks}
       ctx={{
-        color, basePath, storeSlug, social, products: [], productsByBlock, forms, businessId, pageId, h1Id,
+        color, basePath, storeSlug, social, products: [], productsByBlock, forms, businessId, pageId, caleDesign, h1Id,
         bundlesByBlock, plati: integrari?.plati, curieri: integrari?.curieri,
       }}
     />

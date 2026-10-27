@@ -3,8 +3,9 @@
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
-import { blocurileZonei, completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { blocurileZonei, completeazaBlocuri, schemaBlocurilor, esteContinut } from "@/lib/storefront/design/blocuri";
 import { MarcajBloc } from "@/components/storefront/MarcajBloc";
+import { ContinutLiber } from "@/components/storefront/ContinutLiber";
 import type { BlockInstance } from "@/lib/storefront/design/types";
 import { legaturaBrand } from "@/lib/storefront/brand-href";
 import Image from "next/image";
@@ -1439,7 +1440,10 @@ export function ProductPageDetailed({
           )}
 
           {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => (
-            <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{jos[b.type]}</MarcajBloc>
+            <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>
+          {/* „Conținut liber” (etapa 9): se repeta, deci dupa id, nu din harta bucatilor. */}
+          {esteContinut(SCHEMA_BLOCURI, b.type) ? <ContinutLiber cale={{ sectiune: idPagina, bloc: b.id }} /> : jos[b.type]}
+        </MarcajBloc>
           ))}
 
           {/* ─── Bara lipita jos, pe telefon ─────────────────────────────── */}

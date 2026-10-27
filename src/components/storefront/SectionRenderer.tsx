@@ -23,6 +23,7 @@ import { ContactClassic } from "./sections/content/ContactClassic";
 import { GalleryClassic } from "./sections/content/GalleryClassic";
 import { ReviewsClassic } from "./sections/content/ReviewsClassic";
 import { SlotBlocuri } from "./SloturiBlocuri";
+import { ContinutLiber } from "./ContinutLiber";
 
 /**
  * Variantele care nu sunt „classic" se incarca la cerere.
@@ -175,6 +176,9 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
     case "rich_blocks":
       // Blocurile paginii alese ca pagina principala, randate pe server.
       return <SlotBlocuri cheie={String(section.settings.slot ?? "")} />;
+    case "continut_liber":
+      // „Conținut liber” (etapa 9): slotul randat pe server, sau blocurile vii in editor.
+      return <ContinutLiber cale={{ sectiune: section.id, bloc: null }} />;
     default:
       return null;
   }

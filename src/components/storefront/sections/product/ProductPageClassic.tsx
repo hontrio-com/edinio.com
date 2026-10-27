@@ -50,8 +50,9 @@ import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvid
 import { radacinaMagazin } from "@/lib/storefront/category-href";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
-import { blocurileZonei, completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { blocurileZonei, completeazaBlocuri, schemaBlocurilor, esteContinut } from "@/lib/storefront/design/blocuri";
 import { MarcajBloc } from "@/components/storefront/MarcajBloc";
+import { ContinutLiber } from "@/components/storefront/ContinutLiber";
 import type { BlockInstance } from "@/lib/storefront/design/types";
 
 /** Schema blocurilor variantei (`blocuri.ts`): zonele, ordinea implicita, cele obligatorii. */
@@ -1432,7 +1433,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       {demo ? null : (
       <>
       {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => (
-        <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>{jos[b.type]}</MarcajBloc>
+        <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>
+          {/* „Conținut liber” (etapa 9): se repeta, deci dupa id, nu din harta bucatilor. */}
+          {esteContinut(SCHEMA_BLOCURI, b.type) ? <ContinutLiber cale={{ sectiune: idPagina, bloc: b.id }} /> : jos[b.type]}
+        </MarcajBloc>
       ))}
 
       {/* Sticky bottom bar (mobile) */}

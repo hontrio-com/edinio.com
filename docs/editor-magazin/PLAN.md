@@ -863,10 +863,11 @@ Citit inainte:
    (niciodata in ciorna), dupa id. Trimiterea se scrie fara pagina, cu locul ei („Pagina principală”, „Pagina
    Magazin”, „Pagina de produs”), care apare in „Mesaje”. Id-urile blocurilor raman unice in tot designul
    (duplicarea unei sectiuni le reface), altfel un formular ar raspunde in numele altuia.
-8. **Siguranta si plafoanele:** la salvarea cioarnei si la „Publică”, aceeasi poarta `raw` ca la pagini
-   (`gateRawBlocks`); parserul lasa doar tipurile cunoscute si o adancime marginita; la incarcarea in editor,
-   `curataHtmlPentruEditor`. Plafonul designului ramane 200 KB (cea mai mare pagina proprie de azi are 31 KB), cu
-   mesaj care spune ca e de la continut.
+8. **Siguranta si plafoanele:** semnul `raw` nu intra deloc in design (il scoate parserul, care e si validarea de
+   la salvare si de la „Publică”; facut asa la 9.2, in locul portii pe rol de admin); parserul lasa doar tipurile
+   cunoscute si o adancime marginita; la incarcarea in editor, `curataHtmlPentruEditor`; la client nu pleaca
+   blocurile din design (9.3). Plafonul designului ramane 200 KB (cea mai mare pagina proprie de azi are 31 KB),
+   cu mesaj care spune ca e de la continut.
 9. **Datele panourilor:** partea de magazin din `dateEditorPagina` (produse, categorii, formulare, pachete,
    integrari, legaturi, randuri de produse) se desprinde intr-o citire a magazinului, ceruta o data, cand se
    deschide primul „Conținut liber”. Paginile proprii o folosesc si ele, deci nu exista doua copii.
@@ -898,8 +899,20 @@ Citit inainte:
       locul, iar „Mesaje” il arata. 9 probe noi, mutanti 22/22.) Salvarea si formularele: poarta `raw` si plafonul
       la ciorna si la „Publică”; contactul si newsletterul cautate in designul publicat, cu locul in „Mesaje”.
       Probe si mutanti.
-- [ ] 9.3 Magazinul: sloturile randate pe server pe pagina principala, pe produs (pe sablon) si pe Pagina
-      Magazin; fonturi, animatii, fara H1. Probe; verificat pe magazinul demo.
+- [x] 9.3 (27.10: `sloturi-pe-server.tsx` cu `slotBlocuri` (aceeasi invelitoare pentru pagina principala proprie si
+      pentru „Conținut liber”: fonturi, animatii, interogari) si `sloturiContinutLiber` (blocurile prin
+      `prepareBlocksForPublic`, fara H1, cu calea pentru formulare); sloturile pe pagina principala, pe produs
+      (sablonul ales pe server; si la magazinul cu un produs) si doar pe `/magazin`; in client `ContinutLiber`
+      (slotul, sau in editor blocurile venite NUMAI prin mesajul editorului, cu datele cerute o data:
+      `cereDateBlocuri` / `dateBlocuri`), zonele Paginii Magazin in `ShopPageSection`, continutul de sub produs in
+      Clasic si Detaliat (`test.todo` de la 9.1 devenit proba). VERIFICAT pe demo cu `curl` (continut pus temporar
+      in designul publicat al `floraria-mirei`, pus la loc, amprentele egale): fiecare pagina isi randeaza continutul,
+      formularul poarta calea, `<img onerror>` din text iese curatat. GASIT la verificare si reparat: fiecare pagina
+      ducea la client (RSC) TOT designul, cu blocurile tuturor paginilor, necuratate, pe doua drumuri: designul
+      rezolvat (`resolveDesign` da acum designul fara blocuri, `faraBlocuriLibere`, si lista lor separat, doar pentru
+      server) si coloana bruta din randul de setari (`faraDesignulBrut`, pe pagina principala, produs, Magazin).
+      Probe noi, mutanti 30/30.) Magazinul: sloturile randate pe server pe pagina principala, pe produs (pe sablon)
+      si pe Pagina Magazin; fonturi, animatii, fara H1. Probe; verificat pe magazinul demo.
 - [ ] 9.4 Editorul: arborele si panourile pe orice lista de blocuri, intrarile „Adaugă”, datele magazinului,
       previzualizarea pe loc si clicul. Probe.
 - [ ] 9.5 Ghidul din centrul de ajutor, REGISTRU (C si D), porti, proba in Chrome pe magazinul de proba (cele trei

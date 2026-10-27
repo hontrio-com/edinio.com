@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
+import { sloturiContinutLiber } from "@/components/storefront/sloturi-pe-server";
+import { continuturiInSectiune, faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
 import { UrmaCautarePixel } from "@/components/storefront/UrmaCautarePixel";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { CHEIE_BRAND, construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
@@ -619,7 +621,8 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
         // Coloanele de TVA s-au cerut doar pentru descriere. Grila nu le citeste, deci
         // n-au ce cauta in props: ce e acolo ajunge in HTML-ul fiecarui vizitator.
         const { vat_enabled: _tva, prices_include_vat: _preturiCuTva, ...rest } = storeSettings;
-        return rest;
+        // Nici designul brut (etapa 9): ar fi dus in HTML toate blocurile „Conținut liber”, necuratate.
+        return faraDesignulBrut(rest);
       })()
     : null;
 
@@ -665,6 +668,24 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
     categoriiCuProduse: rezumat?.categorii,
   });
 
+  /*
+   * „Conținut liber” deasupra si sub produse (etapa 9), numai pe `/magazin`: nu pe o categorie, un
+   * brand sau o cautare (decizia lui din 27.10: „Doar pe /magazin”).
+   */
+  const continutMagazin = !categorieSlug && !brandSlug && !esteCautare;
+  const sloturiContinut = continutMagazin
+    ? sloturiContinutLiber(continuturiInSectiune(resolved.continut, resolved.design.shop.page.id), {
+      supabase,
+      businessId: business.id,
+      hideNoImage: pc.hide_products_without_images === true,
+      hideOutOfStock: pc.hide_out_of_stock_products === true,
+      color: magazin.primary_color ?? "#07c527",
+      basePath,
+      storeSlug: business.slug,
+      social: (business.social ?? {}) as Record<string, string>,
+    })
+    : undefined;
+
   return (
     <>
       {dateStructurate ? (
@@ -679,6 +700,8 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
       ) : null}
     <MiniStoreRenderer
       surface="shop"
+      sloturiContinut={sloturiContinut}
+      continutMagazin={continutMagazin}
       business={pentruBrowser(magazin)}
       products={products}
       storeSettings={setariDeTrimis as never}

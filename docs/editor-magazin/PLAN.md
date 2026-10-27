@@ -693,10 +693,27 @@ in raport, pentru lista lui.
       magazinului (fara diacritice, regula lui), cuvintele-cheie de cautare din ajutor, etichetele
       retrase din `registry.ts` (nu se mai arata) si textele vechi din `SettingsClient` si de pe prima
       pagina a panoului, mutate doar (datorie de dinainte, in lista lui).
-- [ ] V5 Responsive si design, in Chrome: editorul la 390 / 768 / 1024 / 1280 / 1920 px, Setarile
+- [x] V5 Responsive si design, in Chrome: editorul la 390 / 768 / 1024 / 1280 / 1920 px, Setarile
       mutate la 390 px, magazinul public (acasa, produs, categorie, cos, pagina proprie) la 390 / 768 px;
       depasirea orizontala masurata; consola fara erori.
-- [ ] V6 Porti (`tsc`, probe, `lint:prag`, `build:ci`), raport, comit.
+      27.10. Magazinul public, ca vizitator (fara sesiune), pe `bijuterii-cris` (demo, abonament valabil):
+      8 pagini la 390 si 768 px, 0 px depasire; `/cos` si `/checkout` trimit la prima pagina (sertar);
+      pagina de produs pe telefon arata bine; consola doar cu eroarea extensiei. Editorul, prin
+      impersonare (acordul lui: „M-am conectat”, dupa cererea de acord), pe `floraria-mirei`: 1920, 1280
+      (panou 360 + previzualizare 916, toate cele 12 butoane), 1024 si 768 (panou SAU previzualizare), 390
+      (meniul „...”, previzualizarea de telefon): 0 px depasire peste tot, consola fara avertismente React.
+      Setarile General, Catalog, Formular de comanda la 390 px: 0 px. Reparatiile, vazute pe ecran:
+      numele sablonului revine la „Anulează” si se intoarce la „Refă”; `inert` cat merge „Renunță”
+      (~0,65 s) si cat merge „Publică” (~0,9 s), dupa care publicarea a scris corect cele doua versiuni;
+      rutele vechi duc in editor; „Pagini” > „Editează” > „Ieși” intoarce in „Pagini”. Starea pusa la loc
+      si verificata printr-o singura interogare (amprentele, data, ciorna goala, 1 comanda, 0 versiuni,
+      abonamentul, pagina neatinsa). De gust, pentru lista lui: pe tableta (768-1023 px) panoul ia toata
+      latimea; la ~768 px starea din bara se taie („Totul e...”); meniul Setarilor e fara diacritice
+      (vechi, si „Formular de comanda” le urmeaza); „Renunță” nu cere confirmare, desi nu se desface.
+- [x] V6 Porti (`tsc`, probe, `lint:prag`, `build:ci`), raport, comit.
+      27.10, la `84080f8f`: `tsc` 0; 11135 probe, 0 cazute, 2 sarite (cele vechi de easySales), din Git
+      Bash (din PowerShell cad 3 doar fiindca n-au `grep`); `lint:prag` nu creste (51); `build:ci` 0.
+      Raportul i-a fost dat; urmeaza lista lui.
 
 ## Deciziile proprietarului
 

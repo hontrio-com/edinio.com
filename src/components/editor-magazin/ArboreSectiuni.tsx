@@ -4,7 +4,10 @@ import { Fragment } from "react";
 import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { Callout } from "@/components/ui/callout";
 import { SectionList } from "@/components/store-editor/SectionList";
-import { comutaBloc, mutaBloc, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { comutaBloc, esteContinut, mutaBloc, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { shopOnPage } from "@/lib/storefront/design/commerce";
+import { blocuriDinSetari, ETICHETA_CONTINUT_LIBER } from "@/lib/storefront/design/continut-liber";
+import { rezumatBloc } from "@/lib/editor-magazin/pagina-proprie";
 import { comutaBaraDeAnunt, duplicateSection, ID_BARA_ANUNT, moveSection, removeSection, schimbaBlocurile, toggleSection } from "@/lib/storefront/design/edit";
 import { idBloc } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
@@ -29,17 +32,20 @@ import { SelectorSablon } from "./SelectorSablon";
  * ascund, iar clicul deschide panoul blocului. Fara tragere: blocurile sunt mici,
  * iar sagetile merg si pe telefon, si de la tastatura.
  */
-function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, nesalvat }: {
+function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdaugaContinut }: {
   sectiune: SectionInstance;
   aplica: CiornaDesign["aplica"];
   blocSelectat: string | null;
   onSelectBloc: (idSectiune: string, idBlocului: string) => void;
   onPeste: (id: string | null) => void;
   nesalvat: (fel: FelContinut | null) => boolean;
+  /** „Conținut liber” nou in zona (etapa 9): tipul repetabil al zonei. */
+  onAdaugaContinut: (idSectiune: string, tip: string) => void;
 }) {
   const schema = schemaBlocurilor(sectiune.kind, sectiune.variant);
-  const blocuri = sectiune.blocks;
-  if (!schema || !blocuri) return null;
+  // Fara lista = lista goala: Pagina Magazin fara continut n-are cheia `blocks` (etapa 9).
+  const blocuri = sectiune.blocks ?? [];
+  if (!schema) return null;
   const schimba = (operatia: Parameters<typeof schimbaBlocurile>[2], cheie: string) =>
     aplica((d: StoreDesign) => schimbaBlocurile(d, sectiune.id, operatia), cheie);
   const actiune = "w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:pointer-events-none";
@@ -48,7 +54,9 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
     <div className="ml-4 mt-1 mb-1 pl-3 border-l border-border space-y-2.5">
       {schema.zone.map((zona) => {
         const aleZonei = blocuri.filter((b) => schema.tipuri[b.type]?.zona === zona.id);
-        if (aleZonei.length === 0) return null;
+        // Tipul „Conținut liber” al zonei (etapa 9): zona apare si goala, cu butonul lui.
+        const tipContinut = Object.keys(schema.tipuri).find((t) => schema.tipuri[t].zona === zona.id && schema.tipuri[t].repetabil);
+        if (aleZonei.length === 0 && !tipContinut) return null;
         return (
           <div key={zona.id}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{zona.label}</p>
@@ -56,12 +64,16 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
               {aleZonei.map((b, i) => {
                 const meta = schema.tipuri[b.type];
                 const id = idBloc(sectiune.id, b.id);
+                // Un „Conținut liber” se recunoaste dupa primul lui bloc, intre altele la fel (etapa 9).
+                const primul = esteContinut(schema, b.type) ? blocuriDinSetari(b.settings)[0] : undefined;
+                const rezumat = esteContinut(schema, b.type) ? (primul ? rezumatBloc(primul) ?? "" : "gol") : "";
                 return (
                   <li key={b.id} onMouseEnter={() => onPeste(id)} onMouseLeave={() => onPeste(null)}
                     className={`rounded-lg border bg-surface ${blocSelectat === b.id ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
                     <div className="flex items-center gap-0.5 pl-2 pr-1">
                       <button type="button" onClick={() => onSelectBloc(sectiune.id, b.id)} className="flex-1 min-w-0 flex items-center gap-2 py-2 text-left">
                         <span className={`text-xs font-medium truncate ${b.enabled ? "text-foreground" : "text-muted-foreground"}`}>{meta.label}</span>
+                        {rezumat && <span className="min-w-0 text-[11px] text-muted-foreground truncate">{rezumat}</span>}
                         {!b.enabled && <span className="shrink-0 text-[10px] text-muted-foreground">ascuns</span>}
                         {nesalvat(felBloc(b.type)) && <PunctNesalvat />}
                       </button>
@@ -89,6 +101,12 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
                 );
               })}
             </ul>
+            {tipContinut && (
+              <button type="button" onClick={() => onAdaugaContinut(sectiune.id, tipContinut)}
+                className="mt-1 w-full h-8 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-1.5">
+                <Plus className="h-3 w-3" /> Adaugă {ETICHETA_CONTINUT_LIBER.toLowerCase()}
+              </button>
+            )}
           </div>
         );
       })}
@@ -150,7 +168,7 @@ function Titlu({ children }: { children: React.ReactNode }) {
 
 export function ArboreSectiuni({
   ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa,
-  sablon, onSablon, onSablonNou, onSetariSablon, continutPagina, titluPagina, onDeschidePagina,
+  sablon, onSablon, onSablonNou, onSetariSablon, continutPagina, titluPagina, onDeschidePagina, onAdaugaContinut,
 }: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
@@ -177,6 +195,8 @@ export function ArboreSectiuni({
   titluPagina?: string;
   /** Deschide in editor pagina proprie aleasa ca pagina principala. */
   onDeschidePagina: (id: string) => void;
+  /** „Conținut liber” nou intr-o zona a paginii (etapa 9). */
+  onAdaugaContinut: (idSectiune: string, tip: string) => void;
 }) {
   const { design, aplica } = ciorna;
   const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
@@ -243,10 +263,11 @@ export function ArboreSectiuni({
             <Fragment key={s.id}>
               <RandFix sectiune={s} eticheta={sectionMeta(s.kind)?.label ?? s.kind} selectat={selectat === s.id && !blocSelectat}
                 nesalvat={nesalvat(felContinut(s))} onSelect={() => onSelect(s.id)} onPeste={onPeste} />
-              {s.blocks && (
+              {/* Pagina Magazin are zone doar cand are pagina ei (etapa 9); altfel nota de sus spune de ce. */}
+              {schemaBlocurilor(s.kind, s.variant) && (s.kind !== "shop_page" || shopOnPage(design)) && (
                 <li>
                   <ArboreBlocuri sectiune={s} aplica={aplica} blocSelectat={selectat === s.id ? blocSelectat : null}
-                    onSelectBloc={onSelectBloc} onPeste={onPeste} nesalvat={nesalvat} />
+                    onSelectBloc={onSelectBloc} onPeste={onPeste} nesalvat={nesalvat} onAdaugaContinut={onAdaugaContinut} />
                 </li>
               )}
             </Fragment>

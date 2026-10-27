@@ -19,22 +19,18 @@ import { integrariPentruPagini, type MetodaAfisata } from "@/lib/pages/integrari
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { aplicaPaginaAcasa } from "@/lib/storefront/design/pagina-acasa";
 import { parseProductSections } from "@/lib/store-sections";
+import { esteContinut, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { blocuriDinSetari } from "@/lib/storefront/design/continut-liber";
+import { toateSectiunile } from "@/lib/storefront/design/edit";
 
 const COLOANE_PRODUS = "id, name, slug, price, compare_at_price, images, category, is_featured, page_sections, is_bundle, track_inventory, stock_quantity";
 
-/** Tot ce ii trebuie editorului ca sa editeze o pagina proprie: randul ei si datele de previzualizare. */
-export interface DateEditorPagina {
-  pagina: {
-    id: string;
-    titlu: string;
-    slug: string;
-    publicata: boolean;
-    blocks: Block[];
-    css: string;
-    seo: PageSeo;
-    /** `updated_at` la incarcare: garda de versiune a salvarii. */
-    versiune: string;
-  };
+/**
+ * Ce le trebuie blocurilor ca sa se regleze si sa se previzualizeze, la nivel de MAGAZIN: produsele,
+ * categoriile, formularele, pachetele, integrarile, legaturile. Le folosesc paginile proprii si, din
+ * etapa 9, „Conținut liber” din design (`dateBlocuriMagazin`), deci exista o singura citire.
+ */
+export interface DateBlocuri {
   business: {
     id: string; slug: string; custom_domain: string | null;
     store_name: string | null; business_name: string; logo_url: string | null;
@@ -46,10 +42,33 @@ export interface DateEditorPagina {
   pachete: PachetPagina[];
   integrari: { furnizori: string[]; plati: MetodaAfisata[]; curieri: MetodaAfisata[] };
   legaturi: Omit<DateLegaturi, "businessId">;
-  estePaginaAcasa: boolean;
   randuriProduse: { id: string; titlu: string; oprit: boolean }[];
   isAdmin: boolean;
 }
+
+/** Tot ce ii trebuie editorului ca sa editeze o pagina proprie: randul ei si datele de previzualizare. */
+export interface DateEditorPagina extends DateBlocuri {
+  pagina: {
+    id: string;
+    titlu: string;
+    slug: string;
+    publicata: boolean;
+    blocks: Block[];
+    css: string;
+    seo: PageSeo;
+    /** `updated_at` la incarcare: garda de versiune a salvarii. */
+    versiune: string;
+  };
+  estePaginaAcasa: boolean;
+}
+
+const COLOANE_MAGAZIN = "id, slug, custom_domain, store_name, business_name, logo_url, primary_color, phone, social";
+
+/** Randul magazinului cu coloanele de mai sus (`COLOANE_MAGAZIN`). */
+type RandMagazin = {
+  id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string;
+  logo_url: string | null; primary_color: string | null; phone: string | null; social: unknown;
+};
 
 /**
  * Datele editorului pentru o pagina proprie, doar pentru PROPRIETARUL ei; `null` altfel.
@@ -67,18 +86,70 @@ export async function dateEditorPagina(
   if (!page) return null;
 
   const { data: business } = await supabase
-    .from("businesses")
-    .select("id, slug, custom_domain, store_name, business_name, logo_url, primary_color, phone, social")
-    .eq("id", page.business_id)
-    .eq("user_id", userId)
-    .maybeSingle();
+    .from("businesses").select(COLOANE_MAGAZIN).eq("id", page.business_id).eq("user_id", userId).maybeSingle();
   if (!business) return null; // nu e proprietarul
 
+  const { data: ss } = await supabase.from("store_settings").select("page_content, storefront_design").eq("business_id", business.id).maybeSingle();
+  const blocks = (page.blocks as unknown as Block[]) ?? [];
+  const comune = await incarcaDateBlocuri(supabase, business, userId, blocks, page.id, ss);
+  return {
+    pagina: {
+      id: page.id,
+      titlu: page.title,
+      slug: page.slug,
+      publicata: page.is_published,
+      blocks: curataHtmlPentruEditor(blocks),
+      css: page.page_css ?? "",
+      seo: (page.seo ?? {}) as PageSeo,
+      versiune: page.updated_at,
+    },
+    ...comune,
+    estePaginaAcasa: citestePaginaAcasa(ss?.page_content) === page.id,
+  };
+}
+
+/**
+ * Datele blocurilor pentru „Conținut liber” (etapa 9), doar pentru PROPRIETAR; `null` altfel. Produsele
+ * alese de mana in blocurile de produse se aduc din toate continuturile designului (ciorna, altfel cel
+ * publicat), ca la o pagina proprie.
+ */
+export async function dateBlocuriMagazin(
+  supabase: SupabaseClient<Database>,
+  businessId: string,
+  userId: string,
+): Promise<DateBlocuri | null> {
+  const { data: business } = await supabase
+    .from("businesses").select(COLOANE_MAGAZIN).eq("id", businessId).eq("user_id", userId).maybeSingle();
+  if (!business) return null;
+  const { data: ss } = await supabase
+    .from("store_settings").select("page_content, storefront_design, storefront_design_draft").eq("business_id", business.id).maybeSingle();
+  const design = parseStoreDesign(ss?.storefront_design_draft ?? ss?.storefront_design, {
+    primaryColor: business.primary_color ?? "#07c527",
+    pageContent: (ss?.page_content ?? {}) as Record<string, unknown>,
+    features: {},
+  });
+  const blocuri = toateSectiunile(design).flatMap((s) => {
+    if (s.kind === "continut_liber") return blocuriDinSetari(s.settings);
+    const schema = schemaBlocurilor(s.kind, s.variant);
+    return (s.blocks ?? []).flatMap((b) => (schema && esteContinut(schema, b.type) ? blocuriDinSetari(b.settings) : []));
+  });
+  return incarcaDateBlocuri(supabase, business, userId, blocuri, null, ss);
+}
+
+/** Partea de magazin, pentru un proprietar deja verificat; `blocuri` = cele editate (pentru produsele alese de mana). */
+async function incarcaDateBlocuri(
+  supabase: SupabaseClient<Database>,
+  business: RandMagazin,
+  userId: string,
+  blocuri: Block[],
+  faraPagina: string | null,
+  ss: { page_content: unknown; storefront_design: unknown } | null,
+): Promise<DateBlocuri> {
   const { data: profile } = await supabase.from("users_profile").select("role").eq("id", userId).single();
   const isAdmin = profile?.role === "admin";
 
   // Categories windowed past the 1000-row PostgREST cap (big imported taxonomies).
-  const [{ data: productsRaw }, cats, { data: formsRaw }, { data: pagini }, { data: ss }] = await Promise.all([
+  const [{ data: productsRaw }, cats, { data: formsRaw }, { data: pagini }] = await Promise.all([
     supabase.from("products").select(COLOANE_PRODUS)
       .eq("business_id", business.id).eq("is_active", true).order("is_featured", { ascending: false }).order("sort_order").limit(60),
     fetchAllRows("dashboard.page-edit.categories", (from, to) =>
@@ -88,9 +159,10 @@ export async function dateEditorPagina(
     supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
       .eq("business_id", business.id).order("created_at"),
     /* Pentru sugestiile de link: paginile magazinului (fara cea deschisa) si prefixele adreselor. */
-    supabase.from("custom_pages").select("title, slug, is_published")
-      .eq("business_id", business.id).neq("id", page.id).order("sort_order").order("created_at").limit(500),
-    supabase.from("store_settings").select("page_content, storefront_design").eq("business_id", business.id).maybeSingle(),
+    (faraPagina
+      ? supabase.from("custom_pages").select("title, slug, is_published").eq("business_id", business.id).neq("id", faraPagina)
+      : supabase.from("custom_pages").select("title, slug, is_published").eq("business_id", business.id))
+      .order("sort_order").order("created_at").limit(500),
   ]);
 
   /*
@@ -116,7 +188,7 @@ export async function dateEditorPagina(
     cu produse din afara lor ieseau goale in editor, desi pe magazin aveau produse.
     Se aduc si acelea, marginit.
   */
-  const blocuriProduse = flattenBlocks((page.blocks as unknown as Block[]) ?? []).filter((b): b is ProductsBlock => b.type === "products");
+  const blocuriProduse = flattenBlocks(blocuri).filter((b): b is ProductsBlock => b.type === "products");
   const incarcate = new Set((productsRaw ?? []).map((p) => p.id));
   const lipsa = [...new Set(blocuriProduse.flatMap((b) => (b.mode === "selected" ? b.productIds ?? [] : [])))].filter((id) => !incarcate.has(id)).slice(0, 200);
   const categoriiBlocuri = [...new Set(blocuriProduse.flatMap((b) => (b.mode === "category" && b.category ? [b.category] : [])))].slice(0, 20);
@@ -151,20 +223,10 @@ export async function dateEditorPagina(
   }));
 
   return {
-    pagina: {
-      id: page.id,
-      titlu: page.title,
-      slug: page.slug,
-      publicata: page.is_published,
-      blocks: curataHtmlPentruEditor((page.blocks as unknown as Block[]) ?? []),
-      css: page.page_css ?? "",
-      seo: (page.seo ?? {}) as PageSeo,
-      versiune: page.updated_at,
-    },
     business: {
       id: business.id, slug: business.slug, custom_domain: business.custom_domain,
       store_name: business.store_name, business_name: business.business_name,
-      logo_url: business.logo_url, primary_color: business.primary_color, phone: business.phone,
+      logo_url: business.logo_url, primary_color: business.primary_color ?? "#07c527", phone: business.phone,
       social: (business.social ?? {}) as Record<string, string>,
     },
     products,
@@ -178,7 +240,6 @@ export async function dateEditorPagina(
       radacinaCatalog: catalogPePagina ? `/${permalinkuri.magazin}` : "",
       prefixProdus: permalinkuri.produs,
     },
-    estePaginaAcasa: citestePaginaAcasa(pc) === page.id,
     randuriProduse: parseProductSections(pc.product_sections).map((r) => ({ id: r.id, titlu: r.title, oprit: !r.enabled })),
     isAdmin,
   };

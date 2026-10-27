@@ -8,6 +8,7 @@ import { logError } from "@/lib/error-logger";
 import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
 import { instantaneuContinut, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { curataContinutulPentruEditor } from "@/lib/storefront/design/continut-pentru-editor";
 import { ciornaAFostSchimbata } from "@/lib/storefront/design/draft-guard";
 import {
   MAX_CONTINUT_BYTES,
@@ -418,5 +419,6 @@ export async function getDesignVersion(
     return { error: "Nu am putut citi versiunea acum. Încearcă din nou." };
   }
   if (!data) return { error: "Versiunea nu mai există." };
-  return { design: data.design, continut: data.continut, la: data.created_at };
+  // „Conținut liber” (etapa 9): blocurile versiunii ajung in editor curatate, ca ale paginilor proprii.
+  return { design: curataContinutulPentruEditor(data.design), continut: data.continut, la: data.created_at };
 }

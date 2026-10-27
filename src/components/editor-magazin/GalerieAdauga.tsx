@@ -29,17 +29,20 @@ const DESCRIERI: Partial<Record<SectionKind, string>> = {
   gallery: "Fotografii ale magazinului.",
   about: "Descrierea magazinului.",
   contact: "Telefonul, emailul și adresa magazinului.",
+  continut_liber: "Blocurile de pe paginile tale: text, imagini, butoane, coloane, întrebări, video, formular.",
 };
 
-export function GalerieAdauga({ design, slug, onAdauga, onInchide }: {
+export function GalerieAdauga({ design, slug, onAdauga, onInchide, faraContinutLiber = false }: {
   design: StoreDesign;
   slug: string;
   onAdauga: (kind: SectionKind) => void;
   onInchide: () => void;
+  /** Pagina principala e o pagina proprie: blocurile se pun acolo, deci „Conținut liber” nu se ofera (etapa 9). */
+  faraContinutLiber?: boolean;
 }) {
   // Randul de produse nu se adauga din design (continutul lui sta in `page_content`),
   // dar se poate adauga de aici: editorul il face in continut, in ciorna (etapa 6).
-  const tipuri: SectionKind[] = [...addableKinds(design), "product_row"];
+  const tipuri = ([...addableKinds(design), "product_row"] as SectionKind[]).filter((k) => !(faraContinutLiber && k === "continut_liber"));
 
   useEffect(() => {
     const laEsc = (e: KeyboardEvent) => { if (e.key === "Escape") onInchide(); };

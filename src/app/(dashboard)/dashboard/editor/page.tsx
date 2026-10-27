@@ -5,6 +5,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { MarkEditorVisited } from "@/components/dashboard/MarkEditorVisited";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { curataContinutulPentruEditor } from "@/lib/storefront/design/continut-pentru-editor";
 import { ciornaCuContinut, contextCuCiorna, continutDinCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
@@ -134,6 +135,13 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire, se
     ? parseStoreDesign(setari.storefront_design_draft, contextCuCiorna(ctx, continutCiorna))
     : null;
   const permalinkuri = permalinkuriDin(pageContent);
+  /*
+   * „Conținut liber” (etapa 9): blocurile din design se curata pentru editor, ca ale paginilor proprii.
+   * Fara ciorna, acelasi obiect pentru amandoua, ca pana acum. Baza garzii (`cioarnaInitiala`) ramane cum
+   * e in coloana.
+   */
+  const publicatPentruEditor = curataContinutulPentruEditor(publicat);
+  const initialPentruEditor = ciorna ? curataContinutulPentruEditor(ciorna) : publicatPentruEditor;
 
   return (
     <EditorMagazin
@@ -160,8 +168,8 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire, se
         gallery: magazin.gallery,
       }}
       pageContent={pageContent}
-      designInitial={ciorna ?? publicat}
-      designPublicat={publicat}
+      designInitial={initialPentruEditor}
+      designPublicat={publicatPentruEditor}
       // Coloana asa cum e (designul parsat, cu continutul alaturi): baza garzii de concurenta.
       cioarnaInitiala={ciorna ? ciornaCuContinut(ciorna, continutCiorna) : null}
       continutCiornaInitial={continutCiorna}

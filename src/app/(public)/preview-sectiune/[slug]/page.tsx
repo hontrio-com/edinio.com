@@ -9,7 +9,10 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { construiesteFatete } from "@/lib/storefront/catalog/facets";
-import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
+import { DEMO_BANNERS, DEMO_CATEGORIES, DEMO_CONTINUT_LIBER, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
+import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
+import { sloturiContinutLiber } from "@/components/storefront/sloturi-pe-server";
+import { faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
 import { toateSectiunile } from "@/lib/storefront/design/edit";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
@@ -77,8 +80,9 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   ]);
   const business = magazinCuCiorna(businessCitit, ciorna.continut);
   const designDeCitit = ciorna.ciorna ?? storeSettings?.storefront_design;
-  // Randul de setari, fara coloana de ciorna: singurul care are voie sa plece catre client.
-  const faraCiorna = storeSettings ?? {};
+  // Randul de setari, fara coloana de ciorna: singurul care are voie sa plece catre client. Si fara designul
+  // BRUT (etapa 9): ar fi dus in HTML blocurile „Conținut liber”, necuratate.
+  const faraCiorna = faraDesignulBrut(storeSettings) ?? {};
   const produseDemo = demoProducts(business.id);
   const paginaProdusDemo = demoProductPage(business.id);
   /*
@@ -141,8 +145,26 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
     hasAnnouncementBar: false,
   };
 
+  /*
+   * „Conținut liber” (etapa 9): blocuri de exemplu, randate pe server ca in magazin, in slotul
+   * sectiunii de aici (`preview_continut_liber`). Gol, cardul din galerie ar fi fost alb.
+   */
+  const sloturi = kind === "continut_liber"
+    ? sloturiContinutLiber([{ cale: { sectiune: `preview_${kind}`, bloc: null }, blocuri: DEMO_CONTINUT_LIBER }], {
+      supabase,
+      businessId: business.id,
+      hideNoImage: false,
+      hideOutOfStock: false,
+      color: business.primary_color ?? "#07c527",
+      basePath: `/${business.slug}`,
+      storeSlug: business.slug,
+      social: {},
+    })
+    : undefined;
+
   return (
     <StorefrontThemeScope style={resolved.style}>
+      <FurnizorSloturiBlocuri sloturi={sloturi}>
       <SectionPreviewFrame
         chrome={chrome}
         section={{
@@ -193,6 +215,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
           } as never,
         }}
       />
+      </FurnizorSloturiBlocuri>
       <PreviewHeightReporter />
     </StorefrontThemeScope>
   );

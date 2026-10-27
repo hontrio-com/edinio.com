@@ -591,7 +591,9 @@ test("⚠⚠ nimic nu mai deschide editorul de pagini vechi: ruta lui trimite in
 
 test("⚠ un bloc nou se pune chiar sub blocul ales, si in coloane, nu doar la sfarsitul paginii", () => {
   // Editorul de pagini retras avea „+” intre oricare doua blocuri; fara el, un bloc de sus cerea zeci de sageti.
-  const arbore = faraComentarii("src/components/editor-magazin/ArborePagina.tsx");
+  // Lista e in `ListaBlocuri` din etapa 9 (aceeasi la paginile proprii si la „Conținut liber”), iar pagina o foloseste.
+  const arbore = faraComentarii("src/components/editor-magazin/ListaBlocuri.tsx");
+  assert.match(faraComentarii("src/components/editor-magazin/ArborePagina.tsx"), /<ListaBlocuri blocuri={blocuri} cheie={cheie}/);
   assert.match(arbore, /onClick=\{\(\) => onAdauga\(sub\(i \+ 1, /);
   assert.match(arbore, /rand\(b, i, blocuri, \(index, dupa\) => \(\{ fel: "sus", index, dupa \}\)\)/);
   assert.match(arbore, /rand\(nb, ni, dinColoana, \(index, dupa\) => \(\{ fel: "coloana", idColoane: b\.id, coloana: ci, index, dupa \}\)\)/);

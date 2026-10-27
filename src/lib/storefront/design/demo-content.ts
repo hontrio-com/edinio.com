@@ -1,4 +1,5 @@
 import type { MenuItem } from "@/lib/pages/menu";
+import type { Block } from "@/lib/pages/blocks.types";
 import type { CartItem } from "@/components/storefront/cart/CartProvider";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 
@@ -283,3 +284,13 @@ export function demoProducts(businessId: string) {
     fara_stoc: false,
   }));
 }
+
+/**
+ * „Conținut liber” in galeria „Adaugă secțiune” (etapa 9): cateva blocuri obisnuite, ca miniatura sa
+ * arate ce face sectiunea. Gol, cardul ar fi fost alb. Texte de magazin, deci fara diacritice.
+ */
+export const DEMO_CONTINUT_LIBER: Block[] = [
+  { id: "demo_titlu", type: "heading", text: "Povestea noastra", level: 2, size: "lg", style: { align: "center", padding: "md" } },
+  { id: "demo_text", type: "text", html: "<p style=\"text-align:center\">Scrie aici ce vrei sa afle clientii: cine esti, ce faci si de ce merita sa cumpere de la tine.</p>", style: { padding: "sm", width: "narrow" } },
+  { id: "demo_buton", type: "button", label: "Vezi produsele", href: "", variant: "solid", effect: "none", size: "md", rounded: "lg", style: { align: "center", padding: "md" } },
+];

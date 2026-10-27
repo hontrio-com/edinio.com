@@ -35,7 +35,8 @@ test("editorul si pagina aseaza coloanele cu aceeasi functie", () => {
   assert.match(pagina, /const a = asezareColoane\(block\)/);
   const vie = readFileSync(new URL("../../components/pages/PaginaVie.tsx", import.meta.url), "utf8");
   assert.match(vie, /<BlockRenderer\s+blocks=\{viu\.blocks\}/);
-  const arbore = readFileSync(new URL("../../components/editor-magazin/ArborePagina.tsx", import.meta.url), "utf8");
+  // Lista blocurilor sta din etapa 9 in `ListaBlocuri` (aceeasi la paginile proprii si la „Conținut liber”).
+  const arbore = readFileSync(new URL("../../components/editor-magazin/ListaBlocuri.tsx", import.meta.url), "utf8");
   assert.match(arbore, /asezareColoane\(b\)\.count/);
 });
 

@@ -9,7 +9,7 @@ import { IconitaBloc, PaletaBlocuri } from "@/components/pages/PaletaBlocuri";
 import { SetariPagina } from "@/components/pages/SetariPagina";
 import { BLOCK_META, type Block, type BlockType, type SectiuneAcasa } from "@/lib/pages/blocks.types";
 import { updateBlockInTree } from "@/lib/pages/block-tree";
-import type { DateEditorPagina } from "@/lib/pages/date-editor-pagina";
+import type { DateBlocuri, DateEditorPagina } from "@/lib/pages/date-editor-pagina";
 import { rezumatBloc, type StarePagina } from "@/lib/editor-magazin/pagina-proprie";
 import { cn } from "@/lib/utils/cn";
 import { RandComutator } from "./continut/ui";
@@ -22,10 +22,14 @@ import type { PaginaDeschisa } from "./usePaginaProprie";
  * (`BlockSettings`, `SetariPagina`, `PaletaBlocuri`), deci un bloc se regleaza exact ca inainte.
  */
 
-function Antet({ titlu, subtitlu, icon, onInapoi }: { titlu: string; subtitlu: string; icon: React.ReactNode; onInapoi: () => void }) {
+function Antet({ titlu, subtitlu, icon, onInapoi, inapoiLa = "pagină" }: {
+  titlu: string; subtitlu: string; icon: React.ReactNode; onInapoi: () => void;
+  /** Unde duce sageata, pentru cititoarele de ecran: „pagină” sau „conținut” (etapa 9). */
+  inapoiLa?: string;
+}) {
   return (
     <div className="flex items-center gap-2">
-      <button type="button" onClick={onInapoi} aria-label="Înapoi la pagină"
+      <button type="button" onClick={onInapoi} aria-label={`Înapoi la ${inapoiLa}`}
         className="shrink-0 w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
         <ArrowLeft className="h-4 w-4" />
       </button>
@@ -38,17 +42,24 @@ function Antet({ titlu, subtitlu, icon, onInapoi }: { titlu: string; subtitlu: s
   );
 }
 
-const integrariSetari = (d: DateEditorPagina) => ({
+const integrariSetari = (d: DateBlocuri) => ({
   furnizori: d.integrari.furnizori,
   plati: d.integrari.plati.map((m) => m.nume),
   curieri: d.integrari.curieri.map((m) => m.nume),
 });
 
-export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi, onRedaAnimatia }: {
+/**
+ * Setarile unui bloc (`BlockSettings`), pe orice lista de blocuri: o pagina proprie sau un „Conținut
+ * liber” din magazin (etapa 9). `onSchimba` aplica modificarea acolo unde sta lista.
+ */
+export function PanouBlocComun({ bloc, date, loc, inapoiLa, onSchimba, onInapoi, onRedaAnimatia }: {
   bloc: Block;
-  pagina: PaginaDeschisa;
-  date: DateEditorPagina;
-  titluPagina: string;
+  date: DateBlocuri;
+  /** Unde sta blocul, in cuvinte: titlul paginii sau locul continutului. */
+  loc: string;
+  inapoiLa?: string;
+  /** O modificare a blocului; `cheie` tine campurile atinse: tastarea intr-un camp e un singur pas la Anuleaza. */
+  onSchimba: (patch: Partial<Block>, cheie: string) => void;
   onInapoi: () => void;
   /** „Redă animația”: blocul se remonteaza in previzualizare (`cheieAnimatie`). */
   onRedaAnimatia: () => void;
@@ -59,17 +70,13 @@ export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi, onR
     <FurnizorLegaturi value={{ businessId: date.business.id, ...date.legaturi }}>
       {/* Toate clasele de font: lista de fonturi se arata fiecare in fontul lui, ca in editorul de pagini. */}
       <div className={cn("space-y-5 pb-6", toateClaseleDeFont())}>
-        <Antet titlu={eticheta} subtitlu={rezumat ? `${titluPagina} · ${rezumat}` : titluPagina}
+        <Antet titlu={eticheta} subtitlu={rezumat ? `${loc} · ${rezumat}` : loc} inapoiLa={inapoiLa}
           icon={<IconitaBloc tip={bloc.type} className="h-4 w-4" />} onInapoi={onInapoi} />
         <RedaAnimatia.Provider value={onRedaAnimatia}>
           <BlockSettings
             key={bloc.id}
             block={bloc}
-            // Cheia tine campurile atinse: tastarea intr-un camp e un singur pas la Anuleaza.
-            onChange={(patch) => pagina.aplica(
-              (s: StarePagina) => ({ ...s, blocks: updateBlockInTree(s.blocks, bloc.id, patch) }),
-              `bloc:${bloc.id}:${Object.keys(patch).sort().join(",")}`,
-            )}
+            onChange={(patch) => onSchimba(patch, `bloc:${bloc.id}:${Object.keys(patch).sort().join(",")}`)}
             categories={date.categorii}
             forms={date.forms}
             businessId={date.business.id}
@@ -81,6 +88,21 @@ export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi, onR
         </RedaAnimatia.Provider>
       </div>
     </FurnizorLegaturi>
+  );
+}
+
+/** Blocul unei pagini proprii (etapa 5): modificarea intra in pagina deschisa. */
+export function PanouBlocPagina({ bloc, pagina, date, titluPagina, onInapoi, onRedaAnimatia }: {
+  bloc: Block;
+  pagina: PaginaDeschisa;
+  date: DateEditorPagina;
+  titluPagina: string;
+  onInapoi: () => void;
+  onRedaAnimatia: () => void;
+}) {
+  return (
+    <PanouBlocComun bloc={bloc} date={date} loc={titluPagina} onInapoi={onInapoi} onRedaAnimatia={onRedaAnimatia}
+      onSchimba={(patch, cheie) => pagina.aplica((s: StarePagina) => ({ ...s, blocks: updateBlockInTree(s.blocks, bloc.id, patch) }), cheie)} />
   );
 }
 
@@ -116,12 +138,15 @@ export function PanouPagina({ stare, pagina, date, onInapoi }: {
   );
 }
 
-export function PanouAdaugaBloc({ tinta, date, onBloc, onAcasa, onInapoi }: {
+export function PanouAdaugaBloc({ tinta, date, estePaginaAcasa = false, onBloc, onAcasa, onInapoi, inapoiLa }: {
   tinta: TintaBloc;
-  date: DateEditorPagina;
+  date: DateBlocuri;
+  estePaginaAcasa?: boolean;
   onBloc: (tip: BlockType) => void;
-  onAcasa: (sectiune: SectiuneAcasa) => void;
+  /** Sectiunile paginii principale: doar la paginile proprii; lipsa = grupul nu apare (etapa 9). */
+  onAcasa?: (sectiune: SectiuneAcasa) => void;
   onInapoi: () => void;
+  inapoiLa?: string;
 }) {
   // Un bloc de integrare se poate adauga numai cand integrarea lui e activa.
   const integrareActiva: Record<string, boolean> = {
@@ -139,10 +164,11 @@ export function PanouAdaugaBloc({ tinta, date, onBloc, onAcasa, onInapoi }: {
         ].filter(Boolean).join(", ")}
         icon={<Plus className="h-4 w-4" />}
         onInapoi={onInapoi}
+        inapoiLa={inapoiLa}
       />
       <PaletaBlocuri
         inColoana={tinta.fel === "coloana"}
-        estePaginaAcasa={date.estePaginaAcasa}
+        estePaginaAcasa={estePaginaAcasa}
         integrareActiva={integrareActiva}
         onBloc={onBloc}
         onAcasa={onAcasa}

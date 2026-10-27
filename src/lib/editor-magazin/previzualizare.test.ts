@@ -33,6 +33,7 @@ test("⚠ arborele editorului e fara iconite (lista lui, punctul 4: „fa ceva m
     "src/components/store-editor/SectionList.tsx",
     "src/components/editor-magazin/ArboreSectiuni.tsx",
     "src/components/editor-magazin/ArborePagina.tsx",
+    "src/components/editor-magazin/ListaBlocuri.tsx",
   ]) {
     const s = readFileSync(path.join(process.cwd(), f), "utf8");
     assert.doesNotMatch(s, /<PageIcon|<IconitaBloc/, f);

@@ -179,6 +179,14 @@ export function schemaBlocurilor(kind: SectionKind, variant: string): SchemaBloc
   return variant === "detailed" ? BLOCURI_DETALIAT : BLOCURI_CLASIC;
 }
 
+/**
+ * Tipurile de bloc care sunt „Conținut liber”, din toate schemele: le citesc curatarea pentru editor si
+ * cine cauta continuturile in design, fara sa le scrie de mana.
+ */
+export const TIPURI_CONTINUT: ReadonlySet<string> = new Set(
+  [BLOCURI_CLASIC, BLOCURI_DETALIAT, BLOCURI_MAGAZIN].flatMap((s) => Object.keys(s.tipuri).filter((t) => s.tipuri[t].repetabil)),
+);
+
 /** Cate „Conținut liber” poate avea o sectiune, pe toate zonele ei. */
 export const MAX_CONTINUTURI_PE_SECTIUNE = 10;
 

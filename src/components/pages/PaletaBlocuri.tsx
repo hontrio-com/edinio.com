@@ -35,7 +35,8 @@ export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onB
   /** Ce integrari sunt pornite: newsletter, plati, curieri. */
   integrareActiva: Record<string, boolean>;
   onBloc: (tip: BlockType) => void;
-  onAcasa: (sectiune: SectiuneAcasa) => void;
+  /** Sectiunile paginii principale; lipsa = grupul nu apare (in „Conținut liber” din magazin, etapa 9). */
+  onAcasa?: (sectiune: SectiuneAcasa) => void;
 }) {
   return (
     <>
@@ -52,7 +53,7 @@ export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onB
         Sectiunile paginii principale (01.10.2026). Numai sus, nu in
         coloane. Apar mereu, cu o nota cand pagina nu e cea principala.
       */}
-      {!inColoana && (
+      {!inColoana && onAcasa && (
         <div className="mt-5 border-t border-border pt-4">
           <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Home className="h-3.5 w-3.5" /> Din pagina principală</p>
           <p className="mb-2 text-[11px] text-muted-foreground">

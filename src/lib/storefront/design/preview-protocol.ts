@@ -179,7 +179,17 @@ export interface PreviewDateBlocuriMessage {
   date: DatePrevizualizarePagina;
 }
 
+/**
+ * Editor -> preview: de cate ori s-a cerut „Redă animația”, pe id de bloc, pentru „Conținut liber” (etapa
+ * 9); ca la paginile proprii (`reluari` din `PreviewPaginaMessage`), blocul se remonteaza.
+ */
+export interface PreviewReluariMessage {
+  [PREVIEW_MESSAGE]: "reluari";
+  reluari: Record<string, number>;
+}
+
 export type PreviewMessage =
+  | PreviewReluariMessage
   | PreviewDesignMessage
   | PreviewScrollMessage
   | PreviewReadyMessage

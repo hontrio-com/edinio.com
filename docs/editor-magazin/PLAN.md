@@ -913,8 +913,18 @@ Citit inainte:
       server) si coloana bruta din randul de setari (`faraDesignulBrut`, pe pagina principala, produs, Magazin).
       Probe noi, mutanti 30/30.) Magazinul: sloturile randate pe server pe pagina principala, pe produs (pe sablon)
       si pe Pagina Magazin; fonturi, animatii, fara H1. Probe; verificat pe magazinul demo.
-- [ ] 9.4 Editorul: arborele si panourile pe orice lista de blocuri, intrarile „Adaugă”, datele magazinului,
-      previzualizarea pe loc si clicul. Probe.
+- [x] 9.4 (27.10: `ListaBlocuri` (randurile blocurilor, desprinse din `ArborePagina`, aceleasi la pagini si la
+      continut), `PanouBlocComun` (setarile unui bloc pe orice lista), `PanouContinutLiber` (blocurile, „Adaugă
+      bloc”, ochiul, duplica / sterge pentru continutul de sub produs si de pe Magazin); in `EditorMagazin`
+      containerul deschis (`caleLiber`), blocul si tinta legate de cheia containerului, totul prin ciorna
+      (`schimbaBlocuriLaCale`); datele magazinului desprinse din `dateEditorPagina` (`DateBlocuri`,
+      `incarcaDateBlocuri`, o singura citire), cerute o data (`dateBlocuriInEditor`) si trimise in cadru;
+      clicul din previzualizare desfacut de `alegereDinClic`; zonele cu „Adaugă conținut liber” si goale; galeria
+      fara continut cand pagina principala e una proprie, cu miniatura pe blocuri de exemplu; blocurile curatate
+      pentru editor la incarcare si la versiunea readusa (`curataContinutulPentruEditor`). 13 probe, mutanti
+      28/28. Lint: 8 erori React Compiler aparute in `EditorMagazin` (un apel liber in randare, `caleInText`),
+      reparate cu `useMemo`, pragul ramane 51.) Editorul: arborele si panourile pe orice lista de blocuri, intrarile
+      „Adaugă”, datele magazinului, previzualizarea pe loc si clicul. Probe.
 - [ ] 9.5 Ghidul din centrul de ajutor, REGISTRU (C si D), porti, proba in Chrome pe magazinul de proba (cele trei
       pagini, un sablon de produs, un formular trimis din design, „Publică”, „Renunță”, istoricul), totul pus la loc.
 

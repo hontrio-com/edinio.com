@@ -22,8 +22,8 @@ etape din „Etapele” sunt facute.** Verificarea finala V1-V6 (27.10) e facuta
 27.10 (cinci puncte, citate in „Etapa 8”). Etapa 8 = punctele 1-4, FACUTA si PROBATA in Chrome** (pasii
 8.1-8.5, ultimul comit `6a520b67`): previzualizarea pe tot chenarul, arborele fara iconite, fila „Setări” in
 editor, scoasa din Setari. **Etapa 9 = punctul 5 (blocuri ca la paginile proprii pe Acasa, Pagina Magazin si
-pagina de produs): PLANUL e scris (sectiunea „Etapa 9”, 27.10, dupa „Da” al lui), cu doua intrebari pentru el
-(zonele de pe produs si de pe Pagina Magazin); codul (9.1) porneste dupa raspunsurile lui.** Dupa ea, inchiderea
+pagina de produs): PLANUL e scris (sectiunea „Etapa 9”, 27.10, dupa „Da” al lui), iar la cele doua intrebari
+a raspuns: „Doar „Sub produs”” si „Doar pe /magazin”. Codul porneste cu 9.1.** Dupa ea, inchiderea
 (REGISTRU A in productie, push, verificarile din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul
 lui. Intrebarea despre
 teme a fost pusa si a ramas fara raspuns; ramane
@@ -838,7 +838,7 @@ Citit inainte:
 - Biblioteca Media citeste tot randul `store_settings` (`fetchCatalog`), deci pozele din blocurile puse in design
   se socotesc folosite. Cu o pagina proprie ca pagina principala, „Acasă” e chiar pagina aceea (nota din arbore).
 
-### Deciziile etapei (propuse; cele marcate „intrebare” le hotaraste el)
+### Deciziile etapei (propuse 27.10; cele doua intrebari le-a hotarat el, vezi 2 si 3)
 
 1. **Un tip nou de sectiune, „Conținut liber” (`continut_liber`), pe pagina principala.** Se adauga din „Adaugă
    secțiune”, de cate ori e nevoie; se muta, se ascunde, se duplica si se sterge ca orice sectiune. Blocurile lui
@@ -846,10 +846,9 @@ Citit inainte:
    ciorna si ajung la clienti la „Publică”, cu Anuleaza / Refa si istoric, ca restul editorului (decizia din etapa 6).
 2. **Pe pagina de produs: „Conținut liber” in zona „Sub produs”**, la Clasic si la Detaliat, de cate ori e nevoie
    („+ Adaugă conținut liber” sub zona). Sta in pagina sablonului, deci fiecare sablon are continutul lui.
-   **Intrebare:** si in coloana de cumparare? Propunerea: nu acum (acolo sunt pretul, variantele si comanda).
+   **Raspunsul lui (27.10): „Doar „Sub produs””**: coloana de cumparare (pretul, variantele, comanda) ramane neatinsa.
 3. **Pe Pagina Magazin: doua zone, „Deasupra produselor” si „Sub produse”**, cu „Conținut liber”.
-   **Intrebare:** doar pe pagina principala a magazinului (`/magazin`) sau si pe paginile de categorie, brand si
-   cautare? Propunerea: doar pe `/magazin` (categoriile au descrierile lor, pentru Google).
+   **Raspunsul lui (27.10): „Doar pe /magazin”**: paginile de categorie, brand si cautare raman cu descrierile lor.
 4. **In arbore, ca la o pagina proprie:** „Conținut liber” se deschide in blocurile lui (plus sub bloc, sageti,
    duplica, sterge, coloane cu „Adaugă în coloană”); clicul deschide `BlockSettings`, „Adaugă bloc” deschide
    `PaletaBlocuri` (blocurile de integrare doar cand integrarea e activa). Aceleasi piese ca la paginile proprii,
@@ -907,6 +906,8 @@ Citit inainte:
 - 27.10.2026, lista lui de la final (cinci puncte, in „Etapa 8”), si raspunsurile la intrebari: setarile
   in editor, salvate direct, DOAR acolo; blocuri ca la paginile proprii si pe pagina de produs; arborele
   fara iconite; previzualizarea pe toata latimea.
+- 27.10.2026, la planul etapei 9 („Da”, apoi raspunsurile): „Conținut liber” pe Pagina Magazin „Doar pe /magazin”;
+  pe pagina de produs „Doar „Sub produs””.
 
 ## De ce Shopify si nu Elementor
 

@@ -82,7 +82,7 @@ export function GalerieAdauga({ design, slug, loc, onAdauga, onBloc, integrareAc
               <h3 id="galerie-blocuri" className="text-sm font-semibold text-foreground">Blocuri</h3>
               <p className="text-xs text-muted-foreground">Ca pe paginile tale. Blocul intră într-un „Conținut liber”, pe care îl poți completa apoi cu alte blocuri.</p>
             </div>
-            <PaletaBlocuri inColoana={false} estePaginaAcasa={false} integrareActiva={integrareActiva ?? {}} onBloc={onBloc} />
+            <PaletaBlocuri inColoana={false} estePaginaAcasa={false} integrareActiva={integrareActiva ?? {}} onBloc={onBloc} lata />
           </section>
         )}
         <section aria-labelledby={cuBlocuri ? "galerie-sectiuni" : undefined} className="space-y-3">

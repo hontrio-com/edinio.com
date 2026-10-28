@@ -31,8 +31,9 @@ Apoi: contorul de vizitatori masurat (etapa noua) si temele intregi, „dupa ce 
 acum” (raspunsurile lui din 28.10, in „Deciziile proprietarului”). Planul si bifele: sectiunile „Etapa 4: planul de
 lucru” si „Etapa 5: planul de lucru”. **A doua verificare (W1-W6, ceruta 28.10: „O verificare si sa iti spun
 mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5). **Mentiunile lui au venit pe 28.10** (doua:
-„+” in previzualizare, subsolul customizabil complet; raspunsurile in „Mentiunile lui din 28.10”): **etapa 10 („+”) in
-lucru**, apoi etapa 11 (subsolul pe coloane-bloc). Tot fara push si fara migratie, pana spune el.
+„+” in previzualizare, subsolul customizabil complet; raspunsurile in „Mentiunile lui din 28.10”): **etapa 10 („+”)
+FACUTA si PROBATA in Chrome** (pasii 10.1-10.4), **urmeaza etapa 11 (subsolul pe coloane-bloc), dupa raportul catre el**.
+Tot fara push si fara migratie, pana spune el.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1148,7 +1149,28 @@ Citit inainte:
       vechi de la 9.4 aduse la forma noua; mutanti 25/25, unul scapase intai (conditia `if (plus)`), proba stransa.)
       Editorul: mesajul „adauga”, galeria cu loc si cu grupul „Blocuri”, panoul „Adaugă un bloc” cu tinta, continutul
       nou cu primul bloc, randul de produse la loc, telefonul. Probe.
-- [ ] 10.4 REGISTRU (C), ghidurile din centrul de ajutor, porti, proba in Chrome (cere acordul lui pentru impersonare).
+- [x] 10.4 (28.10: REGISTRU C si D, patru ghiduri, porti (tsc 0, lint pe fisiere 0, 565 de probe ale editorului,
+      designului, ajutorului si paginilor), proba in Chrome cu acordul lui („Da, fă proba acum”), pe `floraria-mirei` din
+      baza DEMO, prin impersonare.) REGISTRU (C), ghidurile din centrul de ajutor, porti, proba in Chrome (cere acordul lui
+      pentru impersonare).
+      Vazut pe ecran: pe pagina proprie, „+” sus si jos pe Hero (primul bloc), „+” de jos deschide „Adaugă un bloc” cu
+      „sub „Hero: Pagina principala test””, fara sa aleaga Hero; „Titlu” intra chiar sub Hero, Anulează il scoate („Pagina
+      e salvată.”). Pe Acasa (cu pagina principala proprie scoasa TEMPORAR din `page_content.pagina_acasa`, ca la proba
+      etapei 2): „+” sus si jos pe „Banner principal”; galeria „Adaugă un bloc sau o secțiune” cu „Se adaugă sub „Banner
+      principal”.”; „Titlu” a facut un „Conținut liber” chiar sub banner, deschis pe bloc; „+” de sub titlu: „sub „Titlu: Un
+      titlu de sectiune””, „Text” in acelasi continut; „Rând de produse” din „+” de sub „Căutare și filtre” a intrat chiar
+      acolo, Anulează l-a scos dintr-o apasare, Refă l-a readus la loc; „+” de sus: „Se adaugă deasupra „Banner
+      principal”.”. Pe pagina de produs (bucatile de sub produs sunt goale la produsul de proba, deci fara „+”): „+” de pe
+      marginea paginii, „la sfârșitul zonei „Sub produs””, „Text” intr-un continut nou, inaintea subsolului. La 390 px
+      (editorul intr-un cadru de telefon): „+” pe banner, galeria in doua coloane, 0 px peste margine. Magazinul public
+      (prima pagina, produsul): 200, fara `data-st-adauga`, fara marcaje, fara ciorna. Consola: doar extensia
+      (`cz-shortcut-listen`, „Receiving end does not exist”). Pe Acasa cu pagina principala proprie, „+” nu apare (cum
+      scrie in plan): in productie un singur magazin din 148 are asa ceva (REGISTRU D). GASIT si reparat: in galeria lata
+      blocurile stateau cate trei pe rand, carduri cat o treime de ecran, iar sectiunile cadeau mult sub ele; acum sase pe
+      rand de la 1024 px (`PaletaBlocuri lata`). Pus la loc: ciorna prin „Renunță”, apoi, dupa „Ieși din impersonare”,
+      `pagina_acasa` si data abonamentului; o singura comparatie: firma, designul, `page_content`, setarile (randul
+      intreg), data publicarii, ciorna goala, 0 versiuni, 0 mesaje, 1 comanda, pagina neatinsa (doar `last_sign_in_at`
+      al contului de proba, mutat de impersonare).
 
 ## Deciziile proprietarului
 

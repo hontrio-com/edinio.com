@@ -28,7 +28,7 @@ export function IconitaBloc({ tip, className }: { tip: BlockType; className?: st
   return <Icon className={className} />;
 }
 
-export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onBloc, onAcasa }: {
+export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onBloc, onAcasa, lata = false }: {
   /** Se adauga intr-o coloana: fara blocurile care nu intra acolo si fara sectiunile paginii principale. */
   inColoana: boolean;
   estePaginaAcasa: boolean;
@@ -37,10 +37,13 @@ export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onB
   onBloc: (tip: BlockType) => void;
   /** Sectiunile paginii principale; lipsa = grupul nu apare (in „Conținut liber” din magazin, etapa 9). */
   onAcasa?: (sectiune: SectiuneAcasa) => void;
+  /** In galeria peste previzualizare (etapa 10): sase pe rand pe ecran lat, nu trei carduri cat o treime de ecran. */
+  lata?: boolean;
 }) {
+  const grila = lata ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" : "grid grid-cols-2 sm:grid-cols-3 gap-2";
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className={grila}>
         {(inColoana ? BLOCK_PALETTE_ORDER.filter((t) => !EXCLUSE_DIN_COLOANE.includes(t)) : BLOCK_PALETTE_ORDER).map((type) => (
           <button key={type} type="button" onClick={() => onBloc(type)}
             className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-colors">
@@ -61,7 +64,7 @@ export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onB
               ? "Secțiunile magazinului, cu conținutul din Editează magazinul."
               : "Apar doar când pagina e setată ca pagina principală (Pagini > Acasa)."}
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className={grila}>
             {SECTIUNI_ACASA.map((s) => (
               <button key={s.cheie} type="button" onClick={() => onAcasa(s.cheie)} title={s.descriere}
                 className="flex flex-col items-center gap-2 rounded-xl border border-border p-4 transition-colors hover:border-primary hover:bg-primary/5">
@@ -79,7 +82,7 @@ export function PaletaBlocuri({ inColoana, estePaginaAcasa, integrareActiva, onB
       */}
       <div className="mt-5 border-t border-border pt-4">
         <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Plug className="h-3.5 w-3.5" /> Din integrările tale</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className={grila}>
           {BLOCURI_INTEGRARI.map((type) => {
             const activ = integrareActiva[type];
             const lipsa = type === "newsletter" ? "Conectează Mailchimp, Brevo sau Klaviyo" : type === "payments" ? "Nicio plată activă" : "Niciun curier pornit";

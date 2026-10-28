@@ -610,16 +610,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.hipermarket),
-          { key: "showTopBar", type: "toggle", label: "Arata bara de sus" },
+          { key: "showTopBar", type: "toggle", label: "Arată bara de sus" },
           {
             key: "topText",
             type: "text",
-            label: "Mesaj in bara de sus",
+            label: "Mesaj în bara de sus",
             placeholder: "Livrare in toata tara",
             maxLength: 90,
             showIf: { key: "showTopBar", equals: true },
           },
-          { key: "showHotline", type: "toggle", label: "Arata telefonul in bara de navigare" },
+          { key: "showHotline", type: "toggle", label: "Arată telefonul în bara de navigare" },
         ],
         defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
       },
@@ -707,7 +707,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { showTagline: false, inapoiSus: true },
       },
       hipermarket: {
-        label: "Hipermarket, cu newsletter si coloane pe gri",
+        label: "Hipermarket, cu newsletter și coloane pe gri",
         tags: ["indraznet"],
         layout: "full",
         // Tema Jupiter (etapa 16.2): bara „Înapoi sus”, banda cu newsletterul, coloanele pe gri.
@@ -765,7 +765,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       },
       carduri: {
         // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri gri in dreapta.
-        label: "Bannere cu doua carduri alaturate",
+        label: "Bannere cu două carduri alăturate",
         tags: ["cu imagine", "indraznet"],
         layout: "full",
         previewHeight: 560,
@@ -773,6 +773,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         fields: [
           {
             key: "carduri", type: "repeater", label: "Cardurile din dreapta", itemLabel: "Card", max: 2,
+            help: "Lângă bannere, unul sub altul; pe telefon, sub ele. Un card fără titlu nu apare.",
             fields: [
               { key: "titlu", type: "text", label: "Titlul", maxLength: 40 },
               { key: "text", type: "textarea", label: "Textul", maxLength: 120 },
@@ -815,12 +816,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       classic: { label: "Butoane rotunde", tags: ["clasic"], layout: "contained", fields: [] },
       // Tema Jupiter (etapa 16.3): placi gri pe patru coloane, cu imaginea si numarul de produse.
       placi: {
-        label: "Placi cu imagine si numar de produse",
+        label: "Plăci cu imagine și număr de produse",
         tags: ["cu imagine", "detaliat"],
         layout: "contained",
         fields: [
           { key: "titlu", type: "text", label: "Titlul", placeholder: "Categorii", maxLength: 60 },
-          { key: "arataNumarul", type: "toggle", label: "Arata cate produse are fiecare categorie" },
+          { key: "arataNumarul", type: "toggle", label: "Arată câte produse are fiecare categorie" },
         ],
         defaults: { titlu: "Categorii", arataNumarul: true },
       },
@@ -941,23 +942,24 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     variants: {
       // Tema Jupiter (etapa 16.3), dupa sectiunea „Recomandări” de pe modelul ei.
       rotunde: {
-        label: "Imagine pe cerc, titlu si link",
+        label: "Imagine pe cerc, titlu și link",
         tags: ["cu imagine"],
         layout: "contained",
         previewHeight: 420,
         fields: [
-          { key: "titlu", type: "text", label: "Titlul secțiunii", placeholder: "Recomandări", maxLength: 60 },
+          { key: "titlu", type: "text", label: "Titlul secțiunii", placeholder: "Recomandari", maxLength: 60 },
           {
             key: "placi", type: "repeater", label: "Plăcile", itemLabel: "Placă", max: 8,
+            help: "Patru pe rând pe calculator, două pe telefon. Textul linkului apare doar când placa are link.",
             fields: [
               { key: "titlu", type: "text", label: "Titlul", maxLength: 50 },
               { key: "imagine", type: "image", label: "Imaginea" },
               { key: "link", type: "link", label: "Linkul" },
-              { key: "eticheta", type: "text", label: "Textul linkului", placeholder: "Descoperă ofertele", maxLength: 30 },
+              { key: "eticheta", type: "text", label: "Textul linkului", placeholder: "Descopera ofertele", maxLength: 30 },
             ],
           },
         ],
-        defaults: { titlu: "Recomandări", placi: [] },
+        defaults: { titlu: "Recomandari", placi: [] },
       },
     },
   },
@@ -1068,7 +1070,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         providesH1: true,
         note: SHOP_NOTA,
         // `placiSubcategorii` (tema Jupiter, etapa 16.4): subcategoriile categoriei alese, pe placi, sub titlu.
-        fields: [...SHOP_FIELDS, { key: "placiSubcategorii", type: "toggle", label: "Arata subcategoriile pe placi, sub titlu" }],
+        fields: [...SHOP_FIELDS, { key: "placiSubcategorii", type: "toggle", label: "Arată subcategoriile pe plăci, sub titlu" }],
         defaults: { ...SHOP_DEFAULTS, coloane: "4" },
       },
       toolbar: {

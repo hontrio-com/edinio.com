@@ -29,6 +29,11 @@ export interface Tema {
    * de acum al magazinului (sectiunile, blocurile si coloanele lui raman).
    */
   design: (ctx: DesignContext, date: SetDateDemo | null, baza?: StoreDesign) => StoreDesign;
+  /**
+   * Reglajele din `page_content` ale magazinului demo, ca demo-ul sa arate ca modelul (Jupiter: fara categoria pe card).
+   * Doar pentru demo: la aplicare (etapa 17), reglajele comerciantului raman ale lui.
+   */
+  setariDemo: Record<string, unknown>;
 }
 
 export const TEME: readonly Tema[] = [
@@ -40,6 +45,7 @@ export const TEME: readonly Tema[] = [
     culoare: "#215196",
     date: DATE_DEMO_JUPITER,
     design: designJupiter,
+    setariDemo: { show_category_badges: false },
   },
 ];
 

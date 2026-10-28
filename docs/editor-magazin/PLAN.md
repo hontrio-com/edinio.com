@@ -1687,8 +1687,24 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
         de el raman; GASIT de proba: parserul scrie si coloanele implicite, deci „alese” se judeca fata de implicite. Cosul
         ramane sertarul clasic, in culorile temei. 6 probe in `pagini.test.ts`; mutanti 9/9.) Paginile de categorie si de
         produs, cosul: variantele existente, reglate pe tema si pe cardul ei.
-  - [ ] 16.5 Ghiduri, porti, proba in Chrome langa dedeman.ro (cere acordul lui pentru impersonare, daca e nevoie).
+  - [ ] 16.5 (29.10, facut tot, in afara de proba din editor a listelor noi, care cere acordul lui: ghidurile (antetul
+        cu 9 design-uri, subsolul cu 4, bannerul cu 4 si cardurile lui, subcategoriile pe placi ale Paginii Magazin, banda
+        gri a randurilor, „Adaugă secțiune”; nou `cum-adaugi-placi-de-recomandare`, 427 de ghiduri; citatele cautate in
+        sursa; centrul de ajutor 42/42). GASITE si reparate: (1) vitrina Jupiter scria cu diacritice („Adaugă în coș”,
+        „Caută”, „Coș”), iar etichetele noi din panou fara: intoarse dupa regula lui, cu proba; (2) panoul n-avea control
+        pentru campurile-lista (`repeater` cadea pe `default: return null`), deci „Cardurile din dreapta” si „Plăcile” le
+        putea pune doar tema: acum `ListaRepetor` („Adaugă card”, sageti, „×”, linkul cu `CampLink`), plus o proba ca
+        orice tip de camp din registru are control; (3) cardul Jupiter ignora „Categoria pe card”: acum o arata deasupra
+        titlului, iar demo-ul o tine stinsa (`setariDemo`). In Chrome pe `tema-jupiter`: textele noi si linia de
+        categorie (pornita pe moment pe demo, stinsa la loc). Porti: suita 11.337 / 0 / 2 sarite, `build:ci` trece, tsc 0,
+        eslint 0 pe fisierele atinse; mutanti 9/9.) Ghiduri, porti, proba in Chrome langa dedeman.ro (cere acordul lui
+        pentru impersonare, daca e nevoie).
 - **Etapa 17: pagina „Teme”** (cardul lui Jupiter, „Vezi demo”, „Aplică tema”), aplicarea cu Istoric si „Pune la loc”.
+  - De tinut minte (vazut la 16.5): coloana „Newsletter” a temei intra la aplicare doar cu furnizor conectat (Mailchimp,
+    Brevo sau Klaviyo), cum cere si panoul; altfel subsolul primeste celelalte coloane. Reglajele lui din `page_content`
+    raman ale lui (`setariDemo`, fara categoria pe card, e doar al magazinului demo).
+  - Intrebare pusa lui la raportul etapei 16: placile de categorii si cardul Jupiter le pune acum doar tema
+    („Categorii” si „Card de produs” nu sunt in galeria „Schimbă designul”). Le facem alegibile si in panou?
 - **Etapa 18: „Importă datele demo”** la aplicare si „Șterge datele demo”.
 - **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
   push: DNS, domeniul in Vercel, magazinul demo in productie.

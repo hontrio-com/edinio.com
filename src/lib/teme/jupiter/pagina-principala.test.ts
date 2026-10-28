@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { variantMeta, sectionMeta } from "@/lib/storefront/design/registry";
+import { variantMeta, sectionMeta, SECTION_REGISTRY, type Field } from "@/lib/storefront/design/registry";
 import { addableKinds } from "@/lib/storefront/design/edit";
 import { cardurileHero } from "@/lib/storefront/design/hero-carduri";
 import { placileDinSetari } from "@/lib/storefront/design/placi-promo";
@@ -51,7 +51,7 @@ test("cu datele demo, cardurile si placile au continutul lor, cu linkuri spre ca
   assert.match(cardurileHero(hero.settings)[0].link, /^\/magazin\?cat=/);
   const placi = cu.home.find((s) => s.kind === "placi_promo")!;
   assert.equal(placileDinSetari(placi.settings).length, 4);
-  assert.equal(placi.settings.titlu, "Recomandări");
+  assert.equal(placi.settings.titlu, "Recomandari");
 
   const fara = designJupiter(ctx, null);
   assert.equal(cardurileHero(fara.home.find((s) => s.kind === "hero")!.settings).length, 0);
@@ -115,8 +115,13 @@ test("magazinul: cardul ales din design pentru toate suprafetele, iar cardul Jup
   assert.match(s, /const Card = design\?\.commerce\.productCard\.variant === "jupiter" \? ProductCardJupiter : ProductCard;/);
   const j = cod("src/components/storefront/product/ProductCardJupiter.tsx");
   assert.match(j, /\} = useDateCardProdus\(props\);/);
-  assert.match(j, /isAdded \? "Adăugat!" : isVariable \? "Alege opțiunile" : cerePersonalizare \? "Personalizează" : "Adaugă în coș"/);
-  assert.match(cod("src/components/storefront/product/ProductCard.tsx"), /export function useDateCardProdus\(/);
+  assert.match(j, /isAdded \? "Adaugat!" : isVariable \? "Alege optiunile" : cerePersonalizare \? "Personalizeaza" : "Adauga in cos"/);
+  const clasic = cod("src/components/storefront/product/ProductCard.tsx");
+  assert.match(clasic, /export function useDateCardProdus\(/);
+  for (const t of ["Adaugat!", "Alege optiunile", "Personalizeaza", "Adauga in cos"]) assert.ok(clasic.includes(t), `si clasicul spune „${t}”`);
+  // „Categoria pe card” din fila Stil se aplica si aici (16.5: cardul Jupiter o ignora, comutatorul nu facea nimic).
+  assert.match(j, /priority = false, showCategoryBadge = true \} = props;/);
+  assert.match(j, /\{showCategoryBadge && \(\s*<p [^>]*>\{product\.category \?\? ""\}<\/p>/);
 });
 
 test("pagina principala urmeaza latimea din stil (72rem e implicitul tuturor magazinelor de azi)", () => {
@@ -137,4 +142,23 @@ test("⚠ banda gri se intinde pe tot ecranul fara `100vw` (pe Windows aducea de
 test("miniaturile din galerii au continut de exemplu si pentru placi si pentru cardurile bannerului", () => {
   const p = cod("src/app/(public)/preview-sectiune/[slug]/page.tsx");
   assert.match(p, /kind === "placi_promo" \? \{ placi: DEMO_PLACI_PROMO \} : kind === "hero" && variantParam === "carduri" \? \{ carduri: DEMO_CARDURI_HERO \} : \{\}/);
+});
+
+test("⚠ fiecare tip de camp din registru are control in panou: cardurile si placile le completeaza omul, nu doar tema", () => {
+  // Gasit la 16.5: `repeater` cadea pe `default: return null`, deci „Cardurile din dreapta” si „Plăcile” nu se vedeau.
+  const tipuri = new Set<string>();
+  const strange = (fs: readonly Field[]) => {
+    for (const f of fs) {
+      if (f.retras) continue;
+      tipuri.add(f.type);
+      if (f.type === "repeater") strange(f.fields);
+    }
+  };
+  for (const k of Object.values(SECTION_REGISTRY)) for (const v of Object.values(k.variants)) strange(v.fields);
+  assert.ok(tipuri.has("repeater") && tipuri.has("image") && tipuri.has("link"));
+  const panou = cod("src/components/store-editor/SectionSettings.tsx");
+  for (const t of tipuri) assert.match(panou, new RegExp(`case "${t}":`), `tipul „${t}” n-are control in panou`);
+  assert.match(panou, /case "repeater":\s*return <ListaRepetor field=\{field\} value=\{value\} onChange=\{onChange\} eticheta=\{eticheta\} \/>;/);
+  assert.match(panou, /\{lista\.length < max && \(/, "„Adaugă” dispare la maxim");
+  assert.match(panou, /f\.type === "link" \? \(\s*<CampLink /, "linkul are sugestiile panoului");
 });

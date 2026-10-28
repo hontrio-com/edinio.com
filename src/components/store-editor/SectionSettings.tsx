@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { MediaPicker } from "@/components/media/MediaPicker";
+import { CampLink } from "@/components/pages/editor/CampLink";
+import { MAX_REPEATER_ITEMS } from "@/lib/storefront/design/curatare";
 import { variantMeta, type Field } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 
@@ -259,10 +261,82 @@ function Control({
     case "actions":
       return <ListaActiuni field={field} value={value} onChange={onChange} eticheta={eticheta} />;
 
+    case "repeater":
+      return <ListaRepetor field={field} value={value} onChange={onChange} eticheta={eticheta} />;
+
     default:
-      // Tip de camp inca neimplementat (imagine, iconita, produse, repetor).
+      // Tip de camp inca neimplementat (iconita, produse, categorie).
       return null;
   }
+}
+
+const ACTIUNE_ELEMENT =
+  "w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent transition-colors";
+
+/**
+ * Elementele unui camp `repeater`: cardurile de langa banner, placile de recomandare (tema Jupiter, etapa 16.5).
+ * Fiecare cu campurile lui, sageti, stergere si „Adaugă” pana la maxim. Pana acum tipul cadea pe `default`, deci
+ * elementele le putea pune doar tema, nu si omul. Linkul are sugestiile panoului (paginile, categoriile, produsele).
+ */
+function ListaRepetor({
+  field,
+  value,
+  onChange,
+  eticheta,
+}: {
+  field: Extract<Field, { type: "repeater" }>;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  eticheta: React.ReactNode;
+}) {
+  const lista = (Array.isArray(value) ? value : []).map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}));
+  const max = field.max ?? MAX_REPEATER_ITEMS;
+  const pune = (i: number, cheie: string, v: unknown) => onChange(lista.map((x, k) => (k === i ? { ...x, [cheie]: v } : x)));
+  const muta = (de: number, la: number) => {
+    if (la < 0 || la >= lista.length) return;
+    const next = [...lista];
+    [next[de], next[la]] = [next[la], next[de]];
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      {eticheta}
+      {lista.map((x, i) => (
+        <div key={i} className="rounded-xl border border-border p-3 space-y-3">
+          <div className="flex items-center gap-1">
+            <span className="flex-1 text-xs font-semibold text-foreground">{field.itemLabel} {i + 1}</span>
+            <button type="button" onClick={() => muta(i, i - 1)} disabled={i === 0}
+              aria-label={`Mută ${field.itemLabel} ${i + 1} mai sus`} className={ACTIUNE_ELEMENT}>
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => muta(i, i + 1)} disabled={i === lista.length - 1}
+              aria-label={`Mută ${field.itemLabel} ${i + 1} mai jos`} className={ACTIUNE_ELEMENT}>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => onChange(lista.filter((_, k) => k !== i))}
+              aria-label={`Șterge ${field.itemLabel} ${i + 1}`} className={`${ACTIUNE_ELEMENT} hover:text-destructive`}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {field.fields.map((f) =>
+            f.type === "link" ? (
+              <CampLink key={f.key} eticheta={f.label} valoare={typeof x[f.key] === "string" ? (x[f.key] as string) : ""}
+                onChange={(v) => pune(i, f.key, v)} />
+            ) : (
+              <Control key={f.key} field={f} value={x[f.key]} onChange={(v) => pune(i, f.key, v)} />
+            ),
+          )}
+        </div>
+      ))}
+      {lista.length < max && (
+        <button type="button" onClick={() => onChange([...lista, {}])}
+          className="w-full h-10 rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-1.5">
+          <Plus className="h-3.5 w-3.5" /> Adaugă {field.itemLabel.toLowerCase()} ({lista.length}/{max})
+        </button>
+      )}
+    </div>
+  );
 }
 
 /**

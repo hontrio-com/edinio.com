@@ -196,8 +196,31 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - Linkul din emailul de cos abandonat urmeaza tipul salvat (`/checkout?code=...` la pagina, fereastra la celalalt).
   - ⚠ „Comandă acum” de pe pagina produsului deschide formularul produsului la ambele tipuri, ca inainte; spus in panou
     si in ghid. Daca el vrea altfel, e o etapa separata.
+- **Etapa 16 (tema Jupiter, doar aspectul: nicio tema nu se aplica inca; fara migratii), de verificat dupa push:**
+  - Magazinele de azi arata la fel. Pagina principala si pagina de produs „Detaliat” urmeaza acum latimea din Stil
+    (`--st-container`), cu 72rem implicit, cat era `max-w-6xl`. Cardul clasic ia aceleasi date prin `useDateCardProdus`
+    (aceleasi texte, preturi, „de la”).
+  - Galeriile din editor au variantele noi: antetul „Hipermarket, cu meniu de categorii” (9 design-uri), subsolul
+    „Hipermarket, cu newsletter și coloane pe gri” (4), bannerul „Bannere cu două carduri alăturate” (4). „Plăci de
+    recomandare” apare la „Adaugă secțiune”. Randul de produse are „Pe bandă gri, cu titlu mare”, iar Pagina Magazin cu
+    filtre in stanga are „Arată subcategoriile pe plăci, sub titlu”.
+  - In panou, „Cardurile din dreapta” si „Plăcile” se completeaza (controlul de lista, nou in 16.5: „Adaugă card” /
+    „Adaugă placă”, sagetile, „×”, linkul cu sugestii) si se vad in magazin dupa „Publică”.
+  - Fonturile Open Sans si Sofia Sans sunt in lista (35 de familii, plus Geist).
+  - Textele noi din vitrina sunt fara diacritice, ca restul magazinului („Adauga in cos”, „Cauta”, „Cos”, „Inapoi sus”);
+    etichetele noi din panou sunt cu diacritice.
+  - Magazinul demo `tema-jupiter` si contul tehnic `teme@edinio-demo.test` exista DOAR in baza demo. In productie se fac
+    la etapa 19 (scriptul `scripts/teme/seamana-demo.ts`, care refuza productia pana atunci), cu acordul lui.
 
 ## D. Capturi si texte de ajutor
+- **Etapa 16 (29.10): ghidurile** `cum-reglezi-headerul-magazinului` (9 design-uri, „Hipermarket, cu meniu de categorii”),
+  `cum-reglezi-footerul-magazinului` (al patrulea design), `cum-reglezi-sectiunea-hero` (4 design-uri, cardurile),
+  `cum-configurezi-pagina-magazin` (subcategoriile pe placi), `cum-adaugi-sectiuni-de-produse` (banda gri),
+  `cum-asezi-ordinea-sectiunilor` si unul nou, `cum-adaugi-placi-de-recomandare` (427 de ghiduri). Fara capturi noi.
+  Placile de categorii si cardul „Hipermarket, cu prețul mare” nu au ghid: deocamdata le pune doar tema (etapa 17).
+- **De facut (vazut la 16.5): „Link buton” al antetului „Rotunjit, cu butoane colorate”** e tot text simplu, fara
+  sugestiile (paginile, categoriile, produsele) pe care le au bannerele si, din 16.5, linkurile din listele panoului.
+  Tipul `link` din `SectionSettings` trecut pe `CampLink`, cu `help` sub el; cu proba lui.
 - **FACUT 28.10.2026, ghidurile (inchiderea, pasul 5; PLAN, „Inchiderea, pasul 5”):** toata categoria „Design și pagini” (84 de ghiduri citite fata de cod, rescrise cele care descriau „Design magazin”, „Design secțiuni”, „Ordinea secțiunilor”, „Salvează” pe sectiuni si constructorul de pagini retras), plus trimiterile din „Primii pași” si „Produse”. Noi: cum e impartit editorul, bucatile paginii de produs, istoricul publicarilor, sabloanele de produs (425 de ghiduri). Fiecare citat din categorie cautat in sursa (1084): toate cele scrise acum exista in cod. Ghidul „Conținut liber” ramane fara captura, dupa regula din `ajutor.ts` (cuvintele ajung).
 - **Capturi de facut** (5, lista vie: `npm run capturi -- --lista`, reteta: `docs/ajutor/CAPTURI-AJUTOR.md`): `cum-e-impartit-editorul-magazinului` (orientarea grupului: bara de sus, filele, previzualizarea), `cum-completezi-informatiile-generale-editor-design` (panoul „Informații generale” din fila „Setări”), `cum-schimbi-designul-unei-sectiuni` (galeria „Schimbă designul”, cu „Activ” si „Alege”), `cum-adaugi-blocul-beneficii` (selectorul de pictograme din panoul blocului) si cea veche de la eMAG. Doua dintre ele aratau ecranele scoase („Design secțiuni BETA”, constructorul de pagini): mutate in `docs/ajutor/capturi-scoase/`, ca `npm run capturi` sa nu le lege la loc; pana la cele noi, ghidurile arata substituentul.
 - Etapa 11 (28.10): ghidul `cum-reglezi-footerul-magazinului` (adresa ramane) rescris pe coloane: „Cum personalizezi

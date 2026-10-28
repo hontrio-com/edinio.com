@@ -48,7 +48,7 @@ export const STIL_JUPITER: StoreStyle = {
 /** Coloanele subsolului: newsletterul (urca in banda lui), raioanele, comenzile, informatiile, suportul. */
 export function coloaneSubsolJupiter(): BlockInstance[] {
   return [
-    { id: "newsletter", type: "newsletter", enabled: true, settings: { titlu: "Abonează-te la newsletter pentru promoții săptămânale.", buton: "Abonează-te" } },
+    { id: "newsletter", type: "newsletter", enabled: true, settings: { titlu: "Aboneaza-te la newsletter pentru promotii saptamanale.", buton: "Aboneaza-te" } },
     { id: "raioane", type: "linkuri", enabled: true, settings: { titlu: "Raioane", sursa: "categorii", toateProdusele: false, cate: 6 } },
     {
       id: "comenzi", type: "linkuri", enabled: true,
@@ -56,13 +56,13 @@ export function coloaneSubsolJupiter(): BlockInstance[] {
         titlu: "Comenzi online", sursa: "alese",
         linkuri: [
           { eticheta: "Toate produsele", adresa: "/magazin" },
-          { eticheta: "Coșul meu", adresa: "/cos" },
+          { eticheta: "Cosul meu", adresa: "/cos" },
           { eticheta: "Retur produs", adresa: "/retur" },
         ],
       },
     },
-    { id: "informatii", type: "linkuri", enabled: true, settings: { titlu: "Informații", sursa: "pagini" } },
-    { id: "suport", type: "contact", enabled: true, settings: { titlu: "Suport clienți", telefon: true, whatsapp: true, email: true, oras: true } },
+    { id: "informatii", type: "linkuri", enabled: true, settings: { titlu: "Informatii", sursa: "pagini" } },
+    { id: "suport", type: "contact", enabled: true, settings: { titlu: "Suport clienti", telefon: true, whatsapp: true, email: true, oras: true } },
   ];
 }
 
@@ -130,7 +130,7 @@ function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null): SectionI
  */
 export function designJupiter(ctx: DesignContext, date: SetDateDemo | null, bazaMagazinului?: StoreDesign): StoreDesign {
   const baza = bazaMagazinului ?? buildClassicDesign(ctx);
-  const antet = peVarianta(baza.chrome.header, "hipermarket", date ? { topText: "Livrare în toată țara" } : {});
+  const antet = peVarianta(baza.chrome.header, "hipermarket", date ? { topText: "Livrare in toata tara" } : {});
   const subsol = { ...peVarianta(baza.chrome.footer, "hipermarket", { inapoiSus: true }), blocks: coloaneDupaTema(baza.chrome.footer) };
   // Catalogul pe pagina lui, ca pe model: pe prima pagina raman doar randurile alese.
   const magazin = { ...peVarianta(baza.shop.page, "sidebar", { pastreazaGrilaAcasa: false, placiSubcategorii: true }), enabled: true };

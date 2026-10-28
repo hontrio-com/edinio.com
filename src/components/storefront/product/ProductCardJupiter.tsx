@@ -5,21 +5,22 @@ import { Check, Package, Settings2, ShoppingCart } from "lucide-react";
 import { formatPrice, formatPriceRange, formatPriceValue } from "@/lib/utils/format";
 import { useDateCardProdus, type ProductCardProps } from "./ProductCard";
 
-/** Rosul preturilor la oferta si al insignei „Super preț”, ca pe modelul temei. */
+/** Rosul preturilor la oferta si al insignei „Super pret”, ca pe modelul temei. */
 const ROSU = "#D7141A";
 
 const SIZES_IMAGINE = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px";
 
 /**
  * Cardul de produs al temei Jupiter, varianta „jupiter” a cardului (etapa 16.3 din `docs/editor-magazin/PLAN.md`),
- * dupa dedeman.ro: insigna rosie „Super preț” la oferta, titlul pe trei randuri, pretul vechi taiat si pretul mare cu
+ * dupa dedeman.ro: insigna rosie „Super pret” la oferta, titlul pe trei randuri, pretul vechi taiat si pretul mare cu
  * zecimalele mici, butonul plin in culoarea principala cu patratul cosului in culoarea de accent.
  *
  * Ce spune despre produs (pretul, „de la”, eticheta butonului) vine din `useDateCardProdus`, acelasi ca la cardul
- * clasic: butonul unui produs personalizabil spune „Personalizează”, al unuia cu variante „Alege opțiunile”.
+ * clasic: butonul unui produs personalizabil spune „Personalizeaza”, al unuia cu variante „Alege optiunile”. Tot ca la
+ * el, comutatorul „Categoria pe card” din fila Stil arata categoria, aici deasupra titlului (16.5: era ignorat).
  */
 export function ProductCardJupiter(props: ProductCardProps) {
-  const { product, onAddToCart, isAdded, priority = false } = props;
+  const { product, onAddToCart, isAdded, priority = false, showCategoryBadge = true } = props;
   const {
     imageUrl, isNew, priceRange, showPriceRange, hasDiscount, isOutOfStock, isVariable, cerePersonalizare, dePornire,
     fireSelect, productHref,
@@ -39,7 +40,7 @@ export function ProductCardJupiter(props: ProductCardProps) {
           )}
           {hasDiscount ? (
             <span className="absolute top-0 left-0 px-2 py-1 rounded-[2px] text-[11px] font-bold uppercase tracking-wide text-white" style={{ backgroundColor: ROSU }}>
-              Super preț
+              Super pret
             </span>
           ) : isNew ? (
             <span className="absolute top-0 left-0 px-2 py-1 rounded-[2px] text-[11px] font-bold uppercase tracking-wide" style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
@@ -60,6 +61,10 @@ export function ProductCardJupiter(props: ProductCardProps) {
       </a>
 
       <a href={productHref} onClick={fireSelect} className="mt-3 flex-1">
+        {/* Randul are inaltimea lui si fara categorie, ca titlurile din acelasi rand de carduri sa ramana aliniate. */}
+        {showCategoryBadge && (
+          <p className="mb-1 h-[18px] text-[12px] leading-[18px] text-[var(--st-muted)] truncate">{product.category ?? ""}</p>
+        )}
         <h3 className="text-[14px] leading-[1.45] text-[var(--st-text)] line-clamp-3 min-h-[4.35em] group-hover:text-[var(--st-primary)] transition-colors">
           {product.name}
         </h3>
@@ -81,7 +86,7 @@ export function ProductCardJupiter(props: ProductCardProps) {
         className="mt-3 h-10 w-full flex items-stretch rounded-[3px] overflow-hidden text-[14px] font-bold transition-opacity hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--st-primary)]"
         style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
         <span className="flex-1 min-w-0 flex items-center justify-center px-2 truncate">
-          {isAdded ? "Adăugat!" : isVariable ? "Alege opțiunile" : cerePersonalizare ? "Personalizează" : "Adaugă în coș"}
+          {isAdded ? "Adaugat!" : isVariable ? "Alege optiunile" : cerePersonalizare ? "Personalizeaza" : "Adauga in cos"}
         </span>
         <span className="w-10 shrink-0 flex items-center justify-center" style={{ backgroundColor: "var(--st-accent)", color: "var(--st-accent-contrast)" }}>
           {isAdded ? <Check className="h-[18px] w-[18px]" strokeWidth={3} /> : cerePersonalizare ? <Settings2 className="h-[18px] w-[18px]" /> : <ShoppingCart className="h-[18px] w-[18px]" />}

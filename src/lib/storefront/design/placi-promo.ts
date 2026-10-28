@@ -15,7 +15,7 @@ export interface PlacaPromo {
 /** Cate placi incap intr-o sectiune: doua randuri de cate patru. */
 export const MAX_PLACI_PROMO = 8;
 
-export const ETICHETA_PLACA_IMPLICITA = "Descoperă ofertele";
+export const ETICHETA_PLACA_IMPLICITA = "Descopera ofertele";
 
 const sir = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 

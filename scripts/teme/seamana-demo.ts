@@ -36,16 +36,18 @@ async function main() {
   // Designul temei, publicat direct: magazinul demo n-are ciorna si nici istoric de pastrat.
   const { data: setari, error: eSet } = await admin.from("store_settings").select("page_content").eq("business_id", magazin.id).single();
   if (eSet) throw new Error(`setari: ${eSet.message}`);
+  // Reglajele demo-ului (`setariDemo`) peste ce a scris importul in `page_content` (bannerele, urma datelor demo).
+  const pageContent = { ...((setari?.page_content ?? {}) as Record<string, unknown>), ...tema.setariDemo };
   const ctx = contextDesign({
     primaryColor: magazin.primary_color,
-    pageContent: (setari?.page_content ?? {}) as Record<string, unknown>,
+    pageContent,
     features: magazin.features,
     coverUrl: magazin.cover_url,
     tagline: magazin.tagline,
   });
   const design = tema.design(ctx, tema.date);
   const { error: eDesign } = await admin.from("store_settings")
-    .update({ storefront_design: design as never, storefront_design_draft: null, updated_at: new Date().toISOString() })
+    .update({ storefront_design: design as never, storefront_design_draft: null, page_content: pageContent as never, updated_at: new Date().toISOString() })
     .eq("business_id", magazin.id);
   if (eDesign) throw new Error(`design: ${eDesign.message}`);
   console.log(JSON.stringify({ tema: tema.cheie, magazin: tema.slugDemo, ...rezultat, design: "publicat" }));

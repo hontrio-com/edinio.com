@@ -157,7 +157,7 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
             {telefonJos && (
               <a href={`tel:${business.phone}`} className="ml-auto shrink-0 inline-flex items-center gap-2 text-[15px] text-[var(--st-text)] hover:text-[var(--st-primary)] transition-colors whitespace-nowrap">
                 <Phone className="h-4 w-4" strokeWidth={STROKE} />
-                Suport clienți: <strong className="font-semibold">{business.phone}</strong>
+                Suport clienti: <strong className="font-semibold">{business.phone}</strong>
               </a>
             )}
           </div>
@@ -182,9 +182,9 @@ function CautareJupiter({ compact = false }: { compact?: boolean }) {
   return (
     <form {...propsForm} {...propsZona}
       className={`relative flex items-stretch rounded-[3px] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] focus-within:ring-2 focus-within:ring-[var(--st-primary)]/25 ${compact ? "h-11" : "h-14"}`}>
-      <input type="search" value={valoare} onChange={(e) => scrie(e.target.value)} placeholder="Caută" aria-label="Caută produse"
+      <input type="search" value={valoare} onChange={(e) => scrie(e.target.value)} placeholder="Cauta" aria-label="Cauta produse"
         className="flex-1 min-w-0 px-3.5 bg-transparent text-[15px] text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none" />
-      <button type="submit" aria-label="Caută"
+      <button type="submit" aria-label="Cauta"
         className={`shrink-0 flex items-center justify-center -m-px rounded-r-[3px] transition-opacity hover:opacity-90 ${compact ? "w-11" : "w-14"}`}
         style={{ backgroundColor: "var(--st-accent)", color: "var(--st-accent-contrast)" }}>
         <Search className="h-[22px] w-[22px]" strokeWidth={2.2} />
@@ -196,7 +196,7 @@ function CautareJupiter({ compact = false }: { compact?: boolean }) {
 
 /**
  * Meniul de categorii, pe doua niveluri: intai raioanele pe patru coloane, apoi, la clic pe unul cu subcategorii,
- * subcategoriile lui, cu „Înapoi” si „Vezi toată categoria”. Un raion fara subcategorii duce direct la pagina lui.
+ * subcategoriile lui, cu „Inapoi” si „Vezi toata categoria”. Un raion fara subcategorii duce direct la pagina lui.
  */
 function MeniuCategorii({ grupuri, categoriiRoot, pePagina, onInchide }: {
   grupuri: { radacina: CategoryItem; copii: CategoryItem[] }[];
@@ -220,14 +220,14 @@ function MeniuCategorii({ grupuri, categoriiRoot, pePagina, onInchide }: {
         <div className="flex gap-8">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-4 mb-4">
-              <button type="button" onClick={() => setAles(null)} aria-label="Înapoi la toate categoriile"
+              <button type="button" onClick={() => setAles(null)} aria-label="Inapoi la toate categoriile"
                 className="inline-flex items-center gap-1 text-[20px] text-[var(--st-text)] hover:text-[var(--st-primary)] transition-colors">
                 <ChevronLeft className="h-5 w-5" style={{ color: "var(--st-primary)" }} strokeWidth={2.2} />
                 {grup.radacina.name}
               </button>
               <a href={href(grup.radacina.name)} className="ml-auto shrink-0 px-3 py-1.5 text-[13px] font-semibold rounded-[3px] border transition-colors hover:bg-[var(--st-primary-soft)]"
                 style={{ borderColor: "var(--st-primary)", color: "var(--st-primary)" }}>
-                Vezi toată categoria
+                Vezi toata categoria
               </a>
             </div>
             <ul className="grid grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-2.5">
@@ -274,7 +274,7 @@ function MeniuCategorii({ grupuri, categoriiRoot, pePagina, onInchide }: {
   );
 }
 
-/** Cosul: iconita cu insigna si eticheta „Coș”, ca contul de langa el. */
+/** Cosul: iconita cu insigna si eticheta „Cos”, ca contul de langa el. */
 function Cos({ mode, count }: { mode: CartMode; count: number }) {
   if (mode === "hidden") return null;
   return (
@@ -288,7 +288,7 @@ function Cos({ mode, count }: { mode: CartMode; count: number }) {
           </span>
         )}
       </span>
-      <span className="hidden sm:inline text-[15px] font-semibold">Coș</span>
+      <span className="hidden sm:inline text-[15px] font-semibold">Cos</span>
     </CartControl>
   );
 }

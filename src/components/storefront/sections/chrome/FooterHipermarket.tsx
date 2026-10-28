@@ -24,7 +24,7 @@ const GRI = "color-mix(in srgb, var(--st-text) 4%, var(--st-bg))";
 
 /**
  * Subsolul temei Jupiter, varianta „hipermarket” (etapa 16.2 din `docs/editor-magazin/PLAN.md`), dupa dedeman.ro:
- * bara „Înapoi sus” in culoarea principala, banda cu newsletterul (titlu mare, camp si buton lipite), coloanele pe gri,
+ * bara „Inapoi sus” in culoarea principala, banda cu newsletterul (titlu mare, camp si buton lipite), coloanele pe gri,
  * apoi partea legala si randul de copyright.
  *
  * Coloanele sunt aceleasi blocuri ca la celelalte subsoluri (etapa 11): newsletterul, daca exista, urca in banda lui,
@@ -45,7 +45,7 @@ export function FooterHipermarket({ sectiune }: { sectiune: SectionInstance }) {
         <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           className="w-full h-[38px] flex items-center justify-center gap-1.5 text-[15px] font-semibold hover:opacity-95 transition-opacity"
           style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
-          Înapoi sus
+          Inapoi sus
           <ChevronUp className="h-4 w-4" strokeWidth={2.4} />
         </button>
       )}
@@ -55,7 +55,7 @@ export function FooterHipermarket({ sectiune }: { sectiune: SectionInstance }) {
           <MarcajBloc idSectiune={sectiune.id} idBlocului={newsletter.id} eticheta={etichetaColoanei(newsletter)}>
             <div className="max-w-2xl">
               <p className="text-[20px] leading-snug text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>
-                {sir(newsletter.settings.titlu) || "Abonează-te la newsletter și bucură-te de promoții."}
+                {sir(newsletter.settings.titlu) || "Aboneaza-te la newsletter si bucura-te de promotii."}
               </p>
               {sir(newsletter.settings.text) && <p className="mt-2 text-[14px] text-[var(--st-muted)]">{sir(newsletter.settings.text)}</p>}
               <div className="mt-2">

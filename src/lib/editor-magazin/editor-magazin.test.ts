@@ -864,6 +864,10 @@ test("⚠ notele editorului nu trimit la ecranele scoase, iar „Recomandate” 
   // Sursa intreaga: `faraComentarii` ia `accept="image/*"` drept inceput de comentariu si taie nota.
   const acasa = sursa("src/components/editor-magazin/continut/ContinutAcasa.tsx");
   assert.match(acasa, /În rând apar produsele marcate „Recomandat”/);
+  // Mesajele editorului citate in ghiduri: cu diacritice, exact cum le citeaza centrul de ajutor.
+  const actiuni = sursa("src/lib/actions/store-design.actions.ts");
+  assert.match(actiuni, /"Designul a fost modificat în altă filă\. Reîncarcă pagina ca să nu pierzi acele modificări\."/);
+  assert.match(actiuni, /"Nu există modificări de publicat\."/);
 });
 
 test("actiunea care cauta produsul unui sablon primeste orice: nu cade pe altceva decat liste", () => {

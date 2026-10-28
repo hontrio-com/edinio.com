@@ -1000,7 +1000,13 @@ Inventarul (84 de ghiduri in „Design și pagini”, citite toate pe 28.10):
       locul semnului din Produse („Recomandat”). Probe, mutanti 5/5. Proba pe ecran a reparatiei (1): ramane, cere
       impersonare.) Grupa „Design magazin” si ghidurile noi ale ei (orientarea, istoricul, bucatile paginii de
       produs), nota „Recomandate” din editor.
-- [ ] G.2 Grupa „Secțiuni”.
+- [x] G.2 (28.10: 11 ghiduri rescrise pe galeria „Schimbă designul” si pe „Publică”, cu numele noi (Antet, Subsol,
+      Banner principal); numarul de design-uri verificat pe registru; nou: `cum-folosesti-sabloane-pentru-pagina-de-produs`
+      (425 de ghiduri). Pagina de produs: doar reglajele ramase (firimiturile, „Adaugă în coș”, miniaturile, randurile
+      rezumatului), restul trimis la blocuri. In editor: mesajele „modificat în altă filă” si „Nu există modificări de
+      publicat.” au primit diacriticele, cum le citeaza ghidurile, cu proba. Vazut: optiunea „Ca în Editează
+      magazinul” de la sortarea Paginii Magazin trimite la o sortare implicita fara control in editor (nici editorul
+      vechi nu-l avea): REGISTRU D.) Grupa „Secțiuni”.
 - [ ] G.3 „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.
 - [ ] G.4 Recitirea tuturor ghidurilor atinse fata de cod (fiecare denumire citata cautata in sursa), probele
       centrului de ajutor, numarul din `ajutor.ts`, lista capturilor (`npm run capturi -- --lista`), REGISTRU D,

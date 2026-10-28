@@ -231,7 +231,7 @@ export async function saveDesignDraft(businessId: string, raw: unknown, baza?: u
     // important: coloana goala inseamna `null`, iar `baza` trebuie sa poarte ce
     // scrie in COLOANA, nu ce se vede pe ecranul care salveaza.
     if (ciornaAFostSchimbata(rand?.storefront_design_draft, baza, owned.ctx)) {
-      return { error: "Designul a fost modificat in alta fila. Reincarca pagina ca sa nu pierzi acele modificari." };
+      return { error: "Designul a fost modificat în altă filă. Reîncarcă pagina ca să nu pierzi acele modificări." };
     }
   }
 
@@ -277,7 +277,7 @@ export async function publishDesign(businessId: string, deEcran?: unknown): Prom
     .single();
 
   const sursa = deEcran ?? row?.storefront_design_draft;
-  if (!sursa) return { error: "Nu exista modificari de publicat." };
+  if (!sursa) return { error: "Nu există modificări de publicat." };
 
   const continut = continutDinCiorna(sursa);
   if (marimeContinut(continut) > MAX_CONTINUT_BYTES) return { error: "Conținutul nepublicat e prea mare. Publică sau renunță la o parte din el." };

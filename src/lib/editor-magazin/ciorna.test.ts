@@ -1,12 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createBlock } from "@/lib/pages/blocks.types";
 import { newProductSection } from "@/lib/store-sections";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
-import { updateSection } from "@/lib/storefront/design/edit";
+import { addSection, updateSection } from "@/lib/storefront/design/edit";
+import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { CONTINUT_GOL, parseContinutCiorna, type ContinutCiorna } from "@/lib/storefront/design/continut-ciorna";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import {
   amprentaCiornei,
+  amprentaDesignului,
   cuCheilePc,
   cuColoanele,
   dupaPublicare,
@@ -138,4 +141,41 @@ test("⚠⚠ „readu” e un pas: Anuleaza aduce inapoi ciorna de dinainte, Ref
   assert.deepEqual(reductorCiorna(inapoi, { tip: "reface" }).ciorna, versiune);
   // Versiunea care e deja pe ecran nu e un pas.
   assert.equal(reductorCiorna(s2, { tip: "readu", ciorna: { ...versiune }, acum: (ceas += 5_000) }), s2);
+});
+
+/* ═══ Etapa 9: blocurile din „Conținut liber” trec prin parser cu ordinea cheilor lor ═══ */
+
+/** Ce face `jsonb` cu un obiect scris: cheile se rearanjeaza dupa lungime, apoi dupa octeti, la orice adancime. */
+function caInJsonb(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(caInJsonb);
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const chei = Object.keys(o)
+      .filter((k) => o[k] !== undefined)
+      .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0));
+    return Object.fromEntries(chei.map((k) => [k, caInJsonb(o[k])]));
+  }
+  return v;
+}
+
+test("⚠ „Conținut liber”: versiunea citita din `jsonb` nu pare alta decat cea de pe ecran (recitirea probei 9.5)", () => {
+  // Dupa un „Publică”, `publicat` e chiar designul de pe ecran, cu cheile blocurilor in ordinea lui
+  // `createBlock`. „Readu în editor” aduce aceeasi versiune din baza, parsata: parserul isi reface
+  // sectiunile intr-o ordine fixa, dar blocurile continutului raman in ordinea din `jsonb`. Cu
+  // `JSON.stringify` in amprenta, antetul arata „modificari nepublicate” fara niciuna, iar versiunea
+  // de pe ecran devenea un pas gol la Anuleaza.
+  const cu = addSection(parseStoreDesign(buildClassicDesign(ctx), ctx), "continut_liber");
+  const sectiune = cu.home.find((s) => s.kind === "continut_liber");
+  assert.ok(sectiune);
+  const design = updateSection(cu, sectiune.id, { settings: { blocuri: [createBlock("heading"), createBlock("text")] } });
+  const peEcran = { design, continut: CONTINUT_GOL };
+  const dinBaza = { design: parseStoreDesign(caInJsonb(JSON.parse(JSON.stringify(design))), ctx), continut: CONTINUT_GOL };
+  assert.notEqual(JSON.stringify(dinBaza.design), JSON.stringify(design), "ordinea chiar difera; altfel proba n-ar apara nimic");
+  assert.equal(amprentaDesignului(dinBaza.design), amprentaDesignului(design), "„are modificari?” (`useCiornaDesign`)");
+  assert.equal(amprentaCiornei(dinBaza), amprentaCiornei(peEcran));
+  const s = stareInitiala(peEcran);
+  assert.equal(reductorCiorna(s, { tip: "readu", ciorna: dinBaza, acum: (ceas += 5_000) }), s, "versiunea de pe ecran nu e un pas");
+  // O schimbare adevarata in continut ramane o schimbare.
+  const altul = updateSection(design, sectiune.id, { settings: { blocuri: [createBlock("heading")] } });
+  assert.notEqual(amprentaCiornei({ design: altul, continut: CONTINUT_GOL }), amprentaCiornei(peEcran));
 });

@@ -130,6 +130,27 @@ test("paleta: la continut fara „Din pagina principală”; paginile proprii is
   assert.match(cod("src/components/pages/PaletaBlocuri.tsx"), /\{!inColoana && onAcasa && \(/);
 });
 
+test("⚠ arborele: textul `sr-only` al lacatului sta intr-un parinte `relative` (proba 9.5)", () => {
+  // Absolut si fara parinte pozitionat, iesea din panoul derulant: documentul crestea cu ~280 px si
+  // editorul pe tot ecranul se derula cu bara de sus cu tot.
+  const a = cod("src/components/editor-magazin/ArboreSectiuni.tsx");
+  const toate = a.match(/className="sr-only"/g) ?? [];
+  const inParintePozitionat = a.match(/<span title=\{meta\.obligatoriu\} className="relative [^"]*">\s*<Lock [^>]*\/>\s*<span className="sr-only">/g) ?? [];
+  assert.equal(toate.length, 1);
+  assert.equal(inParintePozitionat.length, 1);
+});
+
+test("paleta continutului spune unde intra blocul: la sfarsitul continutului, nu al paginii (proba 9.5)", () => {
+  const e = cod(EDITOR);
+  const laContinut = e.slice(e.indexOf("<PanouAdaugaBloc tinta={liberAici.tinta}"), e.indexOf("<PanouAdaugaBloc tinta={liberAici.tinta}") + 300);
+  assert.match(laContinut, /laSfarsit="La sfârșitul conținutului"/);
+  const laPagina = e.slice(e.indexOf("<PanouAdaugaBloc tinta={tintaBloc}"), e.indexOf("<PanouAdaugaBloc tinta={tintaBloc}") + 300);
+  assert.doesNotMatch(laPagina, /laSfarsit/);
+  const p = cod("src/components/editor-magazin/PanouriPagina.tsx");
+  assert.match(p, /laSfarsit = "La sfârșitul paginii"/);
+  assert.match(p, /tinta\.dupa \? `sub „\$\{tinta\.dupa\}”` : tinta\.fel === "sus" \? laSfarsit : null/);
+});
+
 test("⚠ datele blocurilor: cerute o data, trimise in cadru la cerere si dupa fiecare „ready”", () => {
   const e = cod(EDITOR);
   assert.match(e, /if \(dateBlocuriAcum\.current \|\| cerDateBlocuri\.current\) return;/);

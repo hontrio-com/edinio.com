@@ -829,6 +829,14 @@ test("ruta editorului aduce setarile si citeste `?fila=setari&setare=...`", () =
   assert.match(p, /\.eq\("user_id", userId\)/);
 });
 
+test("⚠ „are modificari?” compara designul cu amprenta canonica, nu cu `JSON.stringify` (recitirea probei 9.5)", () => {
+  // Blocurile din „Conținut liber” pastreaza ordinea cheilor prin parser; vezi `amprentaDesignului` din `ciorna.ts`.
+  const h = faraComentarii("src/components/editor-magazin/useCiornaDesign.ts");
+  assert.match(h, /const amprentaPublicat = useMemo\(\(\) => amprentaDesignului\(publicat\), \[publicat\]\);/);
+  assert.match(h, /\(\) => amprentaDesignului\(design\) !== amprentaPublicat \|\| areContinut\(continut\),\s*\[design, amprentaPublicat, continut\],/);
+  assert.doesNotMatch(h, /JSON\.stringify/);
+});
+
 test("actiunea care cauta produsul unui sablon primeste orice: nu cade pe altceva decat liste", () => {
   const s = faraComentarii("src/lib/actions/editor-sabloane.actions.ts");
   assert.match(s, /\(Array\.isArray\(produse\) \? produse : \[\]\)\.filter\(/);

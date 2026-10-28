@@ -1,4 +1,4 @@
-import { amprentaContinut, contextCuCiorna, continutDinCiorna } from "./continut-ciorna";
+import { amprentaContinut, contextCuCiorna, continutDinCiorna, jsonCanonic } from "./continut-ciorna";
 import { isEmptyDesign, parseStoreDesign } from "./parse";
 import type { DesignContext } from "./types";
 
@@ -26,6 +26,10 @@ import type { DesignContext } from "./types";
  * idempotent — in baza sta deja `parse(design)`, iar clientul trimite `design` —
  * si exact asta verifica testul din `draft-guard.test.ts`.
  *
+ * ⚠⚠ Si cu cheile ORDONATE (`jsonCanonic`), nu cu `JSON.stringify`: `jsonb` rearanjeaza cheile, iar
+ * blocurile din „Conținut liber” (etapa 9) trec prin parser cu ordinea lor. Proba 9.5 a prins-o: dupa
+ * primul bloc pus intr-un continut, fiecare salvare cadea cu „modificat in alta fila”.
+ *
  * Din etapa 6 ciorna tine si continutul nepublicat (`continut`, vezi `continut-ciorna.ts`), deci
  * amprenta il cuprinde: o fila care schimba doar un text tot schimba ciorna celeilalte.
  */
@@ -46,5 +50,5 @@ function amprenta(raw: unknown, ctx: DesignContext): string | null {
   // Designul se parseaza cu continutul ciornei lui: un rand de produse care exista doar in ciorna
   // ar fi iesit altfel din design ca orfan.
   const continut = continutDinCiorna(raw);
-  return `${JSON.stringify(parseStoreDesign(raw, contextCuCiorna(ctx, continut)))}|${amprentaContinut(continut)}`;
+  return `${jsonCanonic(parseStoreDesign(raw, contextCuCiorna(ctx, continut)))}|${amprentaContinut(continut)}`;
 }

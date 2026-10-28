@@ -162,8 +162,9 @@ export function contextCuCiorna(ctx: DesignContext, continut: ContinutCiorna): D
  * JSON cu cheile ordonate, la orice adancime.
  *
  * ⚠ `jsonb` isi rearanjeaza cheile (dupa lungime, apoi dupa octeti): un obiect citit din baza si
- * acelasi obiect de pe ecran dau alt `JSON.stringify`. Designul scapa prin parser, care isi
- * reface obiectele intr-o ordine fixa; valorile libere din `pc` nu trec prin el.
+ * acelasi obiect de pe ecran dau alt `JSON.stringify`. Parserul designului isi reface obiectele
+ * intr-o ordine fixa, dar nu si blocurile din „Conținut liber” (etapa 9), iar valorile libere din
+ * `pc` nu trec deloc prin el; de aceea si garda cioarnei (`draft-guard.ts`) compara cu functia asta.
  */
 export function jsonCanonic(v: unknown): string {
   if (Array.isArray(v)) return `[${v.map((x) => (x === undefined ? "null" : jsonCanonic(x))).join(",")}]`;

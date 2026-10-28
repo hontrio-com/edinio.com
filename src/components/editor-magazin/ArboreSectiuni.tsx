@@ -86,7 +86,9 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
                         <ChevronDown className="h-3.5 w-3.5" />
                       </button>
                       {meta.obligatoriu ? (
-                        <span title={meta.obligatoriu} className="w-7 h-7 flex items-center justify-center text-muted-foreground/60">
+                        // `relative`: fara el, textul `sr-only` (absolut) iesea din panoul derulant si lungea
+                        // documentul; editorul pe tot ecranul se derula cu bara de sus cu tot (proba 9.5).
+                        <span title={meta.obligatoriu} className="relative w-7 h-7 flex items-center justify-center text-muted-foreground/60">
                           <Lock className="h-3 w-3" aria-hidden="true" />
                           <span className="sr-only">{meta.obligatoriu}</span>
                         </span>

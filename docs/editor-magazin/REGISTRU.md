@@ -116,6 +116,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 - **Etapa 9 („Conținut liber”: blocurile paginilor proprii in magazin; deciziile lui: „Și pe pagina de produs”, „Doar „Sub produs””, „Doar pe /magazin”):**
   - Pe pagina principala, sectiunea „Conținut liber” (din „Adaugă secțiune”, de cate ori e nevoie); sub produs, in zona „Sub produs”, pe fiecare sablon; pe Pagina Magazin, deasupra si sub produse, doar pe `/magazin`. Blocurile stau in design (`settings.blocuri`), deci trec prin ciorna, „Publică” si istoric, ca restul editorului. Fara migratii.
   - De verificat dupa push, pe un magazin real (cu acordul lui): un continut in fiecare loc, „Publică”, apoi magazinul deschis normal il arata; o categorie si o cautare NU arata continutul Paginii Magazin; un formular de contact pus intr-un continut se trimite din magazin, iar mesajul apare in Pagini > Mesaje cu locul lui („Pagina principală” etc.); un continut ascuns nu primeste mesaje.
+  - ⚠ Tot atunci: dupa primul bloc pus intr-un continut, mai multe modificari la rand se salveaza fara „Designul a fost modificat in alta fila” (proba 9.5 a prins exact asta: garda compara pe ordinea cheilor din `jsonb`), iar „Readu în editor” pe versiunea din magazin lasa bara pe „Totul e publicat”.
   - Cu o pagina din „Pagini” ca pagina principala, „Conținut liber” nu se ofera la „Adaugă secțiune” (blocurile se pun in pagina aceea).
 - **Schimbari de comportament de etapa 9, de urmarit dupa push:**
   - ⚠ Paginile magazinului nu mai trimit in HTML coloana bruta `storefront_design` (din randul de setari, pe pagina principala, produs, Magazin si in miniaturile din galerie), iar designul trimis la client vine fara blocurile „Conținut liber” (`faraBlocuriLibere` in `resolveDesign`); blocurile se randeaza pe server, in sloturi. Verificat in sursa: nicio componenta de client nu citea coloana. De urmarit: nimic din magazin nu se schimba vizual pe magazinele fara continut.
@@ -151,5 +152,12 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   strica nimic (designul e acelasi), dar coloana nu mai e `NULL`. Golirea automata ar trebui sa treaca prin
   garda de concurenta: un `discard` simplu ar sterge si ciorna altei file. Existenta inca de la etapa 2.
 - **De decis (etapa 4): contorul de vizitatori** afiseaza un numar nemasurat, fix pe produs (18-27); aprins la 9 magazine. Editorul nou o spune in panoul blocului. Ramane, sau iese?
+- **De discutat (vazut la proba 9.5): previzualizarea nu sare la blocul nou.** Dupa „Adaugă bloc” intr-un „Conținut liber”,
+  blocul apare in arbore si i se deschide panoul, dar previzualizarea ramane unde era; continutul de sub produs, de
+  pilda, trebuie derulat de mana. La fel se poarta paginile proprii (etapa 5), deci nu e o regresie.
+- Vazut la verificarea sablonului (9.5, 28.10): pe pagina de produs, designul rezolvat trimis la client poarta lista
+  sabloanelor (numele, produsele, categoriile, paginile lor; fara blocurile „Conținut liber”), din etapa 4b. Nimic
+  secret (produsele si categoriile sunt publice, numele e doar o eticheta), dar sunt ~1,9 KB pe sablon, deci cel mult
+  ~19 KB la plafonul de 10. Pe pagina principala nu pleaca. De taiat la nevoie (doar sablonul ales), cu proba ei.
 - `ProductForm` (galeria de imagini a produsului) foloseste tot dnd-kit fara `id` stabil, deci poate avea aceeasi nepotrivire de hidratare reparata in lista de sectiuni (`SectionList`, `useId`). In afara editorului, neatins.
 - ~~Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”.~~ Rezolvat de etapa 8: setarile s-au intors in editor, deci ghidurile lor stau iar langa el. Invers, cele din categoria „Setări” despre datele firmei, ANAF si numerotarea comenzilor descriu acum fila „Setări” a editorului; titlul categoriei ramane potrivit. O mutare intre categorii schimba adresa (`/ajutor/<categorie>/<ghid>`) si cere redirectari.

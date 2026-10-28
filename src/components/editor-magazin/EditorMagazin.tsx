@@ -813,7 +813,7 @@ export function EditorMagazin({
               </div>
             ) : caleLiber && cheieLiber && liberAici?.tinta && dateBlocuri ? (
               <PanouAdaugaBloc tinta={liberAici.tinta} date={dateBlocuri} inapoiLa="conținut" onBloc={adaugaBlocLiber}
-                onInapoi={() => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })} />
+                laSfarsit="La sfârșitul conținutului" onInapoi={() => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })} />
             ) : caleLiber && cheieLiber && blocLiberDeschis && dateBlocuri ? (
               <PanouBlocComun key={blocLiberDeschis.id} bloc={blocLiberDeschis} date={dateBlocuri} loc={locLiber} inapoiLa="conținut"
                 onSchimba={(patch, cheie) => ciorna.aplica(

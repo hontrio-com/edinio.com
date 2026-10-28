@@ -91,9 +91,19 @@ export function reductorCiorna(stare: StareCiorna, a: ActiuneCiorna): StareCiorn
   }
 }
 
+/**
+ * Amprenta designului, pentru „are modificari?”: cu cheile ORDONATE (`jsonCanonic`), nu cu
+ * `JSON.stringify`. Blocurile din „Conținut liber” (etapa 9) trec prin parser cu ordinea cheilor
+ * lor, iar `jsonb` le rearanjeaza: o versiune adusa din baza („Readu în editor”) parea alta decat
+ * aceeasi versiune de pe ecran. La fel si garda cioarnei (`draft-guard.ts`).
+ */
+export function amprentaDesignului(d: StoreDesign): string {
+  return jsonCanonic(d);
+}
+
 /** Amprenta perechii, pentru „e deja salvata?” si „are modificari?”. */
 export function amprentaCiornei(c: Ciorna): string {
-  return `${JSON.stringify(c.design)}|${amprentaContinut(c.continut)}`;
+  return `${amprentaDesignului(c.design)}|${amprentaContinut(c.continut)}`;
 }
 
 /** Ce e publicat acum din continut: tot `page_content` si cele patru coloane din `businesses`. */

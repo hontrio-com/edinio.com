@@ -6,7 +6,7 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
-**Ultima stare, 27.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
+**Ultima stare, 28.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
 (blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
 sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte
 importanta” a lui), FACUT si PROBAT** (vezi pasul 4.7). **4b (sabloanele paginii de produs, decizia lui:
@@ -22,10 +22,10 @@ etape din „Etapele” sunt facute.** Verificarea finala V1-V6 (27.10) e facuta
 27.10 (cinci puncte, citate in „Etapa 8”). Etapa 8 = punctele 1-4, FACUTA si PROBATA in Chrome** (pasii
 8.1-8.5, ultimul comit `6a520b67`): previzualizarea pe tot chenarul, arborele fara iconite, fila „Setări” in
 editor, scoasa din Setari. **Etapa 9 = punctul 5 (blocuri ca la paginile proprii pe Acasa, Pagina Magazin si
-pagina de produs): PLANUL e scris (sectiunea „Etapa 9”, 27.10, dupa „Da” al lui), iar la cele doua intrebari
-a raspuns: „Doar „Sub produs”” si „Doar pe /magazin”. Codul porneste cu 9.1.** Dupa ea, inchiderea
-(REGISTRU A in productie, push, verificarile din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul
-lui. Intrebarea despre
+pagina de produs, „Conținut liber”), FACUTA si PROBATA** (pasii 9.1-9.5, 27-28.10, cu raspunsurile lui: „Doar
+„Sub produs”” si „Doar pe /magazin”; proba in Chrome pe acordul zilei de 27.10, sablonul verificat pe server).
+**Toata lista lui (punctele 1-5) e facuta.** Urmeaza inchiderea (REGISTRU A in productie, push, verificarile
+din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul lui. Intrebarea despre
 teme a fost pusa si a ramas fara raspuns; ramane
 deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
 „Etapa 5: planul de lucru”.
@@ -925,8 +925,32 @@ Citit inainte:
       28/28. Lint: 8 erori React Compiler aparute in `EditorMagazin` (un apel liber in randare, `caleInText`),
       reparate cu `useMemo`, pragul ramane 51.) Editorul: arborele si panourile pe orice lista de blocuri, intrarile
       „Adaugă”, datele magazinului, previzualizarea pe loc si clicul. Probe.
-- [ ] 9.5 Ghidul din centrul de ajutor, REGISTRU (C si D), porti, proba in Chrome pe magazinul de proba (cele trei
-      pagini, un sablon de produs, un formular trimis din design, „Publică”, „Renunță”, istoricul), totul pus la loc.
+- [x] 9.5 (27-28.10: ghidul `cum-adaugi-continut-liber-in-magazin` (421 de ghiduri) si REGISTRU C si D (`904ad91f`);
+      porti verzi dupa reparatii: tsc, 11.201 probe / 0 cazute, lint:prag 51 = pragul, build:ci; proba in Chrome pe
+      `floraria-mirei`, contul de proba `9360c5a3`, prin impersonare, pe acordul zilei de 27.10) Ghidul, REGISTRU,
+      porti, proba in Chrome. Vazut pe ecran: galeria arata „Conținut liber” cu miniatura; pus pe pagina principala
+      (titlu, text, formular de contact), sub produs si deasupra produselor pe Pagina Magazin (pe varianta „Filtre în
+      bara laterală”), totul in ciorna, cu Anuleaza / Refa pe bloc; „Publică” („Totul e publicat”, versiunea in
+      istoric); in magazin fiecare pagina isi arata DOAR continutul ei, continutul de sub produs inaintea subsolului,
+      fara designul brut in HTML; formularul trimis din continut a scris mesajul fara `page_id`, cu locul, iar
+      „Mesaje” il arata („Formular de contact · Pagina principală”); `/cautare` fara continutul Paginii Magazin;
+      continutul ascuns si publicat: nimic in HTML (nici textul, nici id-ul blocului), iar formularul ramas deschis in
+      magazin a fost refuzat (niciun mesaj nou); „Readu în editor” si „Renunță”; la 390 si 768 px magazinul si
+      editorul fara depasire. GASIT la proba si reparat: (1) dupa primul bloc pus intr-un continut, fiecare salvare
+      a ciornei cadea cu „Designul a fost modificat in alta fila”: garda compara cu `JSON.stringify`, iar `jsonb`
+      rearanjeaza cheile blocurilor, a caror ordine parserul n-o reface; acum `jsonCanonic`; (2) paleta continutului
+      spunea „La sfârșitul paginii”, acum „La sfârșitul conținutului”; (3) textul `sr-only` al lacatului din arbore,
+      fara parinte pozitionat, lungea documentul cu ~280 px, iar editorul pe tot ecranul se derula cu bara de sus cu
+      tot; acum `relative`. GASIT la recitirea de dupa caderea editorului (28.10) si reparat: aceeasi ordine a cheilor
+      in „are modificari?” (`useCiornaDesign`) si in amprenta cioarnei (`readu`): dupa un „Publică”, „Readu în
+      editor” pe versiunea din magazin arata „modificari nepublicate” fara niciuna si adauga un pas gol la Anuleaza;
+      acum `amprentaDesignului`, canonica (masurat: 0,67 ms pe un design de 72 KB, fata de 0,10; amprenta celui
+      publicat se tine aparte). Mutanti 8/8. Sablonul de produs, verificat pe server cu `curl` (designul publicat
+      pus temporar, facut cu operatiile editorului): sablonul cu produsul ca exceptie isi arata continutul, iar cel
+      din „Implicit” lipseste si din datele RSC; fara atribuire, invers; pagina principala, niciunul. Pus la loc:
+      designul (din versiunea `inainte`), `page_content` (cu `pagina_acasa`), versiunile, mesajul de proba, data
+      abonamentului; verificat cu o singura comparatie. Caderea editorului a prins refacerea nepornita: cererea
+      expirase („Invalid or expired requestState”), deci nimic nu se pusese la loc pana la reluare.)
 
 ## Deciziile proprietarului
 

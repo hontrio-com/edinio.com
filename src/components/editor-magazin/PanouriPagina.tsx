@@ -138,10 +138,12 @@ export function PanouPagina({ stare, pagina, date, onInapoi }: {
   );
 }
 
-export function PanouAdaugaBloc({ tinta, date, estePaginaAcasa = false, onBloc, onAcasa, onInapoi, inapoiLa }: {
+export function PanouAdaugaBloc({ tinta, date, estePaginaAcasa = false, laSfarsit = "La sfârșitul paginii", onBloc, onAcasa, onInapoi, inapoiLa }: {
   tinta: TintaBloc;
   date: DateBlocuri;
   estePaginaAcasa?: boolean;
+  /** Unde intra blocul fara `dupa`: intr-un „Conținut liber” e sfarsitul continutului, nu al paginii. */
+  laSfarsit?: string;
   onBloc: (tip: BlockType) => void;
   /** Sectiunile paginii principale: doar la paginile proprii; lipsa = grupul nu apare (etapa 9). */
   onAcasa?: (sectiune: SectiuneAcasa) => void;
@@ -160,7 +162,7 @@ export function PanouAdaugaBloc({ tinta, date, estePaginaAcasa = false, onBloc, 
         titlu={tinta.fel === "coloana" ? "Adaugă în coloană" : "Adaugă un bloc"}
         subtitlu={[
           tinta.fel === "coloana" ? `Coloana ${tinta.coloana + 1}` : null,
-          tinta.dupa ? `sub „${tinta.dupa}”` : tinta.fel === "sus" ? "La sfârșitul paginii" : null,
+          tinta.dupa ? `sub „${tinta.dupa}”` : tinta.fel === "sus" ? laSfarsit : null,
         ].filter(Boolean).join(", ")}
         icon={<Plus className="h-4 w-4" />}
         onInapoi={onInapoi}

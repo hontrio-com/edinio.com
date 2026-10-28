@@ -6,6 +6,7 @@ import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/action
 import { creeazaCoadaSalvarii, type CoadaSalvarii } from "@/lib/editor-magazin/coada-salvarii";
 import {
   amprentaCiornei,
+  amprentaDesignului,
   dupaPublicare,
   reductorCiorna,
   stareInitiala,
@@ -26,8 +27,6 @@ import type { StoreDesign } from "@/lib/storefront/design/types";
  * acolo: salvarea amanata, baza pentru garda de concurenta, „epoca” pentru Publica si Renunta.
  * Starea si istoricul sunt in `lib/editor-magazin/ciorna.ts`, fara React.
  */
-
-const amprentaDesign = (d: StoreDesign) => JSON.stringify(d);
 
 export function useCiornaDesign({
   businessId,
@@ -123,10 +122,14 @@ export function useCiornaDesign({
    */
   const epoca = useRef(0);
 
-  /** Ceva nepublicat: designul altul decat cel publicat, sau continut in ciorna. */
+  /**
+   * Ceva nepublicat: designul altul decat cel publicat, sau continut in ciorna. Amprenta canonica
+   * (vezi `amprentaDesignului`); a celui publicat se tine aparte, ca tastarea sa nu o refaca.
+   */
+  const amprentaPublicat = useMemo(() => amprentaDesignului(publicat), [publicat]);
   const areModificari = useMemo(
-    () => amprentaDesign(design) !== amprentaDesign(publicat) || areContinut(continut),
-    [design, publicat, continut],
+    () => amprentaDesignului(design) !== amprentaPublicat || areContinut(continut),
+    [design, amprentaPublicat, continut],
   );
 
   /*

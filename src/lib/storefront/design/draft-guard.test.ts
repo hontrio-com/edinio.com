@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createBlock, type HeadingBlock } from "@/lib/pages/blocks.types";
 import { ciornaAFostSchimbata } from "./draft-guard";
 import { parseStoreDesign } from "./parse";
 import { buildClassicDesign } from "./defaults";
-import { updateSection } from "./edit";
+import { addSection, updateSection } from "./edit";
 import type { DesignContext } from "./types";
 
 /**
@@ -57,6 +58,37 @@ test("⚠ parserul e idempotent: in baza sta `parse(x)`, clientul trimite `x`", 
   const deDouaOri = parseStoreDesign(oData, ctx);
   assert.deepEqual(deDouaOri, oData);
   assert.equal(ciornaAFostSchimbata(oData, ciorna, ctx), false);
+});
+
+/** Ce face `jsonb` cu un obiect scris: cheile se rearanjeaza dupa lungime, apoi dupa octeti, la orice adancime. */
+function caInJsonb(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(caInJsonb);
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const chei = Object.keys(o)
+      .filter((k) => o[k] !== undefined)
+      .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0));
+    return Object.fromEntries(chei.map((k) => [k, caInJsonb(o[k])]));
+  }
+  return v;
+}
+
+test("⚠⚠ „Conținut liber”: ciorna citita din `jsonb` (cheile rearanjate) nu e un conflict (proba 9.5)", () => {
+  // Blocurile continutului trec prin parser cu ordinea cheilor lor, iar `jsonb` le rearanjeaza. Cu
+  // `JSON.stringify` in amprenta, dupa primul bloc fiecare salvare cadea cu „modificat in alta fila”.
+  const cuSectiune = addSection(publicat, "continut_liber");
+  const sectiune = cuSectiune.home.find((s) => s.kind === "continut_liber");
+  assert.ok(sectiune);
+  const titlu = createBlock("heading") as HeadingBlock;
+  const blocuri = [titlu, createBlock("text"), createBlock("columns")];
+  const deSalvat = updateSection(cuSectiune, sectiune.id, { settings: { blocuri } });
+  const inColoana = caInJsonb(JSON.parse(JSON.stringify(parseStoreDesign(deSalvat, ctx))));
+  // Ordinea chiar difera dupa parser; altfel proba n-ar apara nimic.
+  assert.notEqual(JSON.stringify(parseStoreDesign(inColoana, ctx)), JSON.stringify(parseStoreDesign(deSalvat, ctx)));
+  assert.equal(ciornaAFostSchimbata(inColoana, deSalvat, ctx), false);
+  // O schimbare adevarata in continut ramane conflict.
+  const altTitlu = updateSection(deSalvat, sectiune.id, { settings: { blocuri: [{ ...titlu, text: "Alt titlu" }, ...blocuri.slice(1)] } });
+  assert.equal(ciornaAFostSchimbata(inColoana, altTitlu, ctx), true);
 });
 
 test("o coloana goala altfel decat `null` conteaza tot ca lipsa de ciorna", () => {

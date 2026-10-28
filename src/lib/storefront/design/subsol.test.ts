@@ -247,3 +247,42 @@ test("newsletterul din subsol trimite prin `aboneazaNewsletter`, cu calea subsol
   // Linkurile alese trec prin `resolveHref` (relative la magazin, scheme periculoase -> „#”).
   assert.match(c, /href: resolveHref\(adresa, basePath\)/);
 });
+
+// ── Legaturile din cod: editorul ─────────────────────────────────────────────
+
+test("⚠ arborele: coloanele subsolului sub „Subsol”, cu sageti, ochi si „Adaugă coloană”", () => {
+  const a = cod("src/components/editor-magazin/ArboreSectiuni.tsx");
+  assert.match(a, /<ArboreBlocuri sectiune=\{design\.chrome\.footer\} aplica=\{aplica\} blocSelectat=\{selectat === design\.chrome\.footer\.id \? blocSelectat : null\}[\s\S]*?onAdaugaColoana=\{onAdaugaColoana\} \/>/);
+  assert.match(a, /eticheta="Subsol" selectat=\{selectat === design\.chrome\.footer\.id && !blocSelectat\}/, "cu o coloana deschisa, randul subsolului nu pare selectat");
+  assert.match(a, /\{cuColoane && onAdaugaColoana && \(/);
+  assert.match(a, /if \(aleZonei\.length === 0 && !tipContinut && !cuColoane\) return null;/, "zona apare si goala, ca prima coloana sa se poata pune");
+});
+
+test("⚠⚠ editorul: panoul coloanei inaintea panoului de bloc, lista „Adaugă coloană”, cererea inchisa odata cu celelalte", () => {
+  const e = cod("src/components/editor-magazin/EditorMagazin.tsx");
+  const iColoana = e.indexOf('sectiuneSelectata && blocDeschis && sectiuneSelectata.kind === "footer" ? (');
+  const iBloc = e.indexOf(") : sectiuneSelectata && blocDeschis ? (");
+  assert.ok(iColoana > 0 && iBloc > iColoana, "o coloana nu ajunge in panoul blocurilor paginii de produs");
+  assert.match(e, /<PanouAdaugaColoana subsol=\{design\.chrome\.footer\} date=\{dateBlocuri\} locText=\{coloanaNouaCeruta\.locText\}/);
+  assert.match(e, /if \(a\.fel === "coloana-subsol"\) \{\s*setColoanaNouaCeruta\(a\);\s*return;\s*\}/, "„+” de pe o coloana deschide lista cu locul ei");
+  assert.match(e, /adaugaColoana\(l, sch, tip, cerere\.loc\)/);
+  // Oriunde se inchide cererea de continut nou, se inchide si cea de coloana: altfel lista ar fi ramas peste alt panou.
+  const inchideri = e.split("setContinutNouCerut(null);").length - 1;
+  const cuColoana = e.split(/setContinutNouCerut\(null\);\s*setColoanaNouaCeruta\(null\);/).length - 1;
+  assert.ok(inchideri >= 10);
+  assert.equal(cuColoana, inchideri - 1, "toate, in afara de deschiderea listei din arbore, care o pune imediat dupa");
+});
+
+test("panoul coloanei: reglajul peste ce e ACUM in ciorna, ochiul, stergerea; lista: unicele si newsletterul fara furnizor, oprite", () => {
+  const p = cod("src/components/editor-magazin/PanouColoanaSubsol.tsx");
+  assert.match(p, /setariColoana\(l, sch, coloana\.id, \{ \.\.\.\(l\.find\(\(b\) => b\.id === coloana\.id\)\?\.settings \?\? \{\}\), \[cheie\]: valoare \}\)/);
+  assert.match(p, /`coloana:\$\{coloana\.id\}:\$\{cheie\}`/, "tastarea intr-un camp e un singur pas la Anulează");
+  assert.match(p, /comutaBloc\(l, sch, coloana\.id\)/);
+  assert.match(p, /opereaza\(\(l, sch\) => stergeColoana\(l, sch, coloana\.id\)\); onInapoi\(\);/);
+  assert.match(p, /tip === "newsletter" && !newsletterPermis\(date\)/);
+  assert.match(p, /!poateAdaugaColoana\(coloane, schema, tip\) \? "E deja în subsol\." : null/);
+  // Culoarea care poate lipsi se poate readuce la „Implicită”.
+  const st = cod("src/components/store-editor/SectionSettings.tsx");
+  assert.match(st, /if \(!field\.allowEmpty\) \{/);
+  assert.match(st, /<button type="button" onClick=\{\(\) => onChange\(undefined\)\}[\s\S]*?Implicită/);
+});

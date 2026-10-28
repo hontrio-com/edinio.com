@@ -9,7 +9,7 @@ import {
   blocuriLaCale, caleInText, completeazaBlocurileSectiunii, ID_BARA_ANUNT, mutaSectiuneaLa, schimbaBlocuriLaCale, schimbaBlocurile,
   toateSectiunile, toggleSection, updateSection, type CaleContinut, type LocNou,
 } from "@/lib/storefront/design/edit";
-import { adaugaContinut, comutaBloc, duplicaContinut, esteContinut, schemaBlocurilor, stergeContinut } from "@/lib/storefront/design/blocuri";
+import { adaugaColoana, adaugaContinut, comutaBloc, duplicaContinut, esteContinut, schemaBlocurilor, stergeContinut } from "@/lib/storefront/design/blocuri";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { PREFIX_PAGINA_PROPRIE, PREVIEW_MESSAGE, cheiaPaginiiProprii, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
@@ -40,6 +40,7 @@ import { PanouBloc } from "./PanouBloc";
 import { PanouNod } from "./PanouNod";
 import { integrariActive, PanouAdaugaBloc, PanouBlocComun, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
 import { PanouContinutLiber } from "./PanouContinutLiber";
+import { PanouAdaugaColoana, PanouColoanaSubsol } from "./PanouColoanaSubsol";
 import { PanouSablon } from "./PanouSablon";
 import { PanouStil } from "./continut/PanouStil";
 import { DeschideSetareaContext } from "./navigare";
@@ -510,6 +511,7 @@ export function EditorMagazin({
     setBlocSelectat(null);
     setLiber(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     arataInPrevizualizare(id);
   }, [arataInPrevizualizare]);
 
@@ -519,6 +521,7 @@ export function EditorMagazin({
     setBlocSelectat(idBlocului);
     setLiber(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     arataInPrevizualizare(idBloc(idSectiune, idBlocului));
   }, [arataInPrevizualizare]);
 
@@ -527,6 +530,7 @@ export function EditorMagazin({
     setBlocSelectat(null);
     setLiber(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
   }, []);
 
   const schimbaPagina = useCallback((p: CheiePagina) => {
@@ -535,6 +539,7 @@ export function EditorMagazin({
     setBlocSelectat(null);
     setLiber(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     setPeste(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
@@ -575,6 +580,7 @@ export function EditorMagazin({
     setBlocSelectat(null);
     setLiber(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
     setLocAdaugare(null);
@@ -624,6 +630,7 @@ export function EditorMagazin({
     setGalerieDesign(null);
     setSetariSablon(false);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     if (a.fel === "sectiune") {
       setLocAdaugare({ loc: a.loc, text: `Se adaugă ${a.unde === "jos" ? "sub" : "deasupra"} „${a.eticheta}”.` });
       setAdaugaDeschis(true);
@@ -732,6 +739,7 @@ export function EditorMagazin({
         setBlocSelectat(blocStructural);
         setLiber(interior ? { ...interior, tinta: null } : null);
         setContinutNouCerut(null);
+        setColoanaNouaCeruta(null);
         setVedereMobil("panou");
       }
     }
@@ -791,6 +799,7 @@ export function EditorMagazin({
     }
     ciorna.aplica(r.design);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     setPeste(null);
     setSelectat(a.sectiune);
     setBlocSelectat(r.id);
@@ -811,6 +820,7 @@ export function EditorMagazin({
     if (!nou) return;
     setPeste(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     setSelectat(idSectiune);
     setBlocSelectat(nou.id);
     setLiber({ cheie: `${idSectiune}/${nou.id}`, bloc: null, tinta: { fel: "sus", index: 0 } });
@@ -827,6 +837,40 @@ export function EditorMagazin({
     setLiber({ cheie: cheieLiber, bloc: nou.id, tinta: null });
   }, [liberAici, caleLiber, cheieLiber, ciorna]);
 
+  /** Lista „Adaugă coloană” a subsolului din arbore (etapa 11): coloana noua intra la capat. */
+  const deschideAdaugaColoana = useCallback(() => {
+    setPeste(null);
+    setSelectat(null);
+    setBlocSelectat(null);
+    setLiber(null);
+    setContinutNouCerut(null);
+    setColoanaNouaCeruta({ fel: "coloana-subsol", loc: {}, locText: "la capătul subsolului" });
+  }, []);
+
+  /** Coloana aleasa in lista (etapa 11): intra la locul cerut si i se deschide panoul. */
+  const adaugaColoanaSubsol = useCallback((tip: string) => {
+    const cerere = coloanaNouaCeruta;
+    if (!cerere) return;
+    const subsol = design.chrome.footer;
+    const inainte = new Set((subsol.blocks ?? []).map((b) => b.id));
+    const urmator = schimbaBlocurile(design, subsol.id, (l, sch) => adaugaColoana(l, sch, tip, cerere.loc));
+    if (urmator === design) return;
+    ciorna.aplica(urmator);
+    setColoanaNouaCeruta(null);
+    const noua = urmator.chrome.footer.blocks?.find((b) => !inainte.has(b.id));
+    if (!noua) return;
+    setPeste(null);
+    setSelectat(subsol.id);
+    setBlocSelectat(noua.id);
+  }, [coloanaNouaCeruta, design, ciorna]);
+
+  /*
+   * Adresele din coloanele subsolului se aleg cu sugestiile paginilor si categoriilor, iar newsletterul cere un
+   * furnizor conectat: amandoua vin din datele blocurilor, cerute o data, cand se deschide o coloana sau lista.
+   */
+  const coloanaDeschisa = sectiuneSelectata?.kind === "footer" && !!blocDeschis;
+  useEffect(() => { if (coloanaNouaCeruta || coloanaDeschisa) cereDateBlocuri(); }, [coloanaNouaCeruta, coloanaDeschisa, cereDateBlocuri]);
+
   /** Un sablon nou al paginii de produs, pornit de la Implicit, deschis pe loc in setarile lui (4b). */
   const sablonNou = useCallback(() => {
     const r = adaugaSablon(design, `Șablon ${(design.product.sabloane?.length ?? 0) + 1}`);
@@ -839,6 +883,7 @@ export function EditorMagazin({
     setSelectat(null);
     setBlocSelectat(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     setSetariSablon(true);
   }, [design, ciorna]);
 
@@ -847,6 +892,7 @@ export function EditorMagazin({
     setSelectat(null);
     setBlocSelectat(null);
     setContinutNouCerut(null);
+    setColoanaNouaCeruta(null);
     setSetariSablon(false);
   }, []);
 
@@ -917,6 +963,10 @@ export function EditorMagazin({
               // „+” de sub produs / de pe Pagina Magazin (etapa 10): blocul ales intra intr-un „Conținut liber” nou.
               <PanouAdaugaBloc tinta={{ fel: "sus", index: 0 }} locText={continutNouCerut.locText} date={dateBlocuri} inapoiLa="secțiuni"
                 onBloc={adaugaInContinutNou} onInapoi={() => setContinutNouCerut(null)} />
+            ) : coloanaNouaCeruta ? (
+              // Lista „Adaugă coloană” a subsolului (etapa 11): din arbore sau din „+” de pe o coloana.
+              <PanouAdaugaColoana subsol={design.chrome.footer} date={dateBlocuri} locText={coloanaNouaCeruta.locText}
+                onAlege={adaugaColoanaSubsol} onInapoi={() => setColoanaNouaCeruta(null)} />
             ) : setariSablon && sablonActiv ? (
               <PanouSablon
                 key={sablonActiv}
@@ -974,6 +1024,9 @@ export function EditorMagazin({
                   inapoiLaArbore();
                 } : undefined}
               />
+            ) : sectiuneSelectata && blocDeschis && sectiuneSelectata.kind === "footer" ? (
+              <PanouColoanaSubsol key={blocDeschis.id} subsol={sectiuneSelectata} coloana={blocDeschis} ciorna={ciorna} date={dateBlocuri}
+                onInapoi={inapoiLaArbore} />
             ) : sectiuneSelectata && blocDeschis ? (
               <PanouBloc
                 key={`${sectiuneSelectata.id}/${blocDeschis.id}`}
@@ -1001,7 +1054,7 @@ export function EditorMagazin({
               <div className="pb-6">
                 <ArboreSectiuni
                   ciorna={ciorna} pagina={pagina} magazin={paginiAfisate} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
-                  blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc} onAdaugaContinut={adaugaContinutInZona}
+                  blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc} onAdaugaContinut={adaugaContinutInZona} onAdaugaColoana={deschideAdaugaColoana}
                   nesalvat={nesalvat} onAdauga={() => { setLocAdaugare(null); setAdaugaDeschis(true); setVedereMobil("previzualizare"); cereDateBlocuri(); }}
                   paginaAcasa={paginaAcasa}
                   sablon={sablonActiv} onSablon={alegeSablon} onSablonNou={sablonNou} onSetariSablon={() => setSetariSablon(true)}

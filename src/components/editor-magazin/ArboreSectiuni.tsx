@@ -32,7 +32,7 @@ import { SelectorSablon } from "./SelectorSablon";
  * ascund, iar clicul deschide panoul blocului. Fara tragere: blocurile sunt mici,
  * iar sagetile merg si pe telefon, si de la tastatura.
  */
-function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdaugaContinut }: {
+function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdaugaContinut, onAdaugaColoana }: {
   sectiune: SectionInstance;
   aplica: CiornaDesign["aplica"];
   blocSelectat: string | null;
@@ -41,6 +41,8 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
   nesalvat: (fel: FelContinut | null) => boolean;
   /** „Conținut liber” nou in zona (etapa 9): tipul repetabil al zonei. */
   onAdaugaContinut: (idSectiune: string, tip: string) => void;
+  /** Lista „Adaugă coloană” a subsolului (etapa 11); doar la sectiunile cu coloane. */
+  onAdaugaColoana?: () => void;
 }) {
   const schema = schemaBlocurilor(sectiune.kind, sectiune.variant);
   // Fara lista = lista goala: Pagina Magazin fara continut n-are cheia `blocks` (etapa 9).
@@ -56,7 +58,9 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
         const aleZonei = blocuri.filter((b) => schema.tipuri[b.type]?.zona === zona.id);
         // Tipul „Conținut liber” al zonei (etapa 9): zona apare si goala, cu butonul lui.
         const tipContinut = Object.keys(schema.tipuri).find((t) => schema.tipuri[t].zona === zona.id && schema.tipuri[t].repetabil);
-        if (aleZonei.length === 0 && !tipContinut) return null;
+        // Coloanele subsolului (etapa 11): zona apare si goala, cu „Adaugă coloană”.
+        const cuColoane = Object.values(schema.tipuri).some((t) => t.zona === zona.id && t.coloana);
+        if (aleZonei.length === 0 && !tipContinut && !cuColoane) return null;
         return (
           <div key={zona.id}>
             <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{zona.label}</p>
@@ -66,7 +70,9 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
                 const id = idBloc(sectiune.id, b.id);
                 // Un „Conținut liber” se recunoaste dupa primul lui bloc, intre altele la fel (etapa 9).
                 const primul = esteContinut(schema, b.type) ? blocuriDinSetari(b.settings)[0] : undefined;
-                const rezumat = esteContinut(schema, b.type) ? (primul ? rezumatBloc(primul) ?? "" : "gol") : "";
+                // O coloana a subsolului, dupa titlul ei (etapa 11): pot fi mai multe „Linkuri”.
+                const rezumat = esteContinut(schema, b.type) ? (primul ? rezumatBloc(primul) ?? "" : "gol")
+                  : meta.coloana && typeof b.settings.titlu === "string" ? b.settings.titlu.trim() : "";
                 return (
                   <li key={b.id} onMouseEnter={() => onPeste(id)} onMouseLeave={() => onPeste(null)}
                     className={`rounded-lg border bg-surface ${blocSelectat === b.id ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
@@ -103,6 +109,12 @@ function ArboreBlocuri({ sectiune, aplica, blocSelectat, onSelectBloc, onPeste, 
                 );
               })}
             </ul>
+            {cuColoane && onAdaugaColoana && (
+              <button type="button" onClick={onAdaugaColoana}
+                className="mt-1 w-full h-8 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-1.5">
+                <Plus className="h-3 w-3" /> Adaugă coloană
+              </button>
+            )}
             {tipContinut && (
               <button type="button" onClick={() => onAdaugaContinut(sectiune.id, tipContinut)}
                 className="mt-1 w-full h-8 rounded-lg border border-dashed border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-1.5">
@@ -170,7 +182,7 @@ function Titlu({ children }: { children: React.ReactNode }) {
 
 export function ArboreSectiuni({
   ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa,
-  sablon, onSablon, onSablonNou, onSetariSablon, continutPagina, titluPagina, onDeschidePagina, onAdaugaContinut,
+  sablon, onSablon, onSablonNou, onSetariSablon, continutPagina, titluPagina, onDeschidePagina, onAdaugaContinut, onAdaugaColoana,
 }: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
@@ -199,6 +211,8 @@ export function ArboreSectiuni({
   onDeschidePagina: (id: string) => void;
   /** „Conținut liber” nou intr-o zona a paginii (etapa 9). */
   onAdaugaContinut: (idSectiune: string, tip: string) => void;
+  /** Lista „Adaugă coloană” a subsolului (etapa 11). */
+  onAdaugaColoana: () => void;
 }) {
   const { design, aplica } = ciorna;
   const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
@@ -279,8 +293,13 @@ export function ArboreSectiuni({
 
       <Titlu>Jos, pe toate paginile</Titlu>
       <ul className="space-y-1.5">
-        <RandFix sectiune={design.chrome.footer} eticheta="Subsol" selectat={selectat === design.chrome.footer.id}
+        <RandFix sectiune={design.chrome.footer} eticheta="Subsol" selectat={selectat === design.chrome.footer.id && !blocSelectat}
           nesalvat={nesalvat("footer")} onSelect={() => onSelect(design.chrome.footer.id)} onPeste={onPeste} />
+        {/* Coloanele subsolului (etapa 11), ca blocurile paginii de produs: sageti, ochi, clic. */}
+        <li>
+          <ArboreBlocuri sectiune={design.chrome.footer} aplica={aplica} blocSelectat={selectat === design.chrome.footer.id ? blocSelectat : null}
+            onSelectBloc={onSelectBloc} onPeste={onPeste} nesalvat={nesalvat} onAdaugaContinut={onAdaugaContinut} onAdaugaColoana={onAdaugaColoana} />
+        </li>
       </ul>
     </div>
   );

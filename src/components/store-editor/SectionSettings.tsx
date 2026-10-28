@@ -191,15 +191,41 @@ function Control({
         </label>
       );
 
-    case "color":
+    case "color": {
+      const aleasa = typeof value === "string" && value.startsWith("#") ? value : null;
+      if (!field.allowEmpty) {
+        return (
+          <label className="flex items-center justify-between gap-3">
+            {eticheta}
+            <input type="color" className="shrink-0 w-11 h-9 rounded-lg border border-border cursor-pointer bg-surface"
+              value={aleasa ?? "#000000"}
+              onChange={(e) => onChange(e.target.value)} />
+          </label>
+        );
+      }
+      /*
+       * O culoare care poate lipsi (subsolul, etapa 11): goala inseamna „a designului”, deci se vede scris si se
+       * poate readuce. Fara butonul „Implicită”, o culoare aleasa o data nu mai putea fi scoasa.
+       */
       return (
-        <label className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           {eticheta}
-          <input type="color" className="shrink-0 w-11 h-9 rounded-lg border border-border cursor-pointer bg-surface"
-            value={typeof value === "string" && value.startsWith("#") ? value : "#000000"}
-            onChange={(e) => onChange(e.target.value)} />
-        </label>
+          <div className="shrink-0 flex items-center gap-1.5">
+            {aleasa ? (
+              <button type="button" onClick={() => onChange(undefined)}
+                className="h-9 px-2.5 rounded-lg text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                Implicită
+              </button>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">Implicită</span>
+            )}
+            <input type="color" aria-label={field.label} className="w-11 h-9 rounded-lg border border-border cursor-pointer bg-surface"
+              value={aleasa ?? "#000000"}
+              onChange={(e) => onChange(e.target.value)} />
+          </div>
+        </div>
       );
+    }
 
     /*
      * Imaginea trece prin librarie, nu printr-un camp de adresa.

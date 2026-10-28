@@ -1252,7 +1252,13 @@ Citit inainte:
       pagini n-au subsol in niciuna, fiindca abonamentul lor e expirat pe demo. 3 probe noi.)
       Magazinul: subsolul randat din coloane (pe coloane si centrat), marcajele in editor, culorile, „Înapoi sus”,
       copyright, newsletterul (componenta si serverul). Probe; HTML-ul de azi fata de cel nou.
-- [ ] 11.3 Editorul: coloanele in arbore, panoul coloanei, lista „Adaugă coloană”, culorile cu „Implicită”, „+” pe
+- [x] 11.3 (28.10: `PanouColoanaSubsol.tsx` cu panoul coloanei (reglajele pe tip, linkurile alese cu `CampLink`,
+      imaginea din Biblioteca Media, „Ascunde”, „Duplică”, „Șterge coloana”) si lista `PanouAdaugaColoana` (cele unice
+      deja puse si newsletterul fara furnizor, oprite, cu motivul); coloanele sub „Subsol” in arbore (`ArboreBlocuri`,
+      cu „Adaugă coloană”); in `EditorMagazin` cererea de coloana noua (din arbore sau din „+”), inchisa odata cu
+      celelalte panouri de adaugare, datele blocurilor cerute la deschidere; culoarea care poate lipsi are „Implicită”
+      in `SectionSettings`. 3 probe pe sursa; mutanti 28/28 pe toata etapa 11.)
+      Editorul: coloanele in arbore, panoul coloanei, lista „Adaugă coloană”, culorile cu „Implicită”, „+” pe
       coloane. Probe.
 - [ ] 11.4 REGISTRU, ghidurile, porti, proba in Chrome (cere acordul lui pentru impersonare).
 

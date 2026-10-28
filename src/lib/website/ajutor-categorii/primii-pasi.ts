@@ -96,7 +96,7 @@ export const PRIMII_PASI: CategorieAjutor = {
           detalii: [
             { titlu: "Ce schimbă fiecare stil", text: "\"Clasic\" are numele magazinului în stânga și meniul pe același rând. \"Elegant\" are numele la mijloc și meniul dedesubt. \"Catalog mare\" are căutarea la vedere și o bară cu categoriile, potrivit pentru multe produse. \"Modern\" are butoane rotunjite și colorate. Fiecare stil vine și cu subsolul lui." },
             { titlu: "Unde se vede culoarea", text: "Culoarea principală colorează butoanele, prețurile și bannerul de pe prima pagină, pe care apare numele magazinului." },
-            { titlu: "Le poți schimba mai târziu", text: "Culoarea o schimbi din \"Editează magazinul\", la \"Design magazin\". Capul și subsolul paginii le schimbi din \"Design secțiuni\", unde găsești și alte variante." },
+            { titlu: "Le poți schimba mai târziu", text: "Culoarea o schimbi din \"Editează magazinul\", fila \"Stil\". Capul și subsolul paginii le schimbi tot acolo, în fila \"Secțiuni\": apeși \"Antet\" sau \"Subsol\", apoi \"Schimbă designul\", unde găsești și alte variante." },
             { titlu: "Cum te întorci la pasul 1", text: "Apasă \"Înapoi\", sub butonul principal. Ce ai completat la pasul 1 rămâne." },
           ],
           termeni: ["onboarding", "culoare magazin", "stil magazin", "temă", "aspect", "design"],

@@ -320,7 +320,7 @@ export const PRODUSE: CategorieAjutor = {
         {
           slug: "produse-recomandate",
           titlu: "Cum marchezi produsele ca recomandate",
-          rezumat: "Semnul de recomandat se pune în masă, din bara de acțiuni, sau pe un singur produs, din secțiunea „Status” a formularului. Ca produsele să apară într-un rând „Recomandate” în magazin, secțiunea trebuie pornită din editorul de design.",
+          rezumat: "Semnul de recomandat se pune în masă, din bara de acțiuni, sau pe un singur produs, din secțiunea „Status” a formularului. Ca produsele să apară într-un rând „Recomandate” în magazin, rândul trebuie arătat din ochiul lui, în Editează magazinul.",
           pasi: [
             "Intră în panoul de administrare > Produse > Toate produsele.",
             "Bifează produsele.",
@@ -330,8 +330,8 @@ export const PRODUSE: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Un singur produs, din formular", text: "Deschide produsul din listă sau apasă „Adaugă produs”. În coloana din dreapta, secțiunea „Status”, pornește comutatorul „Recomandat”, cel cu steaua lângă etichetă. Salvează cu „Salvează modificările”, iar la produs nou cu „Adaugă produs”. Pe ecran mic butonul din bara fixată jos scrie doar „Salvează”." },
-            { titlu: "Unde se vede semnul", text: "În listă, ca stea galbenă lângă numele produsului. În magazin, într-un rând de produse cu titlul „Recomandate”, dacă secțiunea este pornită din editorul de design. Dacă secțiunea este stinsă, produsele rămân marcate în panou, dar rândul nu se afișează deloc." },
-            { titlu: "Cât intră în rândul din magazin", text: "Rândul „Recomandate” aduce cel mult 24 de produse. Dacă ai marcat mai multe, nu vor apărea toate. Titlul rândului este „Recomandate” implicit și poate fi schimbat din conținutul paginii." },
+            { titlu: "Unde se vede semnul", text: "În listă, ca stea galbenă lângă numele produsului. În magazin, într-un rând de produse cu titlul „Recomandate”, dacă rândul e arătat din ochiul lui, în Editează magazinul, pe pagina principală. Dacă rândul e ascuns, produsele rămân marcate în panou, dar rândul nu se afișează deloc." },
+            { titlu: "Cât intră în rândul din magazin", text: "Rândul „Recomandate” aduce cel mult 24 de produse. Dacă ai marcat mai multe, nu vor apărea toate. Titlul rândului este „Recomandate” implicit și se schimbă din panoul rândului, la „Titlul rândului”." },
             { titlu: "Efectul asupra sortării", text: "Semnul de recomandat influențează și catalogul: opțiunea de sortare „Recomandate” pune întâi produsele marcate, apoi restul." },
             { titlu: "Limite și mesaje", text: "Aceleași ca la celelalte acțiuni în masă: cel mult 20000 de produse odată, „Niciun produs selectat.” dacă nu ai bifat nimic și „Eroare la acțiunea în masă. Încearcă din nou.” dacă scrierea nu reușește." },
             { titlu: "În fișierul CSV", text: "Semnul se exportă și se importă pe coloana „Recomandat”, cu valorile „Da” și „Nu”. Poți marca multe produse deodată și dintr-un import." },

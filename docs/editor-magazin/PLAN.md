@@ -1007,7 +1007,12 @@ Inventarul (84 de ghiduri in „Design și pagini”, citite toate pe 28.10):
       publicat.” au primit diacriticele, cum le citeaza ghidurile, cu proba. Vazut: optiunea „Ca în Editează
       magazinul” de la sortarea Paginii Magazin trimite la o sortare implicita fara control in editor (nici editorul
       vechi nu-l avea): REGISTRU D.) Grupa „Secțiuni”.
-- [ ] G.3 „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.
+- [x] G.3 (28.10: paginile pe editorul unic: crearea, editarea si „Salvează pagina”, „Setările paginii”, blocurile
+      (randul cu „+”, sageti, „⧉”, cos; coloanele; lista „Adaugă un bloc”, cu cele 18 blocuri si grupul integrarilor),
+      Anulează / Refă pe pagina (raman si dupa salvare, verificat in reductor), ultimul pas din ghidurile fiecarui bloc;
+      „Mesaje” cu locul formularelor din magazin; Biblioteca Media (unde e butonul); „Primii pasi” (culoarea, antetul)
+      si „Produse” (randul „Recomandate”). Formularul din previzualizare tot scrie „Previzualizare”: verificat.)
+      „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.
 - [ ] G.4 Recitirea tuturor ghidurilor atinse fata de cod (fiecare denumire citata cautata in sursa), probele
       centrului de ajutor, numarul din `ajutor.ts`, lista capturilor (`npm run capturi -- --lista`), REGISTRU D,
       porti, raport. Fara push.

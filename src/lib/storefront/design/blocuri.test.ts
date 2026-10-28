@@ -17,8 +17,8 @@ const CLASIC = schemaBlocurilor("product_page", "classic")!;
 const DETALIAT = schemaBlocurilor("product_page", "detailed")!;
 const gol: ContextBlocuri = { pageContent: {}, setari: {} };
 const tipuri = (l: readonly BlockInstance[]) => l.map((b) => b.type);
-/** Bucatile FIXE ale schemei, in ordinea ei: „Conținut liber” (etapa 9) nu se adauga singur. */
-const fixe = (schema: NonNullable<ReturnType<typeof schemaBlocurilor>>) => Object.keys(schema.tipuri).filter((t) => !schema.tipuri[t].repetabil);
+/** Bucatile FIXE ale schemei, in ordinea ei: „Conținut liber” (etapa 9) si coloanele subsolului (etapa 11) nu se adauga singure. */
+const fixe = (schema: NonNullable<ReturnType<typeof schemaBlocurilor>>) => Object.keys(schema.tipuri).filter((t) => !schema.tipuri[t].repetabil && !schema.tipuri[t].coloana);
 const ctx = (pageContent: Record<string, unknown> = {}): DesignContext => ({ primaryColor: "#07c527", pageContent, features: {} });
 const citit = (d: unknown, c = ctx()) => parseStoreDesign(JSON.parse(JSON.stringify(d)), c);
 
@@ -30,7 +30,9 @@ test("pagina de produs are blocuri, cate o schema pe varianta; Pagina Magazin do
   assert.equal(schemaBlocurilor("shop_page", "none"), magazin);
   assert.deepEqual(fixe(magazin), []);
   assert.equal(schemaBlocurilor("hero", "overlay"), null);
-  assert.equal(schemaBlocurilor("footer", "dark"), null);
+  // Etapa 11: subsolul are coloane-bloc, fara bucati fixe, pe orice design al lui.
+  assert.deepEqual(fixe(schemaBlocurilor("footer", "dark")!), []);
+  assert.equal(schemaBlocurilor("header", "classic"), null);
 });
 
 test("⚠⚠ lista implicita e asezarea de dinainte de blocuri, cu toate tipurile o data", () => {

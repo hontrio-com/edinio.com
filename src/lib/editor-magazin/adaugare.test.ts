@@ -24,6 +24,8 @@ const citit = (d: unknown) => parseStoreDesign(JSON.parse(JSON.stringify(d)), ct
 const text = (id: string, html = "<p>Text</p>"): Block => ({ id, type: "text", html } as Block);
 const titlu = (id: string, t: string): Block => ({ id, type: "heading", text: t, level: 2 } as Block);
 const coloane = (id: string, ...col: Block[][]): Block => ({ id, type: "columns", items: col.map((blocks) => ({ blocks })) } as Block);
+/** Fara „+”-urile subsolului (etapa 11), care sunt pe orice pagina. */
+const faraSubsol = <T extends { id: string }>(l: T[]) => l.filter((p) => p.id !== "footer" && !p.id.startsWith("footer/"));
 
 const ctx = (pagina: CheiePagina, extra: Partial<ContextAdaugare> = {}): ContextAdaugare => ({
   pagina,
@@ -69,7 +71,7 @@ test("⚠ „deasupra” sare pe prima sectiune APRINSA: una stinsa nu se vede i
   const d0 = citit(buildClassicDesign(ctxDesign()));
   const prima = d0.home.find((s) => s.enabled)!;
   const d = updateSection(d0, prima.id, { enabled: false, enabledOverride: false });
-  const cuSus = puncteDeAdaugare(d, ctx("acasa")).filter((p) => p.sus).map((p) => p.id);
+  const cuSus = faraSubsol(puncteDeAdaugare(d, ctx("acasa"))).filter((p) => p.sus).map((p) => p.id);
   assert.ok(!cuSus.includes(prima.id));
   assert.deepEqual(cuSus, [d.home.find((s) => s.enabled)!.id]);
 });
@@ -101,7 +103,8 @@ test("pe Acasa: „+” pe un bloc din „Conținut liber” = „Adaugă un blo
 
 test("⚠ cu o pagina proprie ca pagina principala, Acasa n-are „+”: in previzualizare e pagina aceea", () => {
   const { d } = cuContinutAcasa();
-  assert.deepEqual(puncteDeAdaugare(d, ctx("acasa", { paginaAcasaProprie: true })), []);
+  assert.deepEqual(faraSubsol(puncteDeAdaugare(d, ctx("acasa", { paginaAcasaProprie: true }))), []);
+  assert.ok(puncteDeAdaugare(d, ctx("acasa", { paginaAcasaProprie: true })).length > 0, "subsolul are „+” si acolo (etapa 11)");
 });
 
 test("sectiunea noua intra la locul ales; fara loc, inaintea catalogului, ca pana acum", () => {
@@ -239,10 +242,10 @@ test("magazinul cu un singur produs: Acasa e pagina produsului, cu „+” sub p
 
 test("pe Pagina Magazin: marginea de sus = deasupra produselor, cea de jos = sub produse; fara pagina, nimic", () => {
   const d0 = citit(buildClassicDesign(ctxDesign()));
-  assert.deepEqual(puncteDeAdaugare(updateSection(d0, d0.shop.page.id, { enabled: false }), ctx("magazin")), [], "produsele pe pagina principala");
+  assert.deepEqual(faraSubsol(puncteDeAdaugare(updateSection(d0, d0.shop.page.id, { enabled: false }), ctx("magazin"))), [], "produsele pe pagina principala");
   let d = updateSection(d0, d0.shop.page.id, { variant: "sidebar", enabled: true });
   const sid = d.shop.page.id;
-  const puncte = puncteDeAdaugare(d, ctx("magazin"));
+  const puncte = faraSubsol(puncteDeAdaugare(d, ctx("magazin")));
   assert.deepEqual(puncte, [{ id: sid, sus: true }]);
   const sus = ceAdaugaPlusul(d, ctx("magazin"), sid, "sus");
   assert.deepEqual(sus, { fel: "continut-nou", sectiune: sid, tip: "continut_sus", loc: {}, locText: "la începutul zonei „Deasupra produselor”" });
@@ -262,18 +265,18 @@ test("pe Pagina Magazin: marginea de sus = deasupra produselor, cea de jos = sub
 test("pe o pagina proprie: „+” pe blocurile ei (si din coloane) -> „Adaugă un bloc” la tinta", () => {
   const blocuri = [titlu("h", "Salut"), coloane("col", [text("c1")], [])];
   const c = ctx("pagina:pg", { blocuriPagina: blocuri });
-  assert.deepEqual(puncteDeAdaugare(citit(buildClassicDesign(ctxDesign())), c).map((p) => p.id), ["pagina:pg/h", "pagina:pg/col", "pagina:pg/c1"]);
+  assert.deepEqual(faraSubsol(puncteDeAdaugare(citit(buildClassicDesign(ctxDesign())), c)).map((p) => p.id), ["pagina:pg/h", "pagina:pg/col", "pagina:pg/c1"]);
   const d = citit(buildClassicDesign(ctxDesign()));
   assert.deepEqual(ceAdaugaPlusul(d, c, "pagina:pg/h", "jos"), { fel: "bloc-pagina", tinta: { fel: "sus", index: 1, dupa: "Titlu: Salut" } });
   assert.deepEqual(ceAdaugaPlusul(d, c, "pagina:pg/c1", "sus"), { fel: "bloc-pagina", tinta: { fel: "coloana", idColoane: "col", coloana: 0, index: 0, inainte: "Text: Text" } });
-  assert.deepEqual(puncteDeAdaugare(d, ctx("pagina:pg")), [], "pagina inca neincarcata");
+  assert.deepEqual(faraSubsol(puncteDeAdaugare(d, ctx("pagina:pg"))), [], "pagina inca neincarcata");
   assert.equal(ceAdaugaPlusul(d, c, "pagina:alta/h", "jos"), null, "alta pagina");
 });
 
 test("cosul si comanda n-au „+”", () => {
   const d = citit(buildClassicDesign(ctxDesign()));
-  assert.deepEqual(puncteDeAdaugare(d, ctx("cos")), []);
-  assert.deepEqual(puncteDeAdaugare(d, ctx("comanda")), []);
+  assert.deepEqual(faraSubsol(puncteDeAdaugare(d, ctx("cos"))), []);
+  assert.deepEqual(faraSubsol(puncteDeAdaugare(d, ctx("comanda"))), []);
 });
 
 test("tintaLangaBloc: in lista sau in coloana; `null` pentru un bloc strain", () => {
@@ -281,6 +284,23 @@ test("tintaLangaBloc: in lista sau in coloana; `null` pentru un bloc strain", ()
   assert.deepEqual(tintaLangaBloc(blocuri, "a", "sus"), { fel: "sus", index: 0, inainte: "Text: Text" });
   assert.deepEqual(tintaLangaBloc(blocuri, "y", "jos"), { fel: "coloana", idColoane: "col", coloana: 1, index: 2, dupa: "Text: Text" });
   assert.equal(tintaLangaBloc(blocuri, "z", "jos"), null);
+});
+
+// ── Subsolul (etapa 11) ──────────────────────────────────────────────────────
+
+test("subsolul: „+” pe coloanele lui vazute, pe orice pagina -> „Adaugă coloană” langa cea aleasa", () => {
+  const d = citit(buildClassicDesign(ctxDesign()));
+  for (const pagina of ["acasa", "produs", "cos", "pagina:pg"] as CheiePagina[]) {
+    const dinSubsol = puncteDeAdaugare(d, ctx(pagina)).filter((p) => !faraSubsol([p]).length);
+    assert.deepEqual(dinSubsol, [{ id: "footer/identitate", sus: true }, { id: "footer/magazin" }, { id: "footer/informatii" }, { id: "footer/contact" }], pagina);
+  }
+  assert.deepEqual(ceAdaugaPlusul(d, ctx("acasa"), "footer/magazin", "jos"), { fel: "coloana-subsol", loc: { dupa: "magazin" }, locText: "după „Linkuri: Magazin”" });
+  assert.deepEqual(ceAdaugaPlusul(d, ctx("acasa"), "footer/identitate", "sus"), { fel: "coloana-subsol", loc: { inainte: "identitate" }, locText: "înainte de „Logo și text”" });
+  assert.equal(ceAdaugaPlusul(d, ctx("acasa"), "footer/magazin", "sus"), null, "„deasupra” doar pe prima");
+  // Fara nicio coloana vazuta: subsolul insusi, ca sa se poata pune prima.
+  const gol = schimbaBlocurile(d, "footer", () => []);
+  assert.deepEqual(puncteDeAdaugare(gol, ctx("acasa")).filter((p) => p.id === "footer"), [{ id: "footer" }]);
+  assert.deepEqual(ceAdaugaPlusul(gol, ctx("acasa"), "footer", "jos"), { fel: "coloana-subsol", loc: {}, locText: "la capătul subsolului" });
 });
 
 // ── Legaturile din cod: stratul, clicul, editorul ────────────────────────────

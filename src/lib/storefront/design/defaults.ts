@@ -226,7 +226,12 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
     chrome: {
       announcement: section("announcement", "announcement", "marquee", announcementOn),
       header: section("header", "header", "classic"),
-      footer: section("footer", "footer", "dark"),
+      // Cu coloanele de azi (etapa 11), ca pagina de produs cu blocurile ei: un magazin fara design salvat nu trece
+      // prin parser, iar editorul le are nevoie in arbore.
+      footer: {
+        ...section("footer", "footer", "dark"),
+        blocks: completeazaBlocuri(undefined, schemaBlocurilor("footer", "dark")!, { pageContent: pc, setari: {} }),
+      },
     },
     home,
     product: {

@@ -292,6 +292,8 @@ export function EditorMagazin({
   const [locAdaugare, setLocAdaugare] = useState<{ loc: LocNou; text: string } | null>(null);
   /** „+” de sub produs / de pe Pagina Magazin: blocul ales intra intr-un „Conținut liber” nou, acolo. */
   const [continutNouCerut, setContinutNouCerut] = useState<Extract<Adaugare, { fel: "continut-nou" }> | null>(null);
+  /** Lista „Adaugă coloană” a subsolului (etapa 11), cu locul ales: din arbore (la capat) sau din „+”. */
+  const [coloanaNouaCeruta, setColoanaNouaCeruta] = useState<Extract<Adaugare, { fel: "coloana-subsol" }> | null>(null);
   /** Istoricul publicarilor (etapa 7), deschis peste editor. */
   const [istoricDeschis, setIstoricDeschis] = useState(false);
   const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
@@ -652,6 +654,10 @@ export function EditorMagazin({
     setSelectat(null);
     setBlocSelectat(null);
     setLiber(null);
+    if (a.fel === "coloana-subsol") {
+      setColoanaNouaCeruta(a);
+      return;
+    }
     setContinutNouCerut(a);
     cereDateBlocuri();
   }, [cereDateBlocuri]);

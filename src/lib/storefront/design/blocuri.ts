@@ -1,5 +1,7 @@
 import { ETICHETA_CONTINUT_LIBER, parseBlocuriLibere, reidentificaBlocuri, blocuriDinSetari } from "./continut-liber";
+import { sanitizeSettings } from "./curatare";
 import type { Block } from "@/lib/pages/blocks.types";
+import type { Field } from "./registry";
 import type { BlockInstance, SectionKind } from "./types";
 
 /**
@@ -56,12 +58,25 @@ export interface BlocMeta {
    * sterge.
    */
   repetabil?: true;
+  /**
+   * O coloana a subsolului (etapa 11): se poate pune de mai multe ori, fiecare cu id-ul ei si cu reglajele ei,
+   * curatate pe `campuri`, ca setarile unei sectiuni. `unica`: cel mult una in subsol (logo-ul, contactul,
+   * newsletterul, retelele). `implicite`: reglajele unei coloane noi, deja in forma curatata.
+   */
+  coloana?: { campuri: Field[]; unica?: true; implicite: Record<string, unknown> };
 }
 
 export interface SchemaBlocuri {
   zone: ZonaBlocuri[];
   /** Ordinea cheilor e ordinea implicita: exact asezarea de dinainte de blocuri. */
   tipuri: Record<string, BlocMeta>;
+  /**
+   * Lista cu care porneste o sectiune fara blocuri salvate (subsolul, etapa 11): coloanele de dinainte, din reglajele
+   * sectiunii. O lista golita anume ramane goala; doar LIPSA ei aduce implicitele.
+   */
+  implicite?: (setari: Record<string, unknown>) => BlockInstance[];
+  /** Cate blocuri poate avea sectiunea cu totul (subsolul: `MAX_COLOANE_SUBSOL`). */
+  maxBlocuri?: number;
 }
 
 const obiect = (v: unknown): Record<string, unknown> =>
@@ -173,9 +188,150 @@ const BLOCURI_MAGAZIN: SchemaBlocuri = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Subsolul (etapa 11): coloane-bloc
+// ---------------------------------------------------------------------------
+
+/** Cate coloane poate avea subsolul; peste, pe calculator nu mai incap una langa alta. */
+export const MAX_COLOANE_SUBSOL = 8;
+
+const TITLU_COLOANA: Field = { key: "titlu", type: "text", label: "Titlul coloanei", maxLength: 60 };
+
+/**
+ * Coloanele subsolului. Textele implicite sunt ale magazinului, deci fara diacritice, ca restul subsolului
+ * („Informatii”, „Inapoi sus”); etichetele de aici le vede doar omul din editor.
+ */
+const COLOANE_SUBSOL: Record<string, BlocMeta> = {
+  identitate: {
+    label: "Logo și text", icon: "Image", zona: "coloane",
+    coloana: {
+      unica: true,
+      campuri: [
+        { key: "arataLogo", type: "toggle", label: "Logo-ul" },
+        { key: "arataSloganul", type: "toggle", label: "Sloganul magazinului" },
+        { key: "text", type: "textarea", label: "Text", maxLength: 300 },
+        { key: "arataRetelele", type: "toggle", label: "Rețelele sociale" },
+      ],
+      implicite: { arataLogo: true, arataSloganul: true, arataRetelele: true },
+    },
+  },
+  linkuri: {
+    label: "Linkuri", icon: "MousePointerClick", zona: "coloane",
+    coloana: {
+      campuri: [
+        TITLU_COLOANA,
+        {
+          key: "sursa", type: "select", label: "Ce linkuri", options: [
+            { value: "categorii", label: "Categoriile magazinului" },
+            { value: "pagini", label: "Paginile din meniu" },
+            { value: "alese", label: "Alese de mine" },
+          ],
+        },
+        { key: "toateProdusele", type: "toggle", label: "„Toate produsele” primul" },
+        { key: "cate", type: "range", label: "Câte categorii", min: 1, max: 12 },
+        {
+          key: "linkuri", type: "repeater", label: "Linkurile", itemLabel: "Link", max: 12,
+          fields: [
+            { key: "eticheta", type: "text", label: "Textul", maxLength: 80 },
+            { key: "adresa", type: "link", label: "Adresa" },
+          ],
+        },
+      ],
+      implicite: { titlu: "Linkuri utile", sursa: "alese", linkuri: [] },
+    },
+  },
+  text: {
+    label: "Text", icon: "Type", zona: "coloane",
+    coloana: {
+      campuri: [TITLU_COLOANA, { key: "text", type: "textarea", label: "Textul", maxLength: 600 }],
+      implicite: { titlu: "Despre noi", text: "Scrie aici cateva randuri despre magazinul tau." },
+    },
+  },
+  contact: {
+    label: "Contact", icon: "Phone", zona: "coloane",
+    coloana: {
+      unica: true,
+      campuri: [
+        TITLU_COLOANA,
+        { key: "telefon", type: "toggle", label: "Telefonul" },
+        { key: "whatsapp", type: "toggle", label: "WhatsApp" },
+        { key: "email", type: "toggle", label: "Emailul" },
+        { key: "oras", type: "toggle", label: "Orașul" },
+      ],
+      implicite: { titlu: "Contact", telefon: true, whatsapp: true, email: true, oras: true },
+    },
+  },
+  newsletter: {
+    label: "Newsletter", icon: "MailPlus", zona: "coloane",
+    coloana: {
+      unica: true,
+      campuri: [
+        TITLU_COLOANA,
+        { key: "text", type: "textarea", label: "Textul", maxLength: 200 },
+        { key: "buton", type: "text", label: "Textul butonului", maxLength: 40 },
+      ],
+      implicite: { titlu: "Newsletter", text: "Afla primul de oferte si noutati.", buton: "Aboneaza-ma" },
+    },
+  },
+  imagine: {
+    label: "Imagine", icon: "Image", zona: "coloane",
+    coloana: {
+      campuri: [
+        { key: "imagine", type: "image", label: "Imaginea" },
+        { key: "link", type: "link", label: "Link la apăsare" },
+        { key: "alt", type: "text", label: "Text alternativ", maxLength: 120 },
+        { key: "latime", type: "range", label: "Lățimea", min: 40, max: 320, unit: "px" },
+      ],
+      implicite: { latime: 160 },
+    },
+  },
+  retele: {
+    label: "Rețele sociale", icon: "Share2", zona: "coloane",
+    coloana: { unica: true, campuri: [TITLU_COLOANA], implicite: { titlu: "Urmareste-ne" } },
+  },
+};
+
+/** Tipurile de coloana, in ordinea din lista „Adaugă coloană”. */
+export const TIPURI_COLOANE_SUBSOL = Object.keys(COLOANE_SUBSOL);
+
+const sloganulDeAzi = (setari: Record<string, unknown>) => setari.showTagline === true;
+
+/**
+ * Subsolul pe coloane (`dark`, `columns`): identitatea (logo, slogan, retelele), „Magazin” (toate produsele si
+ * primele 6 categorii), „Informatii” (paginile din meniu), „Contact”. Exact `FooterColumns` de dinainte de etapa 11.
+ */
+const SUBSOL_PE_COLOANE: SchemaBlocuri = {
+  zone: [{ id: "coloane", label: "Coloane" }],
+  tipuri: COLOANE_SUBSOL,
+  maxBlocuri: MAX_COLOANE_SUBSOL,
+  implicite: (setari) => [
+    { id: "identitate", type: "identitate", enabled: true, settings: { arataLogo: true, arataSloganul: sloganulDeAzi(setari), arataRetelele: true } },
+    { id: "magazin", type: "linkuri", enabled: true, settings: { titlu: "Magazin", sursa: "categorii", toateProdusele: true, cate: 6 } },
+    { id: "informatii", type: "linkuri", enabled: true, settings: { titlu: "Informatii", sursa: "pagini" } },
+    { id: "contact", type: "contact", enabled: true, settings: { titlu: "Contact", telefon: true, whatsapp: true, email: true, oras: true } },
+  ],
+};
+
+/**
+ * Subsolul centrat: logo-ul, paginile pe un rand, contactul fara oras, retelele. Exact `FooterCentered` de dinainte;
+ * „Inapoi sus” e reglajul subsolului (pornit implicit aici).
+ */
+const SUBSOL_CENTRAT: SchemaBlocuri = {
+  zone: [{ id: "coloane", label: "Coloane" }],
+  tipuri: COLOANE_SUBSOL,
+  maxBlocuri: MAX_COLOANE_SUBSOL,
+  implicite: (setari) => [
+    { id: "identitate", type: "identitate", enabled: true, settings: { arataLogo: true, arataSloganul: sloganulDeAzi(setari), arataRetelele: false } },
+    { id: "informatii", type: "linkuri", enabled: true, settings: { sursa: "pagini" } },
+    { id: "contact", type: "contact", enabled: true, settings: { telefon: true, whatsapp: true, email: true, oras: false } },
+    { id: "retele", type: "retele", enabled: true, settings: {} },
+  ],
+};
+
 /** Schema blocurilor unei sectiuni, dupa tip si varianta; `null` cand sectiunea n-are blocuri. */
 export function schemaBlocurilor(kind: SectionKind, variant: string): SchemaBlocuri | null {
   if (kind === "shop_page") return BLOCURI_MAGAZIN;
+  if (kind === "footer") return variant === "centered" ? SUBSOL_CENTRAT : SUBSOL_PE_COLOANE;
   if (kind !== "product_page") return null;
   return variant === "detailed" ? BLOCURI_DETALIAT : BLOCURI_CLASIC;
 }
@@ -216,6 +372,7 @@ export function parseBlocuri(raw: unknown, schema: SchemaBlocuri): BlockInstance
   const vazute = new Set<string>();
   const out: BlockInstance[] = [];
   let continuturi = 0;
+  const unicePuse = new Set<string>();
   raw.forEach((element, i) => {
     const r = obiect(element);
     const tip = typeof r.type === "string" ? r.type : "";
@@ -224,6 +381,17 @@ export function parseBlocuri(raw: unknown, schema: SchemaBlocuri): BlockInstance
     // Semnul ochiului doar pe blocurile care se pot ascunde, si doar ca boolean:
     // cheia in plus, chiar goala, ar fi facut alt obiect la comparatia ciornei.
     const semn = !meta.obligatoriu && typeof r.enabledOverride === "boolean" ? { enabledOverride: r.enabledOverride } : null;
+    if (meta.coloana) {
+      // O coloana a subsolului (etapa 11): plafonul, cele unice o data, id-ul stabil, reglajele curatate.
+      if (out.length >= (schema.maxBlocuri ?? Infinity) || (meta.coloana.unica && unicePuse.has(tip))) return;
+      if (meta.coloana.unica) unicePuse.add(tip);
+      const dorit = typeof r.id === "string" && ID_CONTINUT.test(r.id) ? r.id : `${tip}_${i}`;
+      let id = dorit;
+      for (let n = 2; vazute.has(id); n += 1) id = `${dorit}_${n}`;
+      vazute.add(id);
+      out.push({ id, type: tip, enabled: r.enabled !== false, ...semn, settings: sanitizeSettings(meta.coloana.campuri, obiect(r.settings)) });
+      return;
+    }
     if (meta.repetabil) {
       if (continuturi >= MAX_CONTINUTURI_PE_SECTIUNE) return;
       continuturi += 1;
@@ -255,9 +423,12 @@ export function completeazaBlocuri(
   schema: SchemaBlocuri,
   ctx: ContextBlocuri,
 ): BlockInstance[] {
-  // Ordinea implicita e a bucatilor fixe; un „Conținut liber” nu se adauga singur.
-  const implicita = Object.keys(schema.tipuri).filter((tip) => !schema.tipuri[tip].repetabil);
-  const lista = (salvate ?? []).filter((b, i, toate) => schema.tipuri[b.type] && (schema.tipuri[b.type].repetabil
+  // Ordinea implicita e a bucatilor fixe; un „Conținut liber” sau o coloana nu se adauga singure.
+  const implicita = Object.keys(schema.tipuri).filter((tip) => !schema.tipuri[tip].repetabil && !schema.tipuri[tip].coloana);
+  // Subsolul fara coloane salvate (etapa 11) porneste de la coloanele de dinainte; o lista goala ramane goala.
+  const deLaCare = salvate === undefined && schema.implicite ? schema.implicite(ctx.setari) : salvate;
+  const cuId = (tip: string) => schema.tipuri[tip].repetabil || schema.tipuri[tip].coloana;
+  const lista = (deLaCare ?? []).filter((b, i, toate) => schema.tipuri[b.type] && (cuId(b.type)
     ? toate.findIndex((x) => x.id === b.id) === i
     : toate.findIndex((x) => x.type === b.type) === i));
   for (const [k, tip] of implicita.entries()) {
@@ -271,8 +442,8 @@ export function completeazaBlocuri(
     const meta = schema.tipuri[b.type];
     const semn = meta.obligatoriu ? undefined : b.enabledOverride;
     const enabled = meta.obligatoriu ? true : (semn ?? (meta.implicit ? meta.implicit(ctx) : true));
-    // Un continut isi pastreaza id-ul (pot fi mai multe de acelasi tip); o bucata fixa are id-ul = tipul.
-    return { id: meta.repetabil ? b.id : b.type, type: b.type, enabled, ...(semn === undefined ? {} : { enabledOverride: semn }), settings: b.settings ?? {} };
+    // Un continut sau o coloana isi pastreaza id-ul (pot fi mai multe de acelasi tip); o bucata fixa are id-ul = tipul.
+    return { id: cuId(b.type) ? b.id : b.type, type: b.type, enabled, ...(semn === undefined ? {} : { enabledOverride: semn }), settings: b.settings ?? {} };
   });
 }
 
@@ -358,4 +529,72 @@ export function stergeContinut(blocuri: readonly BlockInstance[], schema: Schema
   const i = blocuri.findIndex((b) => b.id === id);
   if (i < 0 || !esteContinut(schema, blocuri[i].type)) return blocuri;
   return blocuri.filter((_, k) => k !== i);
+}
+
+// ---------------------------------------------------------------------------
+// Coloanele subsolului (etapa 11): se adauga, se duplica, se sterg, se regleaza
+// ---------------------------------------------------------------------------
+
+/** Id nou pentru o coloana adaugata sau duplicata. */
+function idColoanaNou(): string {
+  return `col_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Se mai poate pune o coloana de tipul asta? Nu peste plafon si nu a doua dintr-una unica. */
+export function poateAdaugaColoana(blocuri: readonly BlockInstance[], schema: SchemaBlocuri, tip: string): boolean {
+  const meta = schema.tipuri[tip];
+  if (!meta?.coloana || blocuri.length >= (schema.maxBlocuri ?? Infinity)) return false;
+  return !(meta.coloana.unica && blocuri.some((b) => b.type === tip));
+}
+
+/**
+ * O coloana noua de tipul `tip`, cu reglajele ei implicite: sub `loc.dupa`, deasupra lui `loc.inainte` (din „+”
+ * din previzualizare) sau la capat. Intoarce ACEEASI lista cand nu se poate (`poateAdaugaColoana`).
+ */
+export function adaugaColoana(
+  blocuri: readonly BlockInstance[],
+  schema: SchemaBlocuri,
+  tip: string,
+  loc: { dupa?: string; inainte?: string } = {},
+): readonly BlockInstance[] {
+  const meta = schema.tipuri[tip];
+  if (!meta?.coloana || !poateAdaugaColoana(blocuri, schema, tip)) return blocuri;
+  const iDupa = loc.dupa ? blocuri.findIndex((b) => b.id === loc.dupa) : -1;
+  const iInainte = loc.inainte ? blocuri.findIndex((b) => b.id === loc.inainte) : -1;
+  const pozitie = iDupa >= 0 ? iDupa + 1 : iInainte >= 0 ? iInainte : blocuri.length;
+  const urmatoarea = [...blocuri];
+  urmatoarea.splice(pozitie, 0, { id: idColoanaNou(), type: tip, enabled: true, settings: structuredClone(meta.coloana.implicite) });
+  return urmatoarea;
+}
+
+/** Copia unei coloane, imediat sub ea. Nu pentru cele unice si nu peste plafon: ACEEASI lista. */
+export function duplicaColoana(blocuri: readonly BlockInstance[], schema: SchemaBlocuri, id: string): readonly BlockInstance[] {
+  const i = blocuri.findIndex((b) => b.id === id);
+  const meta = i >= 0 ? schema.tipuri[blocuri[i].type] : undefined;
+  if (!meta?.coloana || meta.coloana.unica || blocuri.length >= (schema.maxBlocuri ?? Infinity)) return blocuri;
+  const urmatoarea = [...blocuri];
+  urmatoarea.splice(i + 1, 0, { ...blocuri[i], id: idColoanaNou(), settings: structuredClone(blocuri[i].settings) });
+  return urmatoarea;
+}
+
+/** Sterge o coloana. Altceva decat o coloana nu se sterge de aici: ACEEASI lista. */
+export function stergeColoana(blocuri: readonly BlockInstance[], schema: SchemaBlocuri, id: string): readonly BlockInstance[] {
+  const i = blocuri.findIndex((b) => b.id === id);
+  if (i < 0 || !schema.tipuri[blocuri[i].type]?.coloana) return blocuri;
+  return blocuri.filter((_, k) => k !== i);
+}
+
+/**
+ * Reglajele unei coloane, inlocuite. Asa cum le scrie panoul: le curata parserul la salvare, nu aici, altfel o adresa
+ * pe jumatate scrisa („https:”) ar fi disparut din camp la fiecare tasta.
+ */
+export function setariColoana(
+  blocuri: readonly BlockInstance[],
+  schema: SchemaBlocuri,
+  id: string,
+  setari: Record<string, unknown>,
+): readonly BlockInstance[] {
+  const i = blocuri.findIndex((b) => b.id === id);
+  if (i < 0 || !schema.tipuri[blocuri[i].type]?.coloana) return blocuri;
+  return blocuri.map((b, k) => (k === i ? { ...b, settings: setari } : b));
 }

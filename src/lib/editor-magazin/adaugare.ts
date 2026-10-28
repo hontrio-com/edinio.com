@@ -6,6 +6,7 @@ import { blocuriDinSetari } from "@/lib/storefront/design/continut-liber";
 import { addSection, schimbaBlocurile, toateSectiunile, updateSection, type CaleContinut, type LocNou } from "@/lib/storefront/design/edit";
 import { despartireId, idBloc, type MargineAdaugare, type PunctAdaugare } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta } from "@/lib/storefront/design/registry";
+import { coloaneSubsol, coloaneVazute, etichetaColoanei } from "@/lib/storefront/design/subsol";
 import { paginaSablonului } from "@/lib/storefront/design/sabloane-produs";
 import type { SectionInstance, SectionKind, StoreDesign } from "@/lib/storefront/design/types";
 import { rezumatBloc } from "./pagina-proprie";
@@ -45,7 +46,9 @@ export type Adaugare =
   /** Intr-un „Conținut liber” care exista: „Adaugă un bloc”, la tinta. */
   | { fel: "bloc-liber"; cale: CaleContinut; tinta: TintaBloc }
   /** Un „Conținut liber” nou, cu blocul ales, intr-o zona a paginii de produs sau a Paginii Magazin. */
-  | { fel: "continut-nou"; sectiune: string; tip: string; loc: LocNou; locText: string };
+  | { fel: "continut-nou"; sectiune: string; tip: string; loc: LocNou; locText: string }
+  /** O coloana noua in subsol (etapa 11), langa cea aleasa: lista „Adaugă coloană”. */
+  | { fel: "coloana-subsol"; loc: LocNou; locText: string };
 
 const etichetaBloc = (b: Block): string => {
   const nume = BLOCK_META[b.type]?.label ?? b.type;
@@ -103,8 +106,24 @@ function paginaDeProdus(design: StoreDesign, ctx: ContextAdaugare): SectionInsta
   return null;
 }
 
-/** Unde arata previzualizarea „+” pe pagina aleasa. Antetul, subsolul, cosul si comanda n-au. */
+/**
+ * Coloanele subsolului (etapa 11), pe orice pagina: subsolul e pe toate. Fara nicio coloana vazuta, subsolul insusi,
+ * ca prima coloana sa se poata pune tot de aici.
+ */
+function puncteInSubsol(design: StoreDesign): PunctAdaugare[] {
+  const subsol = design.chrome.footer;
+  const coloane = coloaneVazute(subsol);
+  if (coloane.length === 0) return [punct(subsol.id, false)];
+  return coloane.map((c, i) => punct(idBloc(subsol.id, c.id), i === 0));
+}
+
+/** Unde arata previzualizarea „+” pe pagina aleasa, plus coloanele subsolului. Antetul, cosul si comanda n-au. */
 export function puncteDeAdaugare(design: StoreDesign, ctx: ContextAdaugare): PunctAdaugare[] {
+  return [...puncteleProprii(design, ctx), ...puncteInSubsol(design)];
+}
+
+/** „+” din corpul paginii alese. */
+function puncteleProprii(design: StoreDesign, ctx: ContextAdaugare): PunctAdaugare[] {
   if (estePaginaProprie(ctx.pagina)) return ctx.blocuriPagina ? puncteInLista(ctx.blocuriPagina, ctx.pagina) : [];
   const produs = paginaDeProdus(design, ctx);
   if (produs) return puncteInPagina(produs, "jos", false);
@@ -144,6 +163,16 @@ export function ceAdaugaPlusul(design: StoreDesign, ctx: ContextAdaugare, id: st
   const p = puncteDeAdaugare(design, ctx).find((x) => x.id === id);
   if (!p || (unde === "sus" && !p.sus)) return null;
   const { sectiune, bloc } = despartireId(id);
+
+  // Subsolul (etapa 11): o coloana noua langa cea aleasa, sau prima, cand nu se vede niciuna.
+  if (sectiune === design.chrome.footer.id) {
+    const coloana = bloc ? coloaneSubsol(design.chrome.footer).find((c) => c.id === bloc) : undefined;
+    if (!coloana) return { fel: "coloana-subsol", loc: {}, locText: "la capătul subsolului" };
+    const nume = etichetaColoanei(coloana);
+    return unde === "jos"
+      ? { fel: "coloana-subsol", loc: { dupa: coloana.id }, locText: `după „${nume}”` }
+      : { fel: "coloana-subsol", loc: { inainte: coloana.id }, locText: `înainte de „${nume}”` };
+  }
 
   if (estePaginaProprie(ctx.pagina)) {
     const tinta = bloc && ctx.blocuriPagina ? tintaLangaBloc(ctx.blocuriPagina, bloc, unde) : null;

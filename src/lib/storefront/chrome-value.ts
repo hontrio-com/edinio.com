@@ -5,6 +5,7 @@ import { meniuCuAcasa } from "@/lib/pages/menu";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { cartHref, cartOnPage, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { variantMeta } from "@/lib/storefront/design/registry";
+import { subsolCereCategorii } from "@/lib/storefront/design/subsol";
 import type { CartMode, StoreChromeValue } from "@/components/storefront/StorefrontProvider";
 import type {
   StoreCategoryNode,
@@ -164,6 +165,10 @@ export function buildChromeData({
  * Categoriile de nivel intai, dar numai daca varianta de header aleasa le
  * foloseste. Un header fara selector de categorie n-are de ce sa produca o
  * interogare in plus pe fiecare pagina de produs.
+ *
+ * La subsol le cere o coloana „Linkuri” cu categorii, nu designul (etapa 11): pe
+ * subsolul centrat o astfel de coloana ar fi ramas altfel goala pe paginile fara
+ * catalog.
  */
 export async function loadSearchCategories(
   businessId: string,
@@ -171,7 +176,7 @@ export async function loadSearchCategories(
 ): Promise<StoreCategoryNode[] | undefined> {
   const cerute =
     variantMeta("header", design.chrome.header.variant)?.needsCategories === true ||
-    variantMeta("footer", design.chrome.footer.variant)?.needsCategories === true;
+    subsolCereCategorii(design.chrome.footer);
   if (!cerute) return undefined;
   /*
    * ARBORELE intreg, nu doar radacinile.

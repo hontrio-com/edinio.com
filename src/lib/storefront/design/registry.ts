@@ -453,6 +453,43 @@ const SHOP_DEFAULTS = {
   sortareImplicita: "",
 };
 
+/**
+ * Reglajele intregului subsol, aceleasi pe toate designurile lui (etapa 11). Coloanele au reglajele lor, in blocuri
+ * (`blocuri.ts`); aici ce tine de tot subsolul. Partea legala si randul de copyright nu au reglaje de ascundere.
+ */
+function campuriSubsol(): Field[] {
+  return [
+    {
+      key: "showTagline",
+      type: "toggle",
+      label: "Arata sloganul sub logo",
+      retras: "Sloganul se arata din coloana „Logo și text”; valoarea veche da doar coloana ei implicita (etapa 11).",
+    },
+    {
+      key: "inapoiSus",
+      type: "toggle",
+      label: "Butonul „Înapoi sus”",
+      help: "Un buton mic la capătul coloanelor, care duce în capul paginii.",
+    },
+    {
+      key: "copyright",
+      type: "text",
+      label: "Textul de lângă ©",
+      placeholder: "Numele magazinului",
+      maxLength: 120,
+      help: "Gol, apare numele magazinului. Anul se pune singur.",
+    },
+    { key: "fundal", type: "color", label: "Culoarea de fundal", allowEmpty: true, help: "Implicită: culoarea designului ales." },
+    {
+      key: "culoareText",
+      type: "color",
+      label: "Culoarea textului",
+      allowEmpty: true,
+      help: "Implicită: a designului, iar pe un fundal ales de tine, albă sau neagră, după cum se citește mai bine.",
+    },
+  ];
+}
+
 export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   // --- Chrome -------------------------------------------------------------
   announcement: {
@@ -605,6 +642,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       },
     },
   },
+  // Categoriile pentru subsol le cere o coloana „Linkuri” cu categorii (`subsolCereCategorii`, etapa 11), nu designul.
   footer: {
     label: "Subsol",
     icon: "PanelBottom",
@@ -618,47 +656,24 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         tags: ["clasic", "indraznet"],
         layout: "full",
         previewHeight: 560,
-        needsCategories: true,
-        fields: [
-          {
-            key: "showTagline",
-            type: "toggle",
-            label: "Arata sloganul sub logo",
-            help: "Sloganul din datele magazinului. Stins, in coloana ramane doar logo-ul.",
-          },
-        ],
-        defaults: { showTagline: false },
+        fields: campuriSubsol(),
+        defaults: { showTagline: false, inapoiSus: false },
       },
       columns: {
         label: "Deschis, pe coloane",
         tags: ["simplu", "cu imagine"],
         layout: "full",
         previewHeight: 560,
-        needsCategories: true,
-        fields: [
-          {
-            key: "showTagline",
-            type: "toggle",
-            label: "Arata sloganul sub logo",
-            help: "Sloganul din datele magazinului. Stins, in coloana ramane doar logo-ul.",
-          },
-        ],
-        defaults: { showTagline: false },
+        fields: campuriSubsol(),
+        defaults: { showTagline: false, inapoiSus: false },
       },
       centered: {
         label: "Centrat, aerisit",
         tags: ["elegant", "simplu"],
         layout: "full",
         previewHeight: 620,
-        fields: [
-          {
-            key: "showTagline",
-            type: "toggle",
-            label: "Arata sloganul sub logo",
-            help: "Sloganul din datele magazinului. Stins, in coloana ramane doar logo-ul.",
-          },
-        ],
-        defaults: { showTagline: false },
+        fields: campuriSubsol(),
+        defaults: { showTagline: false, inapoiSus: true },
       },
     },
   },

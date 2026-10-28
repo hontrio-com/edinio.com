@@ -1172,6 +1172,81 @@ Citit inainte:
       intreg), data publicarii, ciorna goala, 0 versiuni, 0 mesaje, 1 comanda, pagina neatinsa (doar `last_sign_in_at`
       al contului de proba, mutat de impersonare).
 
+## Etapa 11: subsolul pe coloane-bloc (scris 28.10.2026, inainte de cod; acordul lui: „Da”)
+
+Mentiunea lui: „Footer-ul sa fie si el customizabil complet, acum nu poti customiza foarte multe chestii”; raspunsul la
+intrebare: „Pe coloane-bloc” (coloane adaugate, mutate, ascunse, sterse: Logo si text, Linkuri, Text, Contact,
+Newsletter, Imagine; culorile, retelele, „Înapoi sus”, copyright; blocul legal mereu jos).
+
+Citit inainte:
+- Subsolul are trei designuri (`dark` si `columns` = acelasi `FooterColumns`, inchis / deschis; `centered`) si un singur
+  reglaj, „Arata sloganul sub logo” (`showTagline`). In panou, la „Conținut”: marimea logo-ului (`footer_logo_size`),
+  creditul Edinio (doar pe planurile platite), insignele proprii („Autorizații și certificări”).
+- `FooterColumns`: identitatea (logo, slogan, retelele), „Magazin” (Toate produsele + primele 6 categorii), „Informatii”
+  (paginile si linkurile din meniu), „Contact” (telefon, WhatsApp, email, oras); pe telefon coloanele se pliaza.
+  `FooterCentered`: logo mare (link spre prima pagina), slogan, paginile pe un rand, contactul fara oras, retelele,
+  „Inapoi sus”. Dupa ele, in toate: blocul legal (`FooterLegal`: datele firmei, retragerea, garantia legala,
+  politicile, cookie-urile, ANPC, insignele proprii, Netopia) si randul de copyright cu creditul (`FooterCredit`).
+- Culorile: `footerBg` / `footerText` exista in `StoreStyle` (doar pentru designul inchis) dar n-au niciun control.
+  Partea legala are albul scris direct la tonul inchis (`FooterLegal`, `CompanyIdentity`, `NetopiaBadge`).
+- Categoriile pentru subsol se citesc pe pagini doar cand varianta o cere (`needsCategories`, `loadSearchCategories`).
+- Mecanismul blocurilor (etapa 4): schema pe varianta (`blocuri.ts`), arborele cu sageti si ochi (`ArboreBlocuri`),
+  marcajele in previzualizare (`MarcajBloc`), clicul. Setarile se curata prin `sanitizeSettings` din `parse.ts` (doar
+  pentru sectiuni). Newsletterul scrie in „Mesaje” si trimite la Mailchimp / Brevo / Klaviyo cand sunt conectate;
+  blocul il cauta serverul in designul PUBLICAT (`blocDinMagazinPublicat`), nu in cerere. Linkurile din blocuri se
+  aleg cu `CampLink` (pagini, categorii, produse) si se tin relative la magazin (`resolveHref`).
+- In productie (28.10, doar citire): 123 de magazine fara design salvat (deci subsolul clasic, inchis), 9 `dark`, 9
+  `centered`, 7 `columns`; niciunul cu sloganul pornit, niciunul cu blocuri in subsol. Deci si centratul trebuie sa
+  ramana identic.
+
+### Deciziile etapei
+
+1. **Coloanele sunt blocuri ale subsolului**, in design (ciorna, „Publică”, Anulează / Refă, istoric), pe schema
+   `blocuri.ts`: o zona, „Coloane”, cu tipuri care se pot pune de mai multe ori, fiecare cu reglajele lui:
+   „Logo și text” (logo, sloganul sau un text al lui, retelele sub el), „Linkuri” (titlu; categoriile, paginile din
+   meniu sau linkuri alese de el), „Text” (titlu, text), „Contact” (titlu; telefon, WhatsApp, email, oras, fiecare cu
+   comutatorul lui), „Newsletter” (titlu, text, butonul), „Imagine” (imagine, link, latime), „Rețele sociale” (titlu).
+   Logo, Contact, Newsletter si Retelele cel mult o data; cel mult 8 coloane.
+2. **Magazinele de azi arata la fel**: un subsol fara coloane salvate primeste la citire coloanele de azi, cu id-uri
+   fixe (pe coloane: Logo si text, „Magazin”, „Informatii”, „Contact”; pe centrat: logo, paginile, contactul fara oras,
+   retelele), cu sloganul dupa `showTagline`. O lista golita anume ramane goala. Probe: HTML-ul subsolului de azi
+   fata de cel nou, pe magazine de proba, si citirea idempotenta.
+3. **Reglajele intregului subsol** (panoul lui): „Înapoi sus”, textul de langa „©” (gol = numele magazinului),
+   culoarea fundalului si a textului (goale = cele ale designului; doar fundalul ales = text alb sau negru, dupa
+   contrast). Partea legala trece pe variabile, cu albul ca valoare implicita, ca sa urmeze culorile.
+4. **Blocul legal si randul de copyright raman mereu jos**, nu sunt coloane si nu se ascund (OUG 18/2026, ANPC,
+   politicile); creditul Edinio ramane pe regula de azi.
+5. **In editor**: sub „Subsol”, coloanele, cu sageti si ochi, si „+ Adaugă coloană” (lista tipurilor; cele unice deja
+   puse apar stinse). Clicul pe o coloana (in arbore sau in previzualizare) ii deschide panoul: reglajele ei, „Duplică”,
+   „Șterge coloana”. „+” din previzualizare (etapa 10) merge si pe coloanele subsolului, pe orice pagina.
+6. **Newsletterul** se adauga doar cand e conectat un furnizor (ca blocul de pe pagini); serverul cauta coloana in
+   subsolul PUBLICAT, aprinsa, iar mesajul apare in „Mesaje” cu locul „Subsol”.
+7. **Categoriile se citesc pe pagina cand o coloana „Linkuri” arata categorii**, nu dupa design: pe centrat cu o astfel
+   de coloana, altfel ar fi ramas goala.
+8. Fara migratii; textele coloanelor sunt text simplu (fara HTML), linkurile trec prin aceeasi curatare ca restul.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 11.1 (28.10: `curatare.ts` (curatarea mutata neschimbata, 267/267 probe ale designului dupa mutare); in
+      `blocuri.ts` tipurile de coloana (`coloana`: campuri, unica, implicite), schemele subsolului cu `implicite` si
+      `maxBlocuri`, citirea si completarea coloanelor, `adaugaColoana` / `duplicaColoana` / `stergeColoana` /
+      `setariColoana`; subsolul trece prin `cuBlocuri` (lista goala ramane), designul clasic are coloanele; in registru
+      `campuriSubsol` (`showTagline` retras, `inapoiSus`, `copyright`, `fundal`, `culoareText`), fara `needsCategories`
+      la subsol; `subsol.ts` (`coloaneSubsol`, `subsolCereCategorii`, `inapoiSusPornit`, `textCopyright`,
+      `sablonColoane`, `culoriSubsol`, `etichetaColoanei`); `loadSearchCategories` dupa coloane; „+” pe coloanele
+      subsolului (`coloana-subsol`). 13 probe noi in `subsol.test.ts` si una in `adaugare.test.ts`; trei probe vechi
+      aduse la subsolul cu blocuri. Gasit la probe: designul clasic nu e idempotent la recitire, de dinainte (titlul
+      randului „Recomandate”), nu tine de subsol.)
+      Logica fara React: curatarea campurilor mutata din `parse.ts` intr-un modul comun; schema coloanelor
+      (tipuri, campuri, unice, plafon), coloanele implicite pe design, citirea (lipsa = implicite, gol = gol),
+      operatiile (adauga la loc, duplica, sterge, reglaje), reglajele subsolului in registru, categoriile cerute,
+      „+” pe coloane. Probe.
+- [ ] 11.2 Magazinul: subsolul randat din coloane (pe coloane si centrat), marcajele in editor, culorile, „Înapoi sus”,
+      copyright, newsletterul (componenta si serverul). Probe; HTML-ul de azi fata de cel nou.
+- [ ] 11.3 Editorul: coloanele in arbore, panoul coloanei, lista „Adaugă coloană”, culorile cu „Implicită”, „+” pe
+      coloane. Probe.
+- [ ] 11.4 REGISTRU, ghidurile, porti, proba in Chrome (cere acordul lui pentru impersonare).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { AlertTriangle, Check, Link2, Loader2, Send, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -58,7 +59,7 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
   const [sugestii, setSugestii] = useState<Record<string, Sugestie[]>>({});
   const [raft, setRaft] = useState<{ cate: number; adusLa: number | null; dinMemorie: boolean } | null>(null);
   const [deschisa, setDeschisa] = useState<string | null>(null);
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   useEffect(() => {
     let viu = true;
@@ -148,6 +149,18 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
         minciună mică ce devine mare exact când comerciantul tocmai a primit acces la o
         categorie nouă și n-o găsește. Deci scrie când s-a adus, și are buton.
       */}
+      {seIncarca && (
+        /* ⚠ Rotița de pe buton nu spune cât durează. Prima dată lista vine de la eMAG,
+            pagină cu pagină, iar fără o vorbă omul crede că s-a blocat. */
+        <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
+          <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+          <span>
+            Pregătim sugestiile. Prima dată aducem lista de categorii de la eMAG, iar asta
+            poate dura până la un minut.
+          </span>
+        </p>
+      )}
+
       {raft && (
         <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>
@@ -236,20 +249,23 @@ function RandCategorie({
   const ultimaCerere = useRef(0);
   function cautaAcum(termen: string) {
     const alMeu = ++ultimaCerere.current;
-    if (termen.trim().length < 2) { setGasite([]); return; }
+    /* ⚠ Si rotita se opreste aici: o cautare inca in drum nu mai are voie s-o opreasca,
+       fiindca nu mai e a ultimei taste. Fara randul asta ramanea pornita la nesfarsit. */
+    if (termen.trim().length < 2) { setGasite([]); setSeCauta(false); return; }
     setSeCauta(true);
     window.setTimeout(() => {
       if (alMeu !== ultimaCerere.current) return;
       void (async () => {
-        const r = await cautaCategorieEmag(businessId, termen);
-        if (alMeu !== ultimaCerere.current) return;
-        setSeCauta(false);
-        if ("error" in r) { toast.error(r.error); return; }
-        if (!r.raftAdus) {
-          toast.warning("Apasă întâi „Sugestii”, ca să aducem raftul de categorii al eMAG.");
-          return;
+        try {
+          const r = await cautaCategorieEmag(businessId, termen);
+          if (alMeu !== ultimaCerere.current) return;
+          if ("error" in r) { toast.error(r.error); return; }
+          setGasite(r.gasite);
+        } catch {
+          if (alMeu === ultimaCerere.current) toast.error("Căutarea nu a mers. Încearcă din nou.");
+        } finally {
+          if (alMeu === ultimaCerere.current) setSeCauta(false);
         }
-        setGasite(r.gasite);
       })();
     }, 250);
   }
@@ -259,7 +275,7 @@ function RandCategorie({
   const [valori, setValori] = useState<Record<number, string>>(() =>
     Object.fromEntries((categorie.mapare?.characteristics ?? []).map((c) => [c.id, c.value])),
   );
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
   function ceruDetalii(id: number) {
     incepe(async () => {
@@ -446,12 +462,24 @@ function RandCategorie({
               ))}
             </ul>
           )}
+          {seCauta && (
+            /* ⚠ Se spune și cât se caută. Prima căutare după o conectare aduce raftul de la
+                eMAG, iar o căsuță care tace zece secunde arată ca una stricată. */
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" />
+              <span>
+                Se caută. Prima dată aducem lista de categorii de la eMAG, iar asta poate dura
+                până la un minut.
+              </span>
+            </p>
+          )}
           {cautare.trim() !== "" && gasite.length === 0 && !seCauta && (
             /* ⚠ Se spune și când NU s-a găsit nimic. Tăcut, omul ar fi crezut că încă se
                 caută și ar fi așteptat degeaba. */
             <p className="text-xs text-muted-foreground">
-              Nicio categorie cu numele ăsta în care ai voie să vinzi. Încearcă alt cuvânt,
-              sau apasă „Sugestii” ca să aducem din nou raftul lor.
+              Nicio categorie cu numele ăsta în care ai voie să vinzi. Încearcă alt cuvânt.
+              Dacă ai primit de curând acces la o categorie nouă, apasă „Sugerează”, apoi
+              „Reîmprospătează lista”.
             </p>
           )}
 

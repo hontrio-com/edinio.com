@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { toast } from "sonner";
@@ -43,7 +44,7 @@ export function EmagJurnal({ businessId }: { businessId: string }) {
   const [pePagina, setPePagina] = useState(50);
   const [doarProbleme, setDoarProbleme] = useState(false);
   const [fir, setFir] = useState<string | null>(null);
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   /*
    * ⚠ Pagina se ÎNTOARCE LA 1 când nu e cerută anume, iar asta e dinadins: orice

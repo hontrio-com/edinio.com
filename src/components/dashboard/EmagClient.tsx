@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import {
   BLOC_PREGATIRE_PUBLICARE, BUTON_ADU_OFERTELE, BUTON_ADU_OFERTELE_SCURT,
 } from "@/lib/emag/etichete";
@@ -172,7 +173,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
   const [password, setPassword] = useState("");
   const [tara, setTara] = useState<"ro" | "bg" | "hu">(status?.tara ?? "ro");
   const [vendorName, setVendorName] = useState("");
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
 
   if (!status) {
@@ -814,7 +815,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
  */
 function PanouGpsr({ businessId, status }: { businessId: string; status: StareEmag }) {
   const [g, setG] = useState(status.gpsr);
-  const [seSalveaza, incepe] = useTransition();
+  const [seSalveaza, incepe] = useLucru();
 
   const pune = (cheie: keyof typeof g) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setG((v) => ({ ...v, [cheie]: e.target.value }));
@@ -898,7 +899,7 @@ function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status:
   const [rezerva, setRezerva] = useState(String(status.stocRezervat ?? ""));
   const [taxa, setTaxa] = useState(String(status.greenTax ?? ""));
   const [reaprovizionare, setReaprovizionare] = useState(String(status.supplyLeadTime ?? ""));
-  const [seSalveaza, incepe] = useTransition();
+  const [seSalveaza, incepe] = useLucru();
 
   function salveaza() {
     incepe(async () => {
@@ -1001,7 +1002,7 @@ function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status:
  * oara n-ar mai fi apasat.
  */
 function PanouSincronizare({ businessId }: { businessId: string }) {
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
   function felie(f: "preturi" | "stocuri" | "produse", nume: string) {
     incepe(async () => {
@@ -1099,7 +1100,7 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
 function PanouIstoric({ businessId }: { businessId: string }) {
   const [zile, setZile] = useState("30");
   const [rezultat, setRezultat] = useState<{ noi: number; actualizate: number; complet: boolean } | null>(null);
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
   function adu() {
     if (!window.confirm(
@@ -1242,7 +1243,7 @@ function PanouNotificari({
  * respingerii n-a fost aratat si produsele au stat „in aprobare" la nesfarsit.
  */
 function PanouImport({ businessId }: { businessId: string }) {
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
   const [raport, setRaport] = useState<RaportAratat | null>(null);
   const [faza, setFaza] = useState<Faza>("gata");
   const [create, setCreate] = useState<{ facute: number; total: number } | null>(null);

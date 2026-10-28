@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { Loader2, PackageOpen, RefreshCw, Truck } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -43,7 +44,7 @@ export function EmagReturns({ businessId }: { businessId: string }) {
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
   const [pePagina, setPePagina] = useState(50);
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   function incarca(p = pagina) {
     incepe(async () => {
@@ -136,7 +137,7 @@ function RandRetur({
   rand: RandReturEcran;
   laSchimbare: () => void;
 }) {
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
   function treci(inStare: number, eticheta: string) {
     incepe(async () => {

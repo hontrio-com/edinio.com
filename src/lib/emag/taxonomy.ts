@@ -51,6 +51,40 @@ export type { PotrivireCategorie };
  */
 const MAX_PAGINI_CATEGORII = 60;
 
+/**
+ * Cate pagini se cer deodata.
+ *
+ * ⚠ Masurat in productie pe 28.10.2026, la MNY AROMA: 2.928 de categorii, adica 30 de
+ * pagini, au venit una dupa alta in ~45 de secunde. Piedica nu era ritmul (la 3 pe
+ * secunda, 30 de pagini incap in 10 s), ci asteptarea fiecarei pagini: ~1,5 s la ei,
+ * fiindca vine cu toate caracteristicile categoriilor. Trei deodata umplu ritmul fara
+ * sa-l depaseasca, iar galetile din `client.ts` tin oricum socoteala, si pe instanta,
+ * si pe contul lor.
+ */
+const PAGINI_DEODATA = 3;
+
+/**
+ * Cate reluari primeste o pagina cazuta trecator (502, timp expirat).
+ *
+ * ⚠ Inainte, primul 502 oprea toata citirea. Pe 28.10.2026, doua apasari pe
+ * „Sugerează” s-au intors cu „eMAG a răspuns cu 502” dupa ce citisera deja pagini
+ * intregi, iar omul a luat-o de la capat de fiecare data. Un 502 la ei e o pagina,
+ * nu tot raftul.
+ *
+ * ⚠ Numai la `trecatoare`. Un refuz (400) sau o cheie respinsa (401) dau acelasi
+ * raspuns si a doua oara, iar cererile invalide se numara si ele in ritmul magazinului.
+ */
+const RELUARI_PAGINA = 2;
+
+/**
+ * Cat are voie sa dureze toata citirea.
+ *
+ * ⚠ Actiunea ruleaza sub `maxDuration = 300` al paginii eMAG. Cu reluari, o zi proasta
+ * la ei ar fi putut trece de plafon, iar o functie taiata nu-i spune nimic omului.
+ * Peste termen nu se mai reia nimic si se spune ca lista n-a venit intreaga.
+ */
+const TERMEN_CITIRE_MS = 150_000;
+
 export interface CategoriiAduse {
   categorii: EmagCategorie[];
   /** ⚠ `true` cand s-a atins plafonul: lista NU e completa. */
@@ -58,27 +92,89 @@ export interface CategoriiAduse {
   error: string | null;
 }
 
+/** Ce se poate inlocui in probe: citirea de la eMAG, ceasul si pauza dintre reluari. */
+export interface UnelteCategorii {
+  citeste?: typeof citesteCategorii;
+  acum?: () => number;
+  asteapta?: (ms: number) => Promise<void>;
+}
+
+async function aduPagina(
+  auth: EmagAuth,
+  pagina: number,
+  termen: number,
+  u: Required<UnelteCategorii>,
+): Promise<{ lot: EmagCategorie[] } | { error: string }> {
+  for (let reluare = 0; ; reluare++) {
+    const r = await u.citeste(auth, { currentPage: pagina, itemsPerPage: 100 });
+    if (!isEmagError(r)) return { lot: Array.isArray(r.data) ? r.data : [] };
+    const maiIncerc = r.verdict === "trecatoare" && reluare < RELUARI_PAGINA && u.acum() < termen;
+    if (!maiIncerc) return { error: r.error };
+    await u.asteapta(1000 * (reluare + 1));
+  }
+}
+
 /**
  * Toate categoriile, paginat.
  *
  * ⚠ `trunchiat` nu e decorativ. O lista taiata tacut ar fi insemnat ca potrivirea
  * automata nu vede jumatate din raft si sugereaza categoria gresita cu incredere
- * mare — adica exact greseala pe care potrivitorul e construit s-o evite.
+ * mare, adica exact greseala pe care potrivitorul e construit s-o evite.
+ *
+ * ⚠ Paginile vin cate `PAGINI_DEODATA`, dar se asaza IN ORDINEA LOR, iar sfarsitul se
+ * afla tot din prima pagina mai scurta de 100. Paginile cerute dupa ea in acelasi val
+ * vin goale si nu se pun nicaieri: costul e cel mult doua cereri, o data.
  */
-export async function aduCategorii(auth: EmagAuth): Promise<CategoriiAduse> {
+export async function aduCategorii(auth: EmagAuth, unelte: UnelteCategorii = {}): Promise<CategoriiAduse> {
+  const u: Required<UnelteCategorii> = {
+    citeste: unelte.citeste ?? citesteCategorii,
+    acum: unelte.acum ?? Date.now,
+    asteapta: unelte.asteapta ?? ((ms) => new Promise((gata) => setTimeout(gata, ms))),
+  };
+  const termen = u.acum() + TERMEN_CITIRE_MS;
   const categorii: EmagCategorie[] = [];
 
-  for (let pagina = 1; pagina <= MAX_PAGINI_CATEGORII; pagina++) {
-    const r = await citesteCategorii(auth, { currentPage: pagina, itemsPerPage: 100 });
-    if (isEmagError(r)) {
-      return { categorii, trunchiat: true, error: r.error };
+  for (let prima = 1; prima <= MAX_PAGINI_CATEGORII; prima += PAGINI_DEODATA) {
+    if (u.acum() >= termen) {
+      return {
+        categorii,
+        trunchiat: true,
+        error: "eMAG răspunde foarte încet acum. Încearcă din nou peste câteva minute.",
+      };
     }
-    const lot = Array.isArray(r.data) ? r.data : [];
-    categorii.push(...lot);
-    if (lot.length < 100) return { categorii, trunchiat: false, error: null };
+
+    const pagini: number[] = [];
+    for (let p = prima; p < prima + PAGINI_DEODATA && p <= MAX_PAGINI_CATEGORII; p++) pagini.push(p);
+
+    const loturi = await Promise.all(pagini.map((p) => aduPagina(auth, p, termen, u)));
+    for (const l of loturi) {
+      if ("error" in l) return { categorii, trunchiat: true, error: l.error };
+      categorii.push(...l.lot);
+      if (l.lot.length < 100) return { categorii, trunchiat: false, error: null };
+    }
   }
 
   return { categorii, trunchiat: true, error: null };
+}
+
+/**
+ * Raftul, in forma in care se tine minte: numai ce trebuie ca sa CAUTI in el.
+ *
+ * ⚠ Masurat pe 28.10.2026: lista de la eMAG vine cu caracteristicile si tipurile de
+ * familie ale fiecarei categorii, ~2,3 KB pe categorie, adica 6,7 MB pentru 2.928 de
+ * categorii. Tot blocul se scria in baza si se citea inapoi la FIECARE tasta din
+ * cautare, desi cautarea si sugestiile se uita doar la id, nume si `is_allowed`.
+ *
+ * Caracteristicile nu se pierd: cand omul alege o categorie, `aduCategorie(id)` le
+ * cere proaspete, cu tot cu valorile lor, pe care lista oricum nu le are.
+ */
+export function categoriiPentruRaft(categorii: EmagCategorie[]): EmagCategorie[] {
+  return categorii.map((c) => ({
+    id: c.id,
+    name: c.name,
+    parent_id: c.parent_id,
+    is_allowed: c.is_allowed,
+  }));
 }
 
 /**

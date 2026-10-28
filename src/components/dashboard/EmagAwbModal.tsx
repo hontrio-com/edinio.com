@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { AlertCircle, CheckCircle, Download, Loader2, Package, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
    * chiar cea corecta si nu mai are cine s-o schimbe degeaba.
    */
   const [seCitesc, setSeCitesc] = useState(true);
-  const [seTrimite, incepe] = useTransition();
+  const [seTrimite, incepe] = useLucru();
 
   /* ⚠ `hasAwb` vine din ce a spus eMAG, nu dintr-o coloana a comenzii: AWB-urile lor
      nu stau in `orders`, ci in `emag_awb`. Citit de acolo, greutatea s-ar fi

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { Paginatie } from "./Paginatie";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import {
@@ -53,7 +54,7 @@ export function EmagListings({ businessId }: { businessId: string }) {
      produs cu variante are mai multe oferte. Ținute pe ofertă, același produs ar fi
      intrat de cinci ori în același lot. */
   const [alese, setAlese] = useState<Set<string>>(new Set());
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   /*
    * ⚠ Trece prin COADĂ, nu prin trimitere directă. „Trimite acum" ține omul pe loc cât
@@ -290,7 +291,7 @@ function RandOferta({
   laBifa: () => void;
   laSchimbare: () => void;
 }) {
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
   function trimite() {
     if (!rand.productId) return;

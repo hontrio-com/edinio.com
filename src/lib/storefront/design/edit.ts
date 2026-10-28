@@ -360,7 +360,29 @@ export function schimbaBlocuriLaCale(design: StoreDesign, cale: CaleContinut, op
 const CONTINUT_DIN_PAGE_CONTENT: SectionKind[] = ["product_row"];
 
 /** Adauga o sectiune la finalul paginii, inaintea catalogului daca acesta exista. */
-export function addSection(design: StoreDesign, kind: SectionKind): StoreDesign {
+/**
+ * Langa ce element intra unul nou: sub `dupa` sau deasupra lui `inainte` (etapa 10, „+” din
+ * previzualizare). Un id care nu e in lista inseamna locul implicit.
+ */
+export interface LocNou {
+  dupa?: string;
+  inainte?: string;
+}
+
+/** Pozitia din lista pentru un element nou, dupa `loc`; `null` cand locul nu se gaseste. */
+function pozitiaLocului(ids: readonly string[], loc: LocNou | undefined): number | null {
+  if (loc?.dupa) {
+    const i = ids.indexOf(loc.dupa);
+    if (i >= 0) return i + 1;
+  }
+  if (loc?.inainte) {
+    const i = ids.indexOf(loc.inainte);
+    if (i >= 0) return i;
+  }
+  return null;
+}
+
+export function addSection(design: StoreDesign, kind: SectionKind, loc?: LocNou): StoreDesign {
   const meta = sectionMeta(kind);
   const variant = firstVariant(kind);
   if (!meta || !variant) return design;
@@ -372,10 +394,26 @@ export function addSection(design: StoreDesign, kind: SectionKind): StoreDesign 
 
   const next = clone(design);
   const noua = section(newSectionId(), kind, variant, true, meta.variants[variant].defaults ?? {});
+  // Locul ales din previzualizare (etapa 10); fara el, inaintea catalogului, ca pana acum.
+  const ales = pozitiaLocului(next.home.map((s) => s.id), loc);
   const catalog = next.home.findIndex((s) => s.kind === "product_grid");
-  if (catalog >= 0) next.home.splice(catalog, 0, noua);
+  if (ales !== null) next.home.splice(ales, 0, noua);
+  else if (catalog >= 0) next.home.splice(catalog, 0, noua);
   else next.home.push(noua);
   return next;
+}
+
+/**
+ * Muta o sectiune a paginii principale langa alta (etapa 10): randul de produse adaugat din „+” se
+ * face in continut, iar derivarea il pune inaintea catalogului; de acolo vine la locul ales. Prin
+ * `moveSection`, deci cu aceeasi regula pentru ordinea randurilor intre ele (`ordineAtinsa`).
+ */
+export function mutaSectiuneaLa(design: StoreDesign, id: string, loc: LocNou): StoreDesign {
+  const de = design.home.findIndex((s) => s.id === id);
+  if (de < 0) return design;
+  const ramase = design.home.filter((s) => s.id !== id).map((s) => s.id);
+  const la = pozitiaLocului(ramase, loc);
+  return la === null ? design : moveSection(design, de, la);
 }
 
 /**

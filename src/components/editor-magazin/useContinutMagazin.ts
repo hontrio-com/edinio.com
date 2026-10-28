@@ -73,7 +73,12 @@ export function useContinutMagazin({ magazin, ciorna }: { magazin: MagazinPentru
    * scrieri in acelasi eveniment nu se calca. Cheia pasului (doar pentru lipirea tastarii la
    * Anuleaza) se ia din ecran.
    */
-  const seteaza = useCallback((nod: NodContinut, actualizare: (p: ContinutPagina) => ContinutPagina) => {
+  const seteaza = useCallback((
+    nod: NodContinut,
+    actualizare: (p: ContinutPagina) => ContinutPagina,
+    /** Cheia pasului, cand altcineva se lipeste de el: randul adaugat din „+” si mutat la locul lui (etapa 10). */
+    cheieAnume?: string,
+  ) => {
     const proba = actualizare(pcAcum.current);
     const chei = cheiSchimbate(pcAcum.current as Record<string, unknown>, proba as Record<string, unknown>).sort();
     if (chei.length === 0) return;
@@ -87,7 +92,7 @@ export function useContinutMagazin({ magazin, ciorna }: { magazin: MagazinPentru
       if (urmator === ecran) return c;
       const schimbate = cheiSchimbate(ecran as Record<string, unknown>, urmator as Record<string, unknown>);
       return cuCheilePc(c, doarCheile(urmator as Record<string, unknown>, schimbate), publicat);
-    }, `continut:${nod}:${chei.join(",")}`);
+    }, cheieAnume ?? `continut:${nod}:${chei.join(",")}`);
   }, [aplicaContinut]);
 
   /** Are nodul modificari nepublicate (in ciorna)? */
@@ -199,8 +204,8 @@ export function useContinutMagazin({ magazin, ciorna }: { magazin: MagazinPentru
   }, [aplicaContinut]);
 
   /** Modifica pe loc: adaugarea si stergerea unui rand de produse. Din etapa 6, tot in ciorna. */
-  const seteazaSiSalveaza = useCallback(async (nod: NodContinut, actualizare: (p: ContinutPagina) => ContinutPagina): Promise<boolean> => {
-    seteaza(nod, actualizare);
+  const seteazaSiSalveaza = useCallback(async (nod: NodContinut, actualizare: (p: ContinutPagina) => ContinutPagina, cheieAnume?: string): Promise<boolean> => {
+    seteaza(nod, actualizare, cheieAnume);
     return true;
   }, [seteaza]);
 

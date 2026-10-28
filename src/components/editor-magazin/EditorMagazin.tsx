@@ -6,8 +6,8 @@ import { DesignGallery } from "@/components/store-editor/DesignGallery";
 import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
 import { newProductSection } from "@/lib/store-sections";
 import {
-  addSection, blocuriLaCale, caleInText, completeazaBlocurileSectiunii, ID_BARA_ANUNT, schimbaBlocuriLaCale, schimbaBlocurile,
-  toateSectiunile, toggleSection, updateSection, type CaleContinut,
+  blocuriLaCale, caleInText, completeazaBlocurileSectiunii, ID_BARA_ANUNT, mutaSectiuneaLa, schimbaBlocuriLaCale, schimbaBlocurile,
+  toateSectiunile, toggleSection, updateSection, type CaleContinut, type LocNou,
 } from "@/lib/storefront/design/edit";
 import { adaugaContinut, comutaBloc, duplicaContinut, esteContinut, schemaBlocurilor, stergeContinut } from "@/lib/storefront/design/blocuri";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
@@ -38,7 +38,7 @@ import { GalerieAdauga } from "./GalerieAdauga";
 import { IstoricVersiuni } from "./IstoricVersiuni";
 import { PanouBloc } from "./PanouBloc";
 import { PanouNod } from "./PanouNod";
-import { PanouAdaugaBloc, PanouBlocComun, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
+import { integrariActive, PanouAdaugaBloc, PanouBlocComun, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
 import { PanouContinutLiber } from "./PanouContinutLiber";
 import { PanouSablon } from "./PanouSablon";
 import { PanouStil } from "./continut/PanouStil";
@@ -50,6 +50,9 @@ import { useContinutMagazin } from "./useContinutMagazin";
 import { usePaginaProprie } from "./usePaginaProprie";
 import type { CheieSetare } from "@/lib/editor-magazin/setari";
 import { alegereDinClic } from "@/lib/editor-magazin/continut-liber";
+import {
+  ceAdaugaPlusul, continutNou, puncteDeAdaugare, sectiuneNoua, type Adaugare, type ContextAdaugare,
+} from "@/lib/editor-magazin/adaugare";
 
 /** Filele panoului din stanga; „Setări” din etapa 8 (lista lui, 27.10.2026). */
 export type FilaEditor = "sectiuni" | "stil" | "setari";
@@ -285,6 +288,10 @@ export function EditorMagazin({
   const [peste, setPeste] = useState<string | null>(null);
   const [galerieDesign, setGalerieDesign] = useState<string | null>(null);
   const [adaugaDeschis, setAdaugaDeschis] = useState(false);
+  /** Locul ales cu „+” din previzualizare pentru galeria „Adaugă” (etapa 10); `null` = locul de azi. */
+  const [locAdaugare, setLocAdaugare] = useState<{ loc: LocNou; text: string } | null>(null);
+  /** „+” de sub produs / de pe Pagina Magazin: blocul ales intra intr-un „Conținut liber” nou, acolo. */
+  const [continutNouCerut, setContinutNouCerut] = useState<Extract<Adaugare, { fel: "continut-nou" }> | null>(null);
   /** Istoricul publicarilor (etapa 7), deschis peste editor. */
   const [istoricDeschis, setIstoricDeschis] = useState(false);
   const [dispozitiv, setDispozitiv] = useState<Dispozitiv>("desktop");
@@ -448,15 +455,26 @@ export function EditorMagazin({
   // In panoul unui „Conținut liber” (etapa 9) randurile blocurilor se vad sub mouse, ca in arborele unei pagini.
   const pesteVazut = caleLiber && !blocLiberDeschis && !liberAici?.tinta ? peste
     : sectiuneSelectata || blocPaginaDeschis || setariPaginii || tintaBloc ? null : peste;
-  const evidentiereAcum = useRef({ selectat: selectatVazut, peste: pesteVazut });
-  useEffect(() => { evidentiereAcum.current = { selectat: selectatVazut, peste: pesteVazut }; }, [selectatVazut, pesteVazut]);
+  /*
+   * „+” din previzualizare (etapa 10): unde se arata il hotaraste editorul, din design si pagina, si pleaca odata cu
+   * evidentierea; clicul vine inapoi ca „adauga” si se verifica pe aceeasi lista (`ceAdaugaPlusul`).
+   */
+  const blocuriPaginii = paginaDeschisa.stare?.blocks ?? null;
+  const ctxAdaugare = useMemo<ContextAdaugare>(() => ({
+    pagina, magazin: paginiAfisate, sablon: sablonActiv, paginaAcasaProprie: !!paginaAcasa, blocuriPagina: blocuriPaginii,
+  }), [pagina, paginiAfisate, sablonActiv, paginaAcasa, blocuriPaginii]);
+  const puncteAdaugare = useMemo(() => puncteDeAdaugare(design, ctxAdaugare), [design, ctxAdaugare]);
+  const evidentiereAcum = useRef({ selectat: selectatVazut, peste: pesteVazut, adaugare: puncteAdaugare });
+  useEffect(() => {
+    evidentiereAcum.current = { selectat: selectatVazut, peste: pesteVazut, adaugare: puncteAdaugare };
+  }, [selectatVazut, pesteVazut, puncteAdaugare]);
   const trimiteEvidentierea = useCallback(() => {
     rama.current?.contentWindow?.postMessage(
       { [PREVIEW_MESSAGE]: "evidentiere", ...evidentiereAcum.current },
       window.location.origin,
     );
   }, []);
-  useEffect(() => { trimiteEvidentierea(); }, [selectatVazut, pesteVazut, trimiteEvidentierea]);
+  useEffect(() => { trimiteEvidentierea(); }, [selectatVazut, pesteVazut, puncteAdaugare, trimiteEvidentierea]);
 
   /** Adu sectiunea in dreptul ochilor, in previzualizare. */
   const arataInPrevizualizare = useCallback((id: string) => {
@@ -489,6 +507,7 @@ export function EditorMagazin({
     setSelectat(id);
     setBlocSelectat(null);
     setLiber(null);
+    setContinutNouCerut(null);
     arataInPrevizualizare(id);
   }, [arataInPrevizualizare]);
 
@@ -497,6 +516,7 @@ export function EditorMagazin({
     setSelectat(idSectiune);
     setBlocSelectat(idBlocului);
     setLiber(null);
+    setContinutNouCerut(null);
     arataInPrevizualizare(idBloc(idSectiune, idBlocului));
   }, [arataInPrevizualizare]);
 
@@ -504,6 +524,7 @@ export function EditorMagazin({
     setSelectat(null);
     setBlocSelectat(null);
     setLiber(null);
+    setContinutNouCerut(null);
   }, []);
 
   const schimbaPagina = useCallback((p: CheiePagina) => {
@@ -511,9 +532,11 @@ export function EditorMagazin({
     setSelectat(null);
     setBlocSelectat(null);
     setLiber(null);
+    setContinutNouCerut(null);
     setPeste(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
+    setLocAdaugare(null);
     setSetariSablon(false);
     setBlocPagina(null);
     setSetariPaginii(false);
@@ -549,8 +572,10 @@ export function EditorMagazin({
     setSelectat(null);
     setBlocSelectat(null);
     setLiber(null);
+    setContinutNouCerut(null);
     setGalerieDesign(null);
     setAdaugaDeschis(false);
+    setLocAdaugare(null);
     setSetariSablon(false);
     setVedereMobil("previzualizare");
     if (idPagina) cerePagina("acasa");
@@ -587,12 +612,63 @@ export function EditorMagazin({
     setBlocPagina(nou.id);
   }, [tintaBloc, aplicaPeEcran]);
 
+  /**
+   * „+” apasat in previzualizare (etapa 10): galeria peste previzualizare pe Acasa, altfel „Adaugă un bloc” in
+   * panou, la locul ales. Pe telefon editorul trece singur unde se alege.
+   */
+  const deschideAdaugarea = useCallback((a: Adaugare) => {
+    setFila("sectiuni");
+    setPeste(null);
+    setGalerieDesign(null);
+    setSetariSablon(false);
+    setContinutNouCerut(null);
+    if (a.fel === "sectiune") {
+      setLocAdaugare({ loc: a.loc, text: `Se adaugă ${a.unde === "jos" ? "sub" : "deasupra"} „${a.eticheta}”.` });
+      setAdaugaDeschis(true);
+      setVedereMobil("previzualizare");
+      // Blocurile de integrare din galerie stiu abia cu datele daca integrarea lor e pornita.
+      cereDateBlocuri();
+      return;
+    }
+    setAdaugaDeschis(false);
+    setLocAdaugare(null);
+    setVedereMobil("panou");
+    if (a.fel === "bloc-pagina") {
+      setSelectat(null);
+      setBlocSelectat(null);
+      setLiber(null);
+      setSetariPaginii(false);
+      setBlocPagina(null);
+      setTintaBloc(a.tinta);
+      return;
+    }
+    setTintaBloc(null);
+    if (a.fel === "bloc-liber") {
+      setSelectat(a.cale.sectiune);
+      setBlocSelectat(a.cale.bloc);
+      setLiber({ cheie: caleInText(a.cale), bloc: null, tinta: a.tinta });
+      return;
+    }
+    setSelectat(null);
+    setBlocSelectat(null);
+    setLiber(null);
+    setContinutNouCerut(a);
+    cereDateBlocuri();
+  }, [cereDateBlocuri]);
+
   // ── Mesajele din previzualizare ──
   useEffect(() => {
     function laMesaj(e: MessageEvent) {
       if (e.origin !== window.location.origin || !isPreviewMessage(e.data)) return;
       const tip = e.data[PREVIEW_MESSAGE];
-      if (tip === "ready") {
+      if (tip === "adauga") {
+        // Din cadru: forma se verifica, iar locul se cauta pe lista punctelor, nu se crede.
+        const { id, unde } = e.data;
+        if (typeof id !== "string" || (unde !== "sus" && unde !== "jos")) return;
+        const a = ceAdaugaPlusul(design, ctxAdaugare, id, unde);
+        if (a) deschideAdaugarea(a);
+      }
+      else if (tip === "ready") {
         trimiteDesignul();
         trimitePagina(true);
         trimiteDateBlocuri();
@@ -649,34 +725,71 @@ export function EditorMagazin({
         setSelectat(id);
         setBlocSelectat(blocStructural);
         setLiber(interior ? { ...interior, tinta: null } : null);
+        setContinutNouCerut(null);
         setVedereMobil("panou");
       }
     }
     window.addEventListener("message", laMesaj);
     return () => window.removeEventListener("message", laMesaj);
-  }, [trimiteDesignul, trimiteEvidentierea, trimitePagina, trimiteDateBlocuri, trimiteReluari, cereDateBlocuri, design, pagina, paginiAfisate, paginaDeschisa.modificata, schimbaPagina]);
+  }, [trimiteDesignul, trimiteEvidentierea, trimitePagina, trimiteDateBlocuri, trimiteReluari, cereDateBlocuri, design, pagina, paginiAfisate, paginaDeschisa.modificata, schimbaPagina, ctxAdaugare, deschideAdaugarea]);
 
   const adaugaSectiune = useCallback(async (kind: SectionKind) => {
+    const loc = locAdaugare?.loc;
     setAdaugaDeschis(false);
+    setLocAdaugare(null);
     if (kind === "product_row") {
       // Randul traieste in continut: intra in ciorna, iar designul se re-deriva in acelasi pas
       // (`aplicaContinut`), deci la urmatoarea randare randul e si in arbore, si selectat.
       const rand = newProductSection("selected");
-      const ok = await continut.seteazaSiSalveaza("rand", (p) => ({ ...p, product_sections: [...(p.product_sections ?? []), rand] }));
+      // Din „+” (etapa 10): derivarea il pune inaintea catalogului, de unde vine la locul ales, sub ACEEASI cheie,
+      // deci Anulează scoate tot dintr-o apasare.
+      const cheie = loc ? `adauga-rand:${rand.id}` : undefined;
+      const ok = await continut.seteazaSiSalveaza("rand", (p) => ({ ...p, product_sections: [...(p.product_sections ?? []), rand] }), cheie);
+      if (ok && loc) ciorna.aplica((d: StoreDesign) => mutaSectiuneaLa(d, rand.id, loc), cheie);
       if (ok) setSelectat(rand.id);
       return;
     }
-    const inainte = new Set(design.home.map((s) => s.id));
-    const urmator = addSection(design, kind);
-    ciorna.aplica(urmator);
-    const nou = urmator.home.find((s) => !inainte.has(s.id));
-    if (nou) {
-      setSelectat(nou.id);
-      setBlocSelectat(null);
-      // „Conținut liber” (etapa 9): gol, deci paleta de blocuri, nu un panou fara nimic in el.
-      setLiber(nou.kind === "continut_liber" ? { cheie: nou.id, bloc: null, tinta: { fel: "sus", index: 0 } } : null);
+    const r = sectiuneNoua(design, kind, loc);
+    if (!r) return;
+    ciorna.aplica(r.design);
+    setSelectat(r.id);
+    setBlocSelectat(null);
+    // „Conținut liber” (etapa 9): gol, deci paleta de blocuri, nu un panou fara nimic in el.
+    setLiber(kind === "continut_liber" ? { cheie: r.id, bloc: null, tinta: { fel: "sus", index: 0 } } : null);
+  }, [continut, design, ciorna, locAdaugare]);
+
+  /** Un bloc ales in galerie (etapa 10, „Secțiuni și blocuri”): intra intr-un „Conținut liber” nou, deschis pe el. */
+  const adaugaBlocDinGalerie = useCallback((tip: BlockType) => {
+    const bloc = createBlock(tip, { inColumn: false });
+    const r = sectiuneNoua(design, "continut_liber", locAdaugare?.loc, bloc);
+    setAdaugaDeschis(false);
+    setLocAdaugare(null);
+    if (!r) return;
+    ciorna.aplica(r.design);
+    setPeste(null);
+    setSelectat(r.id);
+    setBlocSelectat(null);
+    setLiber({ cheie: r.id, bloc: bloc.id, tinta: null });
+    setVedereMobil("panou");
+  }, [design, ciorna, locAdaugare]);
+
+  /** Blocul ales dupa un „+” de sub produs / de pe Pagina Magazin: intr-un „Conținut liber” nou, la locul ales. */
+  const adaugaInContinutNou = useCallback((tip: BlockType) => {
+    const a = continutNouCerut;
+    if (!a) return;
+    const bloc = createBlock(tip, { inColumn: false });
+    const r = continutNou(design, a, bloc);
+    if (!r) {
+      toast.error("Poți avea cel mult 10 blocuri „Conținut liber” pe o pagină.");
+      return;
     }
-  }, [continut, design, ciorna]);
+    ciorna.aplica(r.design);
+    setContinutNouCerut(null);
+    setPeste(null);
+    setSelectat(a.sectiune);
+    setBlocSelectat(r.id);
+    setLiber({ cheie: caleInText({ sectiune: a.sectiune, bloc: r.id }), bloc: bloc.id, tinta: null });
+  }, [continutNouCerut, design, ciorna]);
 
   /** Un „Conținut liber” nou intr-o zona a paginii de produs sau a Paginii Magazin (etapa 9), deschis pe paleta. */
   const adaugaContinutInZona = useCallback((idSectiune: string, tip: string) => {
@@ -691,6 +804,7 @@ export function EditorMagazin({
     const nou = toateSectiunile(urmator).find((s) => s.id === idSectiune)?.blocks?.find((b) => !inainte.has(b.id));
     if (!nou) return;
     setPeste(null);
+    setContinutNouCerut(null);
     setSelectat(idSectiune);
     setBlocSelectat(nou.id);
     setLiber({ cheie: `${idSectiune}/${nou.id}`, bloc: null, tinta: { fel: "sus", index: 0 } });
@@ -718,6 +832,7 @@ export function EditorMagazin({
     setSablonEditat(r.id);
     setSelectat(null);
     setBlocSelectat(null);
+    setContinutNouCerut(null);
     setSetariSablon(true);
   }, [design, ciorna]);
 
@@ -725,6 +840,7 @@ export function EditorMagazin({
     setSablonEditat(id);
     setSelectat(null);
     setBlocSelectat(null);
+    setContinutNouCerut(null);
     setSetariSablon(false);
   }, []);
 
@@ -787,6 +903,14 @@ export function EditorMagazin({
               <FilaSetari setari={setari} deschisa={setareDeschisa} onDeschide={setSetareDeschisa} onInapoi={() => setSetareDeschisa(null)} />
             ) : fila === "stil" ? (
               <PanouStil continut={continut} />
+            ) : continutNouCerut && !dateBlocuri ? (
+              <div className="space-y-2" aria-busy="true">
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}
+              </div>
+            ) : continutNouCerut && dateBlocuri ? (
+              // „+” de sub produs / de pe Pagina Magazin (etapa 10): blocul ales intra intr-un „Conținut liber” nou.
+              <PanouAdaugaBloc tinta={{ fel: "sus", index: 0 }} locText={continutNouCerut.locText} date={dateBlocuri} inapoiLa="secțiuni"
+                onBloc={adaugaInContinutNou} onInapoi={() => setContinutNouCerut(null)} />
             ) : setariSablon && sablonActiv ? (
               <PanouSablon
                 key={sablonActiv}
@@ -872,7 +996,7 @@ export function EditorMagazin({
                 <ArboreSectiuni
                   ciorna={ciorna} pagina={pagina} magazin={paginiAfisate} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
                   blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc} onAdaugaContinut={adaugaContinutInZona}
-                  nesalvat={nesalvat} onAdauga={() => { setAdaugaDeschis(true); setVedereMobil("previzualizare"); }}
+                  nesalvat={nesalvat} onAdauga={() => { setLocAdaugare(null); setAdaugaDeschis(true); setVedereMobil("previzualizare"); cereDateBlocuri(); }}
                   paginaAcasa={paginaAcasa}
                   sablon={sablonActiv} onSablon={alegeSablon} onSablonNou={sablonNou} onSetariSablon={() => setSetariSablon(true)}
                   onDeschidePagina={(id) => cerePagina(cheiaPaginiiProprii(id))}
@@ -926,9 +1050,10 @@ export function EditorMagazin({
             />
           )}
           {adaugaDeschis && (
-            <GalerieAdauga design={design} slug={magazin.slug} onAdauga={(k) => void adaugaSectiune(k)}
+            <GalerieAdauga design={design} slug={magazin.slug} loc={locAdaugare?.text} onAdauga={(k) => void adaugaSectiune(k)}
+              onBloc={adaugaBlocDinGalerie} integrareActiva={integrariActive(dateBlocuri)}
               faraContinutLiber={!!paginaAcasa}
-              onInchide={() => setAdaugaDeschis(false)} />
+              onInchide={() => { setAdaugaDeschis(false); setLocAdaugare(null); }} />
           )}
           <div className="flex-1 overflow-hidden flex justify-center p-3 lg:p-5">
             <div className="h-full w-full bg-surface rounded-xl border border-border shadow-sm overflow-hidden">

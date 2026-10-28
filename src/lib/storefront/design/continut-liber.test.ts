@@ -171,10 +171,10 @@ test("sub produs: „Conținut liber” se adauga la capatul zonei „Sub produs
   assert.equal(stergeContinut(lista, CLASIC, continut.id).some((b) => b.id === continut.id), false);
 
   // „+” de sub un bloc din aceeasi zona: chiar sub el; sub un bloc din alta zona: la coada.
-  const subDescriere = adaugaContinut(lista, CLASIC, "continut_liber", "descriere");
+  const subDescriere = adaugaContinut(lista, CLASIC, "continut_liber", { dupa: "descriere" });
   const iDescriere = subDescriere.findIndex((b) => b.id === "descriere");
   assert.equal(subDescriere[iDescriere + 1].type, "continut_liber");
-  const subTitlu = adaugaContinut(lista, CLASIC, "continut_liber", "titlu");
+  const subTitlu = adaugaContinut(lista, CLASIC, "continut_liber", { dupa: "titlu" });
   assert.equal(subTitlu.length, lista.length + 1);
   assert.notEqual(subTitlu[subTitlu.findIndex((b) => b.id === "titlu") + 1].type, "continut_liber", "titlul e in zona de cumparare: continutul nu intra acolo");
   assert.ok(!lista.some((b) => b.id === subTitlu.at(-1)!.id), "cel nou e la coada");

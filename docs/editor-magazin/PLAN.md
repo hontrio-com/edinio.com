@@ -30,7 +30,9 @@ Decizia lui: „nu dai push ca mai avem ceva de facut”, deci **nici migratia d
 Apoi: contorul de vizitatori masurat (etapa noua) si temele intregi, „dupa ce terminam de verificat tot ce am facut
 acum” (raspunsurile lui din 28.10, in „Deciziile proprietarului”). Planul si bifele: sectiunile „Etapa 4: planul de
 lucru” si „Etapa 5: planul de lucru”. **A doua verificare (W1-W6, ceruta 28.10: „O verificare si sa iti spun
-mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5); **urmeaza mentiunile lui**.
+mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5). **Mentiunile lui au venit pe 28.10** (doua:
+„+” in previzualizare, subsolul customizabil complet; raspunsurile in „Mentiunile lui din 28.10”): **etapa 10 („+”) in
+lucru**, apoi etapa 11 (subsolul pe coloane-bloc). Tot fara push si fara migratie, pana spune el.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1070,6 +1072,84 @@ cu proba lui; ce e de gust intra in raport, pentru mentiunile lui.
 - [x] W6 (28.10: aceleasi ca la G.4, fiindca de atunci s-au schimbat doar documente: tsc 0, `lint:prag` = pragul,
       11.202 de probe / 0 cazute, `build:ci` trece.) Porti: suita intreaga si `build:ci` (tsc si `lint:prag` trecute la G.4), raport, comit.
 
+## Mentiunile lui din 28.10 (dupa a doua verificare)
+
+1. „Acolo in preview in dreapta sa fie un PLUS gen sa adaugi Bloc Nou”
+2. „Footer-ul sa fie si el customizabil complet, acum nu poti customiza foarte multe chestii”
+
+Raspunsurile lui la intrebari (28.10): „+” **„Între secțiuni”** (pe marginea elementului de sub mouse; pe telefon, pe cel
+atins); pe pagina principala **„Secțiuni și blocuri”** (blocul ales intra singur intr-un „Conținut liber” pus acolo);
+subsolul **„Pe coloane-bloc”** (coloane adaugate, mutate, ascunse, sterse: Logo si text, Linkuri, Text, Contact,
+Newsletter, Imagine; culorile, retelele, „Înapoi sus”, copyright; blocul legal mereu jos). Etapa 10 = „+”, etapa 11 =
+subsolul, una dupa alta, cu raport intre ele.
+
+## Etapa 10: „+” in previzualizare (scris 28.10.2026, inainte de cod)
+
+Citit inainte:
+- Previzualizarea deseneaza doua contururi (`ConturEditor`): „peste” (mouse-ul sau randul din arbore) si „selectat”
+  (panoul deschis), intr-un strat fara clicuri (`pointer-events: none`), in `body`, incarcat doar in editor. Clicurile
+  le opreste TOATE `useDesignPreview` (captura pe `document`, `stopPropagation`), ca previzualizarea sa nu navigheze:
+  un buton pus in strat nu-si primeste niciodata clicul prin React, deci clicul lui se citeste tot acolo.
+- Adaugarea de azi: „Adaugă secțiune” din arbore deschide `GalerieAdauga` peste previzualizare; `addSection` pune
+  sectiunea noua inaintea catalogului (fara pozitie). Randul de produse se face in continut (`product_sections`), iar
+  ordinea randurilor intre ele o da continutul pana muta omul ceva (`ordineAtinsa`). Blocurile unei pagini proprii si
+  ale unui „Conținut liber” se adauga din panoul „Adaugă un bloc” (`PanouAdaugaBloc` + `PaletaBlocuri`), cu o tinta
+  (`TintaBloc`: index in lista sau in coloana, plus `dupa` pentru capul panoului). Un „Conținut liber” nou intr-o zona a
+  paginii de produs / Paginii Magazin: `adaugaContinut` (stie deja `dupa`).
+- Marcajele din previzualizare: sectiunile `data-st-section`, blocurile `data-st-bloc` = `<sectiune>/<bloc>` (pagina
+  proprie `pagina:<id>/<bloc>`, continutul de pe Acasa `<sectiune>/<bloc>`, sub produs si pe Magazin
+  `<pagina>/<continut>/<bloc>`), inclusiv blocurile din coloane.
+
+### Deciziile etapei
+
+1. **„+” sta pe elementul de sub mouse si pe cel selectat** (ecranul tactil n-are „peste”): un buton rotund pe marginea
+   de jos („Adaugă dedesubt”) si, doar pe primul element din lista lui, si pe marginea de sus („Adaugă deasupra”), ca sa
+   se poata pune ceva si in capul paginii. Mouse-ul dus pe buton pastreaza conturul (altfel butonul ar fi disparut sub
+   cursor); clicul pe el nu alege sectiunea de dedesubt.
+2. **Unde se ofera il decide editorul**, nu previzualizarea: o lista de puncte (id + daca are si „deasupra”), calculata
+   pur din design si pagina, trimisa odata cu evidentierea:
+   - Acasa (fara pagina proprie ca pagina principala si fara modul cu un singur produs): sectiunile paginii si blocurile
+     din „Conținut liber”-urile ei;
+   - pagina proprie: blocurile ei;
+   - pagina de produs: bucatile zonei „Sub produs”, „Conținut liber”-urile si blocurile lor, plus sectiunea insasi (jos);
+   - Pagina Magazin: sectiunea (sus = „Deasupra produselor”, jos = „Sub produse”), „Conținut liber”-urile si blocurile lor;
+   - antetul, subsolul (coloanele lui vin in etapa 11), bara de anunt, cosul si comanda: nimic.
+3. **Ce deschide „+”** (functie pura, din id si margine):
+   - pe o sectiune de pe Acasa: galeria „Adaugă” peste previzualizare, cu doua grupuri, „Blocuri” (lista de la paginile
+     proprii) si „Secțiuni” (miniaturile de azi), si locul scris sus („Se adaugă sub „Banner principal””). Sectiunea
+     aleasa intra acolo; blocul ales intra intr-un „Conținut liber” nou, pus acolo, deschis in panou pe bloc. „Adaugă
+     secțiune” din arbore deschide aceeasi galerie, cu ambele grupuri, la locul de azi (inaintea catalogului);
+   - pe un bloc al unei pagini proprii sau al unui „Conținut liber”, ori pe un „Conținut liber” al paginii de produs /
+     Paginii Magazin: panoul „Adaugă un bloc”, cu locul („sub „Titlu: ...””), ca „+”-ul din arbore; blocul intra langa
+     cel ales (si in coloana lui), respectiv la capatul continutului;
+   - pe o bucata fixa din „Sub produs” sau pe marginea paginii de produs / Paginii Magazin: tot „Adaugă un bloc”, dar
+     blocul intra intr-un „Conținut liber” nou, pus acolo (plafonul de 10 pe pagina ramane, cu mesaj).
+   Pe telefon editorul trece singur pe panou cand alegerea se face acolo.
+4. **Totul ca pana acum, doar cu locul ales**: designul prin ciorna (Anulează / Refă, „Publică”), pagina proprie prin
+   „Salvează pagina”. Randul de produse intra in continut si se muta la locul ales, intr-un singur pas la Anulează;
+   ordinea randurilor intre ele urmeaza regula sagetilor (`ordineAtinsa` doar cand se schimba).
+5. **Magazinul public nu primeste nimic**: butonul e in stratul de contur, iar mesajul nou exista doar intre editor si
+   cadrul lui.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 10.1 (28.10: `lib/editor-magazin/adaugare.ts` cu `puncteDeAdaugare`, `ceAdaugaPlusul`, `tintaLangaBloc`,
+      `sectiuneNoua`, `continutNou`; `TintaBloc` mutat acolo; `addSection(design, kind, loc)` si `mutaSectiuneaLa` in
+      `edit.ts`; `adaugaContinut(..., loc, initiale)`; in protocol `PunctAdaugare`, `adauga`, `plusulDeSub`; 18 probe.)
+      Logica fara React: punctele de adaugare pe pagina, ce deschide un „+”, `addSection` cu loc, „deasupra” la
+      `adaugaContinut`, tinta langa un bloc din arbore (si in coloana), mesajele noi in protocol. Probe.
+- [x] 10.2 (28.10: doua butoane in `ConturEditor`, in afara stratului `aria-hidden`, singurele cu clicuri; „+” pe
+      elementul de sub mouse, altfel pe cel selectat; clicul citit primul in `useDesignPreview`.) Previzualizarea: „+”
+      in `ConturEditor` (jos, si sus pe primul; pe „peste” si pe „selectat”; mouse-ul pe el pastreaza conturul), clicul
+      citit in `useDesignPreview`. Probe pe sursa.
+- [x] 10.3 (28.10: `deschideAdaugarea` in `EditorMagazin`; galeria „Adaugă un bloc sau o secțiune” cu `PaletaBlocuri`
+      sus si locul in cap, deschisa la fel si din arbore; panoul „Adaugă un bloc” pentru continutul nou (`locText`);
+      randul de produse mutat sub aceeasi cheie de istoric (`seteaza(..., cheieAnume)`); 3 probe pe sursa, doua probe
+      vechi de la 9.4 aduse la forma noua; mutanti 25/25, unul scapase intai (conditia `if (plus)`), proba stransa.)
+      Editorul: mesajul „adauga”, galeria cu loc si cu grupul „Blocuri”, panoul „Adaugă un bloc” cu tinta, continutul
+      nou cu primul bloc, randul de produse la loc, telefonul. Probe.
+- [ ] 10.4 REGISTRU (C), ghidurile din centrul de ajutor, porti, proba in Chrome (cere acordul lui pentru impersonare).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -1094,6 +1174,8 @@ cu proba lui; ce e de gust intra in raport, pentru mentiunile lui.
   dar dupa ce termini, nu dai push ca mai avem ceva de facut” (deci nici migratia din REGISTRU A, pana spune el);
   garantiile de pe pagina de produs „Rămân neafișate”; contorul de vizitatori „Îl facem real (etapă nouă)”; temele:
   „Facem si teme noi dar asta dupa ce terminam de verificat tot ce am facut acum”.
+- 28.10.2026, mentiunile lui dupa a doua verificare: „+” in previzualizare („Între secțiuni”; pe Acasa „Secțiuni și
+  blocuri”) si subsolul „Pe coloane-bloc” (vezi „Mentiunile lui din 28.10”).
 
 ## De ce Shopify si nu Elementor
 

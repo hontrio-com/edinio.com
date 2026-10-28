@@ -117,6 +117,44 @@ export interface PreviewEvidentiereMessage {
   [PREVIEW_MESSAGE]: "evidentiere";
   selectat: string | null;
   peste: string | null;
+  /**
+   * Unde arata previzualizarea „+” (etapa 10): elementele pe care se poate adauga ceva langa. Lista o
+   * face editorul, din design; previzualizarea doar deseneaza butonul si anunta clicul (`adauga`).
+   */
+  adaugare?: PunctAdaugare[];
+}
+
+/** Marginea elementului pe care s-a apasat „+” (etapa 10): deasupra sau dedesubt. */
+export type MargineAdaugare = "sus" | "jos";
+
+/** Un element cu „+” (etapa 10): jos are mereu, sus doar primul din lista lui (capul paginii, al zonei, al coloanei). */
+export interface PunctAdaugare {
+  id: string;
+  sus?: true;
+}
+
+/** Preview -> editor: s-a apasat „+” pe elementul `id`, la marginea `unde`. Ce se adauga decide editorul. */
+export interface PreviewAdaugaMessage {
+  [PREVIEW_MESSAGE]: "adauga";
+  id: string;
+  unde: MargineAdaugare;
+}
+
+/**
+ * Atributele butonului „+” din stratul de contur: elementul si marginea. Clicul il citeste
+ * `useDesignPreview`, care opreste orice clic din previzualizare inainte sa ajunga la React.
+ */
+export const ADAUGA_ATTR = "data-st-adauga";
+export const MARGINE_ATTR = "data-st-margine";
+
+/** Clicul a fost pe un „+”? Elementul si marginea, din atributele butonului; `null` altfel. */
+export function plusulDeSub(
+  tinta: { closest(selector: string): { getAttribute(nume: string): string | null } | null } | null | undefined,
+): { id: string; unde: MargineAdaugare } | null {
+  const buton = tinta?.closest(`[${ADAUGA_ATTR}]`);
+  const id = buton?.getAttribute(ADAUGA_ATTR);
+  const unde = buton?.getAttribute(MARGINE_ATTR);
+  return id && (unde === "sus" || unde === "jos") ? { id, unde } : null;
 }
 
 /**
@@ -189,6 +227,7 @@ export interface PreviewReluariMessage {
 }
 
 export type PreviewMessage =
+  | PreviewAdaugaMessage
   | PreviewReluariMessage
   | PreviewDesignMessage
   | PreviewScrollMessage

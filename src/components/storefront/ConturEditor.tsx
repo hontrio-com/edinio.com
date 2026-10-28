@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { cutiaSectiunii, sectiuneaDeSub } from "@/lib/storefront/design/contur-editor";
-import { ETICHETA_ATTR, PREVIEW_MESSAGE, isPreviewMessage, selectorMarcaj } from "@/lib/storefront/design/preview-protocol";
+import { cutiaSectiunii, sectiuneaDeSub, type Cutie } from "@/lib/storefront/design/contur-editor";
+import {
+  ADAUGA_ATTR,
+  ETICHETA_ATTR,
+  MARGINE_ATTR,
+  PREVIEW_MESSAGE,
+  isPreviewMessage,
+  selectorMarcaj,
+} from "@/lib/storefront/design/preview-protocol";
 
 /**
  * Conturul sectiunilor in previzualizarea editorului unic (etapa 3 din
@@ -13,6 +20,11 @@ import { ETICHETA_ATTR, PREVIEW_MESSAGE, isPreviewMessage, selectorMarcaj } from
  * (aici) sau de sub randul din arbore (din editor); „selectat”, gros, pentru
  * nodul deschis in panou. Selectia o tine editorul si o trimite prin
  * `evidentiere`; aici doar se deseneaza.
+ *
+ * „+” (etapa 10): pe elementul de sub mouse (altfel pe cel selectat, ca pe ecranul
+ * tactil, unde nu exista „peste”), pe marginea de jos si, la primul din lista lui,
+ * si pe cea de sus. Unde are voie il spune editorul (`adaugare`); clicul il citeste
+ * `useDesignPreview`, care opreste orice clic inainte de React, si il anunta editorului.
  *
  * Se incarca la cerere si DOAR in modul editor (`next/dynamic` cu `ssr: false`
  * in gazde), deci magazinul public nu primeste nimic din el, iar `document`
@@ -24,17 +36,45 @@ import { ETICHETA_ATTR, PREVIEW_MESSAGE, isPreviewMessage, selectorMarcaj } from
 const ALBASTRU = "#2563eb";
 /** Cat de sus sta eticheta deasupra conturului; mai aproape de margine intra in el. */
 const INALTIME_ETICHETA = 20;
+/** Diametrul butonului „+”, centrat pe margine. */
+const PLUS = 28;
 
 export default function ConturEditor() {
   const radacina = useRef<HTMLDivElement>(null);
   const peste = useRef<HTMLDivElement>(null);
   const selectat = useRef<HTMLDivElement>(null);
+  const plusuri = useRef<HTMLDivElement>(null);
+  const plusSus = useRef<HTMLButtonElement>(null);
+  const plusJos = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let dinMouse: string | null = null;
     let dinArbore: string | null = null;
     let idSelectat: string | null = null;
+    /** Elementele cu „+”, si daca au si „deasupra”; le trimite editorul in `evidentiere`. */
+    let puncte = new Map<string, boolean>();
     let cadru = 0;
+
+    /** Un „+” pe mijlocul unei margini a cutiei; ascuns cand n-are ce arata. */
+    function punePlus(buton: HTMLButtonElement | null, id: string | null, y: number | null, cutie: Cutie | null) {
+      if (!buton) return;
+      if (!id || y === null || !cutie) {
+        buton.style.display = "none";
+        return;
+      }
+      buton.style.display = "flex";
+      buton.style.transform = `translate(${cutie.stanga + cutie.latime / 2 - PLUS / 2}px, ${y - PLUS / 2}px)`;
+      buton.setAttribute(ADAUGA_ATTR, id);
+    }
+
+    function deseneazaPlusurile() {
+      // Mouse-ul are intaietate; fara el (ecran tactil, mouse-ul afara), elementul selectat.
+      const id = dinMouse ? (puncte.has(dinMouse) ? dinMouse : null) : idSelectat && puncte.has(idSelectat) ? idSelectat : null;
+      const marcaj = id ? document.querySelector<HTMLElement>(selectorMarcaj(id)) : null;
+      const cutie = cutiaSectiunii(marcaj);
+      punePlus(plusJos.current, cutie ? id : null, cutie ? cutie.sus + cutie.inaltime : null, cutie);
+      punePlus(plusSus.current, cutie && id && puncte.get(id) ? id : null, cutie ? cutie.sus : null, cutie);
+    }
 
     function pune(strat: HTMLDivElement | null, id: string | null) {
       if (!strat) return;
@@ -63,6 +103,7 @@ export default function ConturEditor() {
       pune(selectat.current, idSelectat);
       // Peste cel selectat nu se mai pune al doilea contur: ar dubla eticheta.
       pune(peste.current, idPeste && idPeste !== idSelectat ? idPeste : null);
+      deseneazaPlusurile();
     }
     const programeaza = () => {
       if (!cadru) cadru = requestAnimationFrame(deseneaza);
@@ -72,6 +113,9 @@ export default function ConturEditor() {
       // Doar mouse-ul: pe ecranul tactil nu exista „peste”, iar un deget care
       // deruleaza ar fi aprins si stins contururi pe toata pagina.
       if (e.pointerType !== "mouse") return;
+      // Pe „+” elementul ramane cel de dinainte: butonul sta pe granita cu vecinul,
+      // iar fara asta ar fi sarit pe vecin (sau ar fi disparut) chiar sub cursor.
+      if (plusuri.current?.contains(e.target as Node | null)) return;
       const id = sectiuneaDeSub(e.target as Element | null)?.id ?? null;
       if (id !== dinMouse) {
         dinMouse = id;
@@ -88,6 +132,7 @@ export default function ConturEditor() {
       if (e.data[PREVIEW_MESSAGE] !== "evidentiere") return;
       idSelectat = e.data.selectat;
       dinArbore = e.data.peste;
+      puncte = new Map((e.data.adaugare ?? []).map((p) => [p.id, p.sus === true]));
       programeaza();
     }
 
@@ -103,7 +148,7 @@ export default function ConturEditor() {
      * desen ar fi cerut urmatorul, la nesfarsit.
      */
     const observator = new MutationObserver((schimbari) => {
-      if (schimbari.some((s) => !radacina.current?.contains(s.target))) programeaza();
+      if (schimbari.some((s) => !radacina.current?.contains(s.target) && !plusuri.current?.contains(s.target))) programeaza();
     });
     observator.observe(document.body, { childList: true, subtree: true });
     const redimensionare = new ResizeObserver(programeaza);
@@ -128,16 +173,58 @@ export default function ConturEditor() {
   // Stratul sta in `body`, nu in arborele paginii: un stramos cu `transform`
   // (tema, animatiile variantelor) ar fi mutat `position: fixed` in el.
   return createPortal(
-    <div ref={radacina} aria-hidden="true">
-      <div ref={peste} style={strat(1, "rgba(37, 99, 235, 0.04)")}>
-        <span style={eticheta(false)} />
+    <>
+      <div ref={radacina} aria-hidden="true">
+        <div ref={peste} style={strat(1, "rgba(37, 99, 235, 0.04)")}>
+          <span style={eticheta(false)} />
+        </div>
+        <div ref={selectat} style={strat(2, "transparent")}>
+          <span style={eticheta(true)} />
+        </div>
       </div>
-      <div ref={selectat} style={strat(2, "transparent")}>
-        <span style={eticheta(true)} />
+      {/* Butoanele „+”: in afara stratului `aria-hidden`, fiindca se apasa. */}
+      <div ref={plusuri}>
+        <button ref={plusSus} type="button" {...{ [MARGINE_ATTR]: "sus" }} aria-label="Adaugă deasupra" title="Adaugă deasupra" style={butonPlus()}>
+          <SemnPlus />
+        </button>
+        <button ref={plusJos} type="button" {...{ [MARGINE_ATTR]: "jos" }} aria-label="Adaugă dedesubt" title="Adaugă dedesubt" style={butonPlus()}>
+          <SemnPlus />
+        </button>
       </div>
-    </div>,
+    </>,
     document.body,
   );
+}
+
+function SemnPlus() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style={{ pointerEvents: "none" }}>
+      <path d="M7 1.5v11M1.5 7h11" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Butonul „+”: deasupra contururilor, singurul lucru din strat care primeste clicuri. */
+function butonPlus(): CSSProperties {
+  return {
+    display: "none",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: PLUS,
+    height: PLUS,
+    padding: 0,
+    margin: 0,
+    border: 0,
+    borderRadius: "50%",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    pointerEvents: "auto",
+    zIndex: 2147483647,
+    background: ALBASTRU,
+    boxShadow: "0 0 0 3px #fff, 0 2px 8px rgba(15, 23, 42, 0.3)",
+  };
 }
 
 /**

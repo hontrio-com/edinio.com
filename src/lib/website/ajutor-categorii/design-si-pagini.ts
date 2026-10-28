@@ -35,6 +35,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Previzualizarea", text: "În dreapta vezi magazinul cu modificările tale, înainte să ajungă la clienți. Din bara de sus alegi „Telefon”, „Tabletă” sau „Calculator”. Un clic pe o secțiune din previzualizare o deschide în panou." },
+            { titlu: "„+” din previzualizare", text: "Când ții mouse-ul pe o secțiune sau pe un bloc, pe marginea lui de jos apare „+”: îl apeși ca să adaugi ceva chiar acolo. Primul de pe pagină are „+” și pe marginea de sus. Pe telefon, „+” apare pe secțiunea atinsă. Pe antet, subsol, coș și finalizarea comenzii nu apare." },
             { titlu: "Ce ajunge la clienți și când", text: "Ce schimbi în filele „Secțiuni” și „Stil” se strânge într-o ciornă și ajunge în magazin la „Publică”. Ce salvezi în fila „Setări” ajunge direct, la „Salvează”. Paginile tale se salvează cu „Salvează pagina”." },
             { titlu: "Punctul de lângă o secțiune", text: "O secțiune cu modificări încă nepublicate are un punct portocaliu lângă nume. Dispare după „Publică” sau „Renunță”." },
             { titlu: "Pe telefon și pe tabletă", text: "Pe un ecran îngust (telefon, tabletă ținută vertical), panoul și previzualizarea nu încap una lângă alta: treci între ele cu butonul „Vezi”, respectiv „Editează”, din bara de sus. Istoricul, „Renunță” și vizibilitatea magazinului stau în meniul cu trei puncte; pe telefon, și Anulează și Refă." },
@@ -630,6 +631,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Apasă „Publică” ca să-l vadă clienții.",
           ],
           detalii: [
+            { titlu: "Direct din previzualizare", text: "Pe pagina principală, „+” de pe marginea unei secțiuni deschide galeria: blocul ales intră într-un „Conținut liber” nou, chiar acolo. Sub produs și pe Pagina Magazin, „+” de pe o bucată a paginii sau de pe marginea paginii deschide lista „Adaugă un bloc”, iar blocul ales intră într-un conținut nou, în locul acela. „+” de pe un bloc care e deja într-un conținut pune blocul nou lângă el." },
             { titlu: "Ce blocuri poți pune", text: "Toate blocurile de pe paginile tale, mai puțin „Din pagina principală”: acela aduce o secțiune a magazinului, deci în magazin ar dubla una care există deja. Blocurile din integrări (newsletter, plăți, curieri) apar când integrarea e pornită." },
             { titlu: "Când ajunge la clienți", text: "Ca orice schimbare din editor: după „Publică”. Până atunci îl vezi doar tu, în previzualizare. „Anulează” și „Refă” merg și aici, iar „Istoric” păstrează și conținutul fiecărei publicări." },
             { titlu: "Mutare, ascundere, ștergere", text: "Săgețile mută un bloc, „⧉” îl duplică, coșul îl șterge. Pe pagina principală, secțiunea întreagă se mută, se ascunde, se duplică și se șterge din lista de secțiuni. Sub produs și pe Pagina Magazin, ochiul o ascunde, iar „Duplică” și „Șterge” stau jos în panoul ei." },
@@ -764,10 +766,11 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Ascunde sau arată o secțiune cu ochiul de pe rândul ei.",
             "Fă o copie cu „Duplică secțiunea” sau scoate secțiunea cu „Șterge secțiunea”, din capătul rândului.",
             "Pentru o secțiune nouă, apasă „Adaugă secțiune”, sub listă, și apasă „Adaugă” pe cardul ei.",
+            "Sau, în previzualizare, ține mouse-ul pe secțiunea sub care o vrei și apasă „+” de pe marginea ei de jos. Galeria se deschide cu locul scris sus, de exemplu „Se adaugă sub „Banner principal””.",
             "Apasă „Publică”.",
           ],
           detalii: [
-            { titlu: "Galeria „Adaugă o secțiune”", text: "Fiecare card arată secțiunea cu culorile și fonturile magazinului tău, pe produse de exemplu. Secțiunea nouă intră înaintea catalogului, iar panoul ei se deschide singur." },
+            { titlu: "Galeria „Adaugă un bloc sau o secțiune”", text: "Sus sunt blocurile de pe paginile tale (Titlu, Text, Imagine, Buton și celelalte), jos secțiunile, fiecare card cu culorile și fonturile magazinului tău, pe produse de exemplu. Un bloc ales intră într-un „Conținut liber” nou, în care poți pune apoi și alte blocuri. Din „Adaugă secțiune” ce alegi intră înaintea catalogului; din „+” intră chiar acolo. Panoul se deschide singur." },
             { titlu: "Ce nu apare în galerie", text: "O secțiune care poate fi o singură dată pe pagină și e deja în listă nu mai apare în galerie: o readuci cu ochiul ei. „Rând de produse” și „Conținut liber” se pot adăuga de câte ori vrei." },
             { titlu: "Ce nu se poate șterge", text: "Antetul și subsolul nu se ascund și nu se șterg: în subsol stau datele firmei și politicile. Un rând de produse se șterge din panoul lui, cu „Șterge rândul”." },
             { titlu: "Dacă ai greșit", text: "„Anulează” din bara de sus aduce înapoi o secțiune ștearsă sau mutată, cât timp n-ai apăsat „Publică”. După publicare, o versiune de dinainte o readuci din istoric." },
@@ -1399,12 +1402,13 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Intră în Pagini > Toate paginile și apasă Editează pe pagina dorită. Pagina se deschide în Editează magazinul.",
             "Apasă „Adaugă bloc”, sub lista de blocuri, ca blocul să intre la sfârșitul paginii.",
             "Sau apasă „+” de pe rândul unui bloc, ca blocul nou să intre chiar sub el.",
+            "Sau, în previzualizare, ține mouse-ul pe un bloc și apasă „+” de pe marginea lui de jos. La primul bloc al paginii sau al unei coloane, „+” apare și pe marginea de sus.",
             "În lista „Adaugă un bloc” apasă tipul dorit. Blocul se deschide singur în panou.",
             "Completează setările blocului, apoi apasă „Salvează pagina”.",
           ],
           detalii: [
             { titlu: "Ce blocuri ai la dispoziție", text: "Hero, Titlu, Text, Imagine, Galerie, Buton, Coloane, Spațiu, Linie, Video, Hartă, Întrebări (FAQ), Beneficii, Produse, Pachete, Social, Formular contact și Cod personalizat. La „Din integrările tale” mai ai Newsletter, Metode de plată și Curierii noștri, active când integrarea e pornită." },
-            { titlu: "Unde intră blocul", text: "Sub titlul listei scrie locul: „La sfârșitul paginii” sau „sub” urmat de blocul de pe al cărui rând ai pornit." },
+            { titlu: "Unde intră blocul", text: "Sub titlul listei scrie locul: „La sfârșitul paginii”, sau „sub” ori „deasupra”, urmat de blocul de lângă care ai pornit." },
             { titlu: "Cum e construită pagina", text: "O pagină este o stivă verticală de blocuri pe toată lățimea. Nu poți așeza blocuri liber, unul lângă altul. Pentru mai multe coloane pe același rând folosești blocul Coloane." },
             { titlu: "Când pagina e goală", text: "Vezi textul „Pagina e goală. Adaugă primul bloc ca să începi.”, împreună cu butonul „Adaugă bloc”." },
             { titlu: "Din pagina principală", text: "Grupul „Din pagina principală” aduce secțiuni ale magazinului într-o pagină și apare doar când pagina e aleasă ca pagina principală." },

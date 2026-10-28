@@ -5,6 +5,7 @@ import { sectiuneaDeSub } from "@/lib/storefront/design/contur-editor";
 import {
   PREVIEW_MESSAGE,
   isPreviewMessage,
+  plusulDeSub,
   selectorMarcaj,
 } from "@/lib/storefront/design/preview-protocol";
 import { primaCutie } from "@/lib/storefront/design/scroll-target";
@@ -76,6 +77,12 @@ export function useDesignPreview(
     // Click pe o sectiune -> selectie in lista din editor.
     function onClick(event: MouseEvent) {
       opreste(event);
+      // „+” din stratul de contur (etapa 10): ce se adauga si unde decide editorul.
+      const plus = plusulDeSub(event.target as Element | null);
+      if (plus) {
+        window.parent.postMessage({ [PREVIEW_MESSAGE]: "adauga", ...plus }, window.location.origin);
+        return;
+      }
       // Blocul, cand e unul sub clic, altfel sectiunea (`sectiuneaDeSub`).
       const id = sectiuneaDeSub(event.target as Element | null)?.id;
       if (!id) return;

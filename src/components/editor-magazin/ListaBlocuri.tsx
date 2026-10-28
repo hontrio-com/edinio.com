@@ -4,13 +4,12 @@ import { ChevronDown, ChevronUp, Copy, Plus, Trash2 } from "lucide-react";
 import { asezareColoane } from "@/components/pages/blocks/StaticBlocks";
 import { BLOCK_META, type Block } from "@/lib/pages/blocks.types";
 import { columnBlocks, duplicateBlockInTree, isFlexibleColumns, moveBlockInTree, removeBlockFromTree } from "@/lib/pages/block-tree";
+import type { TintaBloc } from "@/lib/editor-magazin/adaugare";
 import { rezumatBloc } from "@/lib/editor-magazin/pagina-proprie";
 import { idBloc } from "@/lib/storefront/design/preview-protocol";
 
-/** Unde se adauga urmatorul bloc: in lista, sau intr-o coloana a unui bloc de coloane; `dupa` = sub ce bloc. */
-export type TintaBloc =
-  | { fel: "sus"; index: number; dupa?: string }
-  | { fel: "coloana"; idColoane: string; coloana: number; index: number; dupa?: string };
+/** Unde se adauga urmatorul bloc; tipul sta langa „+”-ul din previzualizare (etapa 10), care face aceleasi tinte. */
+export type { TintaBloc };
 
 const actiune = "w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-25 disabled:pointer-events-none";
 

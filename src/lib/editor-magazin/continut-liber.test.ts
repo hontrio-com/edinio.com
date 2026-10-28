@@ -148,7 +148,8 @@ test("paleta continutului spune unde intra blocul: la sfarsitul continutului, nu
   assert.doesNotMatch(laPagina, /laSfarsit/);
   const p = cod("src/components/editor-magazin/PanouriPagina.tsx");
   assert.match(p, /laSfarsit = "La sfârșitul paginii"/);
-  assert.match(p, /tinta\.dupa \? `sub „\$\{tinta\.dupa\}”` : tinta\.fel === "sus" \? laSfarsit : null/);
+  // „deasupra” vine din „+”-ul de sus din previzualizare (etapa 10); fara loc, tot capatul listei.
+  assert.match(p, /tinta\.dupa \? `sub „\$\{tinta\.dupa\}”` : tinta\.inainte \? `deasupra „\$\{tinta\.inainte\}”` : tinta\.fel === "sus" \? laSfarsit : null/);
 });
 
 test("⚠ datele blocurilor: cerute o data, trimise in cadru la cerere si dupa fiecare „ready”", () => {
@@ -169,7 +170,8 @@ test("⚠ datele blocurilor: cerute o data, trimise in cadru la cerere si dupa f
 
 test("adaugarea: sectiunea noua si continutul nou dintr-o zona se deschid direct pe paleta", () => {
   const e = cod(EDITOR);
-  assert.match(e, /setLiber\(nou\.kind === "continut_liber" \? \{ cheie: nou\.id, bloc: null, tinta: \{ fel: "sus", index: 0 \} \} : null\);/);
+  // Din etapa 10 sectiunea noua vine din `sectiuneNoua` (cu locul ales din „+”), cu id-ul ei in `r.id`.
+  assert.match(e, /setLiber\(kind === "continut_liber" \? \{ cheie: r\.id, bloc: null, tinta: \{ fel: "sus", index: 0 \} \} : null\);/);
   assert.match(e, /const urmator = schimbaBlocurile\(design, idSectiune, \(l, sch\) => adaugaContinut\(l, sch, tip\)\);/);
   assert.match(e, /setLiber\(\{ cheie: `\$\{idSectiune\}\/\$\{nou\.id\}`, bloc: null, tinta: \{ fel: "sus", index: 0 \} \}\);/);
 });

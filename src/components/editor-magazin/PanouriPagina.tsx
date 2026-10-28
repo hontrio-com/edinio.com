@@ -138,31 +138,41 @@ export function PanouPagina({ stare, pagina, date, onInapoi }: {
   );
 }
 
-export function PanouAdaugaBloc({ tinta, date, estePaginaAcasa = false, laSfarsit = "La sfârșitul paginii", onBloc, onAcasa, onInapoi, inapoiLa }: {
+/**
+ * Un bloc de integrare se poate adauga numai cand integrarea lui e activa. Fara date (galeria de pe
+ * Acasa, cat se incarca), toate stinse: blocurile lor apar oricum, cu ce trebuie conectat.
+ */
+export function integrariActive(date: DateBlocuri | null): Record<string, boolean> {
+  return {
+    newsletter: (date?.integrari.furnizori.length ?? 0) > 0,
+    payments: (date?.integrari.plati.length ?? 0) > 0,
+    couriers: (date?.integrari.curieri.length ?? 0) > 0,
+  };
+}
+
+export function PanouAdaugaBloc({ tinta, date, estePaginaAcasa = false, laSfarsit = "La sfârșitul paginii", locText, onBloc, onAcasa, onInapoi, inapoiLa }: {
   tinta: TintaBloc;
   date: DateBlocuri;
   estePaginaAcasa?: boolean;
   /** Unde intra blocul fara `dupa`: intr-un „Conținut liber” e sfarsitul continutului, nu al paginii. */
   laSfarsit?: string;
+  /** Locul spus intreg, cand blocul intra intr-un „Conținut liber” nou (etapa 10, „+” de sub produs). */
+  locText?: string;
   onBloc: (tip: BlockType) => void;
   /** Sectiunile paginii principale: doar la paginile proprii; lipsa = grupul nu apare (etapa 9). */
   onAcasa?: (sectiune: SectiuneAcasa) => void;
   onInapoi: () => void;
   inapoiLa?: string;
 }) {
-  // Un bloc de integrare se poate adauga numai cand integrarea lui e activa.
-  const integrareActiva: Record<string, boolean> = {
-    newsletter: date.integrari.furnizori.length > 0,
-    payments: date.integrari.plati.length > 0,
-    couriers: date.integrari.curieri.length > 0,
-  };
+  const integrareActiva = integrariActive(date);
   return (
     <div className="space-y-5 pb-6">
       <Antet
         titlu={tinta.fel === "coloana" ? "Adaugă în coloană" : "Adaugă un bloc"}
-        subtitlu={[
+        subtitlu={locText ?? [
           tinta.fel === "coloana" ? `Coloana ${tinta.coloana + 1}` : null,
-          tinta.dupa ? `sub „${tinta.dupa}”` : tinta.fel === "sus" ? laSfarsit : null,
+          // „deasupra” vine doar din „+”-ul de sus din previzualizare (etapa 10).
+          tinta.dupa ? `sub „${tinta.dupa}”` : tinta.inainte ? `deasupra „${tinta.inainte}”` : tinta.fel === "sus" ? laSfarsit : null,
         ].filter(Boolean).join(", ")}
         icon={<Plus className="h-4 w-4" />}
         onInapoi={onInapoi}

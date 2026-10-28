@@ -1,4 +1,5 @@
 import { ETICHETA_CONTINUT_LIBER, parseBlocuriLibere, reidentificaBlocuri, blocuriDinSetari } from "./continut-liber";
+import type { Block } from "@/lib/pages/blocks.types";
 import type { BlockInstance, SectionKind } from "./types";
 
 /**
@@ -314,22 +315,26 @@ function cateContinuturi(blocuri: readonly BlockInstance[], schema: SchemaBlocur
 }
 
 /**
- * Un „Conținut liber” nou, gol, de tipul `tip`: sub blocul `dupa` (cand e in aceeasi zona) sau la
- * coada listei. Coada e capatul zonei lui: ordinea conteaza doar inauntrul zonei (`blocurileZonei`).
+ * Un „Conținut liber” nou de tipul `tip`: sub blocul `loc.dupa` sau deasupra lui `loc.inainte` (cand e
+ * in aceeasi zona), altfel la coada listei. Coada e capatul zonei lui: ordinea conteaza doar
+ * inauntrul zonei (`blocurileZonei`). Gol, sau cu `initiale` (primul bloc ales din „+”, etapa 10).
  * Intoarce ACEEASI lista pentru un tip care nu e continut sau peste plafon.
  */
 export function adaugaContinut(
   blocuri: readonly BlockInstance[],
   schema: SchemaBlocuri,
   tip: string,
-  dupa?: string,
+  loc: { dupa?: string; inainte?: string } = {},
+  initiale: readonly Block[] = [],
 ): readonly BlockInstance[] {
   const meta = schema.tipuri[tip];
   if (!meta?.repetabil || cateContinuturi(blocuri, schema) >= MAX_CONTINUTURI_PE_SECTIUNE) return blocuri;
-  const iDupa = dupa ? blocuri.findIndex((b) => b.id === dupa && schema.tipuri[b.type]?.zona === meta.zona) : -1;
-  const pozitie = iDupa >= 0 ? iDupa + 1 : blocuri.length;
+  const inZona = (id: string | undefined) => (id ? blocuri.findIndex((b) => b.id === id && schema.tipuri[b.type]?.zona === meta.zona) : -1);
+  const iDupa = inZona(loc.dupa);
+  const iInainte = inZona(loc.inainte);
+  const pozitie = iDupa >= 0 ? iDupa + 1 : iInainte >= 0 ? iInainte : blocuri.length;
   const urmatoarea = [...blocuri];
-  urmatoarea.splice(pozitie, 0, { id: idContinutNou(), type: tip, enabled: true, settings: { blocuri: [] } });
+  urmatoarea.splice(pozitie, 0, { id: idContinutNou(), type: tip, enabled: true, settings: { blocuri: [...initiale] } });
   return urmatoarea;
 }
 

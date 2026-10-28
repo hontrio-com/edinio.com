@@ -952,6 +952,52 @@ Citit inainte:
       abonamentului; verificat cu o singura comparatie. Caderea editorului a prins refacerea nepornita: cererea
       expirase („Invalid or expired requestState”), deci nimic nu se pusese la loc pana la reluare.)
 
+## Inchiderea, pasul 5: ghidurile din centrul de ajutor (scris 28.10.2026, inainte de text)
+
+Pasul 5 din „Ordinea de la final” (REGISTRU): capturile si textele de ajutor din tabelul D. Decizia lui (28.10):
+„Inainte de push dar dupa ce termini, nu dai push ca mai avem ceva de facut”. Deci la capat: raport, fara push si
+fara migratia din REGISTRU A.
+
+Metoda, ca la auditul din 19.08 (`lib/website/ajutor.ts`): fiecare denumire citata se ia din codul editorului unic
+(`components/editor-magazin/`, `components/store-editor/`, `lib/storefront/design/registry.ts` si `blocuri.ts`,
+`lib/editor-magazin/noduri.ts`), nu din memorie; regulile lui de scriere (fara liniuta lunga, emoji, semne de
+exclamare, pasi scurti, denumirile exacte, limitele spuse direct). Slug-urile raman (sunt adresele publice si
+indexate); titlul se poate schimba. Ghidurile noi primesc slug nou. Capturi noi doar dupa regula din `ajutor.ts`
+(A: tinta fara nume; B: orientarea, una pe grup; C: forma e informatia); le face el, dupa reteta din
+`docs/ajutor/CAPTURI-AJUTOR.md`, deci in pagina raman substituenti pana atunci.
+
+Inventarul (84 de ghiduri in „Design și pagini”, citite toate pe 28.10):
+- **Raman** (scrise la etapa 8 sau neatinse de editor): datele de baza, adresa, butoanele flotante, social media,
+  formularul de comanda (3), Biblioteca Media (fara un ghid), meniul, formularele, mesajele (fara doua detalii).
+- **De rescris drumul** (trimit la „Design magazin” > Identitate vizuala / Pagina produs / Pagina magazin /
+  Publicare, la „Design secțiuni”, la „Publică în magazin” sau la „Salvează” pe sectiuni): logo, favicon, marimea
+  logo-ului, bannerele, textul peste banner (acum varianta „Imagine cu text peste”), culoarea principala, bara de
+  anunt, fundalul, beneficiile / pasii / intrebarile / estimarea livrarii / efectul butonului (acum blocuri ale
+  paginii de produs), zoom-ul si etichetele, creditul Edinio (acum in Subsol), beneficiile si garantiile de pe
+  magazin (sectiunile „Beneficii” si „Beneficii pe scurt”), recomandatele si pragul, recenziile, bara de cos /
+  eticheta „Nou” / intervalul de pret (Coșul si Stil > Cardul de produs), randurile de produse, publicarea
+  magazinului (butonul „Vizibil” / „Ascuns” din bara de sus), salvarea, ordinea sectiunilor; toata grupa
+  „Secțiuni” (galeria „Schimbă designul”, „Publică”, numele noi: Antet, Subsol, Banner principal).
+- **Garantiile de pe pagina de produs** (decizia lui: „Rămân neafișate”): ghidul care le edita devine cel despre
+  blocul „Garanțiile” (ochiul lui), cu textele fixe spuse direct.
+- **Paginile** (constructorul vechi, retras la etapa 5): crearea, editarea si publicarea, blocurile (adaugare,
+  mutare, coloane), SEO-ul, plus primul si ultimul pas din ghidurile fiecarui bloc („Salvează pagina”).
+- **Noi:** cum e impartit editorul (orientarea, cu captura de grup), istoricul publicarilor (etapa 7, lipsa din
+  REGISTRU D), sabloanele paginii de produs (4b), bucatile paginii de produs (4a: zone, ochi, lacat, sageti).
+- **In alte categorii:** „Primii pasi” (unde se schimba culoarea si antetul) si „Produse” (randul „Recomandate”).
+- **Gasit la inventar, in editor:** nota randului „Recomandate” spune „marcate „Popular””, dar in Produse semnul se
+  numeste „Recomandat” („Popular” e eticheta din magazin). Se repara, cu proba.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [ ] G.1 Grupa „Design magazin” si ghidurile noi ale ei (orientarea, istoricul, sabloanele, bucatile paginii de
+      produs), nota „Recomandate” din editor.
+- [ ] G.2 Grupa „Secțiuni”.
+- [ ] G.3 „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.
+- [ ] G.4 Recitirea tuturor ghidurilor atinse fata de cod (fiecare denumire citata cautata in sursa), probele
+      centrului de ajutor, numarul din `ajutor.ts`, lista capturilor (`npm run capturi -- --lista`), REGISTRU D,
+      porti, raport. Fara push.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -972,6 +1018,10 @@ Citit inainte:
   fara iconite; previzualizarea pe toata latimea.
 - 27.10.2026, la planul etapei 9 („Da”, apoi raspunsurile): „Conținut liber” pe Pagina Magazin „Doar pe /magazin”;
   pe pagina de produs „Doar „Sub produs””.
+- 28.10.2026, la inchidere („Da”, apoi raspunsurile la intrebari): ghidurile din centrul de ajutor „Inainte de push
+  dar dupa ce termini, nu dai push ca mai avem ceva de facut” (deci nici migratia din REGISTRU A, pana spune el);
+  garantiile de pe pagina de produs „Rămân neafișate”; contorul de vizitatori „Îl facem real (etapă nouă)”; temele:
+  „Facem si teme noi dar asta dupa ce terminam de verificat tot ce am facut acum”.
 
 ## De ce Shopify si nu Elementor
 

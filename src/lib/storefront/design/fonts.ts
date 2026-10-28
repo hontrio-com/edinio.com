@@ -52,6 +52,6 @@ export const instrument = Instrument_Serif({
 
 /*
  * ⚠ `fontSetup` (clasele si stivele perechii alese) s-a mutat in `components/pages/fonturi-incarcate.ts`
- * (etapa 14): magazinul alege acum din toate cele 36 de fonturi ale paginilor, iar clasele lor stau acolo.
+ * (etapa 14): magazinul alege acum din toate cele 33 de fonturi ale paginilor, iar clasele lor stau acolo.
  * Aici raman doar cele 7 instante `next/font`, refolosite de acolo.
  */

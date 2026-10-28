@@ -94,7 +94,7 @@ function intrareFont(cheie: FontKey): { className: string; stack: string } {
  * Clasele si variabilele perechii de fonturi a magazinului (titluri, text). Cand amandoua sunt acelasi font, o
  * singura clasa.
  *
- * ⚠ Mutata aici din `storefront/design/fonts.ts` (etapa 14): magazinul alege acum din Geist plus cele 36 de fonturi
+ * ⚠ Mutata aici din `storefront/design/fonts.ts` (etapa 14): magazinul alege acum din Geist plus cele 33 de fonturi
  * ale paginilor, iar clasele lor stau in fisierul asta. Pentru cele 8 de dinainte iese EXACT ce iesea acolo (aceleasi
  * instante `next/font`, aceeasi stiva prin `stivaFont`), deci vitrinele de azi nu se schimba.
  */

@@ -8,8 +8,8 @@ import type { SectionKind } from "./types";
   ═══════════════════════════════════════════════════════════════════════════
 
   Cerut de el (28.10.2026): „cineva poate vrea un anume font la o anumita sectiune”, de exemplu la randurile de
-  produse, la antet sau la banner. Raspunsul lui la intrebare: cele 36 de fonturi gazduite de noi, separat pentru
-  titluri si pentru text, implicit „Ca în Stil”.
+  produse, la antet sau la banner. Raspunsul lui la intrebare: fonturile gazduite de noi (33; in intrebare scrisesem
+  36, numarat gresit), separat pentru titluri si pentru text, implicit „Ca în Stil”.
 
   ⚠ CUM SE APLICA. Fontul magazinului sta pe radacina vitrinei (`StorefrontThemeScope`), in variabile pe care le
   citesc utilitarele Tailwind si regula titlurilor (`--font-heading: var(--font-app-heading, var(--font-app, ...))`

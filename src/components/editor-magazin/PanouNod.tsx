@@ -151,7 +151,7 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
       )}
 
       {/*
-        Fontul sectiunii (etapa 14, cerut de el): titluri si text, din cele 36, implicit „Ca în Stil”. Prin ciorna,
+        Fontul sectiunii (etapa 14, cerut de el): titluri si text, din cele 33, implicit „Ca în Stil”. Prin ciorna,
         ca restul designului. `toateClaseleDeFont`: fiecare nume din lista se arata in fontul lui.
       */}
       {areFonturiProprii(sectiune.kind) && (

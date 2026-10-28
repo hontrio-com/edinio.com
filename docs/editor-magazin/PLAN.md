@@ -39,8 +39,9 @@ FACUTA si PROBATA in Chrome** (pasii 10.1-10.4); **etapa 11 (subsolul pe coloane
 12”; la proba s-a gasit si s-a reparat previzualizarea paginii de produs, care nu arata continutul din ciorna.
 **Mentiunile lui din 28.10, seara (cinci), impartite in etapele 13-15** (sectiunea „Mentiunile lui din 28.10, seara”):
 **etapa 13 FACUTA si PROBATA** (blocul pus cu „+” numit si deschis direct, animatiile in editor, „Șterge”, linkul
-bannerului cu sugestii); urmeaza raportul, apoi **etapa 14 (fonturile pe sectiune)** si **15 (Setări > Comanda)**. Intre timp `main` a primit reparatia eMAG `dba33c22`, adusa
-in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
+bannerului cu sugestii), raportul trimis; **etapa 14 (fonturile pe sectiune, aceleasi 33 si in Stil) FACUTA si PROBATA**
+(pasii 14.1-14.4), raportul trimis; urmeaza **etapa 15 (Setări > Comanda)**, cu acordul lui. Intre timp `main` a primit
+reparatia eMAG `dba33c22`, adusa in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1391,13 +1392,14 @@ Cuvintele lui:
    fara sa mai fie nevoit sa puna URL sau sa selecteze o anumita categorie, sau un anumit produs”
 
 Raspunsurile lui la intrebari (toate trei pe varianta recomandata): blocul pus cu „+” „Numele lui, deschis direct”;
-fonturile „Cele 36 găzduite de noi”; checkout-ul „În Setări > Comanda”.
+fonturile „Cele 36 găzduite de noi” (lista are 33; in intrebare scrisesem 36, numarat gresit); checkout-ul „În Setări >
+Comanda”.
 
 Ce s-a gasit in cod inainte de plan: (1) un „+” pe Acasa pune blocul intr-o sectiune `continut_liber` noua, iar
 arborele scrie eticheta TIPULUI („Conținut liber”); in editor, `ContinutLiber` deseneaza blocurile din designul viu, deci
 ocoleste slotul de pe server, singurul care aducea `SCRIPT_ANIMATII` + `PornesteAnimatiile`: animatia de intrare nu
 avea cine s-o porneasca (miscarea redusa e oprita la el, masurat). (2) Stilul are 8 fonturi (`FONT_OPTIONS`), paginile
-proprii 36 (`FONTURI_PAGINA`, gazduite prin `next/font`, `preload: false`). (3) Panoul sectiunii (`PanouNod`) are doar
+proprii 33 (`FONTURI_PAGINA`, gazduite prin `next/font`, `preload: false`). (3) Panoul sectiunii (`PanouNod`) are doar
 „Ascunde”; arborele sterge cu `removeSection` prin ciorna (se poate anula). (4) Tipul de checkout e VARIANTA de design a
 sectiunii `checkout` (`classic` = „Formular în fereastră”, `page_two_col` = „Pagină separată”), aleasa din „Schimbă
 designul”; campurile si optiunile extra stau in Setari > Formular de comandă; „Comandă acum” de pe produs deschide
@@ -1459,23 +1461,24 @@ Impartite in trei etape, una cate una, cu raport dupa fiecare: 13 (mentiunile 1,
 
 ## Etapa 14: fonturile pe sectiune (scris 28.10.2026, inainte de cod; acordul lui: „Da”)
 
-Hotarat (raspunsul lui): cele 36 de fonturi gazduite de noi, separat pentru titluri si pentru text, pe orice sectiune,
-implicit „Ca în Stil”; aceleasi 36 si in fila Stil, pentru tot magazinul (azi 8).
+Hotarat (raspunsul lui): fonturile gazduite de noi, separat pentru titluri si pentru text, pe orice sectiune, implicit
+„Ca în Stil”; aceleasi si in fila Stil, pentru tot magazinul (azi 8). Sunt 33 (17 moderne, 9 clasice, 4 de impact, 3
+scrise de mana), nu 36 cum scrisesem in intrebare: numarat gresit, gasit la proba.
 
 Ce e azi, citit in cod: fontul magazinului se pune pe radacina vitrinei (`StorefrontThemeScope`): `--st-font-heading`,
 `--st-font-body` si, cand e ales altul decat Geist, `--font-app` / `--font-app-heading`, pe care le citesc utilitarele
 Tailwind si regula titlurilor (`stil-comun.css`: `--font-heading: var(--font-app-heading, var(--font-app, Geist))`).
 Deci un invelis poate suprascrie fontul oriunde in pagina. Stilul alege din 8 (`FONT_KEYS`, `fontSetup` in `fonts.ts`),
-paginile proprii din 36 (`FONTURI_PAGINA`, clasele in `fonturi-incarcate.ts`, care refoloseste cele 7 instante ale
+paginile proprii din 33 (`FONTURI_PAGINA`, clasele in `fonturi-incarcate.ts`, care refoloseste cele 7 instante ale
 magazinului), cu alegatorul `AlegeFont` (pe familii, fiecare nume in fontul lui). Fiecare sectiune a paginii principale,
 plus antetul, subsolul si bara de anunt, trece prin `Marcata` (`SectionRenderer`).
 
 ### Deciziile etapei
 
-1. **Fontul magazinului din 37**: Geist plus cele 36. `FontKey = "geist" | CheieFont`, `FONT_KEYS` derivat din
+1. **Fontul magazinului din 34**: Geist plus cele 33. `FontKey = "geist" | CheieFont`, `FONT_KEYS` derivat din
    `FONTURI_PAGINA` (o singura lista). `fontSetup` se muta langa clasele tuturor fonturilor (`fonturi-incarcate.ts`);
    pentru cele 8 de azi da EXACT aceleasi clase si stive, deci vitrinele de azi nu se schimba. In Stil, alegatorul
-   devine `AlegeFont` (implicit „Geist (implicit)”): grila de carduri cu 37 de fonturi, de doua ori, ar fi un perete.
+   devine `AlegeFont` (implicit „Geist (implicit)”): grila de carduri cu 34 de fonturi, de doua ori, ar fi un perete.
 2. **Fontul pe sectiune**: doua campuri comune, `fontTitluri` si `fontText`, pe sectiunile cu `scope` „home” si
    „chrome” (16 tipuri). Curatate la citire impreuna cu campurile variantelor si pastrate la schimbarea designului
    (`updateSection`). Lipsa = „Ca în Stil”.
@@ -1492,7 +1495,7 @@ plus antetul, subsolul si bara de anunt, trece prin `Marcata` (`SectionRenderer`
       `fonturi-incarcate.ts` (Geist fara clasa, restul prin `clasaFont` + `stivaFont`), `fonts.ts` pastreaza cele 7
       instante; Stil cu doua `AlegeFont` („Geist (implicit)”, scris anume); `AlegeFonturi.tsx` si `font-options.ts`
       scoase, nimeni altcineva nu le folosea. CSS-ul fonturilor era deja pe paginile magazinului (66 KB in dezvoltare).)
-      Fontul magazinului din 37: `FontKey`/`FONT_KEYS`, `fontSetup` mutat, Stil cu `AlegeFont`. Probe: cele 8 de
+      Fontul magazinului din 34: `FontKey`/`FONT_KEYS`, `fontSetup` mutat, Stil cu `AlegeFont`. Probe: cele 8 de
       azi dau aceleasi clase si stive, unul nou ajunge in stil.
 - [x] 14.2 (28.10: `fonturi-sectiune.ts` (`CAMPURI_FONT_SECTIUNE`, `areFonturiProprii`, `fontulSectiunii`,
       `stilFontSectiune`); in `parseSection` campurile comune pe „home” si „chrome”, in `updateSection` cheile lor
@@ -1502,7 +1505,20 @@ plus antetul, subsolul si bara de anunt, trece prin `Marcata` (`SectionRenderer`
 - [x] 14.3 (28.10: grupul „Fonturi” in `PanouNod`, doua `AlegeFont` cu „Ca în Stil”, prin ciorna; „Ca în Stil” scoate
       cheia. Ghidul nou `cum-alegi-fonturile-magazinului` (426 de ghiduri). 10 probe in `fonturi-sectiune.test.ts`;
       mutanti 7/7.) Editorul: grupul „Fonturi” in `PanouNod`. Probe.
-- [ ] 14.4 Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
+- [x] 14.4 (28.10: ghidul nou din 14.3, plus „La antet” dupa proba; celelalte ghiduri nu descriau alegatorul vechi;
+      REGISTRU C; suita intreaga 11.288 / 0 cazute / 2 sarite si `build:ci` trec pe `c20bf662`; proba in Chrome cu
+      acordul lui („Da, fă proba acum”), pe `floraria-mirei` din demo, doar in ciorna.) Ghidurile, REGISTRU, porti,
+      proba in Chrome (cere acordul lui pentru impersonare).
+      Vazut pe ecran: „Fontul titlurilor” Bebas Neue pe „Banner principal” a schimbat doar titlul bannerului; „Fontul
+      textului” Caveat pe „Antet” a schimbat meniul si numele magazinului, restul paginii neatins. „Schimbă designul” pe
+      banner: fontul a ramas (`fontTitluri` in ciorna, pe noul design). In Stil, „Font titluri” Lora: titlurile restului
+      magazinului pe Lora, iar bannerul a ramas pe Bebas si meniul pe Caveat (fontul sectiunii castiga). Listele: pe
+      familii, fiecare nume in fontul lui, 33 de fonturi plus „Ca în Stil” / „Geist (implicit)”.
+      GASIT: (1) lista are 33 de fonturi, nu 36 cum scrisesem in intrebare si in comentarii; corectat peste tot (codul,
+      ghidul, planul), raspunsul lui ramane citat asa cum l-a dat. (2) Numele magazinului din antet urmeaza „Fontul
+      textului”: e text, ca si in Stil, deci e corect; spus in ghid („La antet”). Pus la loc: ciorna prin „Renunță”; o
+      singura comparatie, totul egal (`page_content` si designul dupa amprenta, ciorna goala, 0 versiuni, data
+      abonamentului, analitica). Iesirea din impersonare l-a deconectat.
 
 ## Etapa 15: Setări > Comanda (de detaliat la inceputul ei)
 
@@ -1539,7 +1555,8 @@ setarilor; pagina „Finalizarea comenzii” din editor arata tipul ales si trim
 - 28.10.2026, seara, la etapa 12 (contorul masurat): ce numara „Alege comerciantul” („Acum” sau „Ultimele 24 de ore”,
   implicit 24 de ore); robotii „Și din Statistici” (nu se mai scriu deloc).
 - 28.10.2026, seara, mentiunile de dupa etapa 12 (vezi „Mentiunile lui din 28.10, seara”): blocul pus cu „+” „Numele lui,
-  deschis direct”; fonturile „Cele 36 găzduite de noi”; checkout-ul „În Setări > Comanda”.
+  deschis direct”; fonturile „Cele 36 găzduite de noi” (sunt 33, numarate gresit in intrebare); checkout-ul „În Setări >
+  Comanda”.
 
 ## De ce Shopify si nu Elementor
 

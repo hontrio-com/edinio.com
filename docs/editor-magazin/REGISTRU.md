@@ -175,6 +175,16 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     intrebarile, pasii, livrarea, efectul butonului, fereastra contorului); pana atunci il arata pe cel publicat pana la
     „Publică”. De verificat dupa push: o schimbare de text in „Beneficiile” paginii de produs se vede in previzualizare
     inainte de „Publică”, iar magazinul public ramane pe cel publicat.
+- **Etapa 14 (fonturile pe sectiune, mentiunea 2 din 28.10, seara), de verificat dupa push:**
+  - Magazinele de azi arata la fel: cele 8 fonturi de dinainte au aceleasi clase si stive (proba), Geist ramane
+    implicit, iar o sectiune fara font ales nu primeste niciun element in plus.
+  - In Stil, „Font titluri” si „Font text” deschid lista pe familii (Geist plus 33, fiecare nume in fontul lui), nu
+    grila de carduri de dinainte.
+  - Pe o sectiune a paginii principale (de exemplu „Banner principal”), grupul „Fonturi” schimba doar sectiunea, pe loc
+    in previzualizare, iar la clienti dupa „Publică”; „Ca în Stil” il scoate. Pe antet, „Fontul textului” schimba si
+    numele magazinului si meniul (sunt text).
+  - Fisierele unui font se descarca doar unde e folosit (`preload: false`); CSS-ul fonturilor era deja pe paginile
+    magazinului, deci greutatea paginii nu creste.
 
 ## D. Capturi si texte de ajutor
 - **FACUT 28.10.2026, ghidurile (inchiderea, pasul 5; PLAN, „Inchiderea, pasul 5”):** toata categoria „Design și pagini” (84 de ghiduri citite fata de cod, rescrise cele care descriau „Design magazin”, „Design secțiuni”, „Ordinea secțiunilor”, „Salvează” pe sectiuni si constructorul de pagini retras), plus trimiterile din „Primii pași” si „Produse”. Noi: cum e impartit editorul, bucatile paginii de produs, istoricul publicarilor, sabloanele de produs (425 de ghiduri). Fiecare citat din categorie cautat in sursa (1084): toate cele scrise acum exista in cod. Ghidul „Conținut liber” ramane fara captura, dupa regula din `ajutor.ts` (cuvintele ajung).

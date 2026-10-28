@@ -180,8 +180,9 @@ export const STYLE_COLOR_KEYS = [
 export type StyleColorKey = (typeof STYLE_COLOR_KEYS)[number];
 
 /**
- * Fonturile magazinului: Geist (implicit) si cele 36 ale paginilor proprii (etapa 14, raspunsul lui: „Cele 36
- * găzduite de noi”; pana atunci, 8). O singura lista, `FONTURI_PAGINA`: doua copii s-ar fi despartit la primul font nou.
+ * Fonturile magazinului: Geist (implicit) si cele 33 ale paginilor proprii (etapa 14, raspunsul lui: „Cele 36
+ * găzduite de noi”, numarate gresit in intrebare; pana atunci, 8). O singura lista, `FONTURI_PAGINA`: doua copii
+ * s-ar fi despartit la primul font nou.
  *
  * ⚠ Cheile se salveaza in baza (`page_content.font_titluri`, stilul designului), deci nu se redenumesc.
  */

@@ -11,13 +11,13 @@ import { areFonturiProprii, fontulSectiunii, stilFontSectiune } from "./fonturi-
 import { sectionMeta } from "./registry";
 
 /*
- * Etapa 14 (mentiunea 2 din 28.10, seara): fonturile pe sectiune, din cele 36 gazduite de noi, si aceleasi 36 in
- * fila Stil (pana atunci, 8). Raspunsul lui: „Cele 36 găzduite de noi”.
+ * Etapa 14 (mentiunea 2 din 28.10, seara): fonturile pe sectiune, din cele 33 gazduite de noi, si aceleasi in fila
+ * Stil (pana atunci, 8). Raspunsul lui: „Cele 36 găzduite de noi”; lista are 33, in intrebare numarasem gresit.
  */
 
 const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
-test("fontul magazinului: Geist plus cele 36, iar cele 8 de dinainte raman chei valide", () => {
+test("fontul magazinului: Geist plus cele 33, iar cele 8 de dinainte raman chei valide", () => {
   assert.equal(FONT_KEYS.length, 1 + FONTURI_PAGINA.length);
   assert.equal(FONT_KEYS[0], "geist");
   for (const vechi of ["geist", "inter", "manrope", "jakarta", "dmsans", "sora", "playfair", "instrument"]) {

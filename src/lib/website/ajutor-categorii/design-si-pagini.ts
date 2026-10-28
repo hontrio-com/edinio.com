@@ -306,9 +306,10 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Apasă „Publică”.",
           ],
           detalii: [
-            { titlu: "Ce fonturi poți alege", text: "Geist, care e fontul din start, și încă 36, pe familii: moderne, clasice, de impact și scrise de mână. În listă, fiecare nume e scris chiar cu fontul lui. Sunt găzduite de noi, deci vizitatorii nu sunt trimiși la Google pentru ele." },
+            { titlu: "Ce fonturi poți alege", text: "Geist, care e fontul din start, și încă 33, pe familii: moderne, clasice, de impact și scrise de mână. În listă, fiecare nume e scris chiar cu fontul lui. Sunt găzduite de noi, deci vizitatorii nu sunt trimiși la Google pentru ele." },
             { titlu: "Ce secțiuni pot avea fontul lor", text: "Toate secțiunile paginii principale (bannerul, rândurile de produse, beneficiile, conținutul liber și celelalte), plus antetul, subsolul și bara de anunț. Pagina de produs, Pagina Magazin, coșul și finalizarea comenzii iau fontul din „Stil”." },
             { titlu: "Doar titlurile sau doar textul", text: "Le poți alege separat. Dacă alegi doar fontul textului, titlurile secțiunii rămân pe fontul magazinului." },
+            { titlu: "La antet", text: "Numele magazinului și meniul sunt text, deci le schimbă „Fontul textului”. Meniul trece pe fontul titlurilor dacă la „Fontul meniului” ai ales „Ca titlurile”." },
             { titlu: "Care font câștigă", text: "Fontul ales anume pe un bloc (în Pagini sau într-un conținut liber) câștigă. După el vine fontul secțiunii, iar la urmă cel din „Stil”." },
           ],
           nota: "Fontul se vede pe loc în previzualizare și ajunge la clienți la „Publică”. La schimbarea designului unei secțiuni, fontul ei rămâne.",

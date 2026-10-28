@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
-import { bannereDupaImport, categoriiDeCreat, externalIdDemo, sluguriUnice, urmaDupaImport } from "./import-demo";
+import { bannereDupaImport, categoriiDeCreat, externalIdDemo, idRandDemo, randuriDupaImport, sluguriUnice, urmaDupaImport } from "./import-demo";
 import type { SetDateDemo } from "./tipuri";
 
 /*
@@ -66,8 +66,8 @@ test("bannerele: ale lui raman primele si neatinse, cele demo se adauga o singur
 });
 
 test("urma: se aduna peste cea de dinainte, fara dubluri, iar codul produsului e „<tema>:<cheie>”", () => {
-  const u = urmaDupaImport({ tema: "jupiter", categorii: ["c1"], bannere: ["x"] }, "jupiter", ["c1", "c2"], ["y"], "2026-10-28T20:00:00Z");
-  assert.deepEqual(u, { tema: "jupiter", categorii: ["c1", "c2"], bannere: ["x", "y"], la: "2026-10-28T20:00:00Z" });
+  const u = urmaDupaImport({ tema: "jupiter", categorii: ["c1"], bannere: ["x"] }, "jupiter", ["c1", "c2"], ["y"], ["r1"], "2026-10-28T20:00:00Z");
+  assert.deepEqual(u, { tema: "jupiter", categorii: ["c1", "c2"], bannere: ["x", "y"], randuri: ["r1"], la: "2026-10-28T20:00:00Z" });
   assert.equal(externalIdDemo("jupiter", "roaba-85l"), "jupiter:roaba-85l");
 });
 
@@ -81,4 +81,24 @@ test("⚠ importul nu trimite nimic spre marketplace-uri si nu sterge nimic", ()
   assert.doesNotMatch(c, /enqueue|Sync\(|\.delete\(|\.upsert\(/);
   assert.match(c, /source: SURSA_DEMO,\s*external_id: externalIdDemo\(tema, p\.cheie\),/);
   assert.match(c, /await proiecteazaImediat\(businessId\);/);
+});
+
+test("randurile: produsele lor exista in set, iar ale lui raman primele si neatinse", () => {
+  const chei = new Set(D.produse.map((p) => p.cheie));
+  for (const r of D.randuri) for (const k of r.produse) assert.ok(chei.has(k), `${r.cheie}: ${k}`);
+
+  const idDupaCheie = new Map(D.produse.map((p, i) => [p.cheie, `id${i}`]));
+  const alLui = { id: "r_lui", title: "Noutăți", enabled: true, mode: "category", category: "X" };
+  const r = randuriDupaImport({ product_sections: [alLui] }, D, "jupiter", idDupaCheie);
+  assert.equal(r.randuri[0], alLui, "randul lui, acelasi obiect, primul");
+  assert.deepEqual(r.adaugate, D.randuri.map((x) => idRandDemo("jupiter", x.cheie)));
+  const oferte = r.randuri[1] as { mode: string; productIds: string[]; layout: string };
+  assert.equal(oferte.mode, "selected");
+  assert.equal(oferte.layout, "carousel");
+  assert.equal(oferte.productIds.length, D.randuri[0].produse.length);
+  for (const id of r.adaugate) assert.ok(id.length <= 64, "incape in legatura din design");
+
+  const iar = randuriDupaImport({ product_sections: r.randuri }, D, "jupiter", idDupaCheie);
+  assert.equal(iar.adaugate.length, 0, "importul repetat nu dubleaza randurile");
+  assert.equal(randuriDupaImport({}, D, "jupiter", new Map()).adaugate.length, 0, "fara produse gasite, niciun rand gol");
 });

@@ -35,6 +35,7 @@ const DESCRIERI: Partial<Record<SectionKind, string>> = {
   about: "Descrierea magazinului.",
   contact: "Telefonul, emailul și adresa magazinului.",
   continut_liber: "Blocurile de pe paginile tale: text, imagini, butoane, coloane, întrebări, video, formular.",
+  placi_promo: "Plăci cu imagine, titlu și link, către categorii sau oferte.",
 };
 
 export function GalerieAdauga({ design, slug, loc, onAdauga, onBloc, integrareActiva, onInchide, faraContinutLiber = false }: {

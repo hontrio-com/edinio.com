@@ -83,7 +83,13 @@ export function BannerSlider({
   // ordinea claselor s-ar schimba fata de marcajul de dinainte, iar comparatia
   // cu productia ar semnala o diferenta acolo unde CSS-ul e identic.
   slideClass = "shrink-0 w-full snap-center aspect-[16/9] bg-muted",
-}: HeroBannersProps & { wrapperClass?: string; slideClass?: string }) {
+  paginare = "puncte",
+}: HeroBannersProps & {
+  wrapperClass?: string;
+  slideClass?: string;
+  /** `segmente`: bare subtiri, cea curenta in culoarea de accent (tema Jupiter, etapa 16.3). */
+  paginare?: "puncte" | "segmente";
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const invelis = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
@@ -205,10 +211,13 @@ export function BannerSlider({
             <ChevronRight className="h-5 w-5" />
           </button>
 
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex gap-1.5">
+          <div className={`absolute left-1/2 -translate-x-1/2 z-10 flex ${paginare === "segmente" ? "bottom-4 gap-1.5" : "bottom-3 gap-1.5"}`}>
             {banners.map((_, i) => (
               <button key={i} type="button" aria-label={`Mergi la banner ${i + 1}`} aria-current={i === index ? "true" : undefined} onClick={() => goTo(i)}
-                className={`h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 hover:bg-surface/80"}`} />
+                className={paginare === "segmente"
+                  ? `h-[3px] w-10 sm:w-14 rounded-full transition-colors ${i === index ? "" : "bg-white/75 hover:bg-white"}`
+                  : `h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 hover:bg-surface/80"}`}
+                style={paginare === "segmente" && i === index ? { backgroundColor: "var(--st-accent)" } : undefined} />
             ))}
           </div>
 

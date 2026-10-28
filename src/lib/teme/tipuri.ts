@@ -46,10 +46,18 @@ export interface PlacaDemo {
   categorie: string;
 }
 
+/** Un rand de produse de pe prima pagina, cu produsele alese dupa cheie (in `page_content.product_sections`). */
+export interface RandDemo {
+  cheie: string;
+  titlu: string;
+  produse: string[];
+}
+
 export interface SetDateDemo {
   categorii: CategorieDemo[];
   produse: ProdusDemo[];
   bannere: BannerDemo[];
   carduri: CardDemo[];
   placi: PlacaDemo[];
+  randuri: RandDemo[];
 }

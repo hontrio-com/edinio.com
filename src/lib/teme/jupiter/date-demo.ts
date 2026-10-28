@@ -166,6 +166,17 @@ export const DATE_DEMO_JUPITER: SetDateDemo = {
     { titlu: "Pregătit de iarnă", text: "Calorifere și aparate de aer condiționat cu prețuri de sezon.", imagine: poza("photo-1518276779712-dfdcb9daa7a1", 500), categorie: "Termice și climatizare" },
   ],
 
+  randuri: [
+    {
+      cheie: "oferte", titlu: "Oferte de sezon",
+      produse: ["calorifer-otel", "aer-conditionat-12000", "masina-gaurit-18v", "lavabila-alba-15l", "canapea-3-locuri", "masina-tuns-iarba", "scara-aluminiu", "masina-spalat-8kg", "parchet-stejar", "set-gradina-lemn", "espressor-automat", "baterie-bucatarie"],
+    },
+    {
+      cheie: "populare", titlu: "Alegeri populare",
+      produse: ["ciocan-tamplarie", "set-role-4", "ghiveci-ceramica-flori", "furtun-25m", "bec-filament", "clanta-inox", "covor-dungi", "gresie-gri-60", "pendul-alb", "aspirator-vertical", "lavoar-oglinda", "cutie-scule-metal"],
+    },
+  ],
+
   placi: [
     { titlu: "Calorifere", imagine: poza("photo-1669725341213-7379ff6c90d5", 600), categorie: "Calorifere" },
     { titlu: "Unelte de grădină", imagine: poza("photo-1621272156568-7306716648df", 600), categorie: "Unelte de grădină" },

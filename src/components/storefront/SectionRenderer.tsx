@@ -75,6 +75,18 @@ const HeroCategories = dynamic(
   () => import("./sections/hero/HeroCategories").then((m) => m.HeroCategories),
   { ssr: true },
 );
+const HeroCuCarduri = dynamic(
+  () => import("./sections/hero/HeroCuCarduri").then((m) => m.HeroCuCarduri),
+  { ssr: true },
+);
+const CategoryNavPlaci = dynamic(
+  () => import("./sections/catalog/CategoryNavPlaci").then((m) => m.CategoryNavPlaci),
+  { ssr: true },
+);
+const PlaciPromo = dynamic(
+  () => import("./sections/content/PlaciPromo").then((m) => m.PlaciPromo),
+  { ssr: true },
+);
 const HeroOverlay = dynamic(
   () => import("./sections/hero/HeroOverlay").then((m) => m.HeroOverlay),
   { ssr: true },
@@ -126,6 +138,7 @@ const HEROURI: Record<string, VariantaSectiune> = {
   banners: HeroBannersOnly as VariantaSectiune,
   overlay: HeroOverlay as VariantaSectiune,
   categories: HeroCategories as VariantaSectiune,
+  carduri: HeroCuCarduri as VariantaSectiune,
 };
 
 /**
@@ -162,7 +175,7 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
     case "catalog_toolbar":
       return <CatalogToolbar />;
     case "category_nav":
-      return <CategoryNavClassic />;
+      return section.variant === "placi" ? <CategoryNavPlaci settings={section.settings} /> : <CategoryNavClassic />;
     case "shipping_progress":
       return <ShippingProgressBanner />;
     case "product_row":
@@ -170,9 +183,9 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
       // varianta: randul n-are catalog de design-uri, iar o varianta salvata ar
       // ingheta o alegere pe care comerciantul o schimba din alta parte.
       return section.settings.mode === "featured" ? (
-        <FeaturedRowClassic prioritate={estePrima} />
+        <FeaturedRowClassic prioritate={estePrima} banda={section.settings.banda === true} />
       ) : (
-        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} prioritate={estePrima} />
+        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} prioritate={estePrima} banda={section.settings.banda === true} />
       );
     case "product_grid":
       return <ProductGridClassic prioritate={estePrima} />;
@@ -189,6 +202,8 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
     case "rich_blocks":
       // Blocurile paginii alese ca pagina principala, randate pe server.
       return <SlotBlocuri cheie={String(section.settings.slot ?? "")} />;
+    case "placi_promo":
+      return <PlaciPromo settings={section.settings} />;
     case "continut_liber":
       // „Conținut liber” (etapa 9): slotul randat pe server, sau blocurile vii in editor.
       return <ContinutLiber cale={{ sectiune: section.id, bloc: null }} />;
@@ -269,7 +284,7 @@ export function MarcajSectiune({ sectiune, children }: {
  */
 function LocGol({ eticheta }: { eticheta: string }) {
   return (
-    <div className="hidden only:block max-w-6xl mx-auto px-4 py-3">
+    <div className="hidden only:block max-w-[var(--st-container,72rem)] mx-auto px-4 py-3">
       <div className="rounded-xl border-2 border-dashed border-[#93c5fd] bg-[#eff6ff] px-4 py-5 text-center text-sm text-[#1d4ed8]">
         Secțiunea „{eticheta}” e goală, deci nu apare în magazin. Apasă aici ca s-o completezi.
       </div>
@@ -281,7 +296,8 @@ function LocGol({ eticheta }: { eticheta: string }) {
  * Sectiunile pe latime completa se randeaza direct, iar seriile consecutive de
  * sectiuni cu container se grupeaza sub un singur wrapper.
  *
- * Gruparea nu e cosmetica: fara ea, containerul de `max-w-6xl` ar trebui pus fie
+ * Gruparea nu e cosmetica: fara ea, containerul (latimea din stil, `--st-container`; pana la etapa 16.3 un
+ * `max-w-6xl` fix, adica exact implicitul de 72rem al tuturor magazinelor) ar trebui pus fie
  * pe fiecare sectiune (schimband marcajul de azi), fie o singura data in jurul
  * tuturor (ceea ce ar strica hero-ul si banda de incredere, care sunt pe toata
  * latimea). Asa, layout-ul classic da exact acelasi marcaj ca inainte, iar o
@@ -308,11 +324,11 @@ export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
             <Marcata section={bloc.section} estePrima={bloc.section.id === idPrimeiSectiuni} />
           </Fragment>
         ) : bloc.esteMain ? (
-          <main key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
+          <main key={`grup-${bloc.sections[0].id}`} className="max-w-[var(--st-container,72rem)] mx-auto px-4 py-10">
             {bloc.sections.map((s) => <Marcata key={s.id} section={s} estePrima={s.id === idPrimeiSectiuni} />)}
           </main>
         ) : (
-          <div key={`grup-${bloc.sections[0].id}`} className="max-w-6xl mx-auto px-4 py-10">
+          <div key={`grup-${bloc.sections[0].id}`} className="max-w-[var(--st-container,72rem)] mx-auto px-4 py-10">
             {bloc.sections.map((s) => <Marcata key={s.id} section={s} estePrima={s.id === idPrimeiSectiuni} />)}
           </div>
         ),
@@ -340,7 +356,7 @@ export function PreviewSection({ section }: { section: SectionInstance }) {
   // prima a unei pagini, deci n-ar avea ce imagine LCP sa grabeasca.
   if (sectionLayout(section) === "full") return <SectionOne section={section} />;
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
+    <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 py-10">
       <SectionOne section={section} />
     </div>
   );

@@ -43,6 +43,15 @@ const DEMO_CATEGORII = [
 
 export const DEMO_CATEGORY_NAMES = DEMO_CATEGORII.map(([name]) => name);
 
+/** Cardurile de langa banner (varianta „carduri”, etapa 16.3), ca miniatura sa nu arate doar caruselul. */
+export const DEMO_CARDURI_HERO = [
+  { titlu: "Catalogul de sezon", text: "Descoperă ofertele noi pentru casă și grădină.", imagine: "/demo/categorie-casa-gradina.webp", link: "#" },
+  { titlu: "Reduceri la electrocasnice", text: "Prețuri mici la aparatele de care ai nevoie.", imagine: "/demo/categorie-electrocasnice.webp", link: "#" },
+];
+
+/** Placile de recomandare (etapa 16.3): patru, din categoriile demonstrative. */
+export const DEMO_PLACI_PROMO = DEMO_CATEGORII.slice(0, 4).map(([titlu, imagine]) => ({ titlu, imagine, link: "#", eticheta: "" }));
+
 export const DEMO_CATEGORIES: StoreCategoryNode[] = DEMO_CATEGORII.map(([name, image], i) => ({
   id: `demo_cat_${i}`,
   name,

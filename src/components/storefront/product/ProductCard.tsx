@@ -57,18 +57,18 @@ export interface ProductCardProps {
  */
 const SIZES_IMAGINE = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px";
 
-export function ProductCard({
+/**
+ * Ce socoteste cardul despre produs: adresa, imaginea, insignele, pretul si eticheta butonului. Comun variantelor de
+ * card (clasica si cea a temei Jupiter, etapa 16.3), ca doua carduri sa nu ajunga sa spuna lucruri diferite despre
+ * acelasi produs.
+ */
+export function useDateCardProdus({
   product,
-  color,
   basePath,
-  onAddToCart,
-  isAdded,
   newBadgeDays,
   outOfStock,
-  showCategoryBadge = true,
-  priority = false,
   priceLowestOnly = false,
-}: ProductCardProps) {
+}: Pick<ProductCardProps, "product" | "basePath" | "newBadgeDays" | "outOfStock" | "priceLowestOnly">) {
   const { produs: prefixProdus } = usePermalinkuri();
   const images = Array.isArray(product.images) ? product.images : [];
   const imageUrl = images[0] ? String(images[0]) : null;
@@ -77,7 +77,7 @@ export function ProductCard({
   // randari ale aceluiasi card.
   const [reper] = useState(() => Date.now());
   const isNew = newBadgeDays > 0 && reper - new Date(product.created_at).getTime() < newBadgeDays * 86400000;
-  // Produs variabil cu preturi diferite -> afiseaza interval („De la X – Y") sau doar minimul.
+  // Produs variabil cu preturi diferite -> afiseaza interval („De la X ... Y") sau doar minimul.
   // Calculat pe SERVER: payload-ul slim arunca combinatiile, deci o derivare
   // locala ar raspunde „niciun pret de vanzare" pentru fiecare produs variabil.
   const priceRange = product.price_range;
@@ -119,6 +119,24 @@ export function ProductCard({
   // de produs rezolva si UUID-uri, deci pe id-ul produsului linkul ramane valid
   // in loc sa duca la /product/null.
   const productHref = hrefProdus(basePath, product.slug ?? product.id, prefixProdus);
+
+  return { imageUrl, isNew, priceRange, showPriceRange, hasDiscount, discountPct, isOutOfStock, isVariable, cerePersonalizare, dePornire, fireSelect, productHref };
+}
+
+export function ProductCard({
+  product,
+  color,
+  basePath,
+  onAddToCart,
+  isAdded,
+  newBadgeDays,
+  outOfStock,
+  showCategoryBadge = true,
+  priority = false,
+  priceLowestOnly = false,
+}: ProductCardProps) {
+  const { imageUrl, isNew, priceRange, showPriceRange, hasDiscount, discountPct, isOutOfStock, isVariable, cerePersonalizare, dePornire, fireSelect, productHref } =
+    useDateCardProdus({ product, basePath, newBadgeDays, outOfStock, priceLowestOnly });
 
   return (
     <div className="group bg-surface border border-border rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 flex flex-col">

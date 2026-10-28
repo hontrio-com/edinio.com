@@ -1,6 +1,7 @@
 "use client";
 
 import { ProductCard } from "@/components/storefront/product/ProductCard";
+import { ProductCardJupiter } from "@/components/storefront/product/ProductCardJupiter";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
@@ -28,10 +29,13 @@ export function StoreProductCard({
     isProductOutOfStock,
     showCategoryBadges,
     priceLowestOnly,
+    design,
   } = useStorefront();
+  // Varianta cardului, din design (etapa 16.3): toate suprafetele magazinului trec pe aici.
+  const Card = design?.commerce.productCard.variant === "jupiter" ? ProductCardJupiter : ProductCard;
 
   return (
-    <ProductCard
+    <Card
       product={product}
       color={color}
       basePath={basePath}

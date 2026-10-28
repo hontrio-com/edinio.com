@@ -6,6 +6,9 @@ import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StoreProductCard } from "./StoreProductCard";
 
+/** Griul benzii: o tenta din culoarea principala peste fond, deci ramane potrivit si pe alte culori. */
+const GRI_BANDA = "color-mix(in srgb, var(--st-primary) 4%, var(--st-bg))";
+
 /**
  * Un rand de produse deasupra catalogului, varianta classic.
  *
@@ -20,6 +23,7 @@ export function ProductRowClassic({
   onViewAll,
   headerGap = "gap-2",
   prioritate = false,
+  banda = false,
 }: {
   title: string;
   items: StorefrontProduct[];
@@ -34,9 +38,42 @@ export function ProductRowClassic({
    * se unifica atunci cand desenam variantele de rand.
    */
   headerGap?: "gap-2" | "gap-3";
+  /**
+   * Pe banda gri, cu titlul mare si sagetile pe margini (reglajul randului, tema Jupiter, etapa 16.3). Banda se
+   * intinde pe toata latimea ecranului printr-o umbra decupata: `100vw` ar fi adus derulare orizontala pe Windows,
+   * unde bara de derulare intra in latime.
+   */
+  banda?: boolean;
 }) {
   const { color } = useStorefront();
   if (items.length === 0) return null;
+
+  if (banda) {
+    return (
+      <section className="mb-10 py-8" style={{ backgroundColor: GRI_BANDA, boxShadow: `0 0 0 100vmax ${GRI_BANDA}`, clipPath: "inset(0 -100vmax)" }}>
+        <div className="flex items-center gap-3 mb-5">
+          <h2 className="text-[24px] leading-tight text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>{title}</h2>
+          {onViewAll && (
+            <button type="button" onClick={onViewAll}
+              className="ml-auto inline-flex items-center gap-1 text-[14px] font-semibold whitespace-nowrap hover:underline underline-offset-2"
+              style={{ color: "var(--st-primary)" }}>
+              Vezi toate
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {layout === "carousel" ? (
+          <ProductRail items={items} prioritate={prioritate} banda />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {items.map((product, i) => (
+              <StoreProductCard key={product.id} product={product} priority={prioritate && i < 5} />
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="mb-12">
@@ -84,7 +121,7 @@ export function ProductRowClassic({
  * de deasupra si de dedesubt. Marginea de fixare readuce oprirea pe marginea
  * continutului, adica exact unde incepe titlul.
  */
-function ProductRail({ items, prioritate }: { items: StorefrontProduct[]; prioritate: boolean }) {
+function ProductRail({ items, prioritate, banda = false }: { items: StorefrontProduct[]; prioritate: boolean; banda?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
   const [spreStanga, setSpreStanga] = useState(false);
@@ -147,9 +184,12 @@ function ProductRail({ items, prioritate }: { items: StorefrontProduct[]; priori
     el.style.scrollSnapType = "";
   };
 
-  const sageata =
-    "hidden md:flex absolute top-1/3 -translate-y-1/2 z-10 w-9 h-9 rounded-full items-center justify-center " +
-    "border border-border bg-surface text-foreground shadow-md hover:bg-muted transition-colors";
+  const sageata = banda
+    // Pe banda: dreptunghiuri albe pe margini, peste primul si ultimul card, ca pe modelul temei.
+    ? "hidden md:flex absolute top-[40%] -translate-y-1/2 z-10 w-10 h-24 items-center justify-center " +
+      "bg-[var(--st-surface)] text-[var(--st-muted)] border border-[var(--st-border)] shadow-[0_2px_8px_rgba(0,0,0,0.10)] hover:text-[var(--st-text)] transition-colors"
+    : "hidden md:flex absolute top-1/3 -translate-y-1/2 z-10 w-9 h-9 rounded-full items-center justify-center " +
+      "border border-border bg-surface text-foreground shadow-md hover:bg-muted transition-colors";
 
   return (
     <div className="relative">
@@ -181,7 +221,7 @@ function ProductRail({ items, prioritate }: { items: StorefrontProduct[]; priori
         }}
       >
         {items.map((product, i) => (
-          <div key={product.id} className="snap-start shrink-0 w-[44%] sm:w-[30%] lg:w-[23%]">
+          <div key={product.id} className={`snap-start shrink-0 w-[44%] sm:w-[30%] ${banda ? "lg:w-[calc((100%-4rem)/5)]" : "lg:w-[23%]"}`}>
             <StoreProductCard product={product} priority={prioritate && i < 4} />
           </div>
         ))}
@@ -209,7 +249,7 @@ function ProductRail({ items, prioritate }: { items: StorefrontProduct[]; priori
  * Sectiunea „Recomandate": produsele marcate ca populare, in grila.
  * Titlul e configurabil din editor.
  */
-export function FeaturedRowClassic({ prioritate = false }: { prioritate?: boolean }) {
+export function FeaturedRowClassic({ prioritate = false, banda = false }: { prioritate?: boolean; banda?: boolean }) {
   const { pageContent, featuredProducts } = useStorefront();
   // ⚠ Fara a doua poarta pe `show_featured_section`. Sectiunea ajunge aici doar
   // daca e `enabled` in design, iar `enabled` se deriva chiar din flagul acela
@@ -221,6 +261,7 @@ export function FeaturedRowClassic({ prioritate = false }: { prioritate?: boolea
       title={pageContent.featured_section_title || "Recomandate"}
       items={featuredProducts}
       prioritate={prioritate}
+      banda={banda}
     />
   );
 }
@@ -233,7 +274,7 @@ export function FeaturedRowClassic({ prioritate = false }: { prioritate?: boolea
  * randurile fara produse sunt deja eliminate din context, deci lipsa lui aici
  * inseamna „nimic de afisat".
  */
-export function CustomProductRow({ sectionId, prioritate = false }: { sectionId: string; prioritate?: boolean }) {
+export function CustomProductRow({ sectionId, prioritate = false, banda = false }: { sectionId: string; prioritate?: boolean; banda?: boolean }) {
   const { productSections, viewAllCategory } = useStorefront();
   const rand = productSections.find((x) => x.section.id === sectionId);
   if (!rand) return null;
@@ -246,6 +287,7 @@ export function CustomProductRow({ sectionId, prioritate = false }: { sectionId:
       prioritate={prioritate}
       layout={section.layout === "carousel" ? "carousel" : "grid"}
       headerGap="gap-3"
+      banda={banda}
       onViewAll={
         section.mode === "category" && section.category
           ? () => viewAllCategory(section.category!)

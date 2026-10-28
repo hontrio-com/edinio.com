@@ -1665,8 +1665,20 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
         temei incap in campuri. 7 probe in `teme/jupiter/design.test.ts`; mutanti 6/6.) Stilul (fonturile noi, culorile) si
         antetul „Hipermarket” (bara albastra, cautarea cu buton portocaliu, contul, cosul, „Categorii produse” cu meniul pe
         doua niveluri), plus subsolul cu „Înapoi sus”, newsletter, coloane, servicii.
-  - [ ] 16.3 Pagina principala: bannerul cu carusel si doua carduri, placile de categorii cu numarul de produse, cardul
-        de produs Jupiter, caruselul cu sageti, randul pe file de categorii, placile de recomandari.
+  - [x] 16.3 (28.10: bannerul `carduri` (`BannerSlider` refolosit, paginare in segmente, doua carduri in reglaje);
+        categoriile `placi` (numarul de produse din catalogul din pagina, urcat pe parinti; fara numar la catalogul pe
+        server); cardul `jupiter` (logica mutata in `useDateCardProdus`, comuna cu cel clasic; „Super preț”, pretul mare,
+        butonul cu patratul cosului), ales in `StoreProductCard` pentru toate suprafetele; randul de produse cu reglajul
+        `banda` (gri pe tot ecranul printr-o umbra decupata, 5 carduri, sageti albe); tipul nou „Plăci de recomandare”
+        (`placi_promo`, imagine pe cerc, adaugabil ca orice sectiune, in afara galeriei); pagina principala urmeaza latimea
+        din stil (`--st-container`, 72rem = implicitul celor 148 de magazine din productie, deci nimic schimbat la ele);
+        importul adauga si randurile demo „Oferte de sezon” si „Alegeri populare”; designul compune pagina in ordinea
+        modelului, restul sectiunilor magazinului dupa. Vazut pe magazinul demo, si pe telefon (390 px, fara depasire;
+        placile de categorii trecute pe doua coloane). 10 probe in `pagina-principala.test.ts`, plus importul; mutanti 11/11
+        (cel cu bucla prins prin blocare; scriptul de mutanti are acum limita de timp). AMANAT: randul pe file de categorii
+        (cere produse pe categorie aduse de pe server la cataloagele mari).) Pagina principala: bannerul cu carusel si doua
+        carduri, placile de categorii cu numarul de produse, cardul de produs Jupiter, caruselul cu sageti, randul pe file de
+        categorii, placile de recomandari.
   - [ ] 16.4 Paginile de categorie si de produs, cosul: variantele existente, reglate pe tema si pe cardul ei.
   - [ ] 16.5 Ghiduri, porti, proba in Chrome langa dedeman.ro (cere acordul lui pentru impersonare, daca e nevoie).
 - **Etapa 17: pagina „Teme”** (cardul lui Jupiter, „Vezi demo”, „Aplică tema”), aplicarea cu Istoric si „Pune la loc”.

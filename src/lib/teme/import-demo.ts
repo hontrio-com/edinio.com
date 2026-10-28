@@ -35,6 +35,8 @@ export interface UrmaDateDemo {
   categorii: string[];
   /** Adresele bannerelor adaugate. */
   bannere: string[];
+  /** Id-urile randurilor de produse adaugate in `product_sections`. */
+  randuri: string[];
   la: string;
 }
 
@@ -107,14 +109,44 @@ export function bannereDupaImport(
   return { imagini, linkuri, adaugate };
 }
 
+/** Id-ul unui rand demo in `product_sections` (incape in cele 64 de caractere ale legaturii din design). */
+export function idRandDemo(tema: string, cheie: string): string {
+  return `demo-${tema}-${cheie}`;
+}
+
+/**
+ * Randurile de produse dupa import: ale lui, neatinse, apoi cele demo care lipsesc, cu produsele dupa id (cele care
+ * nu s-au gasit raman pe dinafara, nu ca id-uri moarte).
+ */
+export function randuriDupaImport(
+  pc: Record<string, unknown>,
+  date: SetDateDemo,
+  tema: string,
+  idDupaCheie: ReadonlyMap<string, string>,
+): { randuri: unknown[]; adaugate: string[] } {
+  const randuri = Array.isArray(pc.product_sections) ? [...pc.product_sections] : [];
+  const existente = new Set(randuri.map((r) => (r && typeof r === "object" ? (r as { id?: unknown }).id : null)));
+  const adaugate: string[] = [];
+  for (const r of date.randuri) {
+    const id = idRandDemo(tema, r.cheie);
+    if (existente.has(id)) continue;
+    const productIds = r.produse.map((k) => idDupaCheie.get(k)).filter((x): x is string => !!x);
+    if (productIds.length === 0) continue;
+    randuri.push({ id, title: r.titlu, enabled: true, mode: "selected", productIds, layout: "carousel", limit: productIds.length });
+    adaugate.push(id);
+  }
+  return { randuri, adaugate };
+}
+
 /** Urma de dupa import: cea de dinainte (un import repetat) plus ce s-a adaugat acum. */
-export function urmaDupaImport(veche: unknown, tema: string, categorii: string[], bannere: string[], la: string): UrmaDateDemo {
+export function urmaDupaImport(veche: unknown, tema: string, categorii: string[], bannere: string[], randuri: string[], la: string): UrmaDateDemo {
   const v = veche && typeof veche === "object" ? (veche as Partial<UrmaDateDemo>) : {};
   const lista = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === "string") : []);
   return {
     tema,
     categorii: [...new Set([...lista(v.categorii), ...categorii])],
     bannere: [...new Set([...lista(v.bannere), ...bannere])],
+    randuri: [...new Set([...lista(v.randuri), ...randuri])],
     la,
   };
 }
@@ -123,6 +155,7 @@ export interface RezultatImport {
   categorii: number;
   produse: number;
   bannere: number;
+  randuri: number;
 }
 
 /**
@@ -197,15 +230,22 @@ export async function importaDateleDemo(
     if (error) throw new Error(`produse noi: ${error.message}`);
   }
 
-  // ── Bannerele si urma, in `page_content` ──
+  // ── Produsele demo ale temei, dupa cheie: pentru randurile de pe prima pagina ──
+  const { data: aleTemei, error: eTema } = await admin
+    .from("products").select("id, external_id").eq("business_id", businessId).eq("source", SURSA_DEMO).like("external_id", `${tema}:%`);
+  if (eTema) throw new Error(`produsele temei: ${eTema.message}`);
+  const idDupaCheie = new Map((aleTemei ?? []).map((p) => [String(p.external_id).slice(tema.length + 1), p.id]));
+
+  // ── Bannerele, randurile si urma, in `page_content` ──
   const { data: setari, error: eSet } = await admin
     .from("store_settings").select("page_content").eq("business_id", businessId).single();
   if (eSet) throw new Error(`setari: ${eSet.message}`);
   const pc = (setari?.page_content ?? {}) as Record<string, unknown>;
   const { imagini, linkuri, adaugate } = bannereDupaImport(pc, date, radacinaCatalog);
-  const urma = urmaDupaImport(pc.date_demo, tema, create, adaugate, new Date().toISOString());
+  const randuri = randuriDupaImport(pc, date, tema, idDupaCheie);
+  const urma = urmaDupaImport(pc.date_demo, tema, create, adaugate, randuri.adaugate, new Date().toISOString());
   const { error: eScris } = await admin.from("store_settings").update({
-    page_content: { ...pc, hero_banners: imagini, hero_banner_links: linkuri, date_demo: urma } as never,
+    page_content: { ...pc, hero_banners: imagini, hero_banner_links: linkuri, product_sections: randuri.randuri, date_demo: urma } as never,
     updated_at: new Date().toISOString(),
   }).eq("business_id", businessId);
   if (eScris) throw new Error(`page_content: ${eScris.message}`);
@@ -213,5 +253,5 @@ export async function importaDateleDemo(
   // Cautarea si filtrele magazinului citesc proiectia, nu tabelul de produse.
   await proiecteazaImediat(businessId);
 
-  return { categorii: create.length, produse: noi.length, bannere: adaugate.length };
+  return { categorii: create.length, produse: noi.length, bannere: adaugate.length, randuri: randuri.adaugate.length };
 }

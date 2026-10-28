@@ -196,6 +196,12 @@ export type HeaderAction = "cautare" | "telefon" | "whatsapp" | "cos";
  * comutator care nu facea nimic. Cele care il arata in alta parte (bara de
  * contact, bara de sus) il au din alt camp, nu de aici.
  */
+/**
+ * Randul de produse pe banda gri, cu titlul mare si sagetile pe margini (tema Jupiter, etapa 16.3). Reglaj, nu
+ * varianta: varianta randului oglindeste asezarea din `page_content` (grila sau carusel), deci banda merge pe amandoua.
+ */
+const CAMP_BANDA_RAND: Field = { key: "banda", type: "toggle", label: "Pe bandă gri, cu titlu mare" };
+
 export const HEADER_VARIANT_ACTIONS: Record<string, HeaderAction[]> = {
   search: ["telefon", "whatsapp", "cos"],
   centered: ["cautare", "whatsapp", "cos"],
@@ -757,6 +763,26 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 420,
         fields: [],
       },
+      carduri: {
+        // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri gri in dreapta.
+        label: "Bannere cu doua carduri alaturate",
+        tags: ["cu imagine", "indraznet"],
+        layout: "full",
+        previewHeight: 560,
+        providesH1: true,
+        fields: [
+          {
+            key: "carduri", type: "repeater", label: "Cardurile din dreapta", itemLabel: "Card", max: 2,
+            fields: [
+              { key: "titlu", type: "text", label: "Titlul", maxLength: 40 },
+              { key: "text", type: "textarea", label: "Textul", maxLength: 120 },
+              { key: "imagine", type: "image", label: "Imaginea" },
+              { key: "link", type: "link", label: "Linkul" },
+            ],
+          },
+        ],
+        defaults: { carduri: [] },
+      },
     },
   },
   usp_strip: {
@@ -787,6 +813,17 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     removable: true,
     variants: {
       classic: { label: "Butoane rotunde", tags: ["clasic"], layout: "contained", fields: [] },
+      // Tema Jupiter (etapa 16.3): placi gri pe patru coloane, cu imaginea si numarul de produse.
+      placi: {
+        label: "Placi cu imagine si numar de produse",
+        tags: ["cu imagine", "detaliat"],
+        layout: "contained",
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul", placeholder: "Categorii", maxLength: 60 },
+          { key: "arataNumarul", type: "toggle", label: "Arata cate produse are fiecare categorie" },
+        ],
+        defaults: { titlu: "Categorii", arataNumarul: true },
+      },
     },
   },
   shipping_progress: {
@@ -825,8 +862,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
      */
     removable: false,
     variants: {
-      grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: [] },
-      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [] },
+      grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
+      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
     },
   },
   product_grid: {
@@ -894,6 +931,36 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
    * pagina principala, in `settings.blocuri` (curatate de `parseBlocuriLibere`, nu de `fields`). Se
    * poate pune de mai multe ori. `full`: blocurile isi aleg singure latimea, ca pe o pagina proprie.
    */
+  placi_promo: {
+    label: "Plăci de recomandare",
+    icon: "LayoutGrid",
+    scope: "home",
+    singleton: false,
+    removable: true,
+    // In afara galeriei „Schimbă designul”: are un singur design. Se adauga ca orice sectiune (`addableKinds`).
+    variants: {
+      // Tema Jupiter (etapa 16.3), dupa sectiunea „Recomandări” de pe modelul ei.
+      rotunde: {
+        label: "Imagine pe cerc, titlu si link",
+        tags: ["cu imagine"],
+        layout: "contained",
+        previewHeight: 420,
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul secțiunii", placeholder: "Recomandări", maxLength: 60 },
+          {
+            key: "placi", type: "repeater", label: "Plăcile", itemLabel: "Placă", max: 8,
+            fields: [
+              { key: "titlu", type: "text", label: "Titlul", maxLength: 50 },
+              { key: "imagine", type: "image", label: "Imaginea" },
+              { key: "link", type: "link", label: "Linkul" },
+              { key: "eticheta", type: "text", label: "Textul linkului", placeholder: "Descoperă ofertele", maxLength: 30 },
+            ],
+          },
+        ],
+        defaults: { titlu: "Recomandări", placi: [] },
+      },
+    },
+  },
   continut_liber: {
     label: "Conținut liber",
     icon: "PenTool",
@@ -1035,7 +1102,11 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "commerce",
     singleton: true,
     removable: false,
-    variants: { classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] } },
+    variants: {
+      classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] },
+      // Tema Jupiter (etapa 16.3): insigna „Super preț”, pretul mare, butonul cu patratul cosului.
+      jupiter: { label: "Hipermarket, cu prețul mare", tags: ["indraznet"], layout: "contained", fields: [] },
+    },
   },
   cart_drawer: {
     label: "Coș",

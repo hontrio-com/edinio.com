@@ -54,6 +54,8 @@ export const HOME_KINDS = [
   "rich_blocks",
   /** „Conținut liber” (etapa 9): blocurile paginilor proprii, in `settings.blocuri` (`continut-liber.ts`). */
   "continut_liber",
+  /** „Plăci de recomandare” (tema Jupiter, etapa 16.3): placi cu imagine pe cerc, titlu si link (`placi-promo.ts`). */
+  "placi_promo",
 ] as const;
 
 /**

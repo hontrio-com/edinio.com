@@ -143,6 +143,8 @@ test("editorul: previzualizarea, adresa ei si nodurile merg dupa tipul SALVAT; c
 
 test("pagina „Finalizarea comenzii”: caseta tipului in arbore si in panou, cu trimiterea spre Setări > Comanda", () => {
   const a = cod("src/components/editor-magazin/ArboreSectiuni.tsx");
+  // Gasit la proba 15.4: randul comenzii scria designul din ciorna sub caseta cu alt tip.
+  assert.match(a, /const \{ aplica \} = ciorna;\s*const design = aplicaTipulComenzii\(ciorna\.design, tipComanda\);/);
   assert.match(a, /\{pagina === "comanda" \? \(\s*<div className="mb-2"><CasetaTipComanda tip=\{tipComanda\} \/><\/div>\s*\) : nota && \(/);
   const n = cod("src/components/editor-magazin/PanouNod.tsx");
   assert.match(n, /\{sectiune\.kind === "checkout" && <CasetaTipComanda tip=\{tipulVariantei\(sectiune\.variant\)\} \/>\}/);

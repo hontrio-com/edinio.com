@@ -17,7 +17,7 @@ import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types
 import type { CiornaDesign } from "./useCiornaDesign";
 import { SelectorSablon } from "./SelectorSablon";
 import { CasetaTipComanda } from "./CasetaTipComanda";
-import type { TipComanda } from "@/lib/storefront/design/tip-comanda";
+import { aplicaTipulComenzii, type TipComanda } from "@/lib/storefront/design/tip-comanda";
 
 /**
  * Arborele paginii alese: ce e sus pe toate paginile, sectiunile paginii, ce e
@@ -219,7 +219,12 @@ export function ArboreSectiuni({
   /** Tipul de checkout SALVAT in Setări > Comanda (etapa 15), aratat pe pagina „Finalizarea comenzii”. */
   tipComanda: TipComanda;
 }) {
-  const { design, aplica } = ciorna;
+  const { aplica } = ciorna;
+  /*
+   * Designul cu tipul de checkout salvat (etapa 15), ca previzualizarea: altfel randul „Finalizarea comenzii” scria
+   * designul din ciorna („Formular in fereastra”) sub caseta care spunea „Standard” (gasit la proba 15.4).
+   */
+  const design = aplicaTipulComenzii(ciorna.design, tipComanda);
   const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
   const eListaPaginii = pagina === "acasa" && !magazin.unSingurProdus;
   const nota = notaPaginii(pagina, design, magazin);

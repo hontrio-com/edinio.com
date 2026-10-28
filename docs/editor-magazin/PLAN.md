@@ -40,7 +40,8 @@ FACUTA si PROBATA in Chrome** (pasii 10.1-10.4); **etapa 11 (subsolul pe coloane
 **Mentiunile lui din 28.10, seara (cinci), impartite in etapele 13-15** (sectiunea „Mentiunile lui din 28.10, seara”):
 **etapa 13 FACUTA si PROBATA** (blocul pus cu „+” numit si deschis direct, animatiile in editor, „Șterge”, linkul
 bannerului cu sugestii), raportul trimis; **etapa 14 (fonturile pe sectiune, aceleasi 33 si in Stil) FACUTA si PROBATA**
-(pasii 14.1-14.4), raportul trimis; urmeaza **etapa 15 (Setări > Comanda)**, cu acordul lui. Intre timp `main` a primit
+(pasii 14.1-14.4), raportul trimis; **etapa 15 (tipul de checkout in Setări > Comanda) FACUTA si PROBATA** (pasii
+15.1-15.4), raportul trimis; urmeaza temele, cu acordul lui. Intre timp `main` a primit
 reparatia eMAG `dba33c22`, adusa in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
@@ -1573,7 +1574,21 @@ tip decat cel publicat.
       si „Alege tipul”; ghidurile (tipul de checkout rescris, trimiterile la „Formular de comandă” devenite „Comanda”) si
       cardul din Setari. 13 probe in `tip-comanda.test.ts`; mutanti 12/12.) Editorul: previzualizarea, adresa si nota cu
       tipul salvat; caseta tipului in arbore si in panoul sectiunii, fara „Schimbă designul”; lista din „Pagini”. Probe.
-- [ ] 15.4 Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
+- [x] 15.4 (28.10: ghidurile in 15.3; REGISTRU C; suita intreaga 11.301 / 0 cazute / 2 sarite si `build:ci` trec pe
+      `ddfb3145`; proba in Chrome cu acordul lui („Da, fă proba acum”), pe `floraria-mirei` din demo.) Ghidurile, REGISTRU,
+      porti, proba in Chrome (cere acordul lui pentru impersonare).
+      Vazut pe ecran: Setări > „Comanda” pornita pe „Formular de comandă, în fereastră” (designul publicat `classic`);
+      „Standard, pagină de finalizare” + „Salvează”: in baza doar `checkout_config.tip = "pagina"`, designul cu aceeasi
+      amprenta, nicio ciorna, bara de sus tot „Totul e publicat”. Pe „Finalizarea comenzii”: caseta cu tipul si „Schimbă
+      tipul în Setări” (deschide „Comanda”), previzualizarea pe pagina de finalizare, panoul sectiunii fara „Schimbă
+      designul”. In magazin, „Finalizează comanda” din cos a dus la `/checkout`; „Pagini” a aratat „PAGINA” si „Alege
+      tipul”. Inapoi pe fereastra: previzualizarea pe pagina principala, cu nota; `/checkout` trimite la prima pagina;
+      cosul deschide fereastra.
+      GASIT si reparat: randul „Finalizarea comenzii” din arbore scria designul din ciorna („Formular in fereastra”) sub
+      caseta „Standard”; arborele citeste acum designul cu tipul aplicat (proba noua, mutant prins). Eroarea de hidratare
+      din consola vine din extensia Chrome-ului lui (`cz-shortcut-listen` pe `<body>`). Pus la loc: iesirea din
+      impersonare (l-a deconectat), `checkout_config` de dinainte, data abonamentului; o singura comparatie, totul egal
+      (`page_content` si designul dupa amprenta, ciorna goala, 0 versiuni, analitica, comenzile, fara `tip`).
 
 ## Deciziile proprietarului
 

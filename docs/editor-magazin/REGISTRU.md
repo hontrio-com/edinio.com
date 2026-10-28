@@ -185,6 +185,17 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     numele magazinului si meniul (sunt text).
   - Fisierele unui font se descarca doar unde e folosit (`preload: false`); CSS-ul fonturilor era deja pe paginile
     magazinului, deci greutatea paginii nu creste.
+- **Etapa 15 (tipul de checkout in Setări > Comanda, mentiunea 4 din 28.10, seara), de verificat dupa push:**
+  - Magazinele de azi raman pe tipul lor (28.10: 9 pe pagina, 139 in fereastra). Niciunul n-are inca
+    `checkout_config.tip`, deci designul decide pana la prima salvare din „Comanda”, care scrie tipul de pe ecran
+    (pornit pe cel de azi).
+  - In editor, Setări > „Comanda”: tipul schimbat si salvat ajunge in magazin pe loc, fara „Publică”: butonul din cos
+    duce la `/checkout` sau deschide fereastra, iar `/checkout` la tipul „în fereastră” trimite la prima pagina.
+  - Pagina „Finalizarea comenzii” din editor arata tipul si „Schimbă tipul în Setări”; „Schimbă designul” nu mai apare la
+    ea. „Pagini” > „Finalizare comanda”: insigna urmeaza tipul salvat, „Alege tipul” deschide Setări > Comanda.
+  - Linkul din emailul de cos abandonat urmeaza tipul salvat (`/checkout?code=...` la pagina, fereastra la celalalt).
+  - ⚠ „Comandă acum” de pe pagina produsului deschide formularul produsului la ambele tipuri, ca inainte; spus in panou
+    si in ghid. Daca el vrea altfel, e o etapa separata.
 
 ## D. Capturi si texte de ajutor
 - **FACUT 28.10.2026, ghidurile (inchiderea, pasul 5; PLAN, „Inchiderea, pasul 5”):** toata categoria „Design și pagini” (84 de ghiduri citite fata de cod, rescrise cele care descriau „Design magazin”, „Design secțiuni”, „Ordinea secțiunilor”, „Salvează” pe sectiuni si constructorul de pagini retras), plus trimiterile din „Primii pași” si „Produse”. Noi: cum e impartit editorul, bucatile paginii de produs, istoricul publicarilor, sabloanele de produs (425 de ghiduri). Fiecare citat din categorie cautat in sursa (1084): toate cele scrise acum exista in cod. Ghidul „Conținut liber” ramane fara captura, dupa regula din `ajutor.ts` (cuvintele ajung).

@@ -56,6 +56,9 @@ export interface CategorieDeCreat {
  */
 export function categoriiDeCreat(existente: readonly string[], date: SetDateDemo): CategorieDeCreat[] {
   const are = new Set(existente.map(cheieNume));
+  // O subcategorie n-are poza ei in set: ia poza primului ei produs, ca placile subcategoriilor sa nu iasa goale.
+  const pozaCopilului = new Map<string, string>();
+  for (const p of date.produse) if (!pozaCopilului.has(cheieNume(p.categorie))) pozaCopilului.set(cheieNume(p.categorie), p.imagine);
   const sus: CategorieDeCreat[] = [];
   const jos: CategorieDeCreat[] = [];
   for (const c of date.categorii) {
@@ -65,7 +68,7 @@ export function categoriiDeCreat(existente: readonly string[], date: SetDateDemo
     }
     for (const copil of c.copii) {
       if (are.has(cheieNume(copil))) continue;
-      jos.push({ nume: copil, parinte: c.nume, imagine: null });
+      jos.push({ nume: copil, parinte: c.nume, imagine: pozaCopilului.get(cheieNume(copil)) ?? null });
       are.add(cheieNume(copil));
     }
   }

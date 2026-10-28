@@ -27,6 +27,8 @@ export interface SetariMagazin {
   imagineAntet: string;
   arataFirimituri: boolean;
   arataNumarul: boolean;
+  /** Subcategoriile categoriei alese, pe placi, sub titlu (doar la filtrele in bara laterala; tema Jupiter, etapa 16.4). */
+  placiSubcategorii: boolean;
 
   coloane: number;
   coloaneMobil: number;
@@ -55,6 +57,7 @@ const IMPLICITE: SetariMagazin = {
   imagineAntet: "",
   arataFirimituri: true,
   arataNumarul: true,
+  placiSubcategorii: false,
 
   coloane: 4,
   coloaneMobil: 2,
@@ -125,6 +128,7 @@ export function citesteSetariMagazinDinSectiune(
     imagineAntet: sir(citeste("imagineAntet"), IMPLICITE.imagineAntet),
     arataFirimituri: comutator(citeste("arataFirimituri"), IMPLICITE.arataFirimituri),
     arataNumarul: comutator(citeste("arataNumarul"), IMPLICITE.arataNumarul),
+    placiSubcategorii: comutator(citeste("placiSubcategorii"), IMPLICITE.placiSubcategorii),
 
     coloane: numar(citeste("coloane"), IMPLICITE.coloane, 2, 6),
     coloaneMobil: numar(citeste("coloaneMobil"), IMPLICITE.coloaneMobil, 1, 2),

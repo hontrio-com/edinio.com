@@ -1234,7 +1234,7 @@ export function ProductPageDetailed({
       <>
         {/* ─── Continutul pachetului ───────────────────────────────────── */}
         {product.is_bundle && bundleComponents.length > 0 && (
-          <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+          <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12">
             <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
             {/* `grid-cols-1` din acelasi motiv ca la grila eroului, dar aici
                 numele componentei e cel care umfla pista: `truncate` inseamna
@@ -1280,7 +1280,7 @@ export function ProductPageDetailed({
       <>
         {/* ─── Beneficii ───────────────────────────────────────────────── */}
         {benefitsSection && (benefitsSection.items?.length ?? 0) > 0 && (
-          <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+          <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12">
             <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
             {/* `grid-cols-1` ca peste tot in fisier: textele de aici se rup
                 la spatii, deci azi nu umfla pista, dar un singur sir fara
@@ -1301,7 +1301,7 @@ export function ProductPageDetailed({
       <>
         {/* ─── Cum functioneaza ────────────────────────────────────────── */}
         {howItWorksSection && (howItWorksSection.steps?.length ?? 0) > 0 && (
-          <div className="max-w-6xl mx-auto px-4 lg:px-6 pb-12">
+          <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12">
             <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
             <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {howItWorksSection.steps.map((s, i) => (
@@ -1323,7 +1323,7 @@ export function ProductPageDetailed({
     <>
       {/* ─── Firimituri ─────────────────────────────────────────────────── */}
       {!isHome && setari.showBreadcrumb !== false && (
-        <nav aria-label="Firimituri" className="max-w-6xl mx-auto px-4 lg:px-6 pt-4 pb-1">
+        <nav aria-label="Firimituri" className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pt-4 pb-1">
           <ol className="flex items-center gap-1.5 text-[13px] text-muted-foreground overflow-x-auto">
             <li className="shrink-0">
               <a href={radacinaCatalog} onClick={laMagazin}
@@ -1344,7 +1344,7 @@ export function ProductPageDetailed({
       )}
 
       {/* ─── Galerie + coloana de cumparare ─────────────────────────────── */}
-      <div className="max-w-6xl mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
+      <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
         {/* Doua randuri pe desktop: galeria sus-stanga, datele sub ea, iar
             coloana de cumparare intinsa peste amandoua. Pe telefon grila are o
             singura coloana si totul curge in ordinea din marcaj.
@@ -1397,7 +1397,7 @@ export function ProductPageDetailed({
         <>
           {/* ─── File ────────────────────────────────────────────────────── */}
           {fileVizibile.length > 0 && (
-            <div ref={fileRef} className="max-w-6xl mx-auto px-4 lg:px-6 pb-12 scroll-mt-24">
+            <div ref={fileRef} className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12 scroll-mt-24">
               <div className="border-b border-border flex gap-6 overflow-x-auto">
                 {fileVizibile.map((f) => (
                   <button key={f.id} type="button" onClick={() => setFila(f.id)}

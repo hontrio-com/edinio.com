@@ -24,8 +24,11 @@ export interface Tema {
   /** Culoarea principala, pentru cardul temei. */
   culoare: string;
   date: SetDateDemo;
-  /** Designul temei peste magazinul dat; cu `date`, si textele de exemplu ale sectiunilor ei. */
-  design: (ctx: DesignContext, date: SetDateDemo | null) => StoreDesign;
+  /**
+   * Designul temei peste magazinul dat; cu `date`, si textele de exemplu ale sectiunilor ei; cu `baza`, peste designul
+   * de acum al magazinului (sectiunile, blocurile si coloanele lui raman).
+   */
+  design: (ctx: DesignContext, date: SetDateDemo | null, baza?: StoreDesign) => StoreDesign;
 }
 
 export const TEME: readonly Tema[] = [

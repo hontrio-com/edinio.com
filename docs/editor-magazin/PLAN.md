@@ -1679,7 +1679,14 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
         (cere produse pe categorie aduse de pe server la cataloagele mari).) Pagina principala: bannerul cu carusel si doua
         carduri, placile de categorii cu numarul de produse, cardul de produs Jupiter, caruselul cu sageti, randul pe file de
         categorii, placile de recomandari.
-  - [ ] 16.4 Paginile de categorie si de produs, cosul: variantele existente, reglate pe tema si pe cardul ei.
+  - [x] 16.4 (28.10: pagina Magazin cu filtre in stanga primeste reglajul `placiSubcategorii` (placile subcategoriilor sub
+        titlu, cu `PlacaCategorie` scoasa din `CategoryNavPlaci`, nu copiata; numarul pe orice categorie,
+        `produsePeCategorie`); pagina de produs „Detaliat” urmeaza latimea din stil (6 containere; 72rem implicit) si e a
+        temei; subcategoriile demo primesc poza primului lor produs (si in baza demo, 27). Designul temei primeste si
+        designul de acum al magazinului ca baza (pentru etapa 17): sectiunile, blocurile de sub produs si coloanele alese
+        de el raman; GASIT de proba: parserul scrie si coloanele implicite, deci „alese” se judeca fata de implicite. Cosul
+        ramane sertarul clasic, in culorile temei. 6 probe in `pagini.test.ts`; mutanti 9/9.) Paginile de categorie si de
+        produs, cosul: variantele existente, reglate pe tema si pe cardul ei.
   - [ ] 16.5 Ghiduri, porti, proba in Chrome langa dedeman.ro (cere acordul lui pentru impersonare, daca e nevoie).
 - **Etapa 17: pagina „Teme”** (cardul lui Jupiter, „Vezi demo”, „Aplică tema”), aplicarea cu Istoric si „Pune la loc”.
 - **Etapa 18: „Importă datele demo”** la aplicare si „Șterge datele demo”.

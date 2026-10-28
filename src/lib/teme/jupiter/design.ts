@@ -2,6 +2,8 @@ import { buildClassicDesign, section } from "@/lib/storefront/design/defaults";
 import { hrefCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { variantMeta } from "@/lib/storefront/design/registry";
+import { schemaBlocurilor } from "@/lib/storefront/design/blocuri";
+import { jsonCanonic } from "@/lib/storefront/design/continut-ciorna";
 import type { BlockInstance, DesignContext, SectionInstance, StoreDesign, StoreStyle } from "@/lib/storefront/design/types";
 import type { SetDateDemo } from "@/lib/teme/tipuri";
 
@@ -64,13 +66,26 @@ export function coloaneSubsolJupiter(): BlockInstance[] {
   ];
 }
 
-/** O sectiune pe varianta temei, cu reglajele ei implicite peste cele de azi si varianta tinuta (`variantOverride`). */
+/**
+ * Coloanele subsolului dupa tema: ale lui, cand si le-a ales (etapa 11); altfel ale temei, cu newsletterul in banda lui.
+ * ⚠ „Alese” nu inseamna „scrise”: parserul scrie si coloanele implicite, deci se compara cu implicitele variantei.
+ */
+function coloaneDupaTema(subsol: SectionInstance): BlockInstance[] {
+  const implicite = schemaBlocurilor("footer", subsol.variant)?.implicite?.(subsol.settings) ?? [];
+  const aleseDeEl = !!subsol.blocks && jsonCanonic(subsol.blocks) !== jsonCanonic(implicite);
+  return aleseDeEl && subsol.blocks ? subsol.blocks : coloaneSubsolJupiter();
+}
+
+/**
+ * O sectiune pe varianta temei, tinuta (`variantOverride`): implicitele variantei, peste ele reglajele de azi ale
+ * magazinului (parserul pastreaza doar ce are sens pe varianta noua), peste ele ce cere tema.
+ */
 function peVarianta(s: SectionInstance, variant: string, setari: Record<string, unknown> = {}): SectionInstance {
   return {
     ...s,
     variant,
     variantOverride: variant,
-    settings: { ...(variantMeta(s.kind, variant)?.defaults ?? {}), ...setari },
+    settings: { ...(variantMeta(s.kind, variant)?.defaults ?? {}), ...s.settings, ...setari },
   };
 }
 
@@ -109,13 +124,29 @@ function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null): SectionI
   return [banner, categorii, ...randuri.slice(0, dupa), recomandari, ...randuri.slice(dupa), ...restul];
 }
 
-export function designJupiter(ctx: DesignContext, date: SetDateDemo | null): StoreDesign {
-  const baza = buildClassicDesign(ctx);
+/**
+ * `baza` = designul de acum al magazinului (la aplicare, etapa 17), ca sectiunile, blocurile si coloanele LUI sa ramana;
+ * lipsa = designul clasic derivat din continut (magazinul demo).
+ */
+export function designJupiter(ctx: DesignContext, date: SetDateDemo | null, bazaMagazinului?: StoreDesign): StoreDesign {
+  const baza = bazaMagazinului ?? buildClassicDesign(ctx);
   const antet = peVarianta(baza.chrome.header, "hipermarket", date ? { topText: "Livrare în toată țara" } : {});
-  const subsol = { ...peVarianta(baza.chrome.footer, "hipermarket", { inapoiSus: true }), blocks: coloaneSubsolJupiter() };
+  const subsol = { ...peVarianta(baza.chrome.footer, "hipermarket", { inapoiSus: true }), blocks: coloaneDupaTema(baza.chrome.footer) };
   // Catalogul pe pagina lui, ca pe model: pe prima pagina raman doar randurile alese.
-  const magazin = { ...peVarianta(baza.shop.page, "sidebar", { pastreazaGrilaAcasa: false }), enabled: true };
+  const magazin = { ...peVarianta(baza.shop.page, "sidebar", { pastreazaGrilaAcasa: false, placiSubcategorii: true }), enabled: true };
   const card = { ...baza.commerce.productCard, variant: "jupiter", variantOverride: "jupiter" };
+  /*
+   * Pagina de produs „Detaliat”, cu miniaturile in stanga, ca pe model (etapa 16.4). Blocurile si reglajele comune ale
+   * magazinului raman: parserul le potriveste pe schema noua, iar „Conținutul liber” de sub produs exista in amandoua.
+   */
+  const paginaProdus = baza.product.page.variant === "detailed"
+    ? baza.product.page
+    : {
+      ...baza.product.page,
+      variant: "detailed",
+      variantOverride: "detailed",
+      settings: { ...(variantMeta("product_page", "detailed")?.defaults ?? {}), ...baza.product.page.settings },
+    };
   return parseStoreDesign({
     ...baza,
     style: STIL_JUPITER,
@@ -123,6 +154,7 @@ export function designJupiter(ctx: DesignContext, date: SetDateDemo | null): Sto
     chrome: { ...baza.chrome, header: antet, footer: subsol },
     home: paginaPrincipala(baza, date),
     shop: { ...baza.shop, page: magazin },
+    product: { ...baza.product, page: paginaProdus },
     commerce: { ...baza.commerce, productCard: card },
   }, ctx);
 }

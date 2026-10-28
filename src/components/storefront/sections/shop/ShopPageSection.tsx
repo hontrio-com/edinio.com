@@ -65,6 +65,7 @@ export function ShopPageSection({ variant, blocuri, idPagina }: {
       coloane={setariMagazin.coloane}
       coloaneMobil={setariMagazin.coloaneMobil}
       arataTitlu={setariMagazin.arataTitlu}
+      placiSubcategorii={setariMagazin.placiSubcategorii}
       grupuriPornite={setariMagazin.grupuriFiltre}
     />
     {zona("jos")}

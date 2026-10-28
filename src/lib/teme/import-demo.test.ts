@@ -43,7 +43,7 @@ test("categoriile: se creeaza doar cele care lipsesc, intai primul nivel, si una
   const plan = categoriiDeCreat(["  grădină ", "Mese"], date);
   assert.deepEqual(plan, [
     { nume: "Mobilă", parinte: null, imagine: "j" },
-    { nume: "Unelte de grădină", parinte: "Grădină", imagine: null },
+    { nume: "Unelte de grădină", parinte: "Grădină", imagine: D.produse.find((p) => p.categorie === "Unelte de grădină")!.imagine },
     { nume: "Ghivece", parinte: "Grădină", imagine: null },
   ]);
   assert.equal(categoriiDeCreat(toateCategoriile, D).length, 0, "importul repetat nu mai creeaza nimic");

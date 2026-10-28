@@ -5,6 +5,7 @@ import {
   NumarRezultate, Paginare, PanouFiltre, Sortare, useAreFiltre,
 } from "./_shared/ShopPieces";
 import type { ShopPageProps } from "./shop-page.types";
+import { PlaciSubcategorii } from "./_shared/PlaciSubcategorii";
 
 /**
  * Pagina de catalog, modelul „Filtre in bara laterala".
@@ -17,7 +18,7 @@ import type { ShopPageProps } from "./shop-page.types";
  * deasupra grilei, ar fi impins produsele sub prima derulare, adica exact ce a
  * venit clientul sa vada.
  */
-export function ShopPageSidebar({ titlu, coloane, coloaneMobil, grupuriPornite, arataTitlu }: ShopPageProps) {
+export function ShopPageSidebar({ titlu, coloane, coloaneMobil, grupuriPornite, arataTitlu, placiSubcategorii = false }: ShopPageProps) {
   // Fara nimic de aratat, coloana ar fi o banda goala langa grila: magazinul
   // fara categorii si fara atribute completate primeste automat asezarea pe
   // toata latimea.
@@ -28,6 +29,7 @@ export function ShopPageSidebar({ titlu, coloane, coloaneMobil, grupuriPornite, 
       <div className="mb-5 space-y-3">
         <ImagineAntet />
         <AntetPagina titlu={titlu} aratatTitlu={arataTitlu} />
+        {placiSubcategorii && <PlaciSubcategorii />}
         <CautareCatalog />
       </div>
 

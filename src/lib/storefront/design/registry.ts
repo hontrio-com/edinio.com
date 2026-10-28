@@ -1067,7 +1067,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 900,
         providesH1: true,
         note: SHOP_NOTA,
-        fields: SHOP_FIELDS,
+        // `placiSubcategorii` (tema Jupiter, etapa 16.4): subcategoriile categoriei alese, pe placi, sub titlu.
+        fields: [...SHOP_FIELDS, { key: "placiSubcategorii", type: "toggle", label: "Arata subcategoriile pe placi, sub titlu" }],
         defaults: { ...SHOP_DEFAULTS, coloane: "4" },
       },
       toolbar: {

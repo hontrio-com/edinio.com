@@ -25,4 +25,6 @@ export interface ShopPageProps {
   grupuriPornite: string[];
   /** Titlul se vede, sau ramane doar pentru cititoarele de ecran. */
   arataTitlu: boolean;
+  /** Subcategoriile categoriei alese, pe placi, sub titlu (tema Jupiter, etapa 16.4). */
+  placiSubcategorii?: boolean;
 }

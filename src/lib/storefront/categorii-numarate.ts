@@ -35,3 +35,27 @@ export function produsePeRadacina(
   }
   return numar;
 }
+
+/**
+ * Id-ul fiecarei categorii -> produsele din subarborele ei (ea si toti descendentii). Pentru placile subcategoriilor
+ * de pe pagina Magazin (etapa 16.4), unde categoria aleasa poate fi oricare, nu doar o radacina.
+ */
+export function produsePeCategorie(
+  arbore: readonly Pick<StoreCategoryNode, "id" | "name" | "parent_id">[],
+  produse: readonly { category: string | null }[],
+): Map<string, number> {
+  const dupaId = new Map(arbore.map((c) => [c.id, c]));
+  const dupaNume = new Map(arbore.map((c) => [cheie(c.name), c]));
+  const numar = new Map<string, number>();
+  for (const p of produse) {
+    if (!p.category) continue;
+    const vazute = new Set<string>();
+    let nod = dupaNume.get(cheie(p.category));
+    while (nod && !vazute.has(nod.id)) {
+      vazute.add(nod.id);
+      numar.set(nod.id, (numar.get(nod.id) ?? 0) + 1);
+      nod = nod.parent_id ? dupaId.get(nod.parent_id) : undefined;
+    }
+  }
+  return numar;
+}

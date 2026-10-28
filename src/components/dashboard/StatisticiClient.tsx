@@ -56,6 +56,15 @@ const FILE: { fila: Fila; eticheta: string }[] = [
   { fila: "live", eticheta: "Live" },
 ];
 
+/*
+  ⚠ Spus anume, fiindca cifrele scad o data cu el (etapa 12 din `docs/editor-magazin/PLAN.md`): pe
+  28.10.2026, aproape jumatate din vederile de produs veneau de la Google si alte crawlere. De atunci nu
+  se mai scriu, iar o perioada veche comparata cu una noua ar fi parut o scadere a traficului.
+*/
+const ROBOTII_NU_INTRA =
+  "Robotii (Google si alte programe care citesc magazinul) nu intra in cifre. Inainte intrau, "
+  + "asa ca perioadele mai vechi pot arata mai mult decat au fost oameni.";
+
 export function StatisticiClient({
   businessId, svgContent, primaryColor, canale,
 }: {
@@ -346,7 +355,8 @@ export function StatisticiClient({
                   empty={(trafic?.total.vizitatori ?? 0) === 0}
                   {...deltaProps(crestere(trafic?.total.vizitatori ?? 0, trafic?.total_anterior.vizitatori ?? 0), comparatie, String(trafic?.total_anterior.vizitatori ?? 0))}
                   explicatie={"Oameni distincti, numarati PE ZI si insumati: cine revine in alta zi se numara din nou. "
-                    + "Asa masuram fara sa punem niciun cookie in browserul vizitatorului."}
+                    + "Asa masuram fara sa punem niciun cookie in browserul vizitatorului. "
+                    + ROBOTII_NU_INTRA}
                 />
                 <CardStatistica marime={marimeCifre}
                   label="Sesiuni"
@@ -370,7 +380,8 @@ export function StatisticiClient({
                   icon={Eye}
                   empty={(trafic?.total.afisari ?? 0) === 0}
                   {...deltaProps(crestere(trafic?.total.afisari ?? 0, trafic?.total_anterior.afisari ?? 0), comparatie, String(trafic?.total_anterior.afisari ?? 0))}
-                  explicatie={"De cate ori s-a deschis o pagina a magazinului. Aceasta era, pana acum, cifra aratata drept „vizitatori activi”."}
+                  explicatie={"De cate ori s-a deschis o pagina a magazinului. Aceasta era, pana acum, cifra aratata drept „vizitatori activi”. "
+                    + ROBOTII_NU_INTRA}
                 />
               </div>
 

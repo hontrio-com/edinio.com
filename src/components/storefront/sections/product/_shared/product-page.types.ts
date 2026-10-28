@@ -45,6 +45,8 @@ export interface PageContent {
   price_range_display?: { enabled: boolean };
   button_effect?: string;
   show_social_proof?: boolean;
+  /** Ce numara contorul de vizitatori (etapa 12): „acum” sau ultimele 24 de ore (implicit). */
+  social_proof_window?: "now" | "day";
   show_quality_badge?: boolean;
   footer_logo_size?: number;
   checkout_config?: {

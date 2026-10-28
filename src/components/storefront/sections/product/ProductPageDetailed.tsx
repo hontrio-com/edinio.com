@@ -49,9 +49,11 @@ import type {
   Business, Product, StoreSettings, PageContent, PageSections,
 } from "./_shared/product-page.types";
 import {
-  abonareMiscareRedusa, citesteMiscareRedusa, hashSir,
+  abonareMiscareRedusa, citesteMiscareRedusa,
   SocialProof, FAQItem, CTAButton,
 } from "./_shared/pieces";
+import { fereastraContorului, numarulContorului } from "@/lib/storefront/contor-vizitatori";
+import type { Privitori } from "@/lib/analitice/privitori";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
@@ -245,6 +247,7 @@ export function ProductPageDetailed({
   idPagina: idPaginaSablon,
   demo = false,
   permisIncarcare = null,
+  privitori = null,
 }: {
   business: Business;
   product: Product;
@@ -272,6 +275,8 @@ export function ProductPageDetailed({
    * ⚠ `null` pe suprafetele care nu-l pot emite (previzualizarea din panou, miniatura de design).
    */
   permisIncarcare?: string | null;
+  /** Oamenii care s-au uitat la produs (etapa 12); vezi `ProductPageClassic`. */
+  privitori?: Privitori | null;
   demo?: boolean;
 }) {
   const permalinkuri = usePermalinkuri();
@@ -373,7 +378,6 @@ export function ProductPageDetailed({
   const deliveryEstimate = pageContent.delivery_estimate;
   /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
   const deliveryTime = pageContent.delivery_time;
-  const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
 
   /* Variante — aceiasi helperi ca in grila, ca pretul afisat sa fie acelasi pe
      care il accepta serverul la plasarea comenzii. */
@@ -633,6 +637,10 @@ export function ProductPageDetailed({
   }, [editare.linie, pers, variantsData]);
 
   const chrome = useStoreChromeOptional();
+  /* Contorul de vizitatori (etapa 12): oamenii masurati pe server. Exemplul, doar in editor si in
+     miniatura, cand nu e nimeni; in magazin zero inseamna ca pastila nu apare. */
+  const fereastraContor = fereastraContorului(pageContent);
+  const viewerCount = numarulContorului({ privitori, fereastra: fereastraContor, exemplu: demo || chrome?.esteEditorDesign === true });
   // Id-ul paginii de produs in design (sablonul ales), pentru marcajele blocurilor din editor.
   const idPagina = idPaginaSablon ?? chrome?.design?.product.page.id ?? "product_page";
   /* Unde se intoarce omul dupa ce salveaza sau renunta. */
@@ -861,7 +869,8 @@ export function ProductPageDetailed({
     ),
     dovada: (
       <>
-        <div><SocialProof count={viewerCount} color={color} /></div>
+        {/* La zero (nimeni de numarat, etapa 12) nu se randeaza nimic, nici invelisul. */}
+        {viewerCount > 0 && <div><SocialProof count={viewerCount} fereastra={fereastraContor} color={color} /></div>}
       </>
     ),
     pret: (

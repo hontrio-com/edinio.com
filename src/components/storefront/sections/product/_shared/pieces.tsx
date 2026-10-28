@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingBag, Plus, Minus, Eye } from "lucide-react";
 import type { FaqItem } from "./product-page.types";
+import { textulContorului, type FereastraContor } from "@/lib/storefront/contor-vizitatori";
 
 /**
  * Piese folosite de mai multe variante de pagina de produs.
@@ -26,13 +27,6 @@ export function abonareMiscareRedusa(la: () => void) {
 
 export function citesteMiscareRedusa() { return window.matchMedia(MQ_MISCARE_REDUSA).matches; }
 
-/** Hash stabil, ca numarul de vizitatori sa iasa acelasi pe server si in browser. */
-export function hashSir(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
 /**
  * Cosul e detinut de `CartProvider` (contorul din antet citeste de acolo), dar
  * pagina de produs scrie direct in `cart_<slug>`. Evenimentul „storage" nu se
@@ -48,16 +42,20 @@ export function anuntaCosSchimbat(cheie: string, valoare: string | null) {
 
 /* ─── Sub-components ──────────────────────────────────────────────────────── */
 
-export function SocialProof({ count, color }: { count: number; color: string }) {
+/**
+ * Contorul de vizitatori (etapa 12): oameni masurati, nu un numar inventat. Cine il cheama decide
+ * daca apare (`numarulContorului`); la zero nu se randeaza deloc.
+ */
+export function SocialProof({ count, fereastra, color }: { count: number; fereastra: FereastraContor; color: string }) {
   return (
     <div className="inline-flex items-center gap-2 bg-surface border border-border shadow-sm rounded-full px-4 py-2 text-sm">
-      <span className="relative flex h-2.5 w-2.5">
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: color }} />
         <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ backgroundColor: color }} />
       </span>
-      <Eye size={14} className="text-muted-foreground" />
+      <Eye size={14} className="shrink-0 text-muted-foreground" />
       <span className="font-medium text-muted-foreground">
-        <span className="text-foreground font-bold">{count}</span> persoane se uita acum
+        <span className="text-foreground font-bold">{count}</span> {textulContorului(count, fereastra)}
       </span>
     </div>
   );

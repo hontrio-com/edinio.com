@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils/cn";
 import type { ContinutMagazin } from "../useContinutMagazin";
 import { EditorElemente, EditorIntrebari } from "./liste";
 import { Grup, Nota, RandComutator, inputMicCls } from "./ui";
+import { EXEMPLU_CONTOR } from "@/lib/storefront/contor-vizitatori";
 
 /**
  * Continutul unui bloc din pagina de produs (etapa 4 din `docs/editor-magazin/PLAN.md`).
@@ -169,8 +170,37 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
       );
     case "incredere":
       return <Nota>Textele garanțiilor (plata, livrarea, returul) sunt fixe deocamdată.</Nota>;
-    case "dovada":
-      return <Nota>Numărul afișat nu e măsurat: e fix pentru fiecare produs, între 18 și 27.</Nota>;
+    /*
+     * Etapa 12: contorul numara oameni adevarati. Ce numara il alege comerciantul (raspunsul lui:
+     * „Alege comerciantul”), implicit ultimele 24 de ore: „Acum” ar fi gol la 95% din vizite.
+     */
+    case "dovada": {
+      const fereastra = pc.social_proof_window === "now" ? "now" : "day";
+      return (
+        <div className="space-y-4">
+          <Grup titlu="Ce numără">
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: "day", eticheta: "Ultimele 24 de ore" },
+                { id: "now", eticheta: "Acum" },
+              ] as const).map(({ id, eticheta }) => (
+                <button key={id} type="button" aria-pressed={fereastra === id}
+                  onClick={() => seteaza("produs_dovada", (p) => ({ ...p, social_proof_window: id }))}
+                  className={cn("rounded-lg border-2 px-2 py-2 text-xs font-medium transition-colors",
+                    fereastra === id ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-primary/40")}>
+                  {eticheta}
+                </button>
+              ))}
+            </div>
+          </Grup>
+          <Nota>
+            Numărul e real: câți oameni diferiți au deschis produsul, fără cel care se uită și fără roboți.
+            „Acum” înseamnă ultimele 15 minute. Când nu e nimeni, contorul nu apare. În previzualizare vezi
+            atunci un exemplu ({EXEMPLU_CONTOR}).
+          </Nota>
+        </div>
+      );
+    }
     case "insigna":
       return <Nota>Eticheta cu stele de lângă titlu.</Nota>;
     case "oferte":

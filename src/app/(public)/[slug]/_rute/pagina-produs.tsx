@@ -8,6 +8,9 @@ import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { esteProprietarulMagazinului } from "@/lib/analitice/proprietar";
+import { vizitatoriiCererii } from "@/lib/analitice/identitate";
+import { privitoriiProdusului } from "@/lib/analitice/privitori";
+import { completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
@@ -307,6 +310,31 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     ? paginaSablonului(resolved.design.product, sablonImpus)
     : sablonulProdusului(resolved.design.product, product.id, categoriiProdusului);
   /*
+   * ═══ CONTORUL DE VIZITATORI, MASURAT (etapa 12) ═══
+   *
+   * Oamenii care s-au uitat la produs, fara cel de fata (azi si ieri, vezi `vizitatoriiCererii`).
+   * Se numara AICI, la randare, nu dintr-o cerere a browserului: o pastila venita dupa incarcare
+   * ar fi impins pretul si butoanele in jos. Si numai cand blocul se vede in sablonul ales, sau in
+   * editor (unde ochiul se poate aprinde pe loc): la magazinele fara contor (139 din 148 pe 25.10),
+   * nicio citire in plus.
+   */
+  const schemaPaginii = schemaBlocurilor("product_page", paginaProdusului.variant);
+  const contorulSeVede = schemaPaginii !== null && completeazaBlocuri(paginaProdusului.blocks, schemaPaginii, {
+    pageContent: pageContent as Record<string, unknown>,
+    setari: paginaProdusului.settings,
+  }).some((b) => b.type === "dovada" && b.enabled);
+  const privitori = contorulSeVede || esteEditorDesign
+    ? await privitoriiProdusului(createAdminClient(), {
+        businessId: business.id,
+        productId: product.id,
+        exclusi: await vizitatoriiCererii({
+          businessId: business.id,
+          ip: clientIpFromHeaders(headersList),
+          userAgent: headersList.get("user-agent"),
+        }),
+      })
+    : null;
+  /*
    * „Conținut liber” de sub produs (etapa 9), randat pe server, pe pagina sablonului ales aici. In
    * editor, o alta alegere de sablon facuta pe loc il arata din designul viu (`ContinutLiber`).
    */
@@ -372,6 +400,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             altMap={altMap}
             productOffers={productOffers}
             permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
+            privitori={privitori}
           />
           </FurnizorSloturiBlocuri>
         </StorePageShell>

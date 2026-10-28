@@ -43,6 +43,8 @@ export interface ContinutPagina {
      aici. Vezi `@/lib/shipping/delivery-time`. */
   delivery_time?: { enabled: boolean; handling_min: number; handling_max: number; transit_min: number; transit_max: number };
   show_social_proof?: boolean;
+  /** Ce numara contorul de vizitatori (etapa 12): „acum” (15 minute) sau ultimele 24 de ore. */
+  social_proof_window?: "now" | "day";
   show_quality_badge?: boolean;
   show_category_badges?: boolean;
   footer_badges?: InsignaFooterStocata[];
@@ -111,6 +113,7 @@ export function continutInitial(pc: ContinutPagina, culoare: string): ContinutPa
     delivery_estimate: pc.delivery_estimate ?? { enabled: false, min_days: 2, max_days: 4, text: "Estimare livrare" },
     delivery_time: pc.delivery_time,
     show_social_proof: pc.show_social_proof ?? false,
+    social_proof_window: pc.social_proof_window === "now" ? "now" : "day",
     show_quality_badge: pc.show_quality_badge ?? false,
     show_category_badges: pc.show_category_badges ?? true,
     footer_badges: pc.footer_badges ?? [],

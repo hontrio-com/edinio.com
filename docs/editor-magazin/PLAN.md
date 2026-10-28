@@ -33,8 +33,10 @@ lucru” si „Etapa 5: planul de lucru”. **A doua verificare (W1-W6, ceruta 2
 mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5). **Mentiunile lui au venit pe 28.10** (doua:
 „+” in previzualizare, subsolul customizabil complet; raspunsurile in „Mentiunile lui din 28.10”): **etapa 10 („+”)
 FACUTA si PROBATA in Chrome** (pasii 10.1-10.4); **etapa 11 (subsolul pe coloane-bloc) FACUTA si PROBATA in Chrome**
-(pasii 11.1-11.4, acordul lui: „Da”, apoi „Da, fă proba acum”). Ambele mentiuni sunt facute; urmeaza raportul si ce
-spune el. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
+(pasii 11.1-11.4, acordul lui: „Da”, apoi „Da, fă proba acum”). Ambele mentiuni sunt facute, raportul trimis.
+**Etapa 12 (contorul de vizitatori masurat) PORNITA 28.10, seara**, la „Hai sa continuam de unde am ramas”: planul,
+masuratorile si cele doua raspunsuri ale lui in „Etapa 12”. Intre timp `main` a primit reparatia eMAG `dba33c22`, adusa
+in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1283,6 +1285,70 @@ Citit inainte:
       abonamentului; o singura comparatie, totul egal (firma, designul, `page_content`, setarile, data publicarii, ciorna
       goala, 0 versiuni, 0 mesaje, 1 comanda, pagina neatinsa).
 
+## Etapa 12: contorul de vizitatori masurat (scris 28.10.2026, inainte de cod)
+
+Hotarat la inchidere: „Îl facem real (etapă nouă)”. Pornita pe 28.10, seara, la „Hai sa continuam de unde am ramas”,
+dupa reparatia eMAG de pe `main` (`dba33c22`, adusa in ramura prin `28b1cd9c`).
+
+**Ce e azi.** Blocul „Contorul de vizitatori” scrie „{n} persoane se uita acum”, cu `n = 18 + (hash(id) % 10)`: fix pe
+produs, intre 18 si 27, fara nicio masuratoare. Aprins la 9 magazine (din 148). Clasic il arata doar pe calculator.
+
+**Ce s-a masurat in productie (28.10, ultimele 24 de ore, doar citire).**
+- 11.750 de vederi de produs. **Aproape jumatate sunt roboti**: 64 de „vizitatori” cu peste 30 de produse vazute in 24 de
+  ore au facut 5.602 vederi (unul singur, 902). Scrierea nu ii opreste: `seMasoaraVizita` scoate proprietarul, gazdele de
+  test si santinela, dar nu si crawlerele. Deci si Statistici ii numara.
+- Fara ei (pragul de 30, doar pentru masuratoare), 6.144 de vederi. Altii pe acelasi produs in ultimele **15 minute**:
+  0 la 95%, 1 la 2,6%, 2+ la 2,4%. In ultimele **24 de ore**: doar el la 43,7% din vederi, 2-4 la 49%, 5-19 la 5,2%,
+  20+ la 1,9%, maxim 118.
+
+### Deciziile etapei
+
+1. **Ce numara, il alege comerciantul** (raspunsul lui: „Alege comerciantul”): in panoul blocului, „Acum” (ultimele 15
+   minute) sau „Ultimele 24 de ore”, **implicit 24 de ore**. Cheia `social_proof_window` (`"now"` / `"day"`) in
+   `page_content`, nodul nou `produs_dovada`, ca efectul butonului: trece prin ciorna si ajunge la clienti la „Publică”.
+2. **Robotii nu se mai scriu deloc** (raspunsul lui: „Și din Statistici”): `esteRobot(userAgent)` in `seMasoaraVizita`,
+   deci si vizitele, vederile de produs, cosul si inceputul comenzii. Un browser fara user-agent e tot robot. Randurile
+   vechi raman (o stergere e o hotarare a lui); contorul se uita oricum doar la ultimele 24 de ore. In Statistici se
+   spune ca robotii nu intra in cifre, fiindca dupa push vederile de produs scad cam la jumatate.
+3. **Se numara oameni DISTINCTI, fara cel care se uita.** `visitor_id` e dispersia zilei (IP, browser, magazin, sare
+   zilnica), deci la fereastra de 24 de ore acelasi om poate avea doua: cel de azi si cel de ieri. Se scot amandoua ale
+   cererii de fata (sarea de ieri se citeste o data pe zi si se tine minte, ca cea de azi). Altfel cine s-a uitat aseara
+   s-ar fi vazut pe sine: „1 persoana a vazut produsul”.
+4. **Numarul se calculeaza pe server, la randare**, nu in browser: pagina de produs e oricum dinamica (`headers()`,
+   `after`), iar o pastila care apare dupa o cerere din browser ar fi impins pretul si butoanele in jos. O singura
+   citire pentru ambele ferestre (vederile produsului din ultimele 24 de ore, cel mult 2.000), facuta DOAR cand blocul
+   e vizibil in sablonul ales sau in editor. Fara index nou: `(business_id, created_at)` exista, iar cel mai mare
+   magazin are ~10.000 de evenimente pe zi.
+5. **Zero inseamna ca pastila nu apare.** In previzualizarea editorului, cand nu e nimeni, se arata un exemplu, ca
+   blocul sa poata fi vazut si ales; panoul spune ca e un exemplu.
+6. **Textul**, fara diacritice ca restul paginii de produs, cu pluralul romanesc: „1 persoana se uita acum” / „3
+   persoane se uita acum” / „20 de persoane se uita acum”; „1 persoana a vazut produsul in ultimele 24 de ore” / „3
+   persoane au vazut...” / „20 de persoane au vazut...”.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 12.1 (28.10: `esteRobot` in `vizita-de-masurat.ts`, chemat din `seMasoaraVizita`, deci din toate cele patru
+      locuri care scriu vizite; `(?<!cu)bot` ca CUBOT sa ramana om, iar browserele din aplicatii (FBAN, Instagram,
+      BytedanceWebview, GSA) raman oameni; fara user-agent = program, deci proba veche care il numara s-a schimbat, cu
+      motivul. 29 de roboti si 13 oameni reali in probe. Nota `ROBOTII_NU_INTRA` la „Vizitatori” si „Afisari de pagina”.)
+      Robotii: `esteRobot` si `seMasoaraVizita`, probe pe user-agenti reali (crawlere, previzualizari de linkuri,
+      unelte; browsere pe telefon si calculator care NU sunt roboti); nota din Statistici.
+- [x] 12.2 (28.10: `idVizitator` in `identitate.ts`, singura formula, folosita si de `identitateAnalitica`;
+      `vizitatoriiCererii` (sarea de azi prin functie, cea de ieri citita din `analitice_sare`, tinute minte); `privitori.ts`
+      (`numaraPrivitorii` pur, `privitoriiProdusului` cu o citire, `null` la orice piedica); `contor-vizitatori.ts`
+      (fereastra, numarul cu exemplul DOAR in editor si miniatura, textul cu pluralul); in `pagina-produs.tsx` numaratoarea
+      cand blocul se vede in sablonul ales sau in editor; pastila si invelisul ei lipsesc la zero, in ambele variante;
+      `hashSir` scos. 10 probe noi in `contor-masurat.test.ts`, doua vechi aduse la regula noua; mutanti 13/13.)
+      Numaratoarea: identitatea cererii (azi si ieri) scoasa din `identitateAnalitica` fara a doua copie,
+      numararea pura (ferestrele, distincti, fara cel de fata) si citirea; pe pagina de produs, cand blocul se vede;
+      pastila cu textul si pluralul, ascunsa la zero, exemplul din editor. Probe.
+- [x] 12.3 (28.10: `social_proof_window` in `continut.ts` (implicit `day`) si in tipul paginii de produs; nodul
+      `produs_dovada` in `noduri.ts` (`felBloc("dovada")`), deci cheia intra singura in ciorna (`CHEI_PC_CIORNA`); in
+      `ContinutBloc` alegerea „Ultimele 24 de ore” / „Acum” si nota noua, cu exemplul spus.)
+      Editorul: `social_proof_window`, nodul `produs_dovada`, alegerea din panoul blocului si nota noua. Probe.
+- [ ] 12.4 Ghidul, REGISTRU (D rezolvat, C), porti, proba in Chrome pe demo (cere acordul lui pentru impersonare;
+      vederi de proba scrise in `site_analytics` pe demo si sterse la final).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -1309,6 +1375,8 @@ Citit inainte:
   „Facem si teme noi dar asta dupa ce terminam de verificat tot ce am facut acum”.
 - 28.10.2026, mentiunile lui dupa a doua verificare: „+” in previzualizare („Între secțiuni”; pe Acasa „Secțiuni și
   blocuri”) si subsolul „Pe coloane-bloc” (vezi „Mentiunile lui din 28.10”).
+- 28.10.2026, seara, la etapa 12 (contorul masurat): ce numara „Alege comerciantul” („Acum” sau „Ultimele 24 de ore”,
+  implicit 24 de ore); robotii „Și din Statistici” (nu se mai scriu deloc).
 
 ## De ce Shopify si nu Elementor
 

@@ -445,7 +445,8 @@ test("fiecare sectiune a designului are un nod de continut", () => {
 test("⚠ blocurile cu continut au fiecare nodul lor, cu cheile lor; restul n-au nod", () => {
   // O salvare din „Beneficiile” nu are voie sa ia cu ea ce s-a scris intre timp
   // in „Întrebările frecvente”: de aceea un nod pe bloc, nu unul pe pagina.
-  const cuNod = { beneficii: "benefits_section", cum_functioneaza: "how_it_works_section", intrebari: "faq_section", livrare: "delivery_estimate", detalii: "delivery_estimate", cumparare: "button_effect" };
+  // ⚠ `dovada` are nod din etapa 12: comerciantul alege ce numara contorul („Acum” sau ultimele 24 de ore).
+  const cuNod = { beneficii: "benefits_section", cum_functioneaza: "how_it_works_section", intrebari: "faq_section", livrare: "delivery_estimate", detalii: "delivery_estimate", cumparare: "button_effect", dovada: "social_proof_window" };
   for (const [tip, cheie] of Object.entries(cuNod)) {
     const nod = felBloc(tip);
     assert.ok(nod, tip);
@@ -456,7 +457,7 @@ test("⚠ blocurile cu continut au fiecare nodul lor, cu cheile lor; restul n-au
   const bloc = sursa("src/components/editor-magazin/continut/ContinutBloc.tsx");
   assert.match(bloc, /case "livrare":\s*return <div className="space-y-4"><EstimareaLivrarii continut=\{continut\} \/><\/div>;/);
   assert.match(bloc, /case "detalii":\s*return \([\s\S]{0,300}?<EstimareaLivrarii continut=\{continut\} \/>/);
-  for (const tip of ["titlu", "pret", "variante", "incredere", "dovada", "insigna", "oferte", "descriere"]) {
+  for (const tip of ["titlu", "pret", "variante", "incredere", "insigna", "oferte", "descriere"]) {
     assert.equal(felBloc(tip), null, tip);
   }
   // Comutatoarele de vizibilitate dublate de ochiul blocului au iesit din editor.

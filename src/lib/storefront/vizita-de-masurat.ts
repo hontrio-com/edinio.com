@@ -49,5 +49,45 @@ export function seMasoaraVizita(a: {
 }): boolean {
   if (a.esteProprietar) return false;
   if (isNonProductionHost(a.host)) return false;
+  if (esteRobot(a.userAgent)) return false;
   return (a.userAgent ?? "").trim() !== UA_SANTINELA;
+}
+
+/**
+ * Semnele dupa care un user-agent e al unui program, nu al unui om.
+ *
+ * ⚠ `(?<!cu)bot`, nu `bot`: CUBOT e o marca de telefoane („CUBOT_X30”), iar oamenii cu ele ar fi
+ * disparut din statistici. Si NU „facebook” sau „instagram” intregi: browserele din aplicatiile
+ * lor (`FBAN/FBIOS`, `Instagram 352...`) sunt oameni; robotii lor se recunosc dupa nume
+ * (`facebookexternalhit`, `meta-externalagent`). La fel TikTok: `BytedanceWebview` e om, `Bytespider` nu.
+ */
+const SEMNE_DE_ROBOT = new RegExp([
+  "(?<!cu)bot", "crawl", "spider", "slurp", "fetcher", "scrap", "archiver",
+  "mediapartners", "googleother", "inspectiontool", "read-aloud",
+  "facebookexternalhit", "facebookcatalog", "meta-external", "whatsapp", "embedly", "link preview", "skypeuripreview",
+  "headless", "lighthouse", "pagespeed", "gtmetrix", "ptst", "pingdom", "uptime", "statuscake", "site24x7",
+  "synthetics", "prerender", "phantomjs", "puppeteer", "playwright", "selenium", "vercel",
+  "curl/", "wget", "python", "go-http-client", "okhttp", "java/", "apache-httpclient", "axios", "node-fetch",
+  "undici", "libwww", "httpx", "aiohttp", "postman", "insomnia",
+].join("|"), "i");
+
+/**
+ * E un program, nu un om?
+ *
+ * ═══ ⚠ JUMATATE DIN VEDERILE DE PRODUS ERAU ROBOTI (masurat pe 28.10.2026) ═══
+ *
+ * Pe ultimele 24 de ore, din 11.750 de vederi de produs, 5.602 veneau de la 64 de „vizitatori”
+ * cu peste 30 de produse vazute fiecare; unul singur, 902. Google si celelalte crawlere citesc
+ * magazinul pagina cu pagina, iar regula de mai sus nu le oprea: Statistici le numara drept
+ * oameni, si tot ele ar fi umplut contorul de vizitatori de pe pagina de produs.
+ *
+ * ⚠ Fara user-agent e tot program: niciun browser nu pleaca fara el.
+ *
+ * ⚠ Ce scapa (un robot care se da drept browser) ramane numarat. Asta nu se poate deosebi dupa
+ * antet, si nu se ghiceste dupa purtare: un om care se uita la 40 de produse e un client bun.
+ */
+export function esteRobot(userAgent: string | null | undefined): boolean {
+  const ua = (userAgent ?? "").trim();
+  if (!ua) return true;
+  return SEMNE_DE_ROBOT.test(ua);
 }

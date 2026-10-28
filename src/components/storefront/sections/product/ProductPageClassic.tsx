@@ -35,9 +35,11 @@ import type {
   Business, Product, StoreSettings, PageContent, PageSections,
 } from "./_shared/product-page.types";
 import {
-  abonareMiscareRedusa, citesteMiscareRedusa, hashSir,
+  abonareMiscareRedusa, citesteMiscareRedusa,
   SocialProof, FAQItem, CTAButton,
 } from "./_shared/pieces";
+import { fereastraContorului, numarulContorului } from "@/lib/storefront/contor-vizitatori";
+import type { Privitori } from "@/lib/analitice/privitori";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
@@ -164,7 +166,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, idPagina: idPaginaSablon, demo = false, permisIncarcare = null }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, idPagina: idPaginaSablon, demo = false, permisIncarcare = null, privitori = null }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -211,6 +213,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
    * ⚠ `null` pe suprafetele care nu-l pot emite (previzualizarea din panou, miniatura de design).
    */
   permisIncarcare?: string | null;
+  /**
+   * Oamenii care s-au uitat la produs (etapa 12), numarati pe server la randare, si numai cand
+   * blocul „Contorul de vizitatori” se vede sau in editor. Lipsa = nimeni de aratat.
+   */
+  privitori?: Privitori | null;
   demo?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
@@ -326,10 +333,6 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const deliveryEstimate = pageContent.delivery_estimate;
   /* Zilele reale (Setari → Livrare); `deliveryEstimate` doar aprinde casuta. */
   const deliveryTime = pageContent.delivery_time;
-  // Numar stabil, derivat din id-ul produsului: cu Math.random() serverul si
-  // browserul scriau numere diferite in acelasi HTML (nepotrivire de hidratare).
-  // Fix in miniatura, ca fiecare card din galerie sa arate acelasi numar.
-  const viewerCount = demo ? 23 : 18 + (hashSir(product.id) % 10);
 
   // Variante — sursa unica din lib/storefront/variants.ts. Un produs cu
   // `variants.enabled` dar fara nicio optiune NU e variabil: altfel butonul de
@@ -594,6 +597,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   }, [editare.linie, pers, variantsData]);
 
   const chrome = useStoreChromeOptional();
+  /* Contorul de vizitatori (etapa 12): oamenii masurati pe server. Exemplul, doar in editor si in
+     miniatura, cand nu e nimeni; in magazin zero inseamna ca pastila nu apare. */
+  const fereastraContor = fereastraContorului(pageContent);
+  const viewerCount = numarulContorului({ privitori, fereastra: fereastraContor, exemplu: demo || chrome?.esteEditorDesign === true });
   // Id-ul paginii de produs in design (sablonul ales), pentru marcajele blocurilor din editor.
   const idPagina = idPaginaSablon ?? chrome?.design?.product.page.id ?? "product_page";
   /* Unde se intoarce omul dupa ce salveaza sau renunta. */
@@ -1117,10 +1124,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         <>
           {/* Doar pe desktop, ca pana acum. `flex-col` pe invelis, nu `block`:
               pastilata e `inline-flex`, deci intr-un bloc s-ar stramta la latimea
-              textului in loc sa umple coloana, cum face azi. */}
-          <div className="hidden lg:flex lg:flex-col">
-            <SocialProof count={viewerCount} color={color} />
-          </div>
+              textului in loc sa umple coloana, cum face azi. La zero (nimeni de
+              numarat, etapa 12) nu se randeaza nimic, nici invelisul. */}
+          {viewerCount > 0 && (
+            <div className="hidden lg:flex lg:flex-col">
+              <SocialProof count={viewerCount} fereastra={fereastraContor} color={color} />
+            </div>
+          )}
         </>
       ),
     };

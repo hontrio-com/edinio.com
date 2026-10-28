@@ -41,6 +41,7 @@ export type FelContinut =
   | "produs_intrebari"
   | "produs_livrare"
   | "produs_cumparare"
+  | "produs_dovada"
   | "magazin"
   | "card"
   | "cos"
@@ -106,6 +107,7 @@ export const CHEI_CONTINUT: Record<FelContinut | typeof NOD_STIL, readonly strin
   produs_intrebari: ["faq_section"],
   produs_livrare: ["delivery_estimate"],
   produs_cumparare: ["button_effect"],
+  produs_dovada: ["social_proof_window"],
   magazin: [],
   card: ["show_category_badges", "new_badge", "price_range_display"],
   cos: ["sticky_cart_bar"],
@@ -144,6 +146,8 @@ export function felBloc(tip: string): FelContinut | null {
     // La Detaliat estimarea livrarii e un rand din caseta „Detalii produs”, deci comutatorul ei sta acolo.
     case "detalii": return "produs_livrare";
     case "cumparare": return "produs_cumparare";
+    // Ce numara contorul (etapa 12): „Acum” sau ultimele 24 de ore.
+    case "dovada": return "produs_dovada";
     default: return null;
   }
 }

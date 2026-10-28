@@ -295,6 +295,26 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           termeni: ["fundal", "background", "culoare pagina", "alb", "nuanta"],
         },
         {
+          slug: "cum-alegi-fonturile-magazinului",
+          titlu: "Cum alegi fonturile magazinului și ale unei secțiuni",
+          rezumat: "Fontul întregului magazin se alege din fila „Stil”, iar o secțiune poate avea fontul ei, din panoul ei, la „Fonturi”.",
+          pasi: [
+            "Intră în Editează magazinul și alege fila „Stil”.",
+            "La „Fonturi”, apasă pe „Font titluri” și alege un font din listă. La fel la „Font text”.",
+            "Pentru o singură secțiune, treci în fila „Secțiuni” și apasă pe secțiune, de exemplu „Banner principal” sau „Antet”.",
+            "În panoul ei, la „Fonturi”, alege „Fontul titlurilor” și „Fontul textului”. „Ca în Stil” păstrează fontul magazinului.",
+            "Apasă „Publică”.",
+          ],
+          detalii: [
+            { titlu: "Ce fonturi poți alege", text: "Geist, care e fontul din start, și încă 36, pe familii: moderne, clasice, de impact și scrise de mână. În listă, fiecare nume e scris chiar cu fontul lui. Sunt găzduite de noi, deci vizitatorii nu sunt trimiși la Google pentru ele." },
+            { titlu: "Ce secțiuni pot avea fontul lor", text: "Toate secțiunile paginii principale (bannerul, rândurile de produse, beneficiile, conținutul liber și celelalte), plus antetul, subsolul și bara de anunț. Pagina de produs, Pagina Magazin, coșul și finalizarea comenzii iau fontul din „Stil”." },
+            { titlu: "Doar titlurile sau doar textul", text: "Le poți alege separat. Dacă alegi doar fontul textului, titlurile secțiunii rămân pe fontul magazinului." },
+            { titlu: "Care font câștigă", text: "Fontul ales anume pe un bloc (în Pagini sau într-un conținut liber) câștigă. După el vine fontul secțiunii, iar la urmă cel din „Stil”." },
+          ],
+          nota: "Fontul se vede pe loc în previzualizare și ajunge la clienți la „Publică”. La schimbarea designului unei secțiuni, fontul ei rămâne.",
+          termeni: ["font", "fonturi", "tipografie", "litere", "font titluri", "font text", "scris de mana"],
+        },
+        {
           slug: "cum-muti-si-ascunzi-bucatile-paginii-de-produs",
           titlu: "Cum muți, ascunzi și completezi bucățile paginii de produs",
           rezumat: "Pagina de produs e făcută din blocuri, pe zone: le muți cu săgețile, le ascunzi cu ochiul și le completezi din panoul lor.",

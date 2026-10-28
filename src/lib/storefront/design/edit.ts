@@ -2,6 +2,7 @@ import { newSectionId, section } from "./defaults";
 import { firstVariant, SECTION_REGISTRY, sectionMeta, variantMeta } from "./registry";
 import { completeazaBlocuri, esteContinut, schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
 import { blocuriDinSetari, reidentificaBlocuri } from "./continut-liber";
+import { areFonturiProprii, CHEI_FONT_SECTIUNE } from "./fonturi-sectiune";
 import type { Block } from "@/lib/pages/blocks.types";
 import type { BlockInstance, SectionInstance, SectionKind, StoreDesign } from "./types";
 
@@ -129,7 +130,12 @@ export function updateSection(
      * implicita se pierdea la orice schimbare de design, desi varianta noua il are: la subsol (etapa 11), textul de
      * langa „©” si culorile alese (vazut la proba).
      */
-    const declarate = new Set([...Object.keys(implicite), ...(meta?.fields ?? []).map((f) => f.key)]);
+    const declarate = new Set([
+      ...Object.keys(implicite),
+      ...(meta?.fields ?? []).map((f) => f.key),
+      // Fontul sectiunii (etapa 14) e al sectiunii, nu al variantei: ramane la orice schimbare de design.
+      ...(areFonturiProprii(tinta.kind) ? CHEI_FONT_SECTIUNE : []),
+    ]);
     for (const cheie of declarate) {
       if (cheie in vechi) rezultat[cheie] = vechi[cheie];
     }

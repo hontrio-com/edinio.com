@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { styleToCssVars } from "@/lib/storefront/design/css-vars";
-import { fontSetup } from "@/lib/storefront/design/fonts";
+import { fontSetup } from "@/components/pages/fonturi-incarcate";
 import type { ResolvedStyle } from "@/lib/storefront/design/types";
 
 /**

@@ -1457,10 +1457,52 @@ Impartite in trei etape, una cate una, cu raport dupa fiecare: 13 (mentiunile 1,
       abonamentului; o singura comparatie, totul egal (`page_content` si designul dupa amprenta, ciorna goala, 0
       versiuni, analitica). Iesirea din impersonare l-a deconectat.
 
-## Etapa 14: fonturile pe sectiune (de detaliat la inceputul ei)
+## Etapa 14: fonturile pe sectiune (scris 28.10.2026, inainte de cod; acordul lui: „Da”)
 
 Hotarat (raspunsul lui): cele 36 de fonturi gazduite de noi, separat pentru titluri si pentru text, pe orice sectiune,
 implicit „Ca în Stil”; aceleasi 36 si in fila Stil, pentru tot magazinul (azi 8).
+
+Ce e azi, citit in cod: fontul magazinului se pune pe radacina vitrinei (`StorefrontThemeScope`): `--st-font-heading`,
+`--st-font-body` si, cand e ales altul decat Geist, `--font-app` / `--font-app-heading`, pe care le citesc utilitarele
+Tailwind si regula titlurilor (`stil-comun.css`: `--font-heading: var(--font-app-heading, var(--font-app, Geist))`).
+Deci un invelis poate suprascrie fontul oriunde in pagina. Stilul alege din 8 (`FONT_KEYS`, `fontSetup` in `fonts.ts`),
+paginile proprii din 36 (`FONTURI_PAGINA`, clasele in `fonturi-incarcate.ts`, care refoloseste cele 7 instante ale
+magazinului), cu alegatorul `AlegeFont` (pe familii, fiecare nume in fontul lui). Fiecare sectiune a paginii principale,
+plus antetul, subsolul si bara de anunt, trece prin `Marcata` (`SectionRenderer`).
+
+### Deciziile etapei
+
+1. **Fontul magazinului din 37**: Geist plus cele 36. `FontKey = "geist" | CheieFont`, `FONT_KEYS` derivat din
+   `FONTURI_PAGINA` (o singura lista). `fontSetup` se muta langa clasele tuturor fonturilor (`fonturi-incarcate.ts`);
+   pentru cele 8 de azi da EXACT aceleasi clase si stive, deci vitrinele de azi nu se schimba. In Stil, alegatorul
+   devine `AlegeFont` (implicit „Geist (implicit)”): grila de carduri cu 37 de fonturi, de doua ori, ar fi un perete.
+2. **Fontul pe sectiune**: doua campuri comune, `fontTitluri` si `fontText`, pe sectiunile cu `scope` „home” si
+   „chrome” (16 tipuri). Curatate la citire impreuna cu campurile variantelor si pastrate la schimbarea designului
+   (`updateSection`). Lipsa = „Ca în Stil”.
+3. **Cum ajung pe ecran**: in `Marcata`, cand sectiunea are un font ales, un invelis `display: contents` cu clasa
+   fontului si variabilele: titlurile in `--st-font-heading` / `--font-app-heading`, textul in `--st-font-body` /
+   `--font-app` / `font-family`. Cand e ales doar textul, titlurile se tin pe fontul magazinului
+   (`--font-app-heading: var(--st-font-heading)`), altfel l-ar urma pe text. Fara font ales, niciun element in plus.
+4. **In editor**: grupul „Fonturi” in panoul sectiunii, cu „Fontul titlurilor” si „Fontul textului” (`AlegeFont`,
+   „Ca în Stil”), prin ciorna: se vede pe loc in previzualizare si ajunge la clienti la „Publică”.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 14.1 (28.10: `FontKey = "geist" | CheieFont`, `FONT_KEYS` derivat din `FONTURI_PAGINA`; `fontSetup` mutat in
+      `fonturi-incarcate.ts` (Geist fara clasa, restul prin `clasaFont` + `stivaFont`), `fonts.ts` pastreaza cele 7
+      instante; Stil cu doua `AlegeFont` („Geist (implicit)”, scris anume); `AlegeFonturi.tsx` si `font-options.ts`
+      scoase, nimeni altcineva nu le folosea. CSS-ul fonturilor era deja pe paginile magazinului (66 KB in dezvoltare).)
+      Fontul magazinului din 37: `FontKey`/`FONT_KEYS`, `fontSetup` mutat, Stil cu `AlegeFont`. Probe: cele 8 de
+      azi dau aceleasi clase si stive, unul nou ajunge in stil.
+- [x] 14.2 (28.10: `fonturi-sectiune.ts` (`CAMPURI_FONT_SECTIUNE`, `areFonturiProprii`, `fontulSectiunii`,
+      `stilFontSectiune`); in `parseSection` campurile comune pe „home” si „chrome”, in `updateSection` cheile lor
+      printre cele declarate; invelisul `contents` in `Marcata`, IN AFARA marcajului (altfel ascundea `LocGol`).)
+      Fontul pe sectiune: campurile comune (citire, schimbarea designului), `stilFontSectiune` pur, invelisul in
+      `Marcata`. Probe.
+- [x] 14.3 (28.10: grupul „Fonturi” in `PanouNod`, doua `AlegeFont` cu „Ca în Stil”, prin ciorna; „Ca în Stil” scoate
+      cheia. Ghidul nou `cum-alegi-fonturile-magazinului` (426 de ghiduri). 10 probe in `fonturi-sectiune.test.ts`;
+      mutanti 7/7.) Editorul: grupul „Fonturi” in `PanouNod`. Probe.
+- [ ] 14.4 Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
 
 ## Etapa 15: Setări > Comanda (de detaliat la inceputul ei)
 

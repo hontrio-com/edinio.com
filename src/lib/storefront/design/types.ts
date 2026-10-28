@@ -24,6 +24,8 @@
  *     de `businesses.primary_color` daca acesta se schimba ulterior.
  */
 
+import { FONTURI_PAGINA, type CheieFont } from "@/lib/pages/fonturi";
+
 // ---------------------------------------------------------------------------
 // Sectiuni
 // ---------------------------------------------------------------------------
@@ -177,17 +179,14 @@ export const STYLE_COLOR_KEYS = [
 ] as const;
 export type StyleColorKey = (typeof STYLE_COLOR_KEYS)[number];
 
-export const FONT_KEYS = [
-  "geist",
-  "inter",
-  "manrope",
-  "jakarta",
-  "dmsans",
-  "sora",
-  "playfair",
-  "instrument",
-] as const;
-export type FontKey = (typeof FONT_KEYS)[number];
+/**
+ * Fonturile magazinului: Geist (implicit) si cele 36 ale paginilor proprii (etapa 14, raspunsul lui: „Cele 36
+ * găzduite de noi”; pana atunci, 8). O singura lista, `FONTURI_PAGINA`: doua copii s-ar fi despartit la primul font nou.
+ *
+ * ⚠ Cheile se salveaza in baza (`page_content.font_titluri`, stilul designului), deci nu se redenumesc.
+ */
+export type FontKey = "geist" | CheieFont;
+export const FONT_KEYS: readonly FontKey[] = ["geist", ...FONTURI_PAGINA.map((f) => f.cheie)];
 
 export const RADIUS_KEYS = ["none", "sm", "md", "lg", "full"] as const;
 export type RadiusKey = (typeof RADIUS_KEYS)[number];

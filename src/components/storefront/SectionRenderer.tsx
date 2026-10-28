@@ -1,10 +1,12 @@
 "use client";
 
-import { Fragment, type ComponentType, type ReactNode } from "react";
+import { Fragment, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { groupSections, sectionLayout } from "@/lib/storefront/design/group-sections";
 import { ETICHETA_ATTR, SECTION_ATTR } from "@/lib/storefront/design/preview-protocol";
 import { sectionMeta } from "@/lib/storefront/design/registry";
+import { stilFontSectiune } from "@/lib/storefront/design/fonturi-sectiune";
+import { claseFonturi } from "@/components/pages/fonturi-incarcate";
 import { useStoreChrome } from "./StorefrontProvider";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { AnnouncementMarquee } from "./sections/chrome/AnnouncementMarquee";
@@ -201,10 +203,24 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
  * click. Vezi `preview-protocol.ts`.
  */
 function Marcata({ section, estePrima = false }: { section: SectionInstance; estePrima?: boolean }) {
-  return (
+  const marcata = (
     <MarcajSectiune sectiune={section}>
       <SectionOne section={section} estePrima={estePrima} />
     </MarcajSectiune>
+  );
+  /*
+   * Fontul ales pe sectiune (etapa 14): un invelis `display: contents` care suprascrie variabilele fontului doar pe
+   * portiunea ei, cu clasa `next/font` care le declara. Fara font ales, niciun element in plus.
+   *
+   * ⚠ IN AFARA marcajului de editor, nu inauntru: acolo `LocGol` apare numai cand e singurul copil al marcajului,
+   * deci un invelis langa el l-ar fi ascuns la o sectiune goala cu font ales.
+   */
+  const font = stilFontSectiune(section.settings);
+  if (!font) return marcata;
+  return (
+    <div className={["contents", claseFonturi(font.chei)].join(" ")} style={font.style as CSSProperties}>
+      {marcata}
+    </div>
   );
 }
 

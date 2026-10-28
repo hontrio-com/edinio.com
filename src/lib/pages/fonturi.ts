@@ -4,13 +4,14 @@
   ═══════════════════════════════════════════════════════════════════════════
 
   Cerut de el: „mai multe variante de fonturi si tipografii" in editorul de
-  pagini. Magazinul are 8 fonturi (`storefront/design/font-options.ts`); paginile
-  primesc 30, pe familii, plus perechi gata facute.
+  pagini. Paginile primesc fonturile pe familii, plus perechi gata facute. Din
+  etapa 14 a editorului unic, ACEEASI lista e si a magazinului (Stil, plus fontul
+  ales pe o sectiune), cu Geist in fata (`FONT_KEYS` din `storefront/design/types.ts`).
 
   ⚠ DATE PURE, fara `next/font`. Declararile stau in
   `components/pages/fonturi-incarcate.ts`; fisierul asta il citesc si validarea
   de pe server si listele din editor, deci nu are voie sa traga dupa el
-  fisierele de font. Aceeasi regula ca `font-options.ts` langa `fonts.ts`.
+  fisierele de font.
 
   ⚠ CHEILE SE SALVEAZA IN BAZA, pe blocuri (`font`, `titleFont`...).
   Nu se redenumesc: o cheie schimbata lasa paginile vechi pe fontul implicit.

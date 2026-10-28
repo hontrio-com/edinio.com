@@ -5,6 +5,7 @@ import { parseBlocuriLibere } from "./continut-liber";
 import { faraBlocuriLibere, toateContinuturileDeRandat, type ContinutDeRandat } from "./continut-publicat";
 import { obj, oneOf, sanitizeColor, sanitizeHref, sanitizeSettings, str } from "./curatare";
 import { firstVariant, sectionMeta } from "./registry";
+import { areFonturiProprii, CAMPURI_FONT_SECTIUNE } from "./fonturi-sectiune";
 import {
   ID_DE_ATRIBUIT,
   MAX_CATEGORII_PE_SABLON,
@@ -135,7 +136,11 @@ function parseSection(raw: unknown, seenIds: Set<string>): SectionInstance | nul
    * intorcea, si textul nu mai era. Filtrarea per-varianta ramane la randare,
    * unde fiecare componenta isi citeste doar ce intelege.
    */
-  const toateCampurile = Object.values(sectionMeta(k)?.variants ?? {}).flatMap((v) => v.fields);
+  const toateCampurile = [
+    ...Object.values(sectionMeta(k)?.variants ?? {}).flatMap((v) => v.fields),
+    // Fontul sectiunii (etapa 14), comun tuturor variantelor: o schimbare de design nu-l pierde.
+    ...(areFonturiProprii(k) ? CAMPURI_FONT_SECTIUNE : []),
+  ];
   const settings = {
     ...sanitizeInternalSettings(k, obj(r.settings)),
     ...sanitizeSettings(toateCampurile, obj(r.settings)),

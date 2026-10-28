@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import { SectionSettings } from "@/components/store-editor/SectionSettings";
 import { comutaBaraDeAnunt, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
+import { areFonturiProprii, fontulSectiunii, type CheieFontSectiune } from "@/lib/storefront/design/fonturi-sectiune";
+import type { CheieFont } from "@/lib/pages/fonturi";
+import { AlegeFont } from "@/components/pages/editor/campuri";
+import { toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
+import { cn } from "@/lib/utils/cn";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import { ContinutNod } from "./continut/ContinutNod";
 import type { CiornaDesign } from "./useCiornaDesign";
@@ -69,6 +74,13 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
    * inapoi, de aceea nu intreaba inainte.
    */
   const poateFiStearsa = meta?.scope === "home" && meta.removable !== false;
+  /** Fontul ales pe sectiune: „Ca în Stil” (`null`) scoate cheia, nu scrie un gol. */
+  const scrieFont = (cheie: CheieFontSectiune, v: CheieFont | null) => {
+    const settings: Record<string, unknown> = { ...sectiune.settings };
+    if (v) settings[cheie] = v;
+    else delete settings[cheie];
+    ciorna.aplica((d: StoreDesign) => updateSection(d, sectiune.id, { settings }), `font:${sectiune.id}:${cheie}`);
+  };
   const sterge = () => {
     ciorna.aplica((d: StoreDesign) => removeSection(d, sectiune.id));
     onInapoi();
@@ -135,6 +147,20 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
               `setari:${sectiune.id}:${campulSchimbat(sectiune.settings, settings)}`,
             )}
           />
+        </div>
+      )}
+
+      {/*
+        Fontul sectiunii (etapa 14, cerut de el): titluri si text, din cele 36, implicit „Ca în Stil”. Prin ciorna,
+        ca restul designului. `toateClaseleDeFont`: fiecare nume din lista se arata in fontul lui.
+      */}
+      {areFonturiProprii(sectiune.kind) && (
+        <div className={cn("space-y-3", toateClaseleDeFont())}>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Fonturi</p>
+          <AlegeFont label="Fontul titlurilor" gol="Ca în Stil" value={fontulSectiunii(sectiune.settings, "fontTitluri")}
+            onChange={(v) => scrieFont("fontTitluri", v)} />
+          <AlegeFont label="Fontul textului" gol="Ca în Stil" value={fontulSectiunii(sectiune.settings, "fontText")}
+            onChange={(v) => scrieFont("fontText", v)} />
         </div>
       )}
 

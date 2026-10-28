@@ -2,8 +2,10 @@
 
 import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
+import { cn } from "@/lib/utils/cn";
 import { MediaPicker } from "@/components/media/MediaPicker";
-import { AlegeFonturi } from "@/components/editor/AlegeFonturi";
+import { AlegeFont } from "@/components/pages/editor/campuri";
+import { toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
 import { NOD_STIL } from "@/lib/editor-magazin/noduri";
 import type { ContinutMagazin } from "../useContinutMagazin";
 import { ContinutCard } from "./ContinutComert";
@@ -125,9 +127,24 @@ export function PanouStil({ continut }: { continut: ContinutMagazin }) {
           </div>
         </Grup>
 
-        <AlegeFonturi titluri={pc.font_titluri} text={pc.font_text}
-          onTitluri={(v) => seteaza(NOD_STIL, (p) => ({ ...p, font_titluri: v }))}
-          onText={(v) => seteaza(NOD_STIL, (p) => ({ ...p, font_text: v }))} />
+        {/*
+          Fonturile magazinului, din Geist si cele 36 ale paginilor (etapa 14). Alegatorul paginilor, pe familii, cu
+          fiecare nume in fontul lui (de aici `toateClaseleDeFont`); grila de carduri de dinainte ar fi avut 37 de
+          randuri, de doua ori. Geist e „gol”: alegerea lui se scrie anume, ca sa bata un font publicat inainte.
+        */}
+        <Grup titlu="Fonturi">
+          <div className={cn("space-y-3", toateClaseleDeFont())}>
+            <AlegeFont label="Font titluri" gol="Geist (implicit)"
+              value={pc.font_titluri && pc.font_titluri !== "geist" ? pc.font_titluri : null}
+              onChange={(v) => seteaza(NOD_STIL, (p) => ({ ...p, font_titluri: v ?? "geist" }))} />
+            <AlegeFont label="Font text" gol="Geist (implicit)"
+              value={pc.font_text && pc.font_text !== "geist" ? pc.font_text : null}
+              onChange={(v) => seteaza(NOD_STIL, (p) => ({ ...p, font_text: v ?? "geist" }))} />
+            <p className="text-[11px] text-muted-foreground">
+              Se aplică pe tot magazinul. O secțiune cu font ales anume, sau un bloc din Pagini, îl păstrează pe al lui.
+            </p>
+          </div>
+        </Grup>
 
       </div>
 

@@ -5,7 +5,8 @@ import {
   Unbounded, Work_Sans,
 } from "next/font/google";
 import { dmsans, instrument, inter, jakarta, manrope, playfair, sora } from "@/lib/storefront/design/fonts";
-import { FONTURI_PAGINA, type CheieFont } from "@/lib/pages/fonturi";
+import { esteFontPagina, FONTURI_PAGINA, stivaFont, type CheieFont } from "@/lib/pages/fonturi";
+import type { FontKey } from "@/lib/storefront/design/types";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -80,4 +81,32 @@ export function claseFonturi(chei: Iterable<CheieFont>): string {
 /** Toate clasele: pentru editor, unde lista de fonturi se arata cu fontul ei. */
 export function toateClaseleDeFont(): string {
   return FONTURI_PAGINA.map((f) => clasaFont(f.cheie as CheieFont)).join(" ");
+}
+
+/** Geist e incarcat global (`app/layout.tsx`), deci n-are clasa aici. */
+const GEIST = { className: "", stack: "var(--font-geist-sans), system-ui, sans-serif" };
+
+function intrareFont(cheie: FontKey): { className: string; stack: string } {
+  return cheie !== "geist" && esteFontPagina(cheie) ? { className: clasaFont(cheie), stack: stivaFont(cheie) } : GEIST;
+}
+
+/**
+ * Clasele si variabilele perechii de fonturi a magazinului (titluri, text). Cand amandoua sunt acelasi font, o
+ * singura clasa.
+ *
+ * ⚠ Mutata aici din `storefront/design/fonts.ts` (etapa 14): magazinul alege acum din Geist plus cele 36 de fonturi
+ * ale paginilor, iar clasele lor stau in fisierul asta. Pentru cele 8 de dinainte iese EXACT ce iesea acolo (aceleasi
+ * instante `next/font`, aceeasi stiva prin `stivaFont`), deci vitrinele de azi nu se schimba.
+ */
+export function fontSetup(heading: FontKey, body: FontKey): {
+  className: string;
+  vars: { "--st-font-heading": string; "--st-font-body": string };
+} {
+  const h = intrareFont(heading);
+  const b = intrareFont(body);
+  const clase = [h.className, b.className].filter(Boolean);
+  return {
+    className: Array.from(new Set(clase)).join(" "),
+    vars: { "--st-font-heading": h.stack, "--st-font-body": b.stack },
+  };
 }

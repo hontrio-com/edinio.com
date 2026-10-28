@@ -132,6 +132,23 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - „Adaugă secțiune” din arbore deschide aceeasi galerie, cu blocurile sus; ce se alege de acolo intra tot inaintea catalogului.
   - Totul prin ciorna (Anulează / Refă, „Publică”); paginile proprii prin „Salvează pagina”. Randul de produse adaugat din „+” vine la locul ales intr-un singur pas la Anulează; daca trece peste alt rand, ordinea randurilor devine a omului (`ordineAtinsa`, regula sagetilor).
   - De verificat dupa push, pe un magazin real (cu acordul lui): „+” pe o sectiune de pe Acasa, un bloc „Titlu” ales din galerie, „Publică”: magazinul deschis normal arata titlul chiar sub sectiunea aleasa; un bloc adaugat cu „+” intr-o pagina proprie, „Salvează pagina”, apare la locul lui. Magazinul public nu are butoane „+” (stratul de contur se incarca doar in editor).
+- **Etapa 11 (subsolul pe coloane-bloc; mentiunea lui din 28.10, raspunsul: „Pe coloane-bloc”):**
+  - Subsolul e facut din coloane (blocuri in design, `chrome.footer.blocks`): Logo si text, Linkuri, Text, Contact,
+    Newsletter, Imagine, Retele sociale; cel mult 8, cele unice o data. In editor: sub „Subsol” in arbore, cu sageti,
+    ochi, „Adaugă coloană”, panoul fiecareia; „+” din previzualizare si pe coloane. Reglajele subsolului: „Înapoi sus”,
+    textul de langa ©, culoarea fundalului si a textului (cu „Implicită”). Totul prin ciorna si „Publică”. Fara migratii.
+  - ⚠ Magazinele de azi: un subsol fara coloane salvate primeste la citire coloanele de dinainte (pe coloane:
+    identitatea, „Magazin”, „Informatii”, „Contact”; centrat: logo-ul, paginile, contactul fara oras, retelele), cu
+    acelasi HTML (verificat pe 22 de pagini demo, doar grila scrisa altfel, cu aceleasi latimi). In productie (28.10):
+    123 fara design salvat, 9 `dark`, 9 `centered`, 7 `columns`, niciunul cu sloganul pornit. De verificat dupa push: 2-3
+    magazine reale (unul pe fiecare design) au subsolul neschimbat, pe calculator si pe telefon.
+  - Categoriile pentru subsol se citesc pe pagina dupa coloane (o coloana „Linkuri” cu categorii), nu dupa design: ca
+    inainte la toate magazinele de azi.
+  - Newsletterul din subsol: abonarea cauta coloana in subsolul PUBLICAT, aprinsa (`blocDinMagazin`); mesajul are locul
+    „Subsol”. De verificat dupa push, pe un magazin cu Mailchimp / Brevo / Klaviyo (cu acordul lui): o abonare din subsol
+    apare in Pagini > Mesaje si la furnizor; o coloana ascunsa nu primeste nimic.
+  - Partea legala (datele firmei, retragerea, garantia legala, politicile, ANPC, insignele, Netopia) si randul de
+    copyright raman sub coloane pe orice design; cu culori alese, partea legala trece pe tonul care le citeste.
 - **Schimbari de comportament de etapa 8, de urmarit dupa push:**
   - ⚠ Comerciantii care au invatat Setari > General / Formular de comandă / Catalog dupa etapa 1 nu le mai gasesc acolo: cardul „Datele magazinului” din General ii trimite in editor. Si invers fata de restul editorului: aici „Salvează” scrie direct, fara „Publică”.
   - Dupa o salvare din fila „Setări”, editorul cere din nou datele de pe server (`router.refresh()`): ciorna si pagina deschisa raman, previzualizarea se reincarca.
@@ -139,6 +156,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 ## D. Capturi si texte de ajutor
 - **FACUT 28.10.2026, ghidurile (inchiderea, pasul 5; PLAN, „Inchiderea, pasul 5”):** toata categoria „Design și pagini” (84 de ghiduri citite fata de cod, rescrise cele care descriau „Design magazin”, „Design secțiuni”, „Ordinea secțiunilor”, „Salvează” pe sectiuni si constructorul de pagini retras), plus trimiterile din „Primii pași” si „Produse”. Noi: cum e impartit editorul, bucatile paginii de produs, istoricul publicarilor, sabloanele de produs (425 de ghiduri). Fiecare citat din categorie cautat in sursa (1084): toate cele scrise acum exista in cod. Ghidul „Conținut liber” ramane fara captura, dupa regula din `ajutor.ts` (cuvintele ajung).
 - **Capturi de facut** (5, lista vie: `npm run capturi -- --lista`, reteta: `docs/ajutor/CAPTURI-AJUTOR.md`): `cum-e-impartit-editorul-magazinului` (orientarea grupului: bara de sus, filele, previzualizarea), `cum-completezi-informatiile-generale-editor-design` (panoul „Informații generale” din fila „Setări”), `cum-schimbi-designul-unei-sectiuni` (galeria „Schimbă designul”, cu „Activ” si „Alege”), `cum-adaugi-blocul-beneficii` (selectorul de pictograme din panoul blocului) si cea veche de la eMAG. Doua dintre ele aratau ecranele scoase („Design secțiuni BETA”, constructorul de pagini): mutate in `docs/ajutor/capturi-scoase/`, ca `npm run capturi` sa nu le lege la loc; pana la cele noi, ghidurile arata substituentul.
+- Etapa 11 (28.10): ghidul `cum-reglezi-footerul-magazinului` (adresa ramane) rescris pe coloane: „Cum personalizezi
+  subsolul magazinului”; nota despre „+” din `cum-e-impartit-editorul-magazinului` spune si de coloanele subsolului.
+  Fara capturi noi. De discutat: in editor, o coloana „Linkuri” cu categorii pusa pe subsolul CENTRAT arata categoriile
+  abia dupa o reincarcare a previzualizarii (lista lor se citeste pe server, dupa designul de la incarcare); in magazin,
+  dupa „Publică”, apar corect.
 - Etapa 10, de discutat: cu o pagina din „Pagini” ca pagina principala, pe „Acasă” „+” nu apare (previzualizarea arata
   pagina aceea, iar blocurile ei se editeaza in pagina, deschisa cu „Deschide pagina” sau cu un clic pe ea). In productie
   (28.10, doar citire): 1 magazin din 148. Daca il vrea si acolo: „+” ar deschide pagina si panoul „Adaugă un bloc” deodata.

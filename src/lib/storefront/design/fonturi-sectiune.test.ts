@@ -17,7 +17,7 @@ import { sectionMeta } from "./registry";
 
 const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
-test("fontul magazinului: Geist plus cele 33, iar cele 8 de dinainte raman chei valide", () => {
+test("fontul magazinului: Geist plus fonturile paginilor, iar cele 8 de dinainte raman chei valide", () => {
   assert.equal(FONT_KEYS.length, 1 + FONTURI_PAGINA.length);
   assert.equal(FONT_KEYS[0], "geist");
   for (const vechi of ["geist", "inter", "manrope", "jakarta", "dmsans", "sora", "playfair", "instrument"]) {
@@ -26,6 +26,11 @@ test("fontul magazinului: Geist plus cele 33, iar cele 8 de dinainte raman chei 
   assert.equal(fontDinPageContent("poppins"), "poppins", "un font nou se poate alege in Stil");
   assert.equal(resolveStyle({}, { ...ctx, pageContent: { font_titluri: "bebas", font_text: "lora" } }).fontHeading, "bebas");
   assert.equal(fontDinPageContent("comic-sans"), undefined);
+});
+
+test("⚠ ghidul spune cate fonturi sunt, iar cifra urmeaza lista (in etapa 14 am scris 36 la 33; in 16.2 au devenit 35)", () => {
+  const ghid = readFileSync("src/lib/website/ajutor-categorii/design-si-pagini.ts", "utf8");
+  assert.ok(ghid.includes(`Geist, care e fontul din start, și încă ${FONTURI_PAGINA.length}, pe familii`), String(FONTURI_PAGINA.length));
 });
 
 test("cele 7 fonturi de dinainte (fara Geist) au EXACT stiva de dinainte, deci vitrinele de azi nu se schimba", () => {

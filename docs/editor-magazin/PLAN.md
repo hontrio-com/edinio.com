@@ -1655,9 +1655,16 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
         aleatoare, ca in seed) si magazinul `tema-jupiter`; importul: 39 de categorii, 58 de produse proiectate, 4 bannere;
         repetat, 0/0/0. 8 probe in `teme/import-demo.test.ts`.) Setul de date demo Jupiter, in cod (categorii pe doua
         niveluri, produse cu poze Unsplash, bannere, carduri, placi), si magazinul `tema-jupiter` in baza demo.
-  - [ ] 16.2 Stilul (fonturile noi, culorile) si antetul „Hipermarket” (bara albastra, cautarea cu buton portocaliu,
-        contul, cosul, „Categorii produse” cu meniul pe doua niveluri), plus subsolul cu „Înapoi sus”, newsletter, coloane,
-        servicii.
+  - [x] 16.2 (28.10: Open Sans si Sofia Sans in lista (35), cifra din ghid legata de lista printr-o proba; container nou
+        `xwide` (100rem, cat pagina modelului); antetul `hipermarket` (bara de sus 40 px, cautarea de 56 px cu butonul de
+        accent, bara de navigare lipita sus la derulare, meniul de categorii pe doua niveluri cu fundal intunecat, Escape);
+        subsolul `hipermarket` (bara „Înapoi sus”, newsletterul in banda lui cu campul si butonul lipite, coloanele pe gri
+        prin `ColoanaSubsol` exportata din `FooterColumns`, nu copiata); `teme/jupiter/design.ts` (stilul, antetul,
+        subsolul, pagina Magazin cu filtre); scriptul aplica si designul. Vazut pe magazinul demo, langa dedeman.ro: aceleasi
+        proportii. GASIT: titlul newsletterului (63 de caractere) se taia la 60, la citire; scurtat, plus o proba ca textele
+        temei incap in campuri. 7 probe in `teme/jupiter/design.test.ts`; mutanti 6/6.) Stilul (fonturile noi, culorile) si
+        antetul „Hipermarket” (bara albastra, cautarea cu buton portocaliu, contul, cosul, „Categorii produse” cu meniul pe
+        doua niveluri), plus subsolul cu „Înapoi sus”, newsletter, coloane, servicii.
   - [ ] 16.3 Pagina principala: bannerul cu carusel si doua carduri, placile de categorii cu numarul de produse, cardul
         de produs Jupiter, caruselul cu sageti, randul pe file de categorii, placile de recomandari.
   - [ ] 16.4 Paginile de categorie si de produs, cosul: variantele existente, reglate pe tema si pe cardul ei.

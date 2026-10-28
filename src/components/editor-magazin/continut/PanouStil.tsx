@@ -128,7 +128,7 @@ export function PanouStil({ continut }: { continut: ContinutMagazin }) {
         </Grup>
 
         {/*
-          Fonturile magazinului, din Geist si cele 33 ale paginilor (etapa 14). Alegatorul paginilor, pe familii, cu
+          Fonturile magazinului, din Geist si fonturile paginilor (etapa 14). Alegatorul paginilor, pe familii, cu
           fiecare nume in fontul lui (de aici `toateClaseleDeFont`); grila de carduri de dinainte ar fi avut 34 de
           randuri, de doua ori. Geist e „gol”: alegerea lui se scrie anume, ca sa bata un font publicat inainte.
         */}

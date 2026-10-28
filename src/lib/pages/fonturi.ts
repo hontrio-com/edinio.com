@@ -46,6 +46,9 @@ export const FONTURI_PAGINA = [
   { cheie: "josefin", nume: "Josefin Sans", familie: "sans", rezerva: "system-ui, sans-serif" },
   { cheie: "quicksand", nume: "Quicksand", familie: "sans", rezerva: "system-ui, sans-serif" },
   { cheie: "jost", nume: "Jost", familie: "sans", rezerva: "system-ui, sans-serif" },
+  // Fonturile temei Jupiter (etapa 16.2): textul si titlurile, ca pe magazinul dupa care e facuta.
+  { cheie: "opensans", nume: "Open Sans", familie: "sans", rezerva: "system-ui, sans-serif" },
+  { cheie: "sofiasans", nume: "Sofia Sans", familie: "sans", rezerva: "system-ui, sans-serif" },
   // Clasice
   { cheie: "playfair", nume: "Playfair Display", familie: "serif", rezerva: "Georgia, serif" },
   { cheie: "instrument", nume: "Instrument Serif", familie: "serif", rezerva: "Georgia, serif" },

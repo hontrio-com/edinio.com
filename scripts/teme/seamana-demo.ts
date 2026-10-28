@@ -11,6 +11,7 @@
 */
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { contextDesign } from "@/lib/editor-magazin/derivare";
 import { importaDateleDemo } from "@/lib/teme/import-demo";
 import { temaDupaCheie } from "@/lib/teme/teme";
 
@@ -25,12 +26,29 @@ async function main() {
   if (url.includes(PRODUCTIA)) throw new Error("Refuz: adresa e a productiei.");
 
   const admin = createClient<Database>(url, cheie, { auth: { persistSession: false } });
-  const { data: magazin, error } = await admin.from("businesses").select("id").eq("slug", tema.slugDemo).single();
+  const { data: magazin, error } = await admin
+    .from("businesses").select("id, primary_color, features, cover_url, tagline").eq("slug", tema.slugDemo).single();
   if (error || !magazin) throw new Error(`Magazinul demo ${tema.slugDemo} lipseste: ${error?.message ?? ""}`);
 
   // Tema are pagina Magazin (`/magazin`): de acolo pornesc linkurile bannerelor.
   const rezultat = await importaDateleDemo(admin, magazin.id, tema.cheie, tema.date, "/magazin");
-  console.log(JSON.stringify({ tema: tema.cheie, magazin: tema.slugDemo, ...rezultat }));
+
+  // Designul temei, publicat direct: magazinul demo n-are ciorna si nici istoric de pastrat.
+  const { data: setari, error: eSet } = await admin.from("store_settings").select("page_content").eq("business_id", magazin.id).single();
+  if (eSet) throw new Error(`setari: ${eSet.message}`);
+  const ctx = contextDesign({
+    primaryColor: magazin.primary_color,
+    pageContent: (setari?.page_content ?? {}) as Record<string, unknown>,
+    features: magazin.features,
+    coverUrl: magazin.cover_url,
+    tagline: magazin.tagline,
+  });
+  const design = tema.design(ctx, tema.date);
+  const { error: eDesign } = await admin.from("store_settings")
+    .update({ storefront_design: design as never, storefront_design_draft: null, updated_at: new Date().toISOString() })
+    .eq("business_id", magazin.id);
+  if (eDesign) throw new Error(`design: ${eDesign.message}`);
+  console.log(JSON.stringify({ tema: tema.cheie, magazin: tema.slugDemo, ...rezultat, design: "publicat" }));
 }
 
 main().catch((e: unknown) => {

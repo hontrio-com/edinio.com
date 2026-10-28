@@ -88,22 +88,29 @@ export function FooterColumns({ ton = "deschis", sectiune }: { ton?: TonFooter; 
   );
 }
 
-interface StilColoane {
+export interface StilColoane {
   separator: string;
   marunt: string;
   inchis: boolean;
+  /** Clasa titlurilor de coloana; lipsa = marunte, cu majuscule (tema Jupiter le vrea mari, etapa 16.2). */
+  titlu?: string;
+  /** Clasa linkurilor; lipsa = cea a tonului. */
+  legatura?: string;
 }
 
-/** O coloana, dupa tipul ei. Cele de azi au exact marcajul de dinainte de etapa 11. */
-function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInstance; idSubsol: string; stil: StilColoane }) {
+/**
+ * O coloana, dupa tipul ei. Cele de azi au exact marcajul de dinainte de etapa 11. Exportata pentru subsolul temei
+ * Jupiter (etapa 16.2), care le aseaza altfel, dar nu le copiaza.
+ */
+export function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInstance; idSubsol: string; stil: StilColoane }) {
   const { business, pageContent, social, esteEditorDesign } = useStoreChrome();
   const linkuri = useLinkuriColoanei(coloana);
   const { separator, marunt, inchis } = stil;
   const s = coloana.settings;
   const titlu = sir(s.titlu);
-  const legatura = inchis
+  const legatura = stil.legatura ?? (inchis
     ? "flex items-start gap-2 text-[13px] text-[var(--st-footer-text)]/50 hover:text-[var(--st-footer-text)] transition-colors"
-    : "flex items-start gap-2 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors";
+    : "flex items-start gap-2 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors");
   const cerc = inchis
     ? "w-9 h-9 rounded-full border border-[var(--st-footer-text)]/15 flex items-center justify-center hover:bg-[var(--st-footer-text)]/10 transition-colors"
     : "w-9 h-9 rounded-full border border-[var(--st-border)] flex items-center justify-center text-[var(--st-text)] hover:bg-[var(--st-primary-soft)] transition-colors";
@@ -149,7 +156,7 @@ function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInstance; id
 
     case "linkuri":
       return (
-        <Coloana titlu={titlu} separator={separator} marunt={marunt}>
+        <Coloana titlu={titlu} separator={separator} marunt={marunt} titluCls={stil.titlu}>
           {linkuri.map((l) => (
             <Legatura key={l.cheie} cls={legatura} href={l.href} extern={l.extern}>{l.eticheta}</Legatura>
           ))}
@@ -161,7 +168,7 @@ function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInstance; id
     case "contact": {
       const oras = business.store_city || business.city;
       return (
-        <Coloana titlu={titlu} separator={separator} marunt={marunt}>
+        <Coloana titlu={titlu} separator={separator} marunt={marunt} titluCls={stil.titlu}>
           {s.telefon !== false && business.phone && (
             <Legatura cls={legatura} href={`tel:${business.phone}`} icon={<Phone className="h-4 w-4" strokeWidth={1.6} />}>
               {business.phone}
@@ -191,7 +198,7 @@ function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInstance; id
     case "text": {
       const text = sir(s.text);
       return (
-        <Coloana titlu={titlu} separator={separator} marunt={marunt}>
+        <Coloana titlu={titlu} separator={separator} marunt={marunt} titluCls={stil.titlu}>
           {text && <p className={`text-[13px] leading-relaxed whitespace-pre-line ${marunt}`}>{text}</p>}
           {esteEditorDesign && !text && <MesajGol key="gol" cls={`text-[13px] ${marunt}`}>Coloana nu are text.</MesajGol>}
         </Coloana>
@@ -232,13 +239,15 @@ function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInstance; id
 }
 
 /** Coloana de linkuri: deschisa pe desktop, pliata pe telefon. Fara titlu, doar lista, mereu deschisa. */
-function Coloana({ titlu, children, separator, marunt }: {
+function Coloana({ titlu, children, separator, marunt, titluCls }: {
   titlu: string;
   children: ReactNode;
   separator: string;
   marunt: string;
+  titluCls?: string;
 }) {
   const [deschisa, setDeschisa] = useState(false);
+  const clasaTitlu = titluCls ?? `text-[11px] font-semibold uppercase tracking-widest ${marunt}`;
   const idLista = useId();
 
   /*
@@ -268,10 +277,10 @@ function Coloana({ titlu, children, separator, marunt }: {
           de tabulare si ar anunta „restrans" peste o lista vizibila. */}
       <button type="button" onClick={() => setDeschisa((v) => !v)} aria-expanded={deschisa} aria-controls={idLista}
         className="w-full flex items-center justify-between gap-2 md:hidden">
-        <span className={`text-[11px] font-semibold uppercase tracking-widest ${marunt}`}>{titlu}</span>
+        <span className={clasaTitlu}>{titlu}</span>
         <ChevronDown className={`h-4 w-4 transition-transform ${marunt} ${deschisa ? "rotate-180" : ""}`} />
       </button>
-      <p className={`hidden md:block text-[11px] font-semibold uppercase tracking-widest ${marunt}`}>{titlu}</p>
+      <p className={`hidden md:block ${clasaTitlu}`}>{titlu}</p>
       <div id={idLista} className={`flex-col gap-2 pt-3 ${deschisa ? "flex" : "hidden"} md:flex`}>
         {children}
       </div>

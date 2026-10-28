@@ -54,7 +54,7 @@ export function defaultColors(ctx: DesignContext): Record<StyleColorKey, string>
 export const RADIUS_PX = { none: 0, sm: 6, md: 12, lg: 20, full: 9999 } as const;
 
 /** Latimea containerului. `normal` = `max-w-6xl` (72rem), cat are storefrontul azi. */
-export const CONTAINER_REM = { narrow: 56, normal: 72, wide: 80, full: 0 } as const;
+export const CONTAINER_REM = { narrow: 56, normal: 72, wide: 80, xwide: 100, full: 0 } as const;
 
 /** Spatiul vertical dintre sectiuni. `normal` = `py-10` (2.5rem), cat e azi. */
 export const DENSITY_REM = { compact: 1.75, normal: 2.5, airy: 4 } as const;

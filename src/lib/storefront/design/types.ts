@@ -180,8 +180,8 @@ export const STYLE_COLOR_KEYS = [
 export type StyleColorKey = (typeof STYLE_COLOR_KEYS)[number];
 
 /**
- * Fonturile magazinului: Geist (implicit) si cele 33 ale paginilor proprii (etapa 14, raspunsul lui: „Cele 36
- * găzduite de noi”, numarate gresit in intrebare; pana atunci, 8). O singura lista, `FONTURI_PAGINA`: doua copii
+ * Fonturile magazinului: Geist (implicit) si fonturile paginilor proprii (din etapa 14, raspunsul lui: „Cele 36
+ * găzduite de noi”, de fapt 33, plus cele doua ale temei Jupiter din etapa 16.2; pana atunci, 8). O singura lista, `FONTURI_PAGINA`: doua copii
  * s-ar fi despartit la primul font nou.
  *
  * ⚠ Cheile se salveaza in baza (`page_content.font_titluri`, stilul designului), deci nu se redenumesc.
@@ -192,7 +192,8 @@ export const FONT_KEYS: readonly FontKey[] = ["geist", ...FONTURI_PAGINA.map((f)
 export const RADIUS_KEYS = ["none", "sm", "md", "lg", "full"] as const;
 export type RadiusKey = (typeof RADIUS_KEYS)[number];
 
-export const CONTAINER_KEYS = ["narrow", "normal", "wide", "full"] as const;
+// `xwide` (100rem): pagina lata a temei Jupiter (etapa 16.2), cat cea a modelului ei, 1600 px.
+export const CONTAINER_KEYS = ["narrow", "normal", "wide", "xwide", "full"] as const;
 export type ContainerKey = (typeof CONTAINER_KEYS)[number];
 
 export const FONT_SCALE_KEYS = ["sm", "md", "lg"] as const;

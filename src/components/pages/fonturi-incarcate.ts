@@ -1,7 +1,7 @@
 import {
   Anton, Bebas_Neue, Caveat, Cinzel, Cormorant_Garamond, DM_Serif_Display, Dancing_Script,
   EB_Garamond, Figtree, Fraunces, Great_Vibes, Jost, Josefin_Sans, Lora, Merriweather,
-  Montserrat, Nunito, Oswald, Outfit, Poppins, Quicksand, Raleway, Rubik, Space_Grotesk,
+  Montserrat, Nunito, Open_Sans, Oswald, Outfit, Poppins, Quicksand, Raleway, Rubik, Sofia_Sans, Space_Grotesk,
   Unbounded, Work_Sans,
 } from "next/font/google";
 import { dmsans, instrument, inter, jakarta, manrope, playfair, sora } from "@/lib/storefront/design/fonts";
@@ -43,6 +43,8 @@ const rubik = Rubik({ subsets: ["latin", "latin-ext"], display: "swap", preload:
 const josefin = Josefin_Sans({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-josefin" });
 const quicksand = Quicksand({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-quicksand" });
 const jost = Jost({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-jost" });
+const opensans = Open_Sans({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-opensans" });
+const sofiasans = Sofia_Sans({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-sofiasans" });
 const lora = Lora({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-lora" });
 const merriweather = Merriweather({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-merriweather" });
 const cormorant = Cormorant_Garamond({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-cormorant" });
@@ -64,7 +66,7 @@ type Incarcat = { variable: string };
 const INCARCATE: Record<CheieFont, Incarcat> = {
   inter, manrope, jakarta, dmsans, sora, playfair, instrument,
   poppins, montserrat, raleway, nunito, worksans, outfit, spacegrotesk, figtree, rubik,
-  josefin, quicksand, jost, lora, merriweather, cormorant, dmserif, fraunces, ebgaramond,
+  josefin, quicksand, jost, opensans, sofiasans, lora, merriweather, cormorant, dmserif, fraunces, ebgaramond,
   cinzel, bebas, oswald, anton, unbounded, caveat, dancing, greatvibes,
 };
 
@@ -94,8 +96,8 @@ function intrareFont(cheie: FontKey): { className: string; stack: string } {
  * Clasele si variabilele perechii de fonturi a magazinului (titluri, text). Cand amandoua sunt acelasi font, o
  * singura clasa.
  *
- * ⚠ Mutata aici din `storefront/design/fonts.ts` (etapa 14): magazinul alege acum din Geist plus cele 33 de fonturi
- * ale paginilor, iar clasele lor stau in fisierul asta. Pentru cele 8 de dinainte iese EXACT ce iesea acolo (aceleasi
+ * ⚠ Mutata aici din `storefront/design/fonts.ts` (etapa 14): magazinul alege acum din Geist plus fonturile
+ * paginilor, iar clasele lor stau in fisierul asta. Pentru cele 8 de dinainte iese EXACT ce iesea acolo (aceleasi
  * instante `next/font`, aceeasi stiva prin `stivaFont`), deci vitrinele de azi nu se schimba.
  */
 export function fontSetup(heading: FontKey, body: FontKey): {

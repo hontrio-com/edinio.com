@@ -51,12 +51,20 @@ const HeaderMarket = dynamic(
   () => import("./sections/chrome/HeaderMarket").then((m) => m.HeaderMarket),
   { ssr: true },
 );
+const HeaderHipermarket = dynamic(
+  () => import("./sections/chrome/HeaderHipermarket").then((m) => m.HeaderHipermarket),
+  { ssr: true },
+);
 const HeaderWedge = dynamic(
   () => import("./sections/chrome/HeaderWedge").then((m) => m.HeaderWedge),
   { ssr: true },
 );
 const HeroBannersOnly = dynamic(
   () => import("./sections/hero/HeroBannersOnly").then((m) => m.HeroBannersOnly),
+  { ssr: true },
+);
+const FooterHipermarket = dynamic(
+  () => import("./sections/chrome/FooterHipermarket").then((m) => m.FooterHipermarket),
   { ssr: true },
 );
 const FooterCentered = dynamic(
@@ -93,6 +101,7 @@ const HEADERE: Record<string, VariantaSectiune> = {
   nav: HeaderNav as VariantaSectiune,
   pills: HeaderPills as VariantaSectiune,
   market: HeaderMarket as VariantaSectiune,
+  hipermarket: HeaderHipermarket as VariantaSectiune,
   wedge: HeaderWedge as VariantaSectiune,
   editorial: HeaderEditorial as VariantaSectiune,
   centered: HeaderCentered as VariantaSectiune,
@@ -109,6 +118,7 @@ const HEADERE: Record<string, VariantaSectiune> = {
 const FOOTERE: Record<string, ComponentType<{ sectiune: SectionInstance }>> = {
   columns: FooterColumnsLight,
   centered: FooterCentered,
+  hipermarket: FooterHipermarket,
 };
 
 /** Variantele de hero, dupa id-ul din registry. */

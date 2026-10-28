@@ -1,4 +1,6 @@
+import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
+import { designJupiter } from "./jupiter/design";
 import type { SetDateDemo } from "./tipuri";
 
 /*
@@ -22,6 +24,8 @@ export interface Tema {
   /** Culoarea principala, pentru cardul temei. */
   culoare: string;
   date: SetDateDemo;
+  /** Designul temei peste magazinul dat; cu `date`, si textele de exemplu ale sectiunilor ei. */
+  design: (ctx: DesignContext, date: SetDateDemo | null) => StoreDesign;
 }
 
 export const TEME: readonly Tema[] = [
@@ -32,6 +36,7 @@ export const TEME: readonly Tema[] = [
     slugDemo: "tema-jupiter",
     culoare: "#215196",
     date: DATE_DEMO_JUPITER,
+    design: designJupiter,
   },
 ];
 

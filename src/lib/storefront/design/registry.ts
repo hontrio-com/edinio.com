@@ -202,6 +202,7 @@ export const HEADER_VARIANT_ACTIONS: Record<string, HeaderAction[]> = {
   editorial: ["cautare", "whatsapp", "cos"],
   wedge: ["cautare", "telefon", "whatsapp", "cos"],
   market: ["whatsapp", "cos"],
+  hipermarket: ["whatsapp", "cos"],
   pills: ["telefon", "whatsapp", "cos"],
   nav: ["cautare", "telefon", "whatsapp", "cos"],
 };
@@ -592,6 +593,30 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         ],
         defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
       },
+      hipermarket: {
+        label: "Hipermarket, cu meniu de categorii",
+        tags: ["indraznet"],
+        layout: "full",
+        // Tema Jupiter (etapa 16.2): bara in culoarea principala, cautarea lata cu buton de accent, contul si
+        // cosul cu eticheta, apoi butonul „Categorii produse”, cu meniul pe doua niveluri.
+        previewHeight: 172,
+        needsCategories: true,
+        replacesCatalogSearch: true,
+        fields: [
+          ...headerFields(HEADER_VARIANT_ACTIONS.hipermarket),
+          { key: "showTopBar", type: "toggle", label: "Arata bara de sus" },
+          {
+            key: "topText",
+            type: "text",
+            label: "Mesaj in bara de sus",
+            placeholder: "Livrare in toata tara",
+            maxLength: 90,
+            showIf: { key: "showTopBar", equals: true },
+          },
+          { key: "showHotline", type: "toggle", label: "Arata telefonul in bara de navigare" },
+        ],
+        defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
+      },
       pills: {
         label: "Rotunjit, cu butoane colorate",
         tags: ["indraznet", "compact"],
@@ -672,6 +697,15 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         tags: ["elegant", "simplu"],
         layout: "full",
         previewHeight: 620,
+        fields: campuriSubsol(),
+        defaults: { showTagline: false, inapoiSus: true },
+      },
+      hipermarket: {
+        label: "Hipermarket, cu newsletter si coloane pe gri",
+        tags: ["indraznet"],
+        layout: "full",
+        // Tema Jupiter (etapa 16.2): bara „Înapoi sus”, banda cu newsletterul, coloanele pe gri.
+        previewHeight: 600,
         fields: campuriSubsol(),
         defaults: { showTagline: false, inapoiSus: true },
       },

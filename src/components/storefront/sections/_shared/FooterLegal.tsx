@@ -202,14 +202,18 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
  * Creditul se poate ascunde doar pe planurile platite (`hide_edinio_badge`),
  * decizie luata inauntrul lui `EdinioCredit` — nu e o setare de design.
  */
-export function FooterCredit({ ton = "inchis" }: { ton?: TonFooter } = {}) {
+export function FooterCredit({ ton = "inchis", text }: {
+  ton?: TonFooter;
+  /** Textul de langa „©” (etapa 11, reglajul subsolului); lipsa = numele magazinului. */
+  text?: string;
+} = {}) {
   const { business, color } = useStoreChrome();
   const t = TON[ton];
 
   return (
     <div className="pt-5 flex items-center justify-between gap-3">
       <p className={t.copyright}>
-        &copy; {new Date().getFullYear()} {business.store_name ?? business.business_name}
+        &copy; {new Date().getFullYear()} {text ?? business.store_name ?? business.business_name}
       </p>
       <EdinioCredit businessId={business.id} color={color} className={t.copyright} />
     </div>

@@ -187,6 +187,8 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
             ...(variantMeta(kind, variantParam)?.defaults ?? {}),
             ...(sectiuneaReala?.variant === variantParam ? sectiuneaReala.settings : {}),
           },
+          // Coloanele subsolului (etapa 11) sunt ale omului pe designul lui; pe celelalte, cele implicite ale designului.
+          ...(kind === "footer" && sectiuneaReala?.variant === variantParam && sectiuneaReala.blocks ? { blocks: sectiuneaReala.blocks } : {}),
         }}
         products={produseCuFatete}
         categories={DEMO_CATEGORIES}

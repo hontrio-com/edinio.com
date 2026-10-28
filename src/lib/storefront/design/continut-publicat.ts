@@ -7,6 +7,7 @@ import { shopOnPage } from "./commerce";
 import { blocuriDinSetari } from "./continut-liber";
 import { blocuriLaCale, type CaleContinut } from "./edit";
 import { aplicaPaginaAcasa } from "./pagina-acasa";
+import { coloaneVazute } from "./subsol";
 import type { SectionInstance, StoreDesign } from "./types";
 
 /**
@@ -28,6 +29,14 @@ export function blocDinMagazin(
   cale: CaleContinut,
   idBloc: string,
 ): { bloc: Block; loc: string } | null {
+  /*
+   * Newsletterul din subsol (etapa 11): o coloana aprinsa a subsolului, de tip „Newsletter”. Subsolul e pe toate
+   * paginile, deci nicio alta conditie. Ca bloc, doar ce citeste abonarea: tipul (fara nume, telefon sau eticheta).
+   */
+  if (cale.sectiune === design.chrome.footer.id && cale.bloc === null) {
+    const coloana = coloaneVazute(design.chrome.footer).find((c) => c.id === idBloc && c.type === "newsletter");
+    return coloana ? { bloc: { id: coloana.id, type: "newsletter" } as Block, loc: "Subsol" } : null;
+  }
   const loc = locContinut(aplicaPaginaAcasa(design, pageContent), pageContent, cale);
   if (!loc) return null;
   const blocuri = blocuriLaCale(design, cale);

@@ -104,9 +104,9 @@ const HEADERE: Record<string, VariantaSectiune> = {
  * chunk separat pentru invelisul de opt linii ar fi doar o cerere de retea in
  * plus. Impartirea ramane pentru `centered`, care chiar e cod separat.
  */
-const FOOTERE: Record<string, VariantaSectiune> = {
-  columns: FooterColumnsLight as VariantaSectiune,
-  centered: FooterCentered as VariantaSectiune,
+const FOOTERE: Record<string, ComponentType<{ sectiune: SectionInstance }>> = {
+  columns: FooterColumnsLight,
+  centered: FooterCentered,
 };
 
 /** Variantele de hero, dupa id-ul din registry. */
@@ -133,8 +133,9 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
       return Varianta ? <Varianta settings={section.settings} /> : <HeaderClassic />;
     }
     case "footer": {
+      // Subsolul primeste sectiunea intreaga: coloanele lui sunt blocuri (etapa 11), nu doar reglaje.
       const Varianta = FOOTERE[section.variant];
-      return Varianta ? <Varianta settings={section.settings} /> : <FooterDark settings={section.settings} />;
+      return Varianta ? <Varianta sectiune={section} /> : <FooterDark sectiune={section} />;
     }
     case "hero": {
       // Fara refugiu propriu: parserul normalizeaza deja varianta la una din

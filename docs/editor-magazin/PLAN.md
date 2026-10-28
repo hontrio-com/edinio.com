@@ -1241,7 +1241,16 @@ Citit inainte:
       (tipuri, campuri, unice, plafon), coloanele implicite pe design, citirea (lipsa = implicite, gol = gol),
       operatiile (adauga la loc, duplica, sterge, reglaje), reglajele subsolului in registru, categoriile cerute,
       „+” pe coloane. Probe.
-- [ ] 11.2 Magazinul: subsolul randat din coloane (pe coloane si centrat), marcajele in editor, culorile, „Înapoi sus”,
+- [x] 11.2 (28.10: `FooterColumns` si `FooterCentered` randate din `coloaneVazute`, cate un `MarcajBloc` pe coloana;
+      piesele comune in `subsol-coloane.tsx` (linkurile dupa sursa, imaginea, newsletterul, mesajul de gol DOAR in
+      editor); culorile ca variabile pe radacina, partea legala pe tonul deschis cand sunt culori alese; `FooterCredit`
+      cu textul de langa ©; dispecerul trimite sectiunea intreaga; miniatura designului activ arata coloanele omului;
+      `blocDinMagazin` gaseste newsletterul din subsolul publicat, cu locul „Subsol”. HTML-ul subsolului inainte si
+      dupa, de pe serverul local (scriptul din scratchpad `subsol-html.mjs`): 6 magazine demo, prima pagina si miniatura
+      fiecarui design, 22 de subsoluri, toate identice dupa doua normalizari cunoscute: grila (`md:grid-cols-[1.4fr_1fr_1fr_1.2fr]`
+      a devenit aceeasi latime printr-o variabila) si id-urile React (`useId`, dupa pozitia in arbore). Doua prime
+      pagini n-au subsol in niciuna, fiindca abonamentul lor e expirat pe demo. 3 probe noi.)
+      Magazinul: subsolul randat din coloane (pe coloane si centrat), marcajele in editor, culorile, „Înapoi sus”,
       copyright, newsletterul (componenta si serverul). Probe; HTML-ul de azi fata de cel nou.
 - [ ] 11.3 Editorul: coloanele in arbore, panoul coloanei, lista „Adaugă coloană”, culorile cu „Implicită”, „+” pe
       coloane. Probe.

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { adaugaColoana, duplicaColoana, MAX_COLOANE_SUBSOL, parseBlocuri, poateAdaugaColoana, schemaBlocurilor, setariColoana, stergeColoana, TIPURI_COLOANE_SUBSOL } from "./blocuri";
+import { blocDinMagazin } from "./continut-publicat";
 import { buildClassicDesign } from "./defaults";
 import { completeazaBlocurileSectiunii, schimbaBlocurile, updateSection } from "./edit";
 import { parseStoreDesign } from "./parse";
@@ -194,4 +197,53 @@ test("culorile: nimic ales = nimic schimbat; fundalul singur isi alege textul du
   const doarText = culoriSubsol({ variant: "dark", settings: { culoareText: "#FDE68A" } })!;
   assert.equal(doarText["--st-footer-bg"], undefined, "fundalul ramane al designului");
   assert.equal(doarText["--st-footer-text"], "#FDE68A");
+});
+
+// ── Newsletterul din subsol (serverul) ───────────────────────────────────────
+
+test("⚠⚠ newsletterul din subsol: serverul gaseste DOAR o coloana aprinsa „Newsletter” a subsolului dat", () => {
+  const cuNewsletter = schimbaBlocurile(cuSubsol("dark"), "footer", (l, s) => adaugaColoana(l, s, "newsletter"));
+  const id = cuNewsletter.chrome.footer.blocks!.find((b) => b.type === "newsletter")!.id;
+  const gasit = blocDinMagazin(cuNewsletter, {}, { sectiune: "footer", bloc: null }, id);
+  assert.deepEqual(gasit, { bloc: { id, type: "newsletter" }, loc: "Subsol" });
+  // Alta coloana, alt id, coloana ascunsa, o cale sub subsol: nimic.
+  assert.equal(blocDinMagazin(cuNewsletter, {}, { sectiune: "footer", bloc: null }, "contact"), null);
+  assert.equal(blocDinMagazin(cuNewsletter, {}, { sectiune: "footer", bloc: null }, "nu-exista"), null);
+  assert.equal(blocDinMagazin(cuNewsletter, {}, { sectiune: "footer", bloc: id }, id), null);
+  const ascuns = schimbaBlocurile(cuNewsletter, "footer", (l) => l.map((b) => (b.id === id ? { ...b, enabled: false } : b)));
+  assert.equal(blocDinMagazin(ascuns, {}, { sectiune: "footer", bloc: null }, id), null, "ascunsa nu primeste mesaje");
+  // Subsolul de azi n-are newsletter.
+  assert.equal(blocDinMagazin(cuSubsol("dark"), {}, { sectiune: "footer", bloc: null }, "identitate"), null);
+});
+
+// ── Legaturile din cod: randarea ─────────────────────────────────────────────
+
+const RAD = process.cwd();
+const cod = (f: string) => readFileSync(path.join(RAD, f), "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+test("⚠⚠ fiecare design de subsol randeaza coloanele lui SI, mereu, partea legala si randul de copyright", () => {
+  for (const f of ["src/components/storefront/sections/chrome/FooterColumns.tsx", "src/components/storefront/sections/chrome/FooterCentered.tsx"]) {
+    const c = cod(f);
+    assert.match(c, /const coloane = coloaneVazute\(sectiune\);/, f);
+    assert.match(c, /<MarcajBloc key=\{c\.id\} idSectiune=\{sectiune\.id\} idBlocului=\{c\.id\} eticheta=\{etichetaColoanei\(c\)\}>/, f);
+    // Partea legala nu sta sub nicio conditie (OUG 18/2026, ANPC, politicile).
+    assert.match(c, /\n\s*<FooterLegal ton=(\{[^}]+\}|"[a-z]+") cuPagini=\{false\} \/>/, f);
+    assert.match(c, /\n\s*<FooterCredit ton=(\{[^}]+\}|"[a-z]+") text=\{textCopyright\(sectiune, nume\)\} \/>/, f);
+    assert.doesNotMatch(c, /\{[^}]*&&\s*<FooterLegal/, `${f}: partea legala nu se ascunde`);
+    assert.match(c, /culoriSubsol\(sectiune\)/, f);
+    assert.match(c, /inapoiSusPornit\(sectiune\) &&/, f);
+  }
+  const r = cod("src/components/storefront/SectionRenderer.tsx");
+  assert.match(r, /return Varianta \? <Varianta sectiune=\{section\} \/> : <FooterDark sectiune=\{section\} \/>;/);
+  // Miniatura designului activ arata coloanele omului.
+  assert.match(cod("src/app/(public)/preview-sectiune/[slug]/page.tsx"), /kind === "footer" && sectiuneaReala\?\.variant === variantParam && sectiuneaReala\.blocks \? \{ blocks: sectiuneaReala\.blocks \}/);
+});
+
+test("newsletterul din subsol trimite prin `aboneazaNewsletter`, cu calea subsolului, acordul si capcana; in editor nu trimite", () => {
+  const c = cod("src/components/storefront/sections/chrome/subsol-coloane.tsx");
+  assert.match(c, /aboneazaNewsletter\(\{ businessId: business\.id, blockId: coloana\.id, cale: idSubsol, email, acord, honeypot: capcana \}\)/);
+  assert.match(c, /if \(esteEditorDesign \|\| trimit\) return;/);
+  assert.match(c, /if \(!acord\) \{ setEroare\(/);
+  // Linkurile alese trec prin `resolveHref` (relative la magazin, scheme periculoase -> „#”).
+  assert.match(c, /href: resolveHref\(adresa, basePath\)/);
 });

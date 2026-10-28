@@ -179,7 +179,8 @@ test("adaugarea: sectiunea noua si continutul nou dintr-o zona se deschid direct
 test("arborele: zonele cu continut apar si goale, cu „Adaugă conținut liber”; Pagina Magazin doar cand are pagina", () => {
   const a = cod("src/components/editor-magazin/ArboreSectiuni.tsx");
   assert.match(a, /const blocuri = sectiune\.blocks \?\? \[\];/);
-  assert.match(a, /if \(aleZonei\.length === 0 && !tipContinut\) return null;/);
+  // Din etapa 11 si zona cu coloanele subsolului apare goala (`cuColoane`).
+  assert.match(a, /if \(aleZonei\.length === 0 && !tipContinut && !cuColoane\) return null;/);
   assert.match(a, /onClick=\{\(\) => onAdaugaContinut\(sectiune\.id, tipContinut\)\}/);
   assert.match(a, /\{schemaBlocurilor\(s\.kind, s\.variant\) && \(s\.kind !== "shop_page" \|\| shopOnPage\(design\)\) && \(/);
 });

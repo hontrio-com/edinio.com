@@ -149,6 +149,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     apare in Pagini > Mesaje si la furnizor; o coloana ascunsa nu primeste nimic.
   - Partea legala (datele firmei, retragerea, garantia legala, politicile, ANPC, insignele, Netopia) si randul de
     copyright raman sub coloane pe orice design; cu culori alese, partea legala trece pe tonul care le citeste.
+  - Gasite la proba (28.10) si reparate: „+” din previzualizare sta acum in afara elementului, lipit de margine (pe un
+    rand scund il acoperea, iar clicul de alegere deschidea lista de adaugare: se vede si la blocurile mici de pe
+    pagini); la schimbarea designului unei sectiuni raman si campurile declarate de varianta noua fara valoare implicita
+    (`updateSection`; la subsol se pierdeau textul de langa „©” si culorile). De verificat dupa push: o alegere din
+    „Schimbă designul” la un antet sau la o sectiune cu reglaje text pastreaza textele pe care varianta noua le are.
 - **Schimbari de comportament de etapa 8, de urmarit dupa push:**
   - ⚠ Comerciantii care au invatat Setari > General / Formular de comandă / Catalog dupa etapa 1 nu le mai gasesc acolo: cardul „Datele magazinului” din General ii trimite in editor. Si invers fata de restul editorului: aici „Salvează” scrie direct, fara „Publică”.
   - Dupa o salvare din fila „Setări”, editorul cere din nou datele de pe server (`router.refresh()`): ciorna si pagina deschisa raman, previzualizarea se reincarca.

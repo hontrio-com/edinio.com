@@ -286,3 +286,17 @@ test("panoul coloanei: reglajul peste ce e ACUM in ciorna, ochiul, stergerea; li
   assert.match(st, /if \(!field\.allowEmpty\) \{/);
   assert.match(st, /<button type="button" onClick=\{\(\) => onChange\(undefined\)\}[\s\S]*?Implicită/);
 });
+
+test("⚠ la schimbarea designului subsolului, reglajele lui raman (textul de langa ©, culorile, „Înapoi sus”)", () => {
+  // Vazut la proba etapei 11: `updateSection` pastra doar cheile cu valoare implicita, deci copyright-ul si culorile
+  // (fara implicit) se pierdeau la orice alegere din galerie.
+  const d = updateSection(cuSubsol("centered"), "footer", { settings: { copyright: "Firma SRL", fundal: "#1e3a5f", culoareText: "#ffffff", inapoiSus: false } });
+  const inchis = updateSection(d, "footer", { variant: "dark" });
+  assert.deepEqual(
+    { copyright: inchis.chrome.footer.settings.copyright, fundal: inchis.chrome.footer.settings.fundal, text: inchis.chrome.footer.settings.culoareText, sus: inchis.chrome.footer.settings.inapoiSus },
+    { copyright: "Firma SRL", fundal: "#1e3a5f", text: "#ffffff", sus: false },
+  );
+  // Ce nu declara varianta noua tot pleaca (regula de dinainte).
+  const cuStrain = updateSection(cuSubsol("dark"), "footer", { settings: { strain: 1 } });
+  assert.equal("strain" in updateSection(cuStrain, "footer", { variant: "columns" }).chrome.footer.settings, false);
+});

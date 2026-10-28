@@ -331,6 +331,10 @@ test("⚠ stratul de contur: „+” se apasa, mouse-ul pe el pastreaza elementu
   const laMiscare = c.slice(c.indexOf("function laMiscare"));
   assert.ok(laMiscare.indexOf("plusuri.current?.contains(") < laMiscare.indexOf("sectiuneaDeSub("));
   assert.match(c, /puncte = new Map\(\(e\.data\.adaugare \?\? \[\]\)/, "lista vine din `evidentiere`");
+  // In AFARA elementului, lipit de margine: centrat pe ea, pe un rand scund (subsolul centrat) acoperea mijlocul lui,
+  // iar clicul dat ca sa-l aleaga nimerea „+”-ul (proba etapei 11).
+  assert.match(c, /const varf = sus \? y - PLUS \+ PESTE_MARGINE : y - PESTE_MARGINE;/);
+  assert.match(c, /const PESTE_MARGINE = 4;/);
   // In afara stratului `aria-hidden`: intre deschiderea lui si butoane, fiecare `<div` e deja inchis.
   const intre = c.slice(c.indexOf('<div ref={radacina} aria-hidden="true">'), c.indexOf("<div ref={plusuri}>"));
   assert.ok(intre.length > 0);

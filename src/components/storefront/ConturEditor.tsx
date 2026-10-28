@@ -36,8 +36,14 @@ import {
 const ALBASTRU = "#2563eb";
 /** Cat de sus sta eticheta deasupra conturului; mai aproape de margine intra in el. */
 const INALTIME_ETICHETA = 20;
-/** Diametrul butonului „+”, centrat pe margine. */
-const PLUS = 28;
+/** Diametrul butonului „+”. */
+const PLUS = 26;
+/**
+ * Cat intra „+” peste element. Butonul sta in AFARA lui, lipit de margine: centrat pe ea, pe un element scund
+ * (un rand din subsolul centrat, un titlu) acoperea chiar mijlocul lui, iar clicul dat ca sa-l aleaga nimerea
+ * „+”-ul (vazut la proba etapei 11).
+ */
+const PESTE_MARGINE = 4;
 
 export default function ConturEditor() {
   const radacina = useRef<HTMLDivElement>(null);
@@ -55,15 +61,16 @@ export default function ConturEditor() {
     let puncte = new Map<string, boolean>();
     let cadru = 0;
 
-    /** Un „+” pe mijlocul unei margini a cutiei; ascuns cand n-are ce arata. */
-    function punePlus(buton: HTMLButtonElement | null, id: string | null, y: number | null, cutie: Cutie | null) {
+    /** Un „+” la mijlocul unei margini a cutiei, in afara ei (`sus` = marginea `y` e deasupra lui); ascuns cand n-are ce arata. */
+    function punePlus(buton: HTMLButtonElement | null, id: string | null, y: number | null, cutie: Cutie | null, sus: boolean) {
       if (!buton) return;
       if (!id || y === null || !cutie) {
         buton.style.display = "none";
         return;
       }
       buton.style.display = "flex";
-      buton.style.transform = `translate(${cutie.stanga + cutie.latime / 2 - PLUS / 2}px, ${y - PLUS / 2}px)`;
+      const varf = sus ? y - PLUS + PESTE_MARGINE : y - PESTE_MARGINE;
+      buton.style.transform = `translate(${cutie.stanga + cutie.latime / 2 - PLUS / 2}px, ${varf}px)`;
       buton.setAttribute(ADAUGA_ATTR, id);
     }
 
@@ -72,8 +79,8 @@ export default function ConturEditor() {
       const id = dinMouse ? (puncte.has(dinMouse) ? dinMouse : null) : idSelectat && puncte.has(idSelectat) ? idSelectat : null;
       const marcaj = id ? document.querySelector<HTMLElement>(selectorMarcaj(id)) : null;
       const cutie = cutiaSectiunii(marcaj);
-      punePlus(plusJos.current, cutie ? id : null, cutie ? cutie.sus + cutie.inaltime : null, cutie);
-      punePlus(plusSus.current, cutie && id && puncte.get(id) ? id : null, cutie ? cutie.sus : null, cutie);
+      punePlus(plusJos.current, cutie ? id : null, cutie ? cutie.sus + cutie.inaltime : null, cutie, false);
+      punePlus(plusSus.current, cutie && id && puncte.get(id) ? id : null, cutie ? cutie.sus : null, cutie, true);
     }
 
     function pune(strat: HTMLDivElement | null, id: string | null) {

@@ -219,7 +219,8 @@ function Control({
             ) : (
               <span className="text-[11px] text-muted-foreground">Implicită</span>
             )}
-            <input type="color" aria-label={field.label} className="w-11 h-9 rounded-lg border border-border cursor-pointer bg-surface"
+            {/* Estompat cat e „Implicită”: negrul din pătrat nu e culoarea din magazin, doar punctul de plecare. */}
+            <input type="color" aria-label={field.label} className={`w-11 h-9 rounded-lg border border-border cursor-pointer bg-surface ${aleasa ? "" : "opacity-30"}`}
               value={aleasa ?? "#000000"}
               onChange={(e) => onChange(e.target.value)} />
           </div>

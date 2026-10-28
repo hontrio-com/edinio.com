@@ -120,10 +120,17 @@ export function updateSection(
    * varianta noua le declara si comerciantul le avea deja setate se pastreaza.
    */
   if (patch.variant !== undefined && patch.settings === undefined) {
-    const implicite = variantMeta(tinta.kind, tinta.variant)?.defaults ?? {};
+    const meta = variantMeta(tinta.kind, tinta.variant);
+    const implicite = meta?.defaults ?? {};
     const vechi = tinta.settings ?? {};
     const rezultat: Record<string, unknown> = { ...implicite };
-    for (const cheie of Object.keys(implicite)) {
+    /*
+     * „Declara” = are valoare implicita SAU e camp al variantei noi. Doar cu implicitele, un camp fara valoare
+     * implicita se pierdea la orice schimbare de design, desi varianta noua il are: la subsol (etapa 11), textul de
+     * langa „©” si culorile alese (vazut la proba).
+     */
+    const declarate = new Set([...Object.keys(implicite), ...(meta?.fields ?? []).map((f) => f.key)]);
+    for (const cheie of declarate) {
       if (cheie in vechi) rezultat[cheie] = vechi[cheie];
     }
     tinta.settings = rezultat;

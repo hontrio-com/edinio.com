@@ -32,8 +32,9 @@ acum” (raspunsurile lui din 28.10, in „Deciziile proprietarului”). Planul 
 lucru” si „Etapa 5: planul de lucru”. **A doua verificare (W1-W6, ceruta 28.10: „O verificare si sa iti spun
 mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5). **Mentiunile lui au venit pe 28.10** (doua:
 „+” in previzualizare, subsolul customizabil complet; raspunsurile in „Mentiunile lui din 28.10”): **etapa 10 („+”)
-FACUTA si PROBATA in Chrome** (pasii 10.1-10.4), **urmeaza etapa 11 (subsolul pe coloane-bloc), dupa raportul catre el**.
-Tot fara push si fara migratie, pana spune el.
+FACUTA si PROBATA in Chrome** (pasii 10.1-10.4); **etapa 11 (subsolul pe coloane-bloc) FACUTA si PROBATA in Chrome**
+(pasii 11.1-11.4, acordul lui: „Da”, apoi „Da, fă proba acum”). Ambele mentiuni sunt facute; urmeaza raportul si ce
+spune el. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1260,7 +1261,27 @@ Citit inainte:
       in `SectionSettings`. 3 probe pe sursa; mutanti 28/28 pe toata etapa 11.)
       Editorul: coloanele in arbore, panoul coloanei, lista „Adaugă coloană”, culorile cu „Implicită”, „+” pe
       coloane. Probe.
-- [ ] 11.4 REGISTRU, ghidurile, porti, proba in Chrome (cere acordul lui pentru impersonare).
+- [x] 11.4 (28.10: ghidul `cum-reglezi-footerul-magazinului` rescris pe coloane, nota „+” din ghidul editorului,
+      REGISTRU C si D; suita intreaga 11.245 / 0 cazute / 2 sarite; proba in Chrome cu acordul lui („Da, fă proba
+      acum”; s-a reconectat el ca admin, iesirea din impersonarea de la etapa 10 il deconectase), pe `floraria-mirei`
+      din baza DEMO, doar in ciorna.) REGISTRU, ghidurile, porti, proba in Chrome (cere acordul lui pentru impersonare).
+      Vazut pe ecran: sub „Subsol”, coloanele designului centrat (Logo si text, Linkuri, Contact, Retele sociale) si
+      „Adaugă coloană”; in previzualizare coloanele goale apar DOAR in editor, cu un mesaj; panoul „Contact” (orasul
+      oprit, ca la centratul de azi; magazinul n-are oras, deci nimic de aratat); lista „Adaugă o coloană” cu cele unice
+      oprite („E deja în subsol.”) si newsletterul oprit (fara furnizor); „Text” adaugat la capat, textul vazut pe loc;
+      clicul pe o coloana in previzualizare ii deschide panoul; „Alese de mine”, un link cu sugestiile (pagina proprie),
+      salvat relativ si randat cu adresa magazinului; culoarea de fundal (textul trecut singur pe alb, partea legala
+      lizibila) si „Implicită” inapoi exact la design; „Înapoi sus” oprit; textul de langa „©”; designul schimbat pe
+      „Închis, pe coloane” si „Deschis, pe coloane”: aceleasi coloane, una langa alta (`1.4fr 1fr 1.2fr 1fr 1.4fr`); „+”
+      de sub „Contact”: „după „Contact””, „Imagine” intrata chiar acolo; la 390 px coloanele una sub alta, cele cu titlu
+      pliate, 0 px peste margine; magazinul public: subsolul publicat, fara nimic din ciorna, fara marcaje.
+      GASIT si reparat: (1) „+” centrat pe marginea de jos acoperea mijlocul unui rand scund (subsolul centrat), iar clicul
+      dat ca sa-l aleaga deschidea lista de adaugare: acum butonul sta in afara elementului, lipit de margine (intra 4 px);
+      (2) la schimbarea designului se pierdeau textul de langa „©” si culorile: `updateSection` pastra doar cheile cu
+      valoare implicita, acum si campurile declarate de varianta noua (proba noua, mutatia prinsa); (3) patratul unei
+      culori nealese se vedea negru: acum estompat cat e „Implicită”. Pus la loc: ciorna prin „Renunță”, data
+      abonamentului; o singura comparatie, totul egal (firma, designul, `page_content`, setarile, data publicarii, ciorna
+      goala, 0 versiuni, 0 mesaje, 1 comanda, pagina neatinsa).
 
 ## Deciziile proprietarului
 

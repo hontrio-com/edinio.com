@@ -24,11 +24,12 @@ etape din „Etapele” sunt facute.** Verificarea finala V1-V6 (27.10) e facuta
 editor, scoasa din Setari. **Etapa 9 = punctul 5 (blocuri ca la paginile proprii pe Acasa, Pagina Magazin si
 pagina de produs, „Conținut liber”), FACUTA si PROBATA** (pasii 9.1-9.5, 27-28.10, cu raspunsurile lui: „Doar
 „Sub produs”” si „Doar pe /magazin”; proba in Chrome pe acordul zilei de 27.10, sablonul verificat pe server).
-**Toata lista lui (punctele 1-5) e facuta.** Urmeaza inchiderea (REGISTRU A in productie, push, verificarile
-din REGISTRU C, capturile si ghidurile din D), DOAR cu acordul lui. Intrebarea despre
-teme a fost pusa si a ramas fara raspuns; ramane
-deschisa pentru lista lui de la final. Planul si bifele: sectiunile „Etapa 4: planul de lucru” si
-„Etapa 5: planul de lucru”.
+**Toata lista lui (punctele 1-5) e facuta.** **Inchiderea a pornit 28.10, cu acordul lui („Da”): pasul 5, ghidurile
+din centrul de ajutor, FACUT** (G.1-G.4, sectiunea „Inchiderea, pasul 5”); raman 5 capturi, de facut de el (REGISTRU D).
+Decizia lui: „nu dai push ca mai avem ceva de facut”, deci **nici migratia din REGISTRU A, nici push-ul, pana spune el**.
+Apoi: contorul de vizitatori masurat (etapa noua) si temele intregi, „dupa ce terminam de verificat tot ce am facut
+acum” (raspunsurile lui din 28.10, in „Deciziile proprietarului”). Planul si bifele: sectiunile „Etapa 4: planul de
+lucru” si „Etapa 5: planul de lucru”.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1013,7 +1014,13 @@ Inventarul (84 de ghiduri in „Design și pagini”, citite toate pe 28.10):
       „Mesaje” cu locul formularelor din magazin; Biblioteca Media (unde e butonul); „Primii pasi” (culoarea, antetul)
       si „Produse” (randul „Recomandate”). Formularul din previzualizare tot scrie „Previzualizare”: verificat.)
       „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.
-- [ ] G.4 Recitirea tuturor ghidurilor atinse fata de cod (fiecare denumire citata cautata in sursa), probele
+- [ ] G.4 (28.10, facut: fiecare citat „...” din categorie cautat in sursa, fara diacritice si fara ghilimele (1084;
+      toate cele scrise acum exista in cod; negasite doar compuneri din cod si etichetele „de altadata”, citate
+      anume); probele centrului de ajutor 42/42 si ale editorului; 425 in `ajutor.ts`; capturile: 5 de facut, doua vechi
+      (ecranele scoase) mutate in `docs/ajutor/capturi-scoase/`; REGISTRU C si D. Porti: tsc 0, `lint:prag` = pragul;
+      ⚠ suita intreaga OPRITA DE SISTEM (memorie putina) dupa 1245 de probe trecute, fisierele de dupa au cazut in
+      milisecunde, fara aserturi, deci n-au rulat; build:ci nerulat. DE RELUAT suita si build-ul, cand spune el.)
+      Recitirea tuturor ghidurilor atinse fata de cod (fiecare denumire citata cautata in sursa), probele
       centrului de ajutor, numarul din `ajutor.ts`, lista capturilor (`npm run capturi -- --lista`), REGISTRU D,
       porti, raport. Fara push.
 

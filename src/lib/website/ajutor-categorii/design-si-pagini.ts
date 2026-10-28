@@ -813,7 +813,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Derulează cardurile. Designul folosit acum are rama colorată și scrie „Activ” în locul butonului.",
             {
               text: "Pe cardul dorit apasă „Alege”. Galeria se închide, iar previzualizarea arată designul nou.",
-              captura: { alt: "Cardurile de design ale unei secțiuni, cu eticheta Activ pe cel folosit și butonul Alege pe celelalte.", src: "/capturi/ajutor/design-si-pagini/cum-schimbi-designul-unei-sectiuni.webp", raport: 16 / 10 },
+              captura: { alt: "Cardurile de design ale unei secțiuni, cu eticheta Activ pe cel folosit și butonul Alege pe celelalte.", raport: 16 / 10 },
             },
             "Apasă „Publică”.",
           ],
@@ -1638,7 +1638,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Bifează, dacă vrei, Afișează fiecare ca un card.",
             {
               text: "Pentru fiecare beneficiu apasă câmpul Pictogramă și alege una din listă.",
-              captura: { alt: "Selectorul de pictograme cu câmpul de căutare.", src: "/capturi/ajutor/design-si-pagini/cum-adaugi-blocul-beneficii.webp", raport: 16 / 10 },
+              captura: { alt: "Selectorul de pictograme cu câmpul de căutare.", raport: 16 / 10 },
             },
             "Completează Titlu și Descriere pentru fiecare beneficiu.",
             "Apasă Adaugă beneficiu pentru încă unul, apoi „Salvează pagina”.",

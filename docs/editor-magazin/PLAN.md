@@ -1437,7 +1437,23 @@ Impartite in trei etape, una cate una, cu raport dupa fiecare: 13 (mentiunile 1,
       Hero (`heroDeschis`); `HeroBanners` rezolva deja linkurile relative cu `resolveHref`. Ghidurile bannerelor,
       continutului liber si al sectiunilor. 7 probe in `etapa-13.test.ts`, una veche (9) adusa la forma noua; mutanti 8/8.)
       Linkul bannerului cu `CampLink`, datele incarcate cand e deschis Hero.
-- [ ] 13.4 Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
+- [x] 13.4 (28.10: ghidurile (bannerele, continutul liber, sectiunile), REGISTRU C; suita intreaga 11.278 / 0 cazute /
+      2 sarite, `build:ci` trece; proba in Chrome cu acordul lui („Da, fă proba acum”), pe `floraria-mirei` din demo, doar
+      in ciorna.) Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
+      Vazut pe ecran, pe Acasa clasica (`pagina_acasa` scoasa temporar): „+” de sub „Banner principal”, „Buton” din
+      galerie: panoul s-a deschis direct pe buton, cu „Adaugă alt bloc aici” si „Șterge”; „Înapoi” in arbore, unde randul
+      scrie „Buton”, cu „Conținut liber” dedesubt; clicul pe rand il deschide iar direct. Efectul „Puls”: `fx-pulse`,
+      `edinio-fx-pulse` ruland (toate 11 efecte au reguli CSS). Animatia „Se mărește”: `data-anim-in`, radacina pornita,
+      `edinio-anim-zoom-in` in desfasurare; „Urcă” se reia de la inceput (28 px). Bannerul (pus temporar in `page_content`:
+      Biblioteca Media a contului e goala, iar incarcarea locala n-are cheile de stocare): „Linkul bannerului 1
+      (opțional)” cu paginile de sistem si paginile proprii; „bu” a gasit produsul, salvat relativ
+      `/product/buchet-de-trandafiri-rosii`, in previzualizare `/floraria-mirei/product/...`. „Șterge” in panoul
+      sectiunii a scos bannerul din arbore si din previzualizare, „Anulează” l-a adus inapoi; „Șterge” din panoul
+      butonului a scos continutul, cu mesajul lui.
+      GASIT si reparat: cu „Ascunde” si „Șterge” pe randul titlului, „Banner principal” iesea „Banner p...”: actiunile
+      stau acum pe randul lor, sub titlu. Pus la loc: ciorna prin „Renunță”, `pagina_acasa`, bannerele goale, data
+      abonamentului; o singura comparatie, totul egal (`page_content` si designul dupa amprenta, ciorna goala, 0
+      versiuni, analitica). Iesirea din impersonare l-a deconectat.
 
 ## Etapa 14: fonturile pe sectiune (de detaliat la inceputul ei)
 

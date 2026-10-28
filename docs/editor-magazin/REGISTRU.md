@@ -167,6 +167,10 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     vrea, e o hotarare a lui).
   - Magazinul cu un singur produs (pagina principala e chiar pagina produsului) nu scrie `product_view`, deci acolo
     contorul nu apare deloc. De discutat daca se vrea.
+- **Etapa 13 (mentiunile din 28.10, seara: 1, 3, 5), de verificat dupa push:** pe un magazin cu pagina principala
+  clasica, un bloc pus cu „+” apare in arbore cu numele lui („Buton”) si se deschide direct; animatia aleasa se vede si
+  in previzualizare; „Ascunde” si „Șterge” stau sub titlul panoului unei sectiuni; linkul bannerului are sugestii, iar
+  un produs ales duce, pe domeniul propriu, la `/product/<slug>` fara prefixul magazinului.
   - Gasit la proba 12.4 si reparat: in editor, pagina de produs arata acum continutul din ciorna (beneficiile,
     intrebarile, pasii, livrarea, efectul butonului, fereastra contorului); pana atunci il arata pe cel publicat pana la
     „Publică”. De verificat dupa push: o schimbare de text in „Beneficiile” paginii de produs se vede in previzualizare

@@ -77,26 +77,36 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={onInapoi} aria-label="Înapoi la secțiuni"
-          className="shrink-0 w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-foreground truncate">{meta?.label ?? sectiune.kind}</h2>
-          {!sectiune.enabled && areOchi && <p className="text-[11px] text-muted-foreground">Ascunsă în magazin</p>}
+      {/*
+        ⚠ Actiunile pe randul lor, sub titlu (gasit la proba 13): langa „Ascunde”, „Șterge” lasa titlului
+        ~70 px in coloana editorului, iar „Banner principal” iesea „Banner p...”.
+      */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={onInapoi} aria-label="Înapoi la secțiuni"
+            className="shrink-0 w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold text-foreground truncate">{meta?.label ?? sectiune.kind}</h2>
+            {!sectiune.enabled && areOchi && <p className="text-[11px] text-muted-foreground">Ascunsă în magazin</p>}
+          </div>
         </div>
-        {areOchi && (
-          <button type="button" onClick={comuta}
-            className="shrink-0 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">
-            {sectiune.enabled ? <><EyeOff className="h-3.5 w-3.5" /> Ascunde</> : <><Eye className="h-3.5 w-3.5" /> Arată</>}
-          </button>
-        )}
-        {poateFiStearsa && (
-          <button type="button" onClick={sterge}
-            className="shrink-0 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors inline-flex items-center gap-1.5">
-            <Trash2 className="h-3.5 w-3.5" /> Șterge
-          </button>
+        {(areOchi || poateFiStearsa) && (
+          <div className="flex gap-2">
+            {areOchi && (
+              <button type="button" onClick={comuta}
+                className="flex-1 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center justify-center gap-1.5">
+                {sectiune.enabled ? <><EyeOff className="h-3.5 w-3.5" /> Ascunde</> : <><Eye className="h-3.5 w-3.5" /> Arată</>}
+              </button>
+            )}
+            {poateFiStearsa && (
+              <button type="button" onClick={sterge}
+                className="flex-1 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors inline-flex items-center justify-center gap-1.5">
+                <Trash2 className="h-3.5 w-3.5" /> Șterge
+              </button>
+            )}
+          </div>
         )}
       </div>
 

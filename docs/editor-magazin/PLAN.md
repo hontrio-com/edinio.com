@@ -36,8 +36,10 @@ FACUTA si PROBATA in Chrome** (pasii 10.1-10.4); **etapa 11 (subsolul pe coloane
 (pasii 11.1-11.4, acordul lui: „Da”, apoi „Da, fă proba acum”). Ambele mentiuni sunt facute, raportul trimis.
 **Etapa 12 (contorul de vizitatori masurat, robotii scosi si din Statistici) FACUTA si PROBATA in Chrome, 28.10, seara**
 (pasii 12.1-12.4), la „Hai sa continuam de unde am ramas”: planul, masuratorile si cele doua raspunsuri ale lui in „Etapa
-12”; la proba s-a gasit si s-a reparat previzualizarea paginii de produs, care nu arata continutul din ciorna. Urmeaza
-raportul si ce spune el. Intre timp `main` a primit reparatia eMAG `dba33c22`, adusa
+12”; la proba s-a gasit si s-a reparat previzualizarea paginii de produs, care nu arata continutul din ciorna.
+**Mentiunile lui din 28.10, seara (cinci), impartite in etapele 13-15** (sectiunea „Mentiunile lui din 28.10, seara”):
+**etapa 13 FACUTA si PROBATA** (blocul pus cu „+” numit si deschis direct, animatiile in editor, „Șterge”, linkul
+bannerului cu sugestii); urmeaza raportul, apoi **etapa 14 (fonturile pe sectiune)** si **15 (Setări > Comanda)**. Intre timp `main` a primit reparatia eMAG `dba33c22`, adusa
 in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si

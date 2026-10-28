@@ -2,7 +2,7 @@
 
 import { ArrowLeft, Copy, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 import type { Block } from "@/lib/pages/blocks.types";
-import { ETICHETA_CONTINUT_LIBER } from "@/lib/storefront/design/continut-liber";
+import { ETICHETA_CONTINUT_LIBER, numeleContinutului } from "@/lib/storefront/design/continut-liber";
 import { ListaBlocuri, type TintaBloc } from "./ListaBlocuri";
 
 /**
@@ -41,8 +41,11 @@ export function PanouContinutLiber({
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div className="min-w-0 flex-1">
-          <h2 className="font-semibold text-foreground leading-snug break-words">{ETICHETA_CONTINUT_LIBER}</h2>
-          <p className="text-[11px] text-muted-foreground leading-snug break-words">{loc}{ascuns ? " · ascuns în magazin" : ""}</p>
+          {/* Dupa blocurile lui, ca in arbore (etapa 13); „Conținut liber” trece in randul mic. */}
+          <h2 className="font-semibold text-foreground leading-snug break-words">{numeleContinutului(blocuri)}</h2>
+          <p className="text-[11px] text-muted-foreground leading-snug break-words">
+            {blocuri.length > 0 ? `${ETICHETA_CONTINUT_LIBER} · ` : ""}{loc}{ascuns ? " · ascuns în magazin" : ""}
+          </p>
         </div>
         <button type="button" onClick={onComutaOchi}
           className="shrink-0 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">

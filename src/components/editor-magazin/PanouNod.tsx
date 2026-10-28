@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowLeft, Eye, EyeOff, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LayoutGrid, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { SectionSettings } from "@/components/store-editor/SectionSettings";
-import { comutaBaraDeAnunt, toggleSection, updateSection } from "@/lib/storefront/design/edit";
+import { comutaBaraDeAnunt, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import { ContinutNod } from "./continut/ContinutNod";
@@ -62,6 +63,17 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
     (d: StoreDesign) => (sectiune.kind === "announcement" ? comutaBaraDeAnunt(d) : toggleSection(d, sectiune.id)),
     `ochi:${sectiune.id}`,
   );
+  /*
+   * „Șterge” langa „Ascunde” (etapa 13, cerut de el). Aceeasi regula ca in arbore: doar sectiunile
+   * paginii principale care se pot scoate. Merge prin ciorna, deci „Anulează” din bara de sus o aduce
+   * inapoi, de aceea nu intreaba inainte.
+   */
+  const poateFiStearsa = meta?.scope === "home" && meta.removable !== false;
+  const sterge = () => {
+    ciorna.aplica((d: StoreDesign) => removeSection(d, sectiune.id));
+    onInapoi();
+    toast.success("Secțiunea a fost ștearsă. O aduci înapoi cu „Anulează”, din bara de sus.");
+  };
 
   return (
     <div className="space-y-5">
@@ -78,6 +90,12 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
           <button type="button" onClick={comuta}
             className="shrink-0 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">
             {sectiune.enabled ? <><EyeOff className="h-3.5 w-3.5" /> Ascunde</> : <><Eye className="h-3.5 w-3.5" /> Arată</>}
+          </button>
+        )}
+        {poateFiStearsa && (
+          <button type="button" onClick={sterge}
+            className="shrink-0 h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors inline-flex items-center gap-1.5">
+            <Trash2 className="h-3.5 w-3.5" /> Șterge
           </button>
         )}
       </div>

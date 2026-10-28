@@ -7,7 +7,7 @@ import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPrev
 import { newProductSection } from "@/lib/store-sections";
 import {
   blocuriLaCale, caleInText, completeazaBlocurileSectiunii, ID_BARA_ANUNT, mutaSectiuneaLa, schimbaBlocuriLaCale, schimbaBlocurile,
-  toateSectiunile, toggleSection, updateSection, type CaleContinut, type LocNou,
+  removeSection, toateSectiunile, toggleSection, updateSection, type CaleContinut, type LocNou,
 } from "@/lib/storefront/design/edit";
 import { adaugaColoana, adaugaContinut, comutaBloc, duplicaContinut, esteContinut, schemaBlocurilor, stergeContinut } from "@/lib/storefront/design/blocuri";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
@@ -28,7 +28,7 @@ import {
 } from "@/lib/editor-magazin/pagini";
 import { createBlock, createBlockAcasa, type BlockType, type SectiuneAcasa } from "@/lib/pages/blocks.types";
 import { findBlock, insertAtTop, insertIntoColumn, updateBlockInTree } from "@/lib/pages/block-tree";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArborePagina, type TintaBloc } from "./ArborePagina";
@@ -52,8 +52,10 @@ import { usePaginaProprie } from "./usePaginaProprie";
 import type { CheieSetare } from "@/lib/editor-magazin/setari";
 import { alegereDinClic } from "@/lib/editor-magazin/continut-liber";
 import {
-  ceAdaugaPlusul, continutNou, puncteDeAdaugare, sectiuneNoua, type Adaugare, type ContextAdaugare,
+  ceAdaugaPlusul, continutNou, puncteDeAdaugare, sectiuneNoua, tintaLangaBloc, type Adaugare, type ContextAdaugare,
 } from "@/lib/editor-magazin/adaugare";
+import { blocUnic } from "@/lib/storefront/design/continut-liber";
+import { FurnizorLegaturi } from "@/components/pages/editor/CampLink";
 
 /** Filele panoului din stanga; „Setări” din etapa 8 (lista lui, 27.10.2026). */
 export type FilaEditor = "sectiuni" | "stil" | "setari";
@@ -355,6 +357,8 @@ export function EditorMagazin({
   const liberAici = useMemo(() => (liber && liber.cheie === cheieLiber ? liber : null), [liber, cheieLiber]);
   const blocuriLibere = useMemo(() => (caleLiber ? blocuriLaCale(design, caleLiber) ?? [] : []), [design, caleLiber]);
   const blocLiberDeschis = useMemo(() => findBlock(blocuriLibere, liberAici?.bloc ?? null), [blocuriLibere, liberAici]);
+  /** Un container de pe Acasa cu un singur bloc: se deschide direct pe el, iar „Înapoi” duce in arbore (etapa 13). */
+  const unBlocPeAcasa = !!caleLiber && !caleLiber.bloc && blocuriLibere.length === 1;
   /** Unde sta continutul deschis, in cuvinte, pentru capul panourilor. */
   const locLiber = useMemo(() => {
     if (!sectiuneSelectata || !caleLiber) return "";
@@ -509,11 +513,23 @@ export function EditorMagazin({
     setPeste(null);
     setSelectat(id);
     setBlocSelectat(null);
-    setLiber(null);
     setContinutNouCerut(null);
     setColoanaNouaCeruta(null);
+    /*
+     * Etapa 13 (cerut de el): un „Conținut liber” cu un SINGUR bloc se deschide direct pe blocul lui.
+     * Butonul pus cu „+” e, pentru om, un buton; lista containerului cu un rand era un pas degeaba.
+     */
+    const sectiune = design.home.find((s) => s.id === id);
+    const unic = sectiune?.kind === "continut_liber" ? blocUnic(sectiune.settings) : null;
+    if (unic) {
+      const cheie = caleInText({ sectiune: id, bloc: null });
+      setLiber({ cheie, bloc: unic.id, tinta: null });
+      arataInPrevizualizare(idBloc(cheie, unic.id));
+      return;
+    }
+    setLiber(null);
     arataInPrevizualizare(id);
-  }, [arataInPrevizualizare]);
+  }, [arataInPrevizualizare, design.home]);
 
   const selecteazaBloc = useCallback((idSectiune: string, idBlocului: string) => {
     setPeste(null);
@@ -532,6 +548,21 @@ export function EditorMagazin({
     setContinutNouCerut(null);
     setColoanaNouaCeruta(null);
   }, []);
+
+  /**
+   * Sterge „Conținut liber”-ul deschis: pe Acasa e o sectiune, sub produs si pe Pagina Magazin un bloc al
+   * paginii. Etapa 13 (cerut de el, „vreau să apară și Șterge”): pana acum, pe Acasa se stergea doar din
+   * arbore. Prin ciorna, deci „Anulează” il aduce inapoi.
+   */
+  const stergeContinutulDeschis = () => {
+    if (!caleLiber) return;
+    const cale = caleLiber;
+    ciorna.aplica((d: StoreDesign) => (cale.bloc
+      ? schimbaBlocurile(d, cale.sectiune, (l, sch) => stergeContinut(l, sch, cale.bloc!))
+      : removeSection(d, cale.sectiune)));
+    inapoiLaArbore();
+    toast.success("Conținutul a fost șters. Îl aduci înapoi cu „Anulează”, din bara de sus.");
+  };
 
   const schimbaPagina = useCallback((p: CheiePagina) => {
     setPagina(p);
@@ -870,6 +901,9 @@ export function EditorMagazin({
    */
   const coloanaDeschisa = sectiuneSelectata?.kind === "footer" && !!blocDeschis;
   useEffect(() => { if (coloanaNouaCeruta || coloanaDeschisa) cereDateBlocuri(); }, [coloanaNouaCeruta, coloanaDeschisa, cereDateBlocuri]);
+  // Linkurile bannerelor din Hero au sugestii (etapa 13): paginile, categoriile si produsele vin din aceleasi date.
+  const heroDeschis = sectiuneSelectata?.kind === "hero";
+  useEffect(() => { if (heroDeschis) cereDateBlocuri(); }, [heroDeschis, cereDateBlocuri]);
 
   /** Un sablon nou al paginii de produs, pornit de la Implicit, deschis pe loc in setarile lui (4b). */
   const sablonNou = useCallback(() => {
@@ -992,15 +1026,35 @@ export function EditorMagazin({
                 {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}
               </div>
             ) : caleLiber && cheieLiber && liberAici?.tinta && dateBlocuri ? (
-              <PanouAdaugaBloc tinta={liberAici.tinta} date={dateBlocuri} inapoiLa="conținut" onBloc={adaugaBlocLiber}
-                laSfarsit="La sfârșitul conținutului" onInapoi={() => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })} />
+              <PanouAdaugaBloc tinta={liberAici.tinta} date={dateBlocuri} inapoiLa={unBlocPeAcasa ? "bloc" : "conținut"} onBloc={adaugaBlocLiber}
+                laSfarsit="La sfârșitul conținutului"
+                onInapoi={() => setLiber({ cheie: cheieLiber, bloc: unBlocPeAcasa ? blocuriLibere[0].id : null, tinta: null })} />
             ) : caleLiber && cheieLiber && blocLiberDeschis && dateBlocuri ? (
-              <PanouBlocComun key={blocLiberDeschis.id} bloc={blocLiberDeschis} date={dateBlocuri} loc={locLiber} inapoiLa="conținut"
+              <PanouBlocComun key={blocLiberDeschis.id} bloc={blocLiberDeschis} date={dateBlocuri} loc={locLiber}
+                inapoiLa={unBlocPeAcasa ? "secțiuni" : "conținut"}
                 onSchimba={(patch, cheie) => ciorna.aplica(
                   (d: StoreDesign) => schimbaBlocuriLaCale(d, caleLiber, (bs) => updateBlockInTree(bs, blocLiberDeschis.id, patch)),
                   cheie,
                 )}
-                onInapoi={() => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })}
+                onInapoi={unBlocPeAcasa ? inapoiLaArbore : () => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })}
+                actiuneSus={unBlocPeAcasa ? (
+                  <div className="flex gap-2">
+                    <button type="button"
+                      onClick={() => setLiber({
+                        cheie: cheieLiber,
+                        bloc: null,
+                        tinta: tintaLangaBloc(blocuriLibere, blocLiberDeschis.id, "jos") ?? { fel: "sus", index: blocuriLibere.length },
+                      })}
+                      className="flex-1 h-10 rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors inline-flex items-center justify-center gap-1.5">
+                      <Plus className="h-3.5 w-3.5" /> Adaugă alt bloc aici
+                    </button>
+                    {/* Blocul e singur in container, deci a-l sterge inseamna a sterge sectiunea. */}
+                    <button type="button" onClick={stergeContinutulDeschis}
+                      className="shrink-0 h-10 px-3 rounded-xl border border-border text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 hover:bg-destructive/5 transition-colors inline-flex items-center gap-1.5">
+                      <Trash2 className="h-3.5 w-3.5" /> Șterge
+                    </button>
+                  </div>
+                ) : undefined}
                 onRedaAnimatia={() => setReluari((r) => ({ ...r, [blocLiberDeschis.id]: (r[blocLiberDeschis.id] ?? 0) + 1 }))} />
             ) : caleLiber && cheieLiber && sectiuneSelectata ? (
               <PanouContinutLiber
@@ -1019,10 +1073,7 @@ export function EditorMagazin({
                   ? ciorna.aplica((d: StoreDesign) => schimbaBlocurile(d, caleLiber.sectiune, (l, sch) => comutaBloc(l, sch, caleLiber.bloc!)), `ochi-bloc:${cheieLiber}`)
                   : ciorna.aplica((d: StoreDesign) => toggleSection(d, caleLiber.sectiune), `ochi:${caleLiber.sectiune}`))}
                 onDuplica={caleLiber.bloc ? () => ciorna.aplica((d: StoreDesign) => schimbaBlocurile(d, caleLiber.sectiune, (l, sch) => duplicaContinut(l, sch, caleLiber.bloc!))) : undefined}
-                onSterge={caleLiber.bloc ? () => {
-                  ciorna.aplica((d: StoreDesign) => schimbaBlocurile(d, caleLiber.sectiune, (l, sch) => stergeContinut(l, sch, caleLiber.bloc!)));
-                  inapoiLaArbore();
-                } : undefined}
+                onSterge={stergeContinutulDeschis}
               />
             ) : sectiuneSelectata && blocDeschis && sectiuneSelectata.kind === "footer" ? (
               <PanouColoanaSubsol key={blocDeschis.id} subsol={sectiuneSelectata} coloana={blocDeschis} ciorna={ciorna} date={dateBlocuri}
@@ -1037,19 +1088,22 @@ export function EditorMagazin({
                 onInapoi={inapoiLaArbore}
               />
             ) : sectiuneSelectata ? (
-              <PanouNod
-                key={sectiuneSelectata.id}
-                sectiune={sectiuneSelectata}
-                ciorna={ciorna}
-                continut={continut}
-                onInapoi={inapoiLaArbore}
-                onSchimbaDesignul={(id) => { setGalerieDesign(id); setVedereMobil("previzualizare"); }}
-                businessId={magazin.id}
-                categorii={categorii}
-                planGratuit={planGratuit}
-                laStil={() => setFila("stil")}
-                onRandSters={() => setSelectat(null)}
-              />
+              /* Sugestiile campurilor de link din panou (bannerele din Hero, etapa 13); fara date, campul ramane text simplu. */
+              <FurnizorLegaturi value={dateBlocuri ? { businessId: dateBlocuri.business.id, ...dateBlocuri.legaturi } : null}>
+                <PanouNod
+                  key={sectiuneSelectata.id}
+                  sectiune={sectiuneSelectata}
+                  ciorna={ciorna}
+                  continut={continut}
+                  onInapoi={inapoiLaArbore}
+                  onSchimbaDesignul={(id) => { setGalerieDesign(id); setVedereMobil("previzualizare"); }}
+                  businessId={magazin.id}
+                  categorii={categorii}
+                  planGratuit={planGratuit}
+                  laStil={() => setFila("stil")}
+                  onRandSters={() => setSelectat(null)}
+                />
+              </FurnizorLegaturi>
             ) : (
               <div className="pb-6">
                 <ArboreSectiuni

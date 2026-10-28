@@ -52,12 +52,14 @@ const integrariSetari = (d: DateBlocuri) => ({
  * Setarile unui bloc (`BlockSettings`), pe orice lista de blocuri: o pagina proprie sau un „Conținut
  * liber” din magazin (etapa 9). `onSchimba` aplica modificarea acolo unde sta lista.
  */
-export function PanouBlocComun({ bloc, date, loc, inapoiLa, onSchimba, onInapoi, onRedaAnimatia }: {
+export function PanouBlocComun({ bloc, date, loc, inapoiLa, actiuneSus, onSchimba, onInapoi, onRedaAnimatia }: {
   bloc: Block;
   date: DateBlocuri;
   /** Unde sta blocul, in cuvinte: titlul paginii sau locul continutului. */
   loc: string;
   inapoiLa?: string;
+  /** Sub cap, inaintea setarilor: „Adaugă alt bloc aici” la blocul deschis direct (etapa 13). */
+  actiuneSus?: React.ReactNode;
   /** O modificare a blocului; `cheie` tine campurile atinse: tastarea intr-un camp e un singur pas la Anuleaza. */
   onSchimba: (patch: Partial<Block>, cheie: string) => void;
   onInapoi: () => void;
@@ -72,6 +74,7 @@ export function PanouBlocComun({ bloc, date, loc, inapoiLa, onSchimba, onInapoi,
       <div className={cn("space-y-5 pb-6", toateClaseleDeFont())}>
         <Antet titlu={eticheta} subtitlu={rezumat ? `${loc} · ${rezumat}` : loc} inapoiLa={inapoiLa}
           icon={<IconitaBloc tip={bloc.type} className="h-4 w-4" />} onInapoi={onInapoi} />
+        {actiuneSus}
         <RedaAnimatia.Provider value={onRedaAnimatia}>
           <BlockSettings
             key={bloc.id}

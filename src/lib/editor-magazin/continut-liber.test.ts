@@ -124,7 +124,8 @@ test("⚠⚠ modificarile continutului trec prin ciorna (Anuleaza, „Publică�
 
 test("paleta: la continut fara „Din pagina principală”; paginile proprii isi pastreaza nota", () => {
   const e = cod(EDITOR);
-  assert.match(e, /<PanouAdaugaBloc tinta=\{liberAici\.tinta\} date=\{dateBlocuri\} inapoiLa="conținut" onBloc=\{adaugaBlocLiber\}/);
+  // ⚠ Etapa 13: cu un singur bloc pe Acasa, „Înapoi” din paleta duce la bloc, nu la lista containerului.
+  assert.match(e, /<PanouAdaugaBloc tinta=\{liberAici\.tinta\} date=\{dateBlocuri\} inapoiLa=\{unBlocPeAcasa \? "bloc" : "conținut"\} onBloc=\{adaugaBlocLiber\}/);
   assert.doesNotMatch(e.slice(e.indexOf("<PanouAdaugaBloc tinta={liberAici.tinta}"), e.indexOf("<PanouAdaugaBloc tinta={liberAici.tinta}") + 300), /onAcasa/);
   assert.match(e, /<PanouAdaugaBloc tinta=\{tintaBloc\} date=\{paginaDeschisa\.date\} estePaginaAcasa=\{paginaDeschisa\.date\.estePaginaAcasa\}/);
   assert.match(cod("src/components/pages/PaletaBlocuri.tsx"), /\{!inColoana && onAcasa && \(/);

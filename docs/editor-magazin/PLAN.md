@@ -1373,6 +1373,83 @@ produs, intre 18 si 27, fara nicio masuratoare. Aprins la 9 magazine (din 148). 
       la prima vizita a zilei). Iesirea din impersonare l-a deconectat. Erorile din consola: doar extensii (ColorZilla pe
       `<body>`, un mesaj de extensie).
 
+## Mentiunile lui din 28.10, seara (dupa etapa 12)
+
+Cuvintele lui:
+1. „Pe prima pagina de exemplu am dat pe + si am adaugat un buton iar in stanga acolo scrie Continut Liber, nu ar
+   trebuie mai bine sa fie direct elementul in cazul nostru Buton in loc de Continut liber? Iar la buton cand apas sa i
+   fac setari si ii dau de exemplu o animatie, nu vad animatia la buton cand selectez diferite animatii”
+2. „La elemente de exemplu la Randurile de produse sau in header sau in Hero nu putem face sa se poata selecta orice
+   font? Sa avem mai multa libertate de personalizare, pentru ca cineva poate vrea un anume font la o anumita sectiune”
+3. „Cand apas pe o sectiune acolo apare doar Ascunde, vreau sa apara si Sterge”
+4. „Trebuie sa vedem ce facem si cum orgnaizam tipul de Checkout ca sa nu se incurce utilizatorul, practic trebuie sa
+   il facem cumva din Setari de aici sa selecteze tipul de Checkout, Standard cu sau Formular de comanda. Tu ce zici?
+   Ce solutii ai?”
+5. „Acolo la Banner principal la imaginile bannerelor unde pui link sa putem selecta si o pagina interna din magazin
+   fara sa mai fie nevoit sa puna URL sau sa selecteze o anumita categorie, sau un anumit produs”
+
+Raspunsurile lui la intrebari (toate trei pe varianta recomandata): blocul pus cu „+” „Numele lui, deschis direct”;
+fonturile „Cele 36 găzduite de noi”; checkout-ul „În Setări > Comanda”.
+
+Ce s-a gasit in cod inainte de plan: (1) un „+” pe Acasa pune blocul intr-o sectiune `continut_liber` noua, iar
+arborele scrie eticheta TIPULUI („Conținut liber”); in editor, `ContinutLiber` deseneaza blocurile din designul viu, deci
+ocoleste slotul de pe server, singurul care aducea `SCRIPT_ANIMATII` + `PornesteAnimatiile`: animatia de intrare nu
+avea cine s-o porneasca (miscarea redusa e oprita la el, masurat). (2) Stilul are 8 fonturi (`FONT_OPTIONS`), paginile
+proprii 36 (`FONTURI_PAGINA`, gazduite prin `next/font`, `preload: false`). (3) Panoul sectiunii (`PanouNod`) are doar
+„Ascunde”; arborele sterge cu `removeSection` prin ciorna (se poate anula). (4) Tipul de checkout e VARIANTA de design a
+sectiunii `checkout` (`classic` = „Formular în fereastră”, `page_two_col` = „Pagină separată”), aleasa din „Schimbă
+designul”; campurile si optiunile extra stau in Setari > Formular de comandă; „Comandă acum” de pe produs deschide
+oricum formularul in fereastra. (5) Linkul bannerului e un `input` simplu (`ContinutAcasa.tsx`); campul cu sugestii
+(`CampLink` + `FurnizorLegaturi`) exista din etapa 11.
+
+Impartite in trei etape, una cate una, cu raport dupa fiecare: 13 (mentiunile 1, 3, 5), 14 (2), 15 (4).
+
+## Etapa 13: blocul pus cu „+”, animatia, „Șterge”, linkurile bannerului (scris 28.10.2026, inainte de cod)
+
+### Deciziile etapei
+
+1. **Un „Conținut liber” se numeste dupa blocurile lui**, in arbore si in capul panoului: „Buton”, „Buton, Text”, peste
+   doua „Buton, Text și încă 2”; dedesubt, mic, „Conținut liber”. Gol: „Conținut liber”, ca azi.
+2. **Cu un singur bloc, clicul il deschide direct** (din arbore si din „Înapoi”-ul lui): panoul butonului, nu lista
+   containerului. „Înapoi” din el duce inapoi in arbore, iar in panou sta „Adaugă alt bloc aici”, care deschide lista
+   de adaugare a containerului, dupa el. Cu doua sau mai multe, ca azi (lista, apoi blocul).
+3. **Animatiile pornesc si in editor**: `ContinutLiber`, pe ramura din editor, pune `PornesteAnimatiile` langa
+   blocuri, ca slotul de pe server; cheia de animatie remonteaza blocul, iar observatorul il prinde. Efectele butonului
+   (`fx-*`, CSS) se verifica pe ecran.
+4. **„Șterge” in panoul sectiunii**, langa „Ascunde”, numai unde arborele are cosul (aceeasi regula, `removable`):
+   `removeSection` prin ciorna, se poate anula din bara de sus; dupa stergere se intoarce in arbore, cu un mesaj.
+5. **Linkul bannerului cu sugestii** (`CampLink`): paginile magazinului, paginile proprii, categoriile si produsele;
+   se poate scrie mai departe orice adresa. Datele vin din acelasi incarcator ca la subsol.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 13.1 (28.10: `numeleContinutului` si `blocUnic` in `continut-liber.ts`; randul din `SectionList` si capul lui
+      `PanouContinutLiber` dupa blocuri, „Conținut liber” / „Gol” dedesubt; `selecteaza` deschide direct blocul unic;
+      `unBlocPeAcasa`: „Înapoi” in arbore, paleta se intoarce la bloc, „Adaugă alt bloc aici” (`actiuneSus` in
+      `PanouBlocComun`, tinta `tintaLangaBloc(..., "jos")`) si „Șterge” langa el.)
+      Numele „Conținut liber” dupa blocuri (functie pura + probe), in arbore si in panou; deschiderea directa
+      cu un singur bloc, „Înapoi” in arbore, „Adaugă alt bloc aici”.
+- [x] 13.2 (28.10: `<PornesteAnimatiile />` langa `BlockRenderer` in ramura de editor a lui `ContinutLiber`; „Șterge” in
+      `PanouNod` (`poateFiStearsa` = regula arborelui, `removeSection` prin ciorna, inapoi in arbore, mesaj) si in
+      panoul containerului de pe Acasa (`stergeContinutulDeschis`, comun cu blocul deschis direct).)
+      Animatiile in editor (`PornesteAnimatiile` in `ContinutLiber`); „Șterge” in `PanouNod`.
+- [x] 13.3 (28.10: `CampLink` in `ContinutHero`, `FurnizorLegaturi` in jurul lui `PanouNod`, datele cerute cand e deschis
+      Hero (`heroDeschis`); `HeroBanners` rezolva deja linkurile relative cu `resolveHref`. Ghidurile bannerelor,
+      continutului liber si al sectiunilor. 7 probe in `etapa-13.test.ts`, una veche (9) adusa la forma noua; mutanti 8/8.)
+      Linkul bannerului cu `CampLink`, datele incarcate cand e deschis Hero.
+- [ ] 13.4 Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
+
+## Etapa 14: fonturile pe sectiune (de detaliat la inceputul ei)
+
+Hotarat (raspunsul lui): cele 36 de fonturi gazduite de noi, separat pentru titluri si pentru text, pe orice sectiune,
+implicit „Ca în Stil”; aceleasi 36 si in fila Stil, pentru tot magazinul (azi 8).
+
+## Etapa 15: Setări > Comanda (de detaliat la inceputul ei)
+
+Hotarat (raspunsul lui): un singur loc, „Comanda”, in fila Setari: sus tipul („Formular de comandă, în fereastră” sau
+„Standard, pagină de finalizare”), dedesubt campurile formularului si optiunile extra; se salveaza direct, ca restul
+setarilor; pagina „Finalizarea comenzii” din editor arata tipul ales si trimite acolo.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -1401,6 +1478,8 @@ produs, intre 18 si 27, fara nicio masuratoare. Aprins la 9 magazine (din 148). 
   blocuri”) si subsolul „Pe coloane-bloc” (vezi „Mentiunile lui din 28.10”).
 - 28.10.2026, seara, la etapa 12 (contorul masurat): ce numara „Alege comerciantul” („Acum” sau „Ultimele 24 de ore”,
   implicit 24 de ore); robotii „Și din Statistici” (nu se mai scriu deloc).
+- 28.10.2026, seara, mentiunile de dupa etapa 12 (vezi „Mentiunile lui din 28.10, seara”): blocul pus cu „+” „Numele lui,
+  deschis direct”; fonturile „Cele 36 găzduite de noi”; checkout-ul „În Setări > Comanda”.
 
 ## De ce Shopify si nu Elementor
 

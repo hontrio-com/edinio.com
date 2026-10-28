@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Upload, X } from "lucide-react";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { ProductPicker } from "@/components/pages/ProductPicker";
+import { CampLink } from "@/components/pages/editor/CampLink";
 import { MAX_ORDINE_MANUALA, type ModAsezare, type ModRest } from "@/lib/storefront/asezare";
 import { MAX_HERO_BANNERS } from "@/lib/storefront/design/hero-banners";
 import type { ContinutMagazin } from "../useContinutMagazin";
@@ -67,9 +68,14 @@ export function ContinutHero({ continut }: { continut: ContinutMagazin }) {
                 </button>
               </div>
             </div>
-            <input type="text" value={b.link ?? ""} className={inputMicCls} aria-label={`Linkul bannerului ${i + 1}`}
-              placeholder="Link la apăsare (opțional): /produse, /contact sau https://..."
-              onChange={(e) => setBannere((l) => l.map((x) => (x.id === b.id ? { ...x, link: e.target.value } : x)))} />
+            {/*
+              Cu sugestii (etapa 13, cerut de el): paginile magazinului, paginile proprii, categoriile si, cand
+              scrii, produsele. Se poate scrie mai departe orice adresa. Legatura se tine relativa la magazin si
+              se rezolva la randare (`resolveHref`), deci merge si pe domeniul propriu.
+            */}
+            <CampLink eticheta={`Linkul bannerului ${i + 1} (opțional)`} valoare={b.link ?? ""}
+              placeholder="Alege o pagină, o categorie sau un produs, ori scrie un link"
+              onChange={(v) => setBannere((l) => l.map((x) => (x.id === b.id ? { ...x, link: v } : x)))} />
           </div>
         ))}
         {bannere.length < MAX_HERO_BANNERS && (

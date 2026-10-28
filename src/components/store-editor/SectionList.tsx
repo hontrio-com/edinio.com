@@ -19,6 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
 import { useId } from "react";
 import { poateFiDuplicata } from "@/lib/storefront/design/edit";
+import { blocuriDinSetari, ETICHETA_CONTINUT_LIBER, numeleContinutului } from "@/lib/storefront/design/continut-liber";
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 
@@ -141,6 +142,16 @@ function SectionRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id, disabled: !mutabila });
   const meta = sectionMeta(section.kind);
   const varianta = variantMeta(section.kind, section.variant);
+  /*
+   * Un „Conținut liber” se numeste dupa blocurile lui („Buton”, „Buton, Text”), cu „Conținut liber” mic
+   * dedesubt (etapa 13, cerut de el): numele cutiei nu spunea ce e in ea.
+   */
+  const continutLiber = section.kind === "continut_liber";
+  const blocuriLibere = continutLiber ? blocuriDinSetari(section.settings) : [];
+  const nume = continutLiber ? numeleContinutului(blocuriLibere) : (meta?.label ?? section.kind);
+  const subtitlu = continutLiber
+    ? (blocuriLibere.length === 0 ? "Gol" : ETICHETA_CONTINUT_LIBER)
+    : (varianta?.label ?? section.variant);
   /**
    * Header-ul si footerul nu se pot stinge.
    *
@@ -169,7 +180,7 @@ function SectionRow({
           type="button"
           {...attributes}
           {...listeners}
-          aria-label={`Mută ${meta?.label ?? section.kind}`}
+          aria-label={`Mută ${nume}`}
           className="w-8 h-11 shrink-0 flex items-center justify-center text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
         >
           <GripVertical className="h-4 w-4" />
@@ -179,11 +190,11 @@ function SectionRow({
         <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center py-2 text-left">
           <span className="min-w-0">
             <span className={`flex items-center gap-1.5 text-sm font-medium ${section.enabled ? "text-foreground" : "text-muted-foreground"}`}>
-              <span className="truncate">{meta?.label ?? section.kind}</span>
+              <span className="truncate">{nume}</span>
               {marcaj}
             </span>
             <span className="block text-[11px] text-muted-foreground truncate">
-              {varianta?.label ?? section.variant}
+              {subtitlu}
               {!section.enabled && " - ascunsă"}
             </span>
           </span>

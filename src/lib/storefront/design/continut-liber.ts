@@ -92,6 +92,30 @@ export function blocuriDinSetari(setari: Record<string, unknown> | undefined): B
 }
 
 /**
+ * Numele unui container dupa blocurile lui: „Buton”, „Buton, Text”, „Buton, Text și încă 2”; gol,
+ * „Conținut liber”.
+ *
+ * ⚠ Cerut de el (28.10.2026, etapa 13): un buton pus cu „+” pe prima pagina aparea in arbore drept
+ * „Conținut liber”, adica numele cutiei, nu al lucrului din ea. Cu trei-patru asemenea cutii, nu stiai
+ * care e care fara sa le deschizi pe rand.
+ */
+/**
+ * Singurul bloc al unui container, sau `null` cand are zero ori mai multe. Cu un singur bloc, clicul pe
+ * container il deschide direct pe el (etapa 13): lista unui singur rand era un pas in plus.
+ */
+export function blocUnic(setari: Record<string, unknown> | undefined): Block | null {
+  const blocuri = blocuriDinSetari(setari);
+  return blocuri.length === 1 ? blocuri[0] : null;
+}
+
+export function numeleContinutului(blocuri: readonly Block[]): string {
+  const nume = blocuri.map((b) => BLOCK_META[b.type]?.label ?? b.type);
+  if (nume.length === 0) return ETICHETA_CONTINUT_LIBER;
+  if (nume.length <= 2) return nume.join(", ");
+  return `${nume.slice(0, 2).join(", ")} și încă ${nume.length - 2}`;
+}
+
+/**
  * Aceleasi blocuri, cu id-uri NOI (si cele din coloane): la duplicarea unui continut. Doua copii cu
  * aceleasi id-uri ar fi raspuns impreuna la Anuleaza, la clicul din previzualizare si la formulare.
  */

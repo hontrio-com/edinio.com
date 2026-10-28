@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { BlockRenderer } from "@/components/pages/BlockRenderer";
+import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
 import { SlotBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import { cheieAnimatie } from "@/lib/pages/animatii";
@@ -97,24 +98,33 @@ export function ContinutLiber({ cale }: { cale: CaleContinut }) {
     </div>
   );
   return (
-    <BlockRenderer
-      blocks={blocuri}
-      ctx={{
-        color: chrome.color,
-        basePath: chrome.basePath,
-        storeSlug: chrome.business.slug,
-        social: chrome.social,
-        businessId: chrome.business.id,
-        products: viu.date.products,
-        bundles: viu.date.bundles,
-        forms: viu.date.forms,
-        plati: viu.date.plati,
-        curieri: viu.date.curieri,
-        preview: true,
-        caleDesign: cheie,
-        h1Id: null,
-        marcheazaBloc,
-      }}
-    />
+    /*
+     * ⚠ PORNIREA ANIMATIILOR, si in editor (etapa 13, gasit dupa mentiunea lui: „nu vad animatia la
+     * buton”). In magazin, scriptul vine cu slotul de pe server (`slotBlocuri`); aici slotul e ocolit,
+     * fiindca blocurile se deseneaza din designul viu, deci animatia aleasa n-avea cine s-o porneasca.
+     * Cheia de animatie remonteaza blocul, iar observatorul pornit aici il prinde si il anima.
+     */
+    <div className="contents">
+      <BlockRenderer
+        blocks={blocuri}
+        ctx={{
+          color: chrome.color,
+          basePath: chrome.basePath,
+          storeSlug: chrome.business.slug,
+          social: chrome.social,
+          businessId: chrome.business.id,
+          products: viu.date.products,
+          bundles: viu.date.bundles,
+          forms: viu.date.forms,
+          plati: viu.date.plati,
+          curieri: viu.date.curieri,
+          preview: true,
+          caleDesign: cheie,
+          h1Id: null,
+          marcheazaBloc,
+        }}
+      />
+      <PornesteAnimatiile />
+    </div>
   );
 }

@@ -222,7 +222,8 @@ test("⚠⚠ la client pleaca designul FARA blocuri; blocurile raman pe server, 
 test("⚠⚠ rutele trimit randul de setari fara designul brut", () => {
   assert.match(cod("src/app/(public)/[slug]/page.tsx"), /const setariDeTrimis = faraDesignulBrut\(storeSettings\);/);
   assert.match(cod("src/lib/storefront/catalog/pagina-magazin.tsx"), /return faraDesignulBrut\(rest\);/);
-  assert.match(cod("src/app/(public)/[slug]/_rute/pagina-produs.tsx"), /storeSettings=\{faraDesignulBrut\(storeSettings\) as never\}/);
+  // ⚠ Din proba 12.4: tot fara designul brut, dar cu continutul din ciorna peste `page_content` (in editor).
+  assert.match(cod("src/app/(public)/[slug]/_rute/pagina-produs.tsx"), /storeSettings=\{faraDesignulBrut\(storeSettings && \{ \.\.\.storeSettings, page_content: pageContent as Json \}\) as never\}/);
 });
 
 test("in client: pagina principala, Pagina Magazin (doar pe `/magazin`) si containerul", () => {

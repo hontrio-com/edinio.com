@@ -431,13 +431,13 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           pasi: [
             "Intră în Editează magazinul și alege „Pagina de produs” la „Editezi”.",
             "Pentru zoom, apasă chiar rândul „Pagina de produs” și, la „Conținut”, apasă comutatorul „Zoom pe imagine”.",
-            "Întoarce-te la listă. Pentru contor, apasă ochiul de pe blocul „Contorul de vizitatori”.",
+            "Întoarce-te la listă. Pentru contor, apasă ochiul de pe blocul „Contorul de vizitatori”, apoi deschide blocul și alege ce numără: „Ultimele 24 de ore” sau „Acum”.",
             "Pentru etichetă, apasă ochiul de pe blocul „Eticheta „Calitate verificată””, la designul Clasic.",
             "Apasă „Publică”.",
           ],
           detalii: [
             { titlu: "Zoom pe imagine", text: "Mărește imaginea produsului când clientul trece cu mouse-ul peste ea, pe calculator. Este pornit din start. Pe telefon nu există trecere cu mouse-ul, deci efectul se vede doar pe calculator." },
-            { titlu: "Contorul de vizitatori", text: "Arată un număr de persoane pe pagina produsului. În panoul blocului scrie: „Numărul afișat nu e măsurat: e fix pentru fiecare produs, între 18 și 27.” E ascuns din start." },
+            { titlu: "Contorul de vizitatori", text: "Arată câți oameni diferiți au deschis produsul, fără cel care se uită și fără roboți. Din start numără ultimele 24 de ore; „Acum” înseamnă ultimele 15 minute. Când nu e nimeni, contorul nu apare pe pagină, iar în previzualizarea editorului vezi atunci un exemplu, 3. La designul Clasic se vede doar pe calculator. Blocul e ascuns din start." },
             { titlu: "Eticheta „Calitate verificată”", text: "Este eticheta cu stele de lângă titlu. Există doar la designul Clasic și e ascunsă din start." },
             { titlu: "Comutatoarele de altădată", text: "„Contor vizitatori live” și „Badge Calitate verificată” din vechiul ecran „Pagina produs” au devenit ochiul blocurilor de mai sus." },
           ],

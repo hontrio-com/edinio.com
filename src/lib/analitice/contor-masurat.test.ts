@@ -139,3 +139,14 @@ test("identitatea: formula vizitatorului sta intr-un singur loc", () => {
     "omul se scoate cu AMANDOUA id-urile, de azi si de ieri");
   assert.match(c, /sareaUneiZileTrecute\(ziuaDinainte\(zi\)\)/);
 });
+
+test("ruta produsului: in editor, componenta primeste continutul din ciorna (gasit la proba 12.4)", () => {
+  /*
+   * Componenta paginii de produs isi citeste continutul din `storeSettings.page_content`. Ruta ii dadea
+   * randul din baza, deci in editor beneficiile, intrebarile, pasii, livrarea, efectul butonului si
+   * fereastra contorului ramaneau cele publicate pana la „Publică”, desi ciorna le avea.
+   */
+  const c = cod("src/app/(public)/[slug]/_rute/pagina-produs.tsx");
+  assert.match(c, /storeSettings=\{faraDesignulBrut\(storeSettings && \{ \.\.\.storeSettings, page_content: pageContent as Json \}\) as never\}/);
+  assert.doesNotMatch(c, /storeSettings=\{faraDesignulBrut\(storeSettings\) as never\}/);
+});

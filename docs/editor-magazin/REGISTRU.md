@@ -157,6 +157,20 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 - **Schimbari de comportament de etapa 8, de urmarit dupa push:**
   - ⚠ Comerciantii care au invatat Setari > General / Formular de comandă / Catalog dupa etapa 1 nu le mai gasesc acolo: cardul „Datele magazinului” din General ii trimite in editor. Si invers fata de restul editorului: aici „Salvează” scrie direct, fara „Publică”.
   - Dupa o salvare din fila „Setări”, editorul cere din nou datele de pe server (`router.refresh()`): ciorna si pagina deschisa raman, previzualizarea se reincarca.
+- **Etapa 12 (contorul de vizitatori masurat, fara roboti), de verificat dupa push:**
+  - Magazinele cu contorul aprins (9 din 148 pe 25.10): pastila arata oameni masurati, „... au vazut produsul in
+    ultimele 24 de ore” din start, sau lipseste cand nu e nimeni. ⚠ In primele 24 de ore poate numara si roboti scrisi
+    INAINTE de push; ies singuri din fereastra.
+  - ⚠ **Statistici scad de la push, si e corect:** robotii nu se mai scriu (pe 28.10 erau aproape jumatate din vederile
+    de produs). Vizitatorii, afisarile si vederile de produs scad; o comparatie cu o perioada de dinainte arata scaderea.
+    Nota din cartonasele „Vizitatori” si „Afisari de pagina” o spune. Randurile vechi raman (stergerea lor, daca se
+    vrea, e o hotarare a lui).
+  - Magazinul cu un singur produs (pagina principala e chiar pagina produsului) nu scrie `product_view`, deci acolo
+    contorul nu apare deloc. De discutat daca se vrea.
+  - Gasit la proba 12.4 si reparat: in editor, pagina de produs arata acum continutul din ciorna (beneficiile,
+    intrebarile, pasii, livrarea, efectul butonului, fereastra contorului); pana atunci il arata pe cel publicat pana la
+    „Publică”. De verificat dupa push: o schimbare de text in „Beneficiile” paginii de produs se vede in previzualizare
+    inainte de „Publică”, iar magazinul public ramane pe cel publicat.
 
 ## D. Capturi si texte de ajutor
 - **FACUT 28.10.2026, ghidurile (inchiderea, pasul 5; PLAN, „Inchiderea, pasul 5”):** toata categoria „Design și pagini” (84 de ghiduri citite fata de cod, rescrise cele care descriau „Design magazin”, „Design secțiuni”, „Ordinea secțiunilor”, „Salvează” pe sectiuni si constructorul de pagini retras), plus trimiterile din „Primii pași” si „Produse”. Noi: cum e impartit editorul, bucatile paginii de produs, istoricul publicarilor, sabloanele de produs (425 de ghiduri). Fiecare citat din categorie cautat in sursa (1084): toate cele scrise acum exista in cod. Ghidul „Conținut liber” ramane fara captura, dupa regula din `ajutor.ts` (cuvintele ajung).
@@ -185,7 +199,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   `storefront_design_draft` pastreaza o ciorna identica cu ce e publicat (salvarea automata o scrie). Nu
   strica nimic (designul e acelasi), dar coloana nu mai e `NULL`. Golirea automata ar trebui sa treaca prin
   garda de concurenta: un `discard` simplu ar sterge si ciorna altei file. Existenta inca de la etapa 2.
-- **Hotarat 28.10 (el: „Îl facem real (etapă nouă)”): contorul de vizitatori** afiseaza un numar nemasurat, fix pe produs (18-27); aprins la 9 magazine. Editorul nou o spune in panoul blocului. Devine un numar masurat intr-o etapa noua, dupa verificarea a ce s-a facut acum; pana atunci ghidul spune deschis ca nu e masurat.
+- ~~**Hotarat 28.10 (el: „Îl facem real (etapă nouă)”): contorul de vizitatori** afiseaza un numar nemasurat, fix pe produs (18-27); aprins la 9 magazine. Editorul nou o spune in panoul blocului. Devine un numar masurat intr-o etapa noua, dupa verificarea a ce s-a facut acum; pana atunci ghidul spune deschis ca nu e masurat.~~ **REZOLVAT de etapa 12 (28.10):** numara oameni distincti, fara cel care se uita si fara roboti, in fereastra aleasa de comerciant (ultimele 24 de ore din start, sau „Acum”); ghidul `cum-pornesti-elementele-de-pe-pagina-produsului` spune asa.
 - **De discutat (vazut la proba 9.5): previzualizarea nu sare la blocul nou.** Dupa „Adaugă bloc” intr-un „Conținut liber”,
   blocul apare in arbore si i se deschide panoul, dar previzualizarea ramane unde era; continutul de sub produs, de
   pilda, trebuie derulat de mana. La fel se poarta paginile proprii (etapa 5), deci nu e o regresie.

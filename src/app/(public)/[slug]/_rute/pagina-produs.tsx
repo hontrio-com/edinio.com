@@ -393,7 +393,14 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             business={pentruBrowser(magazin) as never}
             product={product}
             // Fara designul brut (etapa 9): ar fi dus in HTML toate blocurile „Conținut liber”, necuratate.
-            storeSettings={faraDesignulBrut(storeSettings) as never}
+            /*
+             * ⚠ CU CONTINUTUL DIN CIORNA, nu cu cel publicat (gasit la proba 12.4, 28.10.2026). Componenta isi
+             * citeste continutul din `storeSettings.page_content`; primea randul din baza, deci in editor
+             * beneficiile, intrebarile, pasii, livrarea, efectul butonului si contorul ramaneau cele publicate
+             * pana la „Publică”. Pagina principala le pune peste de la etapa 6; aici lipsea. Pentru vizitatori
+             * ciorna e goala, deci `pageContent` e chiar `page_content`.
+             */
+            storeSettings={faraDesignulBrut(storeSettings && { ...storeSettings, page_content: pageContent as Json }) as never}
             basePath={basePath}
             hasCardPayment={hasCardPayment}
             bundleComponents={bundleComponents}

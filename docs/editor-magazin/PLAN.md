@@ -34,8 +34,10 @@ mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5). **Men
 „+” in previzualizare, subsolul customizabil complet; raspunsurile in „Mentiunile lui din 28.10”): **etapa 10 („+”)
 FACUTA si PROBATA in Chrome** (pasii 10.1-10.4); **etapa 11 (subsolul pe coloane-bloc) FACUTA si PROBATA in Chrome**
 (pasii 11.1-11.4, acordul lui: „Da”, apoi „Da, fă proba acum”). Ambele mentiuni sunt facute, raportul trimis.
-**Etapa 12 (contorul de vizitatori masurat) PORNITA 28.10, seara**, la „Hai sa continuam de unde am ramas”: planul,
-masuratorile si cele doua raspunsuri ale lui in „Etapa 12”. Intre timp `main` a primit reparatia eMAG `dba33c22`, adusa
+**Etapa 12 (contorul de vizitatori masurat, robotii scosi si din Statistici) FACUTA si PROBATA in Chrome, 28.10, seara**
+(pasii 12.1-12.4), la „Hai sa continuam de unde am ramas”: planul, masuratorile si cele doua raspunsuri ale lui in „Etapa
+12”; la proba s-a gasit si s-a reparat previzualizarea paginii de produs, care nu arata continutul din ciorna. Urmeaza
+raportul si ce spune el. Intre timp `main` a primit reparatia eMAG `dba33c22`, adusa
 in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
@@ -1346,8 +1348,30 @@ produs, intre 18 si 27, fara nicio masuratoare. Aprins la 9 magazine (din 148). 
       `produs_dovada` in `noduri.ts` (`felBloc("dovada")`), deci cheia intra singura in ciorna (`CHEI_PC_CIORNA`); in
       `ContinutBloc` alegerea „Ultimele 24 de ore” / „Acum” si nota noua, cu exemplul spus.)
       Editorul: `social_proof_window`, nodul `produs_dovada`, alegerea din panoul blocului si nota noua. Probe.
-- [ ] 12.4 Ghidul, REGISTRU (D rezolvat, C), porti, proba in Chrome pe demo (cere acordul lui pentru impersonare;
+- [x] 12.4 (28.10: ghidul `cum-pornesti-elementele-de-pe-pagina-produsului` (pasul si detaliul contorului), REGISTRU C
+      si D; suita intreaga 11.270 / 0 cazute / 2 sarite inaintea reparatiei de la proba; proba in Chrome cu acordul lui
+      („Da, fă proba acum”), pe demo.)
+      Ghidul, REGISTRU (D rezolvat, C), porti, proba in Chrome pe demo (cere acordul lui pentru impersonare;
       vederi de proba scrise in `site_analytics` pe demo si sterse la final).
+      Vazut pe ecran, pagina PUBLICA a magazinului demo `casa-lumen` (Detaliat, contorul aprins in designul publicat),
+      fara cont: fara nicio vedere, pastila lipseste; cu vederile de proba (un om cu trei vederi, altii la 10 minute, 5
+      ore, 20 de ore, unul la 30 de ore) „4 persoane au vazut produsul in ultimele 24 de ore”; cu „now” scris in continut,
+      „2 persoane se uita acum”; produsul fara vederi, fara pastila; la 390 px (cadru de 390 px in aceeasi fila) pastila
+      „Acum” pe un rand, cea de 24 de ore pe doua, in margini, 0 px peste. Editorul, prin impersonarea contului de test
+      `floraria-mirei` (Clasic, contorul ascuns): ochiul aprins in ciorna, panoul cu „Ce numără” („Ultimele 24 de ore”
+      ales din start, „Acum”) si nota; previzualizarea cu numarul real la singular, „1 persoana a vazut produsul in
+      ultimele 24 de ore”. In Statistici, nota noua in explicatia „Vizitatori”.
+      GASIT si reparat: (1) in editor, pagina de produs primea `page_content` PUBLICAT, nu cel cu ciorna: ruta il
+      calcula (`pcCuCiorna`) dar ii dadea componentei randul din baza, deci beneficiile, intrebarile, pasii, livrarea,
+      efectul butonului si acum fereastra contorului nu se vedeau in previzualizare pana la „Publică” (de la etapa 6;
+      pagina principala le punea peste). Dupa reparatie, „Acum” arata exemplul („3 persoane se uita acum”, nimeni in 15
+      minute), iar „Ultimele 24 de ore” iar numarul real, cu reincarcarea singura a previzualizarii. O proba noua pe
+      sursa. Pus la loc: ciorna prin „Renunță” (pastila disparuta din previzualizare), vederile de proba sterse (9),
+      cheia din `casa-lumen` scoasa, data abonamentului; o singura comparatie, totul egal (analitica 2.708 / 1.646 / 0,
+      `page_content` si designul contului de test, ciorna goala, 0 versiuni). Raman: `updated_at` al contului de test si
+      sarea zilei de azi in `analitice_sare` pe demo (creata de citirea contorului; aceeasi functie o creeaza in productie
+      la prima vizita a zilei). Iesirea din impersonare l-a deconectat. Erorile din consola: doar extensii (ColorZilla pe
+      `<body>`, un mesaj de extensie).
 
 ## Deciziile proprietarului
 

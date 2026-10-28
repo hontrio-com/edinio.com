@@ -68,6 +68,8 @@ next-env.d.ts
 # existand doar pe masina care a scris-o. Chiar capcana descrisa mai sus.
 !/scripts/lint-prag.mjs
 !/scripts/lint-prag.json
+# Umplerea magazinelor demo ale temelor (etapa 16): la push face magazinul demo din productie, deci e unealta.
+!/scripts/teme/
 # Iesirea catre eMAG: NU e scratch, e infrastructura. eMAG accepta apeluri doar de la
 # IP-uri albite, iar Vercel n-are IP fix — deci exista un server propriu, cu proxy
 # CONNECT, iar dosarul asta e TOATA starea lui. Chiar de aia nu se plateste copie de

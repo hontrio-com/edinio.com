@@ -1590,6 +1590,83 @@ tip decat cel publicat.
       impersonare (l-a deconectat), `checkout_config` de dinainte, data abonamentului; o singura comparatie, totul egal
       (`page_content` si designul dupa amprenta, ciorna goala, 0 versiuni, analitica, comenzile, fara `tip`).
 
+## Temele: prima tema, „Jupiter” (scris 28.10.2026, seara, inainte de cod)
+
+Cerut de el (28.10.2026, dupa etapa 15), cuvant cu cuvant: „Da, hai sa facem sectiunea de Teme dar sa fii atent aici
+pentru ca nu vreau sa stricam absolut deloc Design-ul magazinelor care sunt active acum, tema asta sa fie optionala
+pentru cine vrea sa o aplice si cand o aplica sa se aplice direct pe magazinul lui practcic. Incepem cu prima tema, vreau
+sa dam denumiri de Planete la temele astea. Pentru prima tema vreau sa te inspiri de aici: https://www.dedeman.ro/ Vreau
+sa fie aproape 1 la 1 ca in exemplul atasat de mine. Vreau sa punem pe subdomenii si previzualizare live ca sa vada cum
+arata tema cu continut in ea practic. Iar cand o selecteaza sa oferim optiunea de Importare date demo in caz ca vrea.”
+
+Raspunsurile lui (toate pe varianta recomandata): numele „Jupiter”; locul „Pagină nouă „Teme””; aplicarea „Direct în
+magazin, cu Istoric”; datele demo „Adaugă, marcate demo”.
+
+Ce e azi, citit in cod: la inscriere se alege un „stil” (`onboarding/aspect.ts`), adica o pereche antet + subsol; teme
+intregi nu exista. Cardul de produs are o singura varianta (`classic`, `ProductCard.tsx`). Antetul „Magazin mare, cu
+categorii” (`HeaderMarket`) are deja trei randuri. Fonturile paginilor (33) n-au Open Sans si Sofia Sans. Istoricul
+(etapa 7) tine versiuni cu originea „publicare” sau „inainte”. Domeniile proprii se rescriu in `proxy.ts` spre `/{slug}`;
+`*.edinio.com` e gazda platformei. Baza demo foloseste poze Unsplash legate (222 de adrese). Nu exista lista de favorite
+si nici recenzii pe produs.
+
+Ce am vazut pe dedeman.ro (28.10, in Chrome): bara albastra subtire sus (#215196: localitatea, Magazine, Cariere,
+Intrebari frecvente); randul cu logo, cautarea lata cu buton portocaliu (#FF882D), Favorite, Contul meu, Cos; randul cu
+butonul portocaliu „Categorii produse” (meniu pe doua niveluri, cu iconite, si un card de promotie) si linkuri. Pagina
+principala: carusel de bannere-imagine cu paginare in segmente + doua carduri gri (titlu, text, imagine); „Categorii”:
+placi gri pe 4 coloane, imagine, nume cu sageata portocalie, numarul de produse; randuri de produse in carusel cu sageti,
+pe fond gri; „Recomandari”: patru placi cu imagine rotunda, titlu si „Descopera ofertele ›”; „Recomandari pe
+categorii”: file (activa albastra) + carusel. Cardul: insigna rosie „SUPER PREȚ”, inima, stele, titlu pe trei randuri,
+pretul vechi taiat „lei/bucată”, pretul mare rosu cu zecimalele mici, buton albastru „Adaugă în coș” cu patratul
+portocaliu al cosului. Subsolul: bara albastra „Înapoi sus”, newsletter cu buton portocaliu si aplicatiile, cinci coloane
+de linkuri pe gri, „Servicii și facilități” cu iconite, jos copyright, ANPC si retelele. Textul Open Sans 14 px #333,
+titlurile Sofia Sans 24 px. Pagina de categorie: firimituri, titlu cu numarul, placile subcategoriilor, descriere, filtre
+in stanga, sortarea sus, grila pe 4. Pagina de produs: titlu lat sus, cod, galerie cu miniaturi in stanga, pret mare,
+cantitate si butonul albastru.
+
+⚠ Ce NU se copiaza: logo-ul, numele, mascota, pozele si textele Dedeman (sunt ale lor). Se fac aproape 1 la 1 structura,
+asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinul demo are nume si continut propriu.
+
+### Deciziile
+
+1. **O tema = un design intreg** (sectiunile, variantele, setarile si stilul: culori, fonturi, colturi), plus, la
+   cerere, datele demo. Variantele noi intra in registry ca oricare alta, deci se pot alege si una cate una din editor.
+2. **Numele sunt planete**; prima e Jupiter. Demo-ul ei sta pe `jupiter.edinio.com` (local: `jupiter.localhost:3000`),
+   un magazin adevarat (`tema-jupiter`), cu date demo.
+3. **Magazinele de azi nu se ating**: nicio varianta implicita nu se schimba, nimic nu se aplica singur.
+4. **Aplicarea, direct** (raspunsul lui): designul publicat de acum (si ciorna, daca exista) intra in Istoric, cu o
+   origine noua, „tema”; designul publicat devine al temei, ciorna se goleste. Produsele, textele (`page_content`),
+   setarile si domeniul nu se ating. Pe pagina „Teme”, „Pune la loc designul de dinainte”, intr-un clic.
+5. **Datele demo** (raspunsul lui): se ADAUGA langa ce are (categorii, produse, bannere, cardurile temei), marcate:
+   produsele cu `external_id` `tema-demo:jupiter:<cheie>`, restul tinute in `page_content.date_demo`. „Șterge datele
+   demo” scoate exact ce s-a adaugat; nimic al lui nu se sterge sau se suprascrie. Daca magazinul e public, avertisment:
+   produsele demo se vad pana le stergi.
+6. **Pozele demo**: Unsplash (licenta libera), legate, ca in baza demo de azi; nimic de pe dedeman.ro.
+7. **Fonturile Open Sans (text) si Sofia Sans (titluri)** intra in lista (33 → 35), gazduite ca celelalte.
+8. **Lasate pentru o intrebare dupa etapa 16**: inima si „Favorite” (nu exista lista de favorite), stelele (nu exista
+   recenzii pe produs), iconita de cautare dupa poza, „Alege-ți localitatea” (fara sens la un magazin mic).
+
+### Etapele (una cate una, cu raport dupa fiecare)
+
+- **Etapa 16: aspectul Jupiter**, pe magazinul demo local `tema-jupiter`.
+  - [x] 16.1 (28.10: `lib/teme/jupiter/date-demo.ts` (12 raioane, 27 subcategorii, 58 de produse, 4 bannere, 2 carduri,
+        4 placi; poze Unsplash cautate in Chrome, legate); `lib/teme/import-demo.ts`: importul pe bucati pure, fara
+        marketplace-uri, cu proiectia catalogului si urma in `page_content.date_demo`; `lib/teme/teme.ts`; scriptul
+        `scripts/teme/seamana-demo.ts` (refuza productia). In baza demo: contul tehnic `teme@edinio-demo.test` (parola
+        aleatoare, ca in seed) si magazinul `tema-jupiter`; importul: 39 de categorii, 58 de produse proiectate, 4 bannere;
+        repetat, 0/0/0. 8 probe in `teme/import-demo.test.ts`.) Setul de date demo Jupiter, in cod (categorii pe doua
+        niveluri, produse cu poze Unsplash, bannere, carduri, placi), si magazinul `tema-jupiter` in baza demo.
+  - [ ] 16.2 Stilul (fonturile noi, culorile) si antetul „Hipermarket” (bara albastra, cautarea cu buton portocaliu,
+        contul, cosul, „Categorii produse” cu meniul pe doua niveluri), plus subsolul cu „Înapoi sus”, newsletter, coloane,
+        servicii.
+  - [ ] 16.3 Pagina principala: bannerul cu carusel si doua carduri, placile de categorii cu numarul de produse, cardul
+        de produs Jupiter, caruselul cu sageti, randul pe file de categorii, placile de recomandari.
+  - [ ] 16.4 Paginile de categorie si de produs, cosul: variantele existente, reglate pe tema si pe cardul ei.
+  - [ ] 16.5 Ghiduri, porti, proba in Chrome langa dedeman.ro (cere acordul lui pentru impersonare, daca e nevoie).
+- **Etapa 17: pagina „Teme”** (cardul lui Jupiter, „Vezi demo”, „Aplică tema”), aplicarea cu Istoric si „Pune la loc”.
+- **Etapa 18: „Importă datele demo”** la aplicare si „Șterge datele demo”.
+- **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
+  push: DNS, domeniul in Vercel, magazinul demo in productie.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”
@@ -1621,6 +1698,8 @@ tip decat cel publicat.
 - 28.10.2026, seara, mentiunile de dupa etapa 12 (vezi „Mentiunile lui din 28.10, seara”): blocul pus cu „+” „Numele lui,
   deschis direct”; fonturile „Cele 36 găzduite de noi” (sunt 33, numarate gresit in intrebare); checkout-ul „În Setări >
   Comanda”.
+- 28.10.2026, seara, temele (vezi „Temele: prima tema, „Jupiter””): prima „Jupiter”, dupa dedeman.ro, „aproape 1 la 1”;
+  pagina noua „Teme”; aplicarea „Direct în magazin, cu Istoric”; datele demo „Adaugă, marcate demo”; demo pe subdomenii.
 
 ## De ce Shopify si nu Elementor
 

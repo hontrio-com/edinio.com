@@ -1014,15 +1014,45 @@ Inventarul (84 de ghiduri in „Design și pagini”, citite toate pe 28.10):
       „Mesaje” cu locul formularelor din magazin; Biblioteca Media (unde e butonul); „Primii pasi” (culoarea, antetul)
       si „Produse” (randul „Recomandate”). Formularul din previzualizare tot scrie „Previzualizare”: verificat.)
       „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.
-- [ ] G.4 (28.10, facut: fiecare citat „...” din categorie cautat in sursa, fara diacritice si fara ghilimele (1084;
+- [x] G.4 (28.10, facut: fiecare citat „...” din categorie cautat in sursa, fara diacritice si fara ghilimele (1084;
       toate cele scrise acum exista in cod; negasite doar compuneri din cod si etichetele „de altadata”, citate
       anume); probele centrului de ajutor 42/42 si ale editorului; 425 in `ajutor.ts`; capturile: 5 de facut, doua vechi
       (ecranele scoase) mutate in `docs/ajutor/capturi-scoase/`; REGISTRU C si D. Porti: tsc 0, `lint:prag` = pragul;
-      ⚠ suita intreaga OPRITA DE SISTEM (memorie putina) dupa 1245 de probe trecute, fisierele de dupa au cazut in
-      milisecunde, fara aserturi, deci n-au rulat; build:ci nerulat. DE RELUAT suita si build-ul, cand spune el.)
+      suita intreaga, prima data oprita de sistem (memorie putina) dupa 1245 de probe, reluata cu acordul lui („Da”):
+      11.202 trec, 0 cad, 2 sarite; `build:ci` trece.)
       Recitirea tuturor ghidurilor atinse fata de cod (fiecare denumire citata cautata in sursa), probele
       centrului de ajutor, numarul din `ajutor.ts`, lista capturilor (`npm run capturi -- --lista`), REGISTRU D,
       porti, raport. Fara push.
+
+## A doua verificare, inaintea mentiunilor lui (ceruta 28.10.2026)
+
+La „Ce vrei să mai facem înainte de push?”, raspunsul lui: „O verificare si sa iti spun mentiunile mele” (si „Da”
+pentru suita intreaga si build). Aceeasi forma ca V1-V6, pe ce s-a schimbat de la `84080f8f` (etapele 8 si 9,
+ghidurile): 93 de fisiere, 67 fara documente, probe si ghiduri; trei fisiere de actiuni de server
+(`editor-pagini.actions.ts`, `page.actions.ts`, `store-design.actions.ts`). Fara agenti. Ce e defect clar se repara,
+cu proba lui; ce e de gust intra in raport, pentru mentiunile lui.
+
+- [x] W1 (28.10: `origin/main` tot la `122bfbff`, baza ramurii, deci unirea e curata; ce scrie fila „Setări”
+      (coloanele firmei si ale contactului, retelele, butoanele flotante, `checkout_config`, cele trei chei de catalog) nu
+      e pe lista alba a ciornei, deci „Publică” nu le poate calca; in PRODUCTIE `page_form_submissions.page_id` si
+      `block_id` primesc `null`, fara constrangeri sau declansatoare in afara cheilor straine.) Conflicte: `origin/main` fata de baza ramurii; datele (ce scriu Setarile din editor fata de lista alba a
+      ciornei; formularele din „Conținut liber” fata de schema `page_form_submissions` din PRODUCTIE).
+- [x] W2 (28.10, productia: 25 de designuri, 16 `classic` si 9 `detailed`; 0 blocuri, 0 sabloane, 0 „Conținut
+      liber”, 0 `continut` in design, deci lansarea nu schimba nimic la magazinele de azi; cel mai mare design 3,1 KB;
+      3 cioarne vechi, fara `continut`, versiunea 1, citite de editor ca pana acum. 6 din cele 9 magazine Detaliat au
+      estimarea livrarii pornita: fara reparatia de la G.1, dupa push n-ar fi putut-o opri din editor.) Buguri pe datele reale (productia, doar citire): designurile si continutul de azi fata de parserul nou
+      (blocuri, sabloane, `delivery_estimate` la Detaliat), coloanele pe care se sprijina codul nou.
+- [x] W3 (28.10: `dateBlocuriInEditor` verifica proprietarul (`id` + `user_id`, clientul cu RLS); `submitPageForm` si
+      `aboneazaNewsletter` cauta blocul din „Conținut liber” in designul PUBLICAT si vizibil, nu in cerere, iar fara
+      pagina, cale si formular nu scriu nimic; `getDesignVersion` curata blocurile pentru editor; ce pleaca la client,
+      verificat cu `curl` la G (fara designul brut, fara continutul altor pagini). Nimic de reparat.) Buguri in cod: cele trei fisiere de actiuni (autentificare, proprietar, intrari), apoi ce pleaca la client
+      (`resolveDesign`, sloturile, `curataContinutulPentruEditor`), apoi componentele cu stare noi.
+- [x] W4 (28.10: scanerul de la V4, pe randurile adaugate in 64 de fisiere: doar chei tehnice, „salvezi” (corect fara
+      diacritice) si textul de exemplu al magazinului, fara diacritice dupa regula lui. Nimic de reparat.) Texte: diacritice, ghilimele, fara linie lunga, pe randurile adaugate in panou de la `84080f8f`.
+- [ ] W5 Ecranul, in Chrome (cere conectarea lui pe localhost si acordul pentru impersonare): fila „Setări”,
+      „Conținut liber”, caseta „Detalii produs” la Detaliat, la 390 / 768 / 1280 / 1920 px; magazinul public.
+- [x] W6 (28.10: aceleasi ca la G.4, fiindca de atunci s-au schimbat doar documente: tsc 0, `lint:prag` = pragul,
+      11.202 de probe / 0 cazute, `build:ci` trece.) Porti: suita intreaga si `build:ci` (tsc si `lint:prag` trecute la G.4), raport, comit.
 
 ## Deciziile proprietarului
 

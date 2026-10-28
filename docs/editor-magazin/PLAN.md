@@ -29,7 +29,8 @@ din centrul de ajutor, FACUT** (G.1-G.4, sectiunea „Inchiderea, pasul 5”); r
 Decizia lui: „nu dai push ca mai avem ceva de facut”, deci **nici migratia din REGISTRU A, nici push-ul, pana spune el**.
 Apoi: contorul de vizitatori masurat (etapa noua) si temele intregi, „dupa ce terminam de verificat tot ce am facut
 acum” (raspunsurile lui din 28.10, in „Deciziile proprietarului”). Planul si bifele: sectiunile „Etapa 4: planul de
-lucru” si „Etapa 5: planul de lucru”.
+lucru” si „Etapa 5: planul de lucru”. **A doua verificare (W1-W6, ceruta 28.10: „O verificare si sa iti spun
+mentiunile mele”) FACUTA**, cu o reparatie (bara de sus pe tableta, W5); **urmeaza mentiunile lui**.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -1049,7 +1050,22 @@ cu proba lui; ce e de gust intra in raport, pentru mentiunile lui.
       (`resolveDesign`, sloturile, `curataContinutulPentruEditor`), apoi componentele cu stare noi.
 - [x] W4 (28.10: scanerul de la V4, pe randurile adaugate in 64 de fisiere: doar chei tehnice, „salvezi” (corect fara
       diacritice) si textul de exemplu al magazinului, fara diacritice dupa regula lui. Nimic de reparat.) Texte: diacritice, ghilimele, fara linie lunga, pe randurile adaugate in panou de la `84080f8f`.
-- [ ] W5 Ecranul, in Chrome (cere conectarea lui pe localhost si acordul pentru impersonare): fila „Setări”,
+- [x] W5 (28.10, cu acordul lui pentru impersonare, pe `floraria-mirei` din baza DEMO: la 390, 768, 1024, 1280 si
+      1920 px fila „Setări” (Informații generale, Formular de comandă), „Conținut liber”, caseta „Detalii produs” la
+      Detaliat (comutatorul estimarii scrie in ciorna `continut.pc.delivery_estimate`) si cele 4 zone ale paginii de
+      produs, fara nimic peste margine. **Gasit si reparat: intre 640 si ~990 px „Publică” iesea din ecran** (23 px pe
+      768, de tot pe 800-850 px), fiindca grupul din dreapta, cu `min-w-0`, se strangea sub butoanele lui; un titlu lung
+      de pagina proprie impingea la fel bara, la orice latime. Acum, sub 1024 px, istoricul, „Reîncarcă”, „Deschide
+      magazinul”, „Vizibil” si „Renunță” stau in meniul „...”, ca pe telefon, iar starea („Modificări nepublicate”)
+      apare de la 1024 px (sub atat ajungea la 0 px oricum). Grupul din dreapta nu se mai strange, se strange lista
+      paginilor. Masurat de la 356 la 1440 px, si cu un titlu de 70 de caractere: „Publică” mereu in ecran. Proba noua
+      prinde bara veche (`editor-magazin.test.ts`). Magazinul public (prima pagina, produsul, „Magazin”) la 390 si 768:
+      nimic peste margine. „Renunță” a golit ciorna; baza demo pusa la loc, la fel pe fiecare camp din fisa de
+      dinainte (doar `last_sign_in_at`, mutat de impersonare). Doua lucruri care NU sunt defecte: editorul cazut la
+      768 era cheia „start”, pusa de scriptul meu in lista (omul alege doar din optiuni, iar adresa trece prin
+      `paginaCeruta`), deci masuratorile de dinainte la 768 si 1280 fusesera pe pagina de eroare si s-au refacut;
+      previzualizarea ramasa ascunsa la 1024 era fereastra Chrome din fundal (ResizeObserver nu ruleaza fara cadre;
+      dupa o captura s-a micsorat corect).) Ecranul, in Chrome (cere conectarea lui pe localhost si acordul pentru impersonare): fila „Setări”,
       „Conținut liber”, caseta „Detalii produs” la Detaliat, la 390 / 768 / 1280 / 1920 px; magazinul public.
 - [x] W6 (28.10: aceleasi ca la G.4, fiindca de atunci s-au schimbat doar documente: tsc 0, `lint:prag` = pragul,
       11.202 de probe / 0 cazute, `build:ci` trece.) Porti: suita intreaga si `build:ci` (tsc si `lint:prag` trecute la G.4), raport, comit.

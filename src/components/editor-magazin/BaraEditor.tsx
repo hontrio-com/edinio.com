@@ -102,8 +102,12 @@ export function BaraEditor({
         <span className="hidden sm:inline">Ieși</span>
       </button>
 
-      {/* Pe telefon lista ia locul ramas: cu latime fixa, trecea peste Anuleaza. */}
-      <label className="flex-1 sm:flex-none flex items-center gap-2 min-w-0">
+      {/*
+        Pe telefon lista ia locul ramas: cu latime fixa, trecea peste Anuleaza. De la 640 px are
+        latimea ei, dar se strange ea cand bara nu mai are loc: un titlu lung de pagina proprie
+        impingea altfel „Publică” afara din ecran.
+      */}
+      <label className="flex-1 sm:flex-initial flex items-center gap-2 min-w-0">
         <span className="hidden xl:inline text-xs text-muted-foreground">Editezi</span>
         <select value={pagina} onChange={(e) => onPagina(e.target.value as CheiePagina)} aria-label="Pagina pe care o editezi"
           className="h-9 w-full sm:w-auto min-w-0 pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary">
@@ -129,7 +133,7 @@ export function BaraEditor({
         </button>
         {/* Langa Anuleaza: tot un drum inapoi, dar peste publicari, nu peste pasii de acum (etapa 7). */}
         <button type="button" onClick={onIstoric} title="Istoricul publicărilor: readu o versiune de dinainte" aria-label="Istoricul publicărilor"
-          className="h-9 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          className="hidden lg:inline-flex h-9 px-2.5 rounded-lg items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
           <History className="h-4 w-4" />
           <span className="hidden xl:inline">Istoric</span>
         </button>
@@ -145,15 +149,19 @@ export function BaraEditor({
         ))}
       </div>
       <button type="button" onClick={onReincarca} title="Reîncarcă previzualizarea" aria-label="Reîncarcă previzualizarea"
-        className="hidden md:flex w-9 h-9 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        className="hidden lg:flex w-9 h-9 shrink-0 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
         <RotateCw className="h-4 w-4" />
       </button>
       <a href={adresaPublica} target="_blank" rel="noopener noreferrer" title="Deschide magazinul într-o filă nouă" aria-label="Deschide magazinul într-o filă nouă"
-        className="hidden md:flex w-9 h-9 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        className="hidden lg:flex w-9 h-9 shrink-0 rounded-lg items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
         <ExternalLink className="h-4 w-4" />
       </a>
 
-      <div className="ml-auto flex items-center gap-2 min-w-0">
+      {/*
+        Butoanele din dreapta nu se strang: cu `min-w-0`, grupul se strangea sub latimea lor, iar
+        „Publică” iesea din ecran intre 640 si 990 px (de tot pe 800, verificarea din 28.10).
+      */}
+      <div className="ml-auto flex items-center gap-2 shrink-0">
         {/*
           Pe telefon panoul si previzualizarea nu incap una langa alta. Sub 420 px butonul ramane
           doar cu pictograma: cu „Ieși” in bara (4.7), lista paginilor ajunsese sa arate doar „Pa”.
@@ -166,32 +174,33 @@ export function BaraEditor({
           <span className="hidden min-[420px]:inline">{vedereMobil === "panou" ? "Vezi" : "Editează"}</span>
         </button>
 
-        <div className="hidden sm:block min-w-0 text-right">
+        <div className="hidden lg:block min-w-0 text-right">
           <p className="text-[11px] text-muted-foreground truncate">{stare}</p>
           {continutNesalvat && !seIncarca && <p className="text-[11px] text-amber-600 truncate">Conținut nesalvat</p>}
         </div>
 
         <button type="button" onClick={() => setConfirma(true)} disabled={publicareInCurs}
           title={publicat ? "Magazinul e vizibil pentru clienți" : "Magazinul e ascuns pentru clienți"}
-          className="hidden sm:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium items-center gap-1.5 hover:bg-muted transition-colors">
+          className="hidden lg:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium items-center gap-1.5 hover:bg-muted transition-colors">
           <span className={cn("w-2 h-2 rounded-full", publicat ? "bg-primary" : "bg-muted-foreground/50")} />
           {publicat ? "Vizibil" : "Ascuns"}
         </button>
 
         {ciorna.areModificari && (
           <button type="button" onClick={() => void ciorna.renunta()} disabled={ciorna.blocata}
-            className="hidden sm:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:pointer-events-none transition-colors items-center">
+            className="hidden lg:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:pointer-events-none transition-colors items-center">
             Renunță
           </button>
         )}
         {/*
-          Pe telefon nu incape tot in bara: Anuleaza / Refa, Renunta, vizibilitatea
-          magazinului si previzualizarea stau intr-un meniu. Fara el, de pe telefon
-          n-ar fi existat niciun drum catre ele (in editorul vechi, „Publicare” era
-          un panou), iar cu ele in bara, „Publica” iesea taiat din ecran pe 390 px.
+          Pe telefon si pe tableta (sub 1024 px) nu incape tot in bara: Anuleaza / Refa,
+          istoricul, Renunta, vizibilitatea magazinului si previzualizarea stau intr-un meniu.
+          Fara el, de pe telefon n-ar fi existat niciun drum catre ele (in editorul vechi,
+          „Publicare” era un panou), iar cu ele in bara, „Publica” iesea taiat din ecran pe
+          390 px si intre 640 si 990 px. Starea („Modificări nepublicate”) apare tot de la 1024 px.
         */}
         <DropdownMenu>
-          <DropdownMenuTrigger aria-label="Mai multe" className="sm:hidden w-9 h-9 shrink-0 rounded-lg border border-border flex items-center justify-center text-muted-foreground">
+          <DropdownMenuTrigger aria-label="Mai multe" className="lg:hidden w-9 h-9 shrink-0 rounded-lg border border-border flex items-center justify-center text-muted-foreground">
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={8} className="w-60 p-1.5">

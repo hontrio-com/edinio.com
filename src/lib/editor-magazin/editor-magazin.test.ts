@@ -875,3 +875,41 @@ test("actiunea care cauta produsul unui sablon primeste orice: nu cade pe altcev
   assert.match(s, /\(Array\.isArray\(produse\) \? produse : \[\]\)\.filter\(/);
   assert.match(s, /\(Array\.isArray\(numeCategorii\) \? numeCategorii : \[\]\)\.filter\(/);
 });
+
+test("⚠⚠ „Publică” ramane in ecran pe orice latime: ce iese din bara sta in meniul „...” (verificarea din 28.10)", () => {
+  // Intre 640 si 990 px grupul din dreapta se strangea sub butoanele lui si „Publică” iesea din ecran,
+  // de tot pe 800 px. Regula: ce lipseste din bara la o latime sta in meniu la aceeasi latime.
+  const b = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
+  const meniu = b.match(/<DropdownMenuTrigger aria-label="Mai multe" className="(\w+):hidden /);
+  assert.ok(meniu, "meniul „...” are un prag");
+  const prag = meniu[1];
+  // Sub 1024 px nu incap toate in bara (masurat in Chrome, 28.10).
+  assert.equal(prag, "lg");
+  const clasa = (ancora: RegExp) => {
+    const m = b.match(ancora);
+    assert.ok(m, String(ancora));
+    return m[1];
+  };
+  const dinBara = {
+    istoric: clasa(/onClick=\{onIstoric\}[^>]*?className="([^"]+)"/),
+    reincarca: clasa(/onClick=\{onReincarca\}[^>]*?className="([^"]+)"/),
+    deschide: clasa(/<a href=\{adresaPublica\}[^>]*?className="([^"]+)"/),
+    vizibil: clasa(/onClick=\{\(\) => setConfirma\(true\)\} disabled=\{publicareInCurs\}[^>]*?className="([^"]+)"/),
+    renunta: clasa(/onClick=\{\(\) => void ciorna\.renunta\(\)\} disabled=\{ciorna\.blocata\}\s*className="([^"]+)"/),
+    stare: clasa(/<div className="(hidden \w+:block min-w-0 text-right)">/),
+  };
+  for (const [nume, c] of Object.entries(dinBara)) {
+    assert.match(c, new RegExp(`^hidden ${prag}:(inline-flex|flex|block) `), `${nume} apare in bara exact de unde dispare meniul`);
+  }
+  for (const text of ["Anulează", "Refă", "Istoricul publicărilor", "Renunță la modificările nepublicate", "Reîncarcă previzualizarea", "Deschide magazinul"]) {
+    assert.match(b, new RegExp(String.raw`<DropdownMenuItem[^>]*>[\s\S]{0,120}?` + text), `in meniu: ${text}`);
+  }
+  assert.match(b, /onClick=\{\(\) => setConfirma\(true\)\}>\s*<span[^>]*\/>\s*\{publicat \? "Magazin vizibil: ascunde-l"/);
+  // Grupul din dreapta nu se strange; cand nu e loc, se strange lista paginilor (un titlu lung de pagina proprie).
+  // Nici butoanele de 36 px de langa ea: cu titlul lung ajungeau la 16 px (masurat, 28.10).
+  assert.match(b, /<div className="ml-auto flex items-center gap-2 shrink-0">/);
+  assert.match(dinBara.reincarca, /\bw-9 h-9 shrink-0\b/);
+  assert.match(dinBara.deschide, /\bw-9 h-9 shrink-0\b/);
+  assert.match(b, /<label className="flex-1 sm:flex-initial flex items-center gap-2 min-w-0">/);
+  assert.match(b, /aria-label="Pagina pe care o editezi"\s*className="h-9 w-full sm:w-auto min-w-0 /);
+});

@@ -5,6 +5,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { MarkEditorVisited } from "@/components/dashboard/MarkEditorVisited";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { tipulComenzii } from "@/lib/storefront/design/tip-comanda";
 import { curataContinutulPentruEditor } from "@/lib/storefront/design/continut-pentru-editor";
 import { ciornaCuContinut, contextCuCiorna, continutDinCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
@@ -150,6 +151,8 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire, se
         generale: dateleMagazinuluiDinRand(magazin),
         formatComanda: setari?.order_number_format ?? "sequential",
         formular: formularDinPageContent(pageContent),
+        // Fara tip salvat in Setări > Comanda (etapa 15): al designului publicat, adica ce vad clientii azi.
+        tipComandaImplicit: tipulComenzii(publicat),
         catalog: catalogDinPageContent(pageContent),
       }}
       filaInitiala={setareCeruta ? "setari" : "sectiuni"}

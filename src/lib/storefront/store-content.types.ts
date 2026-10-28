@@ -1,6 +1,7 @@
 import type { ProductSection } from "@/lib/store-sections";
 import type { MenuItem } from "@/lib/pages/menu";
 import type { InsignaFooterStocata } from "@/lib/storefront/footer-badges";
+import type { TipComanda } from "@/lib/storefront/design/tip-comanda";
 
 /**
  * Forma lui `store_settings.page_content` asa cum o citeste storefrontul.
@@ -51,6 +52,11 @@ export interface StorePageContent {
      * endpointuri publice si nu se pot baza pe ce arata interfata.
      */
     company_fields?: { enabled: boolean };
+    /**
+     * Tipul de checkout, ales in Setări > Comanda (etapa 15): „fereastra” = formularul peste magazin, „pagina” =
+     * pagina de finalizare. Lipsa = cum spune designul (sectiunea `checkout`). Se aplica la citire: `tip-comanda.ts`.
+     */
+    tip?: TipComanda;
   };
   show_announcement_on_store?: boolean;
   /**

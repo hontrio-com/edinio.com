@@ -12,6 +12,7 @@ import { PaginaNoua } from "./PaginaNoua";
 import { meniuCuAcasa, newMenuItemId, type MenuItem } from "@/lib/pages/menu";
 import { SEGMENT_MAGAZIN } from "@/lib/pages/reserved-slugs";
 import { adresaEditoruluiPentruPagina, type CheiePagina } from "@/lib/editor-magazin/pagini";
+import { adresaSetarii } from "@/lib/editor-magazin/setari";
 
 interface PageRow { id: string; slug: string; title: string; is_published: boolean; updated_at: string }
 interface Business { id: string; slug: string; custom_domain: string | null; store_name: string | null; business_name: string }
@@ -404,6 +405,8 @@ function PaginiDeSistem({
       activa: comandaPePagina,
       inactivInsigna: "IN FEREASTRA",
       inactivExplicatie: "Acum comanda se completeaza intr-o fereastra peste magazin.",
+      /* Tipul nu mai e un design (etapa 15): se alege in editor, Setări > Comanda. */
+      alege: { href: adresaSetarii("formular"), eticheta: "Alege tipul" },
     },
   ] satisfies ({ editor: CheiePagina } & Record<string, unknown>)[];
 
@@ -453,10 +456,10 @@ function PaginiDeSistem({
                 <ExternalLink className="h-4 w-4" />
               </a>
             )}
-            {/* Direct pe pagina ei din editorul unic, nu in ecranul vechi „Design sectiuni”. */}
-            <Link href={`/dashboard/editor?pagina=${r.editor}`}
+            {/* Direct pe pagina ei din editorul unic, nu in ecranul vechi „Design sectiuni”; comanda, la tipul ei. */}
+            <Link href={("alege" in r && r.alege?.href) || `/dashboard/editor?pagina=${r.editor}`}
               className="shrink-0 px-3 py-2 text-xs font-semibold rounded-lg border border-border hover:bg-muted transition-colors">
-              Alege designul
+              {("alege" in r && r.alege?.eticheta) || "Alege designul"}
             </Link>
           </div>
         ))}

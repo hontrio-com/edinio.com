@@ -1,5 +1,6 @@
 import { buildClassicDesign, newSectionId, resolveStyle, section } from "./defaults";
 import { aplicaPaginaAcasa } from "./pagina-acasa";
+import { aplicaTipulComenzii, tipComandaDinPageContent } from "./tip-comanda";
 import { completeazaBlocuri, parseBlocuri, schemaBlocurilor } from "./blocuri";
 import { parseBlocuriLibere } from "./continut-liber";
 import { faraBlocuriLibere, toateContinuturileDeRandat, type ContinutDeRandat } from "./continut-publicat";
@@ -682,8 +683,14 @@ export function resolveDesign(raw: unknown, ctx: DesignContext): ResolvedDesign 
     ⚠ Pagina proprie ca pagina principala muta catalogul pe pagina lui, dar numai
     la CITIRE: editorul de design foloseste `parseStoreDesign`, deci ce salveaza
     el ramane ce a ales comerciantul. Vezi `pagina-acasa.ts`.
+
+    La fel tipul de checkout din Setări > Comanda (etapa 15): sta in `page_content`, nu in design. Vezi
+    `tip-comanda.ts`.
   */
-  const complet = aplicaPaginaAcasa(parseStoreDesign(raw, ctx), ctx.pageContent);
+  const complet = aplicaTipulComenzii(
+    aplicaPaginaAcasa(parseStoreDesign(raw, ctx), ctx.pageContent),
+    tipComandaDinPageContent(ctx.pageContent),
+  );
   return { design: faraBlocuriLibere(complet), style: resolveStyle(complet.style, ctx), continut: toateContinuturileDeRandat(complet) };
 }
 

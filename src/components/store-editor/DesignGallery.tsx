@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Monitor, Smartphone, X } from "lucide-react";
 import { sectionMeta, type VariantMeta } from "@/lib/storefront/design/registry";
+import { varianteDeAles } from "@/lib/storefront/design/tip-comanda";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { INALTIME_IMPLICITA, VariantCard } from "./VariantCard";
 
@@ -39,7 +40,8 @@ export function DesignGallery({
   motivIndisponibil?: (variant: VariantMeta) => string | null;
 }) {
   const meta = sectionMeta(section.kind);
-  const variante = Object.entries(meta?.variants ?? {});
+  // La finalizarea comenzii doar design-urile tipului ales in Setări > Comanda (etapa 15, `varianteDeAles`).
+  const variante = varianteDeAles(section);
   const [peMobil, setPeMobil] = useState(false);
 
   // Escape inchide galeria: e o suprapunere, nu o pagina.

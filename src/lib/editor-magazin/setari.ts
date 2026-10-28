@@ -17,7 +17,11 @@ export const SETARI_EDITOR = [
   { cheie: "general", titlu: "Informații generale", descriere: "Numele, sloganul, contactul, adresa" },
   { cheie: "social", titlu: "Social media", descriere: "Instagram, Facebook, TikTok, YouTube" },
   { cheie: "firma", titlu: "Datele firmei", descriere: "Denumirea, CUI-ul, sediul, numerotarea comenzilor" },
-  { cheie: "formular", titlu: "Formular de comandă", descriere: "Câmpurile opționale și opțiunile plătite" },
+  /*
+   * „Comanda” din etapa 15 (fostul „Formular de comandă”): tipul de checkout, apoi formularul. Cheia ramane `formular`,
+   * ca adresele vechi (`?setare=formular`, ghidurile, semnele de carte) sa deschida tot aici.
+   */
+  { cheie: "formular", titlu: "Comanda", descriere: "Tipul de checkout, câmpurile și opțiunile plătite" },
   { cheie: "catalog", titlu: "Catalog", descriere: "Ce produse și categorii apar în magazin" },
 ] as const;
 

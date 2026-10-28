@@ -1520,11 +1520,60 @@ plus antetul, subsolul si bara de anunt, trece prin `Marcata` (`SectionRenderer`
       singura comparatie, totul egal (`page_content` si designul dupa amprenta, ciorna goala, 0 versiuni, data
       abonamentului, analitica). Iesirea din impersonare l-a deconectat.
 
-## Etapa 15: Setări > Comanda (de detaliat la inceputul ei)
+## Etapa 15: Setări > Comanda, tipul de checkout (scris 28.10.2026, inainte de cod; acordul lui: „Da”)
 
 Hotarat (raspunsul lui): un singur loc, „Comanda”, in fila Setari: sus tipul („Formular de comandă, în fereastră” sau
 „Standard, pagină de finalizare”), dedesubt campurile formularului si optiunile extra; se salveaza direct, ca restul
 setarilor; pagina „Finalizarea comenzii” din editor arata tipul ales si trimite acolo.
+
+Ce e azi, citit in cod: tipul e VARIANTA de design a sectiunii `checkout` (`classic` = fereastra, `page_two_col` =
+pagina, `surface: "page"`), aleasa din „Schimbă designul (2)” pe pagina „Finalizarea comenzii”. Raspunsul „pagina sau
+fereastra” il da un singur loc, `checkoutOnPage(design)` (`commerce.ts`), citit de rutele `/checkout` si `/cos`, de
+`MiniStoreRenderer`, `StoreCartPanels`, de editor (`adresaPrevizualizarii`, `notaPaginii`) si de lista din „Pagini”.
+Campurile formularului stau in Setari > „Formular de comandă” (`page_content.checkout_config`, salvat direct cu
+`updatePageContent`; singurul care scrie cheia). „Comandă acum” de pe pagina produsului deschide formularul produsului
+(`OrderModal`) la ambele tipuri. In productie (citit 28.10): 9 magazine pe pagina, 139 in fereastra; nicio ciorna cu alt
+tip decat cel publicat.
+
+### Deciziile etapei
+
+1. **Tipul se tine in `page_content.checkout_config.tip`** („fereastra” sau „pagina”), langa campurile formularului: se
+   salveaza direct, cu acelasi buton, si nu-l ating nici „Publică”, nici istoricul versiunilor (nu e in design). Lipsa =
+   ca azi, designul decide, deci magazinele de azi nu se schimba.
+2. **Se aplica la CITIRE, ca pagina principala proprie** (`aplicaTipulComenzii`, langa `aplicaPaginaAcasa`): in
+   `resolveDesign` (toate rutele magazinului), in lista din „Pagini” si in editor (designul trimis previzualizarii, adresa
+   ei, nota). Varianta sectiunii `checkout` se schimba doar cand nu se potriveste cu tipul (fereastra: prima varianta de
+   fereastra; pagina: prima de pagina), deci un design de pagina ales ramane. `checkoutOnPage` ramane singurul raspuns.
+3. **„Comanda” in fila Setări** (fostul „Formular de comandă”; cheia `formular` ramane, pentru adresele vechi): sus
+   „Tipul de checkout”, doua carduri, „Formular de comandă, în fereastră” si „Standard, pagină de finalizare”; dedesubt
+   campurile si optiunile extra, ca azi. Fara tip salvat, panoul porneste pe tipul designului publicat.
+4. **Pagina „Finalizarea comenzii” din editor**: sus in arbore, tipul ales si „Schimbă tipul în Setări”, care deschide
+   „Comanda”; la fereastra, nota spune de ce previzualizarea arata pagina principala. In panoul sectiunii, la fel, iar
+   „Schimbă designul” dispare (galeria arata chiar cele doua tipuri: al doilea loc de ales acelasi lucru). Design-urile
+   se numara pe tipul ales (azi unul pe fiecare).
+5. **„Pagini” > „Finalizare comanda”**: butonul duce la Setări > Comanda („Alege tipul”), nu la galerie.
+6. **„Comandă acum”** de pe pagina produsului ramane formularul produsului, la ambele tipuri; se spune in panou si in
+   ghid. Daca vrea ca la „Standard” sa duca la pagina de finalizare, e o etapa separata (calea banilor: personalizarea,
+   treptele de cantitate). Intrebare pentru el, in raport.
+
+### Pasii (bifati pe masura ce se fac)
+
+- [x] 15.1 (28.10: `tip-comanda.ts`: `tipComandaDinPageContent`, `tipulComenzii`, `tipulVariantei`, `aplicaTipulComenzii`
+      (varianta se schimba doar la nepotrivire, restul designului acelasi obiect), `varianteDeAles`; in `resolveDesign`,
+      dupa `aplicaPaginaAcasa`; `tip` in tipul `checkout_config`, iar `formularDinPageContent` lasa sa cada o valoare
+      stricata.) `tip-comanda.ts` (pur): citirea tipului, tipul unui design, `aplicaTipulComenzii`; in `resolveDesign`;
+      `tip` in `checkout_config` (tipul si citirea formularului). Probe.
+- [x] 15.2 (28.10: „Comanda” in lista, aceeasi cheie `formular`; grupul „Tipul de checkout” sus, doua carduri, cu nota
+      despre „Comandă acum”; `formularDeLucru` pune tipul implicit (`tipComandaImplicit` = al designului publicat, din
+      ruta editorului), `tipSalvat` din ce e salvat; salvarea trimite tot doar `checkout_config`.) Setări: „Comanda”,
+      cardurile tipului, salvarea cu formularul; implicitul din designul publicat. Probe.
+- [x] 15.3 (28.10: `designViu` in `EditorMagazin` (designul trimis, adresa previzualizarii, nodurile, galeria), ciorna
+      neatinsa; `CasetaTipComanda` in arbore pe „Finalizarea comenzii” si in panoul sectiunii, cu „Schimbă tipul în
+      Setări”; `numarVariante` si `DesignGallery` prin `varianteDeAles`; nota din `ContinutNod`; „Pagini” cu tipul aplicat
+      si „Alege tipul”; ghidurile (tipul de checkout rescris, trimiterile la „Formular de comandă” devenite „Comanda”) si
+      cardul din Setari. 13 probe in `tip-comanda.test.ts`; mutanti 12/12.) Editorul: previzualizarea, adresa si nota cu
+      tipul salvat; caseta tipului in arbore si in panoul sectiunii, fara „Schimbă designul”; lista din „Pagini”. Probe.
+- [ ] 15.4 Ghidurile, REGISTRU, porti, proba in Chrome (cere acordul lui pentru impersonare).
 
 ## Deciziile proprietarului
 

@@ -16,6 +16,8 @@ import { notaPaginii, PAGINI_EDITOR, sectiunilePaginii, type CheiePagina, type M
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import type { CiornaDesign } from "./useCiornaDesign";
 import { SelectorSablon } from "./SelectorSablon";
+import { CasetaTipComanda } from "./CasetaTipComanda";
+import type { TipComanda } from "@/lib/storefront/design/tip-comanda";
 
 /**
  * Arborele paginii alese: ce e sus pe toate paginile, sectiunile paginii, ce e
@@ -183,6 +185,7 @@ function Titlu({ children }: { children: React.ReactNode }) {
 export function ArboreSectiuni({
   ciorna, pagina, magazin, selectat, onSelect, blocSelectat, onSelectBloc, onPeste, nesalvat, onAdauga, paginaAcasa,
   sablon, onSablon, onSablonNou, onSetariSablon, continutPagina, titluPagina, onDeschidePagina, onAdaugaContinut, onAdaugaColoana,
+  tipComanda,
 }: {
   ciorna: CiornaDesign;
   pagina: CheiePagina;
@@ -213,6 +216,8 @@ export function ArboreSectiuni({
   onAdaugaContinut: (idSectiune: string, tip: string) => void;
   /** Lista „Adaugă coloană” a subsolului (etapa 11). */
   onAdaugaColoana: () => void;
+  /** Tipul de checkout SALVAT in Setări > Comanda (etapa 15), aratat pe pagina „Finalizarea comenzii”. */
+  tipComanda: TipComanda;
 }) {
   const { design, aplica } = ciorna;
   const sectiuni = sectiunilePaginii(design, pagina, magazin, sablon);
@@ -224,7 +229,10 @@ export function ArboreSectiuni({
 
   return (
     <div className="space-y-1">
-      {nota && (
+      {/* Pe „Finalizarea comenzii” nota e in caseta tipului (etapa 15), cu trimiterea spre Setări > Comanda. */}
+      {pagina === "comanda" ? (
+        <div className="mb-2"><CasetaTipComanda tip={tipComanda} /></div>
+      ) : nota && (
         <p className="mb-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground leading-relaxed">{nota}</p>
       )}
 

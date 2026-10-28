@@ -63,8 +63,8 @@ export function ContinutNod({ sectiune, continut, businessId, categorii, planGra
       return <Nota setare="catalog" eticheta="Setări > Catalog">Ce produse apar în catalog alegi din fila Setări. Cum arată pagina alegi mai sus, la Design.</Nota>;
     case "comanda":
       return (
-        <Nota setare="formular" eticheta="Setări > Formular de comandă">
-          Câmpurile formularului și opțiunile extra cu preț se aleg din fila Setări și se salvează direct: ating banii, transportul și facturile.
+        <Nota setare="formular" eticheta="Setări > Comanda">
+          Tipul de checkout, câmpurile formularului și opțiunile extra cu preț se aleg din fila Setări și se salvează direct: ating banii, transportul și facturile.
         </Nota>
       );
     default:

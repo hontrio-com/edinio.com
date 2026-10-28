@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { citestePaginaAcasa } from "@/lib/pages/pagina-acasa";
 import { aplicaPaginaAcasa } from "@/lib/storefront/design/pagina-acasa";
+import { aplicaTipulComenzii, tipComandaDinPageContent } from "@/lib/storefront/design/tip-comanda";
 
 // Titlul filei (sablonul radacinii adauga „ | Edinio”); pana acum fila arata textul generic al site-ului.
 export const metadata = { title: "Pagini" };
@@ -96,12 +97,13 @@ async function ListaPagini({ business }: { business: BusinessPagini }) {
   // Catalogul, cosul si finalizarea comenzii apar in lista ca pagini de sistem,
   // dar numai designul PUBLICAT spune daca sunt pagini adevarate sau raman pe
   // pagina principala, respectiv panouri peste magazin.
-  // Cu o pagina proprie ca pagina principala, catalogul are pagina lui (`aplicaPaginaAcasa`).
-  const design = aplicaPaginaAcasa(parseStoreDesign(ss?.storefront_design, {
+  // Cu o pagina proprie ca pagina principala, catalogul are pagina lui (`aplicaPaginaAcasa`); tipul de checkout
+  // vine din Setări > Comanda (`aplicaTipulComenzii`, etapa 15), ca in magazin.
+  const design = aplicaTipulComenzii(aplicaPaginaAcasa(parseStoreDesign(ss?.storefront_design, {
     primaryColor: "#07c527",
     pageContent: (ss?.page_content as Record<string, unknown>) ?? {},
     features: {},
-  }), ss?.page_content);
+  }), ss?.page_content), tipComandaDinPageContent(ss?.page_content));
 
   return (
     <PagesListClient

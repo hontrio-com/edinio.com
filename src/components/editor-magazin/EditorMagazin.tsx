@@ -14,6 +14,7 @@ import { resolveStyle } from "@/lib/storefront/design/defaults";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { PREFIX_PAGINA_PROPRIE, PREVIEW_MESSAGE, cheiaPaginiiProprii, despartireId, idBloc, isPreviewMessage } from "@/lib/storefront/design/preview-protocol";
 import { firstVariant, sectionMeta } from "@/lib/storefront/design/registry";
+import { aplicaTipulComenzii } from "@/lib/storefront/design/tip-comanda";
 import { dateBlocuriInEditor } from "@/lib/actions/editor-pagini.actions";
 import type { DateBlocuri } from "@/lib/pages/date-editor-pagina";
 import { adaugaSablon, categoriiAcoperite, MAX_SABLOANE } from "@/lib/storefront/design/sabloane-produs";
@@ -158,6 +159,25 @@ export function EditorMagazin({
   const [pagina, setPagina] = useState<CheiePagina>(paginaInitiala);
   const design = ciorna.design;
 
+  // ── Setarile magazinului (etapa 8): salvate direct, fiecare cu butonul ei ──
+  /*
+   * Dupa o salvare: previzualizarea (numele, contactul, formularul se vad in magazin) si datele editorului
+   * de pe server (sloganul intra in derivarea hero-ului), ca ecranul sa nu ramana pe valorile de la intrare.
+   */
+  const dupaSalvareSetari = useCallback(() => {
+    reincarcaAcum.current();
+    router.refresh();
+  }, [router]);
+  const setari = useSetariMagazin({ businessId: magazin.id, initiale: setariInitiale, dupaSalvare: dupaSalvareSetari });
+
+  /**
+   * Designul cu tipul de checkout SALVAT in Setări > Comanda (etapa 15), ca in magazin (`resolveDesign`): dupa el merg
+   * previzualizarea, adresa ei si nodurile din panou. Ciorna ramane neatinsa: tipul nu sta in design, deci nu e o
+   * modificare de publicat.
+   */
+  const tipComanda = setari.formular.tipSalvat;
+  const designViu = useMemo(() => aplicaTipulComenzii(design, tipComanda), [design, tipComanda]);
+
   // ── Sablonul paginii de produs editat (etapa 4b) ──
   /** `null` = Implicit. Un sablon sters (sau scos prin Anuleaza) cade singur pe Implicit. */
   const [sablonEditat, setSablonEditat] = useState<string | null>(null);
@@ -210,8 +230,8 @@ export function EditorMagazin({
   const blocPaginaDeschis = useMemo(() => (starePagina ? findBlock(starePagina.blocks, blocPagina) : null), [starePagina, blocPagina]);
 
   const adresa = useMemo(
-    () => adresaPrevizualizarii(pagina, design, paginiAfisate, { sablon: sablonActiv, slug: slugSablon }),
-    [pagina, design, paginiAfisate, sablonActiv, slugSablon],
+    () => adresaPrevizualizarii(pagina, designViu, paginiAfisate, { sablon: sablonActiv, slug: slugSablon }),
+    [pagina, designViu, paginiAfisate, sablonActiv, slugSablon],
   );
 
   // ── Previzualizarea ──
@@ -255,17 +275,6 @@ export function EditorMagazin({
   // ── Continutul: tot in ciorna (etapa 6); previzualizarea se reincarca dupa ce ajunge in baza ──
   useEffect(() => { reincarcaAcum.current = reincarca; }, [reincarca]);
   const continut = useContinutMagazin({ magazin: { id: magazin.id, is_published: magazin.isPublished }, ciorna });
-
-  // ── Setarile magazinului (etapa 8): salvate direct, fiecare cu butonul ei ──
-  /*
-   * Dupa o salvare: previzualizarea (numele, contactul, formularul se vad in magazin) si datele editorului
-   * de pe server (sloganul intra in derivarea hero-ului), ca ecranul sa nu ramana pe valorile de la intrare.
-   */
-  const dupaSalvareSetari = useCallback(() => {
-    reincarcaAcum.current();
-    router.refresh();
-  }, [router]);
-  const setari = useSetariMagazin({ businessId: magazin.id, initiale: setariInitiale, dupaSalvare: dupaSalvareSetari });
 
   // ── Ecranul ──
   const [fila, setFila] = useState<FilaEditor>(filaInitiala);
@@ -318,11 +327,11 @@ export function EditorMagazin({
 
   /** Nodurile paginii alese, plus ce e comun tuturor paginilor. */
   const noduri = useMemo<SectionInstance[]>(() => [
-    ...(design.chrome.announcement ? [design.chrome.announcement] : []),
-    design.chrome.header,
-    ...sectiunilePaginii(design, pagina, paginiAfisate, sablonActiv),
-    design.chrome.footer,
-  ], [design, pagina, paginiAfisate, sablonActiv]);
+    ...(designViu.chrome.announcement ? [designViu.chrome.announcement] : []),
+    designViu.chrome.header,
+    ...sectiunilePaginii(designViu, pagina, paginiAfisate, sablonActiv),
+    designViu.chrome.footer,
+  ], [designViu, pagina, paginiAfisate, sablonActiv]);
   /**
    * Bara de anunt poate lipsi din design. Nodul ei ramane deschis cu o sectiune
    * de umplutura, ca omul sa-i poata scrie textul si sa o aprinda din ochi.
@@ -375,8 +384,8 @@ export function EditorMagazin({
    */
   const ctxStil = useMemo(() => contextCuCiorna(ciorna.ctxPublicat, ciorna.continut), [ciorna.ctxPublicat, ciorna.continut]);
 
-  const trimiteAcum = useRef({ design, ctxStil });
-  useEffect(() => { trimiteAcum.current = { design, ctxStil }; }, [design, ctxStil]);
+  const trimiteAcum = useRef({ design: designViu, ctxStil });
+  useEffect(() => { trimiteAcum.current = { design: designViu, ctxStil }; }, [designViu, ctxStil]);
   const trimiteDesignul = useCallback(() => {
     const { design: d, ctxStil: c } = trimiteAcum.current;
     rama.current?.contentWindow?.postMessage(
@@ -390,7 +399,7 @@ export function EditorMagazin({
    * trimis prea devreme se pierde, si e in regula: pagina cere designul singura,
    * prin „ready”. Vezi `preview-protocol.ts`.
    */
-  useEffect(() => { trimiteDesignul(); }, [design, ctxStil, trimiteDesignul]);
+  useEffect(() => { trimiteDesignul(); }, [designViu, ctxStil, trimiteDesignul]);
 
   /*
    * Pagina proprie (etapa 5): blocurile de pe ecran pleaca in cadru la fiecare modificare, iar datele
@@ -940,7 +949,7 @@ export function EditorMagazin({
       : `Ai nevoie de cel puțin ${min} bannere (acum ai ${numarBannere}).`;
   }, [numarBannere]);
 
-  const sectiuneGalerie = galerieDesign ? toateSectiunile(design).find((s) => s.id === galerieDesign) ?? null : null;
+  const sectiuneGalerie = galerieDesign ? toateSectiunile(designViu).find((s) => s.id === galerieDesign) ?? null : null;
   const adresaPublica = magazin.customDomain
     ? `https://${magazin.customDomain}`
     : `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/${magazin.slug}`;
@@ -1109,6 +1118,7 @@ export function EditorMagazin({
                 <ArboreSectiuni
                   ciorna={ciorna} pagina={pagina} magazin={paginiAfisate} selectat={selectat} onSelect={selecteaza} onPeste={setPeste}
                   blocSelectat={blocSelectat} onSelectBloc={selecteazaBloc} onAdaugaContinut={adaugaContinutInZona} onAdaugaColoana={deschideAdaugaColoana}
+                  tipComanda={tipComanda}
                   nesalvat={nesalvat} onAdauga={() => { setLocAdaugare(null); setAdaugaDeschis(true); setVedereMobil("previzualizare"); cereDateBlocuri(); }}
                   paginaAcasa={paginaAcasa}
                   sablon={sablonActiv} onSablon={alegeSablon} onSablonNou={sablonNou} onSetariSablon={() => setSetariSablon(true)}

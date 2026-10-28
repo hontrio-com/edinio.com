@@ -1,4 +1,5 @@
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { esteTipComanda } from "@/lib/storefront/design/tip-comanda";
 
 /**
  * Formularul de comanda din Setari (`page_content.checkout_config`).
@@ -26,11 +27,13 @@ function obiect(v: unknown): Record<string, unknown> {
  * altfel un rand stricat din baza ar darama toata fila la `.trim()`.
  */
 export function formularDinPageContent(pageContent: unknown): ConfigFormular {
-  const cfg = obiect(obiect(pageContent).checkout_config);
+  const { tip: tipComanda, ...cfg } = obiect(obiect(pageContent).checkout_config);
   const campuri = Array.isArray(cfg.custom_fields) ? cfg.custom_fields : [];
   const extras = Array.isArray(cfg.extras) ? cfg.extras : [];
   return {
     ...(cfg as ConfigFormular),
+    // Tipul de checkout (etapa 15) ramane doar cand e unul cunoscut: o valoare stricata n-are ce cauta inapoi in baza.
+    ...(esteTipComanda(tipComanda) ? { tip: tipComanda } : {}),
     custom_fields: campuri.map((brut, i) => {
       const c = obiect(brut);
       const tip = TIPURI_CAMP.has(c.type as CampSuplimentar["type"]) ? (c.type as CampSuplimentar["type"]) : "text";

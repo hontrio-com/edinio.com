@@ -210,6 +210,9 @@ export function adresaPrevizualizarii(
   return `${cale}?${PREVIEW_QUERY}${sablon}`;
 }
 
+/** De ce previzualizarea paginii „Finalizarea comenzii” arata pagina principala, la tipul „în fereastră” (etapa 15). */
+export const NOTA_COMANDA_IN_FEREASTRA = "Comanda se completează într-o fereastră, peste magazin, deci aici vezi pagina principală.";
+
 /**
  * De ce previzualizarea nu arata chiar pagina aleasa, daca e cazul.
  *
@@ -239,8 +242,7 @@ export function notaPaginii(pagina: CheiePagina, design: StoreDesign, m: Magazin
         ? null
         : "Coșul se deschide ca sertar, peste pagina pe care e clientul. Alege un design de tip pagină ca să aibă pagina lui.";
     case "comanda":
-      return checkoutOnPage(design)
-        ? null
-        : "Comanda se completează într-o fereastră, peste magazin. Alege un design de tip pagină ca să aibă pagina ei.";
+      // Tipul nu mai e un design (etapa 15): se alege in Setări > Comanda, iar arborele il arata in `CasetaTipComanda`.
+      return checkoutOnPage(design) ? null : NOTA_COMANDA_IN_FEREASTRA;
   }
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Hash, Loader2, Plus, Save, Search, Shuffle, X } from "lucide-react";
+import { AppWindow, ArrowLeft, Columns2, Hash, Loader2, Plus, Save, Search, Shuffle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { LIMITE_DATE, NUME_RETEA, RETELE_SOCIALE } from "@/lib/dashboard/datele-magazinului";
 import type { CampSuplimentar } from "@/lib/dashboard/formular-comanda";
 import { SETARI_EDITOR, type CheieSetare } from "@/lib/editor-magazin/setari";
+import { ETICHETA_TIP_COMANDA } from "@/lib/storefront/design/tip-comanda";
 import { Grup, RandComutator, inputCls } from "../continut/ui";
 import type { SetariMagazin } from "./useSetariMagazin";
 
@@ -278,6 +279,29 @@ export function PanouFormularComanda({ f, onInapoi }: { f: Formular; onInapoi: (
   return (
     <div className="space-y-5">
       <CapPanou cheie="formular" onInapoi={onInapoi} />
+
+      {/*
+        Tipul de checkout (etapa 15, cerut de el: „sa selecteze tipul de Checkout, Standard cu sau Formular de comanda”).
+        Se salveaza cu formularul, direct; editorul si magazinul se uita dupa cel salvat.
+      */}
+      <Grup titlu="Tipul de checkout">
+        {([
+          { valoare: "fereastra", Icon: AppWindow, text: "Clientul completează comanda într-o fereastră, peste magazin, fără să plece de pe pagină." },
+          { valoare: "pagina", Icon: Columns2, text: "Coșul duce la o pagină separată de finalizare, cu rezumatul comenzii alături." },
+        ] as const).map(({ valoare, Icon, text }) => (
+          <label key={valoare} className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+            config.tip === valoare ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30"
+          }`}>
+            <input type="radio" name="st-tip-comanda" value={valoare} checked={config.tip === valoare}
+              onChange={() => setConfig((c) => ({ ...c, tip: valoare }))} className="mt-0.5 accent-primary shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Icon className="h-3.5 w-3.5" />{ETICHETA_TIP_COMANDA[valoare]}</span>
+              <span className="block text-[11px] text-muted-foreground mt-0.5">{text}</span>
+            </span>
+          </label>
+        ))}
+        <p className={ajutorCls}>„Comandă acum” de pe pagina produsului deschide formularul produsului, la ambele tipuri.</p>
+      </Grup>
 
       <Grup titlu="Câmpuri standard">
         <p className="-mt-1 text-[11px] text-muted-foreground leading-relaxed">

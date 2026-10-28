@@ -1165,8 +1165,8 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">Datele magazinului</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Numele, contactul, adresa, rețelele sociale, datele firmei, formularul de comandă și catalogul se editează în
-                    Editează magazinul, fila Setări. Se salvează tot direct în magazin.
+                    Numele, contactul, adresa, rețelele sociale, datele firmei, comanda (tipul de checkout și formularul) și catalogul
+                    se editează în Editează magazinul, fila Setări. Se salvează tot direct în magazin.
                   </p>
                 </div>
                 <div className="px-5 py-4">

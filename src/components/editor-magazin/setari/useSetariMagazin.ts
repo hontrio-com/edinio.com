@@ -15,6 +15,7 @@ import {
   catalogModificat, formularModificat, panouriGeneraleModificate,
   type CheieSetare, type StareGenerale, type VizibilitateCatalog,
 } from "@/lib/editor-magazin/setari";
+import type { TipComanda } from "@/lib/storefront/design/tip-comanda";
 
 /**
  * Starea filei „Setări” din editor (etapa 8, lista lui de pe 27.10.2026): datele magazinului, formularul
@@ -31,13 +32,19 @@ export interface SetariInitiale {
   generale: DateleGenerale;
   formatComanda: string;
   formular: ConfigFormular;
+  /** Tipul de checkout cand nu e salvat niciunul: al designului publicat (etapa 15), adica ce vad clientii azi. */
+  tipComandaImplicit: TipComanda;
   catalog: VizibilitateCatalog;
 }
 
 const formatDin = (v: string): "sequential" | "random" => (v === "random" ? "random" : "sequential");
 
-/** Lista goala in loc de lipsa, ca ecranul sa le poata desena (ca in fila din Setari). */
-const formularDeLucru = (f: ConfigFormular): ConfigFormular => ({ ...f, custom_fields: f.custom_fields ?? [], extras: f.extras ?? [] });
+/**
+ * Lista goala in loc de lipsa, ca ecranul sa le poata desena (ca in fila din Setari). Tipul de checkout (etapa 15) e
+ * mereu ales pe ecran: fara unul salvat, cel de azi, deci prima salvare il scrie fara sa schimbe ceva in magazin.
+ */
+const formularDeLucru = (f: ConfigFormular, tipImplicit: TipComanda): ConfigFormular =>
+  ({ ...f, tip: f.tip ?? tipImplicit, custom_fields: f.custom_fields ?? [], extras: f.extras ?? [] });
 
 function useDateleGenerale(businessId: string, initiale: DateleGenerale, formatInitial: string, dupaSalvare: () => void) {
   const [d, setD] = useState(initiale);
@@ -132,9 +139,9 @@ function useDateleGenerale(businessId: string, initiale: DateleGenerale, formatI
   };
 }
 
-function useFormularComanda(businessId: string, initial: ConfigFormular, dupaSalvare: () => void) {
-  const [config, setConfig] = useState<ConfigFormular>(() => formularDeLucru(initial));
-  const [salvat, setSalvat] = useState<ConfigFormular>(() => formularDeLucru(initial));
+function useFormularComanda(businessId: string, initial: ConfigFormular, tipImplicit: TipComanda, dupaSalvare: () => void) {
+  const [config, setConfig] = useState<ConfigFormular>(() => formularDeLucru(initial, tipImplicit));
+  const [salvat, setSalvat] = useState<ConfigFormular>(() => formularDeLucru(initial, tipImplicit));
   const [salvez, startSalvare] = useTransition();
   const modificat = formularModificat(config, salvat);
 
@@ -166,12 +173,18 @@ function useFormularComanda(businessId: string, initial: ConfigFormular, dupaSal
       if ("error" in rezultat) { toast.error(rezultat.error); return; }
       setConfig(curat);
       setSalvat(curat);
-      toast.success("Formularul de comandă a fost salvat.");
+      toast.success("Setările comenzii au fost salvate.");
       dupaSalvare();
     });
   }
 
-  return { config, setConfig, schimbaCamp, schimbaExtra, salvez, salveaza, modificat };
+  /*
+   * Tipul SALVAT, nu cel de pe ecran: dupa el se uita editorul (previzualizarea, pagina „Finalizarea comenzii”), ca
+   * si magazinul, care il citeste din baza. Un tip ales si nesalvat nu schimba nimic pana la „Salvează”.
+   */
+  const tipSalvat: TipComanda = salvat.tip ?? tipImplicit;
+
+  return { config, setConfig, schimbaCamp, schimbaExtra, salvez, salveaza, modificat, tipSalvat };
 }
 
 function useCatalog(businessId: string, initial: VizibilitateCatalog, dupaSalvare: () => void) {
@@ -216,7 +229,7 @@ export function useSetariMagazin({ businessId, initiale, dupaSalvare }: {
   dupaSalvare: () => void;
 }) {
   const generale = useDateleGenerale(businessId, initiale.generale, initiale.formatComanda, dupaSalvare);
-  const formular = useFormularComanda(businessId, initiale.formular, dupaSalvare);
+  const formular = useFormularComanda(businessId, initiale.formular, initiale.tipComandaImplicit, dupaSalvare);
   const catalog = useCatalog(businessId, initiale.catalog, dupaSalvare);
 
   const nesalvate: CheieSetare[] = [

@@ -12,6 +12,8 @@ import { toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
 import { cn } from "@/lib/utils/cn";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import { ContinutNod } from "./continut/ContinutNod";
+import { CasetaTipComanda } from "./CasetaTipComanda";
+import { tipulVariantei, varianteDeAles } from "@/lib/storefront/design/tip-comanda";
 import type { CiornaDesign } from "./useCiornaDesign";
 import type { ContinutMagazin } from "./useContinutMagazin";
 
@@ -22,11 +24,12 @@ type Cat = { id: string; name: string; parent_id: string | null; sort_order?: nu
  *
  * Doar sectiunile din catalog: randul de produse are si el doua variante, dar
  * ele oglindesc asezarea din continutul randului, iar o galerie care nu schimba
- * nimic ar fi un buton mort.
+ * nimic ar fi un buton mort. La finalizarea comenzii, doar cele de acelasi tip
+ * (`varianteDeAles`, etapa 15): tipul se alege in Setări > Comanda.
  */
 export function numarVariante(s: SectionInstance): number {
   const meta = sectionMeta(s.kind);
-  return meta?.inCatalog ? Object.keys(meta.variants).length : 0;
+  return meta?.inCatalog ? varianteDeAles(s).length : 0;
 }
 
 /** Ce s-a schimbat intre doua seturi de setari: cheia pentru lipirea din istoric. */
@@ -121,6 +124,9 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
           </div>
         )}
       </div>
+
+      {/* Tipul de checkout (etapa 15): se vede aici, se alege in Setări > Comanda. Sectiunea e cea din designul viu. */}
+      {sectiune.kind === "checkout" && <CasetaTipComanda tip={tipulVariantei(sectiune.variant)} />}
 
       {variante > 1 && (
         <div className="space-y-2">

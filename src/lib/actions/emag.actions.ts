@@ -31,7 +31,7 @@ import {
   type EmagAuth, type FormatAwb, citesteFacturi, citesteCategoriiFacturi} from "@/lib/emag/client";
 import {
   aduCategorie, aduCategorii, aduCoteTva, aduTimpiPregatire, alegeCotaTva, alegeTimpPregatire,
-  caracteristiciLipsa, caracteristiciObligatorii, sugereazaCategorie,
+  caracteristiciLipsa, caracteristiciObligatorii, categoriiPentruRaft, sugereazaCategorie,
 } from "@/lib/emag/taxonomy";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 /* ⚠ Strangerea paginii cerute la cate pagini exista cu adevarat. Fara ea, un `range`
@@ -576,6 +576,29 @@ export async function connectEmag(
    */
   await uitaAmintirile(createAdminClient(), businessId);
 
+  /*
+   * ═══ ⚠ SI RAFTUL NOU SE ADUCE IMEDIAT, IN FUNDAL (28.10.2026) ═══
+   *
+   * Primul lucru pe care il face omul dupa conectare e sa-si lege categoriile, iar
+   * pentru asta trebuie raftul lor. Lasat pe seama primei apasari, l-a asteptat el:
+   * la MNY AROMA, minute intregi, cu doua 502 de la eMAG pe drum. Pornit acum, e de
+   * obicei gata pana ajunge omul la categorii.
+   *
+   * ⚠ Dupa `uitaAmintirile`, nu inainte: altfel ar sterge chiar raftul proaspat adus.
+   * O cadere aici nu strica nimic; „Sugerează” si cautarea il aduc oricum, cand lipseste.
+   */
+  dupaRaspuns(async () => {
+    const r = await raftulEmag(createAdminClient(), businessId, { auth, config: noua });
+    if (r.eroare) {
+      await logError({
+        action: "emag.connect.raft",
+        message: `raftul de categorii nu s-a adus dupa conectare: ${r.eroare}`,
+        businessId,
+        severity: "warning",
+      });
+    }
+  }, "emag.connect.raft", businessId);
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
 }
@@ -678,6 +701,42 @@ export async function getEmagAdrese(
 }
 
 /**
+ * Raftul de categorii al contului: din memorie daca e proaspat, de la ei daca nu.
+ *
+ * ═══ ⚠ UN SINGUR DRUM, PENTRU TREI APELANTI (28.10.2026) ═══
+ *
+ * „Sugerează”, cautarea dupa nume si citirea din fundal de dupa conectare cer acelasi
+ * lucru. Inainte, numai „Sugerează” stia sa-l aduca, iar cautarea raspundea „Apasă
+ * întâi «Sugestii»”: dupa o conectare noua, comerciantul care stia ce cauta era trimis
+ * la un buton care, in ziua aceea, a stat patru minute.
+ *
+ * ⚠ Se tine minte numai forma usoara (`categoriiPentruRaft`): id, nume, parinte si
+ * `is_allowed`. Lista intreaga avea 6,7 MB la 2.928 de categorii, si se citea inapoi
+ * la fiecare tasta din cautare.
+ *
+ * ⚠ Raftul se tine minte, nu se cere la fiecare apasare: `aduCategorii` pagineaza pana
+ * la 60 de pagini, iar ritmul de 3 cereri pe secunda e acelasi prin care pleaca o
+ * miscare de stoc dupa o vanzare.
+ */
+async function raftulEmag(
+  admin: ReturnType<typeof createAdminClient>,
+  businessId: string,
+  c: { auth: EmagAuth; config: EmagConfig },
+  fortat = false,
+) {
+  return cuMemorie<EmagCategorie[]>(
+    admin,
+    { businessId, tara: c.config.tara, cont: c.config.username, fel: "categorii" },
+    async () => {
+      const a = await aduCategorii(c.auth);
+      const date = categoriiPentruRaft(a.categorii);
+      return { date, cate: date.length, trunchiat: a.trunchiat, eroare: a.error };
+    },
+    { fortat },
+  );
+}
+
+/**
  * Sugestii de categorie eMAG pentru categoriile magazinului.
  *
  * ⚠ NIMIC NU SE APLICA SINGUR. O categorie potrivita gresit nu da eroare —
@@ -699,26 +758,11 @@ export async function sugereazaCategoriiEmag(
   const admin = createAdminClient();
 
   /*
-   * ═══ ⚠ RAFTUL LOR SE ȚINE MINTE, NU SE CERE LA FIECARE APĂSARE ═══
-   *
-   * `aduCategorii` paginează până la 60 de pagini la 3 cereri pe secundă. Cerut de
-   * fiecare dată, ecranul aștepta până la douăzeci de secunde — și, mai rău, ținea
-   * ocupat douăzeci de secunde ritmul de care are nevoie coada: aceleași 3 cereri pe
-   * secundă prin care pleacă o mișcare de stoc după o vânzare.
-   *
    * ⚠ `fortat` există pentru butonul „Reîmprospătează”: o listă veche nu strică
    * nimic, dar comerciantul care tocmai a cerut acces la o categorie nouă trebuie să
    * o poată vedea fără să aștepte o săptămână.
    */
-  const memorat = await cuMemorie<EmagCategorie[]>(
-    admin,
-    { businessId, tara: c.config.tara, cont: c.config.username, fel: "categorii" },
-    async () => {
-      const a = await aduCategorii(c.auth);
-      return { date: a.categorii, cate: a.categorii.length, trunchiat: a.trunchiat, eroare: a.error };
-    },
-    { fortat: optiuni.fortat },
-  );
+  const memorat = await raftulEmag(admin, businessId, c, optiuni.fortat);
 
   /* ⚠ Fără nicio listă — nici proaspătă, nici memorată — nu se ghicește nimic. */
   if (!memorat.date) return { error: memorat.eroare ?? "Categoriile eMAG nu s-au putut citi." };
@@ -1686,29 +1730,36 @@ export interface DetaliiCategorieEmag {
  * Raspunsul bun ERA in raftul lor. Doar ca trebuia CAUTAT, nu ghicit: omul stie ce vinde,
  * scrie „pisici” si alege.
  *
- * ⚠ NU cere nimic de la eMAG. Cauta in lista memorata de `sugereazaCategoriiEmag`, deci
- * nu arde din cele 3 cereri pe secunda ale magazinului la fiecare tasta apasata.
+ * ⚠ Cauta in raftul MEMORAT, chiar si in unul mai vechi de o saptamana: altfel fiecare
+ * tasta apasata ar arde din cele 3 cereri pe secunda ale magazinului.
+ *
+ * ═══ ⚠ FARA RAFT, IL ADUCE EA, NU-L MAI TRIMITE PE OM LA „SUGEREAZĂ” (28.10.2026) ═══
+ *
+ * Inainte raspundea „Apasă întâi «Sugestii»”. Dupa o conectare noua (care uita raftul),
+ * comerciantul de la MNY AROMA a apasat „Leagă”, a scris categoria si a fost trimis la
+ * un buton care in ziua aceea a stat patru minute. Acum prima cautare il aduce, o
+ * singura data; urmatoarele il citesc din memorie.
  */
 export async function cautaCategorieEmag(
   businessId: string,
   termen: string,
-): Promise<{ gasite: { id: number; label: string }[]; raftAdus: boolean } | { error: string }> {
-  const g = await guard(businessId);
-  if ("error" in g) return { error: g.error };
+): Promise<{ gasite: { id: number; label: string }[] } | { error: string }> {
+  const c = await contextPentruCitire(businessId);
+  if ("error" in c) return c;
 
   const admin = createAdminClient();
-  const config = await loadConfig(businessId);
-
-  /* ⚠ Se citeste amintirea, NU se cere de la ei: altfel fiecare tasta apasata ar arde
-     din cele 3 cereri pe secunda ale magazinului. */
   const amintire = await citesteAmintirea<EmagCategorie[]>(admin, {
-    businessId, tara: config.tara, cont: config.username, fel: "categorii",
+    businessId, tara: c.config.tara, cont: c.config.username, fel: "categorii",
   });
 
-  /* ⚠ Fara raft adus nu se cauta in gol: se spune omului sa apese intai „Sugestii”. */
-  if (!amintire?.date) return { gasite: [], raftAdus: false };
+  let raft = amintire?.date ?? null;
+  if (!raft) {
+    const adus = await raftulEmag(admin, businessId, c);
+    if (!adus.date) return { error: adus.eroare ?? "Categoriile eMAG nu s-au putut citi. Încearcă din nou." };
+    raft = adus.date;
+  }
 
-  return { gasite: cautaCategorie(termen, amintire.date, 25), raftAdus: true };
+  return { gasite: cautaCategorie(termen, raft, 25) };
 }
 
 export async function detaliiCategorieEmag(

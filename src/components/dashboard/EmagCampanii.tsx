@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { Loader2, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 import { propuneInCampanieEmag } from "@/lib/actions/emag.actions";
@@ -36,7 +37,7 @@ export function EmagCampanii({ businessId }: { businessId: string }) {
   const [stocMaxim, setStocMaxim] = useState("");
   const [maxPeComanda, setMaxPeComanda] = useState("");
   const [sarite, setSarite] = useState<{ emagId: number; motiv: string }[]>([]);
-  const [seLucreaza, incepe] = useTransition();
+  const [seLucreaza, incepe] = useLucru();
 
   function propune() {
     if (!window.confirm(

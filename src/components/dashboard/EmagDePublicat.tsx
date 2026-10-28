@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { Paginatie } from "./Paginatie";
 import { Loader2, PackagePlus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -32,7 +33,7 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
   const [cautare, setCautare] = useState("");
   const [pagina, setPagina] = useState(1);
   const [alese, setAlese] = useState<Set<string>>(new Set());
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   function incarca(p = pagina, c = categorie, q = cautare) {
     incepe(async () => {
@@ -264,7 +265,7 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
 function CampMarca({ businessId, produsId }: { businessId: string; produsId: string }) {
   const [valoare, setValoare] = useState("");
   const [salvata, setSalvata] = useState<string | null>(null);
-  const [seSalveaza, incepe] = useTransition();
+  const [seSalveaza, incepe] = useLucru();
 
   function salveaza() {
     const v = valoare.trim();

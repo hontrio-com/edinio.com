@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { facturileEmag, type FacturiLorEcran } from "@/lib/actions/emag.actions";
@@ -40,7 +41,7 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
   const [date, setDate] = useState<FacturiLorEcran | null>(null);
   const [luni, setLuni] = useState("3");
   const [pagina, setPagina] = useState(1);
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   function incarca(peLuni = luni) {
     /* ⚠ Se începe de la prima pagină: altă perioadă înseamnă altă listă, de obicei mai

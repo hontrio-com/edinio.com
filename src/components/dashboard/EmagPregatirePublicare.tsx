@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { BLOC_PREGATIRE_PUBLICARE } from "@/lib/emag/etichete";
 import { CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -49,7 +50,7 @@ export function EmagPregatirePublicare({
   const [alesTva, setAlesTva] = useState<string>(vatId != null ? String(vatId) : "");
   const [alesTimp, setAlesTimp] = useState<string>(handlingTime != null ? String(handlingTime) : "");
   const [seIncarca, setSeIncarca] = useState(true);
-  const [seSalveaza, incepe] = useTransition();
+  const [seSalveaza, incepe] = useLucru();
 
   useEffect(() => {
     let viu = true;

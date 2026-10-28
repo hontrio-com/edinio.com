@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useLucru } from "@/components/dashboard/useLucru";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -26,7 +27,7 @@ import { centrulProblemelorEmag, type CentruProblemeEcran } from "@/lib/actions/
 
 export function EmagProbleme({ businessId }: { businessId: string }) {
   const [centru, setCentru] = useState<CentruProblemeEcran | null>(null);
-  const [seIncarca, incepe] = useTransition();
+  const [seIncarca, incepe] = useLucru();
 
   function incarca() {
     incepe(async () => {

@@ -990,7 +990,15 @@ Inventarul (84 de ghiduri in „Design și pagini”, citite toate pe 28.10):
 
 ### Pasii (bifati pe masura ce se fac)
 
-- [ ] G.1 Grupa „Design magazin” si ghidurile noi ale ei (orientarea, istoricul, sabloanele, bucatile paginii de
+- [x] G.1 (28.10: 33 de ghiduri citite fata de cod, 24 rescrise; noi: `cum-e-impartit-editorul-magazinului` (cu
+      captura de orientare a grupului), `cum-muti-si-ascunzi-bucatile-paginii-de-produs`,
+      `cum-readuci-o-versiune-publicata`; 424 de ghiduri. Garantiile: ghidul spune textele fixe si ochiul blocului.
+      GASIT la citirea codului si reparat in editor: (1) la designul Detaliat comutatorul estimarii livrarii nu se
+      putea atinge (blocul lui exista doar la Clasic, desi `blocuri.ts` spunea ca asta trebuie evitat); acum il are si
+      panoul casetei „Detalii produs”, cu nodul `produs_livrare`; (2) nota antetului „Elegant, cu mesaj derulant”
+      trimitea la „Design magazin”, scos; (3) nota randului „Recomandate” numea eticheta din magazin („Popular”) in
+      locul semnului din Produse („Recomandat”). Probe, mutanti 5/5. Proba pe ecran a reparatiei (1): ramane, cere
+      impersonare.) Grupa „Design magazin” si ghidurile noi ale ei (orientarea, istoricul, bucatile paginii de
       produs), nota „Recomandate” din editor.
 - [ ] G.2 Grupa „Secțiuni”.
 - [ ] G.3 „Bibliotecă media” si „Pagini și formulare”; „Primii pasi” si „Produse”.

@@ -505,7 +505,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Bara de contact, randul cu logo si meniu, banda de anunt.
         previewHeight: 144,
         hostsAnnouncement: true,
-        note: "Mesajul derulant se scrie si se porneste din Editeaza magazinul > Design magazin, la „Bara de anunt”. Aici il vezi ca exemplu.",
+        note: "Mesajul derulant se scrie la „Bara de anunț”, sus în lista de secțiuni, și se pornește din ochiul ei. Aici îl vezi ca exemplu.",
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.editorial),
           { key: "showTopBar", type: "toggle", label: "Arata bara de contact" },

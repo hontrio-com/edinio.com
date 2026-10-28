@@ -5,6 +5,7 @@ import path from "node:path";
 import { buildClassicDesign } from "@/lib/storefront/design/defaults";
 import { comutaBaraDeAnunt, ID_BARA_ANUNT, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
+import { SECTION_REGISTRY, type Field } from "@/lib/storefront/design/registry";
 import { createBlock, type Block } from "@/lib/pages/blocks.types";
 import type { DateEditorPagina } from "@/lib/pages/date-editor-pagina";
 import { adaugaSablon } from "@/lib/storefront/design/sabloane-produs";
@@ -444,12 +445,17 @@ test("fiecare sectiune a designului are un nod de continut", () => {
 test("⚠ blocurile cu continut au fiecare nodul lor, cu cheile lor; restul n-au nod", () => {
   // O salvare din „Beneficiile” nu are voie sa ia cu ea ce s-a scris intre timp
   // in „Întrebările frecvente”: de aceea un nod pe bloc, nu unul pe pagina.
-  const cuNod = { beneficii: "benefits_section", cum_functioneaza: "how_it_works_section", intrebari: "faq_section", livrare: "delivery_estimate", cumparare: "button_effect" };
+  const cuNod = { beneficii: "benefits_section", cum_functioneaza: "how_it_works_section", intrebari: "faq_section", livrare: "delivery_estimate", detalii: "delivery_estimate", cumparare: "button_effect" };
   for (const [tip, cheie] of Object.entries(cuNod)) {
     const nod = felBloc(tip);
     assert.ok(nod, tip);
     assert.deepEqual(CHEI_CONTINUT[nod], [cheie], tip);
   }
+  // ⚠ La Detaliat estimarea e un rand din caseta „Detalii produs”: comutatorul ei sta in panoul casetei,
+  // altfel n-avea de unde porni (gasit la ghidurile din 28.10). Acelasi comutator ca la blocul de la Clasic.
+  const bloc = sursa("src/components/editor-magazin/continut/ContinutBloc.tsx");
+  assert.match(bloc, /case "livrare":\s*return <div className="space-y-4"><EstimareaLivrarii continut=\{continut\} \/><\/div>;/);
+  assert.match(bloc, /case "detalii":\s*return \([\s\S]{0,300}?<EstimareaLivrarii continut=\{continut\} \/>/);
   for (const tip of ["titlu", "pret", "variante", "incredere", "dovada", "insigna", "oferte", "descriere"]) {
     assert.equal(felBloc(tip), null, tip);
   }
@@ -835,6 +841,29 @@ test("⚠ „are modificari?” compara designul cu amprenta canonica, nu cu `JS
   assert.match(h, /const amprentaPublicat = useMemo\(\(\) => amprentaDesignului\(publicat\), \[publicat\]\);/);
   assert.match(h, /\(\) => amprentaDesignului\(design\) !== amprentaPublicat \|\| areContinut\(continut\),\s*\[design, amprentaPublicat, continut\],/);
   assert.doesNotMatch(h, /JSON\.stringify/);
+});
+
+test("⚠ notele editorului nu trimit la ecranele scoase, iar „Recomandate” numeste semnul din Produse (ghidurile, 28.10)", () => {
+  // „Design magazin” si „Design secțiuni” nu mai exista din etapa 2; o nota care le pomeneste trimite omul nicaieri.
+  const texte: string[] = [];
+  const dinCampuri = (campuri: readonly Field[]) => {
+    for (const f of campuri) {
+      if (f.help) texte.push(f.help);
+      if (f.type === "repeater") dinCampuri(f.fields);
+    }
+  };
+  for (const meta of Object.values(SECTION_REGISTRY)) {
+    for (const v of Object.values(meta?.variants ?? {})) {
+      if (v.note) texte.push(v.note);
+      dinCampuri(v.fields);
+    }
+  }
+  assert.ok(texte.length > 10, `prea putine texte citite: ${texte.length}`);
+  for (const t of texte) assert.doesNotMatch(t, /Design (magazin|sec[tț]iuni)/i, t);
+  // In Produse semnul e „Recomandat” (butonul „Recomandă”); „Popular” e doar eticheta din magazin.
+  // Sursa intreaga: `faraComentarii` ia `accept="image/*"` drept inceput de comentariu si taie nota.
+  const acasa = sursa("src/components/editor-magazin/continut/ContinutAcasa.tsx");
+  assert.match(acasa, /În rând apar produsele marcate „Recomandat”/);
 });
 
 test("actiunea care cauta produsul unui sablon primeste orice: nu cade pe altceva decat liste", () => {

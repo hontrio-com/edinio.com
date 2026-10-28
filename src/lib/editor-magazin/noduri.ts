@@ -141,6 +141,8 @@ export function felBloc(tip: string): FelContinut | null {
     case "cum_functioneaza": return "produs_pasi";
     case "intrebari": return "produs_intrebari";
     case "livrare": return "produs_livrare";
+    // La Detaliat estimarea livrarii e un rand din caseta „Detalii produs”, deci comutatorul ei sta acolo.
+    case "detalii": return "produs_livrare";
     case "cumparare": return "produs_cumparare";
     default: return null;
   }

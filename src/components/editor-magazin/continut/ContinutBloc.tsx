@@ -66,6 +66,46 @@ function PrevizualizareEfect({ id, eticheta, culoare, ales, onAlege }: {
 
 const DIN_FISA = "Se completează din fișa fiecărui produs.";
 
+/**
+ * Comutatorul estimarii de livrare, cu textul si zilele ei. Il au doua blocuri: „Estimarea livrării” la
+ * Clasic si caseta „Detalii produs” la Detaliat, unde estimarea e un rand al casetei.
+ */
+function EstimareaLivrarii({ continut }: { continut: ContinutMagazin }) {
+  const { pc, seteaza } = continut;
+  const livrare = pc.delivery_estimate!;
+  const set = (fn: (p: typeof pc) => typeof pc) => seteaza("produs_livrare", fn);
+  return (
+    <RandComutator titlu="Arată estimarea livrării" ajutor="Când ajunge comanda, pe pagina produsului. În designul Detaliat apare în caseta „Detalii produs”."
+      pornit={livrare.enabled}
+      onSchimba={(v) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, enabled: v } }))}>
+      <div className="space-y-2">
+        <input type="text" value={livrare.text ?? "Estimare livrare"} className={inputMicCls} aria-label="Textul estimării"
+          placeholder="Estimare livrare"
+          onChange={(e) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, text: e.target.value } }))} />
+        {/* Cand zilele sunt declarate in Setari > Livrare, ELE se afiseaza si tot ele pleaca la Google. */}
+        {pc.delivery_time?.enabled ? (
+          <Nota href="/dashboard/settings?sectiune=livrare" eticheta="Setări > Livrare">
+            Zilele vin din Setări &gt; Livrare &gt; Timp de livrare ({pc.delivery_time.handling_min + pc.delivery_time.transit_min}-{pc.delivery_time.handling_max + pc.delivery_time.transit_max} zile). Aceleași zile pleacă și la Google.
+          </Nota>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-[10px] text-muted-foreground mb-1 block">Zile minim</span>
+              <input type="number" min={1} max={30} value={livrare.min_days ?? 2} className={inputMicCls}
+                onChange={(e) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, min_days: parseInt(e.target.value) || 2 } }))} />
+            </label>
+            <label className="block">
+              <span className="text-[10px] text-muted-foreground mb-1 block">Zile maxim</span>
+              <input type="number" min={1} max={30} value={livrare.max_days ?? 4} className={inputMicCls}
+                onChange={(e) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, max_days: parseInt(e.target.value) || 4 } }))} />
+            </label>
+          </div>
+        )}
+      </div>
+    </RandComutator>
+  );
+}
+
 export function ContinutBloc({ tip, continut }: { tip: string; continut: ContinutMagazin }) {
   const { pc, seteaza, culoare } = continut;
 
@@ -100,42 +140,19 @@ export function ContinutBloc({ tip, continut }: { tip: string; continut: Continu
         </div>
       );
     }
-    case "livrare": {
-      const livrare = pc.delivery_estimate!;
-      const set = (fn: (p: typeof pc) => typeof pc) => seteaza("produs_livrare", fn);
+    case "livrare":
+      return <div className="space-y-4"><EstimareaLivrarii continut={continut} /></div>;
+    /*
+     * La Detaliat estimarea e un rand din caseta, nu un bloc al ei: fara comutatorul de aici, cine
+     * foloseste Detaliat n-avea de unde s-o porneasca (gasit la ghidurile din 28.10.2026).
+     */
+    case "detalii":
       return (
         <div className="space-y-4">
-          <RandComutator titlu="Arată estimarea livrării" ajutor="Când ajunge comanda, pe pagina produsului. În designul Detaliat apare în caseta „Detalii produs”."
-            pornit={livrare.enabled}
-            onSchimba={(v) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, enabled: v } }))}>
-            <div className="space-y-2">
-              <input type="text" value={livrare.text ?? "Estimare livrare"} className={inputMicCls} aria-label="Textul estimării"
-                placeholder="Estimare livrare"
-                onChange={(e) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, text: e.target.value } }))} />
-              {/* Cand zilele sunt declarate in Setari > Livrare, ELE se afiseaza si tot ele pleaca la Google. */}
-              {pc.delivery_time?.enabled ? (
-                <Nota href="/dashboard/settings?sectiune=livrare" eticheta="Setări > Livrare">
-                  Zilele vin din Setări &gt; Livrare &gt; Timp de livrare ({pc.delivery_time.handling_min + pc.delivery_time.transit_min}-{pc.delivery_time.handling_max + pc.delivery_time.transit_max} zile). Aceleași zile pleacă și la Google.
-                </Nota>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block">
-                    <span className="text-[10px] text-muted-foreground mb-1 block">Zile minim</span>
-                    <input type="number" min={1} max={30} value={livrare.min_days ?? 2} className={inputMicCls}
-                      onChange={(e) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, min_days: parseInt(e.target.value) || 2 } }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-[10px] text-muted-foreground mb-1 block">Zile maxim</span>
-                    <input type="number" min={1} max={30} value={livrare.max_days ?? 4} className={inputMicCls}
-                      onChange={(e) => set((p) => ({ ...p, delivery_estimate: { ...p.delivery_estimate!, max_days: parseInt(e.target.value) || 4 } }))} />
-                  </label>
-                </div>
-              )}
-            </div>
-          </RandComutator>
+          <Nota href="/dashboard/products" eticheta="Produse">Codul, codul EAN, categoria și greutatea vin din fișa fiecărui produs.</Nota>
+          <EstimareaLivrarii continut={continut} />
         </div>
       );
-    }
     case "cumparare":
       return (
         <div className="space-y-4">

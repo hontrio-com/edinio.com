@@ -135,7 +135,7 @@ export function ContinutRecomandate({ continut }: { continut: ContinutMagazin })
           placeholder="Recomandate" onChange={(e) => seteaza("recomandate", (p) => ({ ...p, featured_section_title: e.target.value }))} />
       </Grup>
       <Nota href="/dashboard/products" eticheta="Mergi la Produse">
-        În rând apar produsele marcate „Popular”. Le marchezi din lista de produse.
+        În rând apar produsele marcate „Recomandat”, cu steaua din lista de produse. În magazin poartă eticheta „Popular”.
       </Nota>
     </div>
   );

@@ -37,7 +37,7 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { after } from "next/server";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -473,8 +473,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // Detect custom domain access
   const headersList = await headers();
   const host = (headersList.get("host") ?? "").split(":")[0];
-  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${business.slug}`;
+  const basePath = adreseFaraSlug(host, business) ? "" : `/${business.slug}`;
 
   // Analitica, DUPA ce raspunsul a plecat (skip pentru proprietar). Sarita si pe
   // preview/localhost: acele medii scriu in baza de PRODUCTIE, deci fiecare
@@ -740,7 +739,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
    *
    * `storeBaseUrl` e aceeasi functie pe care o folosesc `generateMetadata` de mai
    * sus (prin expresia ei), pagina de catalog si paginile de politici. Calculat
-   * dupa `isCustomDomain`, `@id`-ul magazinului ar fi fost altul cand aceeasi
+   * dupa gazda cererii, `@id`-ul magazinului ar fi fost altul cand aceeasi
    * vitrina se deschide pe edinio.com — se intampla la `?preview=1` si la
    * domeniile pe care cronul le-a gasit moarte — deci pagina principala si
    * paginile ei de categorie ar fi descris DOUA entitati in loc de una, iar

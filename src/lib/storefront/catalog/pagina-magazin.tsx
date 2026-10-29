@@ -2,7 +2,7 @@ import { pentruBrowser } from "@/lib/storefront/business-public";
 import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
 import { notFound, redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { after } from "next/server";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -103,8 +103,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
     .single();
 
   const host = (await headers()).get("host")?.split(":")[0] ?? "";
-  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${slug}`;
+  const basePath = adreseFaraSlug(host, { slug, custom_domain: business.custom_domain }) ? "" : `/${slug}`;
 
   // Ciorna se randeaza DOAR in editorul de design, exact ca pe pagina
   // principala; pana la Publica, vizitatorii vad versiunea publicata.

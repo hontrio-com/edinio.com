@@ -1861,7 +1861,29 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
       recripteaza cheile curierilor (alt nonce, aceeasi valoare la decriptare, verificat); puse la loc si ele.
       Ramase mutate: `updated_at` si marcajul de proiectie al produsului lui (de la punerea la loc).
 - **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
-  push: DNS, domeniul in Vercel, magazinul demo in productie.
+  push: DNS, domeniul in Vercel, magazinul demo in productie. Scris 29.10, inainte de cod (acordul lui: „Da, etapa 19”).
+  - Ce e azi, citit in cod: orice `*.edinio.com` e gazda PLATFORMEI (`platform-hosts.ts`), deci `jupiter.edinio.com` ar
+    servi chiar site-ul de prezentare; `jupiter.localhost` nu e a platformei si ar cadea pe cautarea domeniilor proprii
+    (404). Vitrina scrie adresele fara slug doar pe domeniul propriu (`esteDomeniulPropriu`, 11 pagini, acelasi tipar
+    `basePath`); aceeasi functie hotaraste si indexarea, contul de client si Search Console. Magazinul demo are doar
+    ramburs: un vizitator ar putea plasa o comanda, iar emailul de confirmare ar pleca la adresa scrisa de el. Slugul
+    `tema-jupiter` nu e rezervat (0 magazine `tema-%` in productie, 29.10). `next dev` refuza resursele de dezvoltare
+    cerute de pe alta gazda decat `localhost` (`allowedDevOrigins`).
+  - 19.1 `lib/teme/gazde-demo.ts` (fara dependente): subdomeniul fiecarei teme si magazinul lui. In `proxy.ts`, inaintea
+    domeniilor proprii: `<cheie>.edinio.com` si `<cheie>.localhost` se rescriu spre `/<slugDemo>`, cu
+    `X-Robots-Tag: noindex`; `robots.txt` = „Disallow: /”, fara sitemap; o adresa veche cu slugul in fata se redirecteaza
+    fara el. `adreseFaraSlug(host, magazin)` in cele 11 pagini, DOAR pentru adrese: indexarea, contul de client si
+    Search Console raman pe `esteDomeniulPropriu` (demo-ul nu e domeniul nimanui). `allowedDevOrigins: ["*.localhost"]`.
+    „Vezi demo” duce pe subdomeniu (local `http://jupiter.localhost:3000`, pe o gazda de desfasurare pe `/tema-jupiter`);
+    miniatura ramane pe aceeasi origine (`X-Frame-Options: SAMEORIGIN` n-ar lasa cadrul de pe alta).
+  - 19.2 Magazinul demo nu ia comenzi: semnul `magazin_demo` in `setariDemo` (scris de script in `page_content`), iar
+    `placeOrder` si `placeCartOrder` refuza, inaintea oricarei rezervari, cu „Acesta e un magazin demo: poți încerca tot,
+    dar comenzile sunt oprite.”. Cosul abandonat nu se strange (`abandoned_cart_enabled` ramane oprit; verificat). Slugurile
+    `tema-*` rezervate la crearea unui magazin.
+  - 19.3 Productia, pregatita, NU rulata: fisierul SQL al magazinului demo (contul tehnic, profilul Ultra, magazinul,
+    setarile; idempotent, dupa tiparul din `demo-seed`), scriptul de umplere acceptand productia doar cu un semn anume;
+    in REGISTRU: CNAME `jupiter` → Vercel, domeniul in proiect, SQL-ul si scriptul cu acordul lui, verificarile.
+  - 19.4 Ghiduri, probe, porti; proba in Chrome pe `jupiter.localhost:3000` (magazinul demo e public: fara impersonare).
 
 ## Deciziile proprietarului
 

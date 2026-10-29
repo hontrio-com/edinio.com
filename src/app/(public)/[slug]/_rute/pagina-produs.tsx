@@ -13,7 +13,7 @@ import { privitoriiProdusului } from "@/lib/analitice/privitori";
 import { completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
@@ -210,8 +210,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
 
   // Detect custom domain access (also the One Product Store homepage target).
   const headersList = await headers();
-  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${business.slug}`;
+  const basePath = adreseFaraSlug(headersList.get("host"), business) ? "" : `/${business.slug}`;
 
   // One Product Store: the homepage already renders this exact product as the
   // store's landing page, so the canonical /product/<main> URL is duplicate

@@ -1,6 +1,7 @@
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
 import { designJupiter, faraTexteleDemo, IDENTITATE_JUPITER } from "./jupiter/design";
+import { CHEIE_MAGAZIN_DEMO } from "./gazde-demo";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -32,8 +33,9 @@ export interface Tema {
   /** Culoarea, fundalul si fonturile: scrise in magazin, unde le regleaza fila „Stil” (`lib/teme/aplicare.ts`). */
   identitate: IdentitateTema;
   /**
-   * Reglajele din `page_content` ale magazinului demo, ca demo-ul sa arate ca modelul (Jupiter: fara categoria pe card).
-   * Doar pentru demo: la aplicare (etapa 17), reglajele comerciantului raman ale lui.
+   * Reglajele din `page_content` ale magazinului demo, ca demo-ul sa arate ca modelul (Jupiter: fara categoria pe card),
+   * plus semnul magazinului demo (`magazin_demo`: fara comenzi, etapa 19.2). Doar pentru demo: la aplicare (etapa 17),
+   * reglajele comerciantului raman ale lui.
    */
   setariDemo: Record<string, unknown>;
 }
@@ -48,7 +50,7 @@ export const TEME: readonly Tema[] = [
     design: designJupiter,
     faraTexteleDemo,
     identitate: IDENTITATE_JUPITER,
-    setariDemo: { show_category_badges: false },
+    setariDemo: { show_category_badges: false, [CHEIE_MAGAZIN_DEMO]: true },
   },
 ];
 
@@ -57,9 +59,21 @@ export function temaDupaCheie(v: unknown): Tema | null {
 }
 
 /**
- * Unde se vede demo-ul temei: azi magazinul ei, pe adresa platformei (`/tema-jupiter`); la etapa 19, subdomeniul ei
- * (`jupiter.edinio.com`).
+ * Unde se vede demo-ul temei („Vezi demo”, etapa 19): pe subdomeniul ei (`https://jupiter.edinio.com`; local, pe
+ * `http://jupiter.localhost:3000`). Pe o gazda de desfasurare (`*.vercel.app`) subdomeniul nu exista, deci magazinul
+ * demo pe adresa platformei (`/tema-jupiter`). `host` = antetul `Host` al cererii paginii „Teme”.
  */
-export function adresaDemo(tema: Pick<Tema, "slugDemo">): string {
+export function adresaDemo(tema: Pick<Tema, "cheie" | "slugDemo">, host: string | null | undefined): string {
+  const [gazda = "", port] = (host ?? "").trim().toLowerCase().split(":");
+  if (gazda === "localhost") return `http://${tema.cheie}.localhost${port ? `:${port}` : ""}`;
+  if (gazda === "www.edinio.com" || gazda === "edinio.com") return `https://${tema.cheie}.edinio.com`;
+  return `/${tema.slugDemo}`;
+}
+
+/**
+ * Miniatura vie de pe pagina „Teme”: pe ACEEASI origine cu panoul, fiindca vitrina raspunde cu
+ * `X-Frame-Options: SAMEORIGIN`, deci un cadru de pe subdomeniu n-ar fi aratat nimic.
+ */
+export function adresaMiniaturii(tema: Pick<Tema, "slugDemo">): string {
   return `/${tema.slugDemo}`;
 }

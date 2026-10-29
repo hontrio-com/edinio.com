@@ -487,3 +487,59 @@ describe("domeniul propriu care nu serveste un magazin: doua ecrane, amandoua 40
     assert.doesNotMatch(corp, /În curând/);
   });
 });
+
+describe("etapa 19: subdomeniul demo al unei teme e magazinul ei demo, fara indexare", () => {
+  test("jupiter.edinio.com: fiecare cale se rescrie pe /tema-jupiter, cu noindex, fara sa intrebe baza", async () => {
+    const inainte = interogariMagazine();
+    for (const [cale, tinta] of [
+      ["/", "/tema-jupiter"],
+      ["/product/calorifer", "/tema-jupiter/product/calorifer"],
+      ["/magazin/gradina", "/tema-jupiter/magazin/gradina"],
+      ["/cos", "/tema-jupiter/cos"],
+    ]) {
+      const r = await proxy(cerere(`https://jupiter.edinio.com${cale}`));
+      const rescriere = new URL(r.headers.get("x-middleware-rewrite") ?? "http://x/nimic");
+      assert.equal(rescriere.pathname, tinta, cale);
+      assert.equal(robots(r), "noindex, follow", `${cale} fara noindex`);
+    }
+    assert.equal(interogariMagazine(), inainte, "subdomeniul demo nu cauta nimic in baza");
+  });
+
+  test("local, jupiter.localhost:3000 face la fel, cu interogarea pastrata (nu cade pe domeniile proprii)", async () => {
+    const r = await proxy(cerere("http://jupiter.localhost:3000/magazin?cat=Gradina"));
+    const rescriere = new URL(r.headers.get("x-middleware-rewrite") ?? "http://x/nimic");
+    assert.equal(rescriere.pathname, "/tema-jupiter/magazin");
+    assert.equal(rescriere.searchParams.get("cat"), "Gradina");
+    assert.equal(r.status, 200);
+  });
+
+  test("robots.txt opreste tot, sitemap-ul nu exista: demo-ul nu are ce cauta in Google", async () => {
+    const roboti = await proxy(cerere("https://jupiter.edinio.com/robots.txt"));
+    assert.equal(roboti.status, 200);
+    assert.match(await roboti.text(), /^User-agent: \*\nDisallow: \/\n$/);
+    const harta = await proxy(cerere("https://jupiter.edinio.com/sitemap.xml"));
+    assert.equal(harta.status, 404);
+  });
+
+  test("o adresa cu slugul in fata se muta fara el (altfel s-ar rescrie de doua ori), si cand e codificat", async () => {
+    for (const [cale, tinta] of [
+      ["/tema-jupiter/product/x", "/product/x"],
+      ["/tema-jupiter", "/"],
+      ["/tema%2Djupiter/product/x", "/product/x"],
+    ]) {
+      const r = await proxy(cerere(`https://jupiter.edinio.com${cale}`));
+      assert.equal(r.status, 308, cale);
+      assert.equal(new URL(r.headers.get("location") ?? "").pathname, tinta, cale);
+    }
+  });
+
+  test("ce nu e subdomeniul unei teme nu se atinge: alt subdomeniu, alta gazda, o gazda care doar incepe la fel", async () => {
+    for (const url of ["https://saturn.edinio.com/", "https://constructor.edinio.com/", "https://www.edinio.com/"]) {
+      const r = await proxy(cerere(url));
+      assert.doesNotMatch(r.headers.get("x-middleware-rewrite") ?? "", /tema-jupiter/, url);
+    }
+    // `jupiter.edinio.com.strain.ro` e un domeniu strain: cautat ca domeniu propriu, deci 404, nu demo-ul.
+    const strain = await proxy(cerere("https://jupiter.edinio.com.strain.ro/"));
+    assert.equal(strain.status, 404);
+  });
+});

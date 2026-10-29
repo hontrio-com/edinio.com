@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -87,8 +87,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   });
 
   const host = (await headers()).get("host");
-  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${slug}`;
+  const basePath = adreseFaraSlug(host, { slug, custom_domain: business.custom_domain }) ? "" : `/${slug}`;
 
   /*
     ═══ PALNIA: „a inceput checkout-ul" ═══

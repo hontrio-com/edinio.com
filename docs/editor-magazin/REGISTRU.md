@@ -9,6 +9,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 4. Variabilele din tabelul B in Vercel (Production) inainte de push.
 5. Capturile din tabelul D refacute pe ecranele finale.
 6. Unire `editor-magazin` -> `main`, push, verificare productie + CI (tabelul C).
+7. Magazinul demo al temei Jupiter (etapa 19, vezi „E. Demo-ul temelor”), cu acordul lui: subdomeniul, contul tehnic si
+   magazinul, umplerea. Pagina „Teme” arata miniatura si „Vezi demo” abia dupa pasul asta.
 
 ## A. Migratii
 | nr | fisier | ce face | demo | productie |
@@ -298,3 +300,22 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 - Si selectorul Bibliotecii Media are etichetele fara diacritice („Adauga (1)”, „Anuleaza”, „Niciun fisier...”), ca registrul de mai sus; ghidurile le citeaza cu diacritice, ca in tot centrul de ajutor. Aceeasi trecere separata.
 - `ProductForm` (galeria de imagini a produsului) foloseste tot dnd-kit fara `id` stabil, deci poate avea aceeasi nepotrivire de hidratare reparata in lista de sectiuni (`SectionList`, `useId`). In afara editorului, neatins.
 - ~~Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”.~~ Rezolvat de etapa 8: setarile s-au intors in editor, deci ghidurile lor stau iar langa el. Invers, cele din categoria „Setări” despre datele firmei, ANAF si numerotarea comenzilor descriu acum fila „Setări” a editorului; titlul categoriei ramane potrivit. O mutare intre categorii schimba adresa (`/ajutor/<categorie>/<ghid>`) si cere redirectari.
+
+## E. Demo-ul temelor (etapa 19), LA PUSH, cu acordul lui
+Magazinul demo al temei Jupiter (`tema-jupiter`) exista DOAR in baza demo. In productie nu exista nimic din el: pana la
+pasii de mai jos, `jupiter.edinio.com` nu raspunde, iar pe pagina „Teme” miniatura si „Vezi demo” dau 404.
+1. **DNS:** inregistrarea `jupiter` (CNAME) catre Vercel, la furnizorul domeniului `edinio.com` (valoarea o da Vercel la
+   pasul 2, de regula `cname.vercel-dns.com`).
+2. **Vercel:** proiectul aplicatiei > Settings > Domains > Add `jupiter.edinio.com` (fara redirectare), pana apare
+   „Valid Configuration” si certificatul.
+3. **Contul tehnic si magazinul:** `scripts/teme/magazinul-demo.sql`, rulat o singura data pe productie (idempotent; nu
+   sterge nimic; se opreste daca slugul `tema-jupiter` ar fi al altui cont). Inainte, de hotarat de el: emailul si
+   telefonul afisate in subsolul demo-ului (azi `jupiter@edinio-demo.test`, `0700 000 000`). Verificarea e in coada
+   fisierului: magazinul publicat, fara domeniu propriu, plan Ultra pana in 2099, setarile.
+4. **Umplerea:** `scripts/teme/seamana-demo.ts jupiter --productie`, cu cheile productiei in mediu (doar pentru rularea
+   asta). Scrie 39 de categorii, 58 de produse demo (sursa `tema-demo`, deci in afara canalelor, etapa 18.1), 4 bannere,
+   2 randuri, designul temei si semnul `magazin_demo` (fara comenzi, etapa 19.2).
+5. **Verificari:** `https://jupiter.edinio.com` arata magazinul demo, adresele fara `/tema-jupiter`, antetul
+   `X-Robots-Tag: noindex, follow`; `/robots.txt` = „Disallow: /”; `/sitemap.xml` = 404; o comanda (din cos si din
+   formularul produsului) e refuzata cu „Acesta e un magazin demo: poți încerca tot, dar comenzile sunt oprite.”, fara
+   rand nou in `orders`; pe pagina „Teme”, miniatura vie si „Vezi demo” deschide `jupiter.edinio.com`.

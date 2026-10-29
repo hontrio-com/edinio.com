@@ -7,7 +7,10 @@
     node --env-file=.env.development.local --conditions=react-server --import ./scripts/tests/register.mjs \
       scripts/teme/seamana-demo.ts jupiter
 
-  ⚠ Refuza productia. Magazinul demo din productie se face abia la push, cu acordul lui (REGISTRU).
+  ⚠ Productia doar cu `--productie` la coada, LA PUSH, cu acordul lui (REGISTRU), dupa `scripts/teme/magazinul-demo.sql`
+  (contul tehnic si magazinul). Fara semn, o rulare din greseala cu cheile productiei e refuzata.
+
+  Scrie si semnul magazinului demo (`magazin_demo`, din `setariDemo`): fara comenzi (etapa 19.2).
 */
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -24,7 +27,9 @@ async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const cheie = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !cheie) throw new Error("Lipsesc NEXT_PUBLIC_SUPABASE_URL sau SUPABASE_SERVICE_ROLE_KEY.");
-  if (url.includes(PRODUCTIA)) throw new Error("Refuz: adresa e a productiei.");
+  if (url.includes(PRODUCTIA) && !process.argv.includes("--productie")) {
+    throw new Error("Refuz: adresa e a productiei. Acolo doar la push, cu acordul lui, si cu --productie.");
+  }
 
   const admin = createClient<Database>(url, cheie, { auth: { persistSession: false } });
   const { data: magazin, error } = await admin

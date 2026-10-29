@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -348,8 +349,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
 
   // Custom domain detection (links honour basePath).
   const headersList = await headers();
-  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${business.slug}`;
+  const basePath = adreseFaraSlug(headersList.get("host"), business) ? "" : `/${business.slug}`;
 
   /*
    * Pagina aleasa ca pagina principala are o singura adresa: radacina magazinului.

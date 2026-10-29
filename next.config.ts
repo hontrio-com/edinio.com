@@ -196,6 +196,12 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   /*
+   * Demo-ul unei teme se probeaza local pe `jupiter.localhost:3000` (etapa 19, `lib/teme/gazde-demo.ts`). Fara linia
+   * asta, `next dev` refuza resursele de dezvoltare cerute de pe alta gazda decat `localhost`. Doar in dezvoltare.
+   */
+  allowedDevOrigins: ["*.localhost"],
+
+  /*
    * `/roadmap` a devenit `/blog` (2026-08-09).
    *
    * Redirectul nu e politete: pagina veche e in productie de luni de zile, deci

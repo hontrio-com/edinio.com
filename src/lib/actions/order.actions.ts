@@ -91,6 +91,7 @@ import { isIP } from "node:net";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
 import { emailulContului, leagaComandaPlasata, poartaContuluiLaComanda } from "@/lib/cont/poarta-comenzii";
 import { adresaContului } from "@/lib/cont/origine";
+import { esteMagazinDemo, MESAJ_COMENZI_OPRITE } from "@/lib/teme/gazde-demo";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
 const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
@@ -1231,6 +1232,8 @@ export async function placeOrder(data: {
     logError({ action: "placeOrder.configUnavailable", message: eroareCfg.message, details: { businessId: data.business_id }, severity: "error" });
     return { error: "Nu am putut verifica setarile magazinului. Te rugam incearca din nou in cateva momente." };
   }
+  // Magazinul demo al unei teme (etapa 19.2) nu ia comenzi: inaintea oricarei rezervari sau scrieri.
+  if (esteMagazinDemo(cfgRow?.page_content)) return { error: MESAJ_COMENZI_OPRITE };
 
   /*
    * Metoda de plata, verificata fata de ce ofera CHIAR magazinul.
@@ -4504,6 +4507,8 @@ export async function placeCartOrder(data: {
     logError({ action: "placeCartOrder.configUnavailable", message: eroareCfg.message, details: { businessId: data.business_id }, severity: "error" });
     return { error: "Nu am putut verifica setarile magazinului. Te rugam incearca din nou in cateva momente." };
   }
+  // Magazinul demo al unei teme (etapa 19.2) nu ia comenzi: inaintea oricarei rezervari sau scrieri.
+  if (esteMagazinDemo(cfgRow?.page_content)) return { error: MESAJ_COMENZI_OPRITE };
 
   // Aceeasi garda ca la comanda directa: metoda de plata se verifica fata de ce
   // ofera magazinul, nu doar fata de tabelul de coduri. Vezi `verificaMetodaPlata`.

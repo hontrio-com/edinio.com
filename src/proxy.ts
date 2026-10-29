@@ -11,6 +11,7 @@ import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { ecranDomeniuNeconectat, ecranMagazinNepublicat } from "@/lib/ecran-domeniu";
 import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
 import { EXTENSII_STATICE, NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
+import { slugDemoDupaGazda } from "@/lib/teme/gazde-demo";
 import {
   ANTET_ROBOTS,
   NOINDEX_DESFASURARE,
@@ -205,6 +206,42 @@ export async function proxy(request: NextRequest) {
   // which X-Frame-Options: SAMEORIGIN then blocks ("refused to connect"). Keep
   // the preview on the current origin so it can be framed by the dashboard.
   const isPreview = request.nextUrl.searchParams.get("preview") === "1";
+
+  /*
+   * ═══ SUBDOMENIUL DEMO AL UNEI TEME: jupiter.edinio.com (etapa 19) ═══
+   *
+   * Tot ce vine pe subdomeniu e magazinul demo al temei, rescris spre `/<slug>` ca un domeniu propriu (vitrina isi
+   * scrie acolo adresele fara slug: `adreseFaraSlug`). INAINTEA ramurii domeniilor proprii: local, `jupiter.localhost`
+   * nu e o gazda a platformei si ar fi cazut pe cautarea lor (404).
+   *
+   * Demo-ul nu se indexeaza (e o copie a temei, cu date inventate): antetul `noindex` pe tot, `robots.txt` care
+   * opreste tot, fara sitemap. O adresa cu slugul in fata (o legatura veche, de pe platforma) se muta fara el, ca sa
+   * nu se rescrie de doua ori.
+   */
+  const slugDemo = slugDemoDupaGazda(hostname);
+  if (slugDemo) {
+    const { pathname } = request.nextUrl;
+    if (pathname === "/robots.txt") {
+      return new NextResponse("User-agent: *\nDisallow: /\n", {
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=3600" },
+      });
+    }
+    if (pathname === "/sitemap.xml") {
+      return new NextResponse("Not found", { status: 404, headers: { "cache-control": "no-store", [ANTET_ROBOTS]: "noindex" } });
+    }
+    if (primulSegment(pathname) === slugDemo) {
+      // Dupa segmentul BRUT, ca la redirectarea spre domeniul propriu de mai jos: `/tema%2Djupiter/x` e tot slugul.
+      const segmentBrut = pathname.split("/")[1] ?? "";
+      const url = request.nextUrl.clone();
+      url.pathname = pathname.slice(segmentBrut.length + 1) || "/";
+      return NextResponse.redirect(url, 308);
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = pathname === "/" ? `/${slugDemo}` : `/${slugDemo}${pathname}`;
+    const raspuns = NextResponse.rewrite(url);
+    raspuns.headers.set(ANTET_ROBOTS, NOINDEX_VITRINA);
+    return raspuns;
+  }
 
   /*
    * ═══ O SINGURA GAZDA PENTRU SITE: www.edinio.com ═══

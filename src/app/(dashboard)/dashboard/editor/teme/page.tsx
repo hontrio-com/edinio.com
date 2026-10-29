@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -6,7 +7,7 @@ import { temaAplicataDin } from "@/lib/teme/aplicare";
 import { urmaDateDemoDin } from "@/lib/teme/import-demo";
 import { citesteLoculPentruDemo, motivulLimitei } from "@/lib/teme/limita-demo";
 import { SURSA_DEMO } from "@/lib/teme/produse-demo";
-import { adresaDemo, TEME } from "@/lib/teme/teme";
+import { adresaDemo, adresaMiniaturii, TEME } from "@/lib/teme/teme";
 import { TemeClient } from "@/components/teme/TemeClient";
 
 export const metadata = { title: "Teme" };
@@ -45,6 +46,8 @@ export default async function TemePage() {
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", magazin.id).eq("source", SURSA_DEMO),
   ]);
   const urma = urmaDateDemoDin(setari?.page_content);
+  // Etapa 19: „Vezi demo” pe subdomeniul temei, dupa gazda pe care s-a deschis panoul (local, `jupiter.localhost`).
+  const gazda = (await headers()).get("host");
 
   return (
     <TemeClient
@@ -52,7 +55,8 @@ export default async function TemePage() {
       teme={TEME.map((t, i) => {
         const loc = locuri[i];
         return {
-          cheie: t.cheie, nume: t.nume, descriere: t.descriere, culoare: t.identitate.culoare, adresaDemo: adresaDemo(t),
+          cheie: t.cheie, nume: t.nume, descriere: t.descriere, culoare: t.identitate.culoare,
+          adresaDemo: adresaDemo(t, gazda), adresaMiniaturii: adresaMiniaturii(t),
           demo: {
             produse: t.date.produse.length, bannere: t.date.bannere.length, randuri: t.date.randuri.length,
             // Citirea cazuta lasa bifa la vedere: actiunea reface verificarea si spune ea daca nu incap.

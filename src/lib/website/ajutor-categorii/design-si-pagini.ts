@@ -874,12 +874,13 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "O temă schimbă dintr-un clic tot designul magazinului: antetul, prima pagină, paginile de categorie și de produs, cardul de produs, culoarea și fonturile. Produsele și textele tale rămân.",
           pasi: [
             "Intră în Editează magazinul > Teme, din meniul din stânga.",
-            "Apasă „Vezi demo” ca să vezi tema pe un magazin cu produse.",
+            "Apasă „Vezi demo” ca să vezi tema pe un magazin cu produse, pe adresa ei (Jupiter: jupiter.edinio.com).",
             "Apasă „Aplică tema” și citește ce se schimbă.",
             "Dacă vrei magazinul plin, ca în demo, bifează „Importă și datele demo”.",
             "Apasă din nou „Aplică tema”, apoi „Deschide editorul”, și reglează tema ca pe orice design.",
           ],
           detalii: [
+            { titlu: "Magazinul demo", text: "Fiecare temă are un magazin demo pe adresa ei: Jupiter pe jupiter.edinio.com. Cauți, filtrezi și pui în coș ca un client, dar comenzile sunt oprite. Pagina „Teme” îl arată și în miniatură, pe cardul temei." },
             { titlu: "Ce schimbă Jupiter", text: "Antetul „Hipermarket, cu meniu de categorii”, subsolul „Hipermarket, cu newsletter și coloane pe gri”, prima pagină (bannerul cu două carduri, categoriile pe plăci, rândurile pe bandă gri, plăcile de recomandare), Pagina Magazin cu filtre în stânga, pagina de produs „Detaliat”, cardul „Hipermarket, cu prețul mare”, culoarea principală, fundalul și fonturile." },
             { titlu: "Ce rămâne al tău", text: "Produsele, categoriile, textele, bannerele, rândurile de produse, paginile, setările și domeniul. Rămân și coloanele de subsol alese de tine, blocurile „Conținut liber”, cardurile de lângă banner, plăcile de recomandare și mesajul din bara de sus, dacă le aveai deja." },
             { titlu: "Cardurile și plăcile temei", text: "Fără datele demo, cardurile de lângă banner și plăcile de recomandare pornesc goale. Le completezi din editor, în panoul secțiunii lor." },

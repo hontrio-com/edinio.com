@@ -15,6 +15,7 @@ import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
 import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo, robotsVitrinaPeGazda, verificareGooglePentru } from "@/lib/seo";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import type { Metadata } from "next";
 import { contulMagazinului as contulMagazinuluiPeCerere } from "@/lib/cont/config";
 import { ContulMagazinuluiProvider } from "@/components/storefront/cont/ContulMagazinului";
@@ -206,7 +207,7 @@ export default async function StoreLayout({ children, params }: Props) {
   // raspuns: `esteDomeniulPropriu` e singurul loc care o judeca.
   const host = (await headers()).get("host");
   const customDomain = (business?.custom_domain as string | null) ?? null;
-  const basePath = esteDomeniulPropriu(host, customDomain) ? "" : `/${slug}`;
+  const basePath = adreseFaraSlug(host, { slug, custom_domain: customDomain }) ? "" : `/${slug}`;
 
   /*
    * Conturile de client, pe cererea asta: butonul „Contul meu" din antet si daca o

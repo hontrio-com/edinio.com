@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -42,8 +42,7 @@ export default async function ReturPage({ params, searchParams }: Props) {
 
   // Custom-domain aware base path (proxy rewrites customdomain.ro/x -> /slug/x).
   const host = (await headers()).get("host");
-  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${slug}`;
+  const basePath = adreseFaraSlug(host, { slug, custom_domain: business.custom_domain }) ? "" : `/${slug}`;
 
   // Acelasi header si footer ca pe restul magazinului. Logo-ul din continut a
   // disparut: il are acum header-ul.

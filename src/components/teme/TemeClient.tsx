@@ -17,7 +17,10 @@ export interface TemaPeCard {
   nume: string;
   descriere: string;
   culoare: string;
+  /** „Vezi demo”: subdomeniul temei (etapa 19). */
   adresaDemo: string;
+  /** Miniatura vie: pe aceeasi origine cu panoul (cadrul nu se incarca de pe alta). */
+  adresaMiniaturii: string;
   /** Datele demo ale temei (etapa 18): cate sunt si daca incap in planul lui. */
   demo: {
     produse: number;
@@ -113,7 +116,7 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
           const esteAplicata = aplicata?.cheie === t.cheie;
           return (
             <li key={t.cheie} className="rounded-2xl border border-border bg-surface overflow-hidden flex flex-col">
-              <MiniaturaDemo adresa={t.adresaDemo} nume={t.nume} />
+              <MiniaturaDemo adresa={t.adresaMiniaturii} nume={t.nume} />
               <div className="p-4 space-y-3 flex-1 flex flex-col">
                 <div className="flex items-center gap-2">
                   <span aria-hidden className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: t.culoare }} />

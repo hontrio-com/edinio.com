@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
@@ -193,8 +193,7 @@ export default async function PolicyPage({ params }: Props) {
 
   // Detect custom domain access
   const headersList = await headers();
-  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
-  const basePath = isCustomDomain ? "" : `/${slug}`;
+  const basePath = adreseFaraSlug(headersList.get("host"), { slug, custom_domain: business.custom_domain }) ? "" : `/${slug}`;
 
   // Header-ul si footerul magazinului, ca pe orice alta pagina publica. Pana
   // acum pagina avea doar un link „Inapoi la magazin" si nu afisa insignele

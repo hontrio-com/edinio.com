@@ -2,7 +2,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { permanentRedirect } from "next/navigation";
 import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
-import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import {
   PERMALINKURI_IMPLICITE, setareaPermalinkurilor,
   type FelPermalink, type SetarePermalinkuri,
@@ -48,7 +48,7 @@ export async function adresaCurenta(
   const [rand, s, h] = await Promise.all([
     incarcaAntetMagazin(slug), setareaPermalinkurilorMagazinului(slug), headers(),
   ]);
-  const basePath = esteDomeniulPropriu(h.get("host"), rand?.custom_domain ?? null) ? "" : `/${slug}`;
+  const basePath = adreseFaraSlug(h.get("host"), { slug, custom_domain: rand?.custom_domain ?? null }) ? "" : `/${slug}`;
   const coada = restul.map((x) => `/${encodeURIComponent(x)}`).join("");
   return `${basePath}/${s[fel]}${coada}${sirInterogare(sp)}`;
 }

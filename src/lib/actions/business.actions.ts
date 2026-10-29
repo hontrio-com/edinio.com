@@ -8,6 +8,7 @@ import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
+import { esteSlugDeMagazinDemo } from "@/lib/teme/gazde-demo";
 import { culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
 import { designInitial } from "@/lib/onboarding/design-initial";
 import type { DesignContext } from "@/lib/storefront/design/types";
@@ -48,7 +49,8 @@ function motivSlugRespins(slug: string): string | null {
   if (!SLUG_MAGAZIN.test(slug)) {
     return "Adresa magazinului trebuie sa aiba intre 3 si 50 de caractere, doar litere mici, cifre si liniute, si sa nu inceapa sau sa se termine cu liniuta.";
   }
-  if (NON_STORE_SEGMENTS.has(slug)) {
+  // Si `tema-*`: adresele magazinelor demo ale temelor (etapa 19), care stau si pe subdomeniile lor.
+  if (NON_STORE_SEGMENTS.has(slug) || esteSlugDeMagazinDemo(slug)) {
     return "Aceasta adresa este rezervata de platforma. Alege alta.";
   }
   return null;

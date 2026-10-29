@@ -96,6 +96,8 @@ test("⚠⚠ fara comenzi pe magazinul demo: amandoua caile refuza INAINTEA cont
     }
   }
   assert.match(MESAJ_COMENZI_OPRITE, /magazin demo/);
+  // Il citeste clientul, in vitrina: fara diacritice, ca restul refuzurilor comenzii (vazut la proba 19.4).
+  assert.doesNotMatch(MESAJ_COMENZI_OPRITE, /[ăâîșțşţĂÂÎȘȚŞŢ]/);
 });
 
 test("slugurile `tema-*` sunt rezervate la crearea magazinului si la intrebarea „e liber?”", () => {

@@ -317,5 +317,5 @@ pasii de mai jos, `jupiter.edinio.com` nu raspunde, iar pe pagina „Teme” min
    2 randuri, designul temei si semnul `magazin_demo` (fara comenzi, etapa 19.2).
 5. **Verificari:** `https://jupiter.edinio.com` arata magazinul demo, adresele fara `/tema-jupiter`, antetul
    `X-Robots-Tag: noindex, follow`; `/robots.txt` = „Disallow: /”; `/sitemap.xml` = 404; o comanda (din cos si din
-   formularul produsului) e refuzata cu „Acesta e un magazin demo: poți încerca tot, dar comenzile sunt oprite.”, fara
+   formularul produsului) e refuzata cu „Acesta e un magazin demo: poti incerca tot, dar comenzile sunt oprite.”, fara
    rand nou in `orders`; pe pagina „Teme”, miniatura vie si „Vezi demo” deschide `jupiter.edinio.com`.

@@ -1877,13 +1877,26 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     „Vezi demo” duce pe subdomeniu (local `http://jupiter.localhost:3000`, pe o gazda de desfasurare pe `/tema-jupiter`);
     miniatura ramane pe aceeasi origine (`X-Frame-Options: SAMEORIGIN` n-ar lasa cadrul de pe alta).
   - 19.2 Magazinul demo nu ia comenzi: semnul `magazin_demo` in `setariDemo` (scris de script in `page_content`), iar
-    `placeOrder` si `placeCartOrder` refuza, inaintea oricarei rezervari, cu „Acesta e un magazin demo: poți încerca tot,
-    dar comenzile sunt oprite.”. Cosul abandonat nu se strange (`abandoned_cart_enabled` ramane oprit; verificat). Slugurile
-    `tema-*` rezervate la crearea unui magazin.
+    `placeOrder` si `placeCartOrder` refuza, inaintea oricarei rezervari, cu „Acesta e un magazin demo: poti incerca tot,
+    dar comenzile sunt oprite.” (fara diacritice: e text de vitrina). Cosul abandonat nu se strange
+    (`abandoned_cart_enabled` ramane oprit; verificat). Slugurile `tema-*` rezervate la crearea unui magazin.
   - 19.3 Productia, pregatita, NU rulata: fisierul SQL al magazinului demo (contul tehnic, profilul Ultra, magazinul,
     setarile; idempotent, dupa tiparul din `demo-seed`), scriptul de umplere acceptand productia doar cu un semn anume;
     in REGISTRU: CNAME `jupiter` → Vercel, domeniul in proiect, SQL-ul si scriptul cu acordul lui, verificarile.
   - 19.4 Ghiduri, probe, porti; proba in Chrome pe `jupiter.localhost:3000` (magazinul demo e public: fara impersonare).
+  - [x] 19.1-19.3 FACUTE (29.10, `0867f3dc`): ca in plan. In plus: `jupiter.edinio.com.strain.ro` si `constructor.edinio.com`
+    nu sunt subdomenii de tema (un `Map`, gazda potrivita intreaga); taietura slugului dupa segmentul BRUT. SQL-ul probat pe
+    demo pe toate trei ramurile (cont si magazin noi, apoi „exista deja”, apoi slugul altui cont, oprit, cu tot blocul
+    intors), proba stearsa; scriptul rulat pe demo a scris semnul `magazin_demo` (doar la `tema-jupiter`). Probe noi pe
+    proxy-ul adevarat (5) si pe reguli (10); mutanti 16/16. Porti: suita 11.401 / 0 / 2 sarite, tsc, lint sub prag,
+    `build:ci`.
+  - [x] 19.4 PROBATA (29.10): `jupiter.localhost:3000` serveste magazinul demo, hidratat (46/46 butoane), cu 48 de
+    linkuri spre produse fara slug si 0 cu `/tema-jupiter`; `noindex` in antet si in pagina; `robots.txt` „Disallow: /”;
+    `sitemap.xml` 404; `/tema-jupiter/magazin` -> 308 `/magazin`. Comanda din formularul produsului SI cea din cos
+    (sertarul cosului, fiindca designul n-are pagina de cos) refuzate cu mesajul, 0 comenzi, 0 cosuri, 0 clienti; ultima
+    comanda din baza ramane cea din 29.09. GASIT: mesajul avea diacritice, desi e text de vitrina; scos, cu proba.
+    Pagina „Teme” n-a fost deschisa in Chrome (sesiunea lui de pe localhost s-a inchis la iesirea din impersonare, 18.5):
+    „Vezi demo” si miniatura sunt probate pe sursa si pe functie.
 
 ## Deciziile proprietarului
 

@@ -52,8 +52,9 @@ export function esteMagazinDemo(pageContent: unknown): boolean {
 /**
  * Raspunsul la o comanda pe magazinul demo (etapa 19.2): nimic nu se rezerva, nu se scrie si nu pleaca. Fara poarta,
  * un vizitator ar fi plasat o comanda cu ramburs, iar emailul de confirmare ar fi plecat la adresa scrisa de el.
+ * ⚠ Fara diacritice: il citeste clientul, in vitrina, ca restul refuzurilor comenzii (gasit la proba 19.4).
  */
-export const MESAJ_COMENZI_OPRITE = "Acesta e un magazin demo: poți încerca tot, dar comenzile sunt oprite.";
+export const MESAJ_COMENZI_OPRITE = "Acesta e un magazin demo: poti incerca tot, dar comenzile sunt oprite.";
 
 /** Slugurile magazinelor demo, rezervate: un comerciant nu-si poate face magazinul pe unul din ele. */
 export function esteSlugDeMagazinDemo(slug: string): boolean {

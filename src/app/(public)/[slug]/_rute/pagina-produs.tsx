@@ -41,6 +41,7 @@ import { normalizeazaDefinitia } from "@/lib/customization/definitie";
 import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/permis-incarcare";
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
 import { adresaCurenta, setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
+import { esteProdusDemo } from "@/lib/teme/produse-demo";
 
 /*
  * ⚠ AICI STA PAGINA DE PRODUS, nu in `product/[productSlug]/page.tsx` (25.09.2026).
@@ -114,7 +115,8 @@ export async function metadataProdus({ productSlug, slug }: Props): Promise<Meta
   const url = hrefProdus(storeBaseUrl({ slug, custom_domain: customDomain }), canonicalSlug, permalinkuri.produs);
   // One Product Store: only the main product is indexable (and it 301s to the
   // homepage, handled in the page). Every other product is noindex,follow.
-  const noindex = storeMode.mode === "one_product" && storeMode.productId !== product.id;
+  // Si produsele demo ale unei teme (etapa 18.1): raman doar in magazin, deci nici in Google (lipsesc si din sitemap).
+  const noindex = (storeMode.mode === "one_product" && storeMode.productId !== product.id) || esteProdusDemo(product);
   return {
     // `absolute` strips the root layout's "%s | Edinio" template.
     title: { absolute: title },

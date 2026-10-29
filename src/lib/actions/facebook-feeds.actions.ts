@@ -9,6 +9,7 @@ import type { ProdusLasatAfara } from "@/lib/facebook/lasate-afara";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 import type { Json } from "@/types/database.types";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 
 /**
  * Feedurile Meta segmentate, salvate din panou — si intrebarea pe care si-o pune panoul despre
@@ -128,7 +129,8 @@ export async function numaraProduseFeed(
   const [{ data: produse, error: eProd }, { data: categorii }] = await Promise.all([
     admin.from("products")
       .select("id, category, price, track_inventory, stock_quantity, is_bundle")
-      .eq("business_id", biz.id).eq("is_active", true),
+      // Ca fluxul: produsele demo (etapa 18.1) nu intra in el, deci nici in numaratoare.
+      .eq("business_id", biz.id).eq("is_active", true).or(FARA_PRODUSE_DEMO),
     admin.from("categories").select("id, name, parent_id").eq("business_id", biz.id),
   ]);
   if (eProd) return { error: "Nu am putut citi produsele." };
@@ -174,7 +176,9 @@ export async function cautaProduseFeed(
     .from("products")
     .select("id, name, category, price, images", { count: "exact" })
     .eq("business_id", biz.id)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    // Produsele demo (etapa 18.1) nu se pot alege: nu pleaca din magazin.
+    .or(FARA_PRODUSE_DEMO);
 
   /*
    * ⚠ `%` si `_` se escapeaza: intr-un `ilike` sunt metacaractere, deci o cautare
@@ -262,6 +266,8 @@ export async function produseleLasateAfaraDinCatalog(): Promise<
            dintre magazine. Fara el, fiecare comerciant ar vedea numele produselor tuturor. */
         .eq("business_id", biz.id)
         .eq("is_active", true)
+        // Ca fluxul: produsele demo (etapa 18.1) nu sunt nici in el, nici „lasate afara” din el.
+        .or(FARA_PRODUSE_DEMO)
         .order("id")
         .range(from, to),
     );

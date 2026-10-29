@@ -3,6 +3,7 @@ import type { Database, Json } from "@/types/database.types";
 import { slugify } from "@/lib/utils/slugify";
 import { hrefCategorie } from "@/lib/storefront/category-href";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
+import { SURSA_DEMO } from "./produse-demo";
 import type { SetDateDemo } from "./tipuri";
 
 /*
@@ -22,7 +23,8 @@ import type { SetDateDemo } from "./tipuri";
   demo n-are ce cauta acolo, deci importul scrie direct, apoi doar proiecteaza catalogul (cautarea, filtrele).
 */
 
-export const SURSA_DEMO = "tema-demo";
+// Sursa e definita in `produse-demo.ts` (fara dependente), ca s-o poata citi si canalele, care le sar (18.1).
+export { SURSA_DEMO };
 
 export function externalIdDemo(tema: string, cheie: string): string {
   return `${tema}:${cheie}`;

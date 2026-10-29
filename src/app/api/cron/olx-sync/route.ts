@@ -13,6 +13,7 @@ import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { lamurestePlata, platiNelamurite } from "@/lib/olx/plati";
 import { advertCommand } from "@/lib/olx/client";
 import type { MappableProduct } from "@/lib/olx/mapping";
+import { caInactivDacaEDemo } from "@/lib/teme/produse-demo";
 
 // OLX rate limits are not clearly documented — pace conservatively and keep the
 // per-run volume small (the cron fires every minute). Each write op also costs
@@ -307,7 +308,8 @@ export async function GET(req: NextRequest) {
         });
         continue;
       }
-      for (const p of (prods ?? []) as MappableProduct[]) productMap.set(p.id, p);
+      // Un produs demo (etapa 18.1) e vazut ca inactiv: nu pleaca la OLX.
+      for (const p of (prods ?? []) as MappableProduct[]) productMap.set(p.id, caInactivDacaEDemo(p));
     }
 
     for (const item of items) {

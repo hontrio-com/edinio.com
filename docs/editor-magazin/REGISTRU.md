@@ -224,6 +224,12 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - Istoricul arata „Înainte de aplicarea temei” si, cand era o ciorna, „Ciorna nepublicată de dinainte de temă”.
   - Dupa aplicare, culoarea si fonturile alese din fila „Stil” schimba magazinul (identitatea temei sta acolo, nu in
     design, 17.1). „Pune la loc” readuce designul, culoarea, fundalul si fonturile de dinainte.
+- **Etapa 18.1 (produsele demo nu pleaca din magazin), de verificat dupa push:**
+  - ⚠⚠ Nimic nu se schimba pentru produsele de azi: filtrul pastreaza produsele FARA sursa (1.009 din 7.701 in productie,
+    29.10) si pe cele cu alta sursa. Dupa push: fluxul Meta, sitemapul unui magazin, fluxul Pepita si Google Merchant
+    au acelasi numar de produse ca inainte (de comparat pe 2-3 magazine cu fiecare canal).
+  - Produsele demo (abia dupa etapa 18.2, la un magazin care le importa): lipsesc din fluxuri, sitemap si cozi; pagina
+    lor are `noindex`; in easySales apar blocate cu „Produs demo din temă: rămâne doar în magazin.”.
 
 ## D. Capturi si texte de ajutor
 - **Etapa 16 (29.10): ghidurile** `cum-reglezi-headerul-magazinului` (9 design-uri, „Hipermarket, cu meniu de categorii”),
@@ -234,6 +240,9 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   (titlul: „Cum reglezi cardul de produs, ...”), unde se alege cardul in `cum-schimbi-designul-unei-sectiuni`.
   Etapa 17: noi `cum-aplici-o-tema` si `cum-pui-la-loc-designul-de-dinainte-de-tema` (430 de ghiduri); etichetele temelor
   in `cum-readuci-o-versiune-publicata`. Fara capturi noi.
+- **De facut (vazut la 18.1): listele din panoul canalelor** (eMAG, OLX, Trendyol, About You, Pepita) inca arata
+  produsele demo printre cele de ales; trimiterea le sare (ca pe un inactiv), deci nimic nu pleaca, dar omul le poate
+  bifa degeaba. De scos din liste cand e cazul (Meta si Google le scot deja).
 - **De facut (vazut la 16.5): „Link buton” al antetului „Rotunjit, cu butoane colorate”** e tot text simplu, fara
   sugestiile (paginile, categoriile, produsele) pe care le au bannerele si, din 16.5, linkurile din listele panoului.
   Tipul `link` din `SectionSettings` trecut pe `CampLink`, cu `help` sub el; cu proba lui.

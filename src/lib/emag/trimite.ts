@@ -47,6 +47,7 @@ import type { ContextEmag } from "./sync";
 import type { EmagOferta, EmagProdusOferta, StareOferta } from "./types";
 import type { OpEmag } from "./queue";
 import { enqueueEmagSyncMany } from "./queue";
+import { caInactivDacaEDemo } from "@/lib/teme/produse-demo";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -295,9 +296,11 @@ async function citesteProdusul(
   admin: Admin, productId: string, businessId: string,
 ): Promise<ProdusDeCartografiat | null> {
   const r = await admin.from("products")
-    .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, is_bundle, page_sections")
+    .select("id, name, description, price, compare_at_price, images, category, sku, weight_grams, stock_quantity, is_active, is_bundle, page_sections, source")
     .eq("id", productId).eq("business_id", businessId).maybeSingle();
-  return randCitit<ProdusDeCartografiat>("products", r as never);
+  const p = randCitit<ProdusDeCartografiat>("products", r as never);
+  // Un produs demo (etapa 18.1) e vazut ca inactiv: nu pleaca la eMAG, iar o oferta a lui s-ar retrage.
+  return p ? caInactivDacaEDemo(p) : null;
 }
 
 async function citesteRandurile(

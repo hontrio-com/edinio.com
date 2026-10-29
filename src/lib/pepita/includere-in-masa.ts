@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 
 /**
  * „Include toate produsele active" in feedul Pepita, pana la CAPAT.
@@ -61,6 +62,8 @@ export async function includeToateActive(
   while (scrise < PE_TRECERE) {
     let q = admin.from("products").select("id")
       .eq("business_id", businessId).eq("is_active", true)
+      // Produsele demo nu pleaca din magazin (etapa 18.1), deci nici nu se includ.
+      .or(FARA_PRODUSE_DEMO)
       .order("id").limit(PAGINA);
     if (cheie) q = q.gt("id", cheie);
 

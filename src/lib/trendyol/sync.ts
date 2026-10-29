@@ -25,11 +25,12 @@ import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { logError } from "@/lib/error-logger";
 import { patchTrendyolConfig } from "./config";
+import { esteProdusDemo } from "@/lib/teme/produse-demo";
 
 type Db = SupabaseClient<Database>;
 
 export const PRODUCT_FIELDS =
-  "id, name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity";
+  "id, name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity, source";
 
 export interface TrendyolSyncContext {
   auth: TrendyolAuth;
@@ -259,6 +260,8 @@ export async function syncProductNow(
   const product = randCitit<Record<string, unknown>>("trendyol.produsulDeSincronizat", await admin
     .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!product) return removeProductNow(admin, ctx, productId);
+  // Un produs demo (etapa 18.1) e vazut ca inactiv: nu se auto-publica si nu pleaca la Trendyol.
+  if (esteProdusDemo(product as { source?: string | null })) product.is_active = false;
 
   /*
    * Publicare automata: produsul nou nu mai asteapta o trecere prin editor.
@@ -836,6 +839,12 @@ export async function syncProductsBulk(
   // pice toata selectia din cauza unuia fara categorie mapata.
   const pregatite: { product: MappableProduct; listingId: string }[] = [];
   for (const p of lista) {
+    // Produsele demo (etapa 18.1) raman doar in magazin; spus anume, nu ca „inactiv”, fiindca in magazin se vad.
+    if (esteProdusDemo(p as { source?: string | null })) {
+      out.failed++;
+      out.errors.push({ product: p.name, message: "Produs demo: rămâne doar în magazin." });
+      continue;
+    }
     if ((p as { is_active?: boolean }).is_active === false) {
       out.failed++;
       out.errors.push({ product: p.name, message: "Produs inactiv." });

@@ -14,6 +14,7 @@ import { produsXml, stocDisparutXml, stocXml } from "./serializare";
 import { ANTET, INCHEIERE } from "./xml";
 import type { PepitaConfig } from "./types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 
 /**
  * Cele doua feeduri, scrise IN FLUX.
@@ -365,6 +366,8 @@ export async function* scrieFeed(
     let q = admin
       .from("products").select(COLOANE_PRODUS)
       .eq("business_id", businessId).eq("is_active", true)
+      // Produsele demo nu pleaca din magazin (etapa 18.1).
+      .or(FARA_PRODUSE_DEMO)
       .order("id").limit(PAGINA);
     if (dupaId) q = q.gt("id", dupaId);
     const { data, error } = await q;

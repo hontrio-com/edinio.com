@@ -26,6 +26,7 @@ import {
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { patchAboutYouConfig } from "./config";
+import { esteProdusDemo } from "@/lib/teme/produse-demo";
 import { CURIERI_ABOUTYOU, SELECT_AWB_ABOUTYOU } from "./curieri";
 import { cereMarime, getCerintaMaterial } from "./taxonomy";
 import type { AboutYouBatchAck } from "./types";
@@ -40,6 +41,12 @@ type Db = SupabaseClient<Database>;
 export const PRODUCT_FIELDS =
   /* ⚠ `updated_at` e clipa in care valoarea noastra a devenit adevarata: pleaca drept `valid_at`. */
   "id, name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity, updated_at";
+
+/**
+ * Si sursa, doar la poarta sincronizarii (etapa 18.1: produsul demo nu pleaca). Nu in `PRODUCT_FIELDS`: aceea e lista
+ * campurilor TRIMISE, pe care o asculta si declansatorul din baza; `source` nu pleaca la About You.
+ */
+const PRODUCT_FIELDS_CU_SURSA = `${PRODUCT_FIELDS}, source` as const;
 
 export interface AboutYouSyncContext {
   auth: AboutYouAuth;
@@ -1787,9 +1794,11 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
    * definitiv o listare bine configurata.
    */
   const { data: product, error: eroareProdus } = await admin
-    .from("products").select(PRODUCT_FIELDS).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
+    .from("products").select(PRODUCT_FIELDS_CU_SURSA).eq("id", productId).eq("business_id", ctx.businessId).maybeSingle();
   if (eroareProdus) return { ok: false, error: eroareProdus.message };
   if (!product) return removeProductNow(admin, ctx, productId);
+  // Un produs demo (etapa 18.1) e vazut ca inactiv: nu pleaca la About You, iar o listare a lui se dezactiveaza.
+  if (esteProdusDemo(product)) product.is_active = false;
 
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return { ok: false, error: "Produsul nu are configurare About You. Completează detaliile de listare mai întâi." };

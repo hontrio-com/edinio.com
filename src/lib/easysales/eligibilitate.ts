@@ -8,6 +8,7 @@ import {
 import { identitateCombinatie } from "@/lib/storefront/variante-identitate";
 import { IDENTITATE_SIMPLU } from "./identitate";
 import type { EasySalesConfig } from "./tipuri";
+import { esteProdusDemo } from "@/lib/teme/produse-demo";
 
 /**
  * Ce produse pleaca in easySales si de ce nu pleaca celelalte (planul, §5.4.1).
@@ -42,7 +43,7 @@ import type { EasySalesConfig } from "./tipuri";
 /** Coloanele produsului citite de catalog. */
 export const COLOANE_PRODUS_CATALOG =
   "id, name, slug, description, price, compare_at_price, sku, images, category, track_inventory, "
-  + "stock_quantity, weight_grams, page_sections, is_active, is_bundle";
+  + "stock_quantity, weight_grams, page_sections, is_active, is_bundle, source";
 
 export interface ProdusCatalog {
   id: string;
@@ -60,6 +61,8 @@ export interface ProdusCatalog {
   page_sections: unknown;
   is_active: boolean;
   is_bundle: boolean;
+  /** `tema-demo` = produs demo al unei teme: ramane doar in magazin (etapa 18.1). */
+  source?: string | null;
 }
 
 export interface SetariCatalog {
@@ -94,7 +97,7 @@ export function setarileCatalogului(cfg: Pick<EasySalesConfig,
 }
 
 export type CodMotiv =
-  | "inactiv" | "pachet" | "personalizat" | "fara-nume" | "fara-descriere" | "stoc-neurmarit" | "fara-combinatii"
+  | "demo" | "inactiv" | "pachet" | "personalizat" | "fara-nume" | "fara-descriere" | "stoc-neurmarit" | "fara-combinatii"
   | "pret-zero" | "sku-duplicat" | "sku-parinte" | "fara-sku" | "stoc-comun" | "identitate-dubla"
   | "fara-imagine" | "ean-invalid" | "ean-dublat" | "sku-generat" | "descriere-din-nume" | "stoc-fix"
   | "categorie-de-rezerva" | "axe-nedespartite";
@@ -266,6 +269,7 @@ export function hotarareaProdusului(p: ProdusCatalog, ctx: ContextEligibilitate)
   const segment = variante ? "variante" : "simplu";
   const motive: Motiv[] = [];
 
+  if (esteProdusDemo(p)) motive.push(blocheaza("demo", "Produs demo din temă: rămâne doar în magazin."));
   if (!p.is_active) motive.push(blocheaza("inactiv", "Produsul e dezactivat în Edinio."));
   if (p.is_bundle) {
     motive.push(blocheaza("pachet", "Pachetele nu pleacă în easySales: disponibilitatea lor vine din produsele componente."));

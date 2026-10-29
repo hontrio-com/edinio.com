@@ -28,7 +28,17 @@ const baza = http.createServer((req, res) => {
     cereriBaza++;
     const unul = (req.headers.accept ?? "").includes("vnd.pgrst.object");
     const json = (cod: number, d: unknown) => { res.writeHead(cod, { "content-type": "application/json" }); res.end(JSON.stringify(d)); };
-    const eq = (r: Rand) => [...url.searchParams].every(([k, v]) => ["select", "limit", "offset", "order"].includes(k) || String(r[k]) === v.replace(/^eq\./, ""));
+    /* `or=(a.is.null,a.neq.x)` (etapa 18.1, produsele demo): macar o conditie; ca in SQL, NULL nu e „diferit de” nimic. */
+    const treceOr = (r: Rand, v: string) => v.replace(/^\(|\)$/g, "").split(",").some((c) => {
+      const [k, op, ...rest] = c.split(".");
+      const x = r[k];
+      const val = rest.join(".");
+      if (op === "is" && val === "null") return x === null || x === undefined;
+      if (op === "neq") return x !== null && x !== undefined && String(x) !== val;
+      return String(x) === val;
+    });
+    const eq = (r: Rand) => [...url.searchParams].every(([k, v]) => ["select", "limit", "offset", "order"].includes(k)
+      || (k === "or" ? treceOr(r, v) : String(r[k]) === v.replace(/^eq\./, "")));
     const lista = (rs: Rand[]) => (unul ? json(rs.length ? 200 : 406, rs[0] ?? {}) : json(200, rs));
     if (req.method !== "GET") { res.writeHead(201); res.end(); return; }
     if (cale === "businesses") return lista(magazine.filter(eq));

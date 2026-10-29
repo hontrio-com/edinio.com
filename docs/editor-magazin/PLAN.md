@@ -1785,6 +1785,22 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     Trendyol, About You, easySales, plus sitemapul si cautarea Google. Importul nu pune nimic in coada marketplace-urilor,
     dar un cron le-ar lua oricum. 18.1 = inventarul tuturor celor care citesc `products` spre afara si excluderea dupa
     `source = 'tema-demo'`, cu o proba care cade la un cititor nou fara excludere; paginile produselor demo, `noindex`.
+  - [x] 18.1 FACUT (29.10): `lib/teme/produse-demo.ts` (sursa, `esteProdusDemo`, `caInactivDacaEDemo`,
+    `FARA_PRODUSE_DEMO`). Portile: Google Merchant (cronul: ca un inactiv; „sincronizează tot” si numaratoarea, fara
+    demo), catalogul Meta (fluxul si trei citiri din panou), Pepita (fluxul, includerea in masa), sitemapul, email
+    marketing (ca un inactiv: scos de la furnizor), OLX (cronul, trimiterea pe loc), Trendyol (ca un inactiv; in lot,
+    „Produs demo: rămâne doar în magazin.”), About You (ca un inactiv), eMAG (`citesteProdusul`), easySales (motivul nou
+    „demo”, blocheaza), pagina produsului demo `noindex`. Probe pe sursa pe fiecare poarta, plus numaratoarea citirilor
+    de produse din canale (o citire noua o face sa cada). Filtrul probat prin clientul real pe demo: 58 -> 0 la
+    `tema-jupiter`, produsul fara sursa ramane, si cu un al doilea `.or` in cerere (se aduna ca SI). ⚠ In productie
+    (citire): 1.009 produse din 7.701 au `source` NULL; un `neq` simplu le-ar fi scos din fluxuri si din sitemap. 0 demo.
+    Mutanti 12/12. Lasat: listele din panoul canalelor (eMAG, OLX, Trendyol, About You, Pepita) inca le arata; trimiterea
+    le sare (REGISTRU D). GASIT la porti: 46 de probe cazute. (1) Bazele false din probe (fluxul Pepita, includerea in
+    masa, sitemapul, ruta Meta) nu stiau `.or`: invatate, cu semantica SQL (NULL nu e „diferit de” nimic), plus o proba
+    de comportament in fluxul Pepita (demo-ul nu intra, cel fara sursa intra); mutantul care pierde produsele fara sursa
+    e prins de trei probe. (2) La About You `PRODUCT_FIELDS` e lista campurilor TRIMISE, pe care o asculta declansatorul
+    din baza: sursa scoasa de acolo si citita aparte, doar la poarta (`PRODUCT_FIELDS_CU_SURSA`). Porti: suita 11.357 / 0
+    / 2 sarite, `build:ci` trece.
   - 18.2 La „Aplică tema”, o bifa „Importă și datele demo” (produse, categorii, bannere, randuri, cardurile si placile
     temei), cu ce inseamna: se ADAUGA langa ale lui, marcate; daca magazinul e public, clientii le vad pana le sterge.
     De verificat: limita de produse a planului (azi nu gasesc una in cod).
@@ -1832,6 +1848,9 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
   Comanda”.
 - 28.10.2026, seara, temele (vezi „Temele: prima tema, „Jupiter””): prima „Jupiter”, dupa dedeman.ro, „aproape 1 la 1”;
   pagina noua „Teme”; aplicarea „Direct în magazin, cu Istoric”; datele demo „Adaugă, marcate demo”; demo pe subdomenii.
+- 29.10.2026, la inceputul etapei 18 (inventarul: orice produs activ pleaca singur in catalogul Meta, sitemap, Pepita,
+  email marketing, iar la editare intra in cozile Google Merchant, eMAG, OLX, Trendyol, About You): produsele demo „Le
+  opresc la toate canalele” (fiecare canal le sare, ca pe produsele inactive; paginile lor `noindex`, in afara sitemapului).
 - 29.10.2026, la raportul etapei 16: proba din editor a listelor noi „Da, fă proba acum” (cu impersonare, pe demo);
   placile de categorii si cardul Jupiter „Da, și din panou” (16.6); „Comandă acum” la „Standard” „Rămâne formularul
   produsului” (intrebarea din etapa 15, inchisa); „Da, etapa 17”.

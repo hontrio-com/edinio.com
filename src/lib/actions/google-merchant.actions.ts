@@ -15,6 +15,7 @@ import {
   DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig,
 } from "@/lib/google-merchant/types";
 import { logError } from "@/lib/error-logger";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -188,7 +189,8 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
    * si programele.
    */
   const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }, { count: expiratCnt }, { count: laExpirareCnt }, { count: faraDestinatieCnt }] = await Promise.all([
-    supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
+    // Produsele demo (etapa 18.1) nu pleaca la Google, deci nu se numara printre cele de trimis.
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true).or(FARA_PRODUSE_DEMO),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
       .not("status", "in", `(${STARE_EXCLUS},error,${STARE_EXPIRAT})`),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
@@ -466,7 +468,8 @@ export async function queueSyncAll(businessId: string): Promise<{ queued: number
 
   // Windowed: catalogul intreg intra in coada, nu doar primele 1000 de produse.
   const products = await fetchAllRowsStrict("gmc.queueSyncAll.products", (from, to) =>
-    supabase.from("products").select("id").eq("business_id", businessId).eq("is_active", true).order("id").range(from, to)
+    // Fara produsele demo (etapa 18.1): oricum nu pleaca, deci n-au ce cauta in coada.
+    supabase.from("products").select("id").eq("business_id", businessId).eq("is_active", true).or(FARA_PRODUSE_DEMO).order("id").range(from, to)
   );
   const rows = products.map((p) => ({ business_id: businessId, product_id: p.id, offer_id: p.id, op: "upsert" }));
   if (rows.length === 0) return { queued: 0 };

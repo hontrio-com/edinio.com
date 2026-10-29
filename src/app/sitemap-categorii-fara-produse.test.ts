@@ -216,8 +216,15 @@ const PAGINI: Rand[] = [
   { business_id: B_ESAFE, id: "g1", slug: "despre", updated_at: null, seo: {}, is_published: true },
 ];
 
-/** Un filtru PostgREST: `eq.`, `is.null`, `not.is.null`. Orice alt operator e o eroare de proba. */
+/**
+ * Un filtru PostgREST: `eq.`, `neq.`, `is.null`, `not.is.null` si `or=(...)` facut din ele (etapa 18.1: produsele demo).
+ * Ca in SQL, o valoare NULL nu e „diferita de” nimic. Orice alt operator e o eroare de proba.
+ */
 function trece(r: Rand, k: string, v: string): boolean {
+  if (k === "or") {
+    return v.replace(/^\(|\)$/g, "").split(",").some((c) => trece(r, c.slice(0, c.indexOf(".")), c.slice(c.indexOf(".") + 1)));
+  }
+  if (v.startsWith("neq.")) return r[k] !== null && r[k] !== undefined && String(r[k]) !== v.slice(4);
   if (v.startsWith("eq.")) return String(r[k]) === v.slice(3);
   if (v === "is.null") return r[k] === null || r[k] === undefined;
   if (v === "not.is.null") return r[k] !== null && r[k] !== undefined;

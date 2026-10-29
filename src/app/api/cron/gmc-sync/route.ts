@@ -16,6 +16,7 @@ import { expandProductOffers, type MappableBusiness, type MappableProduct } from
 import { MOTIV_PRET_CARE_MINTE, pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { esteProdusDemo } from "@/lib/teme/produse-demo";
 
 type Admin = SupabaseClient<Database>;
 const QUEUE_BATCH = 100;
@@ -160,9 +161,10 @@ export async function GET(req: NextRequest) {
     if (upsertIds.length) {
       const { data: prods } = await admin
         .from("products")
-        .select("id, name, slug, description, price, compare_at_price, images, category, is_active, is_bundle, track_inventory, stock_quantity, weight_grams, page_sections")
+        .select("id, name, slug, description, price, compare_at_price, images, category, is_active, is_bundle, track_inventory, stock_quantity, weight_grams, page_sections, source")
         .in("id", upsertIds);
-      for (const p of prods ?? []) if (p.is_active) productMap.set(p.id, p as MappableProduct);
+      // Un produs demo (etapa 18.1) nu pleaca din magazin: ca unul inactiv, deci pe ramura de stergere de mai jos.
+      for (const p of prods ?? []) if (p.is_active && !esteProdusDemo(p)) productMap.set(p.id, p as MappableProduct);
     }
 
     /* Setat la prima limita zilnica atinsa: restul lucrarilor magazinului asteapta resetarea, fara apel. */

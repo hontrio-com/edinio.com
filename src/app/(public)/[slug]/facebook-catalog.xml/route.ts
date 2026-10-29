@@ -7,6 +7,7 @@ import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 import { logError } from "@/lib/error-logger";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import { setarileDin } from "@/lib/storefront/antet-magazin";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +114,8 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
       .select("id, name, slug, description, price, compare_at_price, images, category, is_bundle, track_inventory, stock_quantity, page_sections")
       .eq("business_id", biz.id)
       .eq("is_active", true)
+      // Produsele demo nu pleaca din magazin (etapa 18.1).
+      .or(FARA_PRODUSE_DEMO)
       .order("id")
       .range(from, to),
   );

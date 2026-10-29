@@ -19,6 +19,7 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { storeBaseUrl } from "@/lib/seo";
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
 import { prefixProdusMagazin } from "@/lib/storefront/prefix-produs-server";
+import { esteProdusDemo } from "@/lib/teme/produse-demo";
 
 export type ProdusCatalog = {
   id: string;
@@ -40,7 +41,7 @@ export type CatalogCitit = {
   sterse: string[];
 };
 
-type Rand = { id: string; name: string; price: number | string | null; images: unknown; slug: string | null; description: string | null; is_active: boolean | null };
+type Rand = { id: string; name: string; price: number | string | null; images: unknown; slug: string | null; description: string | null; is_active: boolean | null; source: string | null };
 
 function produs(r: Rand): ProdusCatalog {
   const img = Array.isArray(r.images) ? (r.images as unknown[])[0] : null;
@@ -71,7 +72,7 @@ export async function citesteCatalogul(businessId: string, ids?: string[]): Prom
   const adresa = biz?.slug ? storeBaseUrl(biz as { slug: string; custom_domain: string | null }) : null;
   const prefixProdus = await prefixProdusMagazin(businessId);
 
-  const campuri = "id, name, price, images, slug, description, is_active";
+  const campuri = "id, name, price, images, slug, description, is_active, source";
   let randuri: Rand[] = [];
   if (ids) {
     /* Pe bucati: `.in()` intra in ADRESA si peste ~650 de id-uri cererea e respinsa la margine. */
@@ -90,8 +91,9 @@ export async function citesteCatalogul(businessId: string, ids?: string[]): Prom
   return {
     adresa,
     prefixProdus,
-    active: randuri.filter((r) => r.is_active !== false).map(produs),
-    inactive: randuri.filter((r) => r.is_active === false).map(produs),
+    // Un produs demo (etapa 18.1) nu pleaca din magazin: ca unul inactiv, deci scos de la furnizor, nu trimis.
+    active: randuri.filter((r) => r.is_active !== false && !esteProdusDemo(r)).map(produs),
+    inactive: randuri.filter((r) => r.is_active === false || esteProdusDemo(r)).map(produs),
     sterse: (ids ?? []).filter((id) => !gasite.has(id)),
   };
 }

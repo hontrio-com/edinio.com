@@ -77,6 +77,19 @@ function doar<T extends Record<string, unknown>>(rand: T, coloane: string | unde
   return iesire;
 }
 
+/** `or("a.is.null,a.neq.x")` ca in PostgREST: macar o conditie; ca in SQL, NULL nu e „diferit de” nimic. */
+function treceOr(r: Record<string, unknown>, expr: string): boolean {
+  return expr.split(",").some((c) => {
+    const [k, op, ...rest] = c.split(".");
+    const x = r[k];
+    const val = rest.join(".");
+    if (op === "is" && val === "null") return x === null || x === undefined;
+    if (op === "neq") return x !== null && x !== undefined && String(x) !== val;
+    if (op === "eq") return x !== null && x !== undefined && String(x) === val;
+    throw new Error(`or neinteles in proba: ${c}`);
+  });
+}
+
 function faceBaza(o: Optiuni = {}) {
   const produse = o.produse ?? [produs(1), produs(2)];
   /*
@@ -171,8 +184,9 @@ function faceBaza(o: Optiuni = {}) {
       if (o.cadeLaPagina && pagini >= o.cadeLaPagina) {
         return { data: null, error: { code: "57014", message: "citirea a cazut" } };
       }
-      /* ⚠ Filtrul pe magazin chiar se aplica, ca proba de izolare sa insemne ceva. */
-      const aleLui = produse.filter(() => filtre.some(([k, v]) => k === "business_id" && v === BID));
+      /* ⚠ Filtrul pe magazin chiar se aplica, ca proba de izolare sa insemne ceva; si `or` (produsele demo, 18.1). */
+      const aleLui = produse.filter((p) => filtre.some(([k, v]) => k === "business_id" && v === BID)
+        && filtre.every(([k, v]) => k !== "or" || treceOr(p as unknown as Record<string, unknown>, String(v))));
       return { data: felie(aleLui, (p) => p.id).map((p) => doar(p as unknown as Record<string, unknown>, coloane)), error: null };
     }
     return { data: null, error: null };
@@ -191,6 +205,7 @@ function faceBaza(o: Optiuni = {}) {
       select: (c?: string) => { coloane = c; return b; },
       upsert: (p: unknown, opt?: { onConflict?: string }) => { corp = p; optiuni = opt; return b; },
       eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
+      or: (expr: string) => { filtre.push(["or", expr]); return b; },
       in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b,
       gt: (_k: string, v: string) => { dupa = v; return b; },
       limit: (n: number) => { cate = n; return b; },
@@ -385,6 +400,16 @@ test("⚠ evidenta articolelor se rescrie la FIECARE trecere, deci o scriere caz
   await feed(db, "produse");
   const dupaADoua = (db as unknown as { __scrise: unknown[] }).__scrise.length;
   assert.equal(dupaADoua, dupaPrima * 2, "a doua trecere n-a mai rescris evidenta: reparatia de la sine a disparut");
+});
+
+test("⚠ produsul demo al unei teme nu intra in feed (etapa 18.1); cel fara sursa intra", async () => {
+  const xml = await feed(faceBaza({
+    config: { mod_includere: "toate" },
+    produse: [produs(1, { source: null }), produs(2, { source: "tema-demo" }), produs(3, { source: "emag" })],
+  }));
+  assert.equal(XMLValidator.validate(xml), true);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 2);
+  assert.ok(!xml.includes("Produs 2"), "produsul demo a plecat la Pepita");
 });
 
 test("feedul intreg e XML valid si contine produsele incluse", async () => {

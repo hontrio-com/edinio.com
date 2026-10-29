@@ -20,6 +20,7 @@ import { rezumatMagazin } from "@/lib/storefront/catalog/context-descriere";
 import { toateArticolelePublicate } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 import {
   COMPETITORS,
   RESOURCES,
@@ -705,6 +706,8 @@ export async function citesteDateMagazin(
           .select("slug, updated_at")
           .eq("business_id", biz.id)
           .eq("is_active", true)
+          // Produsele demo (etapa 18.1) au `noindex` si nu intra in sitemap.
+          .or(FARA_PRODUSE_DEMO)
           .not("slug", "is", null)
           .order("id")
           .range(from, to),

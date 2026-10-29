@@ -21,6 +21,7 @@ import type { GpsrConfig } from "@/lib/gpsr";
 import type { OlxAdvert, OlxConfig } from "./types";
 import { logError } from "@/lib/error-logger";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
+import { caInactivDacaEDemo } from "@/lib/teme/produse-demo";
 
 type Db = SupabaseClient<Database>;
 
@@ -31,7 +32,7 @@ type Db = SupabaseClient<Database>;
  * spusa cu incredere.
  */
 export const PRODUCT_FIELDS =
-  "id, name, slug, description, price, compare_at_price, images, category, is_active, track_inventory, stock_quantity, page_sections";
+  "id, name, slug, description, price, compare_at_price, images, category, is_active, track_inventory, stock_quantity, page_sections, source";
 
 export interface OlxSyncContext {
   token: string;
@@ -1457,7 +1458,8 @@ export async function syncProductNow(admin: Db, ctx: OlxSyncContext, businessId:
      * OLX. Un timeout de o secunda ar fi retras un anunt viu.
      */
     if (error) throw new CitireOlxEsuata(`produsul nu s-a putut citi: ${error.message}`);
-    return upsertRemote(admin, ctx, businessId, productId, (data as MappableProduct | null) ?? null);
+    // Un produs demo (etapa 18.1) e vazut ca inactiv: nu pleaca la OLX.
+    return upsertRemote(admin, ctx, businessId, productId, data ? caInactivDacaEDemo(data as MappableProduct) : null);
   });
 }
 

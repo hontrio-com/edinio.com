@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { readFileSync } from "node:fs";
 import { includeToateActive, PAGINA, PE_TRECERE } from "./includere-in-masa";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 
 const BID = "11111111-1111-1111-1111-111111111111";
 const ACUM = "2026-09-08T10:00:00.000Z";
@@ -51,6 +52,7 @@ function faceBaza(opt: {
       /* ⚠ Filtreaza CU ADEVARAT: cu `eq` no-op, un `.eq("business_id", …)` sters ar fi scris
          `inclus: true` peste produsele ALTOR magazine si nicio proba n-ar fi clipit. */
       eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
+      or: (expr: string) => { filtre.push(["or", expr]); return b; },
       order: (k: string) => { if (k === "id") ordonat = true; return b; },
       limit: (n: number) => { cate = n; return b; },
       gt: (_k: string, v: string) => { dupa = v; return b; },
@@ -96,8 +98,8 @@ function faceBaza(opt: {
         }
         if (tabela !== "products") return Promise.resolve({ data: [], error: null }).then(bun, rau);
         const f = (k: string) => filtre.find((x) => x[0] === k)?.[1];
-        /* Filtrele lipsa nu mai aduc nimic: asa se vede daca s-au sters. */
-        if (f("business_id") !== BID || f("is_active") !== true) {
+        /* Filtrele lipsa nu mai aduc nimic: asa se vede daca s-au sters (si cel al produselor demo, etapa 18.1). */
+        if (f("business_id") !== BID || f("is_active") !== true || f("or") !== FARA_PRODUSE_DEMO) {
           return Promise.resolve({ data: [], error: null }).then(bun, rau);
         }
         let r = ordonat ? [...produse].sort() : produse;

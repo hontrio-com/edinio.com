@@ -303,7 +303,14 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 
 ## E. Demo-ul temelor (etapa 19), LA PUSH, cu acordul lui
 Magazinul demo al temei Jupiter (`tema-jupiter`) exista DOAR in baza demo. In productie nu exista nimic din el: pana la
-pasii de mai jos, `jupiter.edinio.com` nu raspunde, iar pe pagina „Teme” miniatura si „Vezi demo” dau 404.
+pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
+- **29.10.2026: pasii 1 si 2 FACUTI de el** („Am adaugat subdomeniul jupiter.edinio.com”). Masurat atunci: DNS spre
+  Vercel, certificat valid, dar productia (fara codul etapei 19) serveste pe subdomeniu TOT site-ul de prezentare:
+  `/`, `/preturi`, `/login` cu 200, „index, follow”, `robots.txt` „Allow: /”; canonicalul duce la `www.edinio.com`.
+  Ramane asa pana la push. ⚠ Pasii 3 si 4 abia DUPA push: productia de azi n-are poarta comenzilor (19.2), deci un
+  magazin demo facut inainte ar lua comenzi adevarate pe `www.edinio.com/tema-jupiter`. Dupa push si inainte de 3-4,
+  subdomeniul raspunde 404 (rescrie spre un magazin care inca nu exista): pasii 3-4 imediat dupa ce s-a terminat
+  desfasurarea.
 1. **DNS:** inregistrarea `jupiter` (CNAME) catre Vercel, la furnizorul domeniului `edinio.com` (valoarea o da Vercel la
    pasul 2, de regula `cname.vercel-dns.com`).
 2. **Vercel:** proiectul aplicatiei > Settings > Domains > Add `jupiter.edinio.com` (fara redirectare), pana apare

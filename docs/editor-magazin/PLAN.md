@@ -1818,7 +1818,7 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
   - 18.5 Ghiduri, REGISTRU, porti; proba in Chrome pe magazinul de test (cu acordul lui), cu tot pus la loc.
   - [x] 18.2-18.4 FACUTE (29.10), inainte de proba:
     - 18.2: bifa „Importă și datele demo” in fereastra „Aplică tema”, OPRITA la fiecare deschidere; spune ce adauga
-      (58 de produse cu categoriile lor, 3 bannere, 2 randuri, textele temei), ca nu pleaca in canale, ca intra in
+      (58 de produse cu cele 39 de categorii ale lor, 4 bannere, 2 randuri, textele temei), ca nu pleaca in canale, ca intra in
       limita planului, iar cu magazinul vizibil, ca produsele demo se pot COMANDA pana le sterge. Limita GASITA:
       `PLAN_PRODUCT_LIMITS` (gratuit 10, Basic 500, Premium 2500, Ultra fara), pe CONT, ca la adaugarea de mana; se
       numara doar produsele temei care lipsesc (importul repetat nu e oprit). `lib/teme/limita-demo.ts`; un plan necitit
@@ -1843,6 +1843,23 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
       datele demo) si unul nou, `cum-stergi-datele-demo-ale-temei` (431 de ghiduri). Probe noi: `limita-demo`,
       `stergere-demo`, `date-demo-in-design`, ordinea importului pe o baza falsa (si cu o cadere la subcategorii);
       mutanti 15/15. Porti: suita 11.386 / 0 / 2 sarite, tsc, eslint, `build:ci`.
+  - [x] 18.5 PROBATA in Chrome (29.10, cu acordul lui, impersonare pe `floraria-mirei`, baza demo):
+    - planul gratuit: bifa oprita, „Datele demo adaugă 58 de produse, iar planul tău permite 10 produse (ai deja 1).”;
+    - Basic (mutat pe demo): bifa oprita la deschidere, cu urmarile (58 din 500; „le pot comanda”); aplicata: 58 de
+      produse demo active, 39 de categorii (toate in urma), 4 bannere cu linkuri pe `/magazin`, 2 randuri, cardurile si
+      placile demo, mesajul „Livrare in toata tara” (n-avea unul), Istoricul `tema` + `publicare`; magazinul arata ca
+      demo-ul; pagina unui produs demo: 200, `noindex, follow`;
+    - „Pune la loc”: fereastra spune ca produsele si categoriile raman; `page_content` IDENTIC cu cel de dinainte (fara
+      urma), culoarea si antetul lui inapoi; produsele, categoriile si urma raman; caseta „Șterge datele demo” ramane;
+    - „Șterge datele demo”: doar produsul lui, 0 categorii, urma scoasa, `page_content` identic, nimic de publicat;
+    - runda a doua, cu produsul LUI mutat in „Scule electrice” (subcategorie demo): „Scule electrice” si parintele ei,
+      „Scule și unelte”, AU RAMAS (cascada ocolita), celelalte 37 sterse; cardurile, placile, mesajul, bannerele si
+      randurile demo scoase, tema ramasa aplicata; vitrina fara nimic demo.
+    - Pus la loc din rezervele `privat.proba_18_*` (sterse): randurile intregi din `store_settings`, `businesses`,
+      `users_profile` si produsul lui, IDENTICE (fara `updated_at`); 0 categorii, 0 versiuni, 1 comanda (cea veche);
+      maturare pe toate tabelele cu `business_id`: 0 randuri noi. Observat: scrierea prin vederea `store_settings`
+      recripteaza cheile curierilor (alt nonce, aceeasi valoare la decriptare, verificat); puse la loc si ele.
+      Ramase mutate: `updated_at` si marcajul de proiectie al produsului lui (de la punerea la loc).
 - **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
   push: DNS, domeniul in Vercel, magazinul demo in productie.
 
@@ -1885,6 +1902,9 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
 - 29.10.2026, la raportul etapei 16: proba din editor a listelor noi „Da, fă proba acum” (cu impersonare, pe demo);
   placile de categorii si cardul Jupiter „Da, și din panou” (16.6); „Comandă acum” la „Standard” „Rămâne formularul
   produsului” (intrebarea din etapa 15, inchisa); „Da, etapa 17”.
+- 29.10.2026, dupa 18.2-18.4: limita de produse la datele demo „Rămâne limita” (produsele demo se numara ca oricare
+  altele; pe planul gratuit, 58 > 10, bifa e oprita, cu motivul; altfel cele 58 ar fi putut deveni produse reale peste
+  limita); proba 18.5 „Da, fă proba acum” (cu impersonare si planul mutat pe Basic pe demo, pus la loc).
 
 ## De ce Shopify si nu Elementor
 

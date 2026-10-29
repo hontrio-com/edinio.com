@@ -232,7 +232,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     lor are `noindex`; in easySales apar blocate cu „Produs demo din temă: rămâne doar în magazin.”.
 - **Etapa 18.2-18.4 („Importă și datele demo”, „Șterge datele demo”), de verificat dupa push:**
   - ⚠⚠ Nimic nu se intampla singur: bifa porneste oprita, iar fara ea „Aplică tema” face exact ce facea la 17.
-  - Pe un cont de test cu plan Basic: „Aplică tema” cu bifa adauga 58 de produse demo, categoriile, 3 bannere, 2 randuri
+  - Pe un cont de test cu plan Basic: „Aplică tema” cu bifa adauga 58 de produse demo, categoriile, 4 bannere, 2 randuri
     si textele temei; produsele lipsesc din fluxuri (Google, Meta, Pepita) si din sitemap; „Șterge datele demo” le scoate
     pe toate, iar categoriile in care s-a pus un produs al lui raman.
   - Pe un cont gratuit: bifa e oprita, cu motivul (58 de produse nu incap in 10).

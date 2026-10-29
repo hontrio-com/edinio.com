@@ -1801,6 +1801,10 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     e prins de trei probe. (2) La About You `PRODUCT_FIELDS` e lista campurilor TRIMISE, pe care o asculta declansatorul
     din baza: sursa scoasa de acolo si citita aparte, doar la poarta (`PRODUCT_FIELDS_CU_SURSA`). Porti: suita 11.357 / 0
     / 2 sarite, `build:ci` trece.
+  - [x] Defect vechi gasit de eslint la portile 18.1, reparat aparte (29.10, `9c8cdfc4`): cautarea din alegatorul de
+    produse al feedurilor Meta scapa `%` si `_` cu sirul literal „${c}” (backslash-dolar intr-un sir sablon), deci
+    „50%” nu gasea nimic. Acum trece prin `escapeLike`, ca la Clienti. Proba pe functie si pe sursa; mutantul (codul
+    vechi pus la loc) cade. Porti: suita 11.358 / 0 / 2 sarite, tsc, eslint, `build:ci`. REGISTRU C.
   - 18.2 La „Aplică tema”, o bifa „Importă și datele demo” (produse, categorii, bannere, randuri, cardurile si placile
     temei), cu ce inseamna: se ADAUGA langa ale lui, marcate; daca magazinul e public, clientii le vad pana le sterge.
     De verificat: limita de produse a planului (azi nu gasesc una in cod).

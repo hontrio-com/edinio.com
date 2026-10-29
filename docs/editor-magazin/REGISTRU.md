@@ -230,6 +230,10 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     au acelasi numar de produse ca inainte (de comparat pe 2-3 magazine cu fiecare canal).
   - Produsele demo (abia dupa etapa 18.2, la un magazin care le importa): lipsesc din fluxuri, sitemap si cozi; pagina
     lor are `noindex`; in easySales apar blocate cu „Produs demo din temă: rămâne doar în magazin.”.
+- **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
+  feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
+  nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
+  iar o cautare obisnuita gaseste ca inainte.
 
 ## D. Capturi si texte de ajutor
 - **Etapa 16 (29.10): ghidurile** `cum-reglezi-headerul-magazinului` (9 design-uri, „Hipermarket, cu meniu de categorii”),

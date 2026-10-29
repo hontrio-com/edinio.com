@@ -8,8 +8,13 @@ import { logError } from "@/lib/error-logger";
 import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
 import { ciornaDinVersiune, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
 import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
-import { areFurnizorNewsletter, CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, type TemaAplicata } from "@/lib/teme/aplicare";
+import { areFurnizorNewsletter, CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, type TemaAplicata } from "@/lib/teme/aplicare";
+import { CHEIE_DATE_DEMO, importaDateleDemo, urmaDateDemoDin, type UrmaDateDemo } from "@/lib/teme/import-demo";
+import { citesteLoculPentruDemo, motivulLimitei } from "@/lib/teme/limita-demo";
+import { SURSA_DEMO } from "@/lib/teme/produse-demo";
+import { categoriiDemoDeSters, continutFaraDateleDemo } from "@/lib/teme/stergere-demo";
 import { temaDupaCheie } from "@/lib/teme/teme";
+import { bulkProductAction } from "@/lib/actions/product.actions";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { curataContinutulPentruEditor } from "@/lib/storefront/design/continut-pentru-editor";
 import { ciornaAFostSchimbata } from "@/lib/storefront/design/draft-guard";
@@ -457,31 +462,49 @@ async function pastreazaInainteDeTema(owned: OwnedStore, randuri: RandVersiune[]
   }
 }
 
-/** Pune sau scoate semnul temei aplicate din `page_content`, peste ce e acum acolo (dupa „Publică”). */
-async function scrieSemnulTemei(businessId: string, semn: TemaAplicata | null): Promise<void> {
+/**
+ * Pune (sau, cu `null`, scoate) o cheie a temelor din `page_content`, peste ce e acum acolo (dupa „Publică”).
+ *
+ * ⚠ Fara citire reusita, nu scrie nimic: cu `data` gol, `pc` ar fi pornit de la `{}`, iar scrierea ar fi inlocuit tot
+ * `page_content` (textele, bannerele, setarile magazinului) cu o singura cheie (gasit la etapa 18).
+ */
+async function scrieCheiaTemei(businessId: string, cheie: string, valoare: unknown, actiune: string): Promise<void> {
   const supabase = await createClient();
-  const { data } = await supabase.from("store_settings").select("page_content").eq("business_id", businessId).single();
-  const pc = { ...((data?.page_content ?? {}) as Record<string, unknown>) };
-  if (semn) pc[CHEIE_TEMA_APLICATA] = semn;
-  else delete pc[CHEIE_TEMA_APLICATA];
-  const scris = await writeSettings(businessId, { page_content: pc as Json }, "tema.semn");
-  if ("error" in scris) logError({ action: "tema.semn", businessId, message: scris.error });
+  const { data, error } = await supabase.from("store_settings").select("page_content").eq("business_id", businessId).single();
+  if (error || !data) {
+    logError({ action: actiune, businessId, message: error?.message ?? "store_settings lipseste" });
+    return;
+  }
+  const pc = { ...((data.page_content ?? {}) as Record<string, unknown>) };
+  if (valoare === null) delete pc[cheie];
+  else pc[cheie] = valoare;
+  const scris = await writeSettings(businessId, { page_content: pc as Json }, actiune);
+  if ("error" in scris) logError({ action: actiune, businessId, message: scris.error });
+}
+
+/** Pune sau scoate semnul temei aplicate din `page_content`. */
+async function scrieSemnulTemei(businessId: string, semn: TemaAplicata | null): Promise<void> {
+  await scrieCheiaTemei(businessId, CHEIE_TEMA_APLICATA, semn, "tema.semn");
 }
 
 /**
  * Aplica o tema direct in magazin, cu Istoric:
  * 1. ce era publicat intra in Istoric ca `tema`, iar ciorna nepublicata, intreaga, ca `ciorna`;
- * 2. tema se publica prin `publishDesign`: identitatea ei (fundalul si fonturile din „Stil”, culoarea) ca un continut
- *    de ciorna (17.1), designul temei peste designul publicat (sectiunile, blocurile si coloanele lui raman); ciorna de
- *    acum se goleste, ca la orice „Publică”;
- * 3. semnul `tema_aplicata`, pentru pagina „Teme”.
- * Produsele, textele, setarile si domeniul nu se ating.
+ * 2. cu „Importă și datele demo” (etapa 18), datele temei se ADAUGA in magazin (`importaDateleDemo`), marcate demo;
+ *    limita de produse a planului se verifica inainte de orice scriere;
+ * 3. tema se publica prin `publishDesign`: identitatea ei (fundalul si fonturile din „Stil”, culoarea) ca un continut
+ *    de ciorna (17.1), designul temei peste designul publicat (sectiunile, blocurile si coloanele lui raman); cu datele
+ *    demo, si textele lor, doar unde magazinul n-are ale lui; ciorna de acum se goleste, ca la orice „Publică”;
+ * 4. semnul `tema_aplicata`, pentru pagina „Teme”.
+ * Fara datele demo, produsele, textele, setarile si domeniul nu se ating.
  */
-export async function aplicaTema(businessId: string, cheie: string): Promise<ActionResult> {
+export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?: boolean): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
   const tema = temaDupaCheie(cheie);
   if (!tema) return { error: "Tema nu există." };
+  // Doar un `true` adevarat: argumentul vine din browser.
+  const cuDate = cuDateDemo === true;
 
   const supabase = await createClient();
   const { data: row, error: eCitit } = await supabase
@@ -492,6 +515,16 @@ export async function aplicaTema(businessId: string, cheie: string): Promise<Act
   if (eCitit) {
     logError({ action: "aplicaTema.citire", businessId: owned.businessId, message: eCitit.message });
     return { error: "Nu am putut citi magazinul. Încearcă din nou." };
+  }
+
+  // 0. Limita planului, inaintea oricarei scrieri: refuzat aici, magazinul ramane exact cum era.
+  if (cuDate) {
+    const loc = await citesteLoculPentruDemo(supabase, owned.userId, owned.businessId, tema.cheie, tema.date);
+    if ("error" in loc) {
+      logError({ action: "aplicaTema.limita", businessId: owned.businessId, message: loc.error });
+      return { error: "Nu am putut verifica limita de produse a planului, deci tema nu s-a aplicat. Încearcă din nou." };
+    }
+    if (!loc.incap) return { error: `${motivulLimitei(loc)} Aplică tema fără datele demo.` };
   }
 
   // 1. Ce era, INAINTE de orice scriere.
@@ -515,17 +548,38 @@ export async function aplicaTema(businessId: string, cheie: string): Promise<Act
     return { error: "Nu am putut păstra designul de acum în Istoric, deci tema nu s-a aplicat. Încearcă din nou." };
   }
 
-  // 2. Tema, prin „Publică”.
+  // 2. Datele demo: dupa Istoric (bannerele si randurile lor sunt chei ale editorului, deci „Pune la loc” le scoate) si
+  //    inaintea temei, care le arata. Cu radacina catalogului magazinului, ca linkurile lor sa duca unde trebuie.
+  const radacinaCatalog = radacinaCatalogTemei(owned.ctx.pageContent);
+  let ctxMagazin = owned.ctx;
+  if (cuDate) {
+    try {
+      await importaDateleDemo(createAdminClient(), owned.businessId, tema.cheie, tema.date, radacinaCatalog);
+    } catch (e) {
+      logError({ action: "aplicaTema.dateDemo", businessId: owned.businessId, message: e instanceof Error ? e.message : String(e) });
+      return { error: "Datele demo nu s-au putut adăuga, deci tema nu s-a aplicat. Încearcă din nou." };
+    }
+    // Magazinul de dupa import: randurile si bannerele noi intra in designul temei.
+    const dupaImport = await loadOwnedStore(owned.businessId);
+    if ("error" in dupaImport) return dupaImport;
+    ctxMagazin = dupaImport.ctx;
+  }
+
+  // 3. Tema, prin „Publică”.
   const continut = continutIdentitate(tema.identitate);
-  const ctxTema = contextCuCiorna(owned.ctx, continut);
+  const ctxTema = contextCuCiorna(ctxMagazin, continut);
   const integrari = await integrariPentruPagini(owned.businessId);
-  const design = tema.design(ctxTema, null, parseStoreDesign(row?.storefront_design ?? {}, ctxTema), {
+  const design = tema.design(ctxTema, cuDate ? tema.date : null, parseStoreDesign(row?.storefront_design ?? {}, ctxTema), {
     cuNewsletter: areFurnizorNewsletter(integrari.newsletter),
+    radacinaCatalog,
   });
   const publicat = await publishDesign(owned.businessId, ciornaCuContinut(design, continut));
-  if ("error" in publicat) return publicat;
+  if ("error" in publicat) {
+    // Datele demo au intrat deja: omul trebuie sa stie, iar pagina „Teme” ii arata „Șterge datele demo” (urma exista).
+    return cuDate ? { error: `${publicat.error} Datele demo au intrat în magazin; le ștergi de pe pagina „Teme”.` } : publicat;
+  }
 
-  // 3. Semnul, pentru pagina „Teme”.
+  // 4. Semnul, pentru pagina „Teme”.
   await scrieSemnulTemei(owned.businessId, { cheie: tema.cheie, la: new Date().toISOString() });
   revalidatePath("/dashboard/editor/teme");
   return { success: true };
@@ -590,4 +644,114 @@ export async function areDesignDeDinainteDeTema(businessId: string): Promise<{ e
     return { error: "Nu am putut citi Istoricul." };
   }
   return { exista: (count ?? 0) > 0 };
+}
+
+/**
+ * Categoriile create de import ramase goale, sterse (pasul 3 din `stergeDateleDemo`). Doar dupa stergerea produselor
+ * demo, ca produsele ramase sa fie ale lui.
+ */
+async function stergeCategoriileDemo(businessId: string, urma: UrmaDateDemo): Promise<{ error: string } | null> {
+  // Id-uri adevarate, ca filtrul de mai jos sa nu poata fi rupt de un sir scris in `page_content`.
+  const iduri = urma.categorii.filter(esteUuid);
+  if (iduri.length === 0) return null;
+  const supabase = await createClient();
+  const lista = iduri.join(",");
+  // Si copiii lor, ai oricui: un parinte cu un copil care ramane nu se sterge (`on delete cascade`).
+  const { data: categorii, error } = await supabase
+    .from("categories")
+    .select("id, parent_id, name")
+    .eq("business_id", businessId)
+    .or(`id.in.(${lista}),parent_id.in.(${lista})`);
+  if (error) return { error: error.message };
+  /*
+   * Un produs pe nume, intrebat aparte pentru fiecare categorie: o singura cerere `in` pe toate numele s-ar fi oprit la
+   * 1000 de randuri, poate toate dintr-o categorie mare, iar celelalte ar fi parut goale si s-ar fi sters.
+   */
+  const nume = [...new Set((categorii ?? []).filter((c) => iduri.includes(c.id)).map((c) => c.name))];
+  const cuProduse = new Set<string>();
+  const raspunsuri = await Promise.all(nume.map((n) =>
+    supabase.from("products").select("id").eq("business_id", businessId).eq("category", n).limit(1)));
+  for (const [i, r] of raspunsuri.entries()) {
+    if (r.error) return { error: r.error.message };
+    if ((r.data ?? []).length > 0) cuProduse.add(nume[i]);
+  }
+  const deSters = categoriiDemoDeSters(urma, categorii ?? [], cuProduse);
+  if (deSters.length === 0) return null;
+  const { error: eSters } = await supabase.from("categories").delete().eq("business_id", businessId).in("id", deSters);
+  return eSters ? { error: eSters.message } : null;
+}
+
+/**
+ * „Șterge datele demo” (etapa 18.4), dupa urma importului (`page_content.date_demo`):
+ * 1. bannerele si randurile adaugate si textele demo ramase neschimbate in design (`Tema.faraTexteleDemo`), prin
+ *    `publishDesign`, deci si in Istoric; cu o ciorna nepublicata, nu, ca la „Pune la loc”;
+ * 2. produsele cu sursa demo, prin stergerea in masa a panoului (retragerile, pachetele, sincronizarile, proiectia);
+ * 3. categoriile create de import, ramase goale;
+ * 4. urma.
+ * Ce a adaugat sau a schimbat omul ramane. O cadere la mijloc lasa urma pe loc, deci stergerea se poate relua.
+ */
+export async function stergeDateleDemo(businessId: string): Promise<ActionResult> {
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+
+  const supabase = await createClient();
+  const { data: row, error: eCitit } = await supabase
+    .from("store_settings")
+    .select("storefront_design, storefront_design_draft")
+    .eq("business_id", owned.businessId)
+    .single();
+  if (eCitit) {
+    logError({ action: "stergeDateleDemo.citire", businessId: owned.businessId, message: eCitit.message });
+    return { error: "Nu am putut citi magazinul. Încearcă din nou." };
+  }
+  if (row?.storefront_design_draft) {
+    return { error: "Ai modificări nepublicate în editor. Publică-le sau renunță la ele, apoi șterge datele demo." };
+  }
+
+  const urma = urmaDateDemoDin(owned.ctx.pageContent);
+  const { data: produse, error: eProduse } = await supabase
+    .from("products")
+    .select("id")
+    .eq("business_id", owned.businessId)
+    .eq("source", SURSA_DEMO);
+  if (eProduse) {
+    logError({ action: "stergeDateleDemo.produse", businessId: owned.businessId, message: eProduse.message });
+    return { error: "Nu am putut citi produsele demo. Încearcă din nou." };
+  }
+  const iduri = (produse ?? []).map((p) => p.id);
+  if (!urma && iduri.length === 0) return { error: "Nu sunt date demo de șters." };
+
+  // 1. Bannerele, randurile si textele demo, prin „Publică”.
+  if (urma) {
+    const continut = continutFaraDateleDemo(owned.ctx.pageContent, urma);
+    const tema = temaDupaCheie(urma.tema);
+    const design = parseStoreDesign(row?.storefront_design ?? {}, contextCuCiorna(owned.ctx, continut));
+    const fara = tema ? tema.faraTexteleDemo(design, tema.date) : { design, schimbat: false };
+    if (atingeCheiPc(continut) || fara.schimbat) {
+      const publicat = await publishDesign(owned.businessId, ciornaCuContinut(fara.design, continut));
+      if ("error" in publicat) return publicat;
+    }
+  }
+
+  // 2. Produsele demo, ca la stergerea din „Produse”.
+  if (iduri.length > 0) {
+    const sterse = await bulkProductAction(owned.businessId, iduri, { kind: "delete" });
+    if ("error" in sterse) return sterse;
+  }
+
+  // 3. Categoriile create de import, ramase goale.
+  if (urma) {
+    const categorii = await stergeCategoriileDemo(owned.businessId, urma);
+    if (categorii) {
+      logError({ action: "stergeDateleDemo.categorii", businessId: owned.businessId, message: categorii.error });
+      return { error: "Produsele demo s-au șters, dar categoriile lor nu. Încearcă din nou." };
+    }
+  }
+
+  // 4. Urma, la urma: pana aici, o stergere cazuta se poate relua de pe pagina „Teme”.
+  await scrieCheiaTemei(owned.businessId, CHEIE_DATE_DEMO, null, "stergeDateleDemo.urma");
+  revalidatePath("/dashboard/editor/teme");
+  revalidatePath("/dashboard/products/categories");
+  if (owned.slug) revalidatePath(`/${owned.slug}`, "layout");
+  return { success: true };
 }

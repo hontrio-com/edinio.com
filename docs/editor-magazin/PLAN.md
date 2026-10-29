@@ -1816,6 +1816,33 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     categoriile create de import (doar daca n-au alte produse), bannerele si randurile adaugate (dupa urma), iar
     cardurile si placile temei care au ramas cu continutul demo (prin `publishDesign`). Fereastra spune cate sunt.
   - 18.5 Ghiduri, REGISTRU, porti; proba in Chrome pe magazinul de test (cu acordul lui), cu tot pus la loc.
+  - [x] 18.2-18.4 FACUTE (29.10), inainte de proba:
+    - 18.2: bifa „Importă și datele demo” in fereastra „Aplică tema”, OPRITA la fiecare deschidere; spune ce adauga
+      (58 de produse cu categoriile lor, 3 bannere, 2 randuri, textele temei), ca nu pleaca in canale, ca intra in
+      limita planului, iar cu magazinul vizibil, ca produsele demo se pot COMANDA pana le sterge. Limita GASITA:
+      `PLAN_PRODUCT_LIMITS` (gratuit 10, Basic 500, Premium 2500, Ultra fara), pe CONT, ca la adaugarea de mana; se
+      numara doar produsele temei care lipsesc (importul repetat nu e oprit). `lib/teme/limita-demo.ts`; un plan necitit
+      = eroare, nu „gratuit”. Fara loc, bifa e oprita, cu motivul („Datele demo adaugă 58 de produse, iar planul tău
+      permite 10 produse (ai deja 3).”). ⚠ Deci un cont GRATUIT nu poate importa datele Jupiter (58 > 10): intrebare
+      pentru el la raport.
+    - 18.3: `aplicaTema(businessId, cheie, cuDateDemo?)`: limita (inaintea oricarei scrieri), Istoricul, importul (cu
+      radacina catalogului: `/${permalinks.magazin}`, `radacinaCatalogTemei`), magazinul RECITIT (randurile noi intra in
+      design prin `parseStoreDesign`), tema publicata cu `date`. GASIT si reparat: (1) tema GOLEA cardurile bannerului
+      LUI si ii INLOCUIA placile de recomandare, iar cu datele demo ii suprascria mesajul barii de sus; acum ale lui
+      raman, cele demo intra doar in locul gol (ca importul); (2) `scrieSemnulTemei` (17) scria peste o citire cazuta:
+      `page_content` ar fi devenit `{ tema_aplicata }`, adica tot magazinul gol de texte; acum `scrieCheiaTemei` nu
+      scrie fara citire; (3) importul trecea categoriile in urma abia la sfarsit: o cadere la mijloc lasa categorii pe
+      care stergerea nu le mai gasea; acum id-urile se aleg inainte si urma se scrie INAINTEA categoriilor.
+    - 18.4: `stergeDateleDemo`: nu peste o ciorna; bannerele, randurile si textele demo ramase neschimbate
+      (`Tema.faraTexteleDemo`, dupa titlu SI poza) prin „Publică” (deci in Istoric), doar cand e ceva de scos;
+      produsele prin `bulkProductAction` (retragerile eMAG/OLX, pachetele, sincronizarile, proiectia); categoriile din
+      urma ramase goale, intrebate nume cu nume (o lista `in` s-ar fi oprit la 1000 de randuri), fara un parinte cu un
+      copil care ramane (`parent_id` e `on delete cascade`, verificat pe demo); urma LA URMA (o cadere se reia). Caseta
+      pe pagina „Teme” cat sunt date demo; fereastra „Pune la loc” spune ca produsele si categoriile demo raman.
+    - Ghiduri: `cum-aplici-o-tema` (bifa, datele demo, limita), `cum-pui-la-loc-designul-de-dinainte-de-tema` (cu
+      datele demo) si unul nou, `cum-stergi-datele-demo-ale-temei` (431 de ghiduri). Probe noi: `limita-demo`,
+      `stergere-demo`, `date-demo-in-design`, ordinea importului pe o baza falsa (si cu o cadere la subcategorii);
+      mutanti 15/15. Porti: suita 11.386 / 0 / 2 sarite, tsc, eslint, `build:ci`.
 - **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
   push: DNS, domeniul in Vercel, magazinul demo in productie.
 

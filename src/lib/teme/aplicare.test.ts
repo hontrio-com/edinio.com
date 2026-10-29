@@ -14,6 +14,7 @@ import {
   dateleVersiunilorDeDinainte,
   magazinCuIdentitatea,
   pageContentCuIdentitatea,
+  radacinaCatalogTemei,
   temaAplicataDin,
 } from "./aplicare";
 import { designJupiter, IDENTITATE_JUPITER } from "./jupiter/design";
@@ -95,16 +96,54 @@ function functia(s: string, nume: string): string {
 
 test("⚠⚠ aplicarea: proprietarul intai; ce era intra in Istoric INAINTE de publicare, iar o cadere acolo o opreste", () => {
   const f = functia(cod("src/lib/actions/store-design.actions.ts"), "aplicaTema");
-  assert.match(f, /^export async function aplicaTema\(businessId: string, cheie: string\): Promise<ActionResult> \{\s*const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;\s*const tema = temaDupaCheie\(cheie\);\s*if \(!tema\) return \{ error: "Tema nu există\." \};/);
+  // Etapa 18.2: al treilea argument, „Importă și datele demo”; doar un `true` adevarat il porneste (vine din browser).
+  assert.match(f, /^export async function aplicaTema\(businessId: string, cheie: string, cuDateDemo\?: boolean\): Promise<ActionResult> \{\s*const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;\s*const tema = temaDupaCheie\(cheie\);\s*if \(!tema\) return \{ error: "Tema nu există\." \};\s*const cuDate = cuDateDemo === true;/);
   const istoric = f.indexOf("if (!(await pastreazaInainteDeTema(owned, randuri))) {");
   const publicare = f.indexOf("const publicat = await publishDesign(owned.businessId, ciornaCuContinut(design, continut));");
   const semn = f.indexOf("await scrieSemnulTemei(owned.businessId, { cheie: tema.cheie,");
   assert.ok(istoric > 0 && publicare > istoric && semn > publicare, "ordinea: Istoricul, publicarea, semnul");
   assert.match(f, /origine: "tema", publicat_de: owned\.userId, created_at: la\.tema,/);
   assert.match(f, /origine: "ciorna", publicat_de: owned\.userId, created_at: la\.ciorna,/);
-  assert.match(f, /const continut = continutIdentitate\(tema\.identitate\);\s*const ctxTema = contextCuCiorna\(owned\.ctx, continut\);/);
-  assert.match(f, /cuNewsletter: areFurnizorNewsletter\(integrari\.newsletter\),/);
-  assert.match(f, /if \("error" in publicat\) return publicat;/);
+  // Etapa 18.3: contextul e al magazinului de DUPA import (randurile si bannerele demo intra in designul temei).
+  assert.match(f, /const continut = continutIdentitate\(tema\.identitate\);\s*const ctxTema = contextCuCiorna\(ctxMagazin, continut\);/);
+  assert.match(f, /cuNewsletter: areFurnizorNewsletter\(integrari\.newsletter\),\s*radacinaCatalog,/);
+  assert.match(f, /if \("error" in publicat\) \{/);
+});
+
+test("⚠⚠ 18.2-18.3: cu datele demo, limita planului INAINTEA oricarei scrieri, importul dupa Istoric si inaintea temei", () => {
+  const f = functia(cod("src/lib/actions/store-design.actions.ts"), "aplicaTema");
+  const limita = f.indexOf("const loc = await citesteLoculPentruDemo(supabase, owned.userId, owned.businessId, tema.cheie, tema.date);");
+  const istoric = f.indexOf("if (!(await pastreazaInainteDeTema(owned, randuri))) {");
+  const importul = f.indexOf("await importaDateleDemo(createAdminClient(), owned.businessId, tema.cheie, tema.date, radacinaCatalog);");
+  const reluat = f.indexOf("const dupaImport = await loadOwnedStore(owned.businessId);");
+  const publicare = f.indexOf("const publicat = await publishDesign(");
+  assert.ok(limita > 0 && istoric > limita && importul > istoric && reluat > importul && publicare > reluat,
+    "ordinea: limita, Istoricul, importul, magazinul recitit, publicarea");
+  assert.match(f, /if \(!loc\.incap\) return \{ error: `\$\{motivulLimitei\(loc\)\} Aplică tema fără datele demo\.` \};/);
+  // Un plan necitit opreste aplicarea cu date, nu o lasa sa treaca.
+  assert.match(f, /if \("error" in loc\) \{\s*logError\(\{[^}]*\}\);\s*return \{ error: "Nu am putut verifica limita de produse a planului, deci tema nu s-a aplicat\. Încearcă din nou\." \};/);
+  // Importul cazut opreste tema; textele demo intra in design doar cu bifa.
+  assert.match(f, /\} catch \(e\) \{\s*logError\(\{[^}]*\}\);\s*return \{ error: "Datele demo nu s-au putut adăuga, deci tema nu s-a aplicat\. Încearcă din nou\." \};/);
+  assert.match(f, /const design = tema\.design\(ctxTema, cuDate \? tema\.date : null, parseStoreDesign\(row\?\.storefront_design \?\? \{\}, ctxTema\), \{/);
+  assert.match(f, /const radacinaCatalog = radacinaCatalogTemei\(owned\.ctx\.pageContent\);/);
+});
+
+test("radacina catalogului dupa tema: prefixul din Setări > Permalink-uri, implicit /magazin", () => {
+  assert.equal(radacinaCatalogTemei({}), "/magazin");
+  assert.equal(radacinaCatalogTemei({ permalinks: { magazin: "produse" } }), "/produse");
+  // O valoare stricata cade pe implicit, nu pe o adresa rupta (`permalinkuriDin`).
+  assert.equal(radacinaCatalogTemei({ permalinks: { magazin: "Cos Nou!" } }), "/magazin");
+});
+
+test("⚠⚠ cheile temelor din `page_content` nu se scriu peste o citire cazuta (ar fi inlocuit tot `page_content`)", () => {
+  const s = cod("src/lib/actions/store-design.actions.ts");
+  const i = s.indexOf("async function scrieCheiaTemei(");
+  const f = s.slice(i, s.indexOf("\n}\n", i));
+  const garda = f.indexOf("if (error || !data) {");
+  const scrierea = f.indexOf("await writeSettings(");
+  assert.ok(garda > 0 && scrierea > garda, "garda inaintea scrierii");
+  assert.match(f.slice(garda, scrierea), /return;/);
+  assert.match(s, /async function scrieSemnulTemei\(businessId: string, semn: TemaAplicata \| null\): Promise<void> \{\s*await scrieCheiaTemei\(businessId, CHEIE_TEMA_APLICATA, semn, "tema\.semn"\);/);
 });
 
 test("⚠⚠ „Pune la loc”: nu peste o ciorna nepublicata; versiunea `tema` cea mai noua a LUI, publicata; semnul scos", () => {
@@ -134,7 +173,8 @@ test("17.4: pagina „Teme”: magazinul LUI, Istoricul intrebat prin actiunea e
   const c = cod("src/components/teme/TemeClient.tsx");
   assert.match(c, /const \[lucreaza, porneste\] = useLucru\(\);/);
   assert.doesNotMatch(c, /useTransition/, "o tranzitie async ar fi tinut pe loc navigarea");
-  assert.match(c, /const r = await aplicaTema\(businessId, t\.cheie\);/);
+  // Etapa 18.2: bifa „Importă și datele demo”, trimisa doar cand se poate alege (planul o incape).
+  assert.match(c, /const r = await aplicaTema\(businessId, t\.cheie, cuDate && t\.demo\.motivOprit === null\);/);
   assert.match(c, /const r = await puneLaLocDesignulDeDinainte\(businessId\);/);
   assert.match(c, /disabled=\{lucreaza \|\| areCiorna\} onClick=\{puneLaLoc\}/, "cu o ciorna nepublicata, „Pune la loc” asteapta");
   assert.match(cod("src/lib/navigatie-panou.ts"), /\{ href: "\/dashboard\/editor\/teme", label: "Teme" \},/);
@@ -143,12 +183,28 @@ test("17.4: pagina „Teme”: magazinul LUI, Istoricul intrebat prin actiunea e
   assert.match(a, /return \{ error: "Nu am putut citi Istoricul\." \};/);
 });
 
-test("„Aplică” si „Pune la loc” improspateaza chiar pagina „Teme”, de unde sta ea", () => {
+test("„Aplică”, „Pune la loc” si „Șterge datele demo” improspateaza chiar pagina „Teme”, de unde sta ea", () => {
   const cale = "src/app/(dashboard)/dashboard/editor/teme/page.tsx";
   assert.ok(readFileSync(cale, "utf8").includes("export default async function TemePage"));
   const s = cod("src/lib/actions/store-design.actions.ts");
-  for (const nume of ["aplicaTema", "puneLaLocDesignulDeDinainte"]) {
+  for (const nume of ["aplicaTema", "puneLaLocDesignulDeDinainte", "stergeDateleDemo"]) {
     assert.match(functia(s, nume), /revalidatePath\("\/dashboard\/editor\/teme"\);/, nume);
   }
   assert.doesNotMatch(s, /revalidatePath\("\/dashboard\/teme"\)/);
+});
+
+test("18.2/18.4 pe pagina „Teme”: bifa porneste oprita, se opreste cand planul n-o incape; stergerea asteapta ciorna", () => {
+  const c = cod("src/components/teme/TemeClient.tsx");
+  // La fiecare deschidere a ferestrei, bifa oprita (raspunsul lui: datele demo, „in caz ca vrea”).
+  assert.match(c, /const deschideAplicarea = \(t: TemaPeCard\) => \{\s*setCuDate\(false\);\s*setDeAplicat\(t\);\s*\};/);
+  assert.match(c, /disabled=\{lucreaza \|\| deAplicat\.demo\.motivOprit !== null\}/);
+  assert.match(c, /checked=\{cuDate && deAplicat\.demo\.motivOprit === null\}/);
+  assert.match(c, /const r = await stergeDateleDemo\(businessId\);/);
+  assert.match(c, /disabled=\{lucreaza \|\| areCiorna\} onClick=\{stergeDemo\}/, "cu o ciorna nepublicata, stergerea asteapta");
+  // Cu magazinul vizibil, fereastra spune ca produsele demo se pot comanda.
+  assert.match(c, /\{estePublic && <li>Magazinul e vizibil: clienții văd produsele demo și le pot comanda până le ștergi\.<\/li>\}/);
+  const p = cod("src/app/(dashboard)/dashboard/editor/teme/page.tsx");
+  assert.match(p, /TEME\.map\(\(t\) => citesteLoculPentruDemo\(supabase, user\.id, magazin\.id, t\.cheie, t\.date\)\)/);
+  assert.match(p, /motivOprit: "error" in loc \|\| loc\.incap \? null : motivulLimitei\(loc\),/);
+  assert.match(p, /dateDemo=\{urma \|\| \(produseDemo \?\? 0\) > 0 \? \{ produse: produseDemo \?\? 0 \} : null\}/);
 });

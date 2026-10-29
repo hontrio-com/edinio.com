@@ -1,5 +1,6 @@
 import { pcCuCiorna, type ContinutCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { CHEIE_FONT_TEXT, CHEIE_FONT_TITLURI } from "@/lib/storefront/design/fonturi-magazin";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import type { IdentitateTema } from "./tipuri";
 
 /*
@@ -32,6 +33,15 @@ export function pageContentCuIdentitatea(pc: Record<string, unknown>, identitate
 /** Coloanele din `businesses` scrise de tema: doar culoarea principala. */
 export function magazinCuIdentitatea(identitate: IdentitateTema): { primary_color: string } {
   return { primary_color: identitate.culoare };
+}
+
+/**
+ * Radacina catalogului dupa aplicare (etapa 18.3): tema muta catalogul pe pagina lui, deci prefixul ales de magazin in
+ * Setări > Permalink-uri (implicit `/magazin`), ca in sugestiile de linkuri ale editorului (`date-editor-pagina.ts`).
+ * Din ea pleaca linkurile bannerelor, cardurilor si placilor demo si „Toate produsele” din subsol.
+ */
+export function radacinaCatalogTemei(pageContent: Record<string, unknown>): string {
+  return `/${permalinkuriDin(pageContent).magazin}`;
 }
 
 /** Cu un furnizor de newsletter conectat, coloana „Newsletter” a temei intra in subsol (cum cere si panoul). */

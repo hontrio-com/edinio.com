@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database.types";
 import { slugify } from "@/lib/utils/slugify";
@@ -29,6 +30,9 @@ export { SURSA_DEMO };
 export function externalIdDemo(tema: string, cheie: string): string {
   return `${tema}:${cheie}`;
 }
+
+/** Cheia urmei in `page_content`. Nu e o cheie a editorului: nu intra in Istoric, deci „Pune la loc” n-o atinge. */
+export const CHEIE_DATE_DEMO = "date_demo";
 
 /** Ce a adaugat importul in magazin, in `page_content.date_demo`. */
 export interface UrmaDateDemo {
@@ -143,10 +147,26 @@ export function randuriDupaImport(
   return { randuri, adaugate };
 }
 
+const lista = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === "string") : []);
+
+/** Urma din `page_content`, sau `null` cand n-a fost niciun import (ori a fost stearsa cu „Șterge datele demo”). */
+export function urmaDateDemoDin(pageContent: unknown): UrmaDateDemo | null {
+  if (!pageContent || typeof pageContent !== "object") return null;
+  const v = (pageContent as Record<string, unknown>)[CHEIE_DATE_DEMO];
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const u = v as Partial<Record<keyof UrmaDateDemo, unknown>>;
+  return {
+    tema: typeof u.tema === "string" ? u.tema : "",
+    categorii: lista(u.categorii),
+    bannere: lista(u.bannere),
+    randuri: lista(u.randuri),
+    la: typeof u.la === "string" ? u.la : "",
+  };
+}
+
 /** Urma de dupa import: cea de dinainte (un import repetat) plus ce s-a adaugat acum. */
 export function urmaDupaImport(veche: unknown, tema: string, categorii: string[], bannere: string[], randuri: string[], la: string): UrmaDateDemo {
   const v = veche && typeof veche === "object" ? (veche as Partial<UrmaDateDemo>) : {};
-  const lista = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === "string") : []);
   return {
     tema,
     categorii: [...new Set([...lista(v.categorii), ...categorii])],
@@ -154,6 +174,19 @@ export function urmaDupaImport(veche: unknown, tema: string, categorii: string[]
     randuri: [...new Set([...lista(v.randuri), ...randuri])],
     la,
   };
+}
+
+/** Categoriile de creat, trecute in urma din `page_content` inaintea scrierii lor (vezi `importaDateleDemo`). */
+async function scrieUrmaCategoriilor(admin: SupabaseClient<Database>, businessId: string, tema: string, categorii: string[]): Promise<void> {
+  const { data, error } = await admin.from("store_settings").select("page_content").eq("business_id", businessId).single();
+  if (error) throw new Error(`setari: ${error.message}`);
+  const pc = (data?.page_content ?? {}) as Record<string, unknown>;
+  const urma = urmaDupaImport(pc[CHEIE_DATE_DEMO], tema, categorii, [], [], new Date().toISOString());
+  const { error: eScris } = await admin.from("store_settings").update({
+    page_content: { ...pc, [CHEIE_DATE_DEMO]: urma } as never,
+    updated_at: new Date().toISOString(),
+  }).eq("business_id", businessId);
+  if (eScris) throw new Error(`urma: ${eScris.message}`);
 }
 
 export interface RezultatImport {
@@ -184,23 +217,29 @@ export async function importaDateleDemo(
   const dupaNume = new Map((catExistente ?? []).map((c) => [cheieNume(c.name), c.id]));
   let ordine = Math.max(-1, ...(catExistente ?? []).map((c) => c.sort_order ?? 0)) + 1;
   const deCreat = categoriiDeCreat((catExistente ?? []).map((c) => c.name), date);
-  const create: string[] = [];
-  for (const nivel of [deCreat.filter((c) => !c.parinte), deCreat.filter((c) => c.parinte)]) {
-    if (nivel.length === 0) continue;
-    const randuri = nivel.map((c) => ({
+  /*
+   * ⚠ Id-urile se aleg aici si intra in urma INAINTE de scriere (etapa 18.3). Scrise in urma abia la sfarsit, o cadere
+   * la mijloc ar fi lasat categorii create si netrecute nicaieri: importul reluat le-ar fi luat drept ale lui (dupa
+   * nume), iar „Șterge datele demo” nu le-ar mai fi gasit. Un id trecut in urma, dar nescris, nu strica nimic: la
+   * stergere nu se gaseste.
+   */
+  const create = deCreat.map(() => randomUUID());
+  deCreat.forEach((c, i) => dupaNume.set(cheieNume(c.nume), create[i]));
+  if (create.length > 0) await scrieUrmaCategoriilor(admin, businessId, tema, create);
+  // Intai primul nivel, apoi subcategoriile, legate de parintele lor (al lui sau unul creat acum).
+  for (const sub of [false, true]) {
+    const randuri = deCreat.flatMap((c, i) => (!!c.parinte === sub ? [{
+      id: create[i],
       business_id: businessId,
       name: c.nume,
       parent_id: c.parinte ? dupaNume.get(cheieNume(c.parinte)) ?? null : null,
       sort_order: ordine++,
       is_active: true,
       image_url: c.imagine,
-    }));
-    const { data: scrise, error } = await admin.from("categories").insert(randuri).select("id, name");
+    }] : []));
+    if (randuri.length === 0) continue;
+    const { error } = await admin.from("categories").insert(randuri);
     if (error) throw new Error(`categorii noi: ${error.message}`);
-    for (const c of scrise ?? []) {
-      dupaNume.set(cheieNume(c.name), c.id);
-      create.push(c.id);
-    }
   }
 
   // ── Produsele: doar cele care nu sunt deja (dupa cod) ──
@@ -248,9 +287,9 @@ export async function importaDateleDemo(
   const pc = (setari?.page_content ?? {}) as Record<string, unknown>;
   const { imagini, linkuri, adaugate } = bannereDupaImport(pc, date, radacinaCatalog);
   const randuri = randuriDupaImport(pc, date, tema, idDupaCheie);
-  const urma = urmaDupaImport(pc.date_demo, tema, create, adaugate, randuri.adaugate, new Date().toISOString());
+  const urma = urmaDupaImport(pc[CHEIE_DATE_DEMO], tema, create, adaugate, randuri.adaugate, new Date().toISOString());
   const { error: eScris } = await admin.from("store_settings").update({
-    page_content: { ...pc, hero_banners: imagini, hero_banner_links: linkuri, product_sections: randuri.randuri, date_demo: urma } as never,
+    page_content: { ...pc, hero_banners: imagini, hero_banner_links: linkuri, product_sections: randuri.randuri, [CHEIE_DATE_DEMO]: urma } as never,
     updated_at: new Date().toISOString(),
   }).eq("business_id", businessId);
   if (eScris) throw new Error(`page_content: ${eScris.message}`);

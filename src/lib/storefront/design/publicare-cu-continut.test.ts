@@ -57,9 +57,10 @@ test("⚠⚠ `elibereazaComutatoare` nu mai exista: ar fi rescris ciorna fara co
   // Fiecare actiune exportata verifica proprietarul inainte de orice.
   const exportate = [...s.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]);
   // Etapa 17 (temele): `aplicaTema`, `puneLaLocDesignulDeDinainte` si intrebarea paginii „Teme”, tot dupa proprietar.
+  // Etapa 18.4: `stergeDateleDemo` („Șterge datele demo”), la fel.
   assert.deepEqual(exportate.sort(), [
     "aplicaTema", "areDesignDeDinainteDeTema", "discardDesignDraft", "getDesignVersion", "listDesignVersions", "publishDesign",
-    "puneLaLocDesignulDeDinainte", "saveDesignDraft",
+    "puneLaLocDesignulDeDinainte", "saveDesignDraft", "stergeDateleDemo",
   ]);
   for (const nume of exportate) assert.match(functia(s, nume), /const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;/, nume);
 });

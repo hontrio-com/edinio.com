@@ -79,4 +79,9 @@ export interface IdentitateTema {
 /** Ce stie aplicarea despre magazin (etapa 17). Fara furnizor de newsletter, coloana „Newsletter” a temei nu intra. */
 export interface OptiuniTema {
   cuNewsletter?: boolean;
+  /**
+   * Radacina catalogului magazinului (prefixul lui din Setări > Permalink-uri, implicit `/magazin`), de unde pleaca
+   * linkurile temei spre catalog (etapa 18.3). Lipsa = `/magazin`, ca la magazinul demo.
+   */
+  radacinaCatalog?: string;
 }

@@ -4,6 +4,8 @@ import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import { schemaBlocurilor } from "@/lib/storefront/design/blocuri";
 import { jsonCanonic } from "@/lib/storefront/design/continut-ciorna";
+import { cardurileHero } from "@/lib/storefront/design/hero-carduri";
+import { placileDinSetari } from "@/lib/storefront/design/placi-promo";
 import type { BlockInstance, DesignContext, SectionInstance, StoreDesign, StoreStyle } from "@/lib/storefront/design/types";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "@/lib/teme/tipuri";
 
@@ -19,6 +21,9 @@ import type { IdentitateTema, OptiuniTema, SetDateDemo } from "@/lib/teme/tipuri
 
   `date` = datele demo ale temei, cand se aplica impreuna cu ele (magazinul demo, „Importă datele demo”): atunci si
   textele de exemplu ale sectiunilor temei. Fara ele, sectiunile pornesc goale, iar magazinul isi pune textele lui.
+
+  ⚠ Ca importul („Adaugă, marcate demo”): cardurile bannerului, placile de recomandare si mesajul barii de sus ale LUI
+  raman ale lui; textele demo intra doar unde n-are nimic (gasit la 18.3: tema golea cardurile si inlocuia placile).
 */
 
 /**
@@ -56,8 +61,14 @@ export const STIL_JUPITER: StoreStyle = {
   density: "normal",
 };
 
+/** Radacina catalogului in magazinul demo (pagina Magazin); la aplicare, a magazinului (`OptiuniTema.radacinaCatalog`). */
+const RADACINA_CATALOG = "/magazin";
+
+/** Mesajul barii de sus din datele demo: intra doar cand omul n-are unul al lui, iar „Șterge datele demo” il scoate. */
+export const MESAJ_BARA_DEMO = "Livrare in toata tara";
+
 /** Coloanele subsolului: newsletterul (urca in banda lui), raioanele, comenzile, informatiile, suportul. */
-export function coloaneSubsolJupiter(): BlockInstance[] {
+export function coloaneSubsolJupiter(radacina: string = RADACINA_CATALOG): BlockInstance[] {
   return [
     { id: "newsletter", type: "newsletter", enabled: true, settings: { titlu: "Aboneaza-te la newsletter pentru promotii saptamanale.", buton: "Aboneaza-te" } },
     { id: "raioane", type: "linkuri", enabled: true, settings: { titlu: "Raioane", sursa: "categorii", toateProdusele: false, cate: 6 } },
@@ -66,7 +77,7 @@ export function coloaneSubsolJupiter(): BlockInstance[] {
       settings: {
         titlu: "Comenzi online", sursa: "alese",
         linkuri: [
-          { eticheta: "Toate produsele", adresa: "/magazin" },
+          { eticheta: "Toate produsele", adresa: radacina },
           { eticheta: "Cosul meu", adresa: "/cos" },
           { eticheta: "Retur produs", adresa: "/retur" },
         ],
@@ -86,7 +97,7 @@ function coloaneDupaTema(subsol: SectionInstance, optiuni: OptiuniTema): BlockIn
   const aleseDeEl = !!subsol.blocks && jsonCanonic(subsol.blocks) !== jsonCanonic(implicite);
   if (aleseDeEl && subsol.blocks) return subsol.blocks;
   // Fara furnizor de newsletter, coloana temei ramane pe dinafara, cum cere si panoul (etapa 17).
-  return coloaneSubsolJupiter().filter((c) => optiuni.cuNewsletter !== false || c.type !== "newsletter");
+  return coloaneSubsolJupiter(optiuni.radacinaCatalog).filter((c) => optiuni.cuNewsletter !== false || c.type !== "newsletter");
 }
 
 /**
@@ -102,20 +113,20 @@ function peVarianta(s: SectionInstance, variant: string, setari: Record<string, 
   };
 }
 
-/** Radacina catalogului in tema (pagina Magazin): de aici linkurile cardurilor si ale placilor demo. */
-const RADACINA_CATALOG = "/magazin";
-
 /**
  * Pagina principala a temei, in ordinea modelului: bannerul cu carduri, placile de categorii, primul rand de produse,
  * placile de recomandare, celelalte randuri. Restul sectiunilor magazinului raman DUPA ale temei, cu starea lor: un
  * „Despre noi” aprins nu dispare din vedere doar pentru ca s-a aplicat o tema.
  */
-function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null): SectionInstance[] {
+function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null, radacina: string): SectionInstance[] {
   const din = (kind: SectionInstance["kind"], id: string, variant: string) =>
     baza.home.find((s) => s.kind === kind) ?? section(id, kind, variant);
+  const hero = din("hero", "hero", "carduri");
+  // Cardurile LUI raman (un banner pe varianta cu carduri, completat de el); altfel ale temei, cu datele demo.
+  const cardurileLui = cardurileHero(hero.settings).length > 0;
   const banner: SectionInstance = {
-    ...peVarianta(din("hero", "hero", "carduri"), "carduri", {
-      carduri: date ? date.carduri.map((c) => ({ titlu: c.titlu, text: c.text, imagine: c.imagine, link: hrefCategorie(RADACINA_CATALOG, c.categorie) })) : [],
+    ...peVarianta(hero, "carduri", cardurileLui ? {} : {
+      carduri: date ? date.carduri.map((c) => ({ titlu: c.titlu, text: c.text, imagine: c.imagine, link: hrefCategorie(radacina, c.categorie) })) : [],
     }),
     enabled: true,
     enabledOverride: true,
@@ -126,12 +137,14 @@ function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null): SectionI
     enabledOverride: true,
   };
   const randuri = baza.home.filter((s) => s.kind === "product_row").map((s) => ({ ...s, settings: { ...s.settings, banda: true } }));
-  const recomandari = section("recomandari", "placi_promo", "rotunde", true, {
-    ...(variantMeta("placi_promo", "rotunde")?.defaults ?? {}),
-    placi: date ? date.placi.map((p) => ({ titlu: p.titlu, imagine: p.imagine, link: hrefCategorie(RADACINA_CATALOG, p.categorie), eticheta: "" })) : [],
-  });
-  const temei = new Set<string>(["hero", "category_nav", "product_row", "placi_promo"]);
-  const restul = baza.home.filter((s) => !temei.has(s.kind));
+  // Placile de recomandare ale LUI raman, cu placile lor; doar fara ele, ale temei (cu datele demo, umplute).
+  const placiLui = baza.home.find((s) => s.kind === "placi_promo");
+  const placiDemo = date ? date.placi.map((p) => ({ titlu: p.titlu, imagine: p.imagine, link: hrefCategorie(radacina, p.categorie), eticheta: "" })) : [];
+  const recomandari = placiLui
+    ? (placileDinSetari(placiLui.settings).length > 0 ? placiLui : { ...placiLui, settings: { ...placiLui.settings, placi: placiDemo } })
+    : section("recomandari", "placi_promo", "rotunde", true, { ...(variantMeta("placi_promo", "rotunde")?.defaults ?? {}), placi: placiDemo });
+  const temei = new Set<string>(["hero", "category_nav", "product_row"]);
+  const restul = baza.home.filter((s) => !temei.has(s.kind) && s !== placiLui);
   // Placile de recomandare dupa primul rand care se vede, ca „Recomandări” de pe model (dupa „Oferte de sezon”).
   const dupa = randuri.findIndex((r) => r.enabled) + 1;
   return [banner, categorii, ...randuri.slice(0, dupa), recomandari, ...randuri.slice(dupa), ...restul];
@@ -145,7 +158,10 @@ export function designJupiter(
   ctx: DesignContext, date: SetDateDemo | null, bazaMagazinului?: StoreDesign, optiuni: OptiuniTema = {},
 ): StoreDesign {
   const baza = bazaMagazinului ?? buildClassicDesign(ctx);
-  const antet = peVarianta(baza.chrome.header, "hipermarket", date ? { topText: "Livrare in toata tara" } : {});
+  const radacina = optiuni.radacinaCatalog ?? RADACINA_CATALOG;
+  // Mesajul barii de sus: al lui, cand are unul; cel demo doar in locul gol.
+  const mesajulLui = typeof baza.chrome.header.settings.topText === "string" && baza.chrome.header.settings.topText.trim() !== "";
+  const antet = peVarianta(baza.chrome.header, "hipermarket", date && !mesajulLui ? { topText: MESAJ_BARA_DEMO } : {});
   const subsol = { ...peVarianta(baza.chrome.footer, "hipermarket", { inapoiSus: true }), blocks: coloaneDupaTema(baza.chrome.footer, optiuni) };
   // Catalogul pe pagina lui, ca pe model: pe prima pagina raman doar randurile alese.
   const magazin = { ...peVarianta(baza.shop.page, "sidebar", { pastreazaGrilaAcasa: false, placiSubcategorii: true }), enabled: true };
@@ -167,9 +183,42 @@ export function designJupiter(
     style: STIL_JUPITER,
     ordineAtinsa: true,
     chrome: { ...baza.chrome, header: antet, footer: subsol },
-    home: paginaPrincipala(baza, date),
+    home: paginaPrincipala(baza, date, radacina),
     shop: { ...baza.shop, page: magazin },
     product: { ...baza.product, page: paginaProdus },
     commerce: { ...baza.commerce, productCard: card },
   }, ctx);
+}
+
+/** Acelasi card sau aceeasi placa ca in datele demo: titlul si poza neschimbate (linkul tine de radacina magazinului). */
+function eDinDemo(x: unknown, demo: readonly { titlu: string; imagine: string }[]): boolean {
+  if (!x || typeof x !== "object") return false;
+  const { titlu, imagine } = x as Record<string, unknown>;
+  return demo.some((d) => d.titlu === titlu && d.imagine === imagine);
+}
+
+/**
+ * Designul fara textele demo ale temei („Șterge datele demo”, etapa 18.4): cardurile bannerului si placile de
+ * recomandare ramase cum le-a pus importul (acelasi titlu si aceeasi poza) si mesajul demo al barii de sus. Ce a
+ * schimbat sau a adaugat omul ramane al lui. `schimbat` = s-a scos ceva (altfel nu e nimic de publicat).
+ */
+export function faraTexteleDemo(design: StoreDesign, date: SetDateDemo): { design: StoreDesign; schimbat: boolean } {
+  let schimbat = false;
+  const fara = (lista: unknown, demo: readonly { titlu: string; imagine: string }[]) => {
+    if (!Array.isArray(lista)) return lista;
+    const ramase = lista.filter((x) => !eDinDemo(x, demo));
+    if (ramase.length !== lista.length) schimbat = true;
+    return ramase;
+  };
+  const home = design.home.map((s) => {
+    if (s.kind === "hero" && Array.isArray(s.settings.carduri)) return { ...s, settings: { ...s.settings, carduri: fara(s.settings.carduri, date.carduri) } };
+    if (s.kind === "placi_promo" && Array.isArray(s.settings.placi)) return { ...s, settings: { ...s.settings, placi: fara(s.settings.placi, date.placi) } };
+    return s;
+  });
+  let header = design.chrome.header;
+  if (header.settings.topText === MESAJ_BARA_DEMO) {
+    header = { ...header, settings: { ...header.settings, topText: "" } };
+    schimbat = true;
+  }
+  return schimbat ? { design: { ...design, home, chrome: { ...design.chrome, header } }, schimbat } : { design, schimbat };
 }

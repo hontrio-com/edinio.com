@@ -2,7 +2,9 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
-import { bannereDupaImport, categoriiDeCreat, externalIdDemo, idRandDemo, randuriDupaImport, sluguriUnice, urmaDupaImport } from "./import-demo";
+import {
+  bannereDupaImport, categoriiDeCreat, externalIdDemo, idRandDemo, importaDateleDemo, randuriDupaImport, sluguriUnice, urmaDateDemoDin, urmaDupaImport,
+} from "./import-demo";
 import type { SetDateDemo } from "./tipuri";
 
 /*
@@ -101,4 +103,95 @@ test("randurile: produsele lor exista in set, iar ale lui raman primele si neati
   const iar = randuriDupaImport({ product_sections: r.randuri }, D, "jupiter", idDupaCheie);
   assert.equal(iar.adaugate.length, 0, "importul repetat nu dubleaza randurile");
   assert.equal(randuriDupaImport({}, D, "jupiter", new Map()).adaugate.length, 0, "fara produse gasite, niciun rand gol");
+});
+
+test("urma din `page_content`: citita cu grija; lipsa, stricata sau stearsa = niciun import", () => {
+  assert.equal(urmaDateDemoDin(null), null);
+  assert.equal(urmaDateDemoDin({}), null);
+  assert.equal(urmaDateDemoDin({ date_demo: "x" }), null);
+  assert.equal(urmaDateDemoDin({ date_demo: [] }), null);
+  assert.deepEqual(urmaDateDemoDin({ date_demo: { tema: "jupiter", categorii: ["c1", 7], bannere: "x" } }),
+    { tema: "jupiter", categorii: ["c1"], bannere: [], randuri: [], la: "" });
+});
+
+/**
+ * Baza falsa pentru `importaDateleDemo`: tine `page_content` ca o baza adevarata (scrierile se vad la citirile de dupa)
+ * si jurnalul cererilor, in ordine. `cadeLa` = a cata inserare de categorii cade.
+ */
+function bazaImport(o: { categorii?: { id: string; name: string; sort_order: number }[]; cadeLa?: number } = {}) {
+  let pc: Record<string, unknown> = { hero_banners: ["al-lui.jpg"] };
+  const jurnal: { op: string; date?: unknown }[] = [];
+  const produse: { id: string; external_id: string }[] = [];
+  let inserariCategorii = 0;
+  const client = {
+    from(tabel: string) {
+      let coloane = "";
+      let scriere: { fel: "update" | "insert"; date: unknown } | null = null;
+      const q = {
+        select(c: string) { coloane = c; return q; },
+        eq() { return q; },
+        not() { return q; },
+        like() { return q; },
+        update(date: unknown) { scriere = { fel: "update", date }; return q; },
+        insert(date: unknown) { scriere = { fel: "insert", date }; return q; },
+        single() {
+          jurnal.push({ op: `citeste ${tabel}` });
+          return Promise.resolve({ data: { page_content: pc }, error: null });
+        },
+        then(ok: (v: unknown) => unknown, nu?: (e: unknown) => unknown) {
+          let v: unknown = { data: [], error: null };
+          if (scriere) {
+            jurnal.push({ op: `${scriere.fel} ${tabel}`, date: scriere.date });
+            if (tabel === "store_settings") pc = (scriere.date as { page_content: Record<string, unknown> }).page_content;
+            if (tabel === "categories" && ++inserariCategorii === o.cadeLa) v = { error: { message: "cazut" } };
+            else if (tabel === "products") {
+              for (const r of scriere.date as { external_id: string }[]) produse.push({ id: `p${produse.length}`, external_id: r.external_id });
+              v = { error: null };
+            } else v = { error: null };
+          } else {
+            jurnal.push({ op: `citeste ${tabel}.${coloane}` });
+            if (tabel === "categories") v = { data: o.categorii ?? [], error: null };
+            else if (tabel === "products" && coloane === "id, external_id") v = { data: produse, error: null };
+          }
+          return Promise.resolve(v).then(ok, nu);
+        },
+      };
+      return q;
+    },
+  };
+  return { client, jurnal, pc: () => pc };
+}
+
+test("⚠⚠ 18.3: categoriile intra in urma INAINTE de scriere, cu id-urile cu care se scriu; subcategoriile, sub parintii lor", async () => {
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY; // proiectia de la sfarsit nu are voie sa iasa din proba
+  const b = bazaImport({ categorii: [{ id: "lui", name: "Grădină", sort_order: 3 }] });
+  const r = await importaDateleDemo(b.client as never, "m1", "jupiter", D, "/magazin");
+  const prima = b.jurnal.findIndex((x) => x.op === "update store_settings");
+  const inserari = b.jurnal.filter((x) => x.op === "insert categories");
+  assert.ok(prima >= 0 && prima < b.jurnal.findIndex((x) => x.op === "insert categories"), "urma inaintea primei categorii");
+  const urma = (b.jurnal[prima].date as { page_content: { date_demo: { categorii: string[] } } }).page_content.date_demo;
+  const scrise = inserari.flatMap((x) => x.date as { id: string; name: string; parent_id: string | null }[]);
+  assert.deepEqual([...urma.categorii].sort(), scrise.map((c) => c.id).sort(), "exact id-urile scrise, toate");
+  assert.equal(r.categorii, scrise.length);
+  assert.ok(!scrise.some((c) => c.name === "Grădină"), "a lui, cu acelasi nume, nu se creeaza");
+  const dupaId = new Map(scrise.map((c) => [c.id, c]));
+  for (const c of scrise.filter((x) => x.parent_id)) {
+    assert.ok(dupaId.has(c.parent_id!) || c.parent_id === "lui", `${c.name}: sub un parinte creat acum sau al lui`);
+  }
+  // La sfarsit, urma le are inca, langa bannerele si randurile adaugate; bannerul lui ramane primul.
+  const fin = b.pc() as { hero_banners: string[]; date_demo: { categorii: string[]; bannere: string[]; randuri: string[] } };
+  assert.deepEqual([...fin.date_demo.categorii].sort(), [...urma.categorii].sort());
+  assert.equal(fin.date_demo.bannere.length, D.bannere.length);
+  assert.equal(fin.hero_banners[0], "al-lui.jpg");
+});
+
+test("⚠⚠ o cadere la subcategorii lasa urma cu toate id-urile alese: „Șterge datele demo” gaseste ce s-a apucat de scris", async () => {
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const b = bazaImport({ cadeLa: 2 });
+  await assert.rejects(importaDateleDemo(b.client as never, "m1", "jupiter", D, "/magazin"), /categorii noi: cazut/);
+  const urma = urmaDateDemoDin(b.pc());
+  const primul = (b.jurnal.find((x) => x.op === "insert categories")!.date as { id: string }[]).map((c) => c.id);
+  assert.ok(primul.length > 0 && primul.every((id) => urma!.categorii.includes(id)), "primul nivel, scris, e in urma");
+  assert.equal(urma!.categorii.length, categoriiDeCreat([], D).length, "si subcategoriile alese, chiar daca nescrise");
+  assert.ok(!b.jurnal.some((x) => x.op === "insert products"), "dupa cadere, nimic altceva");
 });

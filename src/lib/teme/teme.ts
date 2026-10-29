@@ -1,6 +1,6 @@
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
-import { designJupiter, IDENTITATE_JUPITER } from "./jupiter/design";
+import { designJupiter, faraTexteleDemo, IDENTITATE_JUPITER } from "./jupiter/design";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -27,6 +27,8 @@ export interface Tema {
    * de acum al magazinului (sectiunile, blocurile si coloanele lui raman).
    */
   design: (ctx: DesignContext, date: SetDateDemo | null, baza?: StoreDesign, optiuni?: OptiuniTema) => StoreDesign;
+  /** Inversul textelor demo din `design` („Șterge datele demo”, etapa 18.4): ce a ramas neschimbat din ele iese. */
+  faraTexteleDemo: (design: StoreDesign, date: SetDateDemo) => { design: StoreDesign; schimbat: boolean };
   /** Culoarea, fundalul si fonturile: scrise in magazin, unde le regleaza fila „Stil” (`lib/teme/aplicare.ts`). */
   identitate: IdentitateTema;
   /**
@@ -44,6 +46,7 @@ export const TEME: readonly Tema[] = [
     slugDemo: "tema-jupiter",
     date: DATE_DEMO_JUPITER,
     design: designJupiter,
+    faraTexteleDemo,
     identitate: IDENTITATE_JUPITER,
     setariDemo: { show_category_badges: false },
   },

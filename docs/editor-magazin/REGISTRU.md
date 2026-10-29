@@ -230,6 +230,13 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     au acelasi numar de produse ca inainte (de comparat pe 2-3 magazine cu fiecare canal).
   - Produsele demo (abia dupa etapa 18.2, la un magazin care le importa): lipsesc din fluxuri, sitemap si cozi; pagina
     lor are `noindex`; in easySales apar blocate cu „Produs demo din temă: rămâne doar în magazin.”.
+- **Etapa 18.2-18.4 („Importă și datele demo”, „Șterge datele demo”), de verificat dupa push:**
+  - ⚠⚠ Nimic nu se intampla singur: bifa porneste oprita, iar fara ea „Aplică tema” face exact ce facea la 17.
+  - Pe un cont de test cu plan Basic: „Aplică tema” cu bifa adauga 58 de produse demo, categoriile, 3 bannere, 2 randuri
+    si textele temei; produsele lipsesc din fluxuri (Google, Meta, Pepita) si din sitemap; „Șterge datele demo” le scoate
+    pe toate, iar categoriile in care s-a pus un produs al lui raman.
+  - Pe un cont gratuit: bifa e oprita, cu motivul (58 de produse nu incap in 10).
+  - Un magazin cu cardurile bannerului sau placile de recomandare completate de el le pastreaza dupa aplicarea temei.
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
@@ -244,6 +251,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   (titlul: „Cum reglezi cardul de produs, ...”), unde se alege cardul in `cum-schimbi-designul-unei-sectiuni`.
   Etapa 17: noi `cum-aplici-o-tema` si `cum-pui-la-loc-designul-de-dinainte-de-tema` (430 de ghiduri); etichetele temelor
   in `cum-readuci-o-versiune-publicata`. Fara capturi noi.
+  Etapa 18: bifa „Importă și datele demo” si limita planului in `cum-aplici-o-tema`, datele demo in
+  `cum-pui-la-loc-designul-de-dinainte-de-tema`, nou `cum-stergi-datele-demo-ale-temei` (431 de ghiduri). Fara capturi noi.
 - **De facut (vazut la 18.1): listele din panoul canalelor** (eMAG, OLX, Trendyol, About You, Pepita) inca arata
   produsele demo printre cele de ales; trimiterea le sare (ca pe un inactiv), deci nimic nu pleaca, dar omul le poate
   bifa degeaba. De scos din liste cand e cazul (Meta si Google le scot deja).

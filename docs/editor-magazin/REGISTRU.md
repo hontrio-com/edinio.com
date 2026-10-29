@@ -195,7 +195,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     ea. „Pagini” > „Finalizare comanda”: insigna urmeaza tipul salvat, „Alege tipul” deschide Setări > Comanda.
   - Linkul din emailul de cos abandonat urmeaza tipul salvat (`/checkout?code=...` la pagina, fereastra la celalalt).
   - ⚠ „Comandă acum” de pe pagina produsului deschide formularul produsului la ambele tipuri, ca inainte; spus in panou
-    si in ghid. Daca el vrea altfel, e o etapa separata.
+    si in ghid. Hotarat de el (29.10): „Rămâne formularul produsului”.
 - **Etapa 16 (tema Jupiter, doar aspectul: nicio tema nu se aplica inca; fara migratii), de verificat dupa push:**
   - Magazinele de azi arata la fel. Pagina principala si pagina de produs „Detaliat” urmeaza acum latimea din Stil
     (`--st-container`), cu 72rem implicit, cat era `max-w-6xl`. Cardul clasic ia aceleasi date prin `useDateCardProdus`

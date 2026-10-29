@@ -1687,7 +1687,14 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
         de el raman; GASIT de proba: parserul scrie si coloanele implicite, deci „alese” se judeca fata de implicite. Cosul
         ramane sertarul clasic, in culorile temei. 6 probe in `pagini.test.ts`; mutanti 9/9.) Paginile de categorie si de
         produs, cosul: variantele existente, reglate pe tema si pe cardul ei.
-  - [ ] 16.5 (29.10, facut tot, in afara de proba din editor a listelor noi, care cere acordul lui: ghidurile (antetul
+  - [x] 16.5 (29.10, `73ae4141` + proba din editor, cu acordul lui („Da, fă proba acum”), pe `floraria-mirei` din baza
+        DEMO, impersonat: bannerul trecut pe „Bannere cu două carduri alăturate”, „Adaugă card” pana la 2/2 (butonul
+        dispare), sagetile oprite la capete, mutarea si „×” urmate de previzualizare pe loc, linkul ales din sugestii
+        (`/magazin` → `/floraria-mirei/magazin`), ciorna scrisa in baza; „Plăci de recomandare” din „Adaugă secțiune”, cu
+        panoul deschis singur, placa in previzualizare, „Descopera ofertele ›” doar cu link. Pagina principala proprie a
+        magazinului scoasa pe moment, ca bannerul din design sa se vada; „Renunță”, iesirea din impersonare, apoi totul
+        pus la loc si comparat: planul, designul, `page_content` (aceeasi amprenta), fara ciorna, istoric gol, 0 comenzi
+        noi; `updated_at` si `last_sign_in_at` al contului de test raman mutate. Inainte: ghidurile (antetul
         cu 9 design-uri, subsolul cu 4, bannerul cu 4 si cardurile lui, subcategoriile pe placi ale Paginii Magazin, banda
         gri a randurilor, „Adaugă secțiune”; nou `cum-adaugi-placi-de-recomandare`, 427 de ghiduri; citatele cautate in
         sursa; centrul de ajutor 42/42). GASITE si reparate: (1) vitrina Jupiter scria cu diacritice („Adaugă în coș”,
@@ -1705,6 +1712,7 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     raman ale lui (`setariDemo`, fara categoria pe card, e doar al magazinului demo).
   - Intrebare pusa lui la raportul etapei 16: placile de categorii si cardul Jupiter le pune acum doar tema
     („Categorii” si „Card de produs” nu sunt in galeria „Schimbă designul”). Le facem alegibile si in panou?
+    **Raspunsul lui (29.10): „Da, și din panou”**: se face ca 16.6, inaintea paginii „Teme”.
 - **Etapa 18: „Importă datele demo”** la aplicare si „Șterge datele demo”.
 - **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
   push: DNS, domeniul in Vercel, magazinul demo in productie.
@@ -1742,6 +1750,9 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
   Comanda”.
 - 28.10.2026, seara, temele (vezi „Temele: prima tema, „Jupiter””): prima „Jupiter”, dupa dedeman.ro, „aproape 1 la 1”;
   pagina noua „Teme”; aplicarea „Direct în magazin, cu Istoric”; datele demo „Adaugă, marcate demo”; demo pe subdomenii.
+- 29.10.2026, la raportul etapei 16: proba din editor a listelor noi „Da, fă proba acum” (cu impersonare, pe demo);
+  placile de categorii si cardul Jupiter „Da, și din panou” (16.6); „Comandă acum” la „Standard” „Rămâne formularul
+  produsului” (intrebarea din etapa 15, inchisa); „Da, etapa 17”.
 
 ## De ce Shopify si nu Elementor
 

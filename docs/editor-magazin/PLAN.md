@@ -1898,6 +1898,21 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     Pagina „Teme” n-a fost deschisa in Chrome (sesiunea lui de pe localhost s-a inchis la iesirea din impersonare, 18.5):
     „Vezi demo” si miniatura sunt probate pe sursa si pe functie.
 
+- **Etapa 20: setul demo Jupiter cu datele LUI** (cerut 29.10, dupa etapa 19, cuvant cu cuvant: „Bun, dar acest Demo
+  trebuie sa aiba datele Demo pe care ti le dau eu. Iti dau eu cateva bannerele, cateva produse, un logo, etc...”).
+  Raspunsurile lui: setul „Doar ale tale” (cel de azi, 58 de produse Unsplash in 12 raioane, iese intreg; raioanele si
+  randurile se potrivesc pe ce da el) si importul „Tot, ca în demo” (comerciantul care bifeaza primeste produsele,
+  categoriile SI bannerele lui). Materialul vine in `C:\Users\iorda\Desktop\EDINIOV2\demo-jupiter` (logo, `bannere/`,
+  `produse/`, tabelul produselor; optional pozele raioanelor, cele 2 carduri, cele 4 placi). ASTEPT materialul.
+  - De facut cand vine: pozele micsorate si puse in proiect (`public/teme/jupiter/`, cu proba ca `cdnImage` si un
+    domeniu propriu le servesc; pe domeniul propriu fisierele statice ocolesc rescrierea din proxy); `DATE_DEMO_JUPITER`
+    rescris din tabelul lui (raioanele si subcategoriile lui, randurile din produsele la oferta si din cele recomandate,
+    cardurile si placile din materialul lui sau din raioanele lui); logo-ul si numele magazinului demo; scriptul de
+    umplere scoate INTAI setul vechi din magazinul demo (aceleasi bucati ca „Șterge datele demo”), apoi pune setul nou;
+    probele setului rescrise pe regulile noi (pozele locale, nu Unsplash); ghidurile, daca se schimba cifrele.
+  - ⚠ De spus la livrare: bannerele intra si in magazinele comerciantilor (raspunsul lui), deci fara numele sau oferte
+    anume ale magazinului demo pe ele; pozele si logo-ul ale lui sau libere de drepturi (demo-ul e public).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

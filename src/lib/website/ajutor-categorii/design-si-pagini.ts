@@ -905,7 +905,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             { titlu: "Cu modificări nepublicate", text: "„Pune la loc” e oprit până publici sau renunți la modificările din editor, ca ele să nu se piardă." },
             { titlu: "Mai multe teme la rând", text: "Se readuce designul de dinainte de ultima aplicare." },
           ],
-          nota: "Butonul apare doar după ce ai aplicat o temă.",
+          nota: "Butonul apare cât timp o temă e aplicată și dispare după ce ai pus la loc designul.",
           termeni: ["tema", "pune la loc", "revino", "design vechi", "anuleaza tema", "istoric"],
         },
       ],

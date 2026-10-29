@@ -127,7 +127,9 @@ test("17.4: pagina „Teme”: magazinul LUI, Istoricul intrebat prin actiunea e
   const p = cod("src/app/(dashboard)/dashboard/editor/teme/page.tsx");
   assert.match(p, /const user = await getCachedUser\(\);\s*if \(!user\) redirect\("\/login"\);/);
   assert.match(p, /\.eq\("user_id", user\.id\)/);
-  assert.match(p, /const inainte = await areDesignDeDinainteDeTema\(magazin\.id\);/);
+  // Istoricul se intreaba doar cat e o tema aplicata: dupa „Pune la loc”, caseta ei dispare (gasit la proba 17.6).
+  assert.match(p, /const inainte = aplicata \? await areDesignDeDinainteDeTema\(magazin\.id\) : null;/);
+  assert.match(p, /poatePuneLaLoc=\{inainte !== null && \("error" in inainte \|\| inainte\.exista\)\}/);
   assert.match(p, /timeZone: "Europe\/Bucharest"/);
   const c = cod("src/components/teme/TemeClient.tsx");
   assert.match(c, /const \[lucreaza, porneste\] = useLucru\(\);/);

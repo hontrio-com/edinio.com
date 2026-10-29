@@ -27,8 +27,9 @@ export default async function TemePage() {
   if (!magazin) redirect("/dashboard");
 
   const setari = Array.isArray(magazin.store_settings) ? magazin.store_settings[0] : magazin.store_settings;
-  const inainte = await areDesignDeDinainteDeTema(magazin.id);
   const aplicata = temaAplicataDin(setari?.page_content);
+  // Doar cat e o tema aplicata (vazut la proba 17.6: dupa „Pune la loc”, caseta ramanea, desi n-avea ce face).
+  const inainte = aplicata ? await areDesignDeDinainteDeTema(magazin.id) : null;
   // Pe server, cu fusul Romaniei dat anume: serverul ruleaza pe UTC, iar data nu trebuie sa sara o zi noaptea.
   const aplicataLa = aplicata
     ? new Intl.DateTimeFormat("ro-RO", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Bucharest" }).format(new Date(aplicata.la))
@@ -41,7 +42,7 @@ export default async function TemePage() {
       aplicata={aplicata}
       aplicataLa={aplicataLa}
       // Citirea cazuta lasa butonul la vedere: actiunea spune ea daca n-are ce pune la loc.
-      poatePuneLaLoc={"error" in inainte ? true : inainte.exista}
+      poatePuneLaLoc={inainte !== null && ("error" in inainte || inainte.exista)}
       areCiorna={!!setari?.storefront_design_draft}
       public={magazin.is_published === true}
     />

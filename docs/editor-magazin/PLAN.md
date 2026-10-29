@@ -1761,12 +1761,41 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     intampla (designul inlocuit, cel vechi pastrat in Istoric, produsele si textele neatinse), apoi „Tema e în
     magazin”, „Deschide editorul” si „Pune la loc designul de dinainte”.
   - 17.5 Ghiduri („Cum aplici o temă”, „Cum pui la loc designul de dinainte”), REGISTRU, porti.
-  - 17.6 Proba in Chrome pe magazinul de test din baza demo (impersonare, cu acordul lui): aplicarea, magazinul,
+  - [x] 17.6 Proba in Chrome pe magazinul de test din baza demo (impersonare, cu acordul lui): aplicarea, magazinul,
     Istoricul, „Stil” dupa aplicare, „Pune la loc”; totul pus la loc si comparat.
+    (29.10, cu acordul lui, el reconectat ca admin, apoi impersonat `floraria-mirei`, cu o ciorna mica pusa in baza:
+    pagina „Teme” cu demo-ul viu (`/tema-jupiter`, scara 0,33), fereastra cu ciorna si „vizibil”; „Aplică tema”:
+    antetul si subsolul „hipermarket”, coloanele FARA newsletter (fara furnizor), cardul Jupiter, albastrul, fundalul si
+    fonturile in identitate, ciorna golita (si nepublicata), Istoricul `tema` / `ciorna` / `publicare`, pagina principala
+    proprie neatinsa; magazinul public cu tema si cosul plutitor albastru. In editor: „Categorii” si „Stil > Cardul de
+    produs” cu „Schimbă designul (2)” si galeria cardului (16.6); o culoare aleasa din „Stil” schimba previzualizarea
+    (17.1 dovedit). Cu ciorna, „Pune la loc” oprit, cu nota; dupa „Renunță”, „Pune la loc” a readus EXACT `page_content`
+    (aceeasi amprenta), culoarea mov, antetul centrat, cardul clasic. GASIT si reparat: caseta „Pune la loc” ramanea dupa
+    readucere; acum pagina intreaba Istoricul doar cat e o tema aplicata. Datele puse la loc din tabelul de rezerva
+    `privat.proba_17_inainte` (sters), versiunile probei sterse; comparat: designul, ciorna, `page_content`, publicarea,
+    culoarea, planul, Istoricul gol, 0 comenzi noi; mutate raman `updated_at` si ultima conectare a contului de test.
+    ⚠ Iesirea din impersonare l-a deconectat iar pe localhost.)
   - Intrebare pusa lui la raportul etapei 16: placile de categorii si cardul Jupiter le pune acum doar tema
     („Categorii” si „Card de produs” nu sunt in galeria „Schimbă designul”). Le facem alegibile si in panou?
     **Raspunsul lui (29.10): „Da, și din panou”**: se face ca 16.6, inaintea paginii „Teme”.
-- **Etapa 18: „Importă datele demo”** la aplicare si „Șterge datele demo”.
+- **Etapa 18: „Importă datele demo”** la aplicare si „Șterge datele demo”. Scris 29.10, inainte de cod (acordul lui:
+  „Da, etapa 18”, dupa proba 17.6).
+  - ⚠⚠ **Intai, inainte de orice import pe un magazin real: produsele demo NU pleaca din magazin.** Fluxurile si
+    sincronizarile citesc toate produsele magazinului: Google Merchant (si cronul lui), Meta, TikTok, Pepita, eMAG,
+    Trendyol, About You, easySales, plus sitemapul si cautarea Google. Importul nu pune nimic in coada marketplace-urilor,
+    dar un cron le-ar lua oricum. 18.1 = inventarul tuturor celor care citesc `products` spre afara si excluderea dupa
+    `source = 'tema-demo'`, cu o proba care cade la un cititor nou fara excludere; paginile produselor demo, `noindex`.
+  - 18.2 La „Aplică tema”, o bifa „Importă și datele demo” (produse, categorii, bannere, randuri, cardurile si placile
+    temei), cu ce inseamna: se ADAUGA langa ale lui, marcate; daca magazinul e public, clientii le vad pana le sterge.
+    De verificat: limita de produse a planului (azi nu gasesc una in cod).
+  - 18.3 Ordinea: versiunile de dinainte (ca la 17), apoi importul (`importaDateleDemo`, cu radacina catalogului
+    magazinului), apoi tema publicata CU datele (`date`: cardurile, placile, mesajul barii de sus). „Pune la loc” readuce
+    bannerele si randurile de dinainte (sunt chei ale editorului), dar produsele si categoriile demo raman pana la
+    „Șterge datele demo”; spus in fereastra si in ghid.
+  - 18.4 „Șterge datele demo”, pe pagina „Teme”, cand exista urma (`page_content.date_demo`): produsele cu sursa demo,
+    categoriile create de import (doar daca n-au alte produse), bannerele si randurile adaugate (dupa urma), iar
+    cardurile si placile temei care au ramas cu continutul demo (prin `publishDesign`). Fereastra spune cate sunt.
+  - 18.5 Ghiduri, REGISTRU, porti; proba in Chrome pe magazinul de test (cu acordul lui), cu tot pus la loc.
 - **Etapa 19: subdomeniul** (`jupiter.edinio.com`, local `jupiter.localhost`) si „Vezi demo”; in REGISTRU, ce trebuie la
   push: DNS, domeniul in Vercel, magazinul demo in productie.
 

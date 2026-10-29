@@ -307,7 +307,7 @@ pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
 - **29.10.2026: pasii 1 si 2 FACUTI de el** („Am adaugat subdomeniul jupiter.edinio.com”). Masurat atunci: DNS spre
   Vercel, certificat valid, dar productia (fara codul etapei 19) serveste pe subdomeniu TOT site-ul de prezentare:
   `/`, `/preturi`, `/login` cu 200, „index, follow”, `robots.txt` „Allow: /”; canonicalul duce la `www.edinio.com`.
-  Ramane asa pana la push. ⚠ Pasii 3 si 4 abia DUPA push: productia de azi n-are poarta comenzilor (19.2), deci un
+  Ramane asa pana la push (raspunsul lui: „Îl las așa până la push”). ⚠ Pasii 3 si 4 abia DUPA push: productia de azi n-are poarta comenzilor (19.2), deci un
   magazin demo facut inainte ar lua comenzi adevarate pe `www.edinio.com/tema-jupiter`. Dupa push si inainte de 3-4,
   subdomeniul raspunde 404 (rescrie spre un magazin care inca nu exista): pasii 3-4 imediat dupa ce s-a terminat
   desfasurarea.

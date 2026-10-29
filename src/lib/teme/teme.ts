@@ -1,7 +1,7 @@
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
-import { designJupiter } from "./jupiter/design";
-import type { SetDateDemo } from "./tipuri";
+import { designJupiter, IDENTITATE_JUPITER } from "./jupiter/design";
+import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -21,14 +21,14 @@ export interface Tema {
   descriere: string;
   /** Magazinul demo al temei, cu datele ei. */
   slugDemo: string;
-  /** Culoarea principala, pentru cardul temei. */
-  culoare: string;
   date: SetDateDemo;
   /**
    * Designul temei peste magazinul dat; cu `date`, si textele de exemplu ale sectiunilor ei; cu `baza`, peste designul
    * de acum al magazinului (sectiunile, blocurile si coloanele lui raman).
    */
-  design: (ctx: DesignContext, date: SetDateDemo | null, baza?: StoreDesign) => StoreDesign;
+  design: (ctx: DesignContext, date: SetDateDemo | null, baza?: StoreDesign, optiuni?: OptiuniTema) => StoreDesign;
+  /** Culoarea, fundalul si fonturile: scrise in magazin, unde le regleaza fila „Stil” (`lib/teme/aplicare.ts`). */
+  identitate: IdentitateTema;
   /**
    * Reglajele din `page_content` ale magazinului demo, ca demo-ul sa arate ca modelul (Jupiter: fara categoria pe card).
    * Doar pentru demo: la aplicare (etapa 17), reglajele comerciantului raman ale lui.
@@ -42,13 +42,21 @@ export const TEME: readonly Tema[] = [
     nume: "Jupiter",
     descriere: "Pentru magazine mari, cu multe categorii: bricolaj, casă și grădină. Căutare la vedere, meniu de categorii pe două niveluri și carduri de produs cu prețul în prim-plan.",
     slugDemo: "tema-jupiter",
-    culoare: "#215196",
     date: DATE_DEMO_JUPITER,
     design: designJupiter,
+    identitate: IDENTITATE_JUPITER,
     setariDemo: { show_category_badges: false },
   },
 ];
 
 export function temaDupaCheie(v: unknown): Tema | null {
   return TEME.find((t) => t.cheie === v) ?? null;
+}
+
+/**
+ * Unde se vede demo-ul temei: azi magazinul ei, pe adresa platformei (`/tema-jupiter`); la etapa 19, subdomeniul ei
+ * (`jupiter.edinio.com`).
+ */
+export function adresaDemo(tema: Pick<Tema, "slugDemo">): string {
+  return `/${tema.slugDemo}`;
 }

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getDesignVersion, listDesignVersions } from "@/lib/actions/store-design.actions";
-import { dataVersiunii, esteInMagazin, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
+import { dataVersiunii, esteInMagazin, ETICHETA_ORIGINE, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
 import type { CiornaDesign } from "./useCiornaDesign";
 
 /**
@@ -75,7 +75,7 @@ export function IstoricVersiuni({ businessId, ciorna, ocupat, onInchide, onReadu
       return;
     }
     toast.success(
-      `${v.origine === "inainte" ? "Ai readus cum era magazinul înainte de istoric" : `Ai readus versiunea din ${inPropozitie(dataVersiunii(v.la, new Date()))}`}. ` +
+      `${v.origine === "inainte" ? "Ai readus cum era magazinul înainte de istoric" : v.origine === "tema" ? "Ai readus designul de dinainte de temă" : v.origine === "ciorna" ? "Ai readus ciorna de dinainte de temă" : `Ai readus versiunea din ${inPropozitie(dataVersiunii(v.la, new Date()))}`}. ` +
       "O vezi în previzualizare; clienții o văd abia după „Publică”.",
     );
     onReadusa();
@@ -130,7 +130,7 @@ export function IstoricVersiuni({ businessId, ciorna, ocupat, onInchide, onReadu
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{dataVersiunii(v.la, acum)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {v.origine === "inainte" ? "Cum era magazinul înainte de istoric" : "Publicare"}
+                        {ETICHETA_ORIGINE[v.origine]}
                       </p>
                     </div>
                     {inMagazin && (

@@ -8,7 +8,7 @@ import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import type { ContinutPublicat } from "./ciorna";
 import { contextDesign } from "./derivare";
-import { ciornaDinVersiune, dataVersiunii, esteInMagazin, instantaneuContinut, VERSIUNI_PASTRATE } from "./versiuni";
+import { ciornaDinVersiune, dataVersiunii, esteInMagazin, ETICHETA_ORIGINE, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE } from "./versiuni";
 
 /**
  * ISTORICUL PUBLICARILOR (etapa 7 din `docs/editor-magazin/PLAN.md`): ce se pastreaza la „Publică”
@@ -124,4 +124,12 @@ test("data versiunii: azi, ieri, in anul acesta, alt an (in fusul magazinului)",
 
 test("plafonul e cel din plan", () => {
   assert.equal(VERSIUNI_PASTRATE, 30);
+});
+
+test("17.2: originile se citesc din baza, cu eticheta lor; una necunoscuta conteaza ca „Publicare”", () => {
+  assert.deepEqual(["publicare", "inainte", "tema", "ciorna", "altceva", null].map(origineDinBaza),
+    ["publicare", "inainte", "tema", "ciorna", "publicare", "publicare"]);
+  assert.equal(ETICHETA_ORIGINE.tema, "Înainte de aplicarea temei");
+  assert.equal(ETICHETA_ORIGINE.ciorna, "Ciorna nepublicată de dinainte de temă");
+  assert.equal(new Set(Object.values(ETICHETA_ORIGINE)).size, 4, "fiecare origine cu eticheta ei");
 });

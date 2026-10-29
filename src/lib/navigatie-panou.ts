@@ -74,6 +74,8 @@ export const MENIU_PANOU: IntrarePanou[] = [
      */
     children: [
       { href: "/dashboard/editor", label: "Editorul" },
+      // Etapa 17 a editorului unic (28.10.2026, raspunsul lui: „Pagină nouă „Teme””).
+      { href: "/dashboard/editor/teme", label: "Teme" },
       { href: "/dashboard/editor/media", label: "Biblioteca Media" },
     ],
   },

@@ -14,7 +14,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 | nr | fisier | ce face | demo | productie |
 |---|---|---|---|---|
 | - | - | etapele 1-6 nu au migratii: datele au ramas in aceleasi coloane si chei | - | - |
-| 1 | `migrations/2027-01-31-istoricul-publicarilor.sql` | Tabelul `storefront_design_versions` (etapa 7, istoricul publicarilor): o versiune la fiecare „Publică”, plus starea de dinainte la prima. RLS fara politici, niciun drept pentru `anon` si `authenticated`, doar `service_role` (verificarea e chiar in migratie). `on delete cascade` de la `businesses`. | **DA, 26.10.2026.** Verificat pe rezultat: RLS pornit, 0 politici, `anon` si `authenticated` fara niciun drept, `service_role` scrie si citeste. | **NU.** Aditiva: se aplica INAINTEA push-ului. Fara ea, „Publică” merge, dar istoricul ramane gol si fiecare publicare scrie o eroare in jurnal. `npm run verifica:coloane` cade pe tabelul asta pana e aplicata (anume). Apoi baseline-ul regenerat in acelasi commit. |
+| 1 | `migrations/2027-01-31-istoricul-publicarilor.sql` | Tabelul `storefront_design_versions` (etapa 7, istoricul publicarilor): o versiune la fiecare „Publică”, plus starea de dinainte la prima. RLS fara politici, niciun drept pentru `anon` si `authenticated`, doar `service_role` (verificarea e chiar in migratie). `on delete cascade` de la `businesses`. | **DA, 26.10.2026.** Verificat pe rezultat: RLS pornit, 0 politici, `anon` si `authenticated` fara niciun drept, `service_role` scrie si citeste. **29.10.2026 (etapa 17), in acelasi fisier, inainte de push:** originile `tema` si `ciorna` in constrangere; pe demo constrangerea refacuta (`alter ... drop/add`), verificata cu `pg_get_constraintdef`. Pe o baza noua tabelul se creeaza direct cu ele. | **NU.** Aditiva: se aplica INAINTEA push-ului. Fara ea, „Publică” merge, dar istoricul ramane gol si fiecare publicare scrie o eroare in jurnal. `npm run verifica:coloane` cade pe tabelul asta pana e aplicata (anume). Apoi baseline-ul regenerat in acelasi commit. |
 
 ## B. Variabile de mediu noi
 | cheie | de ce | pusa in Vercel |
@@ -214,6 +214,16 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     etichetele noi din panou sunt cu diacritice.
   - Magazinul demo `tema-jupiter` si contul tehnic `teme@edinio-demo.test` exista DOAR in baza demo. In productie se fac
     la etapa 19 (scriptul `scripts/teme/seamana-demo.ts`, care refuza productia pana atunci), cu acordul lui.
+- **Etapa 17 (pagina „Teme”, aplicarea direct in magazin, cu Istoric), de verificat dupa push:**
+  - ⚠⚠ Migratia 1 din tabelul A (cu originile `tema` si `ciorna`) INAINTEA codului: fara ea, „Aplică tema” cade la
+    scrierea Istoricului si nu aplica nimic (asa e facuta: fara versiunea de dinainte, nu se aplica).
+  - ⚠⚠ Pagina „Teme” cere magazinul demo in productie (etapa 19): fara el, miniatura vie si „Vezi demo” dau 404.
+  - Magazinele de azi nu se schimba pana nu apasa cineva „Aplică tema”.
+  - Editează magazinul > Teme: cardul Jupiter, „Vezi demo”, „Aplică tema” (fereastra spune ce se schimba si ce
+    ramane); dupa aplicare „În magazin”, „Deschide editorul” si „Pune la loc designul de dinainte”.
+  - Istoricul arata „Înainte de aplicarea temei” si, cand era o ciorna, „Ciorna nepublicată de dinainte de temă”.
+  - Dupa aplicare, culoarea si fonturile alese din fila „Stil” schimba magazinul (identitatea temei sta acolo, nu in
+    design, 17.1). „Pune la loc” readuce designul, culoarea, fundalul si fonturile de dinainte.
 
 ## D. Capturi si texte de ajutor
 - **Etapa 16 (29.10): ghidurile** `cum-reglezi-headerul-magazinului` (9 design-uri, „Hipermarket, cu meniu de categorii”),
@@ -222,6 +232,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   `cum-asezi-ordinea-sectiunilor` si unul nou, `cum-adaugi-placi-de-recomandare` (427 de ghiduri). Fara capturi noi.
   16.6: `cum-alegi-cum-arata-categoriile` (nou, 428 de ghiduri), designul cardului in `cum-reglezi-comportamentele-magazinului`
   (titlul: „Cum reglezi cardul de produs, ...”), unde se alege cardul in `cum-schimbi-designul-unei-sectiuni`.
+  Etapa 17: noi `cum-aplici-o-tema` si `cum-pui-la-loc-designul-de-dinainte-de-tema` (430 de ghiduri); etichetele temelor
+  in `cum-readuci-o-versiune-publicata`. Fara capturi noi.
 - **De facut (vazut la 16.5): „Link buton” al antetului „Rotunjit, cu butoane colorate”** e tot text simplu, fara
   sugestiile (paginile, categoriile, produsele) pe care le au bannerele si, din 16.5, linkurile din listele panoului.
   Tipul `link` din `SectionSettings` trecut pe `CampLink`, cu `help` sub el; cu proba lui.

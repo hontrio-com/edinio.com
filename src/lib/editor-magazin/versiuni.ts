@@ -27,9 +27,26 @@ export const VERSIUNI_PASTRATE = 30;
 
 /**
  * `publicare` = ce a dus un „Publică” in magazin; `inainte` = ce era in magazin inaintea primei
- * versiuni, ca si primul „Publică” sa se poata desface.
+ * versiuni, ca si primul „Publică” sa se poata desface. Etapa 17 (temele): `tema` = ce era in magazin
+ * inainte de aplicarea unei teme (din ea „Pune la loc designul de dinainte”); `ciorna` = ciorna
+ * nepublicata de atunci, pastrata intreaga (cu ce era publicat), ca nimic sa nu se piarda.
  */
-export type OrigineVersiune = "publicare" | "inainte";
+export type OrigineVersiune = "publicare" | "inainte" | "tema" | "ciorna";
+
+const ORIGINI: readonly OrigineVersiune[] = ["publicare", "inainte", "tema", "ciorna"];
+
+/** Originea citita din baza; una necunoscuta conteaza ca „publicare”, cum se citea si inainte de etapa 17. */
+export function origineDinBaza(v: unknown): OrigineVersiune {
+  return (ORIGINI as readonly unknown[]).includes(v) ? (v as OrigineVersiune) : "publicare";
+}
+
+/** Ce scrie sub data versiunii, in „Istoricul publicărilor”. */
+export const ETICHETA_ORIGINE: Record<OrigineVersiune, string> = {
+  publicare: "Publicare",
+  inainte: "Cum era magazinul înainte de istoric",
+  tema: "Înainte de aplicarea temei",
+  ciorna: "Ciorna nepublicată de dinainte de temă",
+};
 
 export interface VersiuneInLista {
   id: string;

@@ -25,6 +25,7 @@ function corp(s: string, declaratie: string): string {
 }
 const functia = (s: string, nume: string) => corp(s, `export async function ${nume}(`);
 const pastreaza = () => corp(sursa(), "async function pastreazaVersiunea(");
+const taie = () => corp(sursa(), "async function taieVersiunileVechi(");
 
 test("⚠⚠ versiunea se pastreaza DUPA ce magazinul s-a schimbat, cu chiar data publicarii", () => {
   const f = functia(sursa(), "publishDesign");
@@ -46,8 +47,12 @@ test("⚠⚠ o cadere a istoricului nu strica publicarea, dar ajunge in jurnal",
   const p = pastreaza();
   assert.match(p, /^async function pastreazaVersiunea\([\s\S]*?\): Promise<void> \{\s*try \{/);
   assert.match(p, /\} catch \(e\) \{\s*logError\(\{ action: "publishDesign\.versiune", businessId: owned\.businessId,/);
-  for (const e of ["eNumar", "eScris", "eVechi", "eSters"]) {
+  for (const e of ["eNumar", "eScris"]) {
     assert.match(p, new RegExp(`if \\(${e}\\) throw new Error\\(${e}\\.message\\);`), `${e} ar fi fost inghitita`);
+  }
+  // Taierea celor vechi (etapa 17: comuna cu versiunile de dinainte de tema) arunca si ea, deci tot in jurnal.
+  for (const e of ["eVechi", "eSters"]) {
+    assert.match(taie(), new RegExp(`if \\(${e}\\) throw new Error\\(${e}\\.message\\);`), `${e} ar fi fost inghitita`);
   }
 });
 
@@ -65,13 +70,18 @@ test("⚠⚠ tabelul versiunilor se atinge NUMAI cu magazinul proprietarului", (
   const s = sursa();
   // Fiecare lant, pana la `;` sau pana la capatul elementului din `Promise.all`, fara sa treaca in alt `.from(`.
   const cereri = [...s.matchAll(/\.from\("storefront_design_versions"\)((?:(?!\.from\()[\s\S])*?)(?:;|,\n)/g)].map((m) => m[1]);
-  assert.equal(cereri.length, 6, "o cerere noua pe tabel trebuie trecuta si aici");
+  // Etapa 17: si versiunile de dinainte de tema, „Pune la loc” si intrebarea paginii „Teme” (9).
+  assert.equal(cereri.length, 9, "o cerere noua pe tabel trebuie trecuta si aici");
   for (const c of cereri) {
     // Insertul poarta magazinul in fiecare rand (mai jos).
     if (c.trimStart().startsWith(".insert(")) continue;
-    assert.match(c, /\.eq\("business_id", owned\.businessId\)/, c);
+    assert.match(c, /\.eq\("business_id", (owned\.)?businessId\)/, c);
   }
+  // Taierea (etapa 17) primeste magazinul ca argument: doar ea il ia asa, iar fiecare apel ii da magazinul verificat.
+  assert.equal([...taie().matchAll(/\.eq\("business_id", businessId\)/g)].length, 2);
+  assert.deepEqual([...s.matchAll(/taieVersiunileVechi\(admin, ([^)]+)\)/g)].map((m) => m[1]), ["owned.businessId", "owned.businessId"]);
   assert.equal(pastreaza().split("business_id: owned.businessId,").length - 1, 2, "ambele randuri scrise poarta magazinul lui");
+  assert.equal(functia(s, "aplicaTema").split("business_id: owned.businessId").length - 1, 2, "si cele de dinainte de tema");
 });
 
 test("⚠ clientul de serviciu abia dupa verificarea proprietarului", () => {
@@ -97,10 +107,10 @@ test("⚠ o versiune ceruta: id-ul validat, citirea cazuta deosebita de lipsa", 
 });
 
 test("plafonul: ce trece de `VERSIUNI_PASTRATE` se sterge la scriere, cele mai vechi", () => {
-  const p = pastreaza();
-  assert.match(p, /if \(\(count \?\? 0\) \+ randuri\.length > VERSIUNI_PASTRATE\) \{/);
-  assert.match(p, /\.order\("created_at", \{ ascending: false \}\)\s*\.range\(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE \+ 99\);/);
-  assert.match(p, /\.delete\(\)\s*\.eq\("business_id", owned\.businessId\)\s*\.in\("id", vechi\.map\(\(r\) => r\.id\)\);/);
+  assert.match(pastreaza(), /if \(\(count \?\? 0\) \+ randuri\.length > VERSIUNI_PASTRATE\) await taieVersiunileVechi\(admin, owned\.businessId\);/);
+  const t = taie();
+  assert.match(t, /\.order\("created_at", \{ ascending: false \}\)\s*\.range\(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE \+ 99\);/);
+  assert.match(t, /\.delete\(\)\s*\.eq\("business_id", businessId\)\s*\.in\("id", vechi\.map\(\(r\) => r\.id\)\);/);
 });
 
 test("⚠⚠ migratia: RLS fara politici, niciun drept pentru `anon` si `authenticated`, verificate chiar in ea", () => {
@@ -125,4 +135,14 @@ test("⚠ numai actiunile editorului ating tabelul, iar `verifica:coloane` il ce
   }
   assert.deepEqual(atinse, ["lib/actions/store-design.actions.ts"]);
   assert.match(readFileSync("scripts/tests/coloane-cerute-exista.mjs", "utf8"), /^\s*"storefront_design_versions",$/m);
+});
+
+test("17.2: migratia are originile temelor (`tema`, `ciorna`) si in tabelul nou, si in constrangerea refacuta pe demo", () => {
+  const m = readFileSync(MIGRATIE, "utf8").replace(/--.*$/gm, "");
+  assert.equal((m.match(/check \(origine in \('publicare', 'inainte', 'tema', 'ciorna'\)\)/g) ?? []).length, 2);
+  assert.match(m, /alter table public\.storefront_design_versions drop constraint if exists storefront_design_versions_origine_check;/);
+  assert.match(m, /pg_get_constraintdef\(oid\) from pg_constraint where conname = 'storefront_design_versions_origine_check'\) !~ 'tema'/);
+  // Lista le citeste pe toate, iar istoricul le scrie eticheta.
+  assert.match(sursa(), /origine: origineDinBaza\(r\.origine\)/);
+  assert.match(fara(readFileSync("src/components/editor-magazin/IstoricVersiuni.tsx", "utf8")), /\{ETICHETA_ORIGINE\[v\.origine\]\}/);
 });

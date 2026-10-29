@@ -5,27 +5,40 @@ import { variantMeta } from "@/lib/storefront/design/registry";
 import { schemaBlocurilor } from "@/lib/storefront/design/blocuri";
 import { jsonCanonic } from "@/lib/storefront/design/continut-ciorna";
 import type { BlockInstance, DesignContext, SectionInstance, StoreDesign, StoreStyle } from "@/lib/storefront/design/types";
-import type { SetDateDemo } from "@/lib/teme/tipuri";
+import type { IdentitateTema, OptiuniTema, SetDateDemo } from "@/lib/teme/tipuri";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
   DESIGNUL TEMEI JUPITER (etapele 16.2-16.4 din `docs/editor-magazin/PLAN.md`)
   ═══════════════════════════════════════════════════════════════════════════
 
-  Un design intreg, facut din variante obisnuite din registry (decizia 1 din plan): stilul (culorile si fonturile
-  modelului), antetul si subsolul „hipermarket”, pagina Magazin cu filtre in stanga. Pornind de la designul clasic al
-  magazinului, deci cu continutul LUI: aplicarea temei schimba cum arata magazinul, nu ce scrie in el.
+  Un design intreg, facut din variante obisnuite din registry (decizia 1 din plan): stilul (accentul, colturile,
+  latimea; culoarea principala, fundalul si fonturile sunt identitatea, `IDENTITATE_JUPITER`, etapa 17.1), antetul si
+  subsolul „hipermarket”, pagina Magazin cu filtre in stanga. Pornind de la designul clasic al magazinului, deci cu
+  continutul LUI: aplicarea temei schimba cum arata magazinul, nu ce scrie in el.
 
   `date` = datele demo ale temei, cand se aplica impreuna cu ele (magazinul demo, „Importă datele demo”): atunci si
   textele de exemplu ale sectiunilor temei. Fara ele, sectiunile pornesc goale, iar magazinul isi pune textele lui.
 */
 
-/** Culorile si fonturile modelului: albastrul si portocaliul, Open Sans pentru text, Sofia Sans pentru titluri. */
+/**
+ * Identitatea modelului: albastrul, fundalul alb, Sofia Sans pentru titluri, Open Sans pentru text. Se scrie in magazin,
+ * acolo unde o regleaza fila „Stil” (etapa 17.1), nu in design.
+ */
+export const IDENTITATE_JUPITER: IdentitateTema = {
+  culoare: "#215196",
+  fundal: "#FFFFFF",
+  fontTitluri: "sofiasans",
+  fontText: "opensans",
+};
+
+/**
+ * Restul stilului modelului, ce fila „Stil” nu regleaza: portocaliul de accent, textul, chenarele, colturile, latimea.
+ * ⚠ Fara culoarea principala, fundal si fonturi: in design ar fi castigat peste „Stil” (vezi `IDENTITATE_JUPITER`).
+ */
 export const STIL_JUPITER: StoreStyle = {
   colors: {
-    primary: "#215196",
     accent: "#FF882D",
-    background: "#FFFFFF",
     surface: "#FFFFFF",
     text: "#333333",
     muted: "#6B6B6B",
@@ -33,8 +46,6 @@ export const STIL_JUPITER: StoreStyle = {
     footerBg: "#F5F5F5",
     footerText: "#333333",
   },
-  fontHeading: "sofiasans",
-  fontBody: "opensans",
   fontScale: "md",
   radius: "sm",
   container: "xwide",
@@ -70,10 +81,12 @@ export function coloaneSubsolJupiter(): BlockInstance[] {
  * Coloanele subsolului dupa tema: ale lui, cand si le-a ales (etapa 11); altfel ale temei, cu newsletterul in banda lui.
  * ⚠ „Alese” nu inseamna „scrise”: parserul scrie si coloanele implicite, deci se compara cu implicitele variantei.
  */
-function coloaneDupaTema(subsol: SectionInstance): BlockInstance[] {
+function coloaneDupaTema(subsol: SectionInstance, optiuni: OptiuniTema): BlockInstance[] {
   const implicite = schemaBlocurilor("footer", subsol.variant)?.implicite?.(subsol.settings) ?? [];
   const aleseDeEl = !!subsol.blocks && jsonCanonic(subsol.blocks) !== jsonCanonic(implicite);
-  return aleseDeEl && subsol.blocks ? subsol.blocks : coloaneSubsolJupiter();
+  if (aleseDeEl && subsol.blocks) return subsol.blocks;
+  // Fara furnizor de newsletter, coloana temei ramane pe dinafara, cum cere si panoul (etapa 17).
+  return coloaneSubsolJupiter().filter((c) => optiuni.cuNewsletter !== false || c.type !== "newsletter");
 }
 
 /**
@@ -128,10 +141,12 @@ function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null): SectionI
  * `baza` = designul de acum al magazinului (la aplicare, etapa 17), ca sectiunile, blocurile si coloanele LUI sa ramana;
  * lipsa = designul clasic derivat din continut (magazinul demo).
  */
-export function designJupiter(ctx: DesignContext, date: SetDateDemo | null, bazaMagazinului?: StoreDesign): StoreDesign {
+export function designJupiter(
+  ctx: DesignContext, date: SetDateDemo | null, bazaMagazinului?: StoreDesign, optiuni: OptiuniTema = {},
+): StoreDesign {
   const baza = bazaMagazinului ?? buildClassicDesign(ctx);
   const antet = peVarianta(baza.chrome.header, "hipermarket", date ? { topText: "Livrare in toata tara" } : {});
-  const subsol = { ...peVarianta(baza.chrome.footer, "hipermarket", { inapoiSus: true }), blocks: coloaneDupaTema(baza.chrome.footer) };
+  const subsol = { ...peVarianta(baza.chrome.footer, "hipermarket", { inapoiSus: true }), blocks: coloaneDupaTema(baza.chrome.footer, optiuni) };
   // Catalogul pe pagina lui, ca pe model: pe prima pagina raman doar randurile alese.
   const magazin = { ...peVarianta(baza.shop.page, "sidebar", { pastreazaGrilaAcasa: false, placiSubcategorii: true }), enabled: true };
   const card = { ...baza.commerce.productCard, variant: "jupiter", variantOverride: "jupiter" };

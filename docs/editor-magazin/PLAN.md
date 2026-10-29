@@ -1732,6 +1732,19 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     `design.style` raman doar ce „Stil” nu regleaza (accentul, suprafata, textul, colturile, latimea, cardurile).
     Identitatea scrisa intra in versiunea din Istoric (`continut`: cheile editorului si culoarea), deci „Pune la loc” o
     readuce. Magazinul demo se face la fel.
+  - Facut 29.10 (17.1-17.5): identitatea in `IDENTITATE_JUPITER`, scrisa ca un continut de ciorna (`continutIdentitate`),
+    deci prin „Publică” si in Istoric; demo-ul refacut asa, arata la fel (albastrul, portocaliul, Sofia Sans, Open Sans,
+    acum din identitate). Originile `tema` si `ciorna` in migratia neimpinsa si pe demo, cu etichetele lor in Istoric.
+    `aplicaTema` si `puneLaLocDesignulDeDinainte` trec AMANDOUA prin `publishDesign` (o singura cale de publicare); taierea
+    versiunilor vechi scoasa in `taieVersiunileVechi`, comuna. Coloana „Newsletter” a temei doar cu furnizor. Proba de
+    dus-intors: dupa „Aplică” si „Pune la loc”, `page_content`, culoarea si designul revin EXACT. Pagina
+    `/dashboard/editor/teme` (in meniu, langa „Editorul”): miniatura vie a demo-ului, „Vezi demo”, ferestrele cu ce se
+    intampla, `useLucru`, data in fusul Romaniei. Ghiduri: `cum-aplici-o-tema`, `cum-pui-la-loc-designul-de-dinainte-de-tema`
+    (430). Gasit la porti si reparat: actiunile revalidau `/dashboard/teme`, iar pagina sta la `/dashboard/editor/teme`
+    (acum cu proba); lista actiunilor exportate (fiecare verifica proprietarul intai) are si cele trei noi. Porti: suita
+    11.352 / 0 / 2 sarite, `build:ci` trece (cu ruta noua), tsc 0, eslint 0; mutanti 12/12. RAMAS: 17.6, proba in Chrome
+    (impersonare, cu acordul lui; sesiunea lui de admin pe localhost s-a inchis la iesirea din impersonarea de la 16.5,
+    deci se reconecteaza el).
   - 17.1 Identitatea temei (`Tema.identitate`: culoarea, fundalul, fontul titlurilor si al textului), scoasa din
     `STIL_JUPITER`; scriptul demo o scrie in identitate. Proba: dupa aplicare, culoarea si fonturile alese din „Stil”
     schimba magazinul.

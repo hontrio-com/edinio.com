@@ -18,6 +18,9 @@
 -- Masurat in productie pe 26.10.2026: o versiune are sub 10 KB (continutul cel mult 5,5 KB, designul
 -- cel mult 3,1 KB).
 --
+-- 29.10.2026, etapa 17 (temele), inainte de push: doua origini noi, `tema` (ce era in magazin inainte de aplicarea
+-- unei teme) si `ciorna` (ciorna nepublicata de atunci, ca nimic sa nu se piarda). Vezi constrangerea de mai jos.
+--
 -- Aditiva: un tabel nou, nimic schimbat in rest. Se aplica INAINTE de deploy (codul il scrie la
 -- fiecare „Publică”; fara el, publicarea merge, dar istoricul ramane gol si caderea ajunge in jurnal).
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -29,8 +32,9 @@ create table if not exists public.storefront_design_versions (
   design jsonb not null,
   -- `{ pc, magazin }`: cheile editorului din `page_content` si logo, coperta, culoare, galerie.
   continut jsonb not null,
-  -- `publicare` = ce a dus un „Publică” in magazin; `inainte` = ce era in magazin inaintea primei versiuni.
-  origine text not null default 'publicare' check (origine in ('publicare', 'inainte')),
+  -- `publicare` = ce a dus un „Publică” in magazin; `inainte` = ce era in magazin inaintea primei versiuni;
+  -- `tema` = ce era in magazin inainte de aplicarea unei teme; `ciorna` = ciorna nepublicata de atunci.
+  origine text not null default 'publicare' check (origine in ('publicare', 'inainte', 'tema', 'ciorna')),
   publicat_de uuid references auth.users(id) on delete set null,
   -- Chiar data publicarii (`storefront_design_pub_at`): asa stie lista care versiune e in magazin acum.
   created_at timestamptz not null default now()
@@ -39,6 +43,12 @@ create table if not exists public.storefront_design_versions (
 comment on table public.storefront_design_versions is
   'Istoricul publicarilor din editorul magazinului: o versiune la fiecare „Publică” (designul si continutul '
   'editorului). Doar service_role. Vezi src/lib/editor-magazin/versiuni.ts si docs/editor-magazin/PLAN.md, etapa 7.';
+
+-- Pe o baza care avea deja tabelul (demo, de la etapa 7), constrangerea se reface cu originile temelor; pe una noua
+-- tabelul se creeaza direct cu ele, iar pasul acesta nu schimba nimic.
+alter table public.storefront_design_versions drop constraint if exists storefront_design_versions_origine_check;
+alter table public.storefront_design_versions add constraint storefront_design_versions_origine_check
+  check (origine in ('publicare', 'inainte', 'tema', 'ciorna'));
 
 create index if not exists storefront_design_versions_business_idx
   on public.storefront_design_versions (business_id, created_at desc);
@@ -69,6 +79,10 @@ begin
   end loop;
   if not has_table_privilege('service_role', 'public.storefront_design_versions', 'insert') then
     raise exception 'storefront_design_versions: service_role nu poate scrie';
+  end if;
+  if (select pg_get_constraintdef(oid) from pg_constraint where conname = 'storefront_design_versions_origine_check') !~ 'tema'
+     or (select pg_get_constraintdef(oid) from pg_constraint where conname = 'storefront_design_versions_origine_check') !~ 'ciorna' then
+    raise exception 'storefront_design_versions: originile temelor lipsesc din constrangere';
   end if;
 end $$;
 

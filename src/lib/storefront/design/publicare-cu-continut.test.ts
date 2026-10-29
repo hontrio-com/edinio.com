@@ -56,6 +56,10 @@ test("⚠⚠ `elibereazaComutatoare` nu mai exista: ar fi rescris ciorna fara co
   assert.ok(!existsSync("src/lib/storefront/design/comutatoare-vechi.ts"));
   // Fiecare actiune exportata verifica proprietarul inainte de orice.
   const exportate = [...s.matchAll(/export async function (\w+)\(/g)].map((m) => m[1]);
-  assert.deepEqual(exportate.sort(), ["discardDesignDraft", "getDesignVersion", "listDesignVersions", "publishDesign", "saveDesignDraft"]);
+  // Etapa 17 (temele): `aplicaTema`, `puneLaLocDesignulDeDinainte` si intrebarea paginii „Teme”, tot dupa proprietar.
+  assert.deepEqual(exportate.sort(), [
+    "aplicaTema", "areDesignDeDinainteDeTema", "discardDesignDraft", "getDesignVersion", "listDesignVersions", "publishDesign",
+    "puneLaLocDesignulDeDinainte", "saveDesignDraft",
+  ]);
   for (const nume of exportate) assert.match(functia(s, nume), /const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;/, nume);
 });

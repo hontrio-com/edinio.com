@@ -13,6 +13,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
 import { importaDateleDemo } from "@/lib/teme/import-demo";
+import { magazinCuIdentitatea, pageContentCuIdentitatea } from "@/lib/teme/aplicare";
 import { temaDupaCheie } from "@/lib/teme/teme";
 
 const PRODUCTIA = "rtefdpioqmowkdiybwrr";
@@ -27,7 +28,7 @@ async function main() {
 
   const admin = createClient<Database>(url, cheie, { auth: { persistSession: false } });
   const { data: magazin, error } = await admin
-    .from("businesses").select("id, primary_color, features, cover_url, tagline").eq("slug", tema.slugDemo).single();
+    .from("businesses").select("id, features, cover_url, tagline").eq("slug", tema.slugDemo).single();
   if (error || !magazin) throw new Error(`Magazinul demo ${tema.slugDemo} lipseste: ${error?.message ?? ""}`);
 
   // Tema are pagina Magazin (`/magazin`): de acolo pornesc linkurile bannerelor.
@@ -36,10 +37,13 @@ async function main() {
   // Designul temei, publicat direct: magazinul demo n-are ciorna si nici istoric de pastrat.
   const { data: setari, error: eSet } = await admin.from("store_settings").select("page_content").eq("business_id", magazin.id).single();
   if (eSet) throw new Error(`setari: ${eSet.message}`);
-  // Reglajele demo-ului (`setariDemo`) peste ce a scris importul in `page_content` (bannerele, urma datelor demo).
-  const pageContent = { ...((setari?.page_content ?? {}) as Record<string, unknown>), ...tema.setariDemo };
+  // Reglajele demo-ului (`setariDemo`) peste ce a scris importul in `page_content` (bannerele, urma datelor demo), apoi
+  // identitatea temei (fundalul, fonturile; culoarea in `businesses`), ca la aplicare: acolo o regleaza fila „Stil”.
+  const pageContent = pageContentCuIdentitatea({ ...((setari?.page_content ?? {}) as Record<string, unknown>), ...tema.setariDemo }, tema.identitate);
+  const { error: eCuloare } = await admin.from("businesses").update(magazinCuIdentitatea(tema.identitate)).eq("id", magazin.id);
+  if (eCuloare) throw new Error(`culoare: ${eCuloare.message}`);
   const ctx = contextDesign({
-    primaryColor: magazin.primary_color,
+    primaryColor: tema.identitate.culoare,
     pageContent,
     features: magazin.features,
     coverUrl: magazin.cover_url,

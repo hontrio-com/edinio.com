@@ -6,7 +6,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { esteUuid } from "@/lib/supabase/ids";
 import { logError } from "@/lib/error-logger";
 import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
-import { instantaneuContinut, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
+import { ciornaDinVersiune, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
+import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
+import { areFurnizorNewsletter, CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, type TemaAplicata } from "@/lib/teme/aplicare";
+import { temaDupaCheie } from "@/lib/teme/teme";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { curataContinutulPentruEditor } from "@/lib/storefront/design/continut-pentru-editor";
 import { ciornaAFostSchimbata } from "@/lib/storefront/design/draft-guard";
@@ -172,25 +175,28 @@ async function pastreazaVersiunea(
     const { error: eScris } = await admin.from("storefront_design_versions").insert(randuri);
     if (eScris) throw new Error(eScris.message);
 
-    if ((count ?? 0) + randuri.length > VERSIUNI_PASTRATE) {
-      const { data: vechi, error: eVechi } = await admin
-        .from("storefront_design_versions")
-        .select("id")
-        .eq("business_id", owned.businessId)
-        .order("created_at", { ascending: false })
-        .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 99);
-      if (eVechi) throw new Error(eVechi.message);
-      if (vechi && vechi.length > 0) {
-        const { error: eSters } = await admin
-          .from("storefront_design_versions")
-          .delete()
-          .eq("business_id", owned.businessId)
-          .in("id", vechi.map((r) => r.id));
-        if (eSters) throw new Error(eSters.message);
-      }
-    }
+    if ((count ?? 0) + randuri.length > VERSIUNI_PASTRATE) await taieVersiunileVechi(admin, owned.businessId);
   } catch (e) {
     logError({ action: "publishDesign.versiune", businessId: owned.businessId, message: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/** Pastreaza cele mai noi `VERSIUNI_PASTRATE` versiuni ale magazinului; pe cele mai vechi le sterge. */
+async function taieVersiunileVechi(admin: ReturnType<typeof createAdminClient>, businessId: string): Promise<void> {
+  const { data: vechi, error: eVechi } = await admin
+    .from("storefront_design_versions")
+    .select("id")
+    .eq("business_id", businessId)
+    .order("created_at", { ascending: false })
+    .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 99);
+  if (eVechi) throw new Error(eVechi.message);
+  if (vechi && vechi.length > 0) {
+    const { error: eSters } = await admin
+      .from("storefront_design_versions")
+      .delete()
+      .eq("business_id", businessId)
+      .in("id", vechi.map((r) => r.id));
+    if (eSters) throw new Error(eSters.message);
   }
 }
 
@@ -389,7 +395,7 @@ export async function listDesignVersions(
     return { error: "Nu am putut citi istoricul. Încearcă din nou." };
   }
   return {
-    versiuni: (data ?? []).map((r) => ({ id: r.id, la: r.created_at, origine: r.origine === "inainte" ? "inainte" : "publicare" })),
+    versiuni: (data ?? []).map((r) => ({ id: r.id, la: r.created_at, origine: origineDinBaza(r.origine) })),
     publicatLa: setari?.storefront_design_pub_at ?? null,
   };
 }
@@ -421,4 +427,167 @@ export async function getDesignVersion(
   if (!data) return { error: "Versiunea nu mai există." };
   // „Conținut liber” (etapa 9): blocurile versiunii ajung in editor curatate, ca ale paginilor proprii.
   return { design: curataContinutulPentruEditor(data.design), continut: data.continut, la: data.created_at };
+}
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  TEMELE (etapa 17 din `docs/editor-magazin/PLAN.md`): „Aplică tema” si „Pune la loc designul de dinainte”
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Raspunsul lui: „Direct în magazin, cu Istoric”. Amandoua trec prin `publishDesign`, deci prin aceeasi ordine de
+  scriere (continutul, apoi designul, apoi versiunea publicata) si aceeasi revalidare ca orice „Publică”.
+*/
+
+type RandVersiune = { business_id: string; design: Json; continut: Json; origine: string; publicat_de: string | null; created_at: string };
+
+/**
+ * Ce era in magazin inainte de o tema, scris INAINTE de aplicare: o cadere aici o opreste (`false`), fiindca fara
+ * aceste versiuni „Pune la loc” n-ar avea ce readuce.
+ */
+async function pastreazaInainteDeTema(owned: OwnedStore, randuri: RandVersiune[]): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.from("storefront_design_versions").insert(randuri);
+    if (error) throw new Error(error.message);
+    await taieVersiunileVechi(admin, owned.businessId);
+    return true;
+  } catch (e) {
+    logError({ action: "aplicaTema.istoric", businessId: owned.businessId, message: e instanceof Error ? e.message : String(e) });
+    return false;
+  }
+}
+
+/** Pune sau scoate semnul temei aplicate din `page_content`, peste ce e acum acolo (dupa „Publică”). */
+async function scrieSemnulTemei(businessId: string, semn: TemaAplicata | null): Promise<void> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("store_settings").select("page_content").eq("business_id", businessId).single();
+  const pc = { ...((data?.page_content ?? {}) as Record<string, unknown>) };
+  if (semn) pc[CHEIE_TEMA_APLICATA] = semn;
+  else delete pc[CHEIE_TEMA_APLICATA];
+  const scris = await writeSettings(businessId, { page_content: pc as Json }, "tema.semn");
+  if ("error" in scris) logError({ action: "tema.semn", businessId, message: scris.error });
+}
+
+/**
+ * Aplica o tema direct in magazin, cu Istoric:
+ * 1. ce era publicat intra in Istoric ca `tema`, iar ciorna nepublicata, intreaga, ca `ciorna`;
+ * 2. tema se publica prin `publishDesign`: identitatea ei (fundalul si fonturile din „Stil”, culoarea) ca un continut
+ *    de ciorna (17.1), designul temei peste designul publicat (sectiunile, blocurile si coloanele lui raman); ciorna de
+ *    acum se goleste, ca la orice „Publică”;
+ * 3. semnul `tema_aplicata`, pentru pagina „Teme”.
+ * Produsele, textele, setarile si domeniul nu se ating.
+ */
+export async function aplicaTema(businessId: string, cheie: string): Promise<ActionResult> {
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+  const tema = temaDupaCheie(cheie);
+  if (!tema) return { error: "Tema nu există." };
+
+  const supabase = await createClient();
+  const { data: row, error: eCitit } = await supabase
+    .from("store_settings")
+    .select("storefront_design, storefront_design_draft")
+    .eq("business_id", owned.businessId)
+    .single();
+  if (eCitit) {
+    logError({ action: "aplicaTema.citire", businessId: owned.businessId, message: eCitit.message });
+    return { error: "Nu am putut citi magazinul. Încearcă din nou." };
+  }
+
+  // 1. Ce era, INAINTE de orice scriere.
+  const la = dateleVersiunilorDeDinainte(Date.now());
+  const randuri: RandVersiune[] = [{
+    business_id: owned.businessId, design: (row?.storefront_design ?? {}) as Json,
+    continut: instantaneuContinut(owned.ctx.pageContent, owned.magazin) as unknown as Json,
+    origine: "tema", publicat_de: owned.userId, created_at: la.tema,
+  }];
+  if (row?.storefront_design_draft) {
+    // Intreaga, cu ce era publicat sub ea: readusa din Istoric, arata exact ca ciorna de atunci.
+    const continutCiorna = continutDinCiorna(row.storefront_design_draft);
+    randuri.push({
+      business_id: owned.businessId,
+      design: parseStoreDesign(row.storefront_design_draft, contextCuCiorna(owned.ctx, continutCiorna)) as unknown as Json,
+      continut: instantaneuContinut(pcCuCiorna(owned.ctx.pageContent, continutCiorna), { ...owned.magazin, ...continutCiorna.magazin }) as unknown as Json,
+      origine: "ciorna", publicat_de: owned.userId, created_at: la.ciorna,
+    });
+  }
+  if (!(await pastreazaInainteDeTema(owned, randuri))) {
+    return { error: "Nu am putut păstra designul de acum în Istoric, deci tema nu s-a aplicat. Încearcă din nou." };
+  }
+
+  // 2. Tema, prin „Publică”.
+  const continut = continutIdentitate(tema.identitate);
+  const ctxTema = contextCuCiorna(owned.ctx, continut);
+  const integrari = await integrariPentruPagini(owned.businessId);
+  const design = tema.design(ctxTema, null, parseStoreDesign(row?.storefront_design ?? {}, ctxTema), {
+    cuNewsletter: areFurnizorNewsletter(integrari.newsletter),
+  });
+  const publicat = await publishDesign(owned.businessId, ciornaCuContinut(design, continut));
+  if ("error" in publicat) return publicat;
+
+  // 3. Semnul, pentru pagina „Teme”.
+  await scrieSemnulTemei(owned.businessId, { cheie: tema.cheie, la: new Date().toISOString() });
+  revalidatePath("/dashboard/editor/teme");
+  return { success: true };
+}
+
+/**
+ * „Pune la loc designul de dinainte”: versiunea `tema` cea mai noua (ce era in magazin inainte de ultima tema), designul
+ * si identitatea, publicata prin `publishDesign`. Ce s-a publicat dupa aplicare ramane in Istoric. Cu o ciorna
+ * nepublicata, nu: `publishDesign` ar fi golit-o fara urma.
+ */
+export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<ActionResult> {
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+
+  const supabase = await createClient();
+  const { data: row } = await supabase
+    .from("store_settings")
+    .select("storefront_design_draft")
+    .eq("business_id", owned.businessId)
+    .single();
+  if (row?.storefront_design_draft) {
+    return { error: "Ai modificări nepublicate în editor. Publică-le sau renunță la ele, apoi pune la loc designul." };
+  }
+
+  const { data: v, error } = await createAdminClient()
+    .from("storefront_design_versions")
+    .select("design, continut")
+    .eq("business_id", owned.businessId)
+    .eq("origine", "tema")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logError({ action: "puneLaLocDesignulDeDinainte", businessId: owned.businessId, message: error.message });
+    return { error: "Nu am putut citi Istoricul. Încearcă din nou." };
+  }
+  if (!v) return { error: "Nu există în Istoric un design de dinainte de temă." };
+
+  const ciorna = ciornaDinVersiune(v, { pc: owned.ctx.pageContent, magazin: owned.magazin }, owned.ctx);
+  const publicat = await publishDesign(owned.businessId, ciornaCuContinut(ciorna.design, ciorna.continut));
+  if ("error" in publicat) return publicat;
+
+  await scrieSemnulTemei(owned.businessId, null);
+  revalidatePath("/dashboard/editor/teme");
+  return { success: true };
+}
+
+/**
+ * Pentru pagina „Teme”: are magazinul in Istoric un design de dinainte de tema, de pus la loc? O citire cazuta e o
+ * eroare, nu „nu”: altfel butonul ar fi disparut tocmai cand omul are nevoie de el.
+ */
+export async function areDesignDeDinainteDeTema(businessId: string): Promise<{ exista: boolean } | { error: string }> {
+  const owned = await loadOwnedStore(businessId);
+  if ("error" in owned) return owned;
+  const { count, error } = await createAdminClient()
+    .from("storefront_design_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", owned.businessId)
+    .eq("origine", "tema");
+  if (error) {
+    logError({ action: "areDesignDeDinainteDeTema", businessId: owned.businessId, message: error.message });
+    return { error: "Nu am putut citi Istoricul." };
+  }
+  return { exista: (count ?? 0) > 0 };
 }

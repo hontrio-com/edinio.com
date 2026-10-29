@@ -8,6 +8,8 @@ import {
   type ProdusDeFiltrat,
 } from "./feeduri";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
+import { readFileSync } from "node:fs";
+import { escapeLike } from "@/lib/orders/pagination";
 
 /*
  * Un feed gresit nu cade si nu se logheaza: Meta il citeste, catalogul se face
@@ -249,4 +251,14 @@ test("un feed chiar FARA reguli ramane tot catalogul", () => {
   assert.equal(r.length, PRODUSE.length);
   const r2 = produseDinFeed({ cheie: "s", nume: "S", categorii: [], produse: [] }, PRODUSE, new Set());
   assert.equal(r2.length, PRODUSE.length);
+});
+
+test("⚠ cautarea de produse pentru un feed scapa `%`, `_` si backslash-ul, nu scrie literal „${c}” (vazut 29.10)", () => {
+  // Un backslash in fata fiecarui metacaracter: `String.raw` ca sa nu se mai piarda pe drum.
+  assert.equal(escapeLike("50%"), String.raw`50\%`);
+  assert.equal(escapeLike("a_b"), String.raw`a\_b`);
+  assert.equal(escapeLike(String.raw`c\d`), String.raw`c\\d`);
+  const s = readFileSync("src/lib/actions/facebook-feeds.actions.ts", "utf8");
+  assert.ok(s.includes("cerere = cerere.ilike(\"name\", `%${escapeLike(termen)}%`);"), "cautarea trece prin escapeLike");
+  assert.ok(!s.includes(String.raw`(c) => ` + "`" + String.raw`\${c}` + "`"), "scaparea stricata a revenit");
 });

@@ -10,6 +10,7 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 import type { Json } from "@/types/database.types";
 import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
+import { escapeLike } from "@/lib/orders/pagination";
 
 /**
  * Feedurile Meta segmentate, salvate din panou — si intrebarea pe care si-o pune panoul despre
@@ -182,11 +183,12 @@ export async function cautaProduseFeed(
 
   /*
    * ⚠ `%` si `_` se escapeaza: intr-un `ilike` sunt metacaractere, deci o cautare
-   * dupa „50%" ar fi intors tot catalogul in loc de nimic.
+   * dupa „50%” ar fi intors tot catalogul in loc de nimic. Cu `escapeLike`, ca in restul
+   * panoului: scaparea scrisa aici pe loc (backslash-dolar intr-un sir sablon) dadea literal
+   * „${c}”, deci „50%” nu gasea nimic (vazut 29.10).
    */
   if (termen) {
-    const sigur = termen.replace(/[%_]/g, (c) => `\${c}`);
-    cerere = cerere.ilike("name", `%${sigur}%`);
+    cerere = cerere.ilike("name", `%${escapeLike(termen)}%`);
   }
 
   const { data, count, error } = await cerere.order("name").limit(40);

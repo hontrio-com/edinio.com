@@ -53,7 +53,16 @@ test("catalogul de design-uri contine exact zonele pentru care facem variante", 
     .filter(([, m]) => m?.inCatalog)
     .map(([k]) => k)
     .sort();
-  assert.deepEqual(inCatalog, ["cart_drawer", "checkout", "footer", "header", "hero", "product_page", "shop_page"]);
+  // Etapa 16.6 (el: „Da, și din panou”): categoriile si cardul de produs, cu designul temei Jupiter langa cel clasic.
+  assert.deepEqual(inCatalog, ["cart_drawer", "category_nav", "checkout", "footer", "header", "hero", "product_card", "product_page", "shop_page"]);
+});
+
+test("⚠ orice sectiune cu doua design-uri sau mai multe se alege din galerie; doar randul de produse nu (varianta lui e asezarea)", () => {
+  // Gasit la etapa 16.6: placile de categorii si cardul Jupiter le putea pune doar tema, nu si omul.
+  const fara = Object.entries(SECTION_REGISTRY)
+    .filter(([, m]) => Object.keys(m.variants).length > 1 && !m.inCatalog)
+    .map(([k]) => k);
+  assert.deepEqual(fara, ["product_row"]);
 });
 
 test("hero-ul cu bara de categorii cere un banner, si NU un numar de categorii", () => {

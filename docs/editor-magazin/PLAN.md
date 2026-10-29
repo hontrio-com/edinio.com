@@ -1706,10 +1706,50 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
         categorie (pornita pe moment pe demo, stinsa la loc). Porti: suita 11.337 / 0 / 2 sarite, `build:ci` trece, tsc 0,
         eslint 0 pe fisierele atinse; mutanti 9/9.) Ghiduri, porti, proba in Chrome langa dedeman.ro (cere acordul lui
         pentru impersonare, daca e nevoie).
+  - [x] 16.6 (29.10, facut: `category_nav` si `product_card` in galerie, cu inaltimile miniaturilor masurate la 1280 px
+        (220/400 si 500/570); randul „Design” scos din panoul sectiunii in `RandDesign`, folosit si de fila „Stil”;
+        miniatura cardului prin `StoreProductCard` cu `varianta`; proba noua: orice sectiune cu doua design-uri sau mai
+        multe e in galerie, afara de randul de produse. Ghiduri: nou `cum-alegi-cum-arata-categoriile` (428), designul
+        cardului in ghidul cardului, „Cardul de produs” in „Schimbă designul”. Miniaturile vazute pe ruta publica (cele
+        patru, fara cont). Porti: suita 11.339 / 0 / 2 sarite, `build:ci` trece, eslint 0; mutanti 6/6. Panoul din editor:
+        la proba etapei 17.)
+        (cerut de el la raportul etapei 16, 29.10: „Da, și din panou”; scris inainte de cod) Placile de categorii
+        si cardul Jupiter alegibile si fara tema. `category_nav` si `product_card` intra in galerie (`inCatalog`, cu
+        `previewHeight` pe fiecare varianta). „Categorii” primeste „Schimbă designul (2)” in panoul ei, ca orice
+        sectiune. Cardul n-are rand in arbore: in fila „Stil”, la „Cardul de produs”, un rand „Design” cu „Schimbă
+        designul (2)” deschide aceeasi galerie. Miniatura cardului: patru produse demo prin `StoreProductCard`, cu
+        varianta ceruta (aceeasi alegere a componentei ca in magazin, nu o a doua). Ghiduri (categoriile, cardul,
+        „Schimbă designul”), probe, porti; miniaturile vazute pe ruta publica de previzualizare, panoul cu acordul lui.
 - **Etapa 17: pagina „Teme”** (cardul lui Jupiter, „Vezi demo”, „Aplică tema”), aplicarea cu Istoric si „Pune la loc”.
+  Scris 29.10, inainte de cod (acordul lui: „Da, etapa 17”).
   - De tinut minte (vazut la 16.5): coloana „Newsletter” a temei intra la aplicare doar cu furnizor conectat (Mailchimp,
     Brevo sau Klaviyo), cum cere si panoul; altfel subsolul primeste celelalte coloane. Reglajele lui din `page_content`
     raman ale lui (`setariDemo`, fara categoria pe card, e doar al magazinului demo).
+  - ⚠ **Gasit inainte de cod (29.10): stilul din design CASTIGA peste fila „Stil”** (`resolveStyle`: „Designul castiga”).
+    Daca tema isi pune culoarea principala, fundalul si fonturile in `design.style`, dupa aplicare culoarea si fonturile
+    alese din „Stil” n-ar mai face nimic. Masurat in productie (doar citire): 0 din 148 de magazine au culori sau fonturi
+    in design; toate le tin in identitate (`businesses.primary_color`, `page_content`). Deci tema le scrie TOT ACOLO, iar in
+    `design.style` raman doar ce „Stil” nu regleaza (accentul, suprafata, textul, colturile, latimea, cardurile).
+    Identitatea scrisa intra in versiunea din Istoric (`continut`: cheile editorului si culoarea), deci „Pune la loc” o
+    readuce. Magazinul demo se face la fel.
+  - 17.1 Identitatea temei (`Tema.identitate`: culoarea, fundalul, fontul titlurilor si al textului), scoasa din
+    `STIL_JUPITER`; scriptul demo o scrie in identitate. Proba: dupa aplicare, culoarea si fonturile alese din „Stil”
+    schimba magazinul.
+  - 17.2 Istoricul: originea noua „tema” (ce era in magazin inainte de aplicare) si „ciorna” (ciorna nepublicata de
+    atunci, ca nimic sa nu se piarda), in migratia inca neimpinsa (REGISTRU A) si aplicata pe demo; etichetele lor in
+    „Istoricul publicărilor”.
+  - 17.3 Actiunile: `aplicaTema(cheie)` (proprietarul; versiunile de dinainte; designul temei peste designul lui, cu
+    sectiunile, blocurile si coloanele lui; identitatea; publicat direct, ciorna golita; versiunea publicata; semnul
+    `tema_aplicata` in `page_content`; revalidarea magazinului) si `puneLaLocDesignulDeDinainte()` (versiunea „tema”
+    cea mai noua, design si identitate, publicata direct; ce s-a schimbat dupa ramane in Istoric). Bucatile pure in
+    `lib/teme/aplicare.ts`, cu probe.
+  - 17.4 Pagina `/dashboard/teme` (in meniu langa „Editează magazinul”): cardul Jupiter (numele, descrierea, o miniatura
+    a demo-ului), „Vezi demo” (local `/tema-jupiter`; subdomeniul la 19), „Aplică tema” cu fereastra care spune ce se
+    intampla (designul inlocuit, cel vechi pastrat in Istoric, produsele si textele neatinse), apoi „Tema e în
+    magazin”, „Deschide editorul” si „Pune la loc designul de dinainte”.
+  - 17.5 Ghiduri („Cum aplici o temă”, „Cum pui la loc designul de dinainte”), REGISTRU, porti.
+  - 17.6 Proba in Chrome pe magazinul de test din baza demo (impersonare, cu acordul lui): aplicarea, magazinul,
+    Istoricul, „Stil” dupa aplicare, „Pune la loc”; totul pus la loc si comparat.
   - Intrebare pusa lui la raportul etapei 16: placile de categorii si cardul Jupiter le pune acum doar tema
     („Categorii” si „Card de produs” nu sunt in galeria „Schimbă designul”). Le facem alegibile si in panou?
     **Raspunsul lui (29.10): „Da, și din panou”**: se face ca 16.6, inaintea paginii „Teme”.

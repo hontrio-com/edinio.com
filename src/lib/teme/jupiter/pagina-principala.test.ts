@@ -112,7 +112,7 @@ function cod(cale: string): string {
 
 test("magazinul: cardul ales din design pentru toate suprafetele, iar cardul Jupiter spune ce spune si cel clasic", () => {
   const s = cod("src/components/storefront/sections/products/StoreProductCard.tsx");
-  assert.match(s, /const Card = design\?\.commerce\.productCard\.variant === "jupiter" \? ProductCardJupiter : ProductCard;/);
+  assert.match(s, /const Card = \(varianta \?\? design\?\.commerce\.productCard\.variant\) === "jupiter" \? ProductCardJupiter : ProductCard;/);
   const j = cod("src/components/storefront/product/ProductCardJupiter.tsx");
   assert.match(j, /\} = useDateCardProdus\(props\);/);
   assert.match(j, /isAdded \? "Adaugat!" : isVariable \? "Alege optiunile" : cerePersonalizare \? "Personalizeaza" : "Adauga in cos"/);
@@ -161,4 +161,16 @@ test("⚠ fiecare tip de camp din registru are control in panou: cardurile si pl
   assert.match(panou, /case "repeater":\s*return <ListaRepetor field=\{field\} value=\{value\} onChange=\{onChange\} eticheta=\{eticheta\} \/>;/);
   assert.match(panou, /\{lista\.length < max && \(/, "„Adaugă” dispare la maxim");
   assert.match(panou, /f\.type === "link" \? \(\s*<CampLink /, "linkul are sugestiile panoului");
+});
+
+test("16.6: cardul se alege din fila Stil, cu aceeasi galerie, iar miniatura lui trece prin cardul magazinului", () => {
+  const e = cod("src/components/editor-magazin/EditorMagazin.tsx");
+  assert.match(e, /<PanouStil continut=\{continut\} cardul=\{\{\s*sectiune: designViu\.commerce\.productCard,\s*numar: numarVariante\(designViu\.commerce\.productCard\),\s*onSchimba: \(\) => \{ setGalerieDesign\(designViu\.commerce\.productCard\.id\); setVedereMobil\("previzualizare"\); \},\s*\}\} \/>/);
+  assert.match(cod("src/components/editor-magazin/continut/PanouStil.tsx"),
+    /Cardul de produs<\/p>\s*\{cardul && <RandDesign sectiune=\{cardul\.sectiune\} numar=\{cardul\.numar\} onSchimba=\{cardul\.onSchimba\} \/>\}/);
+  assert.match(cod("src/components/editor-magazin/PanouNod.tsx"), /<RandDesign sectiune=\{sectiune\} numar=\{variante\} onSchimba=\{\(\) => onSchimbaDesignul\(sectiune\.id\)\} \/>/);
+  const f = cod("src/components/storefront/SectionPreviewFrame.tsx");
+  assert.match(f, /if \(section\.kind === "product_card"\) \{[\s\S]*?<StoreProductCard key=\{p\.id\} product=\{p\} priority varianta=\{section\.variant\} \/>/);
+  assert.match(cod("src/components/storefront/sections/products/StoreProductCard.tsx"),
+    /const Card = \(varianta \?\? design\?\.commerce\.productCard\.variant\) === "jupiter" \? ProductCardJupiter : ProductCard;/);
 });

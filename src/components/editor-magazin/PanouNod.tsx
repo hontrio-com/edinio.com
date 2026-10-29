@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Eye, EyeOff, LayoutGrid, Trash2 } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { SectionSettings } from "@/components/store-editor/SectionSettings";
 import { comutaBaraDeAnunt, removeSection, toggleSection, updateSection } from "@/lib/storefront/design/edit";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils/cn";
 import type { SectionInstance, StoreDesign } from "@/lib/storefront/design/types";
 import { ContinutNod } from "./continut/ContinutNod";
 import { CasetaTipComanda } from "./CasetaTipComanda";
+import { RandDesign } from "./RandDesign";
 import { tipulVariantei, varianteDeAles } from "@/lib/storefront/design/tip-comanda";
 import type { CiornaDesign } from "./useCiornaDesign";
 import type { ContinutMagazin } from "./useContinutMagazin";
@@ -128,19 +129,7 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
       {/* Tipul de checkout (etapa 15): se vede aici, se alege in Setări > Comanda. Sectiunea e cea din designul viu. */}
       {sectiune.kind === "checkout" && <CasetaTipComanda tip={tipulVariantei(sectiune.variant)} />}
 
-      {variante > 1 && (
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Design</p>
-          <div className="flex items-center gap-2 rounded-xl border border-border p-3">
-            <p className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">{varianta?.label ?? sectiune.variant}</p>
-            <button type="button" onClick={() => onSchimbaDesignul(sectiune.id)}
-              className="shrink-0 h-9 px-3 rounded-lg border border-border text-xs font-semibold text-foreground hover:bg-muted transition-colors inline-flex items-center gap-1.5">
-              <LayoutGrid className="h-3.5 w-3.5 text-muted-foreground" />
-              Schimbă designul ({variante})
-            </button>
-          </div>
-        </div>
-      )}
+      <RandDesign sectiune={sectiune} numar={variante} onSchimba={() => onSchimbaDesignul(sectiune.id)} />
 
       {((varianta?.fields.length ?? 0) > 0 || varianta?.note) && (
         <div className="space-y-1">

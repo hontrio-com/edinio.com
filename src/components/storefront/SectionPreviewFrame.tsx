@@ -8,6 +8,7 @@ import { citesteSetariMagazinDinSectiune } from "@/lib/storefront/catalog/shop-s
 import { PreviewSection } from "@/components/storefront/SectionRenderer";
 import { StorefrontProvider, type StorefrontContextValue } from "@/components/storefront/StorefrontProvider";
 import { CHECKOUT_DEMO } from "@/components/storefront/sections/checkout/checkout-preview";
+import { StoreProductCard } from "@/components/storefront/sections/products/StoreProductCard";
 import type { ProductPageSection as ProductPageSectionTip } from "@/components/storefront/sections/product/ProductPageSection";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
 import { DEMO_PRAG_TRANSPORT_GRATUIT, DEMO_TRANSPORT, demoCartItems } from "@/lib/storefront/design/demo-content";
@@ -309,6 +310,24 @@ export function SectionPreviewFrame({
       <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
         <StorefrontProvider value={value}>
           <ShopPageSection variant={section.variant} setari={section.settings} />
+        </StorefrontProvider>
+      </CartProvider>
+    );
+  }
+
+  /*
+   * Cardul de produs (etapa 16.6) nu e o sectiune de pagina: miniatura lui arata patru produse demo cu varianta ceruta,
+   * prin acelasi `StoreProductCard` ca magazinul, deci aceeasi alegere a componentei, nu o a doua.
+   */
+  if (section.kind === "product_card") {
+    return (
+      <CartProvider slug={chrome.business.slug} businessId={chrome.business.id}>
+        <StorefrontProvider value={value}>
+          <div className="mx-auto px-4 py-8" style={{ maxWidth: "var(--st-container)" }}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {products.slice(0, 4).map((p) => <StoreProductCard key={p.id} product={p} priority varianta={section.variant} />)}
+            </div>
+          </div>
         </StorefrontProvider>
       </CartProvider>
     );

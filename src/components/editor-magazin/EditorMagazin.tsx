@@ -38,7 +38,7 @@ import { BaraEditor } from "./BaraEditor";
 import { GalerieAdauga } from "./GalerieAdauga";
 import { IstoricVersiuni } from "./IstoricVersiuni";
 import { PanouBloc } from "./PanouBloc";
-import { PanouNod } from "./PanouNod";
+import { numarVariante, PanouNod } from "./PanouNod";
 import { integrariActive, PanouAdaugaBloc, PanouBlocComun, PanouBlocPagina, PanouPagina } from "./PanouriPagina";
 import { PanouContinutLiber } from "./PanouContinutLiber";
 import { PanouAdaugaColoana, PanouColoanaSubsol } from "./PanouColoanaSubsol";
@@ -997,7 +997,11 @@ export function EditorMagazin({
             {fila === "setari" ? (
               <FilaSetari setari={setari} deschisa={setareDeschisa} onDeschide={setSetareDeschisa} onInapoi={() => setSetareDeschisa(null)} />
             ) : fila === "stil" ? (
-              <PanouStil continut={continut} />
+              <PanouStil continut={continut} cardul={{
+                sectiune: designViu.commerce.productCard,
+                numar: numarVariante(designViu.commerce.productCard),
+                onSchimba: () => { setGalerieDesign(designViu.commerce.productCard.id); setVedereMobil("previzualizare"); },
+              }} />
             ) : continutNouCerut && !dateBlocuri ? (
               <div className="space-y-2" aria-busy="true">
                 {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-10 rounded-lg bg-muted animate-pulse" />)}

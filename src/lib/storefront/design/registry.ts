@@ -812,13 +812,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "home",
     singleton: true,
     removable: true,
+    // Doua design-uri de la etapa 16.6 (placile temei Jupiter): alegerea e in galerie, ca la orice sectiune.
+    inCatalog: true,
     variants: {
-      classic: { label: "Butoane rotunde", tags: ["clasic"], layout: "contained", fields: [] },
+      classic: { label: "Butoane rotunde", tags: ["clasic"], layout: "contained", previewHeight: 220, fields: [] },
       // Tema Jupiter (etapa 16.3): placi gri pe patru coloane, cu imaginea si numarul de produse.
       placi: {
         label: "Plăci cu imagine și număr de produse",
         tags: ["cu imagine", "detaliat"],
         layout: "contained",
+        previewHeight: 400,
         fields: [
           { key: "titlu", type: "text", label: "Titlul", placeholder: "Categorii", maxLength: 60 },
           { key: "arataNumarul", type: "toggle", label: "Arată câte produse are fiecare categorie" },
@@ -1105,10 +1108,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "commerce",
     singleton: true,
     removable: false,
+    // Alegerea designului cardului sta in fila „Stil”, la „Cardul de produs” (etapa 16.6): cardul n-are rand in arbore.
+    inCatalog: true,
     variants: {
-      classic: { label: "Clasic", tags: ["clasic"], layout: "contained", fields: [] },
-      // Tema Jupiter (etapa 16.3): insigna „Super preț”, pretul mare, butonul cu patratul cosului.
-      jupiter: { label: "Hipermarket, cu prețul mare", tags: ["indraznet"], layout: "contained", fields: [] },
+      classic: { label: "Clasic", tags: ["clasic"], layout: "contained", previewHeight: 500, fields: [] },
+      // Tema Jupiter (etapa 16.3): insigna „Super pret”, pretul mare, butonul cu patratul cosului.
+      jupiter: { label: "Hipermarket, cu prețul mare", tags: ["indraznet"], layout: "contained", previewHeight: 570, fields: [] },
     },
   },
   cart_drawer: {

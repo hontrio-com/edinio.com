@@ -7,7 +7,9 @@ import { MediaPicker } from "@/components/media/MediaPicker";
 import { AlegeFont } from "@/components/pages/editor/campuri";
 import { toateClaseleDeFont } from "@/components/pages/fonturi-incarcate";
 import { NOD_STIL } from "@/lib/editor-magazin/noduri";
+import type { SectionInstance } from "@/lib/storefront/design/types";
 import type { ContinutMagazin } from "../useContinutMagazin";
+import { RandDesign } from "../RandDesign";
 import { ContinutCard } from "./ContinutComert";
 import { Grup } from "./ui";
 
@@ -67,7 +69,14 @@ function CampImagine({ eticheta, previzualizare, onFisier, onScoate, onAlege, aj
   );
 }
 
-export function PanouStil({ continut }: { continut: ContinutMagazin }) {
+/**
+ * `cardul`: cardul de produs din designul viu, cu cate design-uri are si deschiderea galeriei (etapa 16.6). Cardul n-are
+ * rand in arbore, deci designul lui se alege de aici, cu acelasi „Schimbă designul” ca sectiunile.
+ */
+export function PanouStil({ continut, cardul }: {
+  continut: ContinutMagazin;
+  cardul?: { sectiune: SectionInstance; numar: number; onSchimba: () => void };
+}) {
   const { pc, seteaza, logo, setLogo, favicon, setFavicon, culoare, setCuloare } = continut;
   /*
    * Textul codului, DOAR cat e scris pe jumatate (`#12`): altfel campul arata culoarea din ciorna.
@@ -150,6 +159,7 @@ export function PanouStil({ continut }: { continut: ContinutMagazin }) {
 
       <div className="space-y-4 pt-2 border-t border-border">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground pt-4">Cardul de produs</p>
+        {cardul && <RandDesign sectiune={cardul.sectiune} numar={cardul.numar} onSchimba={cardul.onSchimba} />}
         <ContinutCard continut={continut} />
       </div>
     </div>

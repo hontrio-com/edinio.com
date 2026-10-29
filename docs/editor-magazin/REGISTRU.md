@@ -206,6 +206,9 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     filtre in stanga are „Arată subcategoriile pe plăci, sub titlu”.
   - In panou, „Cardurile din dreapta” si „Plăcile” se completeaza (controlul de lista, nou in 16.5: „Adaugă card” /
     „Adaugă placă”, sagetile, „×”, linkul cu sugestii) si se vad in magazin dupa „Publică”.
+  - 16.6: „Categorii” are „Schimbă designul (2)” („Butoane rotunde” / „Plăci cu imagine și număr de produse”), iar
+    fila „Stil”, la „Cardul de produs”, are „Schimbă designul (2)” („Clasic” / „Hipermarket, cu prețul mare”). Magazinele
+    de azi raman pe „Butoane rotunde” si „Clasic”: nimic nu se schimba pana nu aleg ei.
   - Fonturile Open Sans si Sofia Sans sunt in lista (35 de familii, plus Geist).
   - Textele noi din vitrina sunt fara diacritice, ca restul magazinului („Adauga in cos”, „Cauta”, „Cos”, „Inapoi sus”);
     etichetele noi din panou sunt cu diacritice.
@@ -217,7 +220,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   `cum-reglezi-footerul-magazinului` (al patrulea design), `cum-reglezi-sectiunea-hero` (4 design-uri, cardurile),
   `cum-configurezi-pagina-magazin` (subcategoriile pe placi), `cum-adaugi-sectiuni-de-produse` (banda gri),
   `cum-asezi-ordinea-sectiunilor` si unul nou, `cum-adaugi-placi-de-recomandare` (427 de ghiduri). Fara capturi noi.
-  Placile de categorii si cardul „Hipermarket, cu prețul mare” nu au ghid: deocamdata le pune doar tema (etapa 17).
+  16.6: `cum-alegi-cum-arata-categoriile` (nou, 428 de ghiduri), designul cardului in `cum-reglezi-comportamentele-magazinului`
+  (titlul: „Cum reglezi cardul de produs, ...”), unde se alege cardul in `cum-schimbi-designul-unei-sectiuni`.
 - **De facut (vazut la 16.5): „Link buton” al antetului „Rotunjit, cu butoane colorate”** e tot text simplu, fara
   sugestiile (paginile, categoriile, produsele) pe care le au bannerele si, din 16.5, linkurile din listele panoului.
   Tipul `link` din `SectionSettings` trecut pe `CampLink`, cu `help` sub el; cu proba lui.

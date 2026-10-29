@@ -17,6 +17,9 @@ const GRI = "color-mix(in srgb, var(--st-primary) 4%, var(--st-bg))";
  *
  * Bannerele sunt ale magazinului (`page_content`, ca la celelalte variante); cardurile sunt reglajele sectiunii. Fara
  * carduri, caruselul ia toata latimea; fara bannere, raman cardurile.
+ *
+ * ⚠ Acelasi raport pe orice ecran, 2,14:1 (etapa 20): un banner facut la el nu se taie nicaieri. Pe telefon era 2:1,
+ * deci `object-cover` taia cate 3% din fiecare margine, exact unde stau de obicei textul si sigla bannerului.
  */
 export function HeroCuCarduri({ settings }: { settings: Record<string, unknown> }) {
   const { business, basePath, pageContent } = useStoreChrome();
@@ -35,7 +38,7 @@ export function HeroCuCarduri({ settings }: { settings: Record<string, unknown> 
         {banners.length > 0 && (
           <BannerSlider banners={banners} links={links} alt={nume} basePath={basePath} paginare="segmente"
             wrapperClass="relative rounded-[3px] overflow-hidden"
-            slideClass="shrink-0 w-full snap-center aspect-[2/1] lg:aspect-[2.14/1] bg-[var(--st-bg)]" />
+            slideClass="shrink-0 w-full snap-center aspect-[2.14/1] bg-[var(--st-bg)]" />
         )}
         {carduri.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:grid-rows-2">

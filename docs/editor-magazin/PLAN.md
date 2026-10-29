@@ -1903,15 +1903,37 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
   Raspunsurile lui: setul „Doar ale tale” (cel de azi, 58 de produse Unsplash in 12 raioane, iese intreg; raioanele si
   randurile se potrivesc pe ce da el) si importul „Tot, ca în demo” (comerciantul care bifeaza primeste produsele,
   categoriile SI bannerele lui). Materialul vine in `C:\Users\iorda\Desktop\EDINIOV2\demo-jupiter` (logo, `bannere/`,
-  `produse/`, tabelul produselor; optional pozele raioanelor, cele 2 carduri, cele 4 placi). ASTEPT materialul.
-  - De facut cand vine: pozele micsorate si puse in proiect (`public/teme/jupiter/`, cu proba ca `cdnImage` si un
-    domeniu propriu le servesc; pe domeniul propriu fisierele statice ocolesc rescrierea din proxy); `DATE_DEMO_JUPITER`
-    rescris din tabelul lui (raioanele si subcategoriile lui, randurile din produsele la oferta si din cele recomandate,
-    cardurile si placile din materialul lui sau din raioanele lui); logo-ul si numele magazinului demo; scriptul de
-    umplere scoate INTAI setul vechi din magazinul demo (aceleasi bucati ca „Șterge datele demo”), apoi pune setul nou;
-    probele setului rescrise pe regulile noi (pozele locale, nu Unsplash); ghidurile, daca se schimba cifrele.
+  `produse/`, tabelul produselor; optional pozele raioanelor, cele 2 carduri, cele 4 placi).
+  - [x] 20.1 (29.10, materialul lui: 3 bannere PNG ~2000 x 800, 12 poze de raioane PNG 1254 cu transparenta, sigla SVG,
+    10 produse SVG cu PNG inauntru si NUMELE in numele fisierului; fara tabel, deci fara preturi si texte; cererea lui:
+    „Redenumeste le tu cum trebuie si optimizeaza-le la maxim sa nu consume resurse”). `scripts/teme/imagini-jupiter.mjs`
+    (pastrat, se reia la material nou): din ~35 MB, 32 de fisiere WebP, 864 KB, in `public/teme/jupiter/` (bannere,
+    categorii, placi, carduri, produse, `logo.webp`), fiecare la marimea locului lui (incarcatorul trece neatinse
+    adresele care nu sunt din depozit, deci marimea fisierului e ce descarca oricine): bannere 1600 x 748, raioane 320,
+    placi rotunde 480 (obiectul intreg in cerc), carduri 432 x 336, produse 800, sigla inalta de 120 (3,8 KB, din 345).
+    GASIT pe drum: obiectele raioanelor aveau opacitatea 253 din 255 (usor stravezii) si ceata de alfa in jur, intinsa la
+    loc; sigla avea zgomot de culoare (35 KB fara pierderi), redusa la 16 culori. ⚠ Bannerele lui sunt 2,33-2,65:1, iar
+    slotul temei 2,14:1 (si 2:1 pe telefon): centrate, `object-cover` taia textul bannerelor 1 si 3. Taiate din partea cu
+    fotografia (la 3 pleaca o parte din galeata), iar slotul din `HeroCuCarduri` e acum 2,14:1 pe orice ecran.
+  - [x] 20.2 `DATE_DEMO_JUPITER` rescris: cele 12 raioane in ordinea lui, 8 subcategorii, cele 10 produse cu numele lui
+    („/” pus la loc unde fisierul avea „_”), preturi si descrieri scrise de mine (5 la oferta = randul „Oferte de sezon”,
+    5 in „Alegeri populare”), 3 bannere, 2 carduri si 4 placi din pozele raioanelor. Adrese RELATIVE (`/teme/jupiter/...`):
+    fisierele statice ocolesc proxy-ul, deci se vad pe orice gazda; in datele structurate ale produsului (JSON-LD) se
+    intregesc pe originea paginii (`pozaIntreaga`), OG le intregea deja. Sigla doar a magazinului demo (`Tema.siglaDemo`).
+  - [x] 20.3 `lib/teme/golire-demo.ts` + scriptul de umplere: INTAI golirea (produsele demo, toate categoriile,
+    cheile scrise de import din `page_content`), apoi importul; refuza fara sa stearga nimic pe un slug care nu e `tema-*`,
+    pe un magazin cu un produs care nu e demo si pe setari necitite. Probe: setul (poze pe disc, plafoane de marime,
+    niciuna nefolosita, raportul bannerelor, „Oferte” doar cu reduceri), golirea pe baza falsa, cheile importului legate
+    de golire, JSON-LD; 12 mutanti, toti prinsi. Rulat pe demo: scoase 58 de produse si 39 de categorii, puse 20 de
+    categorii, 10 produse, 3 bannere, 2 randuri; proiectia 10, coada 0.
+  - [x] 20.4 Proba in Chrome pe demo (`jupiter.localhost:3000`): sigla, bannerele intregi (cutia 2,14 = poza 2,139), cele
+    6 raioane cu produse pe placi (cele 6 goale se ascund singure), randurile, placile rotunde, pagina de produs, toate
+    cele 26 de poze 200 `image/webp` cu `immutable`, 735 KB pe prima pagina; pe 390 px (cadru, fereastra era acoperita)
+    bannerul 2,14, fara depasire. ⚠ Meniul „Categorii produse” arata toate cele 12 raioane (arborele intreg, ca „Toate
+    categoriile” din „market”), iar cele 6 fara produse duc la „Niciun produs disponibil”: de intrebat ce vrea.
   - ⚠ De spus la livrare: bannerele intra si in magazinele comerciantilor (raspunsul lui), deci fara numele sau oferte
-    anume ale magazinului demo pe ele; pozele si logo-ul ale lui sau libere de drepturi (demo-ul e public).
+    anume ale magazinului demo pe ele; pozele si logo-ul ale lui sau libere de drepturi (demo-ul e public). Produsele lui
+    sunt marci reale (Philips, Vileda, Erbauer), cu pozele lor, si pleaca la import in magazinele comerciantilor.
 
 ## Deciziile proprietarului
 

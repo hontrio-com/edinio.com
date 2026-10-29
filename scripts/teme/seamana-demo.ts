@@ -10,11 +10,15 @@
   ⚠ Productia doar cu `--productie` la coada, LA PUSH, cu acordul lui (REGISTRU), dupa `scripts/teme/magazinul-demo.sql`
   (contul tehnic si magazinul). Fara semn, o rulare din greseala cu cheile productiei e refuzata.
 
-  Scrie si semnul magazinului demo (`magazin_demo`, din `setariDemo`): fara comenzi (etapa 19.2).
+  Scoate INTAI setul de dinainte (etapa 20, `golesteMagazinulDemo`: produsele demo, categoriile, bannerele, randurile),
+  apoi il pune pe cel de acum. Deci se poate rula din nou oricand se schimba setul.
+
+  Scrie si semnul magazinului demo (`magazin_demo`, din `setariDemo`): fara comenzi (etapa 19.2); si sigla lui (`siglaDemo`).
 */
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { contextDesign } from "@/lib/editor-magazin/derivare";
+import { golesteMagazinulDemo } from "@/lib/teme/golire-demo";
 import { importaDateleDemo } from "@/lib/teme/import-demo";
 import { magazinCuIdentitatea, pageContentCuIdentitatea } from "@/lib/teme/aplicare";
 import { temaDupaCheie } from "@/lib/teme/teme";
@@ -36,6 +40,9 @@ async function main() {
     .from("businesses").select("id, features, cover_url, tagline").eq("slug", tema.slugDemo).single();
   if (error || !magazin) throw new Error(`Magazinul demo ${tema.slugDemo} lipseste: ${error?.message ?? ""}`);
 
+  // Setul de dinainte iese intreg; altfel importul (care doar adauga) l-ar fi lasat langa cel nou.
+  const golit = await golesteMagazinulDemo(admin, magazin.id);
+
   // Tema are pagina Magazin (`/magazin`): de acolo pornesc linkurile bannerelor.
   const rezultat = await importaDateleDemo(admin, magazin.id, tema.cheie, tema.date, "/magazin");
 
@@ -45,7 +52,8 @@ async function main() {
   // Reglajele demo-ului (`setariDemo`) peste ce a scris importul in `page_content` (bannerele, urma datelor demo), apoi
   // identitatea temei (fundalul, fonturile; culoarea in `businesses`), ca la aplicare: acolo o regleaza fila „Stil”.
   const pageContent = pageContentCuIdentitatea({ ...((setari?.page_content ?? {}) as Record<string, unknown>), ...tema.setariDemo }, tema.identitate);
-  const { error: eCuloare } = await admin.from("businesses").update(magazinCuIdentitatea(tema.identitate)).eq("id", magazin.id);
+  const { error: eCuloare } = await admin.from("businesses")
+    .update({ ...magazinCuIdentitatea(tema.identitate), logo_url: tema.siglaDemo }).eq("id", magazin.id);
   if (eCuloare) throw new Error(`culoare: ${eCuloare.message}`);
   const ctx = contextDesign({
     primaryColor: tema.identitate.culoare,
@@ -59,7 +67,7 @@ async function main() {
     .update({ storefront_design: design as never, storefront_design_draft: null, page_content: pageContent as never, updated_at: new Date().toISOString() })
     .eq("business_id", magazin.id);
   if (eDesign) throw new Error(`design: ${eDesign.message}`);
-  console.log(JSON.stringify({ tema: tema.cheie, magazin: tema.slugDemo, ...rezultat, design: "publicat" }));
+  console.log(JSON.stringify({ tema: tema.cheie, magazin: tema.slugDemo, scoase: golit, ...rezultat, design: "publicat" }));
 }
 
 main().catch((e: unknown) => {

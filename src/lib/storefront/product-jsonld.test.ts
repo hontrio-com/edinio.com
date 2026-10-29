@@ -204,7 +204,7 @@ const cuDescriere = (combinations: unknown[]) => ({
   */
   description: "<p>Husa de pat <b>100% bumbac</b>, elastica.</p><h3>Beneficii:</h3><p>Moale<br>Elastica</p>",
   price: 100,
-  images: ["/galerie-1.webp", "/galerie-2.webp"],
+  images: ["https://cdn.tld/galerie-1.webp", "https://cdn.tld/galerie-2.webp"],
   sku: "HUSA-180",
   page_sections: {
     variants: {
@@ -251,12 +251,12 @@ test("⚠ o varianta fara poza proprie primeste galeria, nu ramane fara imagine"
    * variante fara poza proprie.
    */
   const g = grupCuDescriere([
-    { title: "Gri", gtin: "0682643488768", enabled: true, image: "/gri.webp" },
+    { title: "Gri", gtin: "0682643488768", enabled: true, image: "https://cdn.tld/gri.webp" },
     { title: "Bej", gtin: "0682643488799", enabled: true },
   ]);
   const v = g.hasVariant as Record<string, unknown>[];
-  assert.deepEqual(v[0].image, ["/gri.webp"], "poza proprie bate galeria");
-  assert.deepEqual(v[1].image, ["/galerie-1.webp", "/galerie-2.webp"],
+  assert.deepEqual(v[0].image, ["https://cdn.tld/gri.webp"], "poza proprie bate galeria");
+  assert.deepEqual(v[1].image, ["https://cdn.tld/galerie-1.webp", "https://cdn.tld/galerie-2.webp"],
     "fara poza proprie, varianta trebuie sa primeasca galeria produsului");
 });
 
@@ -489,4 +489,22 @@ test("⚠ fara procesare declarata se scrie ZERO, nu 0-1", () => {
   const dt = termen({ cost: 25, min: 2, max: 4 })!;
   assert.equal(dt.handlingTime.minValue, 0);
   assert.equal(dt.handlingTime.maxValue, 0);
+});
+
+test("⚠ pozele relative (datele demo ale unei teme, din `public/`) ies intregi, pe originea paginii; restul raman neatinse", () => {
+  /*
+   * Etapa 20: pozele temei Jupiter stau in `public/teme/jupiter/` si intra in produse cu adresa relativa, ca sa se vada
+   * pe orice gazda. Google cere insa URL-uri intregi in `image`, iar un comerciant poate lasa produsele demo publicate.
+   */
+  const cu = (images: unknown, url = "https://magazin-client.ro/product/x") =>
+    buildProductJsonLd({ name: "P", description: null, price: 10, images }, url, "M", SHIPPING) as Record<string, unknown>;
+  assert.deepEqual(cu(["/teme/jupiter/produse/a.webp", "https://cdn.tld/b.webp"]).image,
+    ["https://magazin-client.ro/teme/jupiter/produse/a.webp", "https://cdn.tld/b.webp"]);
+  // Pe platforma, calea magazinului din adresa paginii nu intra in adresa pozei (fisierul e la radacina).
+  assert.deepEqual(cu(["/teme/jupiter/produse/a.webp"], "https://www.edinio.com/floraria-mea/product/x").image,
+    ["https://www.edinio.com/teme/jupiter/produse/a.webp"]);
+  assert.deepEqual(cu(["//cdn.tld/c.webp"]).image, ["//cdn.tld/c.webp"], "adresa fara schema ramane cum era");
+  assert.deepEqual(cu(["/teme/a.webp"], "nu-e-adresa").image, ["/teme/a.webp"], "fara origine, poza ramane cum era");
+  assert.equal(cu(null).image, undefined);
+  assert.equal(cu("o-singura.jpg").image, "o-singura.jpg", "o forma ciudata ramane exact cum venea (nu cade)");
 });

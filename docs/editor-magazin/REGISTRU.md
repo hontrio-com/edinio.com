@@ -234,11 +234,21 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     lor are `noindex`; in easySales apar blocate cu „Produs demo din temă: rămâne doar în magazin.”.
 - **Etapa 18.2-18.4 („Importă și datele demo”, „Șterge datele demo”), de verificat dupa push:**
   - ⚠⚠ Nimic nu se intampla singur: bifa porneste oprita, iar fara ea „Aplică tema” face exact ce facea la 17.
-  - Pe un cont de test cu plan Basic: „Aplică tema” cu bifa adauga 58 de produse demo, categoriile, 4 bannere, 2 randuri
-    si textele temei; produsele lipsesc din fluxuri (Google, Meta, Pepita) si din sitemap; „Șterge datele demo” le scoate
-    pe toate, iar categoriile in care s-a pus un produs al lui raman.
-  - Pe un cont gratuit: bifa e oprita, cu motivul (58 de produse nu incap in 10).
+  - Pe un cont de test cu plan Basic: „Aplică tema” cu bifa adauga 10 produse demo (setul lui, etapa 20), 20 de
+    categorii, 3 bannere, 2 randuri si textele temei; produsele lipsesc din fluxuri (Google, Meta, Pepita) si din sitemap;
+    „Șterge datele demo” le scoate pe toate, iar categoriile in care s-a pus un produs al lui raman.
+  - Pe un cont gratuit: cu macar un produs al lui, bifa e oprita, cu motivul (10 produse demo nu mai incap in 10); pe
+    unul gol, incap exact (10 din 10), deci importul merge, iar contul ajunge la limita.
   - Un magazin cu cardurile bannerului sau placile de recomandare completate de el le pastreaza dupa aplicarea temei.
+- **Etapa 20 (setul demo Jupiter cu materialul lui, 29.10), de verificat dupa push:**
+  - Pozele temei sunt fisiere statice (`public/teme/jupiter/`, 32 de fisiere, 864 KB), deci pleaca odata cu codul; nimic
+    de urcat in depozit. Dupa push: `https://www.edinio.com/teme/jupiter/logo.webp` si o poza de produs dau 200
+    `image/webp`, cu `Cache-Control: public, max-age=31536000, immutable`; pe domeniul propriu al unui magazin, aceeasi
+    cale da tot 200 (fisierele statice ocolesc rescrierea spre magazin).
+  - ⚠⚠ Nimic nu se schimba la magazinele de azi: datele structurate ale produsului (JSON-LD) intregesc DOAR adresele de
+    poza care incep cu „/” (ale datelor demo); pozele din depozit sunt deja intregi. De comparat `image` din JSON-LD pe
+    2-3 produse ale unui magazin real, inainte si dupa: identic.
+  - Bannerul temei Jupiter (varianta „carduri”) are 2,14:1 si pe telefon (era 2:1). Nu e inca la niciun magazin real.
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
@@ -320,8 +330,10 @@ pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
    telefonul afisate in subsolul demo-ului (azi `jupiter@edinio-demo.test`, `0700 000 000`). Verificarea e in coada
    fisierului: magazinul publicat, fara domeniu propriu, plan Ultra pana in 2099, setarile.
 4. **Umplerea:** `scripts/teme/seamana-demo.ts jupiter --productie`, cu cheile productiei in mediu (doar pentru rularea
-   asta). Scrie 39 de categorii, 58 de produse demo (sursa `tema-demo`, deci in afara canalelor, etapa 18.1), 4 bannere,
-   2 randuri, designul temei si semnul `magazin_demo` (fara comenzi, etapa 19.2).
+   asta). Intai goleste magazinul demo (prima oara nu gaseste nimic; refuza un magazin cu produse care nu sunt demo),
+   apoi scrie 20 de categorii, 10 produse demo (sursa `tema-demo`, deci in afara canalelor, etapa 18.1), 3 bannere,
+   2 randuri, sigla, designul temei si semnul `magazin_demo` (fara comenzi, etapa 19.2). Se poate rula din nou oricand
+   se schimba setul (etapa 20).
 5. **Verificari:** `https://jupiter.edinio.com` arata magazinul demo, adresele fara `/tema-jupiter`, antetul
    `X-Robots-Tag: noindex, follow`; `/robots.txt` = „Disallow: /”; `/sitemap.xml` = 404; o comanda (din cos si din
    formularul produsului) e refuzata cu „Acesta e un magazin demo: poti incerca tot, dar comenzile sunt oprite.”, fara

@@ -38,6 +38,8 @@ export interface Tema {
    * reglajele comerciantului raman ale lui.
    */
   setariDemo: Record<string, unknown>;
+  /** Sigla magazinului demo (`businesses.logo_url`), din `public/`. Doar a lui: importul n-o atinge pe a comerciantului. */
+  siglaDemo: string;
 }
 
 export const TEME: readonly Tema[] = [
@@ -51,6 +53,7 @@ export const TEME: readonly Tema[] = [
     faraTexteleDemo,
     identitate: IDENTITATE_JUPITER,
     setariDemo: { show_category_badges: false, [CHEIE_MAGAZIN_DEMO]: true },
+    siglaDemo: "/teme/jupiter/logo.webp",
   },
 ];
 

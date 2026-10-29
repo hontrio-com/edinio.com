@@ -8,6 +8,20 @@ import {
 } from "@/lib/storefront/variants";
 
 /**
+ * O adresa de poza, intreaga: cele relative (`/teme/...`, pozele datelor demo ale unei teme, din `public/`, etapa 20)
+ * se pun pe originea paginii, fiindca Google cere URL-uri intregi in `image`. Restul (depozitul, adresele straine) raman
+ * neatinse, iar o pagina fara adresa intreaga nu strica nimic: poza ramane cum era.
+ */
+export function pozaIntreaga(adresa: string, paginaProdusului: string): string {
+  if (!adresa.startsWith("/") || adresa.startsWith("//")) return adresa;
+  try {
+    return new URL(adresa, paginaProdusului).href;
+  } catch {
+    return adresa;
+  }
+}
+
+/**
  * Numele de optiune → proprietatea schema.org care ii corespunde.
  *
  * Se potriveste doar ce se poate potrivi CU CERTITUDINE. Numele reale din baza
@@ -106,7 +120,9 @@ export function buildProductJsonLd(
    */
   indisponibil = false,
 ) {
-  const images = product.images as string[] | null;
+  const brute = product.images as string[] | null;
+  // Pozele relative (datele demo ale unei teme) se intregesc; orice altceva ramane exact cum venea.
+  const images = Array.isArray(brute) ? brute.map((u) => (typeof u === "string" ? pozaIntreaga(u, productUrl) : u)) : brute;
   /*
    * ⚠ ETICHETA DEVINE SPATIU, NU SIR GOL (30.08.2026)
    *
@@ -360,7 +376,7 @@ export function buildProductJsonLd(
          * noi, si de acelasi fel cu cea pe care raportul tocmai a dezmintit-o la `description`.
          * 8667 de variante din productie n-au poza proprie.
          */
-        ...(combo.image ? { image: [combo.image] } : images?.length ? { image: images } : {}),
+        ...(combo.image ? { image: [pozaIntreaga(combo.image, productUrl)] } : images?.length ? { image: images } : {}),
         offers: {
           "@type": "Offer",
           priceCurrency: "RON",

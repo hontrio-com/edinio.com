@@ -6,14 +6,15 @@ import { citesteLoculPentruDemo, loculPentruDemo, motivulLimitei, produseDemoNoi
 
 /*
  * Etapa 18.2: „Importă și datele demo” nu trece de limita de produse a planului (gratuit 10, Basic 500, Premium 2500,
- * Ultra fara limita), numarata pe cont, ca la adaugarea de mana. Jupiter are 58 de produse demo.
+ * Ultra fara limita), numarata pe cont, ca la adaugarea de mana. Jupiter are 10 produse demo (setul lui, etapa 20).
  */
 
 const D = DATE_DEMO_JUPITER;
 const N = D.produse.length;
 
 test("limita: incap pana la limita inclusiv; peste ea, nu; Ultra fara limita; importul repetat, oricand", () => {
-  assert.equal(loculPentruDemo(10, 3, N).incap, false, "gratuit: 58 nu incap in 10");
+  assert.equal(loculPentruDemo(10, 3, N).incap, false, "gratuit, cu 3 produse ale lui: cele demo nu mai incap in 10");
+  assert.equal(loculPentruDemo(10, 10 - N, N).incap, true, "gratuit, cu loc exact cat setul: incap");
   assert.equal(loculPentruDemo(500, 500 - N, N).incap, true, "exact la limita: incap");
   assert.equal(loculPentruDemo(500, 501 - N, N).incap, false, "un produs peste: nu");
   const ultra = loculPentruDemo(Infinity, 100_000, N);
@@ -24,15 +25,15 @@ test("limita: incap pana la limita inclusiv; peste ea, nu; Ultra fara limita; im
 
 test("produsele noi: doar cele ale temei care lipsesc din magazin, dupa cod", () => {
   assert.equal(produseDemoNoi("jupiter", D, []), N);
-  const jumatate = D.produse.slice(0, 50).map((p) => externalIdDemo("jupiter", p.cheie));
-  assert.equal(produseDemoNoi("jupiter", D, jumatate), N - 50);
+  const cateva = D.produse.slice(0, 4).map((p) => externalIdDemo("jupiter", p.cheie));
+  assert.equal(produseDemoNoi("jupiter", D, cateva), N - 4);
   assert.equal(produseDemoNoi("jupiter", D, D.produse.map((p) => externalIdDemo("saturn", p.cheie))), N, "codurile altei teme nu conteaza");
   assert.equal(produseDemoNoi("jupiter", D, [null, ...D.produse.map((p) => externalIdDemo("jupiter", p.cheie))]), 0);
 });
 
 test("motivul, in romana cu „de”: ce adauga, ce permite planul si cate are", () => {
-  assert.equal(motivulLimitei(loculPentruDemo(10, 3, N)), "Datele demo adaugă 58 de produse, iar planul tău permite 10 produse (ai deja 3).");
-  assert.equal(motivulLimitei(loculPentruDemo(500, 1453, N)), "Datele demo adaugă 58 de produse, iar planul tău permite 500 de produse (ai deja 1.453).");
+  assert.equal(motivulLimitei(loculPentruDemo(10, 3, 10)), "Datele demo adaugă 10 produse, iar planul tău permite 10 produse (ai deja 3).");
+  assert.equal(motivulLimitei(loculPentruDemo(500, 1453, 58)), "Datele demo adaugă 58 de produse, iar planul tău permite 500 de produse (ai deja 1.453).");
 });
 
 /** Baza falsa: planul contului, codurile produselor demo ale magazinului, numarul produselor contului. */

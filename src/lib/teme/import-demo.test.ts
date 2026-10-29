@@ -1,7 +1,11 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import sharp from "sharp";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
+import { CHEI_SCRISE_DE_IMPORT } from "./golire-demo";
+import { temaDupaCheie } from "./teme";
 import {
   bannereDupaImport, categoriiDeCreat, externalIdDemo, idRandDemo, importaDateleDemo, randuriDupaImport, sluguriUnice, urmaDateDemoDin, urmaDupaImport,
 } from "./import-demo";
@@ -21,19 +25,74 @@ test("setul Jupiter: fiecare produs, banner, card si placa duce la o categorie c
   for (const x of [...D.bannere, ...D.carduri, ...D.placi]) assert.ok(nume.has(x.categorie), x.categorie);
 });
 
-test("setul Jupiter: chei, nume si categorii unice, preturi cu sens, poze doar de pe Unsplash", () => {
+test("setul Jupiter: chei, nume, poze si categorii unice, preturi cu sens, cele 12 raioane ale lui", () => {
   assert.equal(new Set(D.produse.map((p) => p.cheie)).size, D.produse.length, "chei unice");
   assert.equal(new Set(D.produse.map((p) => p.nume)).size, D.produse.length, "nume unice");
+  assert.equal(new Set(D.produse.map((p) => p.imagine)).size, D.produse.length, "fiecare produs cu poza lui");
   assert.equal(new Set(toateCategoriile.map((n) => n.toLowerCase())).size, toateCategoriile.length, "categorii unice");
   for (const p of D.produse) {
     assert.ok(p.pret > 0, p.cheie);
     if (p.pretVechi !== undefined) assert.ok(p.pretVechi > p.pret, `${p.cheie}: reducerea e reala`);
-    assert.match(p.imagine, /^https:\/\/images\.unsplash\.com\/photo-\d+-[0-9a-f]+\?/, p.cheie);
     assert.ok(p.descriere.length > 20, p.cheie);
   }
-  const poze = [...D.categorii.map((c) => c.imagine), ...D.bannere, ...D.carduri, ...D.placi].map((x) => (typeof x === "string" ? x : x.imagine));
-  for (const u of poze) assert.match(u, /^https:\/\/images\.unsplash\.com\//);
-  assert.ok(D.produse.length >= 48 && D.categorii.length === 12);
+  // Raioanele lui sunt 12, cate o poza pentru fiecare (etapa 20); produsele sunt cate a dat.
+  assert.equal(D.categorii.length, 12);
+  assert.ok(D.produse.length > 0);
+});
+
+/** Toate pozele setului (adresele relative din `public/`), cu felul lor (folderul). */
+const pozeleSetului = [
+  ...D.categorii.map((c) => c.imagine), ...D.produse.map((p) => p.imagine),
+  ...D.bannere.map((b) => b.imagine), ...D.carduri.map((c) => c.imagine), ...D.placi.map((p) => p.imagine),
+];
+
+/** Fisierele dintr-un folder, cu subfolderele lui. */
+function fisiere(dir: string): string[] {
+  return readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? fisiere(join(dir, n)) : [join(dir, n)]));
+}
+
+test("⚠ pozele setului: locale, din `public/teme/jupiter`, toate pe disc (o poza lipsa e o poza rupta in vitrina)", () => {
+  for (const u of pozeleSetului) {
+    assert.match(u, /^\/teme\/jupiter\/(bannere|categorii|placi|carduri|produse)\/[a-z0-9-]+\.webp$/, u);
+    assert.ok(existsSync(join("public", u)), `lipseste de pe disc: public${u}`);
+  }
+  assert.match(temaDupaCheie("jupiter")!.siglaDemo, /^\/teme\/jupiter\/[a-z0-9-]+\.webp$/);
+  assert.ok(existsSync(join("public", temaDupaCheie("jupiter")!.siglaDemo)), "sigla lipseste de pe disc");
+});
+
+test("⚠ pozele temei sunt mici (vitrina le descarca intregi: incarcatorul nu le redimensioneaza) si niciuna nu sta degeaba", () => {
+  // Plafoanele sunt de vreo doua ori cat ies azi din `scripts/teme/imagini-jupiter.mjs`: o poza pusa nemicsorata le sare.
+  const PLAFON_KB: Record<string, number> = { bannere: 220, categorii: 80, placi: 80, carduri: 60, produse: 120, ".": 15 };
+  const folosite = new Set([...pozeleSetului, temaDupaCheie("jupiter")!.siglaDemo]);
+  const peDisc = fisiere(join("public", "teme", "jupiter"));
+  assert.ok(peDisc.length > 0);
+  for (const cale of peDisc) {
+    const adresa = `/${relative("public", cale).split(sep).join("/")}`;
+    assert.ok(folosite.has(adresa), `${adresa}: pe disc, dar nefolosita de set`);
+    const fel = dirname(relative(join("public", "teme", "jupiter"), cale)).split(sep)[0];
+    const kb = statSync(cale).size / 1024;
+    assert.ok(kb <= PLAFON_KB[fel], `${adresa}: ${kb.toFixed(0)} KB, peste ${PLAFON_KB[fel]} KB`);
+  }
+});
+
+test("⚠ bannerele au raportul slotului (2,14:1, `HeroCuCarduri`): un alt raport s-ar taia, iar textul lor sta pe margini", async () => {
+  assert.match(cod("src/components/storefront/sections/hero/HeroCuCarduri.tsx"), /slideClass="shrink-0 w-full snap-center aspect-\[2\.14\/1\] /);
+  for (const b of D.bannere) {
+    const m = await sharp(join("public", b.imagine)).metadata();
+    assert.ok(Math.abs(m.width! / m.height! - 2.14) < 0.01, `${b.imagine}: ${m.width} x ${m.height}`);
+    assert.ok(m.width! >= 1280, `${b.imagine}: prea mic pentru desktop`);
+  }
+  for (const p of D.produse) {
+    const m = await sharp(join("public", p.imagine)).metadata();
+    assert.equal(m.width, m.height, `${p.imagine}: cardul de produs e patrat`);
+  }
+});
+
+test("randurile: „Oferte” are doar produse reduse, iar un produs nu apare in doua randuri", () => {
+  const dupaCheie = new Map(D.produse.map((p) => [p.cheie, p]));
+  for (const k of D.randuri.find((r) => r.cheie === "oferte")!.produse) assert.ok(dupaCheie.get(k)?.pretVechi, `${k}: in „Oferte”, fara reducere`);
+  const toate = D.randuri.flatMap((r) => r.produse);
+  assert.equal(new Set(toate).size, toate.length);
 });
 
 test("⚠ nimic de la Dedeman in setul demo: nici numele, nici adresele lor (comentariul spune doar de unde e inspiratia)", () => {
@@ -41,13 +100,18 @@ test("⚠ nimic de la Dedeman in setul demo: nici numele, nici adresele lor (com
 });
 
 test("categoriile: se creeaza doar cele care lipsesc, intai primul nivel, si una de-a lui cu acelasi nume se refoloseste", () => {
-  const date: SetDateDemo = { ...D, categorii: [{ nume: "Grădină", imagine: "i", copii: ["Unelte de grădină", "Ghivece"] }, { nume: "Mobilă", imagine: "j", copii: ["Mese"] }] };
+  const produs = (cheie: string, categorie: string) => ({ ...D.produse[0], cheie, categorie, imagine: `${cheie}.webp` });
+  const date: SetDateDemo = {
+    ...D,
+    categorii: [{ nume: "Grădină", imagine: "i", copii: ["Unelte de grădină", "Ghivece"] }, { nume: "Mobilă", imagine: "j", copii: ["Mese"] }],
+    produse: [produs("foarfeca", "Unelte de grădină"), produs("grebla", "Unelte de grădină")],
+  };
   const plan = categoriiDeCreat(["  grădină ", "Mese"], date);
   assert.deepEqual(plan, [
     { nume: "Mobilă", parinte: null, imagine: "j" },
-    { nume: "Unelte de grădină", parinte: "Grădină", imagine: D.produse.find((p) => p.categorie === "Unelte de grădină")!.imagine },
+    { nume: "Unelte de grădină", parinte: "Grădină", imagine: "foarfeca.webp" },
     { nume: "Ghivece", parinte: "Grădină", imagine: null },
-  ]);
+  ], "subcategoria ia poza PRIMULUI ei produs; fara produse, fara poza");
   assert.equal(categoriiDeCreat(toateCategoriile, D).length, 0, "importul repetat nu mai creeaza nimic");
 });
 
@@ -183,6 +247,17 @@ test("⚠⚠ 18.3: categoriile intra in urma INAINTE de scriere, cu id-urile cu 
   assert.deepEqual([...fin.date_demo.categorii].sort(), [...urma.categorii].sort());
   assert.equal(fin.date_demo.bannere.length, D.bannere.length);
   assert.equal(fin.hero_banners[0], "al-lui.jpg");
+});
+
+test("⚠ golirea magazinului demo (etapa 20) scoate tot ce scrie importul in `page_content`: o cheie noua ar ramane", async () => {
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const b = bazaImport();
+  const inainte = { ...b.pc() };
+  await importaDateleDemo(b.client as never, "m1", "jupiter", D, "/magazin");
+  const dupa = b.pc();
+  const schimbate = Object.keys(dupa).filter((k) => JSON.stringify(dupa[k]) !== JSON.stringify(inainte[k]));
+  assert.ok(schimbate.length >= 3, schimbate.join());
+  for (const k of schimbate) assert.ok((CHEI_SCRISE_DE_IMPORT as readonly string[]).includes(k), `${k}: scrisa de import, lasata de golire`);
 });
 
 test("⚠⚠ o cadere la subcategorii lasa urma cu toate id-urile alese: „Șterge datele demo” gaseste ce s-a apucat de scris", async () => {

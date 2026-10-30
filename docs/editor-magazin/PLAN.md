@@ -43,6 +43,12 @@ bannerului cu sugestii), raportul trimis; **etapa 14 (fonturile pe sectiune, ace
 (pasii 14.1-14.4), raportul trimis; **etapa 15 (tipul de checkout in Setări > Comanda) FACUTA si PROBATA** (pasii
 15.1-15.4), raportul trimis; urmeaza temele, cu acordul lui. Intre timp `main` a primit
 reparatia eMAG `dba33c22`, adusa in ramura prin `28b1cd9c`. Tot fara push si fara migratie, pana spune el (inaintea push-ului: suita intreaga si `build:ci`).
+**Temele (etapele 16-20, 28-29.10) FACUTE si PROBATE**, cu acordul lui la fiecare (sectiunea „Temele: prima tema,
+„Jupiter””): aspectul Jupiter (16), pagina „Teme” cu aplicarea prin Istoric (17), datele demo cu limita planului (18),
+demo-ul pe `jupiter.edinio.com` fara comenzi (19), setul demo din materialul lui (20, `cbcb1e77`). Raportul etapei 20
+trimis 29.10, seara; **ramane intrebarea** despre cele 6 raioane fara produse din meniul „Categorii produse” (20.4).
+`build:ci` trecut pe `cbcb1e77` (30.10, dupa caderea VS Code; la etapa 20 nu rulase, serverul de dezvoltare era pornit).
+Productia demo-ului: REGISTRU „E”, doar dupa push, cu acordul lui.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).

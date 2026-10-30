@@ -241,7 +241,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     unul gol, incap exact (10 din 10), deci importul merge, iar contul ajunge la limita.
   - Un magazin cu cardurile bannerului sau placile de recomandare completate de el le pastreaza dupa aplicarea temei.
 - **Etapa 20 (setul demo Jupiter cu materialul lui, 29.10), de verificat dupa push:**
-  - Pozele temei sunt fisiere statice (`public/teme/jupiter/`, 32 de fisiere, 864 KB), deci pleaca odata cu codul; nimic
+  - Pozele temei sunt fisiere statice (`public/teme/jupiter/`, 33 de fisiere, 869 KB), deci pleaca odata cu codul; nimic
     de urcat in depozit. Dupa push: `https://www.edinio.com/teme/jupiter/logo.webp` si o poza de produs dau 200
     `image/webp`, cu `Cache-Control: public, max-age=31536000, immutable`; pe domeniul propriu al unui magazin, aceeasi
     cale da tot 200 (fisierele statice ocolesc rescrierea spre magazin).
@@ -260,6 +260,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     magazin real pe „Detaliat” (9 in productie, 29.10), inainte si dupa: identica.
   - O tema aplicata stinge „Despre noi” (textul ramane, se aprinde din ochi), iar un „Newsletter” pus de comerciant in subsol
     ramane o coloana obisnuita. Beneficiile din subsol sunt insignele lui („Beneficii pe scurt”).
+- **Etapa 22 (30.10), de verificat dupa push:**
+  - ⚠ Singura schimbare din temele care ajunge la TOATE magazinele: in `stil-comun.css`, orice buton activ din vitrina are
+    mana (`[data-store-theme] button:not(:disabled)`). Doar cursorul, fara nimic pe asezare. Dupa push, pe un magazin real:
+    mana pe „Adauga in cos” si in cos, sageata interzisa pe butoanele oprite.
+  - Pe `jupiter.edinio.com`, in tab, planeta din sigla (`/teme/jupiter/favicon.png`). Magazinele reale raman cu faviconul lor.
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,

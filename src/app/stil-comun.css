@@ -1683,6 +1683,14 @@
     letter-spacing: -0.02em;
   }
 
+  /* Tailwind 4 lasa orice buton pe `cursor: default`. Intr-un magazin, „Adauga in cos” ramanea cu sageata exact langa
+     poza si titlul cu mana, deci parea stins (mentiunea lui, etapa 22). Doar in magazin si doar pe cele active. In stratul
+     de baza: o clasa `cursor-*` scrisa anume pe un buton bate regula. */
+  [data-store-theme] button:not(:disabled),
+  [data-store-theme] [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
   /* Focus visible styles */
   :focus-visible {
     outline: 2px solid var(--color-brand);

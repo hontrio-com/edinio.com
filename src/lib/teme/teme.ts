@@ -54,7 +54,7 @@ export const TEME: readonly Tema[] = [
     design: designJupiter,
     faraTexteleDemo,
     identitate: IDENTITATE_JUPITER,
-    setariDemo: { show_category_badges: false, [CHEIE_MAGAZIN_DEMO]: true, menu: MENIU_DEMO_JUPITER },
+    setariDemo: { show_category_badges: false, [CHEIE_MAGAZIN_DEMO]: true, menu: MENIU_DEMO_JUPITER, favicon_url: "/teme/jupiter/favicon.png" },
     siglaDemo: "/teme/jupiter/logo.webp",
     sloganDemo: "Tot ce trebuie pentru casă, grădină și șantier.",
   },

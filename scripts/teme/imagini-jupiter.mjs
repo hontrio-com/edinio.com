@@ -16,7 +16,9 @@
     deci marimea fisierului e marimea pe care o descarca oricine. De-aia fiecare fel de poza are marimea locului lui;
   - pozele raioanelor veneau cu obiectul la opacitatea 253 din 255 (usor stravezii) si cu o ceata de alfa 1-3 in jur:
     alfa se intinde la loc (253 -> 255, sub 4 -> 0), ceea ce le si micsoreaza;
-  - siglei i se reduc culorile (doua tente plate, cu zgomot de culoare in ele): fara asta, WebP-ul fara pierderi iesea de 35 KB.
+  - siglei i se reduc culorile (doua tente plate, cu zgomot de culoare in ele): fara asta, WebP-ul fara pierderi iesea de 35 KB;
+  - faviconul e doar simbolul din sigla (etapa 22): sigla intreaga e de 4,7 ori mai lata decat inalta, deci in cei 16 px ai
+    tabului nu se mai citea nimic. PNG, nu WebP: Safari nu arata un favicon WebP.
 */
 import { mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -86,6 +88,31 @@ async function scrie(relativ, pipeline) {
 
 /** Alfa intinsa la loc: 4 -> 0, 252 -> 255 (obiectul venea la 253, deci usor stravezii, cu ceata de 1-3 in jur). */
 const alfaCurata = (img) => img.ensureAlpha().linear([1, 1, 1, 255 / 248], [0, 0, 0, (-4 * 255) / 248]);
+
+/**
+ * Simbolul din sigla, fara cuvant: ce sta la dreapta ULTIMEI coloane transparente. Cuvantul si simbolul sunt despartite de
+ * o asemenea coloana; intre literele cuvantului sunt si altele, dar in simbol nu e niciuna (inelul trece peste planeta).
+ */
+async function simbolulDinSigla(svg) {
+  const { data, info } = await sharp(svg, { density: 300 })
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 1 })
+    .resize({ height: 600 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+  const coloanaGoala = (x) => {
+    for (let y = 0; y < height; y++) if (data[(y * width + x) * channels + 3] > 8) return false;
+    return true;
+  };
+  let stanga = width - 1;
+  while (stanga > 0 && !coloanaGoala(stanga)) stanga--;
+  if (stanga === 0) throw new Error("Sigla: n-am gasit golul dintre cuvant si simbol.");
+  return sharp(data, { raw: { width, height, channels } })
+    .extract({ left: stanga + 1, top: 0, width: width - stanga - 1, height })
+    .png()
+    .toBuffer();
+}
 
 /** Obiectul decupat, taiat pe conturul lui (fara marginea transparenta), ca buffer PNG fara pierderi. */
 async function decupat(cale) {
@@ -167,6 +194,17 @@ async function main() {
     .png({ palette: true, colours: 16, dither: 0 })
     .toBuffer();
   await scrie("logo.webp", sharp(sigla).webp({ lossless: true, effort: 6 }));
+
+  // ── Faviconul: simbolul pe un patrat transparent de 192 px, marimea pe care o face si editorul (`processFavicon`) ──
+  // Inelul e mult mai lat decat planeta: taiat cu 13% pe fiecare parte (iese din cadru), planeta umple patratul si se
+  // citeste si la cei 16 px ai tabului; intreg, ramanea o bila de 9 px.
+  const simbol = await sharp(await simbolulDinSigla(readFileSync(join(SURSA, "logo", "LogoJupiter.svg"))))
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 }, threshold: 1 }).png().toBuffer();
+  const { width: latSimbol, height: inaltSimbol } = await sharp(simbol).metadata();
+  const taiat = Math.round(latSimbol * 0.13);
+  await scrie("favicon.png", sharp(simbol).extract({ left: taiat, top: 0, width: latSimbol - 2 * taiat, height: inaltSimbol })
+    .resize(192, 192, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png({ palette: true, quality: 70, effort: 10, dither: 0, compressionLevel: 9 }));
 
   let total = 0;
   for (const s of scrise) {

@@ -83,7 +83,7 @@ export function ProductCardJupiter(props: ProductCardProps) {
 
       {/* ⚠ Eticheta spune ce face butonul, din acelasi predicat ca hotararea din handler (vezi `ProductCard`). */}
       <button type="button" onClick={onAddToCart} disabled={isOutOfStock}
-        className="mt-3 h-10 w-full flex items-stretch rounded-[3px] overflow-hidden text-[14px] font-bold transition-opacity hover:opacity-95 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--st-primary)]"
+        className="mt-3 h-10 w-full flex items-stretch rounded-[3px] overflow-hidden text-[14px] font-bold transition-[filter,box-shadow] enabled:hover:brightness-[0.88] enabled:hover:shadow-[0_3px_10px_rgba(0,0,0,0.22)] enabled:active:brightness-[0.8] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--st-primary)]"
         style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
         <span className="flex-1 min-w-0 flex items-center justify-center px-2 truncate">
           {isAdded ? "Adaugat!" : isVariable ? "Alege optiunile" : cerePersonalizare ? "Personalizeaza" : "Adauga in cos"}

@@ -49,7 +49,8 @@ demo-ul pe `jupiter.edinio.com` fara comenzi (19), setul demo din materialul lui
 trimis 29.10, seara. Intrebarea despre cele 6 raioane fara produse a primit raspuns pe 30.10: raman, cu „0 produse” pe
 placile de pe prima pagina (20.5, facut si probat). `build:ci` a trecut si pe `cbcb1e77` (30.10, dupa caderea VS Code; la
 etapa 20 nu rulase, serverul de dezvoltare era pornit). **Etapa 21 (patru mentiuni dupa demo: golul de langa cautare, „Despre
-noi”, pozele mari de pe pagina de produs, subsolul premium fara newsletter) FACUTA si PROBATA**, 30.10.
+noi”, pozele mari de pe pagina de produs, subsolul premium fara newsletter) FACUTA si PROBATA**, 30.10. **Etapa 22 (faviconul
+demo-ului, butoanele magazinului cu mana, hoverul cardului) FACUTA si PROBATA**, 30.10.
 Productia demo-ului: REGISTRU „E”, doar dupa push, cu acordul lui.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
@@ -1999,6 +2000,26 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     Demo-ul reumplut pe baza demo. In Chrome pe `jupiter.localhost:3000`: fara „Despre noi”, fara campuri in subsol, fara
     depasire la 390 si 1024. Lasat asa: coloana „Raioane” din subsol arata pe paginile fara catalog primele 6 radacini, si
     cele goale (arborele din chrome, la toate subsolurile), iar pe prima pagina doar cele cu produse.
+
+- **Etapa 22: alte doua mentiuni** (30.10, cuvant cu cuvant: „E ok dar am niste mentiuni: 1. Favicon nu se vede bine 2. Daca
+  tin hover pe butonul de Adauga in cos de la produs nu apare ca si cum ar fi buton”).
+  - [x] 22.1 Faviconul: demo-ul n-avea unul, deci magazinul cadea pe sigla (`favicon_url || logo_url`), lata de 4,7 ori cat
+    e de inalta, adica o linie in cei 16 px ai tabului. Acum `public/teme/jupiter/favicon.png`, facut de
+    `imagini-jupiter.mjs` din sigla lui: doar simbolul (ce sta dupa ultima coloana transparenta), 192 x 192, cu inelul taiat
+    13% pe fiecare parte, ca planeta sa umple patratul; intreg, ramanea o bila de 9 px la 16. PNG, nu WebP (Safari), transparent,
+    4,9 KB. Pus prin `setariDemo`, deci doar pe demo; comerciantii isi pastreaza faviconul lor. ⚠ La PNG cu paleta,
+    `colours` peste 16 n-are efect (ramaneau 255 de culori si 16 KB): reducerea o da `quality` (70).
+  - [x] 22.2 Butonul: `cursor: default` (Tailwind 4 lasa asa orice `<button>`), deci pe card mana de pe poza si titlu disparea
+    fix pe buton, iar hoverul era `opacity-95`, invizibil. Regula in `stil-comun.css`, stratul de baza: `[data-store-theme]
+    button:not(:disabled)` si `[role="button"]` au mana. ⚠ E singura schimbare care ajunge la TOATE magazinele: doar cursorul,
+    fara nimic pe asezare (spus in raport, REGISTRU C); 64 de fisiere cu butoane in vitrina si doar 14 `cursor-pointer` scrise
+    de mana, deci o regula, nu 50 de clase. Cardul Jupiter (doar tema): sub mouse se intuneca (`brightness 0.88`) cu umbra, la
+    apasare si mai mult, doar cand e activ. Pagina de produs ramane cu `hover:opacity-90` (comuna cu magazinele pe „Detaliat”),
+    acum cu mana.
+  - [x] 22.3 Probe: `mentiuni-22.test.ts` (5: fisierul, cat umple simbolul, ordinea favicon/sigla, regula CSS, hoverul
+    cardului), 8 mutanti, toti prinsi. In Chrome, cu mouse-ul real: mana pe card si pe pagina, „Comanda acum” si cantitatea tot
+    cu mana, „-” `not-allowed` la 1, filtrul 0.88 sub mouse; `<link rel="icon">` spre PNG, 200 `image/png`. Tabul in sine nu
+    intra in capturi, deci faviconul e verificat pe fisier, marit la 16, 32 si 48 px, pe fond deschis si inchis.
 
 ## Deciziile proprietarului
 

@@ -63,7 +63,7 @@ test("⚠ pozele setului: locale, din `public/teme/jupiter`, toate pe disc (o po
 test("⚠ pozele temei sunt mici (vitrina le descarca intregi: incarcatorul nu le redimensioneaza) si niciuna nu sta degeaba", () => {
   // Plafoanele sunt de vreo doua ori cat ies azi din `scripts/teme/imagini-jupiter.mjs`: o poza pusa nemicsorata le sare.
   const PLAFON_KB: Record<string, number> = { bannere: 220, categorii: 80, placi: 80, carduri: 60, produse: 120, ".": 15 };
-  const folosite = new Set([...pozeleSetului, temaDupaCheie("jupiter")!.siglaDemo]);
+  const folosite = new Set([...pozeleSetului, temaDupaCheie("jupiter")!.siglaDemo, String(temaDupaCheie("jupiter")!.setariDemo.favicon_url)]);
   const peDisc = fisiere(join("public", "teme", "jupiter"));
   assert.ok(peDisc.length > 0);
   for (const cale of peDisc) {

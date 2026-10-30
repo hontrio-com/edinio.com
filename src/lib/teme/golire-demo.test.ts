@@ -98,12 +98,12 @@ function cod(cale: string): string {
   return readFileSync(cale, "utf8").replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-test("scriptul magazinului demo: goleste INAINTEA importului si pune sigla temei", () => {
+test("scriptul magazinului demo: goleste INAINTEA importului si pune sigla si sloganul temei", () => {
   const s = cod("scripts/teme/seamana-demo.ts");
   const golire = s.indexOf("const golit = await golesteMagazinulDemo(admin, magazin.id);");
   const importul = s.indexOf("await importaDateleDemo(admin, magazin.id, tema.cheie, tema.date, \"/magazin\");");
   assert.ok(golire > 0 && importul > golire, "golirea inaintea importului");
-  assert.match(s, /\.update\(\{ \.\.\.magazinCuIdentitatea\(tema\.identitate\), logo_url: tema\.siglaDemo \}\)\.eq\("id", magazin\.id\);/);
+  assert.match(s, /\.update\(\{ \.\.\.magazinCuIdentitatea\(tema\.identitate\), logo_url: tema\.siglaDemo, tagline: tema\.sloganDemo \}\)\.eq\("id", magazin\.id\);/);
   // Golirea e doar in script: importul si actiunile panoului nu golesc nimic.
   for (const f of ["src/lib/teme/import-demo.ts", "src/lib/actions/store-design.actions.ts"]) assert.doesNotMatch(cod(f), /golesteMagazinulDemo/, f);
 });

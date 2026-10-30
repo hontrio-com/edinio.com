@@ -1,5 +1,5 @@
 import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
-import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
+import { DATE_DEMO_JUPITER, MENIU_DEMO_JUPITER } from "./jupiter/date-demo";
 import { designJupiter, faraTexteleDemo, IDENTITATE_JUPITER } from "./jupiter/design";
 import { CHEIE_MAGAZIN_DEMO } from "./gazde-demo";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
@@ -40,6 +40,8 @@ export interface Tema {
   setariDemo: Record<string, unknown>;
   /** Sigla magazinului demo (`businesses.logo_url`), din `public/`. Doar a lui: importul n-o atinge pe a comerciantului. */
   siglaDemo: string;
+  /** Sloganul magazinului demo (`businesses.tagline`), din subsol. Tot doar al lui. */
+  sloganDemo: string;
 }
 
 export const TEME: readonly Tema[] = [
@@ -52,8 +54,9 @@ export const TEME: readonly Tema[] = [
     design: designJupiter,
     faraTexteleDemo,
     identitate: IDENTITATE_JUPITER,
-    setariDemo: { show_category_badges: false, [CHEIE_MAGAZIN_DEMO]: true },
+    setariDemo: { show_category_badges: false, [CHEIE_MAGAZIN_DEMO]: true, menu: MENIU_DEMO_JUPITER },
     siglaDemo: "/teme/jupiter/logo.webp",
+    sloganDemo: "Tot ce trebuie pentru casă, grădină și șantier.",
   },
 ];
 

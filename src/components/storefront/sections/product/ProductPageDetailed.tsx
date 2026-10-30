@@ -2,7 +2,7 @@
 
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
-import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { blocurileZonei, completeazaBlocuri, schemaBlocurilor, esteContinut } from "@/lib/storefront/design/blocuri";
 import { MarcajBloc } from "@/components/storefront/MarcajBloc";
 import { ContinutLiber } from "@/components/storefront/ContinutLiber";
@@ -85,8 +85,16 @@ const MINIATURI_VIZIBILE = 5;
  * intreg ar impinge din nou pagina in gol, doar in cealalta parte.
  */
 const SPECIFICATII_LANGA_GALERIE = 6;
+/**
+ * Inaltimea galeriei „Cât ecranul” pe calculator (reglajul `galleryHeight`, etapa 21): ce ramane din fereastra sub
+ * antet si firimituri, ca fotografia sa se vada intreaga, dar nu mai mult decat ii sta bine unui fisier de 800 px.
+ *
+ * ⚠ Panoul e alb, nu gri ca la cel patrat: e mai lat decat fotografia, iar fotografiile decupate pe alb ar fi aparut ca
+ * un patrat pe fond gri.
+ */
+const INALTIME_COMPACTA = "clamp(26rem, calc(100vh - 18rem), 40rem)";
 
-function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color, miniaturiInStanga }: {
+function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color, miniaturiInStanga, compacta }: {
   slides: string[];
   activ: number;
   mergiLa: (i: number) => void;
@@ -96,6 +104,8 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
   color: string;
   /** Sina verticala langa imagine, sau rand sub ea. Pe telefon e mereu jos. */
   miniaturiInStanga: boolean;
+  /** Pe calculator, panoul cat ecranul in loc de patrat (`INALTIME_COMPACTA`). Pe telefon ramane patrat. */
+  compacta: boolean;
 }) {
   // Sagetile pot duce activul in afara ferestrei de derulare a sinei; fara
   // asta, dupa cateva apasari miniatura curenta nu se mai vede deloc.
@@ -127,7 +137,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
             <ChevronUp size={14} />
           </button>
           <div className="flex flex-col gap-2 overflow-y-auto"
-            style={{ maxHeight: `${MINIATURI_VIZIBILE * 5.5}rem` }}>
+            style={{ maxHeight: compacta ? `calc(${INALTIME_COMPACTA} - 4rem)` : `${MINIATURI_VIZIBILE * 5.5}rem` }}>
             {slides.map((src, i) => (
               <button key={src + i} type="button" onClick={() => mergiLa(i)}
                 aria-label={`Vezi imaginea ${i + 1}`} aria-current={i === activ}
@@ -149,7 +159,8 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
       <div className="relative flex-1 min-w-0">
         {/* Panou deschis in spatele produsului, ca in modelul de referinta: pune
             in valoare fotografiile decupate pe fundal alb. */}
-        <div className="relative aspect-square rounded-md border border-border bg-muted/20 overflow-hidden">
+        <div className={`relative aspect-square rounded-md border border-border overflow-hidden ${compacta ? "bg-white lg:aspect-auto lg:h-[var(--inaltime-galerie)]" : "bg-muted/20"}`}
+          style={compacta ? { "--inaltime-galerie": INALTIME_COMPACTA } as CSSProperties : undefined}>
           {slides.map((src, i) => (
             <div key={src + i}
               aria-hidden={i !== activ}
@@ -660,6 +671,7 @@ export function ProductPageDetailed({
   const cerePersonalizarea = cerePersonalizare(product.page_sections);
   const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
   const miniaturiInStanga = setari.galleryThumbs !== "bottom";
+  const galerieCompacta = setari.galleryHeight === "compact";
   const cateSpecificatii = Number(setari.specsCount) > 0 ? Number(setari.specsCount) : SPECIFICATII_LANGA_GALERIE;
   // Liniile purtate in comanda: tot cosul in afara produsului curent, care se
   // comanda separat, cu cantitatea din formular.
@@ -1362,11 +1374,11 @@ export function ProductPageDetailed({
             `minmax(0, ...)` pe amandoua coloanele, de aceea desktopul era
             intreg si nimeni nu vedea nimic in editor, unde produsul
             demonstrativ are trei poze. */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
+        <div className={`grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start ${galerieCompacta ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,33rem)]" : ""}`}>
           <div className="lg:col-start-1 lg:row-start-1">
             <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
               hasDiscount={!!hasDiscount} discountPct={discountPct} color={color}
-              miniaturiInStanga={miniaturiInStanga} />
+              miniaturiInStanga={miniaturiInStanga} compacta={galerieCompacta} />
           </div>
 
           <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2 flex flex-col gap-4">

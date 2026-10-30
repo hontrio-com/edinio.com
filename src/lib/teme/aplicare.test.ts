@@ -8,7 +8,6 @@ import { coloaneVazute } from "@/lib/storefront/design/subsol";
 import { ciornaDinVersiune, instantaneuContinut } from "@/lib/editor-magazin/versiuni";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import {
-  areFurnizorNewsletter,
   CHEIE_TEMA_APLICATA,
   continutIdentitate,
   dateleVersiunilorDeDinainte,
@@ -44,19 +43,13 @@ test("semnul temei aplicate: citit doar intreg; datele versiunilor de dinainte, 
   }
   const la = dateleVersiunilorDeDinainte(Date.parse("2026-10-29T10:00:00.000Z"));
   assert.ok(Date.parse(la.tema) < Date.parse(la.ciorna) && Date.parse(la.ciorna) < Date.parse("2026-10-29T10:00:00.000Z"));
-  assert.equal(areFurnizorNewsletter({ mailchimp: false, brevo: false, klaviyo: false }), false);
-  assert.equal(areFurnizorNewsletter({ mailchimp: false, brevo: true, klaviyo: false }), true);
 });
 
-test("fara furnizor de newsletter, coloana „Newsletter” a temei nu intra; coloanele alese de el raman oricum", () => {
-  const fara = designJupiter(ctx, null, undefined, { cuNewsletter: false });
-  assert.ok(!coloaneVazute(fara.chrome.footer).some((c) => c.type === "newsletter"));
-  assert.ok(coloaneVazute(fara.chrome.footer).some((c) => c.id === "raioane"), "celelalte coloane ale temei raman");
-  const cu = designJupiter(ctx, null, undefined, { cuNewsletter: true });
-  assert.equal(coloaneVazute(cu.chrome.footer)[0]?.type, "newsletter");
+test("subsolul primeste coloanele temei; coloanele alese de el raman", () => {
+  assert.ok(coloaneVazute(designJupiter(ctx, null).chrome.footer).some((c) => c.id === "raioane"));
   const d = parseStoreDesign(buildClassicDesign(ctx), ctx);
   const aleLui = parseStoreDesign({ ...d, chrome: { ...d.chrome, footer: { ...d.chrome.footer, blocks: [{ id: "doar_contact", type: "contact", enabled: true, settings: { titlu: "Contact" } }] } } }, ctx);
-  assert.deepEqual(designJupiter(ctx, null, aleLui, { cuNewsletter: false }).chrome.footer.blocks?.map((b) => b.id), ["doar_contact"]);
+  assert.deepEqual(designJupiter(ctx, null, aleLui).chrome.footer.blocks?.map((b) => b.id), ["doar_contact"]);
 });
 
 test("⚠⚠ „Aplică”, apoi „Pune la loc”: identitatea, continutul si designul revin EXACT cum erau", () => {
@@ -106,7 +99,7 @@ test("⚠⚠ aplicarea: proprietarul intai; ce era intra in Istoric INAINTE de p
   assert.match(f, /origine: "ciorna", publicat_de: owned\.userId, created_at: la\.ciorna,/);
   // Etapa 18.3: contextul e al magazinului de DUPA import (randurile si bannerele demo intra in designul temei).
   assert.match(f, /const continut = continutIdentitate\(tema\.identitate\);\s*const ctxTema = contextCuCiorna\(ctxMagazin, continut\);/);
-  assert.match(f, /cuNewsletter: areFurnizorNewsletter\(integrari\.newsletter\),\s*radacinaCatalog,/);
+  assert.match(f, /parseStoreDesign\(row\?\.storefront_design \?\? \{\}, ctxTema\), \{ radacinaCatalog \}\);/);
   assert.match(f, /if \("error" in publicat\) \{/);
 });
 

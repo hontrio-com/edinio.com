@@ -67,7 +67,8 @@ test("⚠ aplicata peste designul unui magazin, tema pastreaza ce e al lui (etap
 
 test("fara coloane alese de el (implicitele scrise de parser), subsolul primeste coloanele temei", () => {
   const d = designJupiter(ctx, null, parseStoreDesign(buildClassicDesign(ctx), ctx));
-  assert.equal(d.chrome.footer.blocks?.[0]?.type, "newsletter");
+  assert.equal(d.chrome.footer.blocks?.[0]?.id, "identitate");
+  assert.ok(d.chrome.footer.blocks?.some((b) => b.id === "raioane"));
 });
 
 /** Codul fara comentarii. */

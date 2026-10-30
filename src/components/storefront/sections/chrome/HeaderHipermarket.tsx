@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, MapPin, Menu, Phone, Search, ShoppingCart, Undo2, X } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
-import { whatsappLink } from "@/lib/utils/format";
+import { pluralRo, whatsappLink } from "@/lib/utils/format";
 import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { grupuriCategorii } from "@/lib/storefront/categories-chrome";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
@@ -24,8 +24,11 @@ const STROKE = 1.6;
  * Antetul temei Jupiter, varianta „hipermarket” (etapa 16.2 din `docs/editor-magazin/PLAN.md`).
  *
  * Facut dupa dedeman.ro, cum a cerut el („aproape 1 la 1”), cu identitatea magazinului: o bara subtire in culoarea
- * principala, randul cu logo, cautarea lata cu butonul in culoarea de accent, contul si cosul cu eticheta, apoi bara de
- * navigare cu butonul „Categorii produse”, care deschide meniul pe doua niveluri, si meniul magazinului.
+ * principala, randul cu logo, cautarea, telefonul, contul si cosul, apoi bara de navigare cu butonul „Categorii
+ * produse”, care deschide meniul pe doua niveluri, si meniul magazinului.
+ *
+ * Cautarea ia tot ce ramane din rand (etapa 21): cu o latime fixa, langa ea ramanea un gol cat un sfert din pagina la
+ * orice magazin fara cont si fara WhatsApp, iar pe pagina lata a temei nu mai avea ce sa-l umple.
  *
  * ⚠ Bara de navigare sta lipita sus la derulare, nu tot antetul: cele trei randuri au peste 170 px, iar lipite ar fi
  * mancat un sfert din ecran. Ca pe modelul lui, randul cu logo pleaca, butonul de categorii ramane la indemana.
@@ -52,7 +55,7 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
 
   const baraSus = settings.showTopBar !== false;
   const textSus = typeof settings.topText === "string" ? settings.topText.trim() : "";
-  const telefonJos = settings.showHotline !== false && !!business.phone;
+  const telefon = settings.showHotline !== false && !!business.phone;
   const lipit = hasAnnouncementBar ? "top-9" : "top-0";
 
   return (
@@ -97,11 +100,20 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
               )}
             </a>
 
-            <div className="hidden lg:block flex-1 min-w-0 max-w-[56rem]">
+            <div className="hidden lg:block flex-1 min-w-0">
               <CautareJupiter />
             </div>
 
-            <div className="flex items-center gap-5 lg:gap-7 shrink-0 ml-auto">
+            <div className="flex items-center gap-5 lg:gap-7 shrink-0 ml-auto lg:ml-0">
+              {telefon && (
+                <a href={`tel:${business.phone}`} className="hidden lg:flex items-center gap-2.5 text-[var(--st-text)] hover:text-[var(--st-primary)] transition-colors whitespace-nowrap">
+                  <Phone className="h-6 w-6 shrink-0" strokeWidth={STROKE} />
+                  <span className="leading-tight">
+                    <span className="block text-[12px] text-[var(--st-muted)]">Suport clienti</span>
+                    <span className="block text-[15px] font-semibold">{business.phone}</span>
+                  </span>
+                </a>
+              )}
               <ActiuneCont clasa="flex items-center gap-2 text-[var(--st-text)] hover:opacity-75 transition-opacity" marime={24} stroke={STROKE}
                 clasaText="text-[15px] font-semibold" />
               {actiuni.map((a) => (
@@ -153,12 +165,6 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
                   );
                 })}
               </nav>
-            )}
-            {telefonJos && (
-              <a href={`tel:${business.phone}`} className="ml-auto shrink-0 inline-flex items-center gap-2 text-[15px] text-[var(--st-text)] hover:text-[var(--st-primary)] transition-colors whitespace-nowrap">
-                <Phone className="h-4 w-4" strokeWidth={STROKE} />
-                Suport clienti: <strong className="font-semibold">{business.phone}</strong>
-              </a>
             )}
           </div>
 
@@ -274,7 +280,7 @@ function MeniuCategorii({ grupuri, categoriiRoot, pePagina, onInchide }: {
   );
 }
 
-/** Cosul: iconita cu insigna si eticheta „Cos”, ca contul de langa el. */
+/** Cosul: iconita cu insigna, apoi pe doua randuri eticheta si cate produse are, ca telefonul de langa el. */
 function Cos({ mode, count }: { mode: CartMode; count: number }) {
   if (mode === "hidden") return null;
   return (
@@ -288,7 +294,10 @@ function Cos({ mode, count }: { mode: CartMode; count: number }) {
           </span>
         )}
       </span>
-      <span className="hidden sm:inline text-[15px] font-semibold">Cos</span>
+      <span className="hidden sm:block leading-tight text-left whitespace-nowrap">
+        <span className="block text-[12px] text-[var(--st-muted)]">Cosul meu</span>
+        <span className="block text-[15px] font-semibold">{pluralRo(count)}</span>
+      </span>
     </CartControl>
   );
 }

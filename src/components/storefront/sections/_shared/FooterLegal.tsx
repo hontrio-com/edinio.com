@@ -202,10 +202,12 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
  * Creditul se poate ascunde doar pe planurile platite (`hide_edinio_badge`),
  * decizie luata inauntrul lui `EdinioCredit` — nu e o setare de design.
  */
-export function FooterCredit({ ton = "inchis", text }: {
+export function FooterCredit({ ton = "inchis", text, culoareEdinio }: {
   ton?: TonFooter;
   /** Textul de langa „©” (etapa 11, reglajul subsolului); lipsa = numele magazinului. */
   text?: string;
+  /** Culoarea cuvantului „Edinio”, cand cea a magazinului nu se citeste pe fundalul subsolului; lipsa = a magazinului. */
+  culoareEdinio?: string;
 } = {}) {
   const { business, color } = useStoreChrome();
   const t = TON[ton];
@@ -215,7 +217,7 @@ export function FooterCredit({ ton = "inchis", text }: {
       <p className={t.copyright}>
         &copy; {new Date().getFullYear()} {text ?? business.store_name ?? business.business_name}
       </p>
-      <EdinioCredit businessId={business.id} color={color} className={t.copyright} />
+      <EdinioCredit businessId={business.id} color={culoareEdinio ?? color} className={t.copyright} />
     </div>
   );
 }

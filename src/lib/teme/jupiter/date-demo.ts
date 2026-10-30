@@ -1,3 +1,4 @@
+import type { MenuItem } from "@/lib/pages/menu";
 import type { SetDateDemo } from "@/lib/teme/tipuri";
 
 /*
@@ -21,6 +22,16 @@ import type { SetDateDemo } from "@/lib/teme/tipuri";
 function poza(cale: string): string {
   return `/teme/jupiter/${cale}.webp`;
 }
+
+/**
+ * Meniul magazinului demo (`Tema.setariDemo`): raioanele cu produse, ca bara de navigare sa nu ramana doar cu „Acasa”
+ * (etapa 21). `target` = numele categoriei, ca la linkurile bannerelor. Importul nu atinge meniul comerciantului.
+ */
+export const MENIU_DEMO_JUPITER: MenuItem[] = [
+  { id: "demo_toate", type: "home", label: "Toate produsele" },
+  ...["Scule și unelte", "Materiale de construcții", "Termice și climatizare", "Sanitare", "Iluminat", "Electrocasnice"]
+    .map((nume, i): MenuItem => ({ id: `demo_raion_${i}`, type: "category", label: nume, target: nume })),
+];
 
 export const DATE_DEMO_JUPITER: SetDateDemo = {
   categorii: [

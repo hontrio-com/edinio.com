@@ -93,14 +93,12 @@ export function ImagineSubsol({ coloana, gol }: { coloana: BlockInstance; gol: s
  * cauta coloana in subsolul PUBLICAT (`blocDinMagazin`), nu crede cererea: mesajul ajunge in „Mesaje”, cu locul
  * „Subsol”, si la furnizorul conectat. In editor nu se trimite nimic (previzualizarea opreste oricum formularele).
  */
-export function FormularNewsletterSubsol({ coloana, idSubsol, marunt, inchis, centrat = false, lipit = false }: {
+export function FormularNewsletterSubsol({ coloana, idSubsol, marunt, inchis, centrat = false }: {
   coloana: BlockInstance;
   idSubsol: string;
   marunt: string;
   inchis: boolean;
   centrat?: boolean;
-  /** Campul si butonul lipite, butonul in culoarea de accent (subsolul temei Jupiter, etapa 16.2). */
-  lipit?: boolean;
 }) {
   const { business, esteEditorDesign } = useStoreChrome();
   const [email, setEmail] = useState("");
@@ -135,17 +133,6 @@ export function FormularNewsletterSubsol({ coloana, idSubsol, marunt, inchis, ce
     : "border-[var(--st-border)] bg-[var(--st-bg)] text-[var(--st-text)] placeholder:text-[var(--st-muted)]";
   return (
     <form onSubmit={trimite} className={`mt-3 space-y-2 ${centrat ? "w-full max-w-sm" : ""}`} noValidate>
-      {lipit ? (
-        <div className="flex">
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Adresa de e-mail"
-            aria-label="Adresa ta de email" autoComplete="email"
-            className="min-w-0 flex-1 h-[46px] px-3.5 rounded-l-[3px] border border-r-0 border-[var(--st-border)] bg-[var(--st-surface)] text-[15px] text-[var(--st-text)] placeholder:text-[var(--st-muted)] outline-none focus:ring-2 focus:ring-[var(--st-primary)]/30" />
-          <button type="submit" disabled={trimit}
-            className="shrink-0 h-[46px] px-5 rounded-r-[3px] text-[15px] font-semibold bg-[var(--st-accent)] text-[var(--st-accent-contrast)] hover:opacity-90 disabled:opacity-60 transition-opacity">
-            {buton} ›
-          </button>
-        </div>
-      ) : (
       <div className="flex gap-2">
         <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Adresa ta de email"
           aria-label="Adresa ta de email" autoComplete="email"
@@ -155,7 +142,6 @@ export function FormularNewsletterSubsol({ coloana, idSubsol, marunt, inchis, ce
           {buton}
         </button>
       </div>
-      )}
       <label className={`flex items-start gap-2 text-[11px] leading-snug text-left ${marunt}`}>
         <input type="checkbox" checked={acord} onChange={(e) => setAcord(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded accent-[var(--st-primary)]" />
         <span>Sunt de acord sa primesc emailuri cu noutati si oferte. Te poti dezabona oricand.</span>

@@ -44,11 +44,6 @@ export function radacinaCatalogTemei(pageContent: Record<string, unknown>): stri
   return `/${permalinkuriDin(pageContent).magazin}`;
 }
 
-/** Cu un furnizor de newsletter conectat, coloana „Newsletter” a temei intra in subsol (cum cere si panoul). */
-export function areFurnizorNewsletter(n: { mailchimp: boolean; brevo: boolean; klaviyo: boolean }): boolean {
-  return n.mailchimp || n.brevo || n.klaviyo;
-}
-
 /**
  * Semnul din `page_content` pus la aplicare: ce tema si cand, pentru pagina „Teme”. Nu e o cheie a editorului, deci
  * nu intra in Istoric; „Pune la loc designul de dinainte” il scoate.

@@ -1,88 +1,108 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { ChevronUp } from "lucide-react";
+import { ArrowUp, ShieldCheck } from "lucide-react";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { MarcajBloc } from "@/components/storefront/MarcajBloc";
 import { FooterCredit, FooterLegal } from "@/components/storefront/sections/_shared/FooterLegal";
-import { coloaneVazute, culoriSubsol, etichetaColoanei, inapoiSusPornit, sablonColoane, textCopyright } from "@/lib/storefront/design/subsol";
+import { coloaneVazute, culoriSubsol, etichetaColoanei, inapoiSusPornit, textCopyright } from "@/lib/storefront/design/subsol";
+import { insigneDeAratat } from "@/lib/storefront/insigne-implicite";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { ColoanaSubsol, type StilColoane } from "./FooterColumns";
-import { FormularNewsletterSubsol, sir } from "./subsol-coloane";
+import { TRUST_ICONS } from "./UspStripIcons";
 
-/** Coloanele, cu titlurile mari si linkurile gri, ca pe modelul temei. */
+/** Fundalul: o noapte scoasa din culoarea principala, deci ramane potrivit si cand magazinul o schimba din „Stil”. */
+const FUNDAL = "color-mix(in srgb, var(--st-primary) 36%, #070B14)";
+/** Banda de jos, cu partea legala: acelasi fundal, cu o treapta mai inchis. Pe culorile alese de el, la fel. */
+const FUNDAL_JOS = "color-mix(in srgb, var(--st-footer-bg) 78%, #000)";
+
+/** Coloanele: titluri cu o linie scurta in culoarea de accent, linkuri deschise care se aprind sub mouse. */
 const STIL: StilColoane = {
-  separator: "border-[var(--st-border)]",
-  marunt: "text-[var(--st-muted)]",
-  inchis: false,
-  titlu: "text-[15px] font-semibold text-[var(--st-text)]",
-  legatura: "flex items-start gap-2 text-[13px] text-[var(--st-muted)] hover:text-[var(--st-primary)] transition-colors",
+  separator: "border-[var(--st-footer-text)]/10",
+  marunt: "text-[var(--st-footer-text)]/65",
+  inchis: true,
+  titlu: "text-[15px] font-semibold tracking-wide text-[var(--st-footer-text)] md:after:block md:after:mt-2.5 md:after:h-0.5 md:after:w-8 md:after:bg-[var(--st-accent)]",
+  legatura: "flex items-start gap-2.5 text-[14px] text-[var(--st-footer-text)]/70 hover:text-[var(--st-footer-text)] transition-colors",
+  placaSigla: true,
 };
 
-/** Banda gri a coloanelor: un gri scos din culorile magazinului, deci ramane potrivit si pe alt fond. */
-const GRI = "color-mix(in srgb, var(--st-text) 4%, var(--st-bg))";
-
 /**
- * Subsolul temei Jupiter, varianta „hipermarket” (etapa 16.2 din `docs/editor-magazin/PLAN.md`), dupa dedeman.ro:
- * bara „Inapoi sus” in culoarea principala, banda cu newsletterul (titlu mare, camp si buton lipite), coloanele pe gri,
- * apoi partea legala si randul de copyright.
+ * Subsolul temei Jupiter, varianta „hipermarket” (refacut la etapa 21 din `docs/editor-magazin/PLAN.md`, cererea lui:
+ * „Fa tot footer ul mult mai premium si zona aia de newsletter scoate o”): fundal inchis cu linia de accent sus,
+ * beneficiile, coloanele cu sigla pe placa alba, apoi partea legala si copyrightul pe o banda mai inchisa.
  *
- * Coloanele sunt aceleasi blocuri ca la celelalte subsoluri (etapa 11): newsletterul, daca exista, urca in banda lui,
- * restul stau pe gri. `FooterLegal` si `FooterCredit` sunt obligatorii, ca in orice varianta.
+ * Beneficiile sunt insignele magazinului (`store_trust_badges`, aceleasi ca „Beneficii pe scurt”), nu texte ale temei:
+ * sunt promisiuni ale LUI, deci le schimba si le poate stinge. Coloanele sunt aceleasi blocuri ca la celelalte subsoluri
+ * (etapa 11); un „Newsletter” pus de om ramane o coloana ca oricare alta. `FooterLegal` si `FooterCredit` sunt
+ * obligatorii, ca in orice varianta.
  */
 export function FooterHipermarket({ sectiune }: { sectiune: SectionInstance }) {
-  const { business, hasStickyBottomBar } = useStoreChrome();
+  const { business, hasStickyBottomBar, pageContent } = useStoreChrome();
   const nume = business.store_name ?? business.business_name;
   const coloane = coloaneVazute(sectiune);
-  const newsletter = coloane.find((c) => c.type === "newsletter") ?? null;
-  const restul = coloane.filter((c) => c !== newsletter);
+  const beneficii = sectiune.settings.beneficii !== false ? insigneDeAratat(pageContent.store_trust_badges) : [];
   const spatiuJos = hasStickyBottomBar ? "pb-24 lg:pb-6" : "pb-6";
+  // Culorile alese (etapa 11) cad peste ale variantei; partea legala trece atunci pe tonul care le citeste.
+  const culori = culoriSubsol(sectiune);
+  const tonLegal = culori ? "deschis" : "inchis";
+  const radacina = { "--st-footer-bg": FUNDAL, "--st-footer-text": "#FFFFFF", ...culori } as CSSProperties;
 
   return (
-    <footer className="bg-[var(--st-surface)] text-[var(--st-text)]" style={culoriSubsol(sectiune) as CSSProperties | undefined}>
+    <footer className="bg-[var(--st-footer-bg)] text-[var(--st-footer-text)]" style={radacina}>
+      <div aria-hidden className="h-1" style={{ backgroundColor: "var(--st-accent)" }} />
+
       {inapoiSusPornit(sectiune) && (
-        // Buton, nu ancora: nu e o destinatie (vezi `FooterCentered`).
-        <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="w-full h-[38px] flex items-center justify-center gap-1.5 text-[15px] font-semibold hover:opacity-95 transition-opacity"
-          style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
-          Inapoi sus
-          <ChevronUp className="h-4 w-4" strokeWidth={2.4} />
-        </button>
-      )}
-
-      {newsletter && (
-        <div className="mx-auto px-4 py-8" style={{ maxWidth: "var(--st-container)" }}>
-          <MarcajBloc idSectiune={sectiune.id} idBlocului={newsletter.id} eticheta={etichetaColoanei(newsletter)}>
-            <div className="max-w-2xl">
-              <p className="text-[20px] leading-snug text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>
-                {sir(newsletter.settings.titlu) || "Aboneaza-te la newsletter si bucura-te de promotii."}
-              </p>
-              {sir(newsletter.settings.text) && <p className="mt-2 text-[14px] text-[var(--st-muted)]">{sir(newsletter.settings.text)}</p>}
-              <div className="mt-2">
-                <FormularNewsletterSubsol coloana={newsletter} idSubsol={sectiune.id} marunt="text-[var(--st-muted)]" inchis={false} lipit />
-              </div>
-            </div>
-          </MarcajBloc>
+        <div className="relative mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
+          {/* Buton, nu ancora: nu e o destinatie (vezi `FooterCentered`). */}
+          <button type="button" aria-label="Inapoi sus" title="Inapoi sus" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="absolute z-10 right-4 -top-[26px] w-12 h-12 rounded-full flex items-center justify-center shadow-[0_6px_18px_rgba(0,0,0,0.35)] transition-transform hover:-translate-y-0.5"
+            style={{ backgroundColor: "var(--st-accent)", color: "var(--st-accent-contrast)" }}>
+            <ArrowUp className="h-5 w-5" strokeWidth={2.4} />
+          </button>
         </div>
       )}
 
-      {restul.length > 0 && (
-        <div style={{ backgroundColor: GRI }}>
-          <div className="mx-auto px-4 py-10 grid gap-8 md:grid-cols-2 lg:grid-cols-[var(--coloane-subsol)]"
-            style={{ maxWidth: "var(--st-container)", "--coloane-subsol": sablonColoane(restul) } as CSSProperties}>
-            {restul.map((c) => (
-              <MarcajBloc key={c.id} idSectiune={sectiune.id} idBlocului={c.id} eticheta={etichetaColoanei(c)}>
-                <ColoanaSubsol coloana={c} idSubsol={sectiune.id} stil={STIL} />
-              </MarcajBloc>
-            ))}
+      {beneficii.length > 0 && (
+        <div className="border-b border-[var(--st-footer-text)]/10">
+          <ul className="mx-auto px-4 py-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4" style={{ maxWidth: "var(--st-container)" }}>
+            {beneficii.map((b, i) => {
+              const Icon = TRUST_ICONS[b.icon] ?? ShieldCheck;
+              return (
+                <li key={i} className="flex items-center gap-3.5 min-w-0">
+                  <span className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "color-mix(in srgb, var(--st-accent) 16%, transparent)", color: "var(--st-accent)" }}>
+                    <Icon className="h-[22px] w-[22px]" strokeWidth={1.7} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-semibold leading-snug">{b.title}</span>
+                    <span className="block mt-0.5 text-[13px] leading-snug text-[var(--st-footer-text)]/65">{b.desc}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {coloane.length > 0 && (
+        // Pistele se fac din ce se deseneaza: cu un sablon scris dupa lista coloanelor, una fara continut („Informatii”
+        // la un magazin fara pagini) isi tinea locul, iar dreapta subsolului ramanea goala.
+        <div className="mx-auto px-4 pt-12 pb-14 grid gap-9 md:grid-cols-2 lg:grid-cols-none lg:grid-flow-col lg:auto-cols-fr lg:gap-12"
+          style={{ maxWidth: "var(--st-container)" }}>
+          {coloane.map((c) => (
+            <MarcajBloc key={c.id} idSectiune={sectiune.id} idBlocului={c.id} eticheta={etichetaColoanei(c)}>
+              <ColoanaSubsol coloana={c} idSubsol={sectiune.id} stil={STIL} />
+            </MarcajBloc>
+          ))}
+        </div>
+      )}
+
+      <div style={{ backgroundColor: FUNDAL_JOS }}>
+        <div className={`mx-auto px-4 ${spatiuJos}`} style={{ maxWidth: "var(--st-container)" }}>
+          <FooterLegal ton={tonLegal} cuPagini={false} />
+          <div className="border-t border-[var(--st-footer-text)]/10">
+            <FooterCredit ton={tonLegal} text={textCopyright(sectiune, nume)} culoareEdinio="var(--st-accent)" />
           </div>
-        </div>
-      )}
-
-      <div className={`mx-auto px-4 ${spatiuJos}`} style={{ maxWidth: "var(--st-container)" }}>
-        <FooterLegal ton="deschis" cuPagini={false} />
-        <div className="border-t border-[var(--st-border)]">
-          <FooterCredit ton="deschis" text={textCopyright(sectiune, nume)} />
         </div>
       </div>
     </footer>

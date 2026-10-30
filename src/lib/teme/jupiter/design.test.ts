@@ -64,7 +64,7 @@ test("⚠ designul trece neatins prin parser: ce aplica tema e ce citeste magazi
   const citit = parseStoreDesign(JSON.parse(JSON.stringify(d)), ctx);
   assert.equal(citit.chrome.header.variant, "hipermarket");
   assert.equal(citit.chrome.footer.variant, "hipermarket");
-  assert.deepEqual(coloaneVazute(citit.chrome.footer).map((c) => c.id), ["newsletter", "raioane", "comenzi", "informatii", "suport"]);
+  assert.deepEqual(coloaneVazute(citit.chrome.footer).map((c) => c.id), ["identitate", "raioane", "comenzi", "informatii", "suport"]);
 });
 
 test("⚠ textele coloanelor subsolului incap in campurile lor (un titlu prea lung se taia la citire: „săptămâna”)", () => {
@@ -96,8 +96,7 @@ test("magazinul randeaza variantele noi, iar subsolul foloseste coloanele subsol
   assert.match(r, /hipermarket: FooterHipermarket,/);
   const f = cod("src/components/storefront/sections/chrome/FooterHipermarket.tsx");
   assert.match(f, /import \{ ColoanaSubsol, type StilColoane \} from "\.\/FooterColumns";/);
-  assert.match(f, /<FooterLegal ton="deschis" cuPagini=\{false\} \/>/, "partea legala, obligatorie");
-  assert.match(f, /<FormularNewsletterSubsol coloana=\{newsletter\} idSubsol=\{sectiune\.id\} marunt="text-\[var\(--st-muted\)\]" inchis=\{false\} lipit \/>/);
+  assert.match(f, /<ColoanaSubsol coloana=\{c\} idSubsol=\{sectiune\.id\} stil=\{STIL\} \/>/);
 });
 
 test("antetul: bara de navigare lipita sus, meniul de categorii pe doua niveluri, cautarea cu rezultatele pe loc", () => {

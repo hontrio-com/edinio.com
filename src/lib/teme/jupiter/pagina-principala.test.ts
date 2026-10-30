@@ -58,7 +58,7 @@ test("cu datele demo, cardurile si placile au continutul lor, cu linkuri spre ca
   assert.equal(placileDinSetari(fara.home.find((s) => s.kind === "placi_promo")!.settings).length, 0);
 });
 
-test("⚠ sectiunile magazinului pe care tema nu le foloseste raman, dupa ale ei, cu starea lor", () => {
+test("⚠ sectiunile magazinului pe care tema nu le foloseste raman in lista, dupa ale ei", () => {
   const cuDespre: DesignContext = { ...ctx, pageContent: { ...ctx.pageContent, show_about: true }, tagline: "x" };
   const d = designJupiter(cuDespre, null);
   const kinds = d.home.map((s) => s.kind);

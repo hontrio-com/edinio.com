@@ -76,9 +76,8 @@ export interface IdentitateTema {
   fontText: FontKey;
 }
 
-/** Ce stie aplicarea despre magazin (etapa 17). Fara furnizor de newsletter, coloana „Newsletter” a temei nu intra. */
+/** Ce stie aplicarea despre magazin (etapa 17). */
 export interface OptiuniTema {
-  cuNewsletter?: boolean;
   /**
    * Radacina catalogului magazinului (prefixul lui din Setări > Permalink-uri, implicit `/magazin`), de unde pleaca
    * linkurile temei spre catalog (etapa 18.3). Lipsa = `/magazin`, ca la magazinul demo.

@@ -61,16 +61,22 @@ export const STIL_JUPITER: StoreStyle = {
   density: "normal",
 };
 
+/**
+ * Reglajele temei pe pagina de produs: pe pagina ei lata (100rem), galeria patrata ajungea la 1086 px, mai inalta decat
+ * fereastra si de 1,5 ori cat fisierul, deci neclara (etapa 21). Doar tema le pune: implicitul variantei ramane patrat.
+ */
+const SETARI_PAGINA_PRODUS = { galleryHeight: "compact" };
+
 /** Radacina catalogului in magazinul demo (pagina Magazin); la aplicare, a magazinului (`OptiuniTema.radacinaCatalog`). */
 const RADACINA_CATALOG = "/magazin";
 
 /** Mesajul barii de sus din datele demo: intra doar cand omul n-are unul al lui, iar „Șterge datele demo” il scoate. */
 export const MESAJ_BARA_DEMO = "Livrare in toata tara";
 
-/** Coloanele subsolului: newsletterul (urca in banda lui), raioanele, comenzile, informatiile, suportul. */
+/** Coloanele subsolului: identitatea (sigla, sloganul, retelele), raioanele, comenzile, informatiile, suportul. */
 export function coloaneSubsolJupiter(radacina: string = RADACINA_CATALOG): BlockInstance[] {
   return [
-    { id: "newsletter", type: "newsletter", enabled: true, settings: { titlu: "Aboneaza-te la newsletter pentru promotii saptamanale.", buton: "Aboneaza-te" } },
+    { id: "identitate", type: "identitate", enabled: true, settings: { arataLogo: true, arataSloganul: true, arataRetelele: true } },
     { id: "raioane", type: "linkuri", enabled: true, settings: { titlu: "Raioane", sursa: "categorii", toateProdusele: false, cate: 6 } },
     {
       id: "comenzi", type: "linkuri", enabled: true,
@@ -78,7 +84,8 @@ export function coloaneSubsolJupiter(radacina: string = RADACINA_CATALOG): Block
         titlu: "Comenzi online", sursa: "alese",
         linkuri: [
           { eticheta: "Toate produsele", adresa: radacina },
-          { eticheta: "Cosul meu", adresa: "/cos" },
+          // Nu „Cosul meu”: designul are cosul in sertar, deci `/cos` trimite la prima pagina.
+          { eticheta: "Produse la reducere", adresa: `${radacina}?sale=1` },
           { eticheta: "Retur produs", adresa: "/retur" },
         ],
       },
@@ -89,15 +96,14 @@ export function coloaneSubsolJupiter(radacina: string = RADACINA_CATALOG): Block
 }
 
 /**
- * Coloanele subsolului dupa tema: ale lui, cand si le-a ales (etapa 11); altfel ale temei, cu newsletterul in banda lui.
+ * Coloanele subsolului dupa tema: ale lui, cand si le-a ales (etapa 11), cu tot cu un „Newsletter” pus de el; altfel ale temei.
  * ⚠ „Alese” nu inseamna „scrise”: parserul scrie si coloanele implicite, deci se compara cu implicitele variantei.
  */
 function coloaneDupaTema(subsol: SectionInstance, optiuni: OptiuniTema): BlockInstance[] {
   const implicite = schemaBlocurilor("footer", subsol.variant)?.implicite?.(subsol.settings) ?? [];
   const aleseDeEl = !!subsol.blocks && jsonCanonic(subsol.blocks) !== jsonCanonic(implicite);
   if (aleseDeEl && subsol.blocks) return subsol.blocks;
-  // Fara furnizor de newsletter, coloana temei ramane pe dinafara, cum cere si panoul (etapa 17).
-  return coloaneSubsolJupiter(optiuni.radacinaCatalog).filter((c) => optiuni.cuNewsletter !== false || c.type !== "newsletter");
+  return coloaneSubsolJupiter(optiuni.radacinaCatalog);
 }
 
 /**
@@ -115,8 +121,9 @@ function peVarianta(s: SectionInstance, variant: string, setari: Record<string, 
 
 /**
  * Pagina principala a temei, in ordinea modelului: bannerul cu carduri, placile de categorii, primul rand de produse,
- * placile de recomandare, celelalte randuri. Restul sectiunilor magazinului raman DUPA ale temei, cu starea lor: un
- * „Despre noi” aprins nu dispare din vedere doar pentru ca s-a aplicat o tema.
+ * placile de recomandare, celelalte randuri. Restul sectiunilor magazinului raman DUPA ale temei, cu starea lor, in afara
+ * de „Despre noi”, care nu face parte din pagina temei (cererea lui, etapa 21): ramane in lista, stins, cu textul lui
+ * neatins, si se aprinde din ochi.
  */
 function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null, radacina: string): SectionInstance[] {
   const din = (kind: SectionInstance["kind"], id: string, variant: string) =>
@@ -144,7 +151,9 @@ function paginaPrincipala(baza: StoreDesign, date: SetDateDemo | null, radacina:
     ? (placileDinSetari(placiLui.settings).length > 0 ? placiLui : { ...placiLui, settings: { ...placiLui.settings, placi: placiDemo } })
     : section("recomandari", "placi_promo", "rotunde", true, { ...(variantMeta("placi_promo", "rotunde")?.defaults ?? {}), placi: placiDemo });
   const temei = new Set<string>(["hero", "category_nav", "product_row"]);
-  const restul = baza.home.filter((s) => !temei.has(s.kind) && s !== placiLui);
+  const restul = baza.home
+    .filter((s) => !temei.has(s.kind) && s !== placiLui)
+    .map((s) => (s.kind === "about" ? { ...s, enabled: false, enabledOverride: false } : s));
   // Placile de recomandare dupa primul rand care se vede, ca „Recomandări” de pe model (dupa „Oferte de sezon”).
   const dupa = randuri.findIndex((r) => r.enabled) + 1;
   return [banner, categorii, ...randuri.slice(0, dupa), recomandari, ...randuri.slice(dupa), ...restul];
@@ -171,13 +180,17 @@ export function designJupiter(
    * magazinului raman: parserul le potriveste pe schema noua, iar „Conținutul liber” de sub produs exista in amandoua.
    */
   const paginaProdus = baza.product.page.variant === "detailed"
-    ? baza.product.page
+    ? { ...baza.product.page, settings: { ...baza.product.page.settings, ...SETARI_PAGINA_PRODUS } }
     : {
       ...baza.product.page,
       variant: "detailed",
       variantOverride: "detailed",
-      settings: { ...(variantMeta("product_page", "detailed")?.defaults ?? {}), ...baza.product.page.settings },
+      settings: { ...(variantMeta("product_page", "detailed")?.defaults ?? {}), ...baza.product.page.settings, ...SETARI_PAGINA_PRODUS },
     };
+  // Sabloanele lui (etapa 4b) raman ale lui, dar pe pagina lata au aceeasi galerie.
+  const sabloane = baza.product.sabloane?.map((s) => (s.page.variant === "detailed"
+    ? { ...s, page: { ...s.page, settings: { ...s.page.settings, ...SETARI_PAGINA_PRODUS } } }
+    : s));
   return parseStoreDesign({
     ...baza,
     style: STIL_JUPITER,
@@ -185,7 +198,7 @@ export function designJupiter(
     chrome: { ...baza.chrome, header: antet, footer: subsol },
     home: paginaPrincipala(baza, date, radacina),
     shop: { ...baza.shop, page: magazin },
-    product: { ...baza.product, page: paginaProdus },
+    product: { ...baza.product, page: paginaProdus, ...(sabloane ? { sabloane } : {}) },
     commerce: { ...baza.commerce, productCard: card },
   }, ctx);
 }

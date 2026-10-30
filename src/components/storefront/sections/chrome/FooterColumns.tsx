@@ -96,6 +96,8 @@ export interface StilColoane {
   titlu?: string;
   /** Clasa linkurilor; lipsa = cea a tonului. */
   legatura?: string;
+  /** Sigla pe o placa alba: pe fundalul inchis al temei Jupiter, o sigla inchisa la culoare nu s-ar citi. */
+  placaSigla?: boolean;
 }
 
 /**
@@ -123,7 +125,7 @@ export function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInsta
       return (
         <div className="min-w-0">
           {s.arataLogo !== false && (
-            <div className="flex items-center gap-3 min-w-0">
+            <div className={`flex items-center gap-3 min-w-0 ${stil.placaSigla && business.logo_url ? "w-fit max-w-full rounded-md bg-white px-4 py-3" : ""}`}>
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cdnImage(business.logo_url, 320)} alt={nume}

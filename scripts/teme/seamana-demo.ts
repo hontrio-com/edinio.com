@@ -13,7 +13,7 @@
   Scoate INTAI setul de dinainte (etapa 20, `golesteMagazinulDemo`: produsele demo, categoriile, bannerele, randurile),
   apoi il pune pe cel de acum. Deci se poate rula din nou oricand se schimba setul.
 
-  Scrie si semnul magazinului demo (`magazin_demo`, din `setariDemo`): fara comenzi (etapa 19.2); si sigla lui (`siglaDemo`).
+  Scrie si semnul magazinului demo (`magazin_demo`, din `setariDemo`): fara comenzi (etapa 19.2); si sigla (`siglaDemo`) si sloganul lui (`sloganDemo`).
 */
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -37,7 +37,7 @@ async function main() {
 
   const admin = createClient<Database>(url, cheie, { auth: { persistSession: false } });
   const { data: magazin, error } = await admin
-    .from("businesses").select("id, features, cover_url, tagline").eq("slug", tema.slugDemo).single();
+    .from("businesses").select("id, features, cover_url").eq("slug", tema.slugDemo).single();
   if (error || !magazin) throw new Error(`Magazinul demo ${tema.slugDemo} lipseste: ${error?.message ?? ""}`);
 
   // Setul de dinainte iese intreg; altfel importul (care doar adauga) l-ar fi lasat langa cel nou.
@@ -53,14 +53,14 @@ async function main() {
   // identitatea temei (fundalul, fonturile; culoarea in `businesses`), ca la aplicare: acolo o regleaza fila „Stil”.
   const pageContent = pageContentCuIdentitatea({ ...((setari?.page_content ?? {}) as Record<string, unknown>), ...tema.setariDemo }, tema.identitate);
   const { error: eCuloare } = await admin.from("businesses")
-    .update({ ...magazinCuIdentitatea(tema.identitate), logo_url: tema.siglaDemo }).eq("id", magazin.id);
+    .update({ ...magazinCuIdentitatea(tema.identitate), logo_url: tema.siglaDemo, tagline: tema.sloganDemo }).eq("id", magazin.id);
   if (eCuloare) throw new Error(`culoare: ${eCuloare.message}`);
   const ctx = contextDesign({
     primaryColor: tema.identitate.culoare,
     pageContent,
     features: magazin.features,
     coverUrl: magazin.cover_url,
-    tagline: magazin.tagline,
+    tagline: tema.sloganDemo,
   });
   const design = tema.design(ctx, tema.date);
   const { error: eDesign } = await admin.from("store_settings")

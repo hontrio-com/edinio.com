@@ -7,8 +7,7 @@ import { esteUuid } from "@/lib/supabase/ids";
 import { logError } from "@/lib/error-logger";
 import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
 import { ciornaDinVersiune, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
-import { integrariPentruPagini } from "@/lib/pages/integrari-pagini";
-import { areFurnizorNewsletter, CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, type TemaAplicata } from "@/lib/teme/aplicare";
+import { CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, type TemaAplicata } from "@/lib/teme/aplicare";
 import { CHEIE_DATE_DEMO, importaDateleDemo, urmaDateDemoDin, type UrmaDateDemo } from "@/lib/teme/import-demo";
 import { citesteLoculPentruDemo, motivulLimitei } from "@/lib/teme/limita-demo";
 import { SURSA_DEMO } from "@/lib/teme/produse-demo";
@@ -568,11 +567,7 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
   // 3. Tema, prin „Publică”.
   const continut = continutIdentitate(tema.identitate);
   const ctxTema = contextCuCiorna(ctxMagazin, continut);
-  const integrari = await integrariPentruPagini(owned.businessId);
-  const design = tema.design(ctxTema, cuDate ? tema.date : null, parseStoreDesign(row?.storefront_design ?? {}, ctxTema), {
-    cuNewsletter: areFurnizorNewsletter(integrari.newsletter),
-    radacinaCatalog,
-  });
+  const design = tema.design(ctxTema, cuDate ? tema.date : null, parseStoreDesign(row?.storefront_design ?? {}, ctxTema), { radacinaCatalog });
   const publicat = await publishDesign(owned.businessId, ciornaCuContinut(design, continut));
   if ("error" in publicat) {
     // Datele demo au intrat deja: omul trebuie sa stie, iar pagina „Teme” ii arata „Șterge datele demo” (urma exista).

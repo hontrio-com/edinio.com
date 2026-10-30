@@ -48,7 +48,8 @@ reparatia eMAG `dba33c22`, adusa in ramura prin `28b1cd9c`. Tot fara push si far
 demo-ul pe `jupiter.edinio.com` fara comenzi (19), setul demo din materialul lui (20, `cbcb1e77`). Raportul etapei 20
 trimis 29.10, seara. Intrebarea despre cele 6 raioane fara produse a primit raspuns pe 30.10: raman, cu „0 produse” pe
 placile de pe prima pagina (20.5, facut si probat). `build:ci` a trecut si pe `cbcb1e77` (30.10, dupa caderea VS Code; la
-etapa 20 nu rulase, serverul de dezvoltare era pornit).
+etapa 20 nu rulase, serverul de dezvoltare era pornit). **Etapa 21 (patru mentiuni dupa demo: golul de langa cautare, „Despre
+noi”, pozele mari de pe pagina de produs, subsolul premium fara newsletter) FACUTA si PROBATA**, 30.10.
 Productia demo-ului: REGISTRU „E”, doar dupa push, cu acordul lui.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
@@ -1962,6 +1963,42 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
   - ⚠ De spus la livrare: bannerele intra si in magazinele comerciantilor (raspunsul lui), deci fara numele sau oferte
     anume ale magazinului demo pe ele; pozele si logo-ul ale lui sau libere de drepturi (demo-ul e public). Produsele lui
     sunt marci reale (Philips, Vileda, Erbauer), cu pozele lor, si pleaca la import in magazinele comerciantilor.
+
+- **Etapa 21: mentiunile lui dupa demo-ul Jupiter** (30.10, cuvant cu cuvant: „E foarte ok pana acum dar am cateva mentiuni:
+  1. Acolo langa search e mult prea mult spatiu gol, mai adauga ceva elemente sau restructureaza cumva 2. Scoate sectiunea
+  aia cu Despre noi 3. Pe pagina produsului pozele apar extrem de mari 4. Fa tot footer ul mult mai premium si zona aia de
+  newsletter scoate o”). Totul in varianta temei sau in reglaje noi cu implicitul de azi: niciun magazin real nu se schimba.
+  - [x] 21.1 Antetul (`HeaderHipermarket`): cautarea avea `max-w-[56rem]`, iar langa ea ramaneau 390 px goi la 1920 (doar
+    „Cos”, fara cont si fara WhatsApp pe demo). Acum cautarea ia tot randul (1049 px la 1920, 467 la 1024), iar telefonul a
+    urcat din bara de navigare langa ea, pe doua randuri, ca si cosul („Cosul meu” / „0 produse”). Reglajul a devenit „Arată
+    telefonul lângă căutare”. Bara de navigare ar fi ramas goala: demo-ul primeste meniul lui (`MENIU_DEMO_JUPITER`, in
+    `setariDemo`: „Toate produsele” si cele 6 raioane cu produse); la aplicare, meniul comerciantului ramane al lui.
+  - [x] 21.2 „Despre noi” stins de tema (`enabled` si `enabledOverride` pe `false`): ramane in lista, cu textul neatins, si
+    se aprinde din ochi. ⚠ `enabledOverride` e VALOAREA aleasa, nu un „atins”: cu `true`, parserul o reaprindea; a prins-o
+    proba. Decizia e pe tema, nu doar pe demo, deci si la un comerciant care il avea aprins (scrisa in ghid); inlocuieste
+    regula de la 16.3 („nu dispare din vedere”).
+  - [x] 21.3 Pagina de produs: pe pagina lata a temei (100rem) galeria patrata ajungea la 1086 x 1086, peste fereastra de 855
+    si de 1,5 ori cat fisierul, deci neclara. La 72rem, unde sta orice magazin, are ~690 px, deci defectul e al temei: reglaj
+    nou pe „Detaliat”, `galleryHeight` („Înălțimea galeriei”: „Pătrată” implicit, „Cât ecranul”), pus de tema si pe sabloanele
+    lui „Detaliat”. Compact: inaltimea `clamp(26rem, calc(100vh - 18rem), 40rem)` doar pe calculator, panou ALB (mai lat decat
+    poza, pe gri se vedea patratul fotografiei) si coloana de cumparare de 33rem de la `xl` (titlul pe doua randuri, nu trei).
+    Masurat la 1920 x 855: panou 976 x 567, se termina la 840, deci produsul se vede intreg fara derulare.
+  - [x] 21.4 Subsolul (`FooterHipermarket`) rescris: fundal inchis scos din culoarea principala (`color-mix`, deci urmeaza
+    „Stil”), linia de accent sus, „Înapoi sus” buton rotund in colt, banda de beneficii, sigla pe placa alba (pe fundal inchis
+    sigla Jupiter nu s-ar citi), titluri cu linie scurta de accent, banda legala mai inchisa. Beneficiile sunt insignele
+    MAGAZINULUI (`store_trust_badges`, ca „Beneficii pe scurt”), nu texte ale temei: sunt promisiuni ale lui, le schimba din
+    panoul lor si le stinge cu „Arată beneficiile deasupra coloanelor”. Coloanele temei: identitatea (sigla, sloganul,
+    retelele), raioanele, comenzile, informatiile, suportul. Newsletterul a iesit din tema si din varianta (`cuNewsletter`,
+    `areFurnizorNewsletter`, proprietatea `lipit` si citirea integrarilor din `aplicaTema` sterse); un „Newsletter” pus de
+    om ramane o coloana ca oricare alta. Demo-ul are slogan (`Tema.sloganDemo`). Eticheta: „Hipermarket, închis, cu beneficii”.
+    GASITE pe drum: „Cosul meu” din subsol ducea la prima pagina (designul are cosul in sertar, `/cos` -> 307), inlocuit cu
+    „Produse la reducere” (`?sale=1`, din radacina magazinului); o coloana fara continut isi tinea pista in grila si lasa
+    dreapta goala (acum pistele se fac din ce se deseneaza: `grid-flow-col auto-cols-fr`); „Edinio” era albastru pe albastru
+    (`FooterCredit` primeste `culoareEdinio`, doar aici).
+  - [x] 21.5 Probe: `mentiuni-21.test.ts` (13), 25 de mutanti pe tema, antet, pagina de produs, subsol si demo, toti prinsi.
+    Demo-ul reumplut pe baza demo. In Chrome pe `jupiter.localhost:3000`: fara „Despre noi”, fara campuri in subsol, fara
+    depasire la 390 si 1024. Lasat asa: coloana „Raioane” din subsol arata pe paginile fara catalog primele 6 radacini, si
+    cele goale (arborele din chrome, la toate subsolurile), iar pe prima pagina doar cele cu produse.
 
 ## Deciziile proprietarului
 

@@ -203,7 +203,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     (`--st-container`), cu 72rem implicit, cat era `max-w-6xl`. Cardul clasic ia aceleasi date prin `useDateCardProdus`
     (aceleasi texte, preturi, „de la”).
   - Galeriile din editor au variantele noi: antetul „Hipermarket, cu meniu de categorii” (9 design-uri), subsolul
-    „Hipermarket, cu newsletter și coloane pe gri” (4), bannerul „Bannere cu două carduri alăturate” (4). „Plăci de
+    „Hipermarket, închis, cu beneficii” (4), bannerul „Bannere cu două carduri alăturate” (4). „Plăci de
     recomandare” apare la „Adaugă secțiune”. Randul de produse are „Pe bandă gri, cu titlu mare”, iar Pagina Magazin cu
     filtre in stanga are „Arată subcategoriile pe plăci, sub titlu”.
   - In panou, „Cardurile din dreapta” si „Plăcile” se completeaza (controlul de lista, nou in 16.5: „Adaugă card” /
@@ -252,6 +252,14 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - Placile „Categorii” (varianta „placi”, 30.10): pe `jupiter.edinio.com` toate cele 12 raioane, cele 6 fara produse cu
     „0 produse”; meniul „Categorii produse” fara numere. Cu „Arată câte produse are fiecare categorie” stins raman doar
     cele cu produse. Regula e a variantei: orice magazin care aplica Jupiter o are. Nu e inca la niciun magazin real.
+- **Etapa 21 (mentiunile dupa demo-ul Jupiter, 30.10), de verificat dupa push:**
+  - Pe `jupiter.edinio.com`: cautarea pe tot randul, cu telefonul si „Cosul meu” langa ea; fara „Despre noi”; pagina de
+    produs cu fotografia intreaga in fereastra; subsolul inchis, cu beneficiile, fara newsletter.
+  - ⚠⚠ Nimic nu se schimba la magazinele de azi: galeria „Cât ecranul” e reglaj nou cu implicitul „Pătrată”, doar tema il
+    pune, iar subsolul si antetul sunt variantele temei, pe care nu le are inca nimeni. De comparat pagina de produs a unui
+    magazin real pe „Detaliat” (9 in productie, 29.10), inainte si dupa: identica.
+  - O tema aplicata stinge „Despre noi” (textul ramane, se aprinde din ochi), iar un „Newsletter” pus de comerciant in subsol
+    ramane o coloana obisnuita. Beneficiile din subsol sunt insignele lui („Beneficii pe scurt”).
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
@@ -268,6 +276,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   in `cum-readuci-o-versiune-publicata`. Fara capturi noi.
   Etapa 18: bifa „Importă și datele demo” si limita planului in `cum-aplici-o-tema`, datele demo in
   `cum-pui-la-loc-designul-de-dinainte-de-tema`, nou `cum-stergi-datele-demo-ale-temei` (431 de ghiduri). Fara capturi noi.
+  Etapa 20.5-21: `cum-alegi-cum-arata-categoriile` („0 produse”), `cum-reglezi-headerul-magazinului` (randul cu cautarea, reglajul
+  telefonului), subsolul „Hipermarket, închis, cu beneficii”, „Înălțimea galeriei” la Detaliat, „Despre noi” in `cum-aplici-o-tema`. Fara capturi noi.
 - **De facut (vazut la 18.1): listele din panoul canalelor** (eMAG, OLX, Trendyol, About You, Pepita) inca arata
   produsele demo printre cele de ales; trimiterea le sare (ca pe un inactiv), deci nimic nu pleaca, dar omul le poate
   bifa degeaba. De scos din liste cand e cazul (Meta si Google le scot deja).

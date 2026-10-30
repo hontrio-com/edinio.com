@@ -5,8 +5,8 @@ import { Phone, RotateCcw, ShieldCheck, Truck } from "lucide-react";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { insigneDeAratat } from "@/lib/storefront/insigne-implicite";
 
-/** Iconitele disponibile pentru insignele de incredere, alese din editor. */
-const TRUST_ICONS: Record<string, ElementType> = {
+/** Iconitele disponibile pentru insignele de incredere, alese din editor. Le foloseste si subsolul temei Jupiter. */
+export const TRUST_ICONS: Record<string, ElementType> = {
   truck: Truck,
   shield: ShieldCheck,
   "rotate-ccw": RotateCcw,

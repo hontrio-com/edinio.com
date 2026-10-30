@@ -603,8 +603,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         label: "Hipermarket, cu meniu de categorii",
         tags: ["indraznet"],
         layout: "full",
-        // Tema Jupiter (etapa 16.2): bara in culoarea principala, cautarea lata cu buton de accent, contul si
-        // cosul cu eticheta, apoi butonul „Categorii produse”, cu meniul pe doua niveluri.
+        // Tema Jupiter (etapa 16.2, randul de sus refacut la 21): bara in culoarea principala, cautarea pe tot randul,
+        // telefonul, contul si cosul, apoi butonul „Categorii produse”, cu meniul pe doua niveluri.
         previewHeight: 172,
         needsCategories: true,
         replacesCatalogSearch: true,
@@ -619,7 +619,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             maxLength: 90,
             showIf: { key: "showTopBar", equals: true },
           },
-          { key: "showHotline", type: "toggle", label: "Arată telefonul în bara de navigare" },
+          { key: "showHotline", type: "toggle", label: "Arată telefonul lângă căutare" },
         ],
         defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
       },
@@ -707,13 +707,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { showTagline: false, inapoiSus: true },
       },
       hipermarket: {
-        label: "Hipermarket, cu newsletter și coloane pe gri",
+        label: "Hipermarket, închis, cu beneficii",
         tags: ["indraznet"],
         layout: "full",
-        // Tema Jupiter (etapa 16.2): bara „Înapoi sus”, banda cu newsletterul, coloanele pe gri.
+        // Tema Jupiter (refacut la etapa 21): fundal inchis scos din culoarea principala, beneficiile, coloanele, partea legala.
         previewHeight: 600,
-        fields: campuriSubsol(),
-        defaults: { showTagline: false, inapoiSus: true },
+        fields: [
+          ...campuriSubsol(),
+          { key: "beneficii", type: "toggle", label: "Arată beneficiile deasupra coloanelor", help: "Aceleași carduri ca la secțiunea „Beneficii pe scurt”. Le schimbi din panoul ei." },
+        ],
+        defaults: { showTagline: false, inapoiSus: true, beneficii: true },
       },
     },
   },
@@ -1011,6 +1014,14 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
               { value: "bottom", label: "Sub imagine" },
             ],
           },
+          {
+            key: "galleryHeight", type: "select", label: "Înălțimea galeriei",
+            help: "„Cât ecranul” ține fotografia întreagă în fereastră pe paginile late.",
+            options: [
+              { value: "square", label: "Pătrată" },
+              { value: "compact", label: "Cât ecranul" },
+            ],
+          },
           { key: "showDetails", type: "toggle", label: "Arata caseta „Detalii produs”", retras: "ochiul blocului „Caseta Detalii produs”" },
           { key: "showSpecsSummary", type: "toggle", label: "Arata un rezumat al specificatiilor", retras: "ochiul blocului „Rezumatul specificațiilor”" },
           // Fara `showIf` pe rezumat: comutatorul lui a iesit din editor, iar
@@ -1025,6 +1036,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: {
           ...PDP_DEFAULTS_COMUNE,
           galleryThumbs: "left",
+          galleryHeight: "square",
           showDetails: true,
           showSpecsSummary: true,
           specsCount: 6,

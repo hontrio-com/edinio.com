@@ -249,6 +249,9 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     poza care incep cu „/” (ale datelor demo); pozele din depozit sunt deja intregi. De comparat `image` din JSON-LD pe
     2-3 produse ale unui magazin real, inainte si dupa: identic.
   - Bannerul temei Jupiter (varianta „carduri”) are 2,14:1 si pe telefon (era 2:1). Nu e inca la niciun magazin real.
+  - Placile „Categorii” (varianta „placi”, 30.10): pe `jupiter.edinio.com` toate cele 12 raioane, cele 6 fara produse cu
+    „0 produse”; meniul „Categorii produse” fara numere. Cu „Arată câte produse are fiecare categorie” stins raman doar
+    cele cu produse. Regula e a variantei: orice magazin care aplica Jupiter o are. Nu e inca la niciun magazin real.
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,

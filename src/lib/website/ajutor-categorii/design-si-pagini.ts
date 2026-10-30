@@ -674,8 +674,8 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           detalii: [
             { titlu: "Butoane rotunde", text: "Categoriile principale pe un rând, fiecare într-un cerc cu imaginea ei, după butonul „Toate”. Designul nu are reglaje." },
             { titlu: "Plăci cu imagine și număr de produse", text: "Plăci gri, patru pe rând pe calculator și două pe telefon, fiecare cu imaginea categoriei, numele și numărul de produse din ea și din subcategoriile ei. „Titlul” are maximum 60 de caractere; lăsat gol, scrie „Categorii”." },
-            { titlu: "Când nu apare numărul", text: "Cu comutatorul stins, la o categorie fără produse și la magazinele cu 400 de produse sau mai multe numărul nu se arată." },
-            { titlu: "Ce categorii apar", text: "Categoriile principale, cu imaginile lor, din Produse > Categorii. Fiecare duce la produsele ei. Fără nicio categorie, secțiunea nu apare." },
+            { titlu: "Când nu apare numărul", text: "Cu comutatorul stins și la magazinele cu 400 de produse sau mai multe numărul nu se arată." },
+            { titlu: "Ce categorii apar", text: "Categoriile principale, cu imaginile lor, din Produse > Categorii. Fiecare duce la produsele ei. Când numărul se arată, apar și categoriile fără produse, cu „0 produse”. Când nu se arată, categoriile fără produse lipsesc, afară de cazul în care ai pornit „Arată și categoriile goale”. Fără nicio categorie, secțiunea nu apare." },
           ],
           nota: "Designul ales se vede în previzualizare pe loc și ajunge la clienți la „Publică”.",
           termeni: ["categorii", "placi", "butoane rotunde", "numar produse", "pagina principala", "homepage"],

@@ -46,8 +46,9 @@ reparatia eMAG `dba33c22`, adusa in ramura prin `28b1cd9c`. Tot fara push si far
 **Temele (etapele 16-20, 28-29.10) FACUTE si PROBATE**, cu acordul lui la fiecare (sectiunea „Temele: prima tema,
 „Jupiter””): aspectul Jupiter (16), pagina „Teme” cu aplicarea prin Istoric (17), datele demo cu limita planului (18),
 demo-ul pe `jupiter.edinio.com` fara comenzi (19), setul demo din materialul lui (20, `cbcb1e77`). Raportul etapei 20
-trimis 29.10, seara; **ramane intrebarea** despre cele 6 raioane fara produse din meniul „Categorii produse” (20.4).
-`build:ci` trecut pe `cbcb1e77` (30.10, dupa caderea VS Code; la etapa 20 nu rulase, serverul de dezvoltare era pornit).
+trimis 29.10, seara. Intrebarea despre cele 6 raioane fara produse a primit raspuns pe 30.10: raman, cu „0 produse” pe
+placile de pe prima pagina (20.5, facut si probat). `build:ci` a trecut si pe `cbcb1e77` (30.10, dupa caderea VS Code; la
+etapa 20 nu rulase, serverul de dezvoltare era pornit).
 Productia demo-ului: REGISTRU „E”, doar dupa push, cu acordul lui.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
@@ -1937,6 +1938,27 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     cele 26 de poze 200 `image/webp` cu `immutable`, 735 KB pe prima pagina; pe 390 px (cadru, fereastra era acoperita)
     bannerul 2,14, fara depasire. ⚠ Meniul „Categorii produse” arata toate cele 12 raioane (arborele intreg, ca „Toate
     categoriile” din „market”), iar cele 6 fara produse duc la „Niciun produs disponibil”: de intrebat ce vrea.
+  - [x] 20.5 (30.10, raspunsul lui la intrebarea de la 20.4: „Lasa le asa si treci 0 produse la categoriile alea”, apoi,
+    la „unde?”, „Pe plăci”): placile „Categorii” de pe prima pagina arata toate raioanele, cele goale cu „0 produse”;
+    meniul „Categorii produse” nu se schimba. Regula sta in `placiDeCategorii` (`categorii-numarate.ts`): un raion gol
+    apare DOAR cand numarul se poate scrie langa el; cu „Arată câte produse are fiecare categorie” stins si pe catalogul
+    de pe server (400+ produse) raman cele cu produse, ca o placa goala fara numar ar fi un drum infundat nedeclarat.
+    ⚠ Regula e a variantei „placi”, nu doar a demo-ului: orice magazin cu Jupiter o are, iar comerciantul o opreste cu
+    comutatorul (demo-ul trebuie sa arate ce primeste el). Niciun magazin real nu are inca varianta.
+    GASIT pe drum: numarul venea din lista INTREAGA de produse; cat timp placa aparea doar la raioanele cu produse vizibile
+    nu se vedea, dar cu toate radacinile un raion cu produse ascunse (fara imagine, fara stoc) ar fi scris „3 produse” si
+    ar fi dus la o pagina goala. Acum `visibleProducts`, si la placile subcategoriilor (acolo o subcategorie goala scrie si
+    ea „0 produse”). Lista cu raioanele goale e `rootCategoryItemsToate`, taiata de `categoriiVizibile`, deci categoriile
+    ascunse din Produse > Categorii nu apar. Ghidul „Cum alegi cum arată categoriile” spunea ca la o categorie fara produse
+    numarul nu se arata: rescris, iar comutatorul are acum un rand de ajutor. Miniatura din galerie „Schimbă designul”
+    are categorii de exemplu din care doar 3 din 6 au produse de exemplu: acolo un 0 ar fi aratat designul ca pe un magazin
+    gol, deci ramane fara numar, ca pana acum (doar acolo lipseste `rootCategoryItemsToate`, proba fixeaza asta).
+    15 mutanti (5 pe regula, 10 pe apelanti si pe sursa listei), toti prinsi. Proba in Chrome pe `jupiter.localhost:3000`: 12 placi in ordinea lui, numerele identice
+    cu baza (3, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1, 2), meniul tot cu 12 randuri, fara numere; pe 390 px doua coloane, fara
+    depasire; consola fara erori de hidratare. Doar prin probe, nu pe ecran: comutatorul stins si produsele ascunse.
+    Lasat asa: pagina raionului scrie „0 din 10 produse” (numaratorul comun al paginii de catalog, fata de tot magazinul,
+    la toate magazinele: „3 din 10 produse” pe un raion cu produse). Porti: suita 11.411 / 0 (2 sarite), tsc, `lint:prag`
+    neschimbat (51 de erori vechi, niciuna in fisierele atinse), `build:ci`.
   - ⚠ De spus la livrare: bannerele intra si in magazinele comerciantilor (raspunsul lui), deci fara numele sau oferte
     anume ale magazinului demo pe ele; pozele si logo-ul ale lui sau libere de drepturi (demo-ul e public). Produsele lui
     sunt marci reale (Philips, Vileda, Erbauer), cu pozele lor, si pleaca la import in magazinele comerciantilor.

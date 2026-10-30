@@ -37,6 +37,30 @@ export function produsePeRadacina(
 }
 
 /**
+ * Ce placi de categorii apar pe prima pagina si ce numar poarta fiecare.
+ *
+ * Cand numarul se poate scrie, apar TOATE radacinile, si cele fara produse, cu „0 produse”: vizitatorul vede ca raionul
+ * e gol inainte sa apese (cererea lui, etapa 20.5: „treci 0 produse la categoriile alea”). Fara numar (`numarate` null:
+ * oprit din panou, sau catalog incarcat pe server, unde pagina n-are toate produsele) raman doar cele cu produse, ca o
+ * placa goala fara numar ar fi un drum infundat, nedeclarat.
+ *
+ * `toate` lipseste doar in miniatura din galerie: o singura lista, cu categorii de exemplu din care doar unele au produse
+ * de exemplu. Acolo un 0 n-ar spune nimic despre magazin, doar ar arata designul ca pe un magazin gol, deci ramane fara numar.
+ */
+export function placiDeCategorii<T extends { id: string | null }>(
+  cuProduse: readonly T[],
+  toate: readonly T[] | undefined,
+  numarate: ReadonlyMap<string, number> | null,
+): { categorie: T; numar: number | null }[] {
+  if (!numarate) return cuProduse.map((categorie) => ({ categorie, numar: null }));
+  const faraProduse = toate ? 0 : null;
+  return (toate ?? cuProduse).map((categorie) => ({
+    categorie,
+    numar: categorie.id ? numarate.get(categorie.id) ?? faraProduse : null,
+  }));
+}
+
+/**
  * Id-ul fiecarei categorii -> produsele din subarborele ei (ea si toti descendentii). Pentru placile subcategoriilor
  * de pe pagina Magazin (etapa 16.4), unde categoria aleasa poate fi oricare, nu doar o radacina.
  */

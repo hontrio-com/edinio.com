@@ -824,7 +824,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 400,
         fields: [
           { key: "titlu", type: "text", label: "Titlul", placeholder: "Categorii", maxLength: 60 },
-          { key: "arataNumarul", type: "toggle", label: "Arată câte produse are fiecare categorie" },
+          { key: "arataNumarul", type: "toggle", label: "Arată câte produse are fiecare categorie", help: "Pornit, apar și categoriile fără produse, cu „0 produse”." },
         ],
         defaults: { titlu: "Categorii", arataNumarul: true },
       },

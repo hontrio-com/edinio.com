@@ -5,7 +5,7 @@ import { variantMeta, sectionMeta, SECTION_REGISTRY, type Field } from "@/lib/st
 import { addableKinds } from "@/lib/storefront/design/edit";
 import { cardurileHero } from "@/lib/storefront/design/hero-carduri";
 import { placileDinSetari } from "@/lib/storefront/design/placi-promo";
-import { produsePeRadacina } from "@/lib/storefront/categorii-numarate";
+import { placiDeCategorii, produsePeRadacina } from "@/lib/storefront/categorii-numarate";
 import { sectiuniAcasa } from "@/lib/storefront/design/commerce";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import { DATE_DEMO_JUPITER } from "./date-demo";
@@ -92,6 +92,52 @@ test("numarul de pe placile de categorii: produsele urca la raionul lor, numele 
   assert.equal(n.get("s"), 3, "trei niveluri, si fara deosebire de majuscule");
   assert.equal(n.get("g"), 1);
   assert.equal(n.size, 3, "bucla din arbore nu atarna la nesfarsit si nu se pierde in alte radacini");
+});
+
+test("placile de categorii: cu numarul la vedere apar si raioanele goale, cu 0; fara numar, doar cele cu produse", () => {
+  const scule = { id: "s", name: "Scule" };
+  const mobila = { id: "m", name: "Mobilă" };
+  const faraId = { id: null, name: "Fara id" };
+  const numarate = new Map([["s", 3]]);
+
+  assert.deepEqual(placiDeCategorii([scule], [mobila, scule], numarate), [
+    { categorie: mobila, numar: 0 },
+    { categorie: scule, numar: 3 },
+  ], "toate, in ordinea lui din Produse > Categorii, nu cele cu produse intai");
+  assert.deepEqual(placiDeCategorii([scule], [mobila, scule], null), [{ categorie: scule, numar: null }],
+    "fara numar, o placa goala ar fi un drum infundat nedeclarat");
+  assert.deepEqual(placiDeCategorii([scule, mobila], undefined, numarate), [
+    { categorie: scule, numar: 3 },
+    { categorie: mobila, numar: null },
+  ], "miniatura din galerie: o categorie de exemplu fara produse de exemplu ramane fara numar, nu arata un magazin gol");
+  assert.deepEqual(placiDeCategorii([faraId], [faraId], numarate), [{ categorie: faraId, numar: null }], "fara id nu se poate numara: fara numar, nu un 0 inventat");
+
+  // Pe magazinul adevarat lista intreaga vine mereu, iar miniatura e singura fara ea: altfel regula de mai sus ar ascunde 0.
+  assert.match(cod("src/components/ministore/MiniStoreRenderer.tsx"), /rootCategoryItemsToate: catTree\.toateRadacinile,/);
+  assert.doesNotMatch(cod("src/components/storefront/SectionPreviewFrame.tsx"), /rootCategoryItemsToate/);
+  assert.deepEqual(placiDeCategorii([], [], numarate), []);
+});
+
+test("placile de categorii: regula e chemata cu produsele pe care le gaseste vizitatorul, iar categoriile ascunse raman afara", () => {
+  const c = cod("src/components/storefront/sections/catalog/CategoryNavPlaci.tsx");
+  assert.match(c, /placiDeCategorii\(rootCategoryItems, rootCategoryItemsToate,\s*arataNumarul && !catalogPeServer \? produsePeRadacina\(categories, visibleProducts\) : null\)/);
+  assert.match(c, /const arataNumarul = settings\.arataNumarul !== false;/);
+  assert.match(c, /\{placi\.map\(\(\{ categorie: c, numar \}\) => \(/);
+  assert.match(c, /if \(placi\.length === 0\) return null;/);
+  // 0 e un numar de scris, nu lipsa numarului.
+  assert.match(c, /\{numar !== null && \(\s*<span [^>]*>\{pluralRo\(numar\)\}<\/span>/);
+  assert.doesNotMatch(c, /numar > 0/);
+  assert.doesNotMatch(c, /\bproducts\b/, "numarate din lista intreaga, un raion cu produse ascunse ar scrie „3 produse” si ar duce la o pagina goala");
+
+  const s = cod("src/components/storefront/sections/shop/_shared/PlaciSubcategorii.tsx");
+  assert.match(s, /produsePeCategorie\(categories, visibleProducts\)/);
+  assert.doesNotMatch(s, /\bproducts\b/);
+
+  // Lista cu raioanele goale vine tot din `categoriiVizibile`: cele ascunse din Produse > Categorii nu apar in niciun caz.
+  const m = cod("src/components/ministore/MiniStoreRenderer.tsx");
+  assert.match(m, /const list = categoriiVizibile\(categories \?\? \[\]\);/);
+  assert.match(m, /const toateRadacinile: Item\[\] = list\s*\.filter\(\(c\) => !c\.parent_id\)/);
+  assert.match(m, /rootCategoryItemsToate: catTree\.toateRadacinile,/);
 });
 
 test("variantele noi sunt in registry; placile de recomandare se pot adauga ca orice sectiune", () => {

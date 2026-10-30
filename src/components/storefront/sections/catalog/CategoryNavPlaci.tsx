@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import Image from "next/image";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import { hrefCategorie } from "@/lib/storefront/category-href";
-import { produsePeRadacina } from "@/lib/storefront/categorii-numarate";
+import { placiDeCategorii, produsePeRadacina } from "@/lib/storefront/categorii-numarate";
 import { pluralRo } from "@/lib/utils/format";
 
 /** Fondul placilor: aceeasi tenta ca banda randurilor de produse si cardurile bannerului. */
@@ -29,7 +29,7 @@ export function PlacaCategorie({ href, nume, imagine, numar }: { href: string; n
           {nume}
           <span aria-hidden className="ml-1 font-semibold" style={{ color: "var(--st-accent)" }}>›</span>
         </span>
-        {numar !== null && numar > 0 && (
+        {numar !== null && (
           <span className="block mt-1 text-[12px] text-[var(--st-muted)]">{pluralRo(numar)}</span>
         )}
       </span>
@@ -41,31 +41,31 @@ export function PlacaCategorie({ href, nume, imagine, numar }: { href: string; n
  * Categoriile pe placi, varianta „placi” a navigarii pe categorii (tema Jupiter, etapa 16.3), dupa dedeman.ro: patru
  * pe rand, fiecare cu imaginea in stanga, numele cu sageata in culoarea de accent si numarul de produse dedesubt.
  *
- * Numarul se socoteste din catalogul aflat in pagina; la un catalog incarcat pe server (magazinele foarte mari)
- * pagina nu are toate produsele, deci placile apar fara numar, nu cu unul gresit.
+ * Numarul se socoteste din produsele pe care vizitatorul le gaseste chiar (`visibleProducts`): numarate din lista
+ * intreaga, un raion cu produse ascunse ar fi scris „3 produse” si ar fi dus la o pagina goala. La un catalog incarcat
+ * pe server (magazinele foarte mari) pagina nu are toate produsele, deci placile apar fara numar, nu cu unul gresit.
+ * Ce placi apar: `placiDeCategorii`.
  */
 export function CategoryNavPlaci({ settings }: { settings: Record<string, unknown> }) {
-  const { hasCategories, rootCategoryItems, categories, products, catalogPeServer, categoriiRoot, categoriiPePagina } = useStorefront();
-  const numarate = useMemo(
-    () => (catalogPeServer ? null : produsePeRadacina(categories, products)),
-    [catalogPeServer, categories, products],
-  );
-  if (!hasCategories || rootCategoryItems.length === 0) return null;
-  const titlu = typeof settings.titlu === "string" && settings.titlu.trim() ? settings.titlu.trim() : "Categorii";
+  const { rootCategoryItems, rootCategoryItemsToate, categories, visibleProducts, catalogPeServer, categoriiRoot, categoriiPePagina } = useStorefront();
   const arataNumarul = settings.arataNumarul !== false;
+  const placi = useMemo(
+    () => placiDeCategorii(rootCategoryItems, rootCategoryItemsToate,
+      arataNumarul && !catalogPeServer ? produsePeRadacina(categories, visibleProducts) : null),
+    [rootCategoryItems, rootCategoryItemsToate, arataNumarul, catalogPeServer, categories, visibleProducts],
+  );
+  if (placi.length === 0) return null;
+  const titlu = typeof settings.titlu === "string" && settings.titlu.trim() ? settings.titlu.trim() : "Categorii";
 
   return (
     <section className="mb-10">
       <h2 className="text-[24px] leading-tight text-[var(--st-text)] mb-4" style={{ fontFamily: "var(--st-font-heading)" }}>{titlu}</h2>
       <ul className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
-        {rootCategoryItems.map((c) => {
-          const numar = arataNumarul && numarate && c.id ? numarate.get(c.id) ?? 0 : null;
-          return (
-            <li key={c.key}>
-              <PlacaCategorie href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina === true)} nume={c.name} imagine={c.image} numar={numar} />
-            </li>
-          );
-        })}
+        {placi.map(({ categorie: c, numar }) => (
+          <li key={c.key}>
+            <PlacaCategorie href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina === true)} nume={c.name} imagine={c.image} numar={numar} />
+          </li>
+        ))}
       </ul>
     </section>
   );

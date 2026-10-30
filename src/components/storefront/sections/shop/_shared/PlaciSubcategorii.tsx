@@ -14,7 +14,7 @@ const cheie = (n: string) => n.trim().toLocaleLowerCase("ro");
  * nu arata nimic.
  */
 export function PlaciSubcategorii() {
-  const { categories, categoryFilter, products, catalogPeServer, categoriiRoot, categoriiPePagina } = useStorefront();
+  const { categories, categoryFilter, visibleProducts, catalogPeServer, categoriiRoot, categoriiPePagina } = useStorefront();
   const aleasa = useMemo(
     () => categories.find((c) => cheie(c.name) === cheie(categoryFilter)) ?? null,
     [categories, categoryFilter],
@@ -24,8 +24,8 @@ export function PlaciSubcategorii() {
     [categories, aleasa],
   );
   const numarate = useMemo(
-    () => (catalogPeServer || copii.length === 0 ? null : produsePeCategorie(categories, products)),
-    [catalogPeServer, copii.length, categories, products],
+    () => (catalogPeServer || copii.length === 0 ? null : produsePeCategorie(categories, visibleProducts)),
+    [catalogPeServer, copii.length, categories, visibleProducts],
   );
   if (copii.length === 0) return null;
 

@@ -6,7 +6,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import {
   esteDeconectatTrendyol, eTrecatoare, loadTrendyolContext, processQueueItem, pollOpenBatches,
-  reconcileRejections, reconcileStatuses, reconcileInventory, stergeCePoateFiSters, pause,
+  reconcileRejections, reconcileStatuses, reconcileInventory, relegaListarileExistente, stergeCePoateFiSters, pause,
 } from "@/lib/trendyol/sync";
 import { comenziDeFacturat, urcaFacturaLaTrendyol } from "@/lib/trendyol/facturi";
 import { publicaProduseNoiTrendyolMany } from "@/lib/trendyol/queue";
@@ -635,8 +635,25 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[trendyol-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} ingested=${ingested} corrected=${corrected}`);
-  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ingested, corrected, retururi });
+  // ── 6) Relegarea listarilor pe eroare care exista deja la ei (la 5 minute) ──────
+  /*
+   * ⚠ Adoptarea de dupa lot ruleaza o singura data; daca intrebarea pica atunci, listarea ramane pe
+   * eroare pentru totdeauna (434 la VetDepo, 03.11). Aici se reintreaba, pe ferestre de cate 25.
+   * Vezi `relegaListarileExistente`. `pas = 5` din acelasi motiv ca la deriva.
+   */
+  let legate = 0;
+  if (new Date().getMinutes() % 5 === 2) {
+    for (const businessId of alegeInRotatie(sellerIds, INVENTORY_BIZ, 5)) {
+      const ctx = await ctxFor(businessId);
+      if (!ctx) continue;
+      const r = await relegaListarileExistente(admin, ctx, { max: 25 });
+      legate += r.legate;
+      await pause(PACE_MS);
+    }
+  }
+
+  console.log(`[trendyol-sync] processed=${processed} failed=${failed} polled=${polled} reconciled=${reconciled} ingested=${ingested} corrected=${corrected} legate=${legate}`);
+  return NextResponse.json({ ok: true, processed, failed, polled, reconciled, ingested, corrected, retururi, legate });
 }
 
 /**

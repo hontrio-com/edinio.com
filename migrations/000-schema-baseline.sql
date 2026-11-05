@@ -2581,13 +2581,28 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.catalog_bucati_cod(p_cuvinte text[])
+ RETURNS text[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(distinct x), '{}'::text[])
+    from (select array_to_string(p_cuvinte[i:j], '') as x
+            from generate_subscripts(coalesce(p_cuvinte, '{}'::text[]), 1) i
+           cross join lateral generate_series(i, least(cardinality(p_cuvinte), i + 7)) j) z
+   where length(x) >= 3;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb)
  RETURNS TABLE(product_id uuid)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp', 'extensions'
 AS $function$
-  with cerute as (
+  with bucati as (select public.catalog_bucati_cod(p_cuvinte) as b),
+  cerute as (
     select w, public.semnatura_cuvant(w) as semn,
            case when length(w) >= 7 then 2 when length(w) >= 4 then 1 else 0 end as buget
       from unnest(coalesce(p_cuvinte, '{}'::text[])) w
@@ -2624,9 +2639,12 @@ AS $function$
     having count(*) = (select count(*) from cerute)
     union
     select c.product_id
-      from public.catalog_produs c
+      from public.catalog_produs c, bucati
      where c.business_id = p_business
-       and public.catalog_potriveste_cod(c.coduri, array_to_string(coalesce(p_cuvinte, '{}'::text[]), ''))
+       and cardinality(bucati.b) > 0
+       and (c.coduri && bucati.b
+            or exists (select 1 from unnest(c.coduri) k, unnest(bucati.b) p
+                        where p ~ '[0-9]' and k like p || '%'))
   ),
   filtru as (
     select coalesce((p_filtre->>'faraImagini')::boolean, false)     as fara_img,
@@ -2678,6 +2696,7 @@ declare
   v_vocabular int;
   v_nr        int;
   v_out       jsonb;
+  v_bucati    text[] := public.catalog_bucati_cod(p_cuvinte);
 begin
   if not exists (
     select 1 from public.businesses b
@@ -2695,7 +2714,10 @@ begin
      and not exists (
        select 1 from public.catalog_produs c
         where c.business_id = p_business
-          and public.catalog_potriveste_cod(c.coduri, array_to_string(coalesce(p_cuvinte, '{}'::text[]), ''))
+          and cardinality(v_bucati) > 0
+          and (c.coduri && v_bucati
+               or exists (select 1 from unnest(c.coduri) k, unnest(v_bucati) p
+                           where p ~ '[0-9]' and k like p || '%'))
      ) then
     return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', v_vocabular,
                               'prea_larg', false, 'cuvant_scurt', true);
@@ -2856,20 +2878,6 @@ begin
 
   return coalesce(v_out, jsonb_build_object('randuri', '[]'::jsonb, 'total', 0));
 end;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.catalog_potriveste_cod(p_coduri text[], p_cod text)
- RETURNS boolean
- LANGUAGE sql
- IMMUTABLE
- SET search_path TO ''
-AS $function$
-  select coalesce(length(p_cod), 0) >= 3
-     and exists (
-       select 1 from unnest(coalesce(p_coduri, '{}'::text[])) k
-        where k = p_cod
-           or (p_cod ~ '[0-9]' and k like p_cod || '%'));
 $function$
 ;
 
@@ -17866,6 +17874,7 @@ grant execute on function public.carduri_secundare(p_business uuid, p_fel text, 
 grant execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
 grant execute on function public.catalog_aplica_proiectii(p_randuri jsonb) to service_role;
 grant execute on function public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean) to service_role;
+grant execute on function public.catalog_bucati_cod(p_cuvinte text[]) to service_role;
 grant execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) to service_role;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to anon;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to authenticated;
@@ -17874,7 +17883,6 @@ grant execute on function public.catalog_fara_stoc(p_id uuid) to service_role;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to anon;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to authenticated;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to service_role;
-grant execute on function public.catalog_potriveste_cod(p_coduri text[], p_cod text) to service_role;
 grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) to anon;
 grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) to authenticated;
 grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) to service_role;
@@ -18274,11 +18282,11 @@ revoke execute on function public.canale_vanzare(p_business uuid) from public;
 revoke execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
 revoke execute on function public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean) from public;
+revoke execute on function public.catalog_bucati_cod(p_cuvinte text[]) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
 revoke execute on function public.catalog_fara_stoc(p_id uuid) from public;
 revoke execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) from public;
-revoke execute on function public.catalog_potriveste_cod(p_coduri text[], p_cod text) from public;
 revoke execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) from public;
 revoke execute on function public.catalog_reface_cuvinte(p_business uuid) from public;
 revoke execute on function public.catalog_scrie_rezumat(p_randuri jsonb) from public;

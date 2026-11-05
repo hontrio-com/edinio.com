@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { buildProductSearchIndex, compactCod, queryProductSearchIndex, tokenize } from "@/lib/storefront/product-search";
+import {
+  bucatiDeCod, buildProductSearchIndex, COD_CUVINTE_MAX, compactCod, queryProductSearchIndex, tokenize,
+} from "@/lib/storefront/product-search";
 import { coduriDeCautare, documentDeCautare } from "./doc-cautare";
 import { dinProiectie, type RandProiectie } from "./din-proiectie";
 import { proiecteazaRand } from "./proiector";
@@ -91,14 +93,36 @@ test("codurile trec prin proiector, randul de proiectie si documentul de cautare
   assert.equal("coduri" in dinProiectie(gol), false, "fara coduri, produsul ramane cu forma de dinainte");
 });
 
-test("SQL: aceeasi regula (intreg mereu, inceput doar cu cifra, minim trei) si un singur loc", () => {
+test("codul scris langa alte cuvinte: celelalte cuvinte trebuie sa potriveasca si ele", () => {
+  assert.deepEqual(cauta("vesta C494"), ["vesta"]);
+  assert.deepEqual(cauta("C494 vesta"), ["vesta"]);
+  assert.deepEqual(cauta("vesta half c494-orr"), ["vesta"], "codul unei variante, cu doua cuvinte inainte");
+  assert.deepEqual(cauta("manusi C494"), [], "codul exista, dar „manusi” nu e vesta");
+  assert.deepEqual(cauta("vesta S476"), ["alta"], "fiecare produs cu codul lui");
+});
+
+test("bucatile de cod: alaturate, lipite, minim trei caractere, cel mult opt cuvinte", () => {
+  assert.deepEqual(bucatiDeCod(["vesta", "c", "494"]).map((b) => b.cod),
+    ["vesta", "vestac", "vestac494", "c494", "494"]);
+  const lung = bucatiDeCod(Array.from({ length: 12 }, () => "ab"));
+  assert.ok(lung.every((b) => b.j - b.i < COD_CUVINTE_MAX));
+});
+
+test("SQL: aceeasi regula (intreg mereu, inceput doar cu cifra, minim trei) si aceleasi bucati", () => {
   const sql = readFileSync(
-    path.resolve(process.cwd(), "migrations/2027-01-30-cautarea-dupa-codul-produsului.sql"), "utf8");
-  const fn = sql.slice(sql.indexOf("function public.catalog_potriveste_cod"), sql.indexOf("revoke execute"));
-  assert.match(fn, />= 3/);
-  assert.match(fn, /k = p_cod/);
-  assert.match(fn, /p_cod ~ '\[0-9\]' and k like p_cod \|\| '%'/);
-  // Codul cautat se compune la fel in ambele locuri care il folosesc.
-  const compuneri = sql.match(/catalog_potriveste_cod\(c\.coduri, array_to_string\(coalesce\(p_cuvinte, '\{\}'::text\[\]\), ''\)\)/g) ?? [];
-  assert.equal(compuneri.length, 2);
+    path.resolve(process.cwd(), "migrations/2027-01-31-codul-langa-alte-cuvinte.sql"), "utf8");
+
+  // Bucatile: aceleasi cuvinte alaturate, acelasi plafon (j - i <= 7, adica opt cuvinte), minim trei.
+  const fn = sql.slice(sql.indexOf("function public.catalog_bucati_cod"), sql.indexOf("revoke execute"));
+  assert.equal(COD_CUVINTE_MAX, 8);
+  assert.match(fn, /generate_series\(i, least\(cardinality\(p_cuvinte\), i \+ 7\)\)/);
+  assert.match(fn, /array_to_string\(p_cuvinte\[i:j\], ''\)/);
+  assert.match(fn, /length\(x\) >= 3/);
+
+  // Potrivirea, in ambele locuri care aleg dupa cod: intreg mereu (&&), inceput doar cu cifra.
+  const intreg = sql.match(/c\.coduri && (bucati\.b|v_bucati)/g) ?? [];
+  const inceput = sql.match(/where p ~ '\[0-9\]' and k like p \|\| '%'/g) ?? [];
+  assert.equal(intreg.length, 2);
+  assert.equal(inceput.length, 2);
+  assert.doesNotMatch(sql, /catalog_potriveste_cod\(c\.coduri/, "regula veche, pe toata interogarea lipita");
 });

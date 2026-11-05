@@ -38,8 +38,8 @@ type Doc = { id: string; name: Field; rest: Field[]; codes: string[] };
  * Forma in care se compara codurile: fara diacritice, litere mici, DOAR litere si cifre.
  * Asa „C494-ORR S/M”, „c494orrsm” si „C494 ORR SM” sunt acelasi cod.
  *
- * ⚠ E exact `tokenize(x).join("")`, iar SQL-ul (`catalog_potriveste_cod`) compune codul
- * cautat tot asa, din cuvintele trimise. O a doua definitie ar fi gasit codul pe un palier
+ * ⚠ E exact `tokenize(x).join("")`, iar SQL-ul (`catalog_bucati_cod`) compune bucatile de
+ * cod tot asa, din cuvintele trimise. O a doua definitie ar fi gasit codul pe un palier
  * si nu pe celalalt.
  */
 export function compactCod(input: string): string {
@@ -68,6 +68,32 @@ function scorCod(qCod: string, codes: string[]): number {
   }
   return best;
 }
+
+/** Cate cuvinte alaturate pot forma un cod: „C494-ORR S/M” are cinci. Acelasi plafon in SQL. */
+export const COD_CUVINTE_MAX = 8;
+
+/**
+ * Bucatile din interogare care pot fi un cod: orice sir de cuvinte ALATURATE (cel mult
+ * `COD_CUVINTE_MAX`), lipite la loc, de cel putin `COD_MIN` caractere. `i`..`j` sunt
+ * pozitiile cuvintelor acoperite, inclusiv.
+ *
+ * ⚠ De ce nu doar toata interogarea lipita: „vesta C494” ar fi devenit „vestac494”, care nu
+ * e codul nimanui (eSAFE, 05.11.2026). Cu bucati, „c494” e codul, iar „vesta” trebuie sa
+ * potriveasca pe cuvinte, ca orice alt cuvant. SQL-ul (`catalog_potriveste_cuvintele`)
+ * genereaza aceleasi bucati din aceleasi cuvinte.
+ */
+export function bucatiDeCod(tokens: string[]): { i: number; j: number; cod: string }[] {
+  const out: { i: number; j: number; cod: string }[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    let cod = "";
+    for (let j = i; j < tokens.length && j - i < COD_CUVINTE_MAX; j++) {
+      cod += tokens[j];
+      if (cod.length >= COD_MIN) out.push({ i, j, cod });
+    }
+  }
+  return out;
+}
+
 export type ProductSearchIndex = { docs: Doc[] };
 
 /** Below this per-word score a product does not count as a match at all. */
@@ -223,22 +249,18 @@ export function queryProductSearchIndex(
   // A trailing space means the last word was committed, not mid-typing.
   const lastCommitted = /\s$/.test(rawQuery);
   const phrase = qTokens.join(" ");
-  const qCod = qTokens.join("");
+  const bucati = bucatiDeCod(qTokens);
   const out = new Map<string, number>();
 
   for (const doc of index.docs) {
-    /*
-     * Codul se judeca INAINTEA cuvintelor si separat de ele: „C494” cautat pe cuvinte
-     * inseamna „c” si „494”, care nu potrivesc numele produsului. Fara ramura asta,
-     * cautarea dupa codul de produs nu gasea nimic (eSAFE, 05.11.2026).
-     */
-    const cod = scorCod(qCod, doc.codes);
-    let total = 0;
-    let allInName = true;
-    let matchedAll = true;
-    for (let i = 0; i < qTokens.length; i++) {
-      const q = qTokens[i];
-      const isTyping = i === qTokens.length - 1 && !lastCommitted;
+    // Scorul fiecarui cuvant, calculat o singura data si doar cand e nevoie de el: il
+    // cer si potrivirea pe cuvinte, si verificarea cuvintelor de langa un cod.
+    const scoruri: ({ raw: number; nameRaw: number; weighted: number } | undefined)[] = [];
+    const scorCuvant = (k: number) => {
+      let s = scoruri[k];
+      if (s) return s;
+      const q = qTokens[k];
+      const isTyping = k === qTokens.length - 1 && !lastCommitted;
       const nameRaw = bestFieldScore(q, doc.name, isTyping);
       let raw = nameRaw;
       let weighted = nameRaw * doc.name.weight;
@@ -248,6 +270,35 @@ export function queryProductSearchIndex(
         const w = r * f.weight;
         if (w > weighted) weighted = w;
       }
+      s = { raw, nameRaw, weighted };
+      scoruri[k] = s;
+      return s;
+    };
+
+    /*
+     * Codul se judeca separat de cuvinte: „C494” cautat pe cuvinte inseamna „c” si „494”,
+     * care nu potrivesc numele produsului (eSAFE, 05.11.2026). O bucata de cod conteaza
+     * doar daca TOATE celelalte cuvinte potrivesc produsul, ca la cautarea pe cuvinte.
+     */
+    let cod = 0;
+    if (doc.codes.length > 0) {
+      for (const b of bucati) {
+        const c = scorCod(b.cod, doc.codes);
+        if (c <= cod) continue;
+        let restulPotriveste = true;
+        for (let k = 0; k < qTokens.length; k++) {
+          if (k >= b.i && k <= b.j) continue;
+          if (scorCuvant(k).raw < MATCH_MIN) { restulPotriveste = false; break; }
+        }
+        if (restulPotriveste) cod = c;
+      }
+    }
+
+    let total = 0;
+    let allInName = true;
+    let matchedAll = true;
+    for (let i = 0; i < qTokens.length; i++) {
+      const { raw, nameRaw, weighted } = scorCuvant(i);
       if (raw < MATCH_MIN) {
         matchedAll = false;
         break;

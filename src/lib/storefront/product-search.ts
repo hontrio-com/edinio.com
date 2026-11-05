@@ -22,10 +22,52 @@ export type SearchableProduct = {
   description?: string | null;
   /** Variant option values (e.g. "Roșu", "XL") so queries can hit them. */
   optionValues?: string[];
+  /**
+   * Codurile produsului (SKU-ul lui si al variantelor), deja COMPACTE: vezi `compactCod`.
+   *
+   * ⚠ Nu trec prin `tokenize`, deliberat: acolo „C494” devine „c” + „494”, iar un cuvant
+   * de o litera nu potriveste nimic util. Un cod se cauta lipit, intreg sau de la inceput.
+   */
+  codes?: string[];
 };
 
 type Field = { weight: number; text: string; tokens: string[] };
-type Doc = { id: string; name: Field; rest: Field[] };
+type Doc = { id: string; name: Field; rest: Field[]; codes: string[] };
+
+/**
+ * Forma in care se compara codurile: fara diacritice, litere mici, DOAR litere si cifre.
+ * Asa „C494-ORR S/M”, „c494orrsm” si „C494 ORR SM” sunt acelasi cod.
+ *
+ * ⚠ E exact `tokenize(x).join("")`, iar SQL-ul (`catalog_potriveste_cod`) compune codul
+ * cautat tot asa, din cuvintele trimise. O a doua definitie ar fi gasit codul pe un palier
+ * si nu pe celalalt.
+ */
+export function compactCod(input: string): string {
+  return normalizeSearchText(input).replace(/[^a-z0-9]/g, "");
+}
+
+/** Sub atatea caractere un cod cautat nu potriveste nimic: „c4” ar prinde jumatate de catalog. */
+export const COD_MIN = 3;
+
+/**
+ * Scorul unui cod, PESTE orice potrivire pe cuvinte (cea mai buna e ~2,15), ca produsul
+ * cautat dupa cod sa iasa primul. Codul intreg bate inceputul de cod.
+ *
+ * Inceputul de cod se accepta doar cand cautarea are o CIFRA: „vesta” nu e un cod, si ar
+ * fi prins orice SKU care incepe asa. Aceeasi regula sta in SQL.
+ */
+function scorCod(qCod: string, codes: string[]): number {
+  if (qCod.length < COD_MIN || codes.length === 0) return 0;
+  if (codes.includes(qCod)) return 4;
+  if (!/\d/.test(qCod)) return 0;
+  let best = 0;
+  for (const c of codes) {
+    if (c.length > qCod.length && c.startsWith(qCod)) {
+      best = Math.max(best, 3 + 0.5 * (qCod.length / c.length));
+    }
+  }
+  return best;
+}
 export type ProductSearchIndex = { docs: Doc[] };
 
 /** Below this per-word score a product does not count as a match at all. */
@@ -162,7 +204,7 @@ export function buildProductSearchIndex(products: SearchableProduct[]): ProductS
       if (p.category) rest.push(makeField(p.category, 0.85));
       if (p.optionValues && p.optionValues.length > 0) rest.push(makeField(p.optionValues.join(" "), 0.7));
       if (p.description) rest.push(makeField(p.description, 0.45));
-      return { id: p.id, name: makeField(p.name, 1), rest };
+      return { id: p.id, name: makeField(p.name, 1), rest, codes: p.codes ?? [] };
     }),
   };
 }
@@ -181,9 +223,16 @@ export function queryProductSearchIndex(
   // A trailing space means the last word was committed, not mid-typing.
   const lastCommitted = /\s$/.test(rawQuery);
   const phrase = qTokens.join(" ");
+  const qCod = qTokens.join("");
   const out = new Map<string, number>();
 
   for (const doc of index.docs) {
+    /*
+     * Codul se judeca INAINTEA cuvintelor si separat de ele: „C494” cautat pe cuvinte
+     * inseamna „c” si „494”, care nu potrivesc numele produsului. Fara ramura asta,
+     * cautarea dupa codul de produs nu gasea nimic (eSAFE, 05.11.2026).
+     */
+    const cod = scorCod(qCod, doc.codes);
     let total = 0;
     let allInName = true;
     let matchedAll = true;
@@ -206,7 +255,10 @@ export function queryProductSearchIndex(
       if (nameRaw < MATCH_MIN) allInName = false;
       total += weighted;
     }
-    if (!matchedAll) continue;
+    if (!matchedAll) {
+      if (cod > 0) out.set(doc.id, cod);
+      continue;
+    }
 
     // Normalize by word count so short and long queries score comparably.
     let score = total / qTokens.length;
@@ -215,7 +267,7 @@ export function queryProductSearchIndex(
       if (doc.name.text === phrase || doc.name.text.startsWith(phrase)) score += 0.3;
     }
     if (allInName) score += 0.25;
-    out.set(doc.id, score);
+    out.set(doc.id, Math.max(score, cod));
   }
   return out;
 }

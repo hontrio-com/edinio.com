@@ -71,4 +71,10 @@ export type StorefrontProduct = Pick<
    * numarul de produse care il poarta.
    */
   f?: number[];
+  /**
+   * Codurile produsului pentru cautare: SKU-ul lui si al variantelor active, compacte
+   * (`compactCod`). Vin din `catalog_produs.coduri`; lipsesc pe produsele citite din
+   * `products`, unde nu se cauta.
+   */
+  coduri?: string[];
 };

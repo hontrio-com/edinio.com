@@ -2533,11 +2533,14 @@ begin
     optiuni          = case when jsonb_typeof(r->'optiuni') = 'null' then null else r->'optiuni' end,
     descriere_scurta = coalesce(r->>'descriere_scurta', ''),
     cauta_norm       = coalesce(r->>'cauta_norm', ''),
-    -- `text[]` dintr-un array jsonb de siruri. `coalesce` pe array gol, nu pe
-    -- null: coloana e `not null`.
     fatete           = coalesce(
                          (select array_agg(x #>> '{}') from jsonb_array_elements(r->'fatete') x),
                          '{}'::text[]),
+    coduri           = case when jsonb_typeof(r->'coduri') = 'array'
+                            then coalesce(
+                                   (select array_agg(x #>> '{}') from jsonb_array_elements(r->'coduri') x),
+                                   '{}'::text[])
+                            else cp.coduri end,
     proiectat_la     = (r->>'proiectat_la')::timestamptz
   from jsonb_array_elements(p_randuri) r
   where cp.product_id = (r->>'product_id')::uuid;
@@ -2589,6 +2592,7 @@ AS $function$
            case when length(w) >= 7 then 2 when length(w) >= 4 then 1 else 0 end as buget
       from unnest(coalesce(p_cuvinte, '{}'::text[])) w
      where length(w) >= 1
+       and not exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) z where length(z) < 3)
   ),
   potrivite as (
     select distinct c.w as cerut, v.cuvant
@@ -2618,6 +2622,11 @@ AS $function$
       from pe_cerut g
      group by g.product_id
     having count(*) = (select count(*) from cerute)
+    union
+    select c.product_id
+      from public.catalog_produs c
+     where c.business_id = p_business
+       and public.catalog_potriveste_cod(c.coduri, array_to_string(coalesce(p_cuvinte, '{}'::text[]), ''))
   ),
   filtru as (
     select coalesce((p_filtre->>'faraImagini')::boolean, false)     as fara_img,
@@ -2682,7 +2691,12 @@ begin
     return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', 0, 'prea_larg', false, 'cuvant_scurt', false);
   end if;
 
-  if exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) w where length(w) < 3) then
+  if exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) w where length(w) < 3)
+     and not exists (
+       select 1 from public.catalog_produs c
+        where c.business_id = p_business
+          and public.catalog_potriveste_cod(c.coduri, array_to_string(coalesce(p_cuvinte, '{}'::text[]), ''))
+     ) then
     return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', v_vocabular,
                               'prea_larg', false, 'cuvant_scurt', true);
   end if;
@@ -2842,6 +2856,20 @@ begin
 
   return coalesce(v_out, jsonb_build_object('randuri', '[]'::jsonb, 'total', 0));
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.catalog_potriveste_cod(p_coduri text[], p_cod text)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select coalesce(length(p_cod), 0) >= 3
+     and exists (
+       select 1 from unnest(coalesce(p_coduri, '{}'::text[])) k
+        where k = p_cod
+           or (p_cod ~ '[0-9]' and k like p_cod || '%'));
 $function$
 ;
 
@@ -11168,8 +11196,6 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
-    -- ⚠ Un produs inactiv pana acum n-avea rand in catalog: il primeste chiar mai jos,
-    -- GOL, deci trebuie proiectat oricat de putin s-ar fi schimbat in rest.
     v_doar_stoc :=
       coalesce(old.is_active, false)
       and new.name             is not distinct from old.name
@@ -11179,7 +11205,8 @@ begin
       and new.price        is not distinct from old.price
       and new.page_sections is not distinct from old.page_sections
       and new.images       is not distinct from old.images
-      and new.slug         is not distinct from old.slug;
+      and new.slug         is not distinct from old.slug
+      and new.sku          is not distinct from old.sku;
   end if;
 
   insert into public.catalog_produs as cp (
@@ -12234,7 +12261,8 @@ create table if not exists public.catalog_produs (
   descriere_scurta text default ''::text not null,
   cauta_norm text default ''::text not null,
   fatete text[] default '{}'::text[] not null,
-  proiectat_la timestamp with time zone);
+  proiectat_la timestamp with time zone,
+  coduri text[] default '{}'::text[] not null);
 
 create table if not exists public.catalog_rezumat (
   business_id uuid not null,
@@ -14804,7 +14832,7 @@ CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW
 CREATE TRIGGER pepita_listari_stampileaza_clipa BEFORE UPDATE ON public.pepita_listari FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION pepita_stampileaza_listarea();
 CREATE TRIGGER aboutyou_marcheaza_modificarea AFTER UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity ON public.products FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_modificarea();
 CREATE TRIGGER easysales_marcheaza_produsul AFTER INSERT OR DELETE OR UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity, slug, is_bundle ON public.products FOR EACH ROW EXECUTE FUNCTION easysales_marcheaza_produsul();
-CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
+CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections, sku ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
 CREATE TRIGGER products_repretuieste_pachetele AFTER UPDATE OF price ON public.products FOR EACH ROW WHEN (((NOT COALESCE(new.is_bundle, false)) AND (new.price IS DISTINCT FROM old.price))) EXECUTE FUNCTION trg_repretuieste_pachetele();
 CREATE TRIGGER products_sync_variant_stock BEFORE INSERT OR UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION sync_product_stock_from_variants();
 CREATE TRIGGER set_products_updated_at BEFORE UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -17846,6 +17874,7 @@ grant execute on function public.catalog_fara_stoc(p_id uuid) to service_role;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to anon;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to authenticated;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to service_role;
+grant execute on function public.catalog_potriveste_cod(p_coduri text[], p_cod text) to service_role;
 grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) to anon;
 grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) to authenticated;
 grant execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) to service_role;
@@ -18249,6 +18278,7 @@ revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte t
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
 revoke execute on function public.catalog_fara_stoc(p_id uuid) from public;
 revoke execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) from public;
+revoke execute on function public.catalog_potriveste_cod(p_coduri text[], p_cod text) from public;
 revoke execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) from public;
 revoke execute on function public.catalog_reface_cuvinte(p_business uuid) from public;
 revoke execute on function public.catalog_scrie_rezumat(p_randuri jsonb) from public;

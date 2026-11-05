@@ -1,4 +1,4 @@
-import type { SearchableProduct } from "@/lib/storefront/product-search";
+import { COD_MIN, compactCod, type SearchableProduct } from "@/lib/storefront/product-search";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
 /**
@@ -37,6 +37,36 @@ function valoriDeVarianta(pageSections: StorefrontProduct["page_sections"]): str
   return valori.length > 0 ? valori : undefined;
 }
 
+/** Cate coduri tine un produs. eSAFE are pana la ~150 de combinatii pe produs. */
+const CODURI_MAX = 400;
+
+/**
+ * Codurile dupa care se gaseste un produs: SKU-ul lui si al fiecarei variante ACTIVE.
+ *
+ * Variantele dezactivate (sau toate, cand variantele sunt oprite) nu intra, din acelasi
+ * motiv ca la `valoriDeVarianta`: n-ai ce cumpara dupa codul lor. Le calculeaza
+ * proiectorul, din `page_sections` INTREG; dupa slimuire combinatiile nu mai exista.
+ */
+export function coduriDeCautare(sku: unknown, pageSections: unknown): string[] {
+  const brute: unknown[] = [sku];
+  const v = (pageSections as {
+    variants?: { enabled?: boolean; combinations?: { sku?: unknown; enabled?: boolean }[] };
+  } | null)?.variants;
+  if (v?.enabled && Array.isArray(v.combinations)) {
+    for (const c of v.combinations) {
+      if (c && c.enabled !== false) brute.push(c.sku);
+    }
+  }
+  const out = new Set<string>();
+  for (const b of brute) {
+    if (typeof b !== "string") continue;
+    const c = compactCod(b);
+    if (c.length >= COD_MIN) out.add(c);
+    if (out.size >= CODURI_MAX) break;
+  }
+  return [...out];
+}
+
 /** Produsul, redus la campurile pe care le indexeaza motorul de cautare. */
 export function documentDeCautare(p: StorefrontProduct): SearchableProduct {
   return {
@@ -53,5 +83,6 @@ export function documentDeCautare(p: StorefrontProduct): SearchableProduct {
      */
     description: p.description,
     optionValues: valoriDeVarianta(p.page_sections),
+    codes: p.coduri,
   };
 }

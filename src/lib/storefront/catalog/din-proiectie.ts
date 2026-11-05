@@ -43,6 +43,8 @@ export interface RandProiectie {
   optiuni: unknown;
   descriere_scurta: string;
   fatete: string[] | null;
+  /** Codurile de cautare (SKU-uri compacte). Vezi `coduriDeCautare`. */
+  coduri: string[] | null;
 }
 
 /**
@@ -53,7 +55,7 @@ export interface RandProiectie {
 export const COLOANE_PROIECTIE =
   "product_id, name, slug, category, prima_imagine, price, compare_at_price, is_featured, is_bundle, " +
   "track_inventory, stock_quantity, sort_order, creat, fara_stoc, price_min, price_max, has_range, " +
-  "fara_oferta, optiuni, descriere_scurta, fatete";
+  "fara_oferta, optiuni, descriere_scurta, fatete, coduri";
 
 /**
  * Client fara tipuri pentru `catalog_produs`, ca la `announcements`.
@@ -113,5 +115,11 @@ export function dinProiectie(r: RandProiectie): StorefrontProduct {
         : {}),
     },
     fara_stoc: r.fara_stoc,
+    /*
+     * ⚠ Doar cand exista: fara cheie, produsul ramane identic cu ce era inainte (probele de
+     * forma compara obiecte intregi). ~150 de octeti pe produs la eSAFE, deci il lasam sa
+     * mearga si in browser: la magazinele pe palierul client, acolo se cauta.
+     */
+    ...(Array.isArray(r.coduri) && r.coduri.length > 0 ? { coduri: r.coduri } : {}),
   };
 }

@@ -1636,6 +1636,7 @@ export type Database = {
           business_id: string
           category: string | null
           cauta_norm: string
+          coduri: string[]
           compare_at_price: number | null
           creat: string
           descriere_scurta: string
@@ -1663,6 +1664,7 @@ export type Database = {
           business_id: string
           category?: string | null
           cauta_norm?: string
+          coduri?: string[]
           compare_at_price?: number | null
           creat: string
           descriere_scurta?: string
@@ -1690,6 +1692,7 @@ export type Database = {
           business_id?: string
           category?: string | null
           cauta_norm?: string
+          coduri?: string[]
           compare_at_price?: number | null
           creat?: string
           descriere_scurta?: string

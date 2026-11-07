@@ -151,7 +151,7 @@ test("⚠⚠ „Pune la loc”: nu peste o ciorna nepublicata; versiunea `tema` 
 
 test("tema exista si are identitatea ei; o cheie necunoscuta nu aplica nimic", () => {
   assert.equal(temaDupaCheie("jupiter")?.identitate, IDENTITATE_JUPITER);
-  assert.equal(temaDupaCheie("saturn"), null);
+  assert.equal(temaDupaCheie("pluton"), null);
   assert.equal(temaDupaCheie(undefined), null);
 });
 

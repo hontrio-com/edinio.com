@@ -17,7 +17,7 @@ test("subdomeniul: doar `<tema>.edinio.com` si `<tema>.localhost`, oricum ar fi 
     assert.equal(slugDemoDupaGazda(gazda), "tema-jupiter", gazda);
   }
   for (const gazda of [
-    "www.edinio.com", "edinio.com", "ajutor.edinio.com", "saturn.edinio.com", "constructor.edinio.com", "__proto__.edinio.com",
+    "www.edinio.com", "edinio.com", "ajutor.edinio.com", "pluton.edinio.com", "constructor.edinio.com", "__proto__.edinio.com",
     "x.jupiter.edinio.com", "jupiter.edinio.com.strain.ro", "jupiter.vercel.app", "localhost:3000", "jupiter.ro", "", null, undefined,
   ]) {
     assert.equal(slugDemoDupaGazda(gazda), null, String(gazda));

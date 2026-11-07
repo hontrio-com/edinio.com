@@ -25,6 +25,8 @@ export function HeroPanoramic({ settings }: { settings: Record<string, unknown> 
   const buton = textSetare(settings.buton) || "Vezi colectia";
   const link = textSetare(settings.link);
   const href = link ? resolveHref(link, basePath) : hrefCatreProduse(chrome);
+  // „aliniere” (etapa 24, lotul 2): titlul si butonul in stanga, pentru fotografiile cu subiectul in dreapta.
+  const laStanga = settings.aliniere === "stanga";
 
   return (
     <section className="mx-auto px-4 pt-5 sm:pt-6" style={{ maxWidth: "var(--st-container)" }}>
@@ -32,13 +34,13 @@ export function HeroPanoramic({ settings }: { settings: Record<string, unknown> 
         style={{ backgroundColor: "color-mix(in srgb, var(--st-primary) 30%, #0b0b0b)" }}>
         {imagine && <Image src={imagine} alt="" fill priority sizes="100vw" className="-z-10 object-cover" />}
         <span aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/25 to-black/5" />
-        <div className="w-full px-6 pb-10 sm:px-12 sm:pb-14 lg:pb-16 text-center text-white">
+        <div className={`w-full px-6 pb-10 sm:px-12 sm:pb-14 lg:pb-16 text-white ${laStanga ? "text-left lg:px-16" : "text-center"}`}>
           <h1 className="text-[36px] sm:text-[54px] xl:text-[72px] font-semibold leading-[1.02] tracking-tight"
             style={{ fontFamily: "var(--st-font-heading)" }}>
             {titlu}
             {titlu !== nume && <span className="sr-only"> - {nume}</span>}
           </h1>
-          {text && <p className="mt-4 mx-auto max-w-xl text-[15px] sm:text-[17px] leading-relaxed text-white/80">{text}</p>}
+          {text && <p className={`mt-4 max-w-xl ${laStanga ? "" : "mx-auto"} text-[15px] sm:text-[17px] leading-relaxed text-white/80`}>{text}</p>}
           <a href={href}
             className="mt-8 inline-flex items-center h-12 px-8 rounded-[var(--st-radius-btn)] border border-white/70 text-[14px] font-semibold tracking-[0.08em] uppercase text-white transition-colors hover:bg-white hover:text-black">
             {buton}

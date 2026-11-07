@@ -825,7 +825,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           { key: "imagine", type: "image", label: "Imaginea", help: "Fără imagine aleasă, prima imagine din „Bannere”." },
           {
             key: "fond", type: "select", label: "Culoarea jumătății cu text",
-            options: [{ value: "principala", label: "Culoarea principală" }, { value: "accent", label: "Culoarea de accent" }],
+            options: [
+              { value: "principala", label: "Culoarea principală" },
+              { value: "accent", label: "Culoarea de accent" },
+              { value: "inchis", label: "Negru" },
+              { value: "deschis", label: "Nuanță deschisă" },
+            ],
           },
         ],
         defaults: { titlu: "", text: "", buton: "", link: "", imagine: "", fond: "principala" },
@@ -872,8 +877,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           { key: "buton", type: "text", label: "Textul butonului", placeholder: "Vezi colecția", maxLength: 30 },
           { key: "link", type: "link", label: "Linkul butonului" },
           { key: "imagine", type: "image", label: "Imaginea", help: "Fără imagine aleasă, prima imagine din „Bannere”." },
+          {
+            key: "aliniere", type: "select", label: "Textul",
+            options: [{ value: "centru", label: "La mijloc" }, { value: "stanga", label: "În stânga" }],
+          },
         ],
-        defaults: { titlu: "", text: "", buton: "", link: "", imagine: "" },
+        defaults: { titlu: "", text: "", buton: "", link: "", imagine: "", aliniere: "centru" },
       },
     },
   },

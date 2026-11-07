@@ -8,6 +8,13 @@ import { imagineaBannerului, textSetare } from "@/lib/storefront/design/hero-tem
 import { hrefCatreProduse } from "@/lib/storefront/category-href";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 
+const TONURI = {
+  principala: { fond: "var(--st-primary)", scris: "var(--st-primary-contrast)", fondButon: "var(--st-accent)", scrisButon: "var(--st-accent-contrast)" },
+  accent: { fond: "var(--st-accent)", scris: "var(--st-accent-contrast)", fondButon: "var(--st-primary)", scrisButon: "var(--st-primary-contrast)" },
+  inchis: { fond: "#0F0F10", scris: "#FFFFFF", fondButon: "#FFFFFF", scrisButon: "#0F0F10" },
+  deschis: { fond: "color-mix(in srgb, var(--st-text) 5%, var(--st-surface))", scris: "var(--st-text)", fondButon: "var(--st-primary)", scrisButon: "var(--st-primary-contrast)" },
+} as const;
+
 /**
  * Bannerul „impartit” (tema Mercur, etapa 24 din `docs/editor-magazin/PLAN.md`, dupa Woodmart Pets): jumatatea din stanga
  * in culoarea principala (sau de accent), cu titlul mare, textul si butonul in cealalta culoare; jumatatea din dreapta,
@@ -27,12 +34,9 @@ export function HeroImpartit({ settings }: { settings: Record<string, unknown> }
   const buton = textSetare(settings.buton) || "Vezi produsele";
   const link = textSetare(settings.link);
   const href = link ? resolveHref(link, basePath) : hrefCatreProduse(chrome);
-  const peAccent = settings.fond === "accent";
-  const fond = peAccent ? "var(--st-accent)" : "var(--st-primary)";
-  const scris = peAccent ? "var(--st-accent-contrast)" : "var(--st-primary-contrast)";
-  // Butonul in cealalta culoare a magazinului, ca sa iasa din fond.
-  const fondButon = peAccent ? "var(--st-primary)" : "var(--st-accent)";
-  const scrisButon = peAccent ? "var(--st-primary-contrast)" : "var(--st-accent-contrast)";
+  // Fondul jumatatii cu text (etapa 24: si negru si nuanta deschisa, pentru temele de moda) si butonul care iese din el.
+  const ton = TONURI[settings.fond === "accent" || settings.fond === "inchis" || settings.fond === "deschis" ? settings.fond : "principala"];
+  const { fond, scris, fondButon, scrisButon } = ton;
 
   return (
     <section className="mx-auto px-4 pt-5 sm:pt-6" style={{ maxWidth: "var(--st-container)" }}>

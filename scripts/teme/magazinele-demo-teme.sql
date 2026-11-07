@@ -26,7 +26,11 @@ begin
       ('tema-mercur', 'Mercur Pet Shop', 'Tot ce le trebuie prietenilor tăi blănoși.', 'Magazin demonstrativ al temei Mercur: hrană, jucării și accesorii pentru animale de companie.', 'mercur@edinio-demo.test', '#3446E0'),
       ('tema-venus', 'Venus Electro', 'Electronice și electrocasnice la prețuri bune.', 'Magazin demonstrativ al temei Venus: telefoane, laptopuri, televizoare și electrocasnice.', 'venus@edinio-demo.test', '#C8102E'),
       ('tema-terra', 'Terra Gadget', 'Tehnologie bună, la îndemână.', 'Magazin demonstrativ al temei Terra: audio, drone, telefoane și casă inteligentă.', 'terra@edinio-demo.test', '#0E7C6B'),
-      ('tema-marte', 'Marte Interior', 'Mobilier pentru case liniștite.', 'Magazin demonstrativ al temei Marte: canapele, fotolii, mese, iluminat și decorațiuni.', 'marte@edinio-demo.test', '#C8A27A')
+      ('tema-marte', 'Marte Interior', 'Mobilier pentru case liniștite.', 'Magazin demonstrativ al temei Marte: canapele, fotolii, mese, iluminat și decorațiuni.', 'marte@edinio-demo.test', '#C8A27A'),
+      ('tema-saturn', 'Saturn Moto', 'Aventura începe aici.', 'Magazin demonstrativ al temei Saturn: ATV-uri, SSV-uri, motociclete și echipamente.', 'saturn@edinio-demo.test', '#FF6A13'),
+      ('tema-uranus', 'Uranus Auto', 'Piese pentru orice mașină, livrate repede.', 'Magazin demonstrativ al temei Uranus: piese motor, uleiuri, baterii, frânare și scule.', 'uranus@edinio-demo.test', '#0A2A8A'),
+      ('tema-neptun', 'Neptun Fashion', 'Modă pentru fiecare zi.', 'Magazin demonstrativ al temei Neptun: geci, genți, încălțăminte, pulovere și rochii.', 'neptun@edinio-demo.test', '#111111'),
+      ('tema-sirius', 'Sirius Boutique', 'Eleganță pentru fiecare ocazie.', 'Magazin demonstrativ al temei Sirius: rochii, pantofi, genți, bijuterii și parfumuri.', 'sirius@edinio-demo.test', '#1A1A1A')
     ) as v(slug, nume, slogan, descriere, email, culoare)
   loop
     select id into magazin from public.businesses where slug = t.slug;

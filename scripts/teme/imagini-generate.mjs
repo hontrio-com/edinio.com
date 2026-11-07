@@ -63,7 +63,9 @@ async function faraFond(intrare, fond = "alb") {
     const o = i * 4;
     if (fond === "negru") {
       // Pe negru: lumina slaba din jurul obiectului ramane lumina (culoarea ei, alfa dupa cat de luminoasa e).
-      data[o + 3] = Math.min(255, Math.round(Math.max(data[o], data[o + 1], data[o + 2]) * 6));
+      const v = Math.max(data[o], data[o + 1], data[o + 2]);
+      // Sub 12 trepte: fond (zgomotul aproape negru lasa altfel o caseta abia vizibila in jurul siglei).
+      data[o + 3] = v < 12 ? 0 : Math.min(255, Math.round((v - 12) * 6));
     } else {
       // Pe alb: umbra moale de sub obiect devine o umbra ADEVARATA (negru translucid), nu un abur alb: pe o placa
       // colorata, pixelii gri-deschis pastrati cu culoarea lor ar fi aparut ca un halou alb sub obiect.
@@ -93,6 +95,36 @@ async function decupeazaAlfa(buf) {
   if (x1 < 0) throw new Error("celula goala: nimic vizibil dupa scoaterea fondului");
   const out = await sharp(buf).extract({ left: x0, top: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 }).png().toBuffer({ resolveWithObject: true });
   return { data: out.data, info: out.info };
+}
+
+/**
+ * Pastreaza doar bucatile vizibile mari: o bucata (pixeli legati, alfa > 8) sub 6% din cea mai mare devine transparenta.
+ * Obiectele din grila trec uneori peste granita celulei, iar vecinul lasa un colt sau o dunga pe marginea pozei.
+ */
+async function faraFarame(buf) {
+  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width: w, height: h } = info;
+  const eticheta = new Int32Array(w * h).fill(-1);
+  const marimi = [];
+  const stiva = new Int32Array(w * h);
+  for (let start = 0; start < w * h; start++) {
+    if (eticheta[start] !== -1 || data[start * 4 + 3] <= 8) continue;
+    const id = marimi.length;
+    let n = 0, sp = 0;
+    stiva[sp++] = start; eticheta[start] = id;
+    while (sp > 0) {
+      const i = stiva[--sp]; n++;
+      const x = i % w, y = (i - x) / w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) {
+        if (j >= 0 && eticheta[j] === -1 && data[j * 4 + 3] > 8) { eticheta[j] = id; stiva[sp++] = j; }
+      }
+    }
+    marimi.push(n);
+  }
+  if (marimi.length <= 1) return buf;
+  const prag = Math.max(...marimi) * 0.06;
+  for (let i = 0; i < w * h; i++) if (eticheta[i] >= 0 && marimi[eticheta[i]] < prag) data[i * 4 + 3] = 0;
+  return sharp(data, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
 }
 
 /** Obiectul decupat la marginile lui, pe un patrat transparent, cu `aer` (fractie) de margine. */
@@ -128,7 +160,8 @@ for (const g of manifest.grile ?? []) {
     if (g.fond === "transparent") {
       // Grila trecuta deja prin decuparea ElevenLabs (`birefnet-v2-bg-removal`): fondul e scos de model, cu tot cu
       // umbra, iar obiectele albe raman intregi (pe culoare, un obiect alb pe fond alb nu se poate separa).
-      iesite.push(await scrie(await patrat(celula, g.latime ?? 640, g.aer ?? 0.08), tinta));
+      // Bucatile mici desprinse (un colt din obiectul vecin, trecut peste granita celulei) ies.
+      iesite.push(await scrie(await patrat(await faraFarame(celula), g.latime ?? 640, g.aer ?? 0.08), tinta));
     } else if (g.fond === "pastreaza") {
       // Fotografia din celula: fara chenarul alb dintre celule (decupare dupa culoarea din colt), apoi patrata.
       const fara = await sharp(celula).trim({ threshold: 18 }).toBuffer();

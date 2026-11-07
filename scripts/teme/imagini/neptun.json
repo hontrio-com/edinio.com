@@ -1,0 +1,51 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/geci",
+    "categorii/genti",
+    "categorii/incaltaminte",
+    "categorii/sneakers",
+    "categorii/pulovere",
+    "categorii/rochii",
+    "categorii/blugi",
+    "categorii/accesorii",
+    "produse/palton-camel"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/parka-olive",
+    "produse/geanta-crossbody",
+    "produse/botine-suede",
+    "produse/sneakers-alergare",
+    "produse/helanca-crem",
+    "produse/rochie-satin-rosie",
+    "produse/pantaloni-largi",
+    "produse/esarfa-lana",
+    "produse/sacou-bleumarin"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1400
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120,
+  "faviconLitera": {
+   "litera": "N",
+   "fundal": "#111111",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

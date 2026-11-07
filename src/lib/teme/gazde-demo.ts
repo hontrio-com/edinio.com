@@ -17,7 +17,10 @@ import { bareHost, esteDomeniulPropriu } from "@/lib/platform-hosts";
  * Cheile temelor, in ordinea lor (etapa 24: temele 2-30 vin pe loturi). Aici, nu in `teme.ts`: fisierul n-are dependente,
  * il citeste proxy-ul. O proba tine lista egala cu `TEME`.
  */
-export const CHEI_TEME = ["jupiter", "mercur", "venus", "terra", "marte"] as const;
+export const CHEI_TEME = [
+  "jupiter", "mercur", "venus", "terra", "marte",
+  "saturn", "uranus", "neptun", "sirius",
+] as const;
 
 /** Tema (subdomeniul) -> slugul magazinului ei demo. Un `Map`, nu un obiect: `constructor.edinio.com` nu e o tema. */
 export const MAGAZINE_DEMO: ReadonlyMap<string, string> = new Map(CHEI_TEME.map((c) => [c, `tema-${c}`]));

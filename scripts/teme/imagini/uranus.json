@@ -1,0 +1,53 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/piese-motor",
+    "categorii/uleiuri",
+    "categorii/baterii",
+    "categorii/franare",
+    "categorii/filtre",
+    "categorii/stergatoare",
+    "categorii/iluminat-auto",
+    "categorii/scule",
+    "produse/cric-hidraulic"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/bujie-iridium",
+    "produse/ulei-5l",
+    "produse/baterie-74ah",
+    "produse/placute-frana",
+    "produse/filtru-ulei",
+    "produse/filtru-polen",
+    "produse/redresor",
+    "produse/manometru",
+    "produse/antigel"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/piese",
+   "latime": 1600,
+   "raport": 2.14
+  },
+  {
+   "fisier": "banner-2.png",
+   "iesire": "bannere/revizie",
+   "latime": 1600,
+   "raport": 2.14
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 140
+ }
+}

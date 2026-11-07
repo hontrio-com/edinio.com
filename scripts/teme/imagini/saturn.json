@@ -1,0 +1,49 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/atv",
+    "categorii/ssv",
+    "categorii/motociclete",
+    "categorii/scutere",
+    "categorii/casti",
+    "categorii/echipamente",
+    "categorii/incaltaminte",
+    "categorii/accesorii",
+    "produse/manusi-moto"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/atv-utilitar-570",
+    "produse/atv-sport-450",
+    "produse/ssv-1000",
+    "produse/moto-naked-700",
+    "produse/scuter-125",
+    "produse/casca-modulara",
+    "produse/geaca-piele-moto",
+    "produse/casca-motocross",
+    "produse/topcase-moto"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4,
+   "pozitie": "dreapta"
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "negru",
+  "inaltime": 120,
+  "faviconLitera": {"litera": "S", "fundal": "#FF6A13", "culoare": "#FFFFFF"}
+ }
+}

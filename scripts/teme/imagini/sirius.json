@@ -1,0 +1,51 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/rochii",
+    "categorii/pantofi",
+    "categorii/genti",
+    "categorii/bijuterii",
+    "categorii/parfumuri",
+    "categorii/ochelari",
+    "categorii/ceasuri",
+    "categorii/palarii",
+    "produse/sacou-alb"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/rochie-paiete",
+    "produse/sandale-negre",
+    "produse/geanta-matlasata",
+    "produse/cercei-perle",
+    "produse/parfum-ambra",
+    "produse/ochelari-supradimensionati",
+    "produse/ceas-argintiu",
+    "produse/bereta-crem",
+    "produse/trench-camel"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1400
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120,
+  "faviconLitera": {
+   "litera": "S",
+   "fundal": "#1A1A1A",
+   "culoare": "#E3F04A"
+  }
+ }
+}

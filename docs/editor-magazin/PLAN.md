@@ -2034,9 +2034,14 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     recomandarile ca placi editoriale cu poza intreaga, randurile intr-un panou rotunjit in loc de banda gri pe tot ecranul.
   - [x] 23.4 Cardul de produs: insigna cu procentul reducerii in loc de „Super pret”, poza pe fond deschis, butonul-pastila
     fara patratul portocaliu.
-  - [ ] 23.5 Probe, porti, proba pe ecran (390 / 1024 / 1920). 07.11: `mentiuni-23.test.ts` (6) + probele temei, ale
-    ajutorului si ale designului (1.215 / 0), tsc, eslint pe fisiere; demo-ul reumplut pe baza demo (identitatea noua verificata in
-    baza). RAMAS: proba pe ecran, serverul local cazut la merge (`next dev` blocat, oprirea refuzata de permisiuni).
+  - [x] 23.5 (08.11) Probe: `mentiuni-23.test.ts` (6) + probele temei, ale ajutorului si ale designului (907 / 0), tsc, eslint.
+    Serverul local repornit (cazuse la merge). Proba in Chrome pe `jupiter.localhost:3000`, la 390 / 1024 / 1280 / 1440 / 1600 /
+    1920 (cadre pe aceeasi origine; fereastra e maximizata): fara derulare orizontala, consola fara erori ale magazinului.
+    GASITE si reparate: cardurile de langa banner ieseau mai inalte decat bannerul sub 1536 px (453 fata de 382 la 1280) si lasau
+    gol sub el, acum compacte pana la `2xl` (fara text, titlul mai mic), inaltimi egale masurate la toate latimile (⚠ `min-[1400px]:`
+    nu batea `lg:`, de aceea `2xl`); pe placile „Recomandari” poza era mica si lasa gol, iar pe telefon linkul cadea peste poza;
+    pe telefon „Adauga in cos” se taia („Adauga…”), iconita apare acum de la 640 px. Lasat asa: pagina de produs „Detaliat” e comuna
+    cu magazinele reale (butoanele ei raman cu colturile lor), nu se atinge in tema.
 
 ## Deciziile proprietarului
 

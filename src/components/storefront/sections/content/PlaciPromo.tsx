@@ -36,14 +36,14 @@ export function PlaciPromo({ settings }: { settings: Record<string, unknown> }) 
       <ul className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-5">
         {placi.map((p, i) => {
           const continut = (
-            <span className="relative h-full flex flex-col overflow-hidden rounded-[var(--st-radius-lg)] p-4 sm:p-6 aspect-[4/4.6] sm:aspect-[4/4.2]"
+            <span className="relative h-full flex flex-col overflow-hidden rounded-[var(--st-radius-lg)] p-3.5 sm:p-6 aspect-[4/5.4] sm:aspect-[4/3.5]"
               style={{ background: DEGRADE_PLACA }}>
               <span className="relative z-10 block text-[16px] sm:text-[20px] font-bold leading-tight tracking-tight text-[var(--st-text)]"
                 style={{ fontFamily: "var(--st-font-heading)" }}>
                 {p.titlu}
               </span>
               {p.link && (
-                <span className="relative z-10 mt-2 sm:mt-3 inline-flex items-center gap-1.5 text-[13px] sm:text-[14px] font-semibold text-[var(--st-primary)]">
+                <span className="relative z-10 mt-1.5 sm:mt-3 inline-flex items-center gap-1 sm:gap-1.5 text-[12.5px] sm:text-[14px] leading-snug font-semibold text-[var(--st-primary)]">
                   {p.eticheta || ETICHETA_PLACA_IMPLICITA}
                   <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" strokeWidth={2.2} />
                 </span>
@@ -51,7 +51,7 @@ export function PlaciPromo({ settings }: { settings: Record<string, unknown> }) 
               {p.imagine && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={cdnImage(p.imagine, 600)} alt="" loading="lazy"
-                  className="absolute right-0 bottom-0 w-[82%] h-[62%] object-contain object-right-bottom rounded-[var(--st-radius)] group-hover:scale-[1.05] origin-bottom-right transition-transform duration-500" />
+                  className="absolute right-2 bottom-2 sm:right-3 sm:bottom-3 w-[84%] h-[54%] sm:w-[78%] sm:h-[66%] object-contain object-right-bottom rounded-[var(--st-radius)] group-hover:scale-[1.05] origin-bottom-right transition-transform duration-500" />
               )}
             </span>
           );

@@ -58,22 +58,24 @@ function Card({ card, basePath }: { card: CardHero; basePath: string }) {
   const continut = (
     <>
       <span className="relative z-10 flex-1 min-w-0">
-        <span className="block text-[19px] lg:text-[22px] font-bold leading-tight tracking-tight text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>{card.titlu}</span>
-        {card.text && <span className="mt-2 block text-[14.5px] leading-snug text-[var(--st-muted)]">{card.text}</span>}
+        <span className="block text-[19px] lg:text-[18px] 2xl:text-[22px] font-bold leading-tight tracking-tight text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>{card.titlu}</span>
+        {/* Sub 1536 px (`2xl`) bannerul are 300-430 px inaltime: cu textul, cele doua carduri il depaseau si lasau gol sub el. */}
+        {card.text && <span className="mt-2 block lg:hidden 2xl:block text-[14.5px] leading-snug text-[var(--st-muted)]">{card.text}</span>}
         {href && (
-          <span className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[var(--st-primary)]">
+          <span className="mt-4 lg:mt-3 2xl:mt-4 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[var(--st-primary)]">
             Vezi produsele
             <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" strokeWidth={2.2} />
           </span>
         )}
       </span>
       {card.imagine && (
+        // Intre 1024 si 1280 coloana cardurilor are ~270 px: o poza mai mica, altfel textul se rupea cuvant cu cuvant.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cdnImage(card.imagine, 400)} alt="" className="w-28 h-24 sm:w-40 sm:h-32 shrink-0 object-contain rounded-[var(--st-radius)] group-hover:scale-[1.06] transition-transform duration-500" />
+        <img src={cdnImage(card.imagine, 400)} alt="" className="w-28 h-24 sm:w-40 sm:h-32 lg:w-24 lg:h-24 xl:w-40 xl:h-32 shrink-0 object-contain rounded-[var(--st-radius)] group-hover:scale-[1.06] transition-transform duration-500" />
       )}
     </>
   );
-  const cls = "group h-full min-h-[150px] flex items-center gap-4 p-6 lg:p-7 rounded-[var(--st-radius-lg)] overflow-hidden transition-shadow duration-300";
+  const cls = "group h-full min-h-[150px] lg:min-h-0 2xl:min-h-[150px] flex items-center gap-4 p-6 lg:p-5 2xl:p-7 rounded-[var(--st-radius-lg)] overflow-hidden transition-shadow duration-300";
   return href ? (
     <a href={href} className={`${cls} hover:shadow-[0_14px_30px_-12px_rgba(16,24,40,0.25)]`} style={{ background: DEGRADE_PLACA }}>{continut}</a>
   ) : (

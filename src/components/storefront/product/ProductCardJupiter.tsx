@@ -10,7 +10,10 @@ import { useDateCardProdus, type ProductCardProps } from "./ProductCard";
 /** Rosul preturilor la oferta si al insignei cu reducerea. */
 const ROSU = "#D92D20";
 
-const SIZES_IMAGINE = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px";
+/** Iconita din buton: pe telefon (card de ~150 px) ar fi taiat eticheta („Adauga…”), deci apare de la 640 px. */
+const ICONITA = "hidden sm:block h-[18px] w-[18px] shrink-0";
+
+const SIZES_IMAGINE ="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px";
 
 /**
  * Cardul de produs al temei Jupiter, varianta „jupiter” a cardului (etapa 16.3 din `docs/editor-magazin/PLAN.md`).
@@ -87,9 +90,9 @@ export function ProductCardJupiter(props: ProductCardProps) {
 
       {/* ⚠ Eticheta spune ce face butonul, din acelasi predicat ca hotararea din handler (vezi `ProductCard`). */}
       <button type="button" onClick={onAddToCart} disabled={isOutOfStock}
-        className="mt-3 h-11 w-full inline-flex items-center justify-center gap-2 px-3 rounded-full text-[14px] font-semibold transition-[filter,box-shadow] enabled:hover:brightness-[0.88] enabled:hover:shadow-[0_3px_10px_rgba(0,0,0,0.22)] enabled:active:brightness-[0.8] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--st-primary)]"
+        className="mt-3 h-10 sm:h-11 w-full inline-flex items-center justify-center gap-2 px-2 sm:px-3 rounded-full text-[13px] sm:text-[14px] font-semibold transition-[filter,box-shadow] enabled:hover:brightness-[0.88] enabled:hover:shadow-[0_3px_10px_rgba(0,0,0,0.22)] enabled:active:brightness-[0.8] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--st-primary)]"
         style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
-        {isAdded ? <Check className="h-[18px] w-[18px] shrink-0" strokeWidth={3} /> : cerePersonalizare ? <Settings2 className="h-[18px] w-[18px] shrink-0" /> : <ShoppingCart className="h-[18px] w-[18px] shrink-0" />}
+        {isAdded ? <Check className={ICONITA} strokeWidth={3} /> : cerePersonalizare ? <Settings2 className={ICONITA} /> : <ShoppingCart className={ICONITA} />}
         <span className="min-w-0 truncate">
           {isAdded ? "Adaugat!" : isVariable ? "Alege optiunile" : cerePersonalizare ? "Personalizeaza" : "Adauga in cos"}
         </span>

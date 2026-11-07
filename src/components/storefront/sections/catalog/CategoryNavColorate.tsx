@@ -47,7 +47,7 @@ export function CategoryNavColorate({ settings }: { settings: Record<string, unk
                 <span className="text-[18px] sm:text-[24px] font-extrabold leading-tight tracking-tight" style={{ fontFamily: "var(--st-font-heading)" }}>
                   {c.name}
                 </span>
-                {numar !== null && (
+                {numar !== null && numar > 0 && (
                   <span className="mt-1 shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold tabular-nums bg-white/85 text-[#1B1F3B]">{numar}</span>
                 )}
               </span>

@@ -20,6 +20,7 @@ import { bareHost, esteDomeniulPropriu } from "@/lib/platform-hosts";
 export const CHEI_TEME = [
   "jupiter", "mercur", "venus", "terra", "marte",
   "saturn", "uranus", "neptun", "sirius",
+  "vega", "altair", "rigel", "polaris",
 ] as const;
 
 /** Tema (subdomeniul) -> slugul magazinului ei demo. Un `Map`, nu un obiect: `constructor.edinio.com` nu e o tema. */

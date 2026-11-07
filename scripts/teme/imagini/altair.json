@@ -1,0 +1,51 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/transmisie",
+    "categorii/hidraulica",
+    "categorii/scaune",
+    "categorii/iluminat",
+    "categorii/anvelope",
+    "categorii/silvicultura",
+    "categorii/rulmenti",
+    "categorii/atelier",
+    "produse/filtru-ulei-tractor"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/lampa-led-rotunda",
+    "produse/cuple-rapide",
+    "produse/fir-trimmer",
+    "produse/cutit-masina-tuns",
+    "produse/tirant-central",
+    "produse/furtune-hidraulice",
+    "produse/manusi-lucru",
+    "produse/canistra",
+    "produse/bolt-cupla"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/piese",
+   "latime": 1600
+  },
+  {
+   "fisier": "banner-2.png",
+   "iesire": "bannere/sezon",
+   "latime": 1600
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130
+ }
+}

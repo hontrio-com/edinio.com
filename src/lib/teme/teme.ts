@@ -4,6 +4,7 @@ import { designJupiter, faraTexteleDemo, IDENTITATE_JUPITER } from "./jupiter/de
 import { CHEIE_MAGAZIN_DEMO } from "./gazde-demo";
 import { MARTE, MERCUR, TERRA, VENUS } from "./lotul-1";
 import { NEPTUN, SATURN, SIRIUS, URANUS } from "./lotul-2";
+import { ALTAIR, POLARIS, RIGEL, VEGA } from "./lotul-3";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -74,6 +75,10 @@ export const TEME: readonly Tema[] = [
   URANUS,
   NEPTUN,
   SIRIUS,
+  VEGA,
+  ALTAIR,
+  RIGEL,
+  POLARIS,
 ];
 
 export function temaDupaCheie(v: unknown): Tema | null {

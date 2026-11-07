@@ -30,7 +30,11 @@ begin
       ('tema-saturn', 'Saturn Moto', 'Aventura începe aici.', 'Magazin demonstrativ al temei Saturn: ATV-uri, SSV-uri, motociclete și echipamente.', 'saturn@edinio-demo.test', '#FF6A13'),
       ('tema-uranus', 'Uranus Auto', 'Piese pentru orice mașină, livrate repede.', 'Magazin demonstrativ al temei Uranus: piese motor, uleiuri, baterii, frânare și scule.', 'uranus@edinio-demo.test', '#0A2A8A'),
       ('tema-neptun', 'Neptun Fashion', 'Modă pentru fiecare zi.', 'Magazin demonstrativ al temei Neptun: geci, genți, încălțăminte, pulovere și rochii.', 'neptun@edinio-demo.test', '#111111'),
-      ('tema-sirius', 'Sirius Boutique', 'Eleganță pentru fiecare ocazie.', 'Magazin demonstrativ al temei Sirius: rochii, pantofi, genți, bijuterii și parfumuri.', 'sirius@edinio-demo.test', '#1A1A1A')
+      ('tema-sirius', 'Sirius Boutique', 'Eleganță pentru fiecare ocazie.', 'Magazin demonstrativ al temei Sirius: rochii, pantofi, genți, bijuterii și parfumuri.', 'sirius@edinio-demo.test', '#1A1A1A'),
+      ('tema-vega', 'Vega Sport', 'Echipament pentru fiecare antrenament.', 'Magazin demonstrativ al temei Vega: colanți, tricouri, hanorace, încălțăminte și accesorii de sport.', 'vega@edinio-demo.test', '#0B0B0B'),
+      ('tema-altair', 'Altair Piese', 'Piese și accesorii pentru utilaje, livrate a doua zi.', 'Magazin demonstrativ al temei Altair: transmisie, hidraulică, iluminat, anvelope și atelier.', 'altair@edinio-demo.test', '#B5121B'),
+      ('tema-rigel', 'Rigel Beauty', 'Frumusețe, în fiecare zi.', 'Magazin demonstrativ al temei Rigel: parfumuri, machiaj, îngrijirea tenului și accesorii.', 'rigel@edinio-demo.test', '#111111'),
+      ('tema-polaris', 'Polaris Shoes', 'Încălțăminte din piele, pentru fiecare pas.', 'Magazin demonstrativ al temei Polaris: ghete, sneakers, mocasini, botine și genți.', 'polaris@edinio-demo.test', '#7A3E2B')
     ) as v(slug, nume, slogan, descriere, email, culoare)
   loop
     select id into magazin from public.businesses where slug = t.slug;

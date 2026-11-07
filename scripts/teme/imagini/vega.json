@@ -1,0 +1,54 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "categorii/colanti",
+    "categorii/tricouri",
+    "categorii/alergare",
+    "categorii/incaltaminte",
+    "categorii/hanorace",
+    "categorii/yoga",
+    "categorii/accesorii",
+    "categorii/sorturi",
+    "poze/extra"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/colanti-seamless",
+    "produse/bustiera-sport",
+    "produse/tricou-oversized",
+    "produse/sort-antrenament",
+    "produse/hanorac-fermoar",
+    "produse/jacheta-alergare",
+    "produse/pantofi-antrenament",
+    "produse/geanta-sala",
+    "produse/sticla-apa"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4,
+   "pozitie": "dreapta"
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120,
+  "faviconLitera": {
+   "litera": "V",
+   "fundal": "#0B0B0B",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

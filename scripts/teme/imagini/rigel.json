@@ -1,0 +1,58 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/parfumuri",
+    "categorii/buze",
+    "categorii/ten",
+    "categorii/seruri",
+    "categorii/hidratare",
+    "categorii/farduri",
+    "categorii/gene",
+    "categorii/accesorii",
+    "produse/lac-unghii-roz"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/parfum-floral",
+    "produse/luciu-buze",
+    "produse/pudra-compacta",
+    "produse/ser-vitamina-c",
+    "produse/masca-servetel",
+    "produse/apa-micelara",
+    "produse/tus-ochi",
+    "produse/fard-obraz",
+    "produse/uscator-par"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/parfumuri",
+   "latime": 1600,
+   "raport": 2.14
+  },
+  {
+   "fisier": "banner-2.png",
+   "iesire": "bannere/ingrijire",
+   "latime": 1600,
+   "raport": 2.14
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "R",
+   "fundal": "#111111",
+   "culoare": "#E8336D"
+  }
+ }
+}

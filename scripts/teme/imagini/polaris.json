@@ -1,0 +1,47 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/ghete",
+    "categorii/sneakers",
+    "categorii/mocasini",
+    "categorii/pantofi-toc",
+    "categorii/botine",
+    "categorii/sandale",
+    "categorii/bocanci",
+    "categorii/pantofi-sport",
+    "produse/geanta-tote"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/pantofi-derby",
+    "produse/sneakers-piele-intoarsa",
+    "produse/mocasini-catifea",
+    "produse/stiletto-lac",
+    "produse/cizme-inalte",
+    "produse/sandale-platforma",
+    "produse/bocanci-drumetie",
+    "produse/curea-piele",
+    "produse/geanta-crossbody"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120
+ }
+}

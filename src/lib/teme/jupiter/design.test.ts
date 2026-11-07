@@ -20,13 +20,15 @@ import { coloaneSubsolJupiter, designJupiter, IDENTITATE_JUPITER, STIL_JUPITER }
 
 const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
-test("identitatea si stilul Jupiter: fonturile modelului exista in lista, albastrul, portocaliul, pagina lata de 100rem", () => {
-  assert.ok(esteFontPagina(IDENTITATE_JUPITER.fontText), "Open Sans");
-  assert.ok(esteFontPagina(IDENTITATE_JUPITER.fontTitluri), "Sofia Sans");
-  assert.deepEqual(IDENTITATE_JUPITER, { culoare: "#215196", fundal: "#FFFFFF", fontTitluri: "sofiasans", fontText: "opensans" });
+test("identitatea si stilul Jupiter (etapa 23, aspect propriu): fonturile exista in lista, bleumarinul siglei, portocaliul, colturile rotunjite, pagina lata de 100rem", () => {
+  assert.ok(esteFontPagina(IDENTITATE_JUPITER.fontText), "Inter");
+  assert.ok(esteFontPagina(IDENTITATE_JUPITER.fontTitluri), "Plus Jakarta Sans");
+  assert.deepEqual(IDENTITATE_JUPITER, { culoare: "#0B3D7A", fundal: "#FFFFFF", fontTitluri: "jakarta", fontText: "inter" });
   assert.equal(STIL_JUPITER.container, "xwide");
+  assert.equal(STIL_JUPITER.radius, "md");
+  assert.equal(STIL_JUPITER.buttonRadius, "full");
   assert.equal(CONTAINER_REM.xwide, 100);
-  assert.equal(STIL_JUPITER.colors?.accent, "#FF882D");
+  assert.equal(STIL_JUPITER.colors?.accent, "#F47B20");
 });
 
 test("⚠ 17.1: identitatea temei NU sta in design (ar castiga peste fila „Stil”); dupa aplicare, „Stil” schimba magazinul", () => {
@@ -40,7 +42,7 @@ test("⚠ 17.1: identitatea temei NU sta in design (ar castiga peste fila „Sti
   assert.equal(pc.cheia_lui, 1, "restul cheilor raman ale lui");
   const cuTema = resolveStyle(d.style, { ...ctx, primaryColor: magazinCuIdentitatea(IDENTITATE_JUPITER).primary_color, pageContent: pc });
   assert.deepEqual([cuTema.colors.primary, cuTema.colors.accent, cuTema.colors.background, cuTema.fontHeading, cuTema.fontBody],
-    ["#215196", "#FF882D", "#FFFFFF", "sofiasans", "opensans"]);
+    ["#0B3D7A", "#F47B20", "#FFFFFF", "jakarta", "inter"]);
   // Apoi omul alege altceva in „Stil”: magazinul il urmeaza.
   const dupaStil = resolveStyle(d.style, { ...ctx, primaryColor: "#8B1A1A", pageContent: { ...pc, store_bg_color: "#FAFAFA", font_text: "geist" } });
   assert.deepEqual([dupaStil.colors.primary, dupaStil.colors.background, dupaStil.fontBody], ["#8B1A1A", "#FAFAFA", "geist"]);
@@ -52,7 +54,7 @@ test("designul Jupiter: antetul si subsolul „hipermarket”, pagina Magazin cu
   assert.equal(d.chrome.footer.variant, "hipermarket");
   assert.equal(d.shop.page.variant, "sidebar");
   assert.equal(d.shop.page.enabled, true);
-  assert.equal(d.style.colors?.accent, "#FF882D");
+  assert.equal(d.style.colors?.accent, "#F47B20");
   assert.equal(d.style.container, "xwide");
   assert.equal(d.chrome.header.settings.showTopBar, true);
   assert.equal(d.chrome.header.settings.topText, undefined, "fara date demo, mesajul barii e al magazinului");

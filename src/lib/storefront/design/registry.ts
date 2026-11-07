@@ -197,10 +197,11 @@ export type HeaderAction = "cautare" | "telefon" | "whatsapp" | "cos";
  * contact, bara de sus) il au din alt camp, nu de aici.
  */
 /**
- * Randul de produse pe banda gri, cu titlul mare si sagetile pe margini (tema Jupiter, etapa 16.3). Reglaj, nu
- * varianta: varianta randului oglindeste asezarea din `page_content` (grila sau carusel), deci banda merge pe amandoua.
+ * Randul de produse pe un panou gri, cu titlul mare si sagetile pe margini (tema Jupiter, etapa 16.3; panou rotunjit in
+ * locul benzii pe tot ecranul de la etapa 23). Reglaj, nu varianta: varianta randului oglindeste asezarea din
+ * `page_content` (grila sau carusel), deci panoul merge pe amandoua. Cheia ramane `banda`: e salvata in design.
  */
-const CAMP_BANDA_RAND: Field = { key: "banda", type: "toggle", label: "Pe bandă gri, cu titlu mare" };
+const CAMP_BANDA_RAND: Field = { key: "banda", type: "toggle", label: "Pe panou gri, cu titlu mare" };
 
 export const HEADER_VARIANT_ACTIONS: Record<string, HeaderAction[]> = {
   search: ["telefon", "whatsapp", "cos"],
@@ -767,7 +768,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         fields: [],
       },
       carduri: {
-        // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri gri in dreapta.
+        // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri in dreapta (in degrade de la etapa 23).
         label: "Bannere cu două carduri alăturate",
         tags: ["cu imagine", "indraznet"],
         layout: "full",
@@ -819,7 +820,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     inCatalog: true,
     variants: {
       classic: { label: "Butoane rotunde", tags: ["clasic"], layout: "contained", previewHeight: 220, fields: [] },
-      // Tema Jupiter (etapa 16.3): placi gri pe patru coloane, cu imaginea si numarul de produse.
+      // Tema Jupiter (etapa 16.3): placi cu imaginea si numarul de produse (verticale, pana la sase pe rand, de la etapa 23).
       placi: {
         label: "Plăci cu imagine și număr de produse",
         tags: ["cu imagine", "detaliat"],
@@ -948,7 +949,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     variants: {
       // Tema Jupiter (etapa 16.3), dupa sectiunea „Recomandări” de pe modelul ei.
       rotunde: {
-        label: "Imagine pe cerc, titlu și link",
+        // Etapa 23: placa inalta in degrade, cu poza mare jos (inainte, poza pe cerc). Cheia `rotunde` ramane: e salvata.
+        label: "Placă înaltă cu imagine mare, titlu și link",
         tags: ["cu imagine"],
         layout: "contained",
         previewHeight: 420,

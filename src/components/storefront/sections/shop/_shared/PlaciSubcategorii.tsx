@@ -30,7 +30,7 @@ export function PlaciSubcategorii() {
   if (copii.length === 0) return null;
 
   return (
-    <ul className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
+    <ul className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 lg:gap-4">
       {copii.map((c) => (
         <li key={c.id}>
           <PlacaCategorie href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina === true)} nume={c.name}

@@ -27,35 +27,37 @@ import type { IdentitateTema, OptiuniTema, SetDateDemo } from "@/lib/teme/tipuri
 */
 
 /**
- * Identitatea modelului: albastrul, fundalul alb, Sofia Sans pentru titluri, Open Sans pentru text. Se scrie in magazin,
- * acolo unde o regleaza fila „Stil” (etapa 17.1), nu in design.
+ * Identitatea temei: bleumarinul siglei demo-ului (mai adanc decat albastrul modelului), fundalul alb, Plus Jakarta Sans
+ * pentru titluri, Inter pentru text. Se scrie in magazin, acolo unde o regleaza fila „Stil” (etapa 17.1), nu in design.
+ * Etapa 23 („sa nu fie identica 1 la 1 cu Dedeman”): pana atunci culoarea si fonturile erau cele ale modelului.
  */
 export const IDENTITATE_JUPITER: IdentitateTema = {
-  culoare: "#215196",
+  culoare: "#0B3D7A",
   fundal: "#FFFFFF",
-  fontTitluri: "sofiasans",
-  fontText: "opensans",
+  fontTitluri: "jakarta",
+  fontText: "inter",
 };
 
 /**
- * Restul stilului modelului, ce fila „Stil” nu regleaza: portocaliul de accent, textul, chenarele, colturile, latimea.
+ * Restul stilului temei, ce fila „Stil” nu regleaza: portocaliul siglei ca accent, textul, chenarele, colturile
+ * rotunjite si butoanele-pastila (etapa 23), latimea.
  * ⚠ Fara culoarea principala, fundal si fonturi: in design ar fi castigat peste „Stil” (vezi `IDENTITATE_JUPITER`).
  */
 export const STIL_JUPITER: StoreStyle = {
   colors: {
-    accent: "#FF882D",
+    accent: "#F47B20",
     surface: "#FFFFFF",
-    text: "#333333",
-    muted: "#6B6B6B",
-    border: "#D9D9D9",
-    footerBg: "#F5F5F5",
-    footerText: "#333333",
+    text: "#1B2430",
+    muted: "#667085",
+    border: "#E4E7EC",
+    footerBg: "#F5F6F8",
+    footerText: "#1B2430",
   },
   fontScale: "md",
-  radius: "sm",
+  radius: "md",
   container: "xwide",
   buttonStyle: "solid",
-  buttonRadius: "inherit",
+  buttonRadius: "full",
   cardStyle: "bordered",
   cardRatio: "square",
   density: "normal",

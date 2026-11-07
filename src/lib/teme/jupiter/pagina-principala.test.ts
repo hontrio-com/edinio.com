@@ -179,10 +179,14 @@ test("pagina principala urmeaza latimea din stil (72rem e implicitul tuturor mag
   assert.match(r, /banda=\{section\.settings\.banda === true\}/);
 });
 
-test("⚠ banda gri se intinde pe tot ecranul fara `100vw` (pe Windows aducea derulare orizontala)", () => {
+test("⚠ panoul gri al randului sta in pagina, fara `100vw` (pe Windows aducea derulare orizontala)", () => {
+  // De la etapa 23 panou rotunjit in container, nu banda pe tot ecranul (vezi `mentiuni-23.test.ts`).
   const p = cod("src/components/storefront/sections/products/ProductRowClassic.tsx");
-  assert.match(p, /boxShadow: `0 0 0 100vmax \$\{GRI_BANDA\}`, clipPath: "inset\(0 -100vmax\)"/);
   assert.doesNotMatch(p, /100vw|w-screen/);
+  // Sagetile panoului ies cel mult cat spatiul lateral al paginii (`px-4`, 16 px) peste panou: 48 = 32 (`lg:p-8`) + 16.
+  assert.match(p, /lg:p-8 rounded-\[var\(--st-radius-lg\)\]/);
+  assert.match(p, /-left-3 lg:-left-\[48px\]/);
+  assert.match(p, /-right-3 lg:-right-\[48px\]/);
 });
 
 test("miniaturile din galerii au continut de exemplu si pentru placi si pentru cardurile bannerului", () => {

@@ -39,9 +39,8 @@ export function ProductRowClassic({
    */
   headerGap?: "gap-2" | "gap-3";
   /**
-   * Pe banda gri, cu titlul mare si sagetile pe margini (reglajul randului, tema Jupiter, etapa 16.3). Banda se
-   * intinde pe toata latimea ecranului printr-o umbra decupata: `100vw` ar fi adus derulare orizontala pe Windows,
-   * unde bara de derulare intra in latime.
+   * Pe un panou gri rotunjit, cu titlul mare si sagetile pe margini (reglajul randului, tema Jupiter, etapa 16.3). Pana
+   * la etapa 23 era o banda pe toata latimea ecranului, ca pe modelul temei; cheia `banda` ramane, e salvata in design.
    */
   banda?: boolean;
 }) {
@@ -50,13 +49,12 @@ export function ProductRowClassic({
 
   if (banda) {
     return (
-      <section className="mb-10 py-8" style={{ backgroundColor: GRI_BANDA, boxShadow: `0 0 0 100vmax ${GRI_BANDA}`, clipPath: "inset(0 -100vmax)" }}>
+      <section className="mb-12 px-4 py-6 sm:p-7 lg:p-8 rounded-[var(--st-radius-lg)]" style={{ backgroundColor: GRI_BANDA }}>
         <div className="flex items-center gap-3 mb-5">
-          <h2 className="text-[24px] leading-tight text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>{title}</h2>
+          <h2 className="text-[22px] sm:text-[26px] font-bold tracking-tight leading-tight text-[var(--st-text)]" style={{ fontFamily: "var(--st-font-heading)" }}>{title}</h2>
           {onViewAll && (
             <button type="button" onClick={onViewAll}
-              className="ml-auto inline-flex items-center gap-1 text-[14px] font-semibold whitespace-nowrap hover:underline underline-offset-2"
-              style={{ color: "var(--st-primary)" }}>
+              className="ml-auto inline-flex items-center gap-1 h-10 pl-4 pr-3 rounded-full border border-[var(--st-border)] bg-[var(--st-surface)] text-[14px] font-semibold whitespace-nowrap text-[var(--st-text)] hover:border-[var(--st-primary)] hover:text-[var(--st-primary)] transition-colors">
               Vezi toate
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -185,9 +183,9 @@ function ProductRail({ items, prioritate, banda = false }: { items: StorefrontPr
   };
 
   const sageata = banda
-    // Pe banda: dreptunghiuri albe pe margini, peste primul si ultimul card, ca pe modelul temei.
-    ? "hidden md:flex absolute top-[40%] -translate-y-1/2 z-10 w-10 h-24 items-center justify-center " +
-      "bg-[var(--st-surface)] text-[var(--st-muted)] border border-[var(--st-border)] shadow-[0_2px_8px_rgba(0,0,0,0.10)] hover:text-[var(--st-text)] transition-colors"
+    // In panoul temei (etapa 23): cercuri albe pe marginea panoului; ies cel mult cat spatiul paginii (16 px), deci fara derulare orizontala.
+    ? "hidden md:flex absolute top-[40%] -translate-y-1/2 z-10 w-11 h-11 rounded-full items-center justify-center " +
+      "bg-[var(--st-surface)] text-[var(--st-text)] shadow-[0_6px_18px_-4px_rgba(16,24,40,0.25)] hover:bg-[var(--st-primary)] hover:text-[var(--st-primary-contrast)] transition-colors"
     : "hidden md:flex absolute top-1/3 -translate-y-1/2 z-10 w-9 h-9 rounded-full items-center justify-center " +
       "border border-border bg-surface text-foreground shadow-md hover:bg-muted transition-colors";
 
@@ -231,13 +229,13 @@ function ProductRail({ items, prioritate, banda = false }: { items: StorefrontPr
           plutind peste carduri, una inactiva ar acoperi degeaba un produs. */}
       {spreStanga && (
         <button type="button" aria-label="Produsele anterioare" aria-controls={idBanda}
-          onClick={() => sari(-1)} className={`${sageata} left-0`}>
+          onClick={() => sari(-1)} className={`${sageata} ${banda ? "-left-3 lg:-left-[48px]" : "left-0"}`}>
           <ChevronLeft className="h-4 w-4" />
         </button>
       )}
       {spreDreapta && (
         <button type="button" aria-label="Produsele urmatoare" aria-controls={idBanda}
-          onClick={() => sari(1)} className={`${sageata} right-0`}>
+          onClick={() => sari(1)} className={`${sageata} ${banda ? "-right-3 lg:-right-[48px]" : "right-0"}`}>
           <ChevronRight className="h-4 w-4" />
         </button>
       )}

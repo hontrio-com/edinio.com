@@ -2021,6 +2021,23 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     cu mana, „-” `not-allowed` la 1, filtrul 0.88 sub mouse; `<link rel="icon">` spre PNG, 200 `image/png`. Tabul in sine nu
     intra in capturi, deci faviconul e verificat pe fisier, marit la 16, 32 si 48 px, pe fond deschis si inchis.
 
+- **Etapa 23: Jupiter cu aspect propriu, nu 1 la 1 cu modelul** (07.11, cuvant cu cuvant: „Vreau sa modifici tema sa nu fie
+  identica 1 la 1 cu Dedeman, lasam asa cum e dar mai modifica design-ul sa fie tot premium”). Structura ramane (antetul pe
+  trei randuri, bannerul cu carduri, placile, randurile, recomandarile, subsolul, pagina de produs); se schimba aspectul.
+  Culorile raman ale materialului LUI (sigla si bannerele sunt bleumarin + portocaliu), dar bleumarinul siglei (`#0B3D7A`), mai
+  adanc decat albastrul modelului, iar portocaliul doar ca accent. Doar variantele temei: niciun magazin real nu le are.
+  - [x] 23.1 Identitatea si stilul: fonturile Plus Jakarta Sans (titluri) + Inter (text), colturi rotunjite (`md`, 12 px),
+    butoane rotunde (`full`); componentele temei citesc `--st-radius*` in loc de 3 px scrisi de mana.
+  - [x] 23.2 Antetul: cautarea ca pastila gri cu butonul „Caută” in ea, actiunile in cercuri, butonul de categorii pastila
+    bleumarin „Toate categoriile”, bara de navigare cu linie fina in loc de umbra, meniul rotunjit.
+  - [x] 23.3 Prima pagina: cardurile bannerului pe tenta cu indemn, placile de categorii verticale (poza sus, 6 pe rand),
+    recomandarile ca placi editoriale cu poza intreaga, randurile intr-un panou rotunjit in loc de banda gri pe tot ecranul.
+  - [x] 23.4 Cardul de produs: insigna cu procentul reducerii in loc de „Super pret”, poza pe fond deschis, butonul-pastila
+    fara patratul portocaliu.
+  - [ ] 23.5 Probe, porti, proba pe ecran (390 / 1024 / 1920). 07.11: `mentiuni-23.test.ts` (6) + probele temei, ale
+    ajutorului si ale designului (1.215 / 0), tsc, eslint pe fisiere; demo-ul reumplut pe baza demo (identitatea noua verificata in
+    baza). RAMAS: proba pe ecran, serverul local cazut la merge (`next dev` blocat, oprirea refuzata de permisiuni).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

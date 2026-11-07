@@ -29,8 +29,8 @@ const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features:
 test("identitatea ca un continut de ciorna: cheile „Stil” (fundalul, fonturile) si culoarea, nimic altceva", () => {
   const c = continutIdentitate(IDENTITATE_JUPITER);
   assert.deepEqual(c, {
-    pc: { store_bg_color: "#FFFFFF", font_titluri: "sofiasans", font_text: "opensans" },
-    magazin: { primary_color: "#215196" },
+    pc: { store_bg_color: "#FFFFFF", font_titluri: "jakarta", font_text: "inter" },
+    magazin: { primary_color: "#0B3D7A" },
   });
   assert.deepEqual(pageContentCuIdentitatea({ hero_banners: ["a"] }, IDENTITATE_JUPITER), { hero_banners: ["a"], ...c.pc });
   assert.deepEqual(magazinCuIdentitatea(IDENTITATE_JUPITER), c.magazin);
@@ -65,7 +65,7 @@ test("⚠⚠ „Aplică”, apoi „Pune la loc”: identitatea, continutul si d
   const pc1 = pcCuCiorna(pc0, continut);
   const magazin1 = { ...magazin0, ...continut.magazin };
   const ctx1 = contextCuCiorna(ctx0, continut);
-  assert.equal(ctx1.primaryColor, "#215196");
+  assert.equal(ctx1.primaryColor, "#0B3D7A");
   assert.equal(designJupiter(ctx1, null, design0).chrome.header.variant, "hipermarket");
 
   // „Pune la loc”: versiunea `tema`, ca o ciorna fata de ce e publicat acum, apoi publicata.

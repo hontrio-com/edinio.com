@@ -1,0 +1,51 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/vin-rosu",
+    "categorii/vin-alb",
+    "categorii/spumant",
+    "categorii/whisky",
+    "categorii/gin",
+    "categorii/rom",
+    "categorii/coniac",
+    "categorii/lichior",
+    "produse/lichior-cafea"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/whisky-single-malt",
+    "produse/vin-rosu-reserva",
+    "produse/spumant-brut",
+    "produse/gin-botanic",
+    "produse/rom-negru",
+    "produse/coniac-xo",
+    "produse/vin-alb-sec",
+    "produse/bourbon",
+    "produse/vin-desert"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "poza-mozaic.png",
+   "iesire": "poze/mozaic",
+   "latime": 1400
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "negru",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "A",
+   "fundal": "#0E0C0A",
+   "culoare": "#C8A15A"
+  }
+ }
+}

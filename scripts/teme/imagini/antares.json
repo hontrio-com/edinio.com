@@ -1,0 +1,52 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/laptopuri",
+    "categorii/telefoane",
+    "categorii/monitoare",
+    "categorii/componente",
+    "categorii/periferice",
+    "categorii/gaming",
+    "categorii/audio",
+    "categorii/electrocasnice",
+    "produse/mouse-wireless"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/laptop-14",
+    "produse/telefon-128",
+    "produse/monitor-curbat",
+    "produse/placa-video",
+    "produse/ssd-1tb",
+    "produse/tastatura-mecanica",
+    "produse/casti-gaming",
+    "produse/boxa-portabila",
+    "produse/aspirator-vertical"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "A",
+   "fundal": "#1D4E89",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

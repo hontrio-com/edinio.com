@@ -5,6 +5,7 @@ import { CHEIE_MAGAZIN_DEMO } from "./gazde-demo";
 import { MARTE, MERCUR, TERRA, VENUS } from "./lotul-1";
 import { NEPTUN, SATURN, SIRIUS, URANUS } from "./lotul-2";
 import { ALTAIR, POLARIS, RIGEL, VEGA } from "./lotul-3";
+import { ALDEBARAN, ANTARES, ARCTURUS, CAPELLA } from "./lotul-4";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -79,6 +80,10 @@ export const TEME: readonly Tema[] = [
   ALTAIR,
   RIGEL,
   POLARIS,
+  ANTARES,
+  ARCTURUS,
+  ALDEBARAN,
+  CAPELLA,
 ];
 
 export function temaDupaCheie(v: unknown): Tema | null {

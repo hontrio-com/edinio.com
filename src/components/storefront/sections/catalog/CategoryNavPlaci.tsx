@@ -19,7 +19,7 @@ export function PlacaCategorie({ href, nume, imagine, numar }: { href: string; n
     <a href={href}
       className="group h-full flex flex-col p-2 sm:p-2.5 rounded-[var(--st-radius-lg)] border border-[var(--st-border)] bg-[var(--st-surface)] hover:border-transparent hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-12px_rgba(16,24,40,0.22)] transition-[transform,box-shadow,border-color] duration-300">
       <span className="relative block aspect-[4/3] rounded-[var(--st-radius)] overflow-hidden" style={{ backgroundColor: FOND_POZA }}>
-        {imagine && <Image src={imagine} alt="" fill sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 240px" className="object-contain p-3 mix-blend-multiply group-hover:scale-[1.05] transition-transform duration-500" />}
+        {imagine && <Image src={imagine} alt="" fill sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 240px" className="object-contain p-3 [mix-blend-mode:var(--st-amestec-placa,multiply)] group-hover:scale-[1.05] transition-transform duration-500" />}
       </span>
       <span className="flex items-center gap-2 px-1.5 pt-3 pb-1.5">
         <span className="flex-1 min-w-0">

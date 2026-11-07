@@ -41,7 +41,7 @@ export function ProductCardJupiter(props: ProductCardProps) {
         <div className="relative aspect-square overflow-hidden rounded-[var(--st-radius)]" style={{ backgroundColor: FOND_POZA }}>
           {imageUrl ? (
             <Image src={imageUrl} alt={product.name} fill loading={priority ? "eager" : "lazy"} fetchPriority={priority ? "high" : undefined}
-              sizes={SIZES_IMAGINE} className="object-contain p-3 mix-blend-multiply group-hover:scale-[1.04] transition-transform duration-500 ease-out" />
+              sizes={SIZES_IMAGINE} className="object-contain p-3 [mix-blend-mode:var(--st-amestec-placa,multiply)] group-hover:scale-[1.04] transition-transform duration-500 ease-out" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Package className="h-10 w-10 text-[var(--st-muted)]/40" />

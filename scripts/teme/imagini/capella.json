@@ -1,0 +1,58 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/caini",
+    "categorii/pisici",
+    "categorii/pasari",
+    "categorii/pesti",
+    "categorii/rozatoare",
+    "categorii/reptile",
+    "categorii/jucarii",
+    "categorii/accesorii",
+    "produse/os-piele"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/hrana-caini",
+    "produse/hrana-pisici",
+    "produse/nisip-pisici",
+    "produse/colivie",
+    "produse/acvariu-60",
+    "produse/cusca-hamster",
+    "produse/terariu",
+    "produse/culcus-caine",
+    "produse/ansamblu-zgariat"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/prieteni",
+   "latime": 1600,
+   "raport": 2.14
+  },
+  {
+   "fisier": "banner-2.png",
+   "iesire": "bannere/hrana",
+   "latime": 1600,
+   "raport": 2.14
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "C",
+   "fundal": "#2F9E41",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

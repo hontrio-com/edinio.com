@@ -219,5 +219,10 @@ export function tokeniPeSuprafataInchisa(suprafata: string): Record<string, stri
     "--input": "var(--st-border)",
     "--color-surface": "var(--st-surface)",
     "--color-surface-raised": nuanta,
+    // Fondul placilor cu poze decupate (`FOND_PLACA`): pe suprafata inchisa, o nuanta a ei, nu griul deschis al
+    // temelor albe (tema Aldebaran, lotul 4: placile de categorii ieseau ca niste ferestre albe pe fond negru).
+    "--st-fond-placa": "color-mix(in srgb, var(--st-text) 10%, var(--st-surface))",
+    // Si fara `multiply` pe pozele lor: pe fond inchis le stingea (ramaneau spalacite, gasit la proba).
+    "--st-amestec-placa": "normal",
   };
 }

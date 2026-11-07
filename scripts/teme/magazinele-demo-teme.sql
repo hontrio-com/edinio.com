@@ -34,7 +34,11 @@ begin
       ('tema-vega', 'Vega Sport', 'Echipament pentru fiecare antrenament.', 'Magazin demonstrativ al temei Vega: colanți, tricouri, hanorace, încălțăminte și accesorii de sport.', 'vega@edinio-demo.test', '#0B0B0B'),
       ('tema-altair', 'Altair Piese', 'Piese și accesorii pentru utilaje, livrate a doua zi.', 'Magazin demonstrativ al temei Altair: transmisie, hidraulică, iluminat, anvelope și atelier.', 'altair@edinio-demo.test', '#B5121B'),
       ('tema-rigel', 'Rigel Beauty', 'Frumusețe, în fiecare zi.', 'Magazin demonstrativ al temei Rigel: parfumuri, machiaj, îngrijirea tenului și accesorii.', 'rigel@edinio-demo.test', '#111111'),
-      ('tema-polaris', 'Polaris Shoes', 'Încălțăminte din piele, pentru fiecare pas.', 'Magazin demonstrativ al temei Polaris: ghete, sneakers, mocasini, botine și genți.', 'polaris@edinio-demo.test', '#7A3E2B')
+      ('tema-polaris', 'Polaris Shoes', 'Încălțăminte din piele, pentru fiecare pas.', 'Magazin demonstrativ al temei Polaris: ghete, sneakers, mocasini, botine și genți.', 'polaris@edinio-demo.test', '#7A3E2B'),
+      ('tema-antares', 'Antares IT', 'Tehnologie la prețuri mici.', 'Magazin demonstrativ al temei Antares: laptopuri, telefoane, monitoare, componente și gaming.', 'antares@edinio-demo.test', '#1D4E89'),
+      ('tema-arcturus', 'Arcturus Nutrition', 'Nutriție pentru fiecare obiectiv.', 'Magazin demonstrativ al temei Arcturus: proteine, creatină, vitamine, pre-workout și gustări proteice.', 'arcturus@edinio-demo.test', '#FF5A1F'),
+      ('tema-aldebaran', 'Aldebaran Cellar', 'Băuturi alese, pentru seri bune.', 'Magazin demonstrativ al temei Aldebaran: vinuri, spumante, whisky, gin și coniac.', 'aldebaran@edinio-demo.test', '#C8A15A'),
+      ('tema-capella', 'Capella Pet', 'Tot ce le trebuie prietenilor tăi.', 'Magazin demonstrativ al temei Capella: hrană, jucării, acvarii, cuști și accesorii pentru animale.', 'capella@edinio-demo.test', '#2F9E41')
     ) as v(slug, nume, slogan, descriere, email, culoare)
   loop
     select id into magazin from public.businesses where slug = t.slug;

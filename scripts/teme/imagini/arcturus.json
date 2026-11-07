@@ -1,0 +1,52 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "categorii/proteine",
+    "categorii/creatina",
+    "categorii/vitamine",
+    "categorii/pre-workout",
+    "categorii/gustari",
+    "categorii/slabire",
+    "categorii/regenerare",
+    "categorii/accesorii",
+    "poze/extra"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/proteina-zer",
+    "produse/creatina",
+    "produse/multivitamine",
+    "produse/pre-workout",
+    "produse/batoane-proteice",
+    "produse/l-carnitina",
+    "produse/bcaa",
+    "produse/shaker",
+    "produse/omega-3"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1400
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120,
+  "faviconLitera": {
+   "litera": "A",
+   "fundal": "#FF5A1F",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

@@ -49,6 +49,17 @@ export const DEMO_CARDURI_HERO = [
   { titlu: "Reduceri la electrocasnice", text: "Preturi mici la aparatele de care ai nevoie.", imagine: "/demo/categorie-electrocasnice.webp", link: "#" },
 ];
 
+/**
+ * Placile bannerului „mozaic” (etapa 24): prima pe un banner (fotografie), celelalte pe categorii. Fara ele, miniatura ar
+ * fi aratat doar titlul ascuns, adica nimic. „Impartit” si „panoramic” cad singure pe bannerele demo si pe numele magazinului.
+ */
+export const DEMO_MOZAIC_HERO = [
+  { titlu: "Noutatile sezonului", text: "Colectia noua a ajuns.", imagine: "/demo/banner-1.webp", link: "#", fond: "inchis" },
+  { titlu: "Electrocasnice", text: "Preturi mici azi.", imagine: "/demo/categorie-electrocasnice.webp", link: "#", fond: "principala" },
+  { titlu: "Electronice", text: "Gadgeturi noi.", imagine: "/demo/categorie-electronice.webp", link: "#", fond: "deschis" },
+  { titlu: "Casa si gradina", text: "Pana la 20% reducere.", imagine: "/demo/categorie-casa-gradina.webp", link: "#", fond: "deschis" },
+];
+
 /** Placile de recomandare (etapa 16.3): patru, din categoriile demonstrative. */
 export const DEMO_PLACI_PROMO = DEMO_CATEGORII.slice(0, 4).map(([titlu, imagine]) => ({ titlu, imagine, link: "#", eticheta: "" }));
 

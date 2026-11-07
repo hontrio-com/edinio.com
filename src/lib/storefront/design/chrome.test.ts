@@ -54,7 +54,8 @@ test("catalogul de design-uri contine exact zonele pentru care facem variante", 
     .map(([k]) => k)
     .sort();
   // Etapa 16.6 (el: „Da, și din panou”): categoriile si cardul de produs, cu designul temei Jupiter langa cel clasic.
-  assert.deepEqual(inCatalog, ["cart_drawer", "category_nav", "checkout", "footer", "header", "hero", "product_card", "product_page", "shop_page"]);
+  // Etapa 24: placile de recomandare au doua design-uri (placa inalta, fotografia cu titlu peste), deci intra si ele.
+  assert.deepEqual(inCatalog, ["cart_drawer", "category_nav", "checkout", "footer", "header", "hero", "placi_promo", "product_card", "product_page", "shop_page"]);
 });
 
 test("⚠ orice sectiune cu doua design-uri sau mai multe se alege din galerie; doar randul de produse nu (varianta lui e asezarea)", () => {

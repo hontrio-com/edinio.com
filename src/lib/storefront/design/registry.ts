@@ -621,8 +621,30 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             showIf: { key: "showTopBar", equals: true },
           },
           { key: "showHotline", type: "toggle", label: "Arată telefonul lângă căutare" },
+          // Etapa 24 (temele 2-30): acelasi antet, cu alt ton. Implicitele sunt aspectul de azi, deci Jupiter nu se schimba.
+          {
+            key: "baraNavigare",
+            type: "select",
+            label: "Bara de navigare",
+            options: [
+              { value: "alba", label: "Albă" },
+              { value: "principala", label: "În culoarea principală" },
+              { value: "accent", label: "În culoarea de accent" },
+              { value: "deschisa", label: "Nuanță deschisă" },
+            ],
+          },
+          {
+            key: "cautareForma",
+            type: "select",
+            label: "Căutarea",
+            options: [
+              { value: "pastila", label: "Rotunjită, cu buton" },
+              { value: "dreptunghi", label: "Dreptunghi, cu lupă" },
+            ],
+          },
+          { key: "etichetaCategorii", type: "text", label: "Textul butonului de categorii", placeholder: "Toate categoriile", maxLength: 30 },
         ],
-        defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
+        defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true, baraNavigare: "alba", cautareForma: "pastila", etichetaCategorii: "" },
       },
       pills: {
         label: "Rotunjit, cu butoane colorate",
@@ -788,6 +810,71 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         ],
         defaults: { carduri: [] },
       },
+      // Tema Mercur (etapa 24): o jumatate in culoare cu titlul, textul si butonul, cealalta o fotografie.
+      impartit: {
+        label: "Jumătate culoare, jumătate imagine",
+        tags: ["indraznet", "cu imagine"],
+        layout: "full",
+        previewHeight: 520,
+        providesH1: true,
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul", maxLength: 60 },
+          { key: "text", type: "textarea", label: "Textul", maxLength: 220 },
+          { key: "buton", type: "text", label: "Textul butonului", placeholder: "Vezi produsele", maxLength: 30 },
+          { key: "link", type: "link", label: "Linkul butonului" },
+          { key: "imagine", type: "image", label: "Imaginea", help: "Fără imagine aleasă, prima imagine din „Bannere”." },
+          {
+            key: "fond", type: "select", label: "Culoarea jumătății cu text",
+            options: [{ value: "principala", label: "Culoarea principală" }, { value: "accent", label: "Culoarea de accent" }],
+          },
+        ],
+        defaults: { titlu: "", text: "", buton: "", link: "", imagine: "", fond: "principala" },
+      },
+      // Tema Terra (etapa 24): patru placi in mozaic, una mare, una inalta si doua mici, fiecare cu titlu, text si link.
+      mozaic: {
+        label: "Mozaic de plăci cu text",
+        tags: ["cu imagine", "detaliat"],
+        layout: "full",
+        previewHeight: 560,
+        providesH1: true,
+        fields: [
+          {
+            key: "placi", type: "repeater", label: "Plăcile", itemLabel: "Placă", max: 4,
+            help: "Prima e cea mare, a doua cea înaltă, ultimele două cele mici. Pe telefon vin una sub alta.",
+            fields: [
+              { key: "titlu", type: "text", label: "Titlul", maxLength: 40 },
+              { key: "text", type: "text", label: "Textul", maxLength: 80 },
+              { key: "imagine", type: "image", label: "Imaginea" },
+              { key: "link", type: "link", label: "Linkul" },
+              {
+                key: "fond", type: "select", label: "Fondul",
+                options: [
+                  { value: "inchis", label: "Închis" },
+                  { value: "principala", label: "Culoarea principală" },
+                  { value: "deschis", label: "Deschis" },
+                ],
+              },
+            ],
+          },
+        ],
+        defaults: { placi: [] },
+      },
+      // Tema Marte (etapa 24): o fotografie pe toata latimea, titlul mare si butonul peste ea.
+      panoramic: {
+        label: "Imagine panoramică cu titlu mare",
+        tags: ["elegant", "cu imagine"],
+        layout: "full",
+        previewHeight: 560,
+        providesH1: true,
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul", maxLength: 50 },
+          { key: "text", type: "textarea", label: "Textul", maxLength: 160 },
+          { key: "buton", type: "text", label: "Textul butonului", placeholder: "Vezi colecția", maxLength: 30 },
+          { key: "link", type: "link", label: "Linkul butonului" },
+          { key: "imagine", type: "image", label: "Imaginea", help: "Fără imagine aleasă, prima imagine din „Bannere”." },
+        ],
+        defaults: { titlu: "", text: "", buton: "", link: "", imagine: "" },
+      },
     },
   },
   usp_strip: {
@@ -831,6 +918,26 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           { key: "arataNumarul", type: "toggle", label: "Arată câte produse are fiecare categorie", help: "Pornit, apar și categoriile fără produse, cu „0 produse”." },
         ],
         defaults: { titlu: "Categorii", arataNumarul: true },
+      },
+      // Tema Mercur (etapa 24): placi colorate, numele si numarul sus, poza mare jos in dreapta.
+      colorate: {
+        label: "Plăci colorate cu imagine mare",
+        tags: ["cu imagine", "indraznet"],
+        layout: "contained",
+        previewHeight: 400,
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul", placeholder: "Categorii", maxLength: 60 },
+          { key: "arataNumarul", type: "toggle", label: "Arată câte produse are fiecare categorie", help: "Pornit, apar și categoriile fără produse, cu „0 produse”." },
+          {
+            key: "fond", type: "select", label: "Culoarea plăcilor",
+            options: [
+              { value: "accent", label: "Culoarea de accent" },
+              { value: "principala", label: "Culoarea principală" },
+              { value: "deschis", label: "Nuanță deschisă" },
+            ],
+          },
+        ],
+        defaults: { titlu: "Categorii", arataNumarul: true, fond: "accent" },
       },
     },
   },
@@ -945,7 +1052,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     scope: "home",
     singleton: false,
     removable: true,
-    // In afara galeriei „Schimbă designul”: are un singur design. Se adauga ca orice sectiune (`addableKinds`).
+    // In galeria „Schimbă designul” de la etapa 24 (doua design-uri). Se adauga ca orice sectiune (`addableKinds`).
+    inCatalog: true,
     variants: {
       // Tema Jupiter (etapa 16.3), dupa sectiunea „Recomandări” de pe modelul ei.
       rotunde: {
@@ -968,6 +1076,26 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           },
         ],
         defaults: { titlu: "Recomandari", placi: [] },
+      },
+      // Tema Venus (etapa 24): fotografia pe toata placa, titlul alb peste ea, pe o umbra de jos.
+      imagine: {
+        label: "Fotografie cu titlul peste",
+        tags: ["cu imagine", "indraznet"],
+        layout: "contained",
+        previewHeight: 320,
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul secțiunii", placeholder: "Descopera", maxLength: 60 },
+          {
+            key: "placi", type: "repeater", label: "Plăcile", itemLabel: "Placă", max: 8,
+            help: "Cinci pe rând pe calculator, două pe telefon (restul se derulează). Fotografiile cu oameni sau camere arată cel mai bine.",
+            fields: [
+              { key: "titlu", type: "text", label: "Titlul", maxLength: 50 },
+              { key: "imagine", type: "image", label: "Imaginea" },
+              { key: "link", type: "link", label: "Linkul" },
+            ],
+          },
+        ],
+        defaults: { titlu: "", placi: [] },
       },
     },
   },
@@ -1128,6 +1256,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       classic: { label: "Clasic", tags: ["clasic"], layout: "contained", previewHeight: 500, fields: [] },
       // Tema Jupiter (etapa 16.3): insigna „Super pret”, pretul mare, butonul cu patratul cosului.
       jupiter: { label: "Hipermarket, cu prețul mare", tags: ["indraznet"], layout: "contained", previewHeight: 570, fields: [] },
+      // Temele Terra si Marte (etapa 24): fara chenar, poza pe placa, numele si pretul dedesubt, cosul ca un cerc pe poza.
+      minimal: { label: "Minimal, cu coșul pe imagine", tags: ["elegant", "simplu"], layout: "contained", previewHeight: 520, fields: [] },
     },
   },
   cart_drawer: {

@@ -26,6 +26,26 @@ const CAMP = "color-mix(in srgb, var(--st-primary) 5%, #F2F4F7)";
 const BARA_SUS = "color-mix(in srgb, var(--st-primary) 78%, #000)";
 /** Cercul din jurul iconitelor (telefon, cos), care se coloreaza sub mouse. */
 const CERC = "w-11 h-11 shrink-0 rounded-full flex items-center justify-center bg-[color-mix(in_srgb,var(--st-primary)_5%,#F2F4F7)] group-hover:bg-[var(--st-primary-soft)] transition-colors";
+/**
+ * Tonul barei de navigare (`baraNavigare`, etapa 24): fondul, scrisul linkurilor, culoarea linkului activ, sublinierea si
+ * butonul de categorii, ca variabile pe bara. „alba” = aspectul Jupiter de dinainte, deci implicitul nu schimba nimic.
+ */
+export function tonulBarei(v: unknown): { chenar: string; stil: CSSProperties } {
+  const variabile = (fond: string, scris: string, activ: string, linie: string, buton: string, butonScris: string) => ({
+    backgroundColor: fond, "--hm-scris": scris, "--hm-activ": activ, "--hm-linie": linie, "--hm-buton": buton, "--hm-buton-scris": butonScris,
+  }) as CSSProperties;
+  switch (v) {
+    case "principala":
+      return { chenar: "", stil: variabile("var(--st-primary)", "color-mix(in srgb, var(--st-primary-contrast) 88%, transparent)", "var(--st-primary-contrast)", "var(--st-primary-contrast)", "color-mix(in srgb, var(--st-primary) 72%, #000)", "var(--st-primary-contrast)") };
+    case "accent":
+      return { chenar: "", stil: variabile("var(--st-accent)", "var(--st-accent-contrast)", "var(--st-accent-contrast)", "var(--st-primary)", "var(--st-primary)", "var(--st-primary-contrast)") };
+    case "deschisa":
+      return { chenar: "border-y border-[var(--st-border)]", stil: variabile("color-mix(in srgb, var(--st-primary) 8%, var(--st-surface))", "var(--st-text)", "var(--st-primary)", "var(--st-primary)", "var(--st-primary)", "var(--st-primary-contrast)") };
+    default:
+      return { chenar: "border-y border-[var(--st-border)]", stil: variabile("var(--st-surface)", "var(--st-text)", "var(--st-primary)", "var(--st-accent)", "var(--st-primary)", "var(--st-primary-contrast)") };
+  }
+}
+
 /** Un rand din meniul de categorii: placa rotunjita care se coloreaza usor sub mouse. */
 const RAND_MENIU = "group flex items-center gap-3 px-2.5 py-2 rounded-[var(--st-radius)] hover:bg-[var(--st-primary-soft)] transition-colors";
 
@@ -66,6 +86,9 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
   const textSus = typeof settings.topText === "string" ? settings.topText.trim() : "";
   const telefon = settings.showHotline !== false && !!business.phone;
   const lipit = hasAnnouncementBar ? "top-9" : "top-0";
+  const ton = tonulBarei(settings.baraNavigare);
+  const etichetaCategorii = (typeof settings.etichetaCategorii === "string" && settings.etichetaCategorii.trim()) || "Toate categoriile";
+  const dreptunghi = settings.cautareForma === "dreptunghi";
 
   return (
     <>
@@ -110,7 +133,7 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
             </a>
 
             <div className="hidden lg:block flex-1 min-w-0">
-              <CautareJupiter />
+              <CautareJupiter dreptunghi={dreptunghi} />
             </div>
 
             <div className="flex items-center gap-5 lg:gap-7 shrink-0 ml-auto lg:ml-0">
@@ -147,20 +170,20 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
 
         {/* Pe telefon cautarea are randul ei, ca la modelul lui. */}
         <div className="lg:hidden px-4 pb-3">
-          <CautareJupiter compact />
+          <CautareJupiter compact dreptunghi={dreptunghi} />
         </div>
       </header>
 
-      {/* Bara de navigare: lipita sus la derulare (vezi capul fisierului). */}
-      <div className={`hidden lg:block sticky ${lipit} z-40 bg-[var(--st-surface)] border-y border-[var(--st-border)]`}>
+      {/* Bara de navigare: lipita sus la derulare (vezi capul fisierului). Tonul ei din `baraNavigare` (etapa 24). */}
+      <div className={`hidden lg:block sticky ${lipit} z-40 ${ton.chenar}`} style={ton.stil}>
         <div className="relative mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
           <div className="h-[60px] flex items-center gap-7">
             {grupuri.length > 0 && (
               <button type="button" onClick={() => setMeniuDeschis((v) => !v)} aria-expanded={meniuDeschis}
-                className="shrink-0 h-11 inline-flex items-center gap-2.5 pl-4 pr-5 text-[14.5px] font-semibold rounded-full transition-[filter] hover:brightness-125"
-                style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
+                className="shrink-0 h-11 inline-flex items-center gap-2.5 pl-4 pr-5 text-[14.5px] font-semibold rounded-[var(--st-radius-btn)] transition-[filter] hover:brightness-125"
+                style={{ backgroundColor: "var(--hm-buton)", color: "var(--hm-buton-scris)" }}>
                 {meniuDeschis ? <X className="h-[18px] w-[18px]" strokeWidth={2.2} /> : <LayoutGrid className="h-[18px] w-[18px]" strokeWidth={2.2} />}
-                Toate categoriile
+                {etichetaCategorii}
               </button>
             )}
             {menu.length > 0 && (
@@ -169,8 +192,8 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
                   const activ = esteActiv(it, { currentPageSlug, isHome });
                   return (
                     <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} aria-current={activ ? "page" : undefined}
-                      className={`relative flex items-center text-[15px] font-medium text-[var(--st-text)] hover:text-[var(--st-primary)] transition-colors whitespace-nowrap after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--st-accent)] after:origin-left after:transition-transform ${activ ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"} ${meniuCls}`}
-                      style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", fontWeight: 600 } : {}) }}>
+                      className={`relative flex items-center text-[15px] font-medium text-[var(--hm-scris)] hover:text-[var(--hm-activ)] transition-colors whitespace-nowrap after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--hm-linie)] after:origin-left after:transition-transform ${activ ? "after:scale-x-100" : "after:scale-x-0 hover:after:scale-x-100"} ${meniuCls}`}
+                      style={{ ...meniuStyle, ...(activ ? { color: "var(--hm-activ)", fontWeight: 600 } : {}) }}>
                       {it.label}
                     </a>
                   );
@@ -195,8 +218,24 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
  * principala; la scriere devine alba, cu chenarul in culoarea principala. Rezultatele apar chiar sub ea
  * (`useCautareHeader`), ca la celelalte antete.
  */
-function CautareJupiter({ compact = false }: { compact?: boolean }) {
+function CautareJupiter({ compact = false, dreptunghi = false }: { compact?: boolean; dreptunghi?: boolean }) {
   const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ categorie: "toate" });
+  // „Dreptunghi” (etapa 24, temele Venus si Terra): chenar subtire, colturile din stil, butonul patrat cu lupa lipit in dreapta.
+  if (dreptunghi) {
+    return (
+      <form {...propsForm} {...propsZona}
+        className={`relative flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] focus-within:ring-4 focus-within:ring-[var(--st-primary)]/10 ${compact ? "h-11" : "h-12"}`}>
+        <input type="search" value={valoare} onChange={(e) => scrie(e.target.value)} placeholder="Cauta produsul dorit" aria-label="Cauta produse"
+          className="flex-1 min-w-0 px-4 bg-transparent text-[15px] text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none" />
+        <button type="submit" aria-label="Cauta"
+          className={`shrink-0 -m-px flex items-center justify-center rounded-r-[var(--st-radius)] transition-[filter] hover:brightness-110 ${compact ? "w-11" : "w-14"}`}
+          style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
+          <Search className="h-5 w-5" strokeWidth={2.2} />
+        </button>
+        {rezultate}
+      </form>
+    );
+  }
   return (
     <form {...propsForm} {...propsZona}
       className={`relative flex items-center gap-2.5 rounded-full border border-transparent bg-[var(--st-camp)] transition-colors focus-within:bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] focus-within:ring-4 focus-within:ring-[var(--st-primary)]/10 ${compact ? "h-11 pl-4 pr-1" : "h-[52px] pl-5 pr-1.5"}`}

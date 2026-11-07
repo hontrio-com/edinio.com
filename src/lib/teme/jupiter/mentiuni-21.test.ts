@@ -28,10 +28,10 @@ const PAGINA = "src/components/storefront/sections/product/ProductPageDetailed.t
 
 test("1. antetul: cautarea ia tot randul, iar telefonul sta langa ea, nu in bara de navigare", () => {
   const a = cod(ANTET);
-  assert.match(a, /<div className="hidden lg:block flex-1 min-w-0">\s*<CautareJupiter \/>/);
+  assert.match(a, /<div className="hidden lg:block flex-1 min-w-0">\s*<CautareJupiter dreptunghi=\{dreptunghi\} \/>/);
   assert.doesNotMatch(a, /max-w-\[56rem\]/, "cu latime fixa ramanea golul de langa cautare");
 
-  const cautare = a.indexOf("<CautareJupiter />");
+  const cautare = a.indexOf("<CautareJupiter dreptunghi={dreptunghi} />");
   const telefon = a.indexOf("Suport clienti");
   const cos = a.indexOf("<Cos mode={cartMode}");
   const navigare = a.indexOf("hidden lg:block sticky");
@@ -117,7 +117,7 @@ test("3. ⚠ magazinele de azi nu se schimba: implicitul variantei ramane galeri
   const p = cod(PAGINA);
   assert.match(p, /const galerieCompacta = setari\.galleryHeight === "compact";/);
   assert.match(p, /miniaturiInStanga=\{miniaturiInStanga\} compacta=\{galerieCompacta\} \/>/);
-  assert.match(p, /\$\{compacta \? "bg-white lg:aspect-auto lg:h-\[var\(--inaltime-galerie\)\]" : "bg-muted\/20"\}/, "fara `compacta`, panoul de dinainte, patrat si gri");
+  assert.match(p, /\$\{compacta \? "bg-\[var\(--st-surface\)\] lg:aspect-auto lg:h-\[var\(--inaltime-galerie\)\]" : "bg-muted\/20"\}/, "fara `compacta`, panoul de dinainte, patrat si gri");
   assert.match(p, /\$\{galerieCompacta \? "xl:grid-cols-\[minmax\(0,1fr\)_minmax\(0,33rem\)\]" : ""\}/, "fara `compacta`, coloanele de dinainte");
   assert.match(p, /const INALTIME_COMPACTA = "clamp\(26rem, calc\(100vh - 18rem\), 40rem\)";/);
 });

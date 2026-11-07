@@ -2043,6 +2043,82 @@ asezarea, culorile, fonturile (libere, Google Fonts) si comportamentul; magazinu
     pe telefon „Adauga in cos” se taia („Adauga…”), iconita apare acum de la 640 px. Lasat asa: pagina de produs „Detaliat” e comuna
     cu magazinele reale (butoanele ei raman cu colturile lor), nu se atinge in tema.
 
+## Temele 2-30, pe loturi (scris 08.11.2026, inainte de cod)
+
+Cererea lui (08.11): „Bun, acum restul temelor fa dupa modelele astea”, cu 29 de adrese (numerotate 2-30). Raspunsurile lui:
+„Toate 29, separat” (nu grupate pe domenii, desi multe se suprapun), „Mai multe deodată, raport la final de lot”, numele
+„Planete, apoi stele”, datele demo „Le generezi tu cu ElevenLabs MCP”.
+
+### Deciziile
+1. **Dupa model, nu 1 la 1** (lectia etapei 23, „sa nu fie identica 1 la 1 cu Dedeman”): de la fiecare model se iau
+   structura, asezarea, ritmul si tonul (culori, fonturi, colturi); aspectul ramane al temei. Nimic copiat: nici sigle, nici
+   poze, nici texte, nici fonturi neliber (fonturile lor se inlocuiesc cu cele mai apropiate din lista celor 35 gazduite).
+2. **O tema = variante din registry + identitate + stil + set demo**, ca Jupiter (decizia 1 a temelor). Variantele existente
+   (8 antete, 4 subsoluri, 4 bannere, 2 carduri) se refolosesc; o varianta noua se face doar pentru ce are modelul distinct si
+   ramane disponibila tuturor din galerie. Niciun implicit nu se schimba: magazinele de azi raman neatinse.
+3. **Datele demo generate cu ElevenLabs** (`creative_generate_image`): produsele, categoriile, cardurile si placile ca grile
+   3x3 de obiecte pe fond alb, taiate in bucati (`sharp`), ca o tema sa coste ~8 imagini (~2.400 de credite, ~0,30 USD) in
+   loc de ~30; bannerele (fara text, ca sa nu iasa greseli de litera) si sigla, cate una. O singura generare pe cerere
+   (`generations_count: 1`): nu e nimic de ales de om intre variante. Pozele in `public/teme/<cheie>/`, WebP, ca la Jupiter.
+4. **Numele** (planete, apoi stele): 2 Woodmart Pets -> Mercur, 3 Altex -> Venus, 4 XStore Electronic -> Terra, 5 XStore
+   Furniture Dark -> Marte, 6 ATV Rom -> Saturn, 7 NAPA -> Uranus, 8 Modivo -> Neptun, 9 Fashion Days -> Sirius, 10 Gymshark
+   -> Vega, 11 Kramp -> Altair, 12 Sephora -> Rigel, 13 epantofi -> Polaris, 14 Forit -> Antares, 15 GymBeam -> Arcturus,
+   16 King -> Aldebaran, 17 Animax -> Capella, 18 Timestore -> Deneb, 19 Solartech -> Spica, 20 evomag -> Procyon,
+   21 QwertyKey -> Canopus, 22 Dude Perfect -> Regulus, 23 dm -> Bellatrix, 24 Douglas -> Betelgeuse, 25 Bricostore ->
+   Achernar, 26 XStore Furniture 3 -> Mira, 27 Partdo -> Alnilam, 28 Unimart Fashion -> Mintaka, 29 Unimart Furniture ->
+   Electra, 30 Electro -> Maia.
+5. **Demo-ul fiecarei teme** pe `<cheie>.localhost:3000` (local) si `<cheie>.edinio.com` (productie: REGISTRU „E”, un CNAME
+   si un domeniu Vercel pe tema, sau unul cu stea, decis de el la push).
+6. **Loturi de cate patru**, raport la final de lot: L1 = 2-5, L2 = 6-9, L3 = 10-13, L4 = 14-17, L5 = 18-21, L6 = 22-25,
+   L7 = 26-30.
+
+### Lotul 1 (2-5): Mercur, Venus, Terra, Marte
+Vazute in Chrome (08.11): Woodmart Pets (albastru regal + galben, Fredoka/Albert Sans, colturi mari, banner impartit
+culoare + poza, placi de categorii pe galben, bannere colorate); Altex (bara rosie de navigare cu „Produse”, banner ingust,
+placi-imagine cu text peste, carduri cu chenar si butonul rosu plin, IBM Plex Sans); XStore Electronic (verde petrol, bara
+mentolata cu „All Departments”, banner mozaic: o placa mare inchisa, una inalta colorata, doua gri, banda de 5 beneficii,
+categorii pe patrate gri, Inter); XStore Furniture Dark (fundal #121212, cautare stanga, sigla la mijloc, iconite dreapta,
+meniul centrat, poza mare pe toata latimea cu titlul peste, Lexend).
+- [x] 24.1 (08.11) Temele la plural: `Tema.cheie` e un sir din `CHEI_TEME` (`gazde-demo.ts`, fara dependente, il citeste
+  proxy-ul), `MAGAZINE_DEMO` din ea; `lib/teme/constructor.ts` = o tema e o RETETA (antet, subsol, banner, categorii, randuri,
+  placi, magazin, card, pagina de produs), cu aceleasi reguli ca `designJupiter` (sectiunile si coloanele LUI raman, textele
+  demo doar cu datele demo si doar unde n-are nimic, „Despre noi” stins) si inversul pentru „Șterge datele demo”;
+  `lib/teme/lotul-1.ts` = cele patru retete, `temaDupaReteta`. Magazinele demo: `scripts/teme/magazinele-demo-teme.sql`
+  (rulat pe baza demo), umplute cu `seamana-demo.ts <cheie>`. Pozele: `scripts/teme/imagini-generate.mjs` + manifestul
+  `scripts/teme/imagini/<cheie>.json` (grile 3x3 taiate, fotografii la raportul locului, sigla, faviconul din simbol sau
+  din initiala).
+  ⚠ GASIT la imagini: scoaterea fondului alb dupa culoare (umplere din margini) lasa un halou alb sub obiecte (umbra
+  fotografiei, gri 220-236, oprea umplerea), iar o banda mai larga manca obiectele albe (bolul, purificatorul, castile).
+  Pe alb, un obiect alb nu se separa dupa culoare: grilele cu fond alb trec prin decuparea ElevenLabs
+  (`birefnet-v2-bg-removal`, ~50 de credite pe grila, nod legat de generarea grilei), `"fond": "transparent"` in manifest.
+  Grilele pe negru (Marte) raman pe umplerea din margini, cu `margine` (obiectele vecine treceau peste granita celulei).
+  Cost lotul 1: ~20.000 de credite (~2,5 USD), 24 de imagini generate + 9 decupari.
+- [x] 24.2 Variantele noi, toate in galerie, implicitele de azi neschimbate: bannerele `impartit`, `mozaic`, `panoramic`
+  (`lib/storefront/design/hero-teme.ts` le citeste reglajele); categoriile `colorate`; placile de recomandare `imagine`
+  (deci si placile intra in galeria „Schimbă designul”, `inCatalog`); cardul `minimal`; la antetul „Hipermarket”:
+  `baraNavigare` (alba = Jupiter / principala / accent / deschisa), `cautareForma` (pastila = Jupiter / dreptunghi),
+  `etichetaCategorii`. Butonul cardului Jupiter citeste `--st-radius-btn` (Jupiter are butoane `full`, deci la fel).
+  ⚠ Fondul inchis (Marte): pagina de produs comuna folosea tokenii aplicatiei (`text-foreground`, `bg-muted`), deci titlul
+  si pretul ieseau inchise pe inchis; `tokeniPeSuprafataInchisa` (`css-vars.ts`) ii trece pe culorile magazinului DOAR cand
+  suprafata DIN DESIGN e inchisa (o pune doar o tema; productia n-are magazine cu culori in design, verificat). In productie
+  un singur magazin are fondul paginii inchis din „Stil” (`couture-fashion`, mov): neatins, ramane cum e. Galeria compacta
+  a paginii de produs: `bg-white` -> `bg-[var(--st-surface)]` (doar temele o folosesc).
+- [x] 24.3 Cele patru teme (identitate, stil, reteta, set demo de 18-19 produse, 8 categorii, meniu, sigla, favicon).
+  Mercur: Nunito + Figtree, albastru regal + galben, colturi mari, bara de navigare galbena, banner impartit, categorii
+  colorate, randuri pe panou, placi inalte, subsol „Hipermarket”. Venus: Rubik + Inter, rosu + galben, colturi mici, bara
+  rosie cu „Produse”, cautare dreptunghi, bannere late cu text (generate), placi-fotografie sub banner, randuri simple, subsol
+  deschis, pagina de 72rem. Terra: Sora + Inter, verde petrol, bara mentolata cu „Toate departamentele”, mozaic, banda de
+  beneficii, placi gri, card minimal. Marte: Outfit + DM Sans, fond #121212, nisip, antet cu sigla la mijloc, banner
+  panoramic, „Colecții” pe fotografii in loc de categorii, card minimal, subsol inchis.
+- [x] 24.4 Probe: `lotul-1.test.ts` (8: cheile, pozele pe disc, setul demo legat, variantele alese, textele demo care intra
+  si ies, mozaicul, tokenii doar pe suprafata inchisa, SQL-ul), probele vechi aduse la noua forma (6), ghidurile din
+  centrul de ajutor (cardul 3 design-uri, categoriile 3, bannerul 7, placile 2, temele de acum). Suita intreaga 11.462 / 0,
+  tsc, eslint pe fisiere (0 erori), `lint:prag` 51. Proba in Chrome pe cele patru subdomenii, la 390 / 1024 / 1920 (cadre),
+  fara derulare orizontala. GASITE si reparate pe ecran: categoriile 6 + 2 pe rand (acum 4 pana la 8 categorii), placile
+  „imagine” 5 + 3 (acum 4 cand sunt 4 sau 8), poza peste text pe placile mici ale mozaicului, „Acasa” de doua ori in
+  meniurile demo, siglele mici (`logo_size` pe demo), pagina de produs pe fond inchis (24.2). NERULAT: `build:ci` (serverul
+  de dezvoltare ocupa `.next`), inainte de push.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

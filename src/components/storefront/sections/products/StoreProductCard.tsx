@@ -2,6 +2,7 @@
 
 import { ProductCard } from "@/components/storefront/product/ProductCard";
 import { ProductCardJupiter } from "@/components/storefront/product/ProductCardJupiter";
+import { ProductCardMinimal } from "@/components/storefront/product/ProductCardMinimal";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
@@ -34,8 +35,9 @@ export function StoreProductCard({
     priceLowestOnly,
     design,
   } = useStorefront();
-  // Varianta cardului, din design (etapa 16.3): toate suprafetele magazinului trec pe aici.
-  const Card = (varianta ?? design?.commerce.productCard.variant) === "jupiter" ? ProductCardJupiter : ProductCard;
+  // Varianta cardului, din design (etapa 16.3): toate suprafetele magazinului trec pe aici. „minimal” din etapa 24.
+  const ales = varianta ?? design?.commerce.productCard.variant;
+  const Card = ales === "jupiter" ? ProductCardJupiter : ales === "minimal" ? ProductCardMinimal : ProductCard;
 
   return (
     <Card

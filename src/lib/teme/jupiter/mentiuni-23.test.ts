@@ -41,11 +41,14 @@ test("componentele temei urmeaza colturile din stil, nu 3 px scrisi de mana", ()
 test("antetul: cautarea-pastila cu butonul „Cauta” in culoarea principala, pastila „Toate categoriile”", () => {
   const c = cod(COMPONENTE.antet);
   assert.match(c, /rounded-full border border-transparent bg-\[var\(--st-camp\)\]/);
-  assert.match(c, /\}\s*Toate categoriile\s*<\/button>/);
+  assert.match(c, /\|\| "Toate categoriile";/, "eticheta implicita a butonului de categorii");
   assert.doesNotMatch(c, /Categorii produse/);
   // Portocaliul nu mai e fondul butoanelor mari (cautarea, categoriile): ramane accent (insigna cosului, sublinierea).
   assert.doesNotMatch(c, /backgroundColor: "var\(--st-accent\)", color: "var\(--st-accent-contrast\)" \}\}>\s*\{meniuDeschis/);
+  // Cautarea (pastila si dreptunghiul) are butonul in culoarea principala; butonul de categorii ia culoarea din tonul barei,
+  // iar pe bara alba (implicitul, Jupiter) tonul e tot culoarea principala.
   assert.equal((c.match(/backgroundColor: "var\(--st-primary\)", color: "var\(--st-primary-contrast\)"/g) ?? []).length, 2);
+  assert.match(c, /default:\s*return \{ chenar: "border-y border-\[var\(--st-border\)\]", stil: variabile\("var\(--st-surface\)", "var\(--st-text\)", "var\(--st-primary\)", "var\(--st-accent\)", "var\(--st-primary\)", "var\(--st-primary-contrast\)"\) \};/);
 });
 
 test("cardul: procentul reducerii in loc de „Super pret”, butonul fara patratul de accent", () => {

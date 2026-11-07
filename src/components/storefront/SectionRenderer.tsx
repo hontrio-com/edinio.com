@@ -87,6 +87,23 @@ const PlaciPromo = dynamic(
   () => import("./sections/content/PlaciPromo").then((m) => m.PlaciPromo),
   { ssr: true },
 );
+// Bannerele si placile temelor 2-30 (etapa 24): impartite ca toate variantele, deci nu intra in bundle-ul magazinelor care nu le au.
+const HeroImpartit = dynamic(
+  () => import("./sections/hero/HeroImpartit").then((m) => m.HeroImpartit),
+  { ssr: true },
+);
+const HeroMozaic = dynamic(
+  () => import("./sections/hero/HeroMozaic").then((m) => m.HeroMozaic),
+  { ssr: true },
+);
+const HeroPanoramic = dynamic(
+  () => import("./sections/hero/HeroPanoramic").then((m) => m.HeroPanoramic),
+  { ssr: true },
+);
+const CategoryNavColorate = dynamic(
+  () => import("./sections/catalog/CategoryNavColorate").then((m) => m.CategoryNavColorate),
+  { ssr: true },
+);
 const HeroOverlay = dynamic(
   () => import("./sections/hero/HeroOverlay").then((m) => m.HeroOverlay),
   { ssr: true },
@@ -139,6 +156,9 @@ const HEROURI: Record<string, VariantaSectiune> = {
   overlay: HeroOverlay as VariantaSectiune,
   categories: HeroCategories as VariantaSectiune,
   carduri: HeroCuCarduri as VariantaSectiune,
+  impartit: HeroImpartit as VariantaSectiune,
+  mozaic: HeroMozaic as VariantaSectiune,
+  panoramic: HeroPanoramic as VariantaSectiune,
 };
 
 /**
@@ -175,7 +195,9 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
     case "catalog_toolbar":
       return <CatalogToolbar />;
     case "category_nav":
-      return section.variant === "placi" ? <CategoryNavPlaci settings={section.settings} /> : <CategoryNavClassic />;
+      return section.variant === "placi" ? <CategoryNavPlaci settings={section.settings} />
+        : section.variant === "colorate" ? <CategoryNavColorate settings={section.settings} />
+        : <CategoryNavClassic />;
     case "shipping_progress":
       return <ShippingProgressBanner />;
     case "product_row":
@@ -203,7 +225,7 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
       // Blocurile paginii alese ca pagina principala, randate pe server.
       return <SlotBlocuri cheie={String(section.settings.slot ?? "")} />;
     case "placi_promo":
-      return <PlaciPromo settings={section.settings} />;
+      return <PlaciPromo settings={section.settings} varianta={section.variant} />;
     case "continut_liber":
       // „Conținut liber” (etapa 9): slotul randat pe server, sau blocurile vii in editor.
       return <ContinutLiber cale={{ sectiune: section.id, bloc: null }} />;

@@ -1,0 +1,12 @@
+{
+  "grile": [
+    { "fisier": "grila-a-foto.png", "fond": "pastreaza", "latime": 720, "celule": ["categorii/canapele", "categorii/fotolii", "categorii/mese", "categorii/scaune", "categorii/paturi", "categorii/depozitare", "categorii/iluminat", "categorii/decoratiuni", "placi/terasa"] },
+    { "fisier": "grila-b.png", "fond": "negru", "margine": 0.045, "celule": ["produse/canapea-catifea-verde", "produse/coltar-gri", "produse/fotoliu-ratan", "produse/fotoliu-piele-coniac", "produse/masa-stejar-6", "produse/masuta-marmura", "produse/scaun-nuc", "produse/scaun-bar-alama", "produse/pat-tapitat-160"] },
+    { "fisier": "grila-c.png", "fond": "negru", "margine": 0.045, "celule": ["produse/noptiera-stejar", "produse/comoda-6-sertare", "produse/biblioteca-alama", "produse/lampa-arc", "produse/veioza-ceramica", "produse/pendul-ratan", "produse/oglinda-alama", "produse/vaze-teracota", "produse/covor-lana"] }
+  ],
+  "poze": [
+    { "fisier": "hero-1.png", "iesire": "poze/hero-fotoliu", "latime": 1920, "raport": 2.4 },
+    { "fisier": "hero-2.png", "iesire": "poze/hero-living", "latime": 1920, "raport": 2.4 }
+  ],
+  "sigla": { "fisier": "sigla.png", "fond": "negru", "inaltime": 120 }
+}

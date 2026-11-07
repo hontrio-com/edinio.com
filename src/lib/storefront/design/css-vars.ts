@@ -185,5 +185,39 @@ export function styleToCssVars(style: ResolvedStyle): Record<string, string> {
     "--st-card-shadow-hover": shadow.hover,
     "--st-card-border": style.cardStyle === "bordered" ? "1px solid var(--st-border)" : "1px solid transparent",
     "--st-card-ratio": CARD_RATIO[style.cardRatio],
+    ...tokeniPeSuprafataInchisa(c.surface),
+  };
+}
+
+/**
+ * Pe un magazin cu SUPRAFATA inchisa (tema Marte, etapa 24 din `docs/editor-magazin/PLAN.md`), si tokenii aplicatiei pe
+ * care ii folosesc paginile comune (pagina de produs, cosul, rândul clasic: `text-foreground`, `bg-muted`,
+ * `border-border`, `bg-surface`) trec pe culorile magazinului. Altfel titlul si pretul produsului ramaneau inchise pe
+ * fond inchis (gasit la proba). `@theme inline` pune `var(--foreground)` direct in utilitare, deci suprascrierea pe
+ * radacina vitrinei ajunge peste tot in ea.
+ *
+ * ⚠ Dupa SUPRAFATA din stilul designului, nu dupa fondul paginii: suprafata o pune doar o tema (implicit e alba), iar
+ * productia n-are niciun magazin cu culori in design (verificat 08.11.2026), deci niciun magazin de azi nu se schimba.
+ * Un magazin cu fond inchis ales din „Stil” (unul singur azi) ramane cum e.
+ */
+export function tokeniPeSuprafataInchisa(suprafata: string): Record<string, string> {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(suprafata.trim());
+  if (!m) return {};
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1];
+  if (luminanta(hex) >= 0.18) return {};
+  const nuanta = "color-mix(in srgb, var(--st-text) 8%, var(--st-surface))";
+  return {
+    "--background": "var(--st-bg)",
+    "--foreground": "var(--st-text)",
+    "--card": "var(--st-surface)",
+    "--card-foreground": "var(--st-text)",
+    "--popover": "var(--st-surface)",
+    "--popover-foreground": "var(--st-text)",
+    "--muted": nuanta,
+    "--muted-foreground": "var(--st-muted)",
+    "--border": "var(--st-border)",
+    "--input": "var(--st-border)",
+    "--color-surface": "var(--st-surface)",
+    "--color-surface-raised": nuanta,
   };
 }

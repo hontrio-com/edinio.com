@@ -159,7 +159,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
       <div className="relative flex-1 min-w-0">
         {/* Panou deschis in spatele produsului, ca in modelul de referinta: pune
             in valoare fotografiile decupate pe fundal alb. */}
-        <div className={`relative aspect-square rounded-md border border-border overflow-hidden ${compacta ? "bg-white lg:aspect-auto lg:h-[var(--inaltime-galerie)]" : "bg-muted/20"}`}
+        <div className={`relative aspect-square rounded-md border border-border overflow-hidden ${compacta ? "bg-[var(--st-surface)] lg:aspect-auto lg:h-[var(--inaltime-galerie)]" : "bg-muted/20"}`}
           style={compacta ? { "--inaltime-galerie": INALTIME_COMPACTA } as CSSProperties : undefined}>
           {slides.map((src, i) => (
             <div key={src + i}

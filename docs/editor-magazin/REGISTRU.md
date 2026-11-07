@@ -356,3 +356,16 @@ pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
    `X-Robots-Tag: noindex, follow`; `/robots.txt` = „Disallow: /”; `/sitemap.xml` = 404; o comanda (din cos si din
    formularul produsului) e refuzata cu „Acesta e un magazin demo: poti incerca tot, dar comenzile sunt oprite.”, fara
    rand nou in `orders`; pe pagina „Teme”, miniatura vie si „Vezi demo” deschide `jupiter.edinio.com`.
+
+**Temele 2-30 (etapa 24, pe loturi), tot la push, cu acordul lui.** Lotul 1 (08.11.2026): `mercur`, `venus`, `terra`,
+`marte`. Aceiasi pasi ca la Jupiter, pe cheia fiecarei teme:
+1-2. **Subdomeniile** `mercur`, `venus`, `terra`, `marte` (si cele din loturile urmatoare, `CHEI_TEME` din
+   `src/lib/teme/gazde-demo.ts`): cate un CNAME si un domeniu in Vercel pe tema, SAU unul singur cu stea (`*.edinio.com`),
+   de hotarat de el (cu stea, orice subdomeniu raspunde: cele care nu sunt teme dau pagina platformei, ca azi).
+3. **Magazinele:** `scripts/teme/magazinele-demo-teme.sql`, DUPA `magazinul-demo.sql` (are nevoie de contul tehnic).
+   Idempotent, nu sterge nimic, se opreste pe un slug `tema-*` al altui cont. Verificarea e in coada fisierului.
+4. **Umplerea:** `scripts/teme/seamana-demo.ts <cheie> --productie` pentru fiecare tema. Pozele sunt in `public/teme/<cheie>/`
+   (pleaca odata cu codul), deci nu se urca nimic separat.
+5. **Verificari:** ca la Jupiter, pe fiecare subdomeniu.
+⚠ Pagina „Teme” arata cate o miniatura vie (un cadru cu magazinul demo) pe tema: la 30 de teme, 30 de magazine incarcate
+deodata. De rezolvat inainte de lotul in care se simte (miniatura incarcata la vedere sau o captura statica).

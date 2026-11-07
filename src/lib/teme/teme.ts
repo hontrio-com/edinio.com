@@ -2,6 +2,7 @@ import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
 import { DATE_DEMO_JUPITER, MENIU_DEMO_JUPITER } from "./jupiter/date-demo";
 import { designJupiter, faraTexteleDemo, IDENTITATE_JUPITER } from "./jupiter/design";
 import { CHEIE_MAGAZIN_DEMO } from "./gazde-demo";
+import { MARTE, MERCUR, TERRA, VENUS } from "./lotul-1";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -16,8 +17,8 @@ import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 */
 
 export interface Tema {
-  /** Si subdomeniul demo-ului (`<cheie>.edinio.com`) si prefixul codurilor produselor demo. */
-  cheie: "jupiter";
+  /** Si subdomeniul demo-ului (`<cheie>.edinio.com`) si prefixul codurilor produselor demo. Din `CHEI_TEME` (gazde-demo). */
+  cheie: string;
   nume: string;
   descriere: string;
   /** Magazinul demo al temei, cu datele ei. */
@@ -42,6 +43,11 @@ export interface Tema {
   siglaDemo: string;
   /** Sloganul magazinului demo (`businesses.tagline`), din subsol. Tot doar al lui. */
   sloganDemo: string;
+  /**
+   * Magazinul demo, cand `seamana-demo.ts` il face singur (temele 2-30, etapa 24; Jupiter are `magazinul-demo.sql`):
+   * numele, descrierea si emailul lui de exemplu.
+   */
+  magazinDemo?: { nume: string; descriere: string; email: string };
 }
 
 export const TEME: readonly Tema[] = [
@@ -58,6 +64,11 @@ export const TEME: readonly Tema[] = [
     siglaDemo: "/teme/jupiter/logo.webp",
     sloganDemo: "Tot ce trebuie pentru casă, grădină și șantier.",
   },
+  // Temele 2-30 (etapa 24), pe loturi, in ordinea lui.
+  MERCUR,
+  VENUS,
+  TERRA,
+  MARTE,
 ];
 
 export function temaDupaCheie(v: unknown): Tema | null {

@@ -1,0 +1,11 @@
+{
+  "grile": [
+    { "fisier": "grila-a-t.png", "fond": "transparent", "celule": ["categorii/audio", "categorii/camere-si-drone", "categorii/telefoane", "categorii/computere", "categorii/smart-home", "categorii/tablete", "categorii/ceasuri-inteligente", "categorii/accesorii", "produse/casca-vr"] },
+    { "fisier": "grila-b-t.png", "fond": "transparent", "celule": ["produse/casti-over-ear", "produse/casti-true-wireless", "produse/boxa-inteligenta", "produse/drona-4k", "produse/camera-wifi", "produse/camera-sport", "produse/telefon-65", "produse/telefon-pliabil", "produse/laptop-13"] },
+    { "fisier": "grila-c-t.png", "fond": "transparent", "celule": ["produse/monitor-27", "produse/termostat-inteligent", "produse/sonerie-video", "produse/bec-inteligent", "produse/tableta-10", "produse/tableta-stylus", "produse/smartwatch-sport", "produse/incarcator-wireless", "produse/baterie-externa"] }
+  ],
+  "poze": [
+    { "fisier": "poza-mozaic.png", "iesire": "poze/mozaic", "latime": 1400 }
+  ],
+  "sigla": { "fisier": "sigla.png", "fond": "alb", "inaltime": 140 }
+}

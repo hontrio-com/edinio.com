@@ -61,7 +61,8 @@ export function CategoryNavPlaci({ settings }: { settings: Record<string, unknow
   return (
     <section className="mb-12">
       <h2 className={TITLU_SECTIUNE} style={{ fontFamily: "var(--st-font-heading)" }}>{titlu}</h2>
-      <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 lg:gap-4">
+      {/* Pana la opt categorii, patru pe rand (doua randuri pline); peste, sase (Jupiter are 12): altfel ramanea un rand cu doua. */}
+      <ul className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${placi.length > 8 ? "xl:grid-cols-6" : ""} gap-3 lg:gap-4`}>
         {placi.map(({ categorie: c, numar }) => (
           <li key={c.key}>
             <PlacaCategorie href={hrefCategorie(categoriiRoot, c.name, categoriiPePagina === true)} nume={c.name} imagine={c.image} numar={numar} />

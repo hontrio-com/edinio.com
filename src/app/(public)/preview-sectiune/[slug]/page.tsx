@@ -9,7 +9,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { construiesteFatete } from "@/lib/storefront/catalog/facets";
-import { DEMO_BANNERS, DEMO_CARDURI_HERO, DEMO_CATEGORIES, DEMO_CONTINUT_LIBER, DEMO_PLACI_PROMO, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
+import { DEMO_BANNERS, DEMO_CARDURI_HERO, DEMO_MOZAIC_HERO, DEMO_CATEGORIES, DEMO_CONTINUT_LIBER, DEMO_PLACI_PROMO, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
 import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { sloturiContinutLiber } from "@/components/storefront/sloturi-pe-server";
 import { faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
@@ -186,7 +186,10 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
           settings: {
             ...(variantMeta(kind, variantParam)?.defaults ?? {}),
             // Continutul de exemplu al sectiunilor care il tin in reglaje (etapa 16.3): gol, cardul ar fi fost alb.
-            ...(kind === "placi_promo" ? { placi: DEMO_PLACI_PROMO } : kind === "hero" && variantParam === "carduri" ? { carduri: DEMO_CARDURI_HERO } : {}),
+            ...(kind === "placi_promo" ? { placi: DEMO_PLACI_PROMO }
+              : kind === "hero" && variantParam === "carduri" ? { carduri: DEMO_CARDURI_HERO }
+              : kind === "hero" && variantParam === "mozaic" ? { placi: DEMO_MOZAIC_HERO }
+              : {}),
             ...(sectiuneaReala?.variant === variantParam ? sectiuneaReala.settings : {}),
           },
           // Coloanele subsolului (etapa 11) sunt ale omului pe designul lui; pe celelalte, cele implicite ale designului.

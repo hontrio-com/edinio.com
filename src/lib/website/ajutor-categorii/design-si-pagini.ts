@@ -594,7 +594,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           rezumat: "Designul cardului de produs, eticheta „Nou” și intervalul de preț țin de cardul de produs, în fila „Stil”. Bara de coș pe telefon ține de secțiunea „Coș”.",
           pasi: [
             "Intră în Editează magazinul și alege fila „Stil”.",
-            "Pentru alt design al cardului, apasă la „Cardul de produs” „Schimbă designul (2)” și alege „Clasic” sau „Hipermarket, cu prețul mare”.",
+            "Pentru alt design al cardului, apasă la „Cardul de produs” „Schimbă designul (3)” și alege „Clasic”, „Hipermarket, cu prețul mare” sau „Minimal, cu coșul pe imagine”.",
             "La „Cardul de produs”, apasă comutatorul „Eticheta „Nou”” și completează „Câte zile e „nou” un produs”.",
             "Apasă comutatorul „Intervalul de preț la produsele cu variante”.",
             "Treci în fila „Secțiuni”, alege „Coșul” la „Editezi” și apasă „Coș” în listă.",
@@ -605,7 +605,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             { titlu: "Eticheta „Nou”", text: "Pornită din start, cu 7 zile. Produsele adăugate în ultimele atâtea zile o primesc singure. Săgețile câmpului propun valori între 1 și 90 de zile, dar o valoare scrisă manual în afara intervalului se salvează așa cum este. Dacă lași câmpul gol, se revine la 7." },
             { titlu: "Intervalul de preț", text: "Pornit din start. Cât e pornit, produsele cu mai multe prețuri arată „De la X - Y lei”. Oprit, se arată doar prețul cel mai mic." },
             { titlu: "Bara de coș pe telefon", text: "Pornită din start. Un buton fix jos, pe telefon, cu numărul de produse și totalul din coș." },
-            { titlu: "Designul cardului", text: "„Clasic” pune insignele (reducerea, „Popular”) și categoria peste imagine, iar butonul e plin. „Hipermarket, cu prețul mare” are imaginea pe o placă deschisă, insigna cu procentul reducerii (de exemplu „-20%”), categoria deasupra numelui, prețul mare cu zecimalele mici și butonul rotunjit, cu iconița coșului. Designul se schimbă pe toate paginile cu produse și ajunge la clienți la „Publică”." },
+            { titlu: "Designul cardului", text: "„Clasic” pune insignele (reducerea, „Popular”) și categoria peste imagine, iar butonul e plin. „Hipermarket, cu prețul mare” are imaginea pe o placă deschisă, insigna cu procentul reducerii (de exemplu „-20%”), categoria deasupra numelui, prețul mare cu zecimalele mici și butonul rotunjit, cu iconița coșului. „Minimal, cu coșul pe imagine” n-are chenar: imaginea pe o placă rotunjită, numele și prețul dedesubt, iar adăugarea în coș e un cerc în colțul imaginii, care apare sub mouse (pe telefon se vede mereu). Designul se schimbă pe toate paginile cu produse și ajunge la clienți la „Publică”." },
             { titlu: "Categoria pe card", text: "Tot la „Cardul de produs”, comutatorul „Categoria pe card” arată categoria produsului pe cardurile din magazin, la ambele design-uri." },
             { titlu: "Bara de anunț pe pagina principală", text: "Comutatorul de altădată „Announcement bar pe magazin” este acum „Arată bara și pe pagina principală”, în panoul „Bara de anunț”." },
           ],
@@ -642,7 +642,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
         {
           slug: "cum-adaugi-placi-de-recomandare",
           titlu: "Cum adaugi plăci de recomandare pe pagina principală",
-          rezumat: "„Plăci de recomandare” pune pe pagina principală până la opt plăci, fiecare cu o imagine pe un cerc, un titlu și un link spre o categorie, o ofertă sau o pagină.",
+          rezumat: "„Plăci de recomandare” pune pe pagina principală până la opt plăci, fiecare cu o imagine, un titlu și un link spre o categorie, o ofertă sau o pagină. Are două design-uri: „Placă înaltă cu imagine mare, titlu și link” și „Fotografie cu titlul peste”.",
           pasi: [
             "Intră în Editează magazinul, fila „Secțiuni”, cu „Pagina principală” aleasă la „Editezi”.",
             "Apasă „Adaugă secțiune” și, pe cardul „Plăci de recomandare”, „Adaugă”. Panoul secțiunii se deschide singur.",
@@ -655,6 +655,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             { titlu: "Cum arată", text: "Patru plăci pe rând pe calculator, două pe telefon. Fiecare e o placă înaltă, cu colțurile rotunjite, în nuanța culorii principale: titlul sus, dedesubt, când are link, textul linkului cu o săgeată, în culoarea principală, iar imaginea mare jos, în dreapta. Imaginile decupate (fără fundal) arată cel mai bine." },
             { titlu: "Linkul și textul lui", text: "La „Linkul” îți apar paginile, categoriile și produsele magazinului, sau scrii orice adresă. „Textul linkului” are maximum 30 de caractere; lăsat gol, placa scrie „Descoperă ofertele”. Fără link, placa nu duce nicăieri și textul linkului nu apare." },
             { titlu: "Limitele", text: "„Titlul” are maximum 50 de caractere, iar o secțiune are cel mult 8 plăci. Le muți cu săgețile și le scoți cu „×”. O placă fără titlu și fără imagine nu apare." },
+            { titlu: "Fotografie cu titlul peste", text: "Al doilea design, din „Schimbă designul (2)”: fotografia pe toată placa, titlul alb jos, peste o umbră. Cinci pe rând pe calculator (patru, când sunt patru sau opt plăci); pe telefon se derulează orizontal. Fotografiile cu oameni sau camere arată cel mai bine; textul linkului nu apare aici." },
             { titlu: "Secțiunea goală", text: "Fără nicio placă, în magazin nu apare nimic, iar în previzualizare vezi un îndemn să le adaugi din panoul secțiunii." },
             { titlu: "Mai multe secțiuni", text: "„Plăci de recomandare” se poate adăuga de mai multe ori, de exemplu o dată pentru oferte și o dată pentru categoriile de sezon." },
           ],
@@ -664,16 +665,17 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
         {
           slug: "cum-alegi-cum-arata-categoriile",
           titlu: "Cum alegi cum arată categoriile pe pagina principală",
-          rezumat: "Secțiunea „Categorii” are două design-uri: „Butoane rotunde” și „Plăci cu imagine și număr de produse”.",
+          rezumat: "Secțiunea „Categorii” are trei design-uri: „Butoane rotunde”, „Plăci cu imagine și număr de produse” și „Plăci colorate cu imagine mare”.",
           pasi: [
             "Intră în Editează magazinul, fila „Secțiuni”, cu „Pagina principală” aleasă la „Editezi”, și apasă „Categorii”.",
-            "La „Design”, apasă „Schimbă designul (2)” și alege „Butoane rotunde” sau „Plăci cu imagine și număr de produse”.",
+            "La „Design”, apasă „Schimbă designul (3)” și alege „Butoane rotunde”, „Plăci cu imagine și număr de produse” sau „Plăci colorate cu imagine mare”.",
             "La plăci, scrie, dacă vrei, „Titlul” și alege din „Arată câte produse are fiecare categorie” dacă sub nume apare numărul.",
             "Apasă „Publică”.",
           ],
           detalii: [
             { titlu: "Butoane rotunde", text: "Categoriile principale pe un rând, fiecare într-un cerc cu imaginea ei, după butonul „Toate”. Designul nu are reglaje." },
             { titlu: "Plăci cu imagine și număr de produse", text: "Plăci cu colțurile rotunjite, până la șase pe rând pe calculator și două pe telefon, fiecare cu imaginea categoriei sus, apoi numele și numărul de produse din ea și din subcategoriile ei. „Titlul” are maximum 60 de caractere; lăsat gol, scrie „Categorii”." },
+            { titlu: "Plăci colorate cu imagine mare", text: "Patru plăci pe rând pe calculator și două pe telefon, în culoarea de accent (sau cea principală, sau o nuanță deschisă, din „Culoarea plăcilor”): numele mare și numărul de produse sus, imaginea categoriei mare, jos în dreapta. Imaginile fără fundal arată cel mai bine. Același „Titlu” și același comutator pentru număr ca la plăci." },
             { titlu: "Când nu apare numărul", text: "Cu comutatorul stins și la magazinele cu 400 de produse sau mai multe numărul nu se arată." },
             { titlu: "Ce categorii apar", text: "Categoriile principale, cu imaginile lor, din Produse > Categorii. Fiecare duce la produsele ei. Când numărul se arată, apar și categoriile fără produse, cu „0 produse”. Când nu se arată, categoriile fără produse lipsesc, afară de cazul în care ai pornit „Arată și categoriile goale”. Fără nicio categorie, secțiunea nu apare." },
           ],
@@ -881,6 +883,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Magazinul demo", text: "Fiecare temă are un magazin demo pe adresa ei: Jupiter pe jupiter.edinio.com. Cauți, filtrezi și pui în coș ca un client, dar comenzile sunt oprite. Pagina „Teme” îl arată și în miniatură, pe cardul temei." },
+            { titlu: "Temele de acum", text: "Jupiter (bricolaj, casă și grădină), Mercur (animale de companie), Venus (electronice și electrocasnice), Terra (gadgeturi și tehnologie) și Marte (mobilă și design interior, pe fond închis). Fiecare are pe pagina „Teme” o previzualizare și „Vezi demo”, un magazin întreg cu produsele ei de exemplu." },
             { titlu: "Ce schimbă Jupiter", text: "Antetul „Hipermarket, cu meniu de categorii”, subsolul „Hipermarket, închis, cu beneficii”, prima pagină (bannerul cu două carduri, categoriile pe plăci, rândurile pe panou gri, plăcile de recomandare), Pagina Magazin cu filtre în stânga, pagina de produs „Detaliat” cu galeria „Cât ecranul”, cardul „Hipermarket, cu prețul mare”, culoarea principală, fundalul și fonturile." },
             { titlu: "Ce rămâne al tău", text: "Produsele, categoriile, textele, bannerele, rândurile de produse, paginile, setările și domeniul. Rămân și coloanele de subsol alese de tine, blocurile „Conținut liber”, cardurile de lângă banner, plăcile de recomandare și mesajul din bara de sus, dacă le aveai deja." },
             { titlu: "„Despre noi”", text: "Pe tema Jupiter secțiunea nu se vede. Textul tău rămâne, iar secțiunea o aprinzi înapoi din ochiul ei, în Editează magazinul." },
@@ -1035,10 +1038,10 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
         {
           slug: "cum-reglezi-sectiunea-hero",
           titlu: "Cum reglezi bannerul principal",
-          rezumat: "„Banner principal” are patru design-uri, iar cel cu categorii și bannere cere cel puțin un banner în magazin.",
+          rezumat: "„Banner principal” are șapte design-uri, iar cel cu categorii și bannere cere cel puțin un banner în magazin.",
           pasi: [
             "Intră în Editează magazinul, fila „Secțiuni”, și apasă „Banner principal”.",
-            "La „Design”, apasă „Schimbă designul (4)” și alege „Doar imagini”, „Categorii la stânga, bannere la dreapta”, „Imagine cu text peste” sau „Bannere cu două carduri alăturate”.",
+            "La „Design”, apasă „Schimbă designul (7)” și alege „Doar imagini”, „Categorii la stânga, bannere la dreapta”, „Imagine cu text peste”, „Bannere cu două carduri alăturate”, „Jumătate culoare, jumătate imagine”, „Mozaic de plăci cu text” sau „Imagine panoramică cu titlu mare”.",
             "Dacă ai ales „Categorii la stânga, bannere la dreapta”, trage cursorul „Câte categorii se văd”, de la „Setări”.",
             "Dacă ai ales „Bannere cu două carduri alăturate”, la „Cardurile din dreapta” apasă „Adaugă card” și completează titlul, textul, imaginea și linkul. Poți pune cel mult două.",
             "Pune bannerele la „Conținut”, în același panou.",
@@ -1047,6 +1050,9 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           detalii: [
             { titlu: "Câte categorii se văd", text: "Cursorul merge de la 2 la 10 categorii, din 1 în 1. Implicit sunt 10." },
             { titlu: "Cardurile de lângă bannere", text: "La „Bannere cu două carduri alăturate”, bannerele stau pe două treimi din lățime, iar cardurile în dreapta, unul sub altul. Pe telefon, cardurile vin sub bannere. Fiecare card are „Titlul” (maximum 40 de caractere), „Textul” (maximum 120), „Imaginea” și „Linkul”, unde îți apar paginile, categoriile și produsele magazinului. Le muți cu săgețile și le scoți cu „×”. Un card cu link are dedesubt „Vezi produsele”, cu o săgeată. Un card fără titlu nu apare. Fără niciun card, bannerele iau toată lățimea, iar fără bannere rămân doar cardurile." },
+            { titlu: "Jumătate culoare, jumătate imagine", text: "În stânga, pe culoarea principală (sau de accent, din „Culoarea jumătății cu text”), „Titlul” (maximum 60 de caractere), „Textul” (maximum 220) și butonul, cu „Textul butonului” și „Linkul butonului”; în dreapta, „Imaginea”. Pe telefon, imaginea vine sub text. Lăsate goale: titlul e numele magazinului, textul e sloganul, butonul scrie „Vezi produsele” și duce la produse, iar imaginea e primul banner." },
+            { titlu: "Mozaic de plăci cu text", text: "Până la patru plăci, de la „Plăcile”: prima mare, cu imaginea pe toată suprafața, a doua înaltă, ultimele două mici. Fiecare are „Titlul”, „Textul”, „Imaginea”, „Linkul” și „Fondul” (închis, culoarea principală sau deschis). Pe telefon vin una sub alta. O placă fără titlu nu apare." },
+            { titlu: "Imagine panoramică cu titlu mare", text: "O imagine lată, cu „Titlul” (maximum 50 de caractere), „Textul” și un buton conturat peste ea, jos, la mijloc. Lăsate goale, la fel ca la „Jumătate culoare, jumătate imagine”, iar butonul scrie „Vezi colectia”." },
             { titlu: "„Doar imagini” și „Imagine cu text peste” nu au reglaje", text: "Ele nu au niciun câmp, deci la ele partea „Setări” nu apare." },
             { titlu: "Dacă designul cu bannere apare stins", text: "Când magazinul nu are niciun banner, miniatura lui e stinsă și în locul butonului „Alege” scrie: „Ai nevoie de cel puțin un banner. Adaugă-l la secțiunea Banner principal, apoi alege designul.” Adaugă un banner la „Conținut”, apoi revino la „Schimbă designul”." },
             { titlu: "Cum se numără bannerele", text: "Se iau în calcul cel mult 5 bannere. Dacă magazinul nu are bannere, dar are imaginea de copertă mai veche, aceea contează ca un banner." },

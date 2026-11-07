@@ -1,0 +1,11 @@
+{
+  "grile": [
+    { "fisier": "grila-a-t.png", "fond": "transparent", "celule": ["categorii/hrana-caini", "categorii/hrana-pisici", "categorii/recompense", "categorii/jucarii", "categorii/lese-si-zgarzi", "categorii/culcusuri", "categorii/igiena", "categorii/acvaristica", "produse/bol-ceramic-caini"] },
+    { "fisier": "grila-b-t.png", "fond": "transparent", "celule": ["produse/hrana-caini-talie-mare", "produse/hrana-pui-caine", "produse/conserve-caini-vita", "produse/hrana-pisici-sterilizate", "produse/plicuri-pisici", "produse/recompense-dentare", "produse/batoane-pisici-ton", "produse/minge-cauciuc", "produse/ansamblu-joaca-pisici"] },
+    { "fisier": "grila-c-t.png", "fond": "transparent", "celule": ["produse/soricei-catnip", "produse/lesa-extensibila", "produse/ham-reglabil", "produse/culcus-rotund-plus", "produse/pat-ortopedic-caini", "produse/asternut-aglomerant", "produse/sampon-hipoalergenic", "produse/acvariu-echipat-60l", "produse/filtru-intern-acvariu"] }
+  ],
+  "poze": [
+    { "fisier": "poza-hero.png", "iesire": "poze/hero", "latime": 1400 }
+  ],
+  "sigla": { "fisier": "sigla.png", "fond": "alb", "inaltime": 160 }
+}

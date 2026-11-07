@@ -17,7 +17,7 @@ import { DEGRADE_PLACA, TITLU_SECTIUNE } from "@/components/storefront/sections/
  *
  * Fara placi, in magazin nu apare nimic; in editor, un indemn, ca sectiunea sa poata fi gasita si umpluta.
  */
-export function PlaciPromo({ settings }: { settings: Record<string, unknown> }) {
+export function PlaciPromo({ settings, varianta }: { settings: Record<string, unknown>; varianta?: string }) {
   const { basePath, esteEditorDesign } = useStoreChrome();
   const placi = placileDinSetari(settings);
   const titlu = typeof settings.titlu === "string" ? settings.titlu.trim() : "";
@@ -28,6 +28,41 @@ export function PlaciPromo({ settings }: { settings: Record<string, unknown> }) 
         Plăci de recomandare: adaugă-le din panoul secțiunii.
       </p>
     ) : null;
+  }
+
+  /*
+   * Varianta „imagine” (tema Venus, etapa 24, dupa placile de sub bannerul Altex): fotografia pe toata placa, titlul alb
+   * jos, peste o umbra. Cinci pe rand pe calculator; pe telefon se deruleaza orizontal, cate doua si ceva, ca pe model.
+   */
+  if (varianta === "imagine") {
+    return (
+      <section className="mb-12">
+        {titlu && <h2 className={TITLU_SECTIUNE} style={{ fontFamily: "var(--st-font-heading)" }}>{titlu}</h2>}
+        <ul className={`flex lg:grid ${placi.length % 4 === 0 ? "lg:grid-cols-4" : "lg:grid-cols-5"} gap-3 lg:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory -mx-4 px-4 lg:mx-0 lg:px-0 [scrollbar-width:none]`}>
+          {placi.map((p, i) => {
+            const continut = (
+              <span className="relative block aspect-[4/5] overflow-hidden rounded-[var(--st-radius-lg)] bg-[var(--st-border)]">
+                {p.imagine && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={cdnImage(p.imagine, 600)} alt="" loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-700" />
+                )}
+                <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+                <span className="absolute inset-x-0 bottom-0 p-3.5 sm:p-4 text-[14.5px] sm:text-[16px] font-bold leading-snug text-white text-center"
+                  style={{ fontFamily: "var(--st-font-heading)" }}>
+                  {p.titlu}
+                </span>
+              </span>
+            );
+            return (
+              <li key={i} className="shrink-0 w-[42%] sm:w-[30%] lg:w-auto snap-start">
+                {p.link ? <a href={resolveHref(p.link, basePath)} className="group block">{continut}</a> : <div className="group">{continut}</div>}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
   }
 
   return (

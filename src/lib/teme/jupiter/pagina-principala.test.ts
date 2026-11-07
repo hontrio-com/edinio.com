@@ -147,7 +147,8 @@ test("variantele noi sunt in registry; placile de recomandare se pot adauga ca o
   assert.ok(variantMeta("product_card", "jupiter"));
   assert.ok(variantMeta("product_row", "grid")?.fields.some((f) => f.key === "banda"));
   assert.ok(variantMeta("product_row", "carousel")?.fields.some((f) => f.key === "banda"));
-  assert.ok(!sectionMeta("placi_promo")?.inCatalog, "un singur design: fara galeria „Schimbă designul”");
+  // Etapa 24: al doilea design („imagine”, tema Venus), deci si galeria „Schimbă designul”.
+  assert.ok(sectionMeta("placi_promo")?.inCatalog, "doua design-uri: in galerie");
   assert.ok(addableKinds(designJupiter(ctx, null)).includes("placi_promo"));
 });
 
@@ -158,7 +159,7 @@ function cod(cale: string): string {
 
 test("magazinul: cardul ales din design pentru toate suprafetele, iar cardul Jupiter spune ce spune si cel clasic", () => {
   const s = cod("src/components/storefront/sections/products/StoreProductCard.tsx");
-  assert.match(s, /const Card = \(varianta \?\? design\?\.commerce\.productCard\.variant\) === "jupiter" \? ProductCardJupiter : ProductCard;/);
+  assert.match(s, /const ales = varianta \?\? design\?\.commerce\.productCard\.variant;\s*const Card = ales === "jupiter" \? ProductCardJupiter : ales === "minimal" \? ProductCardMinimal : ProductCard;/);
   const j = cod("src/components/storefront/product/ProductCardJupiter.tsx");
   assert.match(j, /\} = useDateCardProdus\(props\);/);
   assert.match(j, /isAdded \? "Adaugat!" : isVariable \? "Alege optiunile" : cerePersonalizare \? "Personalizeaza" : "Adauga in cos"/);
@@ -174,8 +175,8 @@ test("pagina principala urmeaza latimea din stil (72rem e implicitul tuturor mag
   const r = cod("src/components/storefront/SectionRenderer.tsx");
   assert.doesNotMatch(r, /max-w-6xl/);
   assert.equal((r.match(/max-w-\[var\(--st-container,72rem\)\] mx-auto px-4/g) ?? []).length, 4);
-  assert.match(r, /case "placi_promo":\s*return <PlaciPromo settings=\{section\.settings\} \/>;/);
-  assert.match(r, /return section\.variant === "placi" \? <CategoryNavPlaci settings=\{section\.settings\} \/> : <CategoryNavClassic \/>;/);
+  assert.match(r, /case "placi_promo":\s*return <PlaciPromo settings=\{section\.settings\} varianta=\{section\.variant\} \/>;/);
+  assert.match(r, /return section\.variant === "placi" \? <CategoryNavPlaci settings=\{section\.settings\} \/>\s*: section\.variant === "colorate" \? <CategoryNavColorate settings=\{section\.settings\} \/>\s*: <CategoryNavClassic \/>;/);
   assert.match(r, /banda=\{section\.settings\.banda === true\}/);
 });
 
@@ -191,7 +192,7 @@ test("⚠ panoul gri al randului sta in pagina, fara `100vw` (pe Windows aducea 
 
 test("miniaturile din galerii au continut de exemplu si pentru placi si pentru cardurile bannerului", () => {
   const p = cod("src/app/(public)/preview-sectiune/[slug]/page.tsx");
-  assert.match(p, /kind === "placi_promo" \? \{ placi: DEMO_PLACI_PROMO \} : kind === "hero" && variantParam === "carduri" \? \{ carduri: DEMO_CARDURI_HERO \} : \{\}/);
+  assert.match(p, /kind === "placi_promo" \? \{ placi: DEMO_PLACI_PROMO \}\s*: kind === "hero" && variantParam === "carduri" \? \{ carduri: DEMO_CARDURI_HERO \}\s*: kind === "hero" && variantParam === "mozaic" \? \{ placi: DEMO_MOZAIC_HERO \}\s*: \{\}/);
 });
 
 test("⚠ fiecare tip de camp din registru are control in panou: cardurile si placile le completeaza omul, nu doar tema", () => {
@@ -222,5 +223,5 @@ test("16.6: cardul se alege din fila Stil, cu aceeasi galerie, iar miniatura lui
   const f = cod("src/components/storefront/SectionPreviewFrame.tsx");
   assert.match(f, /if \(section\.kind === "product_card"\) \{[\s\S]*?<StoreProductCard key=\{p\.id\} product=\{p\} priority varianta=\{section\.variant\} \/>/);
   assert.match(cod("src/components/storefront/sections/products/StoreProductCard.tsx"),
-    /const Card = \(varianta \?\? design\?\.commerce\.productCard\.variant\) === "jupiter" \? ProductCardJupiter : ProductCard;/);
+    /const ales = varianta \?\? design\?\.commerce\.productCard\.variant;\s*const Card = ales === "jupiter" \? ProductCardJupiter : ales === "minimal" \? ProductCardMinimal : ProductCard;/);
 });

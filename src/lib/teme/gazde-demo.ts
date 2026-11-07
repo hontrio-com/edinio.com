@@ -13,8 +13,14 @@ import { bareHost, esteDomeniulPropriu } from "@/lib/platform-hosts";
   `Tema` (`cheie`, `slugDemo`); o proba le tine impreuna.
 */
 
+/**
+ * Cheile temelor, in ordinea lor (etapa 24: temele 2-30 vin pe loturi). Aici, nu in `teme.ts`: fisierul n-are dependente,
+ * il citeste proxy-ul. O proba tine lista egala cu `TEME`.
+ */
+export const CHEI_TEME = ["jupiter", "mercur", "venus", "terra", "marte"] as const;
+
 /** Tema (subdomeniul) -> slugul magazinului ei demo. Un `Map`, nu un obiect: `constructor.edinio.com` nu e o tema. */
-export const MAGAZINE_DEMO: ReadonlyMap<string, string> = new Map([["jupiter", "tema-jupiter"]]);
+export const MAGAZINE_DEMO: ReadonlyMap<string, string> = new Map(CHEI_TEME.map((c) => [c, `tema-${c}`]));
 
 /** Gazdele pe care traiesc subdomeniile demo: productia si, local, `*.localhost` (Chrome le trimite la 127.0.0.1). */
 const GAZDA_DEMO = /^([a-z0-9-]+)\.(edinio\.com|localhost)$/;

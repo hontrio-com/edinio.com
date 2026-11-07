@@ -1,0 +1,14 @@
+{
+  "grile": [
+    { "fisier": "grila-a-t.png", "fond": "transparent", "celule": ["categorii/telefoane", "categorii/laptopuri", "categorii/televizoare", "categorii/electrocasnice-mari", "categorii/electrocasnice-mici", "categorii/audio", "categorii/gaming", "categorii/climatizare", "produse/tableta-11-argintie"] },
+    { "fisier": "grila-b-t.png", "fond": "transparent", "celule": ["produse/smartphone-67", "produse/smartphone-61", "produse/laptop-156", "produse/ultrabook-14", "produse/tv-oled-65", "produse/tv-led-55", "produse/combina-frigorifica", "produse/masina-spalat-9kg", "produse/aspirator-vertical"] },
+    { "fisier": "grila-c-t.png", "fond": "transparent", "celule": ["produse/espressor-automat", "produse/casti-anc", "produse/boxa-portabila", "produse/consola-jocuri", "produse/controller-wireless", "produse/aer-conditionat-12000", "produse/purificator-aer", "produse/tableta-11-grafit", "produse/smartwatch"] },
+    { "fisier": "placi-foto.png", "fond": "pastreaza", "latime": 640, "celule": ["placi/tv-familie", "placi/bucatarie", "placi/casti-oras", "placi/gaming", "placi/aspirator", "placi/laptop", "placi/ceas-alergare", "placi/climatizare", "placi/telefon-prieteni"] }
+  ],
+  "poze": [
+    { "fisier": "banner-1.png", "iesire": "bannere/reduceri-iarna", "latime": 1600, "raport": 2.14 },
+    { "fisier": "banner-2.png", "iesire": "bannere/electrocasnice", "latime": 1600, "raport": 2.14 },
+    { "fisier": "banner-3.png", "iesire": "bannere/gaming", "latime": 1600, "raport": 2.14 }
+  ],
+  "sigla": { "fisier": "sigla.png", "fond": "alb", "inaltime": 140, "faviconLitera": { "litera": "V", "fundal": "#C8102E", "culoare": "#FFFFFF" } }
+}

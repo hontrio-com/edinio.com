@@ -38,7 +38,11 @@ begin
       ('tema-antares', 'Antares IT', 'Tehnologie la prețuri mici.', 'Magazin demonstrativ al temei Antares: laptopuri, telefoane, monitoare, componente și gaming.', 'antares@edinio-demo.test', '#1D4E89'),
       ('tema-arcturus', 'Arcturus Nutrition', 'Nutriție pentru fiecare obiectiv.', 'Magazin demonstrativ al temei Arcturus: proteine, creatină, vitamine, pre-workout și gustări proteice.', 'arcturus@edinio-demo.test', '#FF5A1F'),
       ('tema-aldebaran', 'Aldebaran Cellar', 'Băuturi alese, pentru seri bune.', 'Magazin demonstrativ al temei Aldebaran: vinuri, spumante, whisky, gin și coniac.', 'aldebaran@edinio-demo.test', '#C8A15A'),
-      ('tema-capella', 'Capella Pet', 'Tot ce le trebuie prietenilor tăi.', 'Magazin demonstrativ al temei Capella: hrană, jucării, acvarii, cuști și accesorii pentru animale.', 'capella@edinio-demo.test', '#2F9E41')
+      ('tema-capella', 'Capella Pet', 'Tot ce le trebuie prietenilor tăi.', 'Magazin demonstrativ al temei Capella: hrană, jucării, acvarii, cuști și accesorii pentru animale.', 'capella@edinio-demo.test', '#2F9E41'),
+      ('tema-deneb', 'Deneb Time', 'Ceasuri și bijuterii, alese cu grijă.', 'Magazin demonstrativ al temei Deneb: ceasuri, bijuterii, ochelari de soare, genți și parfumuri.', 'deneb@edinio-demo.test', '#111111'),
+      ('tema-spica', 'Spica Solar', 'Energie curată, din stoc propriu.', 'Magazin demonstrativ al temei Spica: panouri fotovoltaice, invertoare, baterii și încărcătoare EV.', 'spica@edinio-demo.test', '#111111'),
+      ('tema-procyon', 'Procyon Electro', 'Electronice și electrocasnice la un preț bun.', 'Magazin demonstrativ al temei Procyon: televizoare, electrocasnice, climatizare, laptopuri și telefoane.', 'procyon@edinio-demo.test', '#E4185D'),
+      ('tema-canopus', 'Canopus Keys', 'Tastaturi mecanice, construite pentru tine.', 'Magazin demonstrativ al temei Canopus: tastaturi mecanice, switch-uri, keycaps, mouse și căști.', 'canopus@edinio-demo.test', '#C6F432')
     ) as v(slug, nume, slogan, descriere, email, culoare)
   loop
     select id into magazin from public.businesses where slug = t.slug;

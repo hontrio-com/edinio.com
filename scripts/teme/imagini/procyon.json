@@ -1,0 +1,61 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/televizoare",
+    "categorii/electrocasnice-mari",
+    "categorii/climatizare",
+    "categorii/bucatarie",
+    "categorii/ingrijire-casa",
+    "categorii/laptopuri",
+    "categorii/telefoane",
+    "categorii/audio",
+    "produse/casti-anc"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/televizor-55",
+    "produse/masina-spalat",
+    "produse/aer-conditionat",
+    "produse/frigider-combina",
+    "produse/espressor-automat",
+    "produse/robot-aspirator",
+    "produse/laptop-15",
+    "produse/telefon-256",
+    "produse/cuptor-microunde"
+   ]
+  },
+  {
+   "fisier": "grila-c-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "poze/vitrina-tv",
+    "poze/vitrina-spalat",
+    "poze/vitrina-clima",
+    "poze/vitrina-aspirator",
+    "poze/vitrina-cafea",
+    "poze/placa-bucatarie",
+    "poze/placa-living",
+    "poze/placa-birou",
+    "poze/placa-drum"
+   ]
+  }
+ ],
+ "poze": [],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "P",
+   "fundal": "#E4185D",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

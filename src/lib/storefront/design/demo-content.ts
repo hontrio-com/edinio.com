@@ -60,6 +60,14 @@ export const DEMO_MOZAIC_HERO = [
   { titlu: "Casa si gradina", text: "Pana la 20% reducere.", imagine: "/demo/categorie-casa-gradina.webp", link: "#", fond: "deschis" },
 ];
 
+/** Cardurile bannerului „vitrina” (etapa 24, lotul 5): pe pozele demonstrative, ca miniatura sa nu fie goala. */
+export const DEMO_VITRINA_HERO = [
+  { eticheta: "-20%", titlu: "Noutatile sezonului", text: "Colectia noua a ajuns.", imagine: "/demo/banner-1.webp", link: "#" },
+  { eticheta: "Nou", titlu: "Electrocasnice", text: "Preturi mici azi.", imagine: "/demo/categorie-electrocasnice.webp", link: "#" },
+  { eticheta: "-15%", titlu: "Electronice", text: "Gadgeturi noi.", imagine: "/demo/categorie-electronice.webp", link: "#" },
+  { eticheta: "", titlu: "Casa si gradina", text: "Pana la 20% reducere.", imagine: "/demo/categorie-casa-gradina.webp", link: "#" },
+];
+
 /** Placile de recomandare (etapa 16.3): patru, din categoriile demonstrative. */
 export const DEMO_PLACI_PROMO = DEMO_CATEGORII.slice(0, 4).map(([titlu, imagine]) => ({ titlu, imagine, link: "#", eticheta: "" }));
 

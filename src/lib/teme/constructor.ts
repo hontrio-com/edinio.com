@@ -204,7 +204,11 @@ export function faraTexteleDemoReteta(reteta: RetetaTema, design: StoreDesign, d
   const home = design.home.map((s) => {
     if (s.kind === "hero") {
       const st = { ...s.settings };
-      if (Array.isArray(st.carduri)) st.carduri = fara(st.carduri, date.carduri);
+      // Cardurile „vitrinei” (lotul 5) vin din demo-ul bannerului, nu din `date.carduri`: se scot pe amandoua.
+      const vitrinaDemo = Array.isArray(demoBanner.carduri)
+        ? (demoBanner.carduri as { titlu: string; imagine: string }[]).map((x) => ({ titlu: x.titlu, imagine: x.imagine }))
+        : [];
+      if (Array.isArray(st.carduri)) st.carduri = fara(st.carduri, [...date.carduri, ...vitrinaDemo]);
       if (Array.isArray(st.placi)) st.placi = fara(st.placi, mozaicDemo);
       if (typeof demoBanner.titlu === "string" && st.titlu === demoBanner.titlu && st.imagine === demoBanner.imagine) {
         for (const k of ["titlu", "text", "buton", "link", "imagine"]) st[k] = "";

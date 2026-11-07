@@ -1,0 +1,52 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/ceasuri-barbati",
+    "categorii/ceasuri-dama",
+    "categorii/bijuterii",
+    "categorii/ochelari",
+    "categorii/genti",
+    "categorii/parfumuri",
+    "categorii/bratari",
+    "categorii/accesorii",
+    "produse/portofel-piele"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/ceas-cronograf",
+    "produse/ceas-auriu-dama",
+    "produse/colier-inima",
+    "produse/ochelari-aviator",
+    "produse/geanta-crossbody",
+    "produse/parfum-oriental",
+    "produse/bratara-zale",
+    "produse/ceas-sport",
+    "produse/cercei-perle"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/colectia",
+   "latime": 1600,
+   "raport": 2.14
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "D",
+   "fundal": "#111111",
+   "culoare": "#E8B923"
+  }
+ }
+}

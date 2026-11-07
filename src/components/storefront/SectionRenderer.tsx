@@ -96,6 +96,10 @@ const HeroMozaic = dynamic(
   () => import("./sections/hero/HeroMozaic").then((m) => m.HeroMozaic),
   { ssr: true },
 );
+const HeroVitrina = dynamic(
+  () => import("./sections/hero/HeroVitrina").then((m) => m.HeroVitrina),
+  { ssr: true },
+);
 const HeroPanoramic = dynamic(
   () => import("./sections/hero/HeroPanoramic").then((m) => m.HeroPanoramic),
   { ssr: true },
@@ -159,6 +163,7 @@ const HEROURI: Record<string, VariantaSectiune> = {
   impartit: HeroImpartit as VariantaSectiune,
   mozaic: HeroMozaic as VariantaSectiune,
   panoramic: HeroPanoramic as VariantaSectiune,
+  vitrina: HeroVitrina as VariantaSectiune,
 };
 
 /**

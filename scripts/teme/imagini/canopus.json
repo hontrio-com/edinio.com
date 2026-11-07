@@ -1,0 +1,76 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/tastaturi",
+    "categorii/mouse",
+    "categorii/switchuri",
+    "categorii/keycaps",
+    "categorii/casti",
+    "categorii/mousepaduri",
+    "categorii/cabluri",
+    "categorii/accesorii",
+    null
+   ]
+  },
+  {
+   "fisier": "grila-a.png",
+   "fond": "alb",
+   "celule": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "produse/keycap-artizan"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/tastatura-75",
+    "produse/tastatura-65",
+    "produse/mouse-ultrausor",
+    "produse/switchuri-liniare",
+    "produse/keycaps-pbt",
+    "produse/casti-wireless",
+    "produse/mousepad-xxl",
+    "produse/cablu-spiralat",
+    "produse/tastatura-tkl"
+   ]
+  },
+  {
+   "fisier": "grila-c-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "poze/vitrina-75",
+    "poze/vitrina-keycaps",
+    "poze/vitrina-mouse",
+    "poze/vitrina-aluminiu",
+    "poze/vitrina-switch",
+    "poze/placa-alb",
+    "poze/placa-rgb",
+    "poze/placa-custom",
+    "poze/placa-birou"
+   ]
+  }
+ ],
+ "poze": [],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "negru",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "C",
+   "fundal": "#0A0A0A",
+   "culoare": "#C6F432"
+  }
+ }
+}

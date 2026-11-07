@@ -192,7 +192,7 @@ test("⚠ panoul gri al randului sta in pagina, fara `100vw` (pe Windows aducea 
 
 test("miniaturile din galerii au continut de exemplu si pentru placi si pentru cardurile bannerului", () => {
   const p = cod("src/app/(public)/preview-sectiune/[slug]/page.tsx");
-  assert.match(p, /kind === "placi_promo" \? \{ placi: DEMO_PLACI_PROMO \}\s*: kind === "hero" && variantParam === "carduri" \? \{ carduri: DEMO_CARDURI_HERO \}\s*: kind === "hero" && variantParam === "mozaic" \? \{ placi: DEMO_MOZAIC_HERO \}\s*: \{\}/);
+  assert.match(p, /kind === "placi_promo" \? \{ placi: DEMO_PLACI_PROMO \}\s*: kind === "hero" && variantParam === "carduri" \? \{ carduri: DEMO_CARDURI_HERO \}\s*: kind === "hero" && variantParam === "mozaic" \? \{ placi: DEMO_MOZAIC_HERO \}\s*: kind === "hero" && variantParam === "vitrina" \? \{ carduri: DEMO_VITRINA_HERO \}\s*: \{\}/);
 });
 
 test("⚠ fiecare tip de camp din registru are control in panou: cardurile si placile le completeaza omul, nu doar tema", () => {

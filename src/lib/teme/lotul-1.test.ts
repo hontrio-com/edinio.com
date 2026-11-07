@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { esteFontPagina } from "@/lib/pages/fonturi";
 import { tokeniPeSuprafataInchisa } from "@/lib/storefront/design/css-vars";
-import { placileMozaic, imagineaBannerului, textSetare } from "@/lib/storefront/design/hero-teme";
+import { cardurileVitrinei, placileMozaic, imagineaBannerului, textSetare } from "@/lib/storefront/design/hero-teme";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import { CHEI_TEME, MAGAZINE_DEMO } from "./gazde-demo";
@@ -17,6 +17,8 @@ import { TEME, temaDupaCheie } from "./teme";
 
 const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 const LOTUL_1 = ["mercur", "venus", "terra", "marte"] as const;
+// Toate temele facute dupa reteta (2-30, loturile 1-7): Jupiter are probele lui, in `jupiter/`.
+const DUPA_RETETA = TEME.map((t) => t.cheie).filter((c) => c !== "jupiter");
 const poza = (cale: string) => join("public", cale);
 
 test("cheile temelor: aceeasi ordine in gazde (proxy) si in TEME, fiecare cu magazinul ei demo", () => {
@@ -27,8 +29,8 @@ test("cheile temelor: aceeasi ordine in gazde (proxy) si in TEME, fiecare cu mag
   }
 });
 
-test("fiecare tema din lot: fonturile sunt in lista celor gazduite, toate pozele exista pe disc", () => {
-  for (const cheie of LOTUL_1) {
+test("fiecare tema dupa reteta: fonturile sunt in lista celor gazduite, toate pozele exista pe disc", () => {
+  for (const cheie of DUPA_RETETA) {
     const t = temaDupaCheie(cheie)!;
     assert.ok(esteFontPagina(t.identitate.fontTitluri), `${cheie}: fontul titlurilor`);
     assert.ok(esteFontPagina(t.identitate.fontText), `${cheie}: fontul textului`);
@@ -37,6 +39,12 @@ test("fiecare tema din lot: fonturile sunt in lista celor gazduite, toate pozele
       ...t.date.categorii.map((c) => c.imagine), ...t.date.produse.map((p) => p.imagine),
       ...t.date.bannere.map((b) => b.imagine), ...t.date.placi.map((p) => p.imagine), ...t.date.carduri.map((c) => c.imagine),
     ];
+    // Si pozele pe care demo-ul le pune direct in banner (mozaic, vitrina, imaginea bannerului cu o singura poza).
+    const hero = t.design(ctx, t.date).home.find((s) => s.kind === "hero")!.settings;
+    for (const lista of [hero.placi, hero.carduri]) {
+      if (Array.isArray(lista)) for (const x of lista as { imagine?: string }[]) if (x.imagine) poze.push(x.imagine);
+    }
+    if (typeof hero.imagine === "string" && hero.imagine) poze.push(hero.imagine);
     for (const p of poze) assert.ok(existsSync(poza(p)), `${cheie}: lipseste ${p}`);
     // Adrese relative: pozele statice nu trec prin proxy, deci se vad pe orice gazda (decizia de la Jupiter, etapa 20).
     for (const p of poze) assert.match(p, new RegExp(`^/teme/${cheie}/`), p);
@@ -44,7 +52,7 @@ test("fiecare tema din lot: fonturile sunt in lista celor gazduite, toate pozele
 });
 
 test("setul demo se tine: produsele pe categorii care exista, randurile pe produse care exista, chei unice", () => {
-  for (const cheie of LOTUL_1) {
+  for (const cheie of DUPA_RETETA) {
     const { date } = temaDupaCheie(cheie)!;
     const categorii = new Set(date.categorii.flatMap((c) => [c.nume, ...c.copii]));
     for (const p of date.produse) assert.ok(categorii.has(p.categorie), `${cheie}: ${p.cheie} -> ${p.categorie}`);
@@ -111,6 +119,43 @@ test("mozaicul: placile se citesc oricum vin; fara titlu nu apar; fondul implici
   assert.equal(imagineaBannerului({}, []), null);
 });
 
+test("vitrina: cardurile se citesc oricum vin; fara titlu sau fara imagine nu apar; cel mult cinci", () => {
+  assert.deepEqual(cardurileVitrinei(undefined), []);
+  assert.deepEqual(cardurileVitrinei({ carduri: {} }), []);
+  const c = cardurileVitrinei({ carduri: [
+    { titlu: " A ", imagine: "/a.webp", eticheta: " -10% " }, { titlu: "fara poza" }, { imagine: "/fara-titlu.webp" }, null,
+    { titlu: "B", imagine: "/b.webp" }, { titlu: "C", imagine: "/c.webp" }, { titlu: "D", imagine: "/d.webp" }, { titlu: "E", imagine: "/e.webp" }, { titlu: "F", imagine: "/f.webp" },
+  ] });
+  assert.deepEqual(c.map((x) => x.titlu), ["A", "B", "C", "D", "E"]);
+  assert.equal(c[0].eticheta, "-10%");
+  assert.equal(c[1].eticheta, "");
+});
+
+test("vitrina si mozaicul: demo-ul intra doar cu datele demo, iar „Șterge datele demo” scoate cardurile lui", () => {
+  for (const cheie of DUPA_RETETA) {
+    const t = temaDupaCheie(cheie)!;
+    const cuDemo = t.design(ctx, t.date);
+    const hero = cuDemo.home.find((s) => s.kind === "hero")!;
+    if (hero.variant !== "vitrina" && hero.variant !== "mozaic") continue;
+    const lista = hero.variant === "vitrina" ? "carduri" : "placi";
+    assert.ok((hero.settings[lista] as unknown[]).length > 0, `${cheie}: demo-ul umple ${lista}`);
+    assert.deepEqual(t.design(ctx, null).home.find((s) => s.kind === "hero")!.settings[lista], [], `${cheie}: fara demo, gol`);
+    const { design } = t.faraTexteleDemo(cuDemo, t.date);
+    assert.deepEqual(design.home.find((s) => s.kind === "hero")!.settings[lista], [], `${cheie}: „Șterge datele demo”`);
+  }
+});
+
+test("pe suprafata inchisa, placile cu poze iau fondul ei si fara `multiply` (pozele nu se mai sting)", () => {
+  const inchis = tokeniPeSuprafataInchisa("#151515");
+  assert.match(inchis["--st-fond-placa"], /var\(--st-surface\)/);
+  assert.equal(inchis["--st-amestec-placa"], "normal");
+  for (const f of ["src/components/storefront/product/ProductCardJupiter.tsx", "src/components/storefront/sections/catalog/CategoryNavPlaci.tsx"]) {
+    const sursa = readFileSync(f, "utf8");
+    assert.ok(sursa.includes("[mix-blend-mode:var(--st-amestec-placa,multiply)]"), f);
+    assert.doesNotMatch(sursa, / mix-blend-multiply /, f);
+  }
+});
+
 test("⚠ tokenii aplicatiei trec pe culorile magazinului DOAR pe o suprafata inchisa (niciun magazin de azi nu se schimba)", () => {
   assert.deepEqual(tokeniPeSuprafataInchisa("#FFFFFF"), {});
   assert.deepEqual(tokeniPeSuprafataInchisa("#F5F6F8"), {});
@@ -126,9 +171,9 @@ test("⚠ tokenii aplicatiei trec pe culorile magazinului DOAR pe o suprafata in
   }
 });
 
-test("magazinele demo pe productie: SQL-ul le are pe toate din lot, cu slugul si emailul temei, si nu sterge nimic", () => {
+test("magazinele demo pe productie: SQL-ul le are pe toate temele dupa reteta, cu slugul si emailul temei, si nu sterge nimic", () => {
   const sql = readFileSync("scripts/teme/magazinele-demo-teme.sql", "utf8");
-  for (const cheie of LOTUL_1) {
+  for (const cheie of DUPA_RETETA) {
     const t = temaDupaCheie(cheie)!;
     assert.match(sql, new RegExp(`\\('tema-${cheie}', '${t.magazinDemo!.nume}', `), cheie);
     assert.ok(sql.includes(`'${t.magazinDemo!.email}'`), cheie);

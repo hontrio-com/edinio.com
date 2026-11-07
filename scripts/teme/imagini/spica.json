@@ -1,0 +1,51 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/panouri",
+    "categorii/invertoare",
+    "categorii/baterii",
+    "categorii/kituri",
+    "categorii/incarcatoare-ev",
+    "categorii/structuri",
+    "categorii/cabluri",
+    "categorii/accesorii",
+    "produse/conectori-mc4"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/panou-450w",
+    "produse/invertor-hibrid-6kw",
+    "produse/baterie-litiu-5kwh",
+    "produse/kit-5kw",
+    "produse/wallbox-11kw",
+    "produse/structura-tigla",
+    "produse/cablu-solar",
+    "produse/contor-inteligent",
+    "produse/panou-bifacial"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "poza-mozaic.png",
+   "iesire": "poze/mozaic",
+   "latime": 1400
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "S",
+   "fundal": "#111111",
+   "culoare": "#FFC400"
+  }
+ }
+}

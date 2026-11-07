@@ -884,6 +884,28 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         ],
         defaults: { titlu: "", text: "", buton: "", link: "", imagine: "", aliniere: "centru" },
       },
+      // Temele Procyon si Canopus (etapa 24, lotul 5): un rand de carduri inalte, fiecare o fotografie cu titlu.
+      vitrina: {
+        label: "Rând de carduri înalte cu fotografie",
+        tags: ["cu imagine", "indraznet"],
+        layout: "full",
+        previewHeight: 560,
+        providesH1: true,
+        fields: [
+          {
+            key: "carduri", type: "repeater", label: "Cardurile", itemLabel: "Card", max: 5,
+            help: "Pe desktop se văd patru, al cincilea se derulează. Un card fără titlu sau fără imagine nu apare.",
+            fields: [
+              { key: "eticheta", type: "text", label: "Eticheta de sus", placeholder: "-20%", maxLength: 16 },
+              { key: "titlu", type: "text", label: "Titlul", maxLength: 50 },
+              { key: "text", type: "text", label: "Textul", maxLength: 90 },
+              { key: "imagine", type: "image", label: "Imaginea" },
+              { key: "link", type: "link", label: "Linkul" },
+            ],
+          },
+        ],
+        defaults: { carduri: [] },
+      },
     },
   },
   usp_strip: {

@@ -2533,11 +2533,14 @@ begin
     optiuni          = case when jsonb_typeof(r->'optiuni') = 'null' then null else r->'optiuni' end,
     descriere_scurta = coalesce(r->>'descriere_scurta', ''),
     cauta_norm       = coalesce(r->>'cauta_norm', ''),
-    -- `text[]` dintr-un array jsonb de siruri. `coalesce` pe array gol, nu pe
-    -- null: coloana e `not null`.
     fatete           = coalesce(
                          (select array_agg(x #>> '{}') from jsonb_array_elements(r->'fatete') x),
                          '{}'::text[]),
+    coduri           = case when jsonb_typeof(r->'coduri') = 'array'
+                            then coalesce(
+                                   (select array_agg(x #>> '{}') from jsonb_array_elements(r->'coduri') x),
+                                   '{}'::text[])
+                            else cp.coduri end,
     proiectat_la     = (r->>'proiectat_la')::timestamptz
   from jsonb_array_elements(p_randuri) r
   where cp.product_id = (r->>'product_id')::uuid;
@@ -2578,17 +2581,33 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.catalog_bucati_cod(p_cuvinte text[])
+ RETURNS text[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(distinct x), '{}'::text[])
+    from (select array_to_string(p_cuvinte[i:j], '') as x
+            from generate_subscripts(coalesce(p_cuvinte, '{}'::text[]), 1) i
+           cross join lateral generate_series(i, least(cardinality(p_cuvinte), i + 7)) j) z
+   where length(x) >= 3;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb)
  RETURNS TABLE(product_id uuid)
  LANGUAGE sql
  STABLE SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp', 'extensions'
 AS $function$
-  with cerute as (
+  with bucati as (select public.catalog_bucati_cod(p_cuvinte) as b),
+  cerute as (
     select w, public.semnatura_cuvant(w) as semn,
            case when length(w) >= 7 then 2 when length(w) >= 4 then 1 else 0 end as buget
       from unnest(coalesce(p_cuvinte, '{}'::text[])) w
      where length(w) >= 1
+       and not exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) z where length(z) < 3)
   ),
   potrivite as (
     select distinct c.w as cerut, v.cuvant
@@ -2618,6 +2637,14 @@ AS $function$
       from pe_cerut g
      group by g.product_id
     having count(*) = (select count(*) from cerute)
+    union
+    select c.product_id
+      from public.catalog_produs c, bucati
+     where c.business_id = p_business
+       and cardinality(bucati.b) > 0
+       and (c.coduri && bucati.b
+            or exists (select 1 from unnest(c.coduri) k, unnest(bucati.b) p
+                        where p ~ '[0-9]' and k like p || '%'))
   ),
   filtru as (
     select coalesce((p_filtre->>'faraImagini')::boolean, false)     as fara_img,
@@ -2669,6 +2696,7 @@ declare
   v_vocabular int;
   v_nr        int;
   v_out       jsonb;
+  v_bucati    text[] := public.catalog_bucati_cod(p_cuvinte);
 begin
   if not exists (
     select 1 from public.businesses b
@@ -2682,7 +2710,15 @@ begin
     return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', 0, 'prea_larg', false, 'cuvant_scurt', false);
   end if;
 
-  if exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) w where length(w) < 3) then
+  if exists (select 1 from unnest(coalesce(p_cuvinte, '{}'::text[])) w where length(w) < 3)
+     and not exists (
+       select 1 from public.catalog_produs c
+        where c.business_id = p_business
+          and cardinality(v_bucati) > 0
+          and (c.coduri && v_bucati
+               or exists (select 1 from unnest(c.coduri) k, unnest(v_bucati) p
+                           where p ~ '[0-9]' and k like p || '%'))
+     ) then
     return jsonb_build_object('randuri', '[]'::jsonb, 'vocabular', v_vocabular,
                               'prea_larg', false, 'cuvant_scurt', true);
   end if;
@@ -11168,8 +11204,6 @@ begin
   end if;
 
   if tg_op = 'UPDATE' then
-    -- ⚠ Un produs inactiv pana acum n-avea rand in catalog: il primeste chiar mai jos,
-    -- GOL, deci trebuie proiectat oricat de putin s-ar fi schimbat in rest.
     v_doar_stoc :=
       coalesce(old.is_active, false)
       and new.name             is not distinct from old.name
@@ -11179,7 +11213,8 @@ begin
       and new.price        is not distinct from old.price
       and new.page_sections is not distinct from old.page_sections
       and new.images       is not distinct from old.images
-      and new.slug         is not distinct from old.slug;
+      and new.slug         is not distinct from old.slug
+      and new.sku          is not distinct from old.sku;
   end if;
 
   insert into public.catalog_produs as cp (
@@ -12234,7 +12269,8 @@ create table if not exists public.catalog_produs (
   descriere_scurta text default ''::text not null,
   cauta_norm text default ''::text not null,
   fatete text[] default '{}'::text[] not null,
-  proiectat_la timestamp with time zone);
+  proiectat_la timestamp with time zone,
+  coduri text[] default '{}'::text[] not null);
 
 create table if not exists public.catalog_rezumat (
   business_id uuid not null,
@@ -14804,7 +14840,7 @@ CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW
 CREATE TRIGGER pepita_listari_stampileaza_clipa BEFORE UPDATE ON public.pepita_listari FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION pepita_stampileaza_listarea();
 CREATE TRIGGER aboutyou_marcheaza_modificarea AFTER UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity ON public.products FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_modificarea();
 CREATE TRIGGER easysales_marcheaza_produsul AFTER INSERT OR DELETE OR UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity, slug, is_bundle ON public.products FOR EACH ROW EXECUTE FUNCTION easysales_marcheaza_produsul();
-CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
+CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections, sku ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
 CREATE TRIGGER products_repretuieste_pachetele AFTER UPDATE OF price ON public.products FOR EACH ROW WHEN (((NOT COALESCE(new.is_bundle, false)) AND (new.price IS DISTINCT FROM old.price))) EXECUTE FUNCTION trg_repretuieste_pachetele();
 CREATE TRIGGER products_sync_variant_stock BEFORE INSERT OR UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION sync_product_stock_from_variants();
 CREATE TRIGGER set_products_updated_at BEFORE UPDATE ON public.products FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -17838,6 +17874,7 @@ grant execute on function public.carduri_secundare(p_business uuid, p_fel text, 
 grant execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
 grant execute on function public.catalog_aplica_proiectii(p_randuri jsonb) to service_role;
 grant execute on function public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean) to service_role;
+grant execute on function public.catalog_bucati_cod(p_cuvinte text[]) to service_role;
 grant execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) to service_role;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to anon;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to authenticated;
@@ -18245,6 +18282,7 @@ revoke execute on function public.canale_vanzare(p_business uuid) from public;
 revoke execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
 revoke execute on function public.catalog_branduri(p_business uuid, p_fara_imagini boolean, p_fara_stoc_ascuns boolean) from public;
+revoke execute on function public.catalog_bucati_cod(p_cuvinte text[]) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
 revoke execute on function public.catalog_fara_stoc(p_id uuid) from public;

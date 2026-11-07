@@ -13,7 +13,8 @@ import { refuzaCanalDeclaratLaEasySales } from "@/lib/easysales/exclusivitate";
 import { randomBytes } from "crypto";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
-import { enqueueTrendyolLivrareMany } from "@/lib/trendyol/queue";
+import { enqueueTrendyolInventoryMany, enqueueTrendyolLivrareMany } from "@/lib/trendyol/queue";
+import { areComutatoareProprii } from "@/lib/trendyol/politica-sincronizare";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -31,7 +32,7 @@ import {
 import { indexeazaFrunze, potrivesteIndexat, type PotrivireCategorie } from "@/lib/trendyol/category-match";
 import { sugereazaAtribute, type SugestieAtribut, type ValoriAtribut } from "@/lib/trendyol/attribute-autofill";
 import {
-  loadTrendyolContext, pushInventoryNow, removeProductNow, syncProductNow, syncProductsBulk,
+  loadTrendyolContext, pushInventoryNow, relegaListarileExistente, removeProductNow, syncProductNow, syncProductsBulk,
 } from "@/lib/trendyol/sync";
 import {
   setPackageStatus, sendTrackingNumber, getFulfillmentState, nuPotFurniza,
@@ -156,6 +157,10 @@ export interface TrendyolStatus {
   brandId?: number;
   brandName?: string;
   autoSync: boolean;
+  /** Comutatoarele separate. Cu `comutatoareProprii` fals, magazinul merge pe regula veche. */
+  sincronizeazaStocul: boolean;
+  sincronizeazaPretul: boolean;
+  comutatoareProprii: boolean;
   autoPublish: boolean;
   /** Tara de FABRICATIE implicita a magazinului (ISO2), sau `""` daca n-a ales niciuna. */
   defaultCountryOfOrigin: string;
@@ -178,7 +183,7 @@ export interface TrendyolStatus {
    * ⚠ Măsurat pe contul real, 24.08.2026: 29 de listări adoptate din 1287. Comerciantul
    * a aflat dintr-o comandă vândută cu 39,99 pentru un produs care în magazin e 43,99.
    */
-  counts: { listings: number; approved: number; rejected: number; variants: number; queued: number; orders: number; preluate: number };
+  counts: { listings: number; approved: number; rejected: number; variants: number; queued: number; orders: number; preluate: number; erori: number };
 }
 
 export async function getTrendyolStatus(businessId: string): Promise<TrendyolStatus | { error: string }> {
@@ -187,7 +192,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
   const { supabase } = g;
   const config = await loadConfig(businessId);
 
-  const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }, { count: preluate }] = await Promise.all([
+  const [{ count: listings }, { count: approved }, { count: rejected }, { count: variants }, { count: queued }, { count: orders }, { count: preluate }, { count: erori }] = await Promise.all([
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId),
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).in("status", ["approved", "active"]),
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "rejected"),
@@ -198,6 +203,9 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
        aici și fapta de acolo să citească ACELAȘI lucru. */
     supabase.from("trendyol_listings").select("id", { count: "exact", head: true })
       .eq("business_id", businessId).eq("auto_inventory", false),
+    /* Acelasi set pe care il ia la rand `relegaListarileExistente`. */
+    supabase.from("trendyol_listings").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("status", "error"),
   ]);
 
   const vitrina = config.storefront ?? TRENDYOL_DEFAULT_STOREFRONT;
@@ -223,6 +231,9 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
     brandId: config.brand_id ?? undefined,
     brandName: config.brand_name ?? undefined,
     autoSync: config.auto_sync !== false,
+    sincronizeazaStocul: config.sincronizeaza_stocul !== false,
+    sincronizeazaPretul: config.sincronizeaza_pretul !== false,
+    comutatoareProprii: areComutatoareProprii(config),
     autoPublish: config.auto_publish === true,
     /* ⚠ Se intoarce GOL cand nu s-a ales, nu „RO": ecranul trebuie sa arate ca lipseste, nu
        sa para completat. */
@@ -238,6 +249,7 @@ export async function getTrendyolStatus(businessId: string): Promise<TrendyolSta
       listings: listings ?? 0, approved: approved ?? 0, rejected: rejected ?? 0,
       variants: variants ?? 0, queued: queued ?? 0, orders: orders ?? 0,
       preluate: preluate ?? 0,
+      erori: erori ?? 0,
     },
   };
 }
@@ -380,6 +392,13 @@ export interface TrendyolSettingsInput {
   brand_id?: number | null;
   brand_name?: string | null;
   auto_sync?: boolean;
+  /**
+   * Cele doua comutatoare separate (04.11.2026). ⚠ Ecranul le trimite DOAR daca omul le-a atins
+   * sau daca magazinul le are deja scrise: trimise din oficiu, o simpla salvare a adresei ar fi
+   * pornit pretul pe listarile preluate. Vezi `politica-sincronizare.ts`.
+   */
+  sincronizeaza_stocul?: boolean;
+  sincronizeaza_pretul?: boolean;
   auto_publish?: boolean;
   /**
    * ⚠ Tara de FABRICATIE implicita, ISO2. Din 23.10.2026 ei cer campul `origin` la nivel de
@@ -454,6 +473,8 @@ export async function saveTrendyolSettings(
     ...(input.brand_id !== undefined ? { brand_id: input.brand_id ?? null } : {}),
     ...(input.brand_name !== undefined ? { brand_name: input.brand_name ?? null } : {}),
     ...(input.auto_sync !== undefined ? { auto_sync: input.auto_sync } : {}),
+    ...(typeof input.sincronizeaza_stocul === "boolean" ? { sincronizeaza_stocul: input.sincronizeaza_stocul } : {}),
+    ...(typeof input.sincronizeaza_pretul === "boolean" ? { sincronizeaza_pretul: input.sincronizeaza_pretul } : {}),
     ...(input.auto_publish !== undefined ? { auto_publish: input.auto_publish } : {}),
     /* ⚠ Golita dinadins => `null`, nu „lasa cum era": altfel comerciantul nu si-ar putea SCOATE
        niciodata o tara pusa gresit. */
@@ -497,8 +518,57 @@ export async function saveTrendyolSettings(
     );
   }
 
+  /*
+   * ═══ ⚠ SI COMUTATOARELE DE STOC / PRET AJUNG SINGURE LA PRODUSE (04.11.2026) ═══
+   *
+   * Aceeasi lectie ca termenul de mai sus: salvata doar in configurare, schimbarea ar fi ajuns la
+   * un produs abia la urmatoarea lui vanzare sau modificare. La VetDepo, 998 de listari preluate
+   * n-au primit niciodata stocul. Deci, cand politica se schimba, fiecare listare publicata isi
+   * reprimeste stocul (si pretul, daca e pornit), prin coada obisnuita si ritmul ei.
+   *
+   * ⚠ Se compara POLITICA, nu bifele: la un magazin fara comutatoare scrise, „stoc pornit, pret
+   * pornit” schimba ceva doar pentru listarile preluate, iar ele sunt tocmai motivul.
+   */
+  const inainte = { s: config.sincronizeaza_stocul, p: config.sincronizeaza_pretul };
+  const dupa = {
+    s: typeof input.sincronizeaza_stocul === "boolean" ? input.sincronizeaza_stocul : inainte.s,
+    p: typeof input.sincronizeaza_pretul === "boolean" ? input.sincronizeaza_pretul : inainte.p,
+  };
+  const politicaSchimbata = dupa.s !== inainte.s || dupa.p !== inainte.p;
+  const pornesteCeva = dupa.s !== false || dupa.p !== false;
+  if (politicaSchimbata && pornesteCeva) {
+    const ids = randuriCitite<{ product_id: string | null }>("trendyol.listariPentruStoc", await admin
+      .from("trendyol_listings").select("product_id").eq("business_id", businessId)
+      .in("status", ["approved", "active", "created"])
+      .not("product_id", "is", null).limit(5000) as never);
+    dupaRaspuns(
+      () => enqueueTrendyolInventoryMany(businessId, ids.map((r: { product_id: string | null }) => r.product_id)),
+      "enqueueTrendyolInventoryMany", businessId,
+    );
+  }
+
   revalidatePath(FEATURE_PATH);
   return { success: true };
+}
+
+/**
+ * Butonul „Leagă produsele care există deja pe Trendyol”: o fereastra din listarile pe eroare.
+ *
+ * ⚠ O FEREASTRA PE APEL, nu tot catalogul: 500 de intrebari la ei, una dupa alta, trec de timpul
+ * unei cereri. Ecranul cheama din nou cu `urmatorul` pana ajunge la `total`, si arata unde e.
+ * Cronul face acelasi lucru singur, la cinci minute (vezi `relegaListarileExistente`).
+ */
+export async function leagaProduseleExistente(
+  businessId: string, deLa: number,
+): Promise<{ success: true; verificate: number; legate: number; total: number; urmatorul: number; oprit?: string } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const admin = createAdminClient();
+  const ctx = await loadTrendyolContext(admin, businessId);
+  if (!ctx) return { error: "Trendyol nu este conectat." };
+  const r = await relegaListarileExistente(admin, ctx, { max: 40, deLa: Math.max(0, Math.floor(Number(deLa) || 0)) });
+  if (r.legate > 0) revalidatePath(FEATURE_PATH);
+  return { success: true, ...r };
 }
 
 // ── Order webhook (subscribe / unsubscribe) ─────────────────────────────────────

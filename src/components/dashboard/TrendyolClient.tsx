@@ -19,7 +19,7 @@ import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
   connectTrendyol, disconnectTrendyol, getTrendyolAddresses,
-  pornesteSincronizareaAdoptatelor, saveTrendyolSettings,
+  leagaProduseleExistente, pornesteSincronizareaAdoptatelor, saveTrendyolSettings,
   subscribeTrendyolWebhook, unsubscribeTrendyolWebhook,
   type TrendyolStatus,
 } from "@/lib/actions/trendyol.actions";
@@ -100,6 +100,39 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
       router.refresh();
     });
   }
+  /*
+   * ⚠ NU INTR-O TRANZITIE: bucla cheama actiunea de mai multe ori, iar o tranzitie async ar tine
+   * pe loc navigarea din panou pe toata durata ei (vezi nota despre `useTransition`). Starea
+   * proprie `legare` arata unde a ajuns.
+   */
+  async function leagaExistente() {
+    if (legare) return;
+    let deLa = 0, verificate = 0, legate = 0, total = status?.counts.erori ?? 0;
+    setLegare({ verificate, legate, total });
+    try {
+      for (let pas = 0; pas < 40; pas++) {
+        const r = await leagaProduseleExistente(businessId, deLa);
+        if ("error" in r) { toast.error(r.error); break; }
+        verificate += r.verificate; legate += r.legate; total = r.total + legate;
+        setLegare({ verificate, legate, total });
+        if (r.oprit) { toast.warning(r.oprit); break; }
+        if (r.verificate === 0 || r.urmatorul >= r.total) break;
+        deLa = r.urmatorul;
+      }
+      toast.success(
+        legate === 0
+          ? `Am verificat ${verificate} ${verificate === 1 ? "produs" : "produse"}. Niciunul nu exista deja pe Trendyol.`
+          : `Gata: ${legate} ${legate === 1 ? "produs legat" : "produse legate"} din ${verificate} verificate.`,
+        { duration: 10000 },
+      );
+    } catch {
+      toast.error("Nu am primit raspuns de la server. Ce s-a legat pana acum ramane legat; poti apasa din nou.");
+    } finally {
+      setLegare(null);
+      router.refresh();
+    }
+  }
+
   // Care buton a pornit tranzitia. `useTransition` da un singur `pending` pe toata
   // componenta, deci fara asta salvarea setarilor punea spinner si pe butonul de
   // webhook, de parca s-ar fi intamplat doua lucruri deodata.
@@ -119,6 +152,16 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
   const [termenExpediere, setTermenExpediere] = useState(
     status?.deliveryDuration != null ? String(status.deliveryDuration) : "");
   const [autoSync, setAutoSync] = useState(status?.autoSync ?? true);
+  /*
+   * ⚠ CELE DOUA COMUTATOARE PLEACA LA SALVARE DOAR DACA AU FOST ATINSE, sau daca magazinul le are
+   * deja scrise. Un magazin fara ele merge pe regula veche (listarile preluate nu primesc nimic);
+   * trimise din oficiu „pornit / pornit”, o salvare a adresei de retur ar fi inceput sa rescrie
+   * preturile tuturor listarilor preluate.
+   */
+  const [stocPornit, setStocPornit] = useState(status?.sincronizeazaStocul ?? true);
+  const [pretPornit, setPretPornit] = useState(status?.sincronizeazaPretul ?? true);
+  const [comutatoareAtinse, setComutatoareAtinse] = useState(false);
+  const [legare, setLegare] = useState<{ verificate: number; legate: number; total: number } | null>(null);
   const [autoPublish, setAutoPublish] = useState(status?.autoPublish ?? false);
   const [taraOrigine, setTaraOrigine] = useState(status?.defaultCountryOfOrigin ?? "");
   const [facturam, setFacturam] = useState(status?.factureazaClientul ?? false);
@@ -249,6 +292,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
           delivery_duration: termenExpediere === "" ? null : Number(termenExpediere),
           default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
           auto_sync: autoSync,
+          ...(status?.comutatoareProprii || comutatoareAtinse
+            ? { sincronizeaza_stocul: stocPornit, sincronizeaza_pretul: pretPornit }
+            : {}),
           /*
            * ⚠ SE TRIMITE CE A BIFAT OMUL (26.08.2026).
            *
@@ -627,6 +673,28 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
             />
 
             {/*
+              ═══ ⚠ STOCUL SI PRETUL, SEPARAT (04.11.2026, VetDepo) ═══
+
+              Comerciantul vinde pe Trendyol la alte preturi decat in magazin. Cu pretul oprit,
+              Edinio trimite stocul impreuna cu pretul pe care produsul il are DEJA la ei, citit
+              chiar inainte, deci pretul de acolo nu se schimba. Valabile pentru toate produsele,
+              si cele preluate din contul lui. Vezi `politica-sincronizare.ts`.
+            */}
+            <RandDeComutator
+              titlu="Trimite stocul la Trendyol"
+              text="Cantitatea din magazin ajunge pe Trendyol la fiecare vânzare sau modificare, pentru toate produsele legate, inclusiv cele preluate din contul tău."
+              atentie={!stocPornit ? "Cu stocul oprit, Trendyol poate vinde produse pe care nu le mai ai. Un produs dezactivat sau șters în magazin se scoate totuși de la vânzare." : undefined}
+              pornit={stocPornit}
+              comuta={(v) => { setStocPornit(v); setComutatoareAtinse(true); }}
+            />
+            <RandDeComutator
+              titlu="Trimite prețul la Trendyol"
+              text="Oprit, prețul de pe Trendyol rămâne cel pus de tine acolo, iar Edinio trimite doar stocul. Pornit, prețul din magazin îl înlocuiește pe cel de pe Trendyol."
+              pornit={pretPornit}
+              comuta={(v) => { setPretPornit(v); setComutatoareAtinse(true); }}
+            />
+
+            {/*
               ═══ ⚠ BIFA DE DEASUPRA NU E ÎNTREGUL ADEVĂR (24.08.2026) ═══
 
               Sunt două comutatoare, la două niveluri. Bifa hotărăște dacă integrarea
@@ -644,7 +712,8 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
 
               Deci excepția se scrie chiar sub comutatorul pe care îl contrazice.
             */}
-            {status.counts.preluate > 0 && (
+            {/* ⚠ Cu comutatoarele scrise, preluatele ASCULTA de ele, deci nota nu mai e adevarata. */}
+            {status.counts.preluate > 0 && !status.comutatoareProprii && (
               <Callout
                 variant="warning"
                 icon={AlertTriangle}
@@ -660,6 +729,23 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                 Trendyol, unde {status.counts.preluate === 1 ? "exista" : "existau"} dinainte cu
                 prețul pus de tine acolo. Edinio nu-l suprascrie fără să ceri, deci prețul lor de
                 pe Trendyol rămâne cel vechi oricâte modificări faci în magazin.
+              </Callout>
+            )}
+
+            {status.counts.erori > 0 && (
+              <Callout
+                variant="info"
+                icon={Layers}
+                title={`${status.counts.erori} ${status.counts.erori === 1 ? "produs e" : "produse sunt"} pe eroare`}
+                action={
+                  <Button variant="outline" size="sm" onClick={leagaExistente} disabled={legare !== null}>
+                    {legare ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                    {legare ? `Verific ${legare.verificate} din ${legare.total}` : "Leagă produsele existente"}
+                  </Button>
+                }
+              >
+                Unele există deja în contul tău Trendyol (de exemplu „Codul de bare există deja”). Edinio
+                le verifică singur la câteva minute și le leagă; butonul le verifică acum, pe toate.
               </Callout>
             )}
 

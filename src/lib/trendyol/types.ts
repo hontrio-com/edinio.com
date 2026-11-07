@@ -292,6 +292,14 @@ export interface TrendyolConfig {
   webhook_secret?: string;
   auto_sync?: boolean;
   /**
+   * Trimite stocul din Edinio la Trendyol. Separat de pret (04.11.2026, VetDepo vinde acolo la
+   * alte preturi). ⚠ Nescris inseamna purtarea de dinainte, nu „pornit": vezi
+   * `politica-sincronizare.ts`.
+   */
+  sincronizeaza_stocul?: boolean;
+  /** Trimite pretul din Edinio la Trendyol. Oprit, pretul pus de comerciant acolo ramane. */
+  sincronizeaza_pretul?: boolean;
+  /**
    * Publica pe Trendyol orice produs nou din magazin, fara trecere prin editor.
    * Listarea se construieste din maparea categoriei; produsele cu categoria
    * nemapata esueaza vizibil in coada, nu pleaca gresit.

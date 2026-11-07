@@ -17,6 +17,8 @@ import {
   stocVarianteiSalvate, stocuriVii, verificaBarcode,
   type MappableProduct, type TrendyolListingEnrichment, type TrendyolVariantData,
 } from "./mapping";
+import { aplicaPolitica, politicaSincronizare } from "./politica-sincronizare";
+import { enqueueTrendyolInventoryMany } from "./queue";
 import type { TrendyolCategoryAttribute, TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
 import { getCategoryAttributesCached } from "./taxonomy";
 import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
@@ -994,9 +996,48 @@ export type InventoryItem = { barcode: string; quantity: number; salePrice: numb
 // Compute the price-and-inventory items Edinio intends for a product. Shared by the
 // forward push AND the reverse reconciliation, so both agree exactly (no oscillation).
 // Returns null when the listing isn't pushable (not on Trendyol yet, no variants).
+/** Stocul si pretul de ACUM de la Trendyol, pe barcode. */
+type ValoriActuale = ReadonlyMap<string, { quantity: number; salePrice: number; listPrice: number }>;
+
+/**
+ * Citeste de la Trendyol stocul si pretul actual al unor barcoduri.
+ *
+ * ⚠ Masurat pe contul VetDepo, 04.11.2026: `approved/inventory-and-price?barcode=` intoarce si la
+ * listarile preluate produsul cu `variants[{barcode, quantity, salePrice, listPrice}]`. Un produs
+ * neaprobat nu apare deloc, si atunci barcodul lipseste din harta (nu are ce pastra).
+ *
+ * ⚠ O cerere cazuta intoarce eroarea CU STATUSUL, nu o harta goala: goala ar insemna „nimic de
+ * trimis", iar miscarea de stoc dupa o vanzare s-ar pierde tacut in loc sa se reia.
+ */
+async function valorileActuale(
+  auth: TrendyolSyncContext["auth"], barcoduri: string[],
+): Promise<{ ok: true; harta: ValoriActuale } | { ok: false; error: string; status?: number }> {
+  const out = new Map<string, { quantity: number; salePrice: number; listPrice: number }>();
+  for (const barcode of [...new Set(barcoduri)]) {
+    const res = await getApprovedProducts(auth, { barcode, size: 5 });
+    if (isTrendyolError(res)) return { ok: false, error: res.error, status: res.status };
+    for (const p of res.data?.content ?? []) {
+      for (const v of p.variants ?? []) {
+        if (v.barcode === barcode) {
+          out.set(barcode, {
+            quantity: Number(v.quantity ?? 0), salePrice: Number(v.salePrice ?? 0), listPrice: Number(v.listPrice ?? 0),
+          });
+        }
+      }
+    }
+  }
+  return { ok: true, harta: out };
+}
+
 async function computeInventoryItems(
   admin: Db, ctx: TrendyolSyncContext, productId: string, forceZero = false, manual = false,
-): Promise<{ items: InventoryItem[]; listing: ListingRow } | { error: string } | null> {
+  optiuni: {
+    /** Valorile de la Trendyol deja citite (reconcilierea le are pe tot catalogul): nu se mai cer. */
+    actuale?: ValoriActuale;
+    /** Doar barcodurile conteaza (termenul de livrare): fara citiri de la Trendyol. */
+    doarBarcoduri?: boolean;
+  } = {},
+): Promise<{ items: InventoryItem[]; listing: ListingRow } | { error: string; status?: number } | null> {
   /* ⚠ Aici `null` inseamna „nu se poate impinge", iar miscarea de stoc de dupa o vanzare s-ar
      pierde tacut — marfa s-ar vinde a doua oara pe Trendyol. Se deosebeste de o pana. */
   const product = randCitit<Record<string, unknown>>("trendyol.produsulPentruStoc", await admin
@@ -1024,7 +1065,12 @@ async function computeInventoryItems(
    * Edinio nu poate depinde de o preferinta de sincronizare. La fel si o
    * impingere ceruta EXPLICIT de comerciant (`manual`).
    */
-  if (listing.auto_inventory === false && !manual && !forceZero) return null;
+  /*
+   * ⚠ Hotararea sta acum in `politicaSincronizare`: fara comutatoarele magazinului scrise, e
+   * exact regula de mai sus (`auto_inventory === false && !manual && !forceZero` => nimic).
+   */
+  const pol = politicaSincronizare(ctx.config, listing, { manual, forceZero });
+  if (!pol.stoc && !pol.pret) return null;
   const variants = (await getVariantData(admin, listing.id)).filter((v) => v.enabled && v.barcode);
   if (variants.length === 0) return null;
 
@@ -1044,7 +1090,18 @@ async function computeInventoryItems(
       listPrice: priced.listPrice,
     });
   }
-  return { items, listing };
+  if (optiuni.doarBarcoduri || (pol.stoc && pol.pret)) return { items, listing };
+
+  /* Jumatatea oprita pleaca cu valoarea pe care o au deja ei. Vezi `aplicaPolitica`. */
+  let actuale = optiuni.actuale;
+  if (!actuale) {
+    const citite = await valorileActuale(ctx.auth, items.map((i) => i.barcode));
+    if (!citite.ok) return { error: citite.error, status: citite.status };
+    actuale = citite.harta;
+  }
+  const finale = aplicaPolitica(items, actuale, pol);
+  if (finale.length === 0) return null;
+  return { items: finale, listing };
 }
 
 export async function pushInventoryNow(
@@ -1052,7 +1109,8 @@ export async function pushInventoryNow(
 ): Promise<SyncOutcome> {
   const built = await computeInventoryItems(admin, ctx, productId, forceZero, manual);
   if (built === null) return { ok: true, action: "skipped" };
-  if ("error" in built) return { ok: false, error: built.error };
+  /* ⚠ Cu statusul: o citire a pretului actual cazuta pe 429 se reia fara sa arda o incercare. */
+  if ("error" in built) return { ok: false, error: built.error, ...(built.status != null ? { status: built.status } : {}) };
 
   const res = await updatePriceInventory(ctx.auth, built.items);
   if (isTrendyolError(res)) {
@@ -1095,7 +1153,7 @@ export async function pushLivrareNow(
   if (zile == null) return { ok: true, action: "skipped" };
 
   /* Barcodurile ies din aceeasi socoteala ca la stoc, deci nu se pot desparti de ea. */
-  const built = await computeInventoryItems(admin, ctx, productId);
+  const built = await computeInventoryItems(admin, ctx, productId, false, false, { doarBarcoduri: true });
   if (built === null) return { ok: true, action: "skipped" };
   if ("error" in built) return { ok: false, error: built.error };
 
@@ -1665,7 +1723,7 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
            * deja la ei. Cel mai des motiv de refuz la creare e chiar asta, iar
            * el nu e o eroare de reparat, ci o listare de adoptat.
            */
-          const adoptat = await incearcaAdoptarea(admin, ctx, listing, motiveleLui);
+          const adoptat = (await incearcaAdoptarea(admin, ctx, listing, motiveleLui)) === "adoptat";
           if (!adoptat) {
             if (!await setListingStatus(admin, listing.id, "error", {
               error: motiveleLui.slice(0, 5).join("; ").slice(0, 500) || "Eroare la procesarea pe Trendyol.",
@@ -1948,18 +2006,27 @@ export async function pollOpenBatches(admin: Db, ctx: TrendyolSyncContext, limit
  * valorile puse de comerciant acolo, si nu le suprascriem fara sa ceara —
  * `auto_inventory` ramane fals, iar impingerea manuala merge oricand.
  */
+/**
+ * ⚠ TREI RASPUNSURI, NU DOUA (04.11.2026). Pana azi era adevarat/fals, iar „fals" amesteca „nu
+ * exista la ei" cu „n-am putut intreba acum" (429 de la limitator, 5xx, retea). Primul e definitiv,
+ * al doilea nu: trecerea de relegare se opreste la el, ca sa nu arda bugetul de cereri degeaba.
+ */
+export type VerdictAdoptare = "adoptat" | "nu-exista" | "trecator";
+
 async function incearcaAdoptarea(
   admin: Db, ctx: TrendyolSyncContext, listing: ListingRow, motive: string[],
-): Promise<boolean> {
-  const { data: variante } = await admin.from("trendyol_variants")
+): Promise<VerdictAdoptare> {
+  const { data: variante, error: eVariante } = await admin.from("trendyol_variants")
     .select("barcode").eq("listing_id", listing.id).eq("enabled", true).limit(1);
+  if (eVariante) return "trecator";
   const barcode = (variante ?? [])[0] ? (variante![0] as { barcode: string }).barcode : null;
-  if (!barcode) return false;
+  if (!barcode) return "nu-exista";
 
   const res = await getProductBaseInfo(ctx.auth, barcode);
-  if (isTrendyolError(res)) return false;      // 404 „product.not.found" sau retea: eroarea ramane eroare
+  /* 404 „product.not.found": eroarea ramane eroare. Restul (429, 5xx, retea) se reia. */
+  if (isTrendyolError(res)) return eTrecatoare(res.status) ? "trecator" : "nu-exista";
   const info = res.data;
-  if (!info || info.approved == null) return false;
+  if (!info || info.approved == null) return "nu-exista";
 
   /*
    * Arhivat inseamna „in cont, dar nu se vinde". Comerciantul care publica din
@@ -2050,9 +2117,84 @@ async function incearcaAdoptarea(
   console.warn(
     `[trendyol] listare ADOPTATA (${barcode}): produsul exista deja in contul lor` +
     `${info.archived === true ? ", era arhivat si l-am scos din arhiva" : ""}. ` +
-    `Stocul si pretul NU se impinge automat. Refuzul la creare a fost: ${motive.slice(0, 2).join("; ")}`,
+    `Stocul si pretul pleaca dupa comutatoarele magazinului (fara ele: nu pleaca). Refuzul la creare a fost: ${motive.slice(0, 2).join("; ")}`,
   );
-  return true;
+  return "adoptat";
+}
+
+/**
+ * Leaga listarile ramase pe eroare al caror produs EXISTA deja in contul Trendyol al comerciantului.
+ *
+ * ═══ ⚠ DE CE EXISTA (04.11.2026, „autolink” cerut de VetDepo) ═══
+ *
+ * Adoptarea rula o SINGURA data, in clipa in care lotul de creare se intorcea refuzat. Daca
+ * intrebarea „exista la voi?” pica atunci, listarea ramanea pe „Codul de bare există deja” pentru
+ * totdeauna. La VetDepo, dupa publicarea in masa din 03.11 seara: 434 de listari asa. Intrebate pe
+ * 04.11, 10 din 12 erau aprobate si de vanzare la ei, deci comenzile si stocul lor nu se legau de
+ * nimic din Edinio.
+ *
+ * ⚠ Jurnalul nu pastreaza ce a raspuns Trendyol atunci, deci CAUZA caderii de pe 03.11 nu e
+ * masurata. Trecerea asta nu depinde de ea: intreaba din nou, pe fiecare listare, pana raspunde.
+ *
+ * ⚠ HOTARAREA NU SE IA PE TEXTUL ERORII. Documentatia lor interzice potrivirea pe mesaj (e si
+ * tradus). Se iau TOATE listarile pe eroare si se intreaba serviciul de stare pe barcode, ca la
+ * adoptarea de dupa lot; o listare care chiar nu exista la ei primeste 404 si ramane cum e.
+ *
+ * ⚠ FEREASTRA, ca la deriva: ordonare stabila dupa `id` si `deLa` dat de apelant. Cronul il
+ * roteste cu minutul; butonul din panou il duce el inainte, cu cele legate scazute (ies din set).
+ */
+export async function relegaListarileExistente(
+  admin: Db, ctx: TrendyolSyncContext, { max = 25, deLa }: { max?: number; deLa?: number } = {},
+): Promise<{ verificate: number; legate: number; total: number; urmatorul: number; oprit?: string }> {
+  const { count, error: eNumar } = await admin.from("trendyol_listings")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", ctx.businessId).eq("status", "error");
+  if (eNumar) return { verificate: 0, legate: 0, total: 0, urmatorul: 0, oprit: eNumar.message };
+  const total = count ?? 0;
+  if (total === 0) return { verificate: 0, legate: 0, total: 0, urmatorul: 0 };
+
+  const start = deLa != null
+    ? Math.max(0, deLa)
+    : (total > max ? (Math.floor(Date.now() / 60_000) * max) % total : 0);
+  if (start >= total) return { verificate: 0, legate: 0, total, urmatorul: total };
+
+  /* ⚠ O citire cazuta NU e „nimic de legat”: se spune, ca butonul sa nu raporteze „gata”. */
+  const { data, error } = await admin.from("trendyol_listings")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin, error")
+    .eq("business_id", ctx.businessId).eq("status", "error")
+    .order("id", { ascending: true })
+    .range(start, start + max - 1);
+  if (error) return { verificate: 0, legate: 0, total, urmatorul: start, oprit: error.message };
+
+  let verificate = 0, legate = 0;
+  const deTrimis: string[] = [];
+  /*
+   * ⚠ LEGATA, LISTAREA ISI PRIMESTE STOCUL ACUM, nu la urmatoarea vanzare. Pe regula veche (fara
+   * comutatoare) o listare preluata nu primeste nimic, deci `computeInventoryItems` o sare oricum.
+   */
+  const trimite = async () => {
+    if (deTrimis.length > 0) await enqueueTrendyolInventoryMany(ctx.businessId, deTrimis.splice(0));
+  };
+  for (const l of (data ?? []) as (ListingRow & { error: string | null })[]) {
+    const v = await incearcaAdoptarea(admin, ctx, l, [l.error ?? ""]);
+    if (v === "adoptat" && l.product_id) deTrimis.push(l.product_id);
+    /* ⚠ La „trecator” ne oprim: limitatorul sau Trendyol spun „nu acum”, iar restul ferestrei
+       ar primi acelasi raspuns. Listarea ramane pe loc si se reia la trecerea urmatoare. */
+    if (v === "trecator") {
+      await trimite();
+      return {
+        verificate, legate, total,
+        urmatorul: start + verificate - legate,
+        oprit: "Trendyol nu răspunde acum. Reîncearcă peste câteva minute.",
+      };
+    }
+    verificate++;
+    if (v === "adoptat") legate++;
+    await pause(150);
+  }
+  await trimite();
+  /* Cele legate au iesit din set, deci fereastra urmatoare incepe mai devreme cu atatea. */
+  return { verificate, legate, total, urmatorul: start + verificate - legate };
 }
 
 async function jurnalLotEsuat(admin: Db, ctx: TrendyolSyncContext, b: BatchRow, errors: string[]): Promise<void> {
@@ -2556,7 +2698,9 @@ export async function reconcileInventory(admin: Db, ctx: TrendyolSyncContext, ma
   for (const l of listings ?? []) {
     const pid = (l as { product_id: string | null }).product_id;
     if (!pid) continue;
-    const built = await computeInventoryItems(admin, ctx, pid);
+    /* ⚠ Valorile de la Trendyol sunt deja aici, pe tot catalogul: jumatatea oprita de comutator se
+       pastreaza din ele, fara inca o cerere pe produs. Si asa deriva iese ZERO pe jumatatea aia. */
+    const built = await computeInventoryItems(admin, ctx, pid, false, false, { actuale: trendyol });
     if (!built || "error" in built) continue;
     for (const it of built.items) {
       const cur = trendyol.get(it.barcode);

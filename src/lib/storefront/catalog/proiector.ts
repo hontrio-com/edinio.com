@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { descriereDeCautare, slimPageSections } from "@/lib/storefront/catalog-slim";
 import { normalizeSearchText } from "@/lib/storefront/product-search";
+import { coduriDeCautare } from "@/lib/storefront/catalog/doc-cautare";
 import { jeton, perechileProdusului } from "@/lib/storefront/catalog/facets";
 
 /**
@@ -30,12 +31,13 @@ const LOT = 500;
 
 /** Coloanele de care are nevoie proiectorul. Nimic in plus: `page_sections` e deja
  *  partea grea (1,2 kB in medie pe eSAFE), nu mai carem si restul randului. */
-const COLOANE = "id, business_id, name, description, category, tags, price, page_sections";
+const COLOANE = "id, business_id, name, sku, description, category, tags, price, page_sections";
 
 interface RandSursa {
   id: string;
   business_id: string;
   name: string | null;
+  sku?: string | null;
   description: string | null;
   category: string | null;
   tags: unknown;
@@ -54,6 +56,8 @@ export interface ProiectieCalculata {
   descriere_scurta: string;
   cauta_norm: string;
   fatete: string[];
+  /** SKU-ul produsului si al variantelor active, compacte. Vezi `coduriDeCautare`. */
+  coduri: string[];
   proiectat_la: string;
 }
 
@@ -93,6 +97,7 @@ export function proiecteazaRand(p: RandSursa, acum: string): ProiectieCalculata 
     // aceluiasi caracter ar putea diverge, si atunci fatetele s-ar reconstrui
     // gresit fara nicio eroare.
     fatete: Array.from(new Set(perechi.map((x) => jeton(x.cheie, x.valoare)))),
+    coduri: coduriDeCautare(p.sku, p.page_sections),
     proiectat_la: acum,
   };
 }

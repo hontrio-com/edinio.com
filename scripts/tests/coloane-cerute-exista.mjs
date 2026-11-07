@@ -75,7 +75,7 @@ const TABELE = [
   "catalog_produs", "catalog_murdar",
   /*
     Istoricul publicarilor din editorul magazinului (etapa 7, `docs/editor-magazin/PLAN.md`). Tabel
-    nou, aplicat intai doar pe demo: pana intra migratia `2027-01-31-istoricul-publicarilor.sql` in
+    nou, aplicat intai doar pe demo: pana intra migratia `2027-02-01-istoricul-publicarilor.sql` in
     productie, unealta TREBUIE sa cada aici, rulata inainte de push. Codul il cere pe nume, nu printr-o
     constanta, tocmai ca unealta sa-l vada.
   */

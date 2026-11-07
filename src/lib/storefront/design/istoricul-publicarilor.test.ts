@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 const fara = (s: string) => s.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 const ACTIUNI = "src/lib/actions/store-design.actions.ts";
-const MIGRATIE = "migrations/2027-01-31-istoricul-publicarilor.sql";
+const MIGRATIE = "migrations/2027-02-01-istoricul-publicarilor.sql";
 const sursa = () => fara(readFileSync(ACTIUNI, "utf8"));
 /** Corpul unei functii de pe primul nivel: de la declaratie pana la acolada ei de inchidere. */
 function corp(s: string, declaratie: string): string {

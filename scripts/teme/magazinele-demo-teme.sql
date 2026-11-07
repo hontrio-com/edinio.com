@@ -42,7 +42,11 @@ begin
       ('tema-deneb', 'Deneb Time', 'Ceasuri și bijuterii, alese cu grijă.', 'Magazin demonstrativ al temei Deneb: ceasuri, bijuterii, ochelari de soare, genți și parfumuri.', 'deneb@edinio-demo.test', '#111111'),
       ('tema-spica', 'Spica Solar', 'Energie curată, din stoc propriu.', 'Magazin demonstrativ al temei Spica: panouri fotovoltaice, invertoare, baterii și încărcătoare EV.', 'spica@edinio-demo.test', '#111111'),
       ('tema-procyon', 'Procyon Electro', 'Electronice și electrocasnice la un preț bun.', 'Magazin demonstrativ al temei Procyon: televizoare, electrocasnice, climatizare, laptopuri și telefoane.', 'procyon@edinio-demo.test', '#E4185D'),
-      ('tema-canopus', 'Canopus Keys', 'Tastaturi mecanice, construite pentru tine.', 'Magazin demonstrativ al temei Canopus: tastaturi mecanice, switch-uri, keycaps, mouse și căști.', 'canopus@edinio-demo.test', '#C6F432')
+      ('tema-canopus', 'Canopus Keys', 'Tastaturi mecanice, construite pentru tine.', 'Magazin demonstrativ al temei Canopus: tastaturi mecanice, switch-uri, keycaps, mouse și căști.', 'canopus@edinio-demo.test', '#C6F432'),
+      ('tema-regulus', 'Regulus Store', 'Pentru fanii adevărați.', 'Magazin demonstrativ al temei Regulus: tricouri, hanorace, șepci, mingi și accesorii.', 'regulus@edinio-demo.test', '#5BBCE4'),
+      ('tema-bellatrix', 'Bellatrix Drogerie', 'Aici sunt om, aici cumpăr.', 'Magazin demonstrativ al temei Bellatrix: machiaj, îngrijire, sănătate, bebeluși și casă.', 'bellatrix@edinio-demo.test', '#23336B'),
+      ('tema-betelgeuse', 'Betelgeuse Parfumerie', 'Parfumul care te definește.', 'Magazin demonstrativ al temei Betelgeuse: parfumuri, machiaj, îngrijire, lumânări și seturi cadou.', 'betelgeuse@edinio-demo.test', '#0F1414'),
+      ('tema-achernar', 'Achernar Brico', 'Puși pe treabă, împreună.', 'Magazin demonstrativ al temei Achernar: unelte, construcții, baie, grădină și iluminat.', 'achernar@edinio-demo.test', '#E30613')
     ) as v(slug, nume, slogan, descriere, email, culoare)
   loop
     select id into magazin from public.businesses where slug = t.slug;

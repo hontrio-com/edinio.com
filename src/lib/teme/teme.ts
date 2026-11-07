@@ -7,6 +7,7 @@ import { NEPTUN, SATURN, SIRIUS, URANUS } from "./lotul-2";
 import { ALTAIR, POLARIS, RIGEL, VEGA } from "./lotul-3";
 import { ALDEBARAN, ANTARES, ARCTURUS, CAPELLA } from "./lotul-4";
 import { CANOPUS, DENEB, PROCYON, SPICA } from "./lotul-5";
+import { ACHERNAR, BELLATRIX, BETELGEUSE, REGULUS } from "./lotul-6";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -89,6 +90,10 @@ export const TEME: readonly Tema[] = [
   SPICA,
   PROCYON,
   CANOPUS,
+  REGULUS,
+  BELLATRIX,
+  BETELGEUSE,
+  ACHERNAR,
 ];
 
 export function temaDupaCheie(v: unknown): Tema | null {

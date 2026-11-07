@@ -1,0 +1,53 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "categorii/unelte",
+    "categorii/constructii",
+    "categorii/baie",
+    "categorii/bucatarie",
+    "categorii/gradina",
+    "categorii/iluminat",
+    "categorii/incalzire",
+    "categorii/decoratiuni",
+    "poze/extra"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/masina-gaurit",
+    "produse/polizor-unghiular",
+    "produse/vopsea-lavabila",
+    "produse/baterie-cada",
+    "produse/chiuveta-inox",
+    "produse/masina-tuns-gazon",
+    "produse/corp-led",
+    "produse/calorifer-ulei",
+    "produse/oglinda-rotunda"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "A",
+   "fundal": "#E30613",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

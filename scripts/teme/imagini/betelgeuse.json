@@ -1,0 +1,54 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "categorii/parfumuri",
+    "categorii/machiaj",
+    "categorii/ingrijire",
+    "categorii/par",
+    "categorii/barbati",
+    "categorii/corp",
+    "categorii/lumanari",
+    "categorii/cadouri",
+    "poze/extra"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/parfum-cristal",
+    "produse/parfum-ambra",
+    "produse/ser-noapte",
+    "produse/ruj-satinat",
+    "produse/ulei-par",
+    "produse/gel-dus-lux",
+    "produse/lumanare-parfumata",
+    "produse/set-cadou",
+    "produse/crema-ochi"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4,
+   "pozitie": "dreapta"
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 100,
+  "faviconLitera": {
+   "litera": "B",
+   "fundal": "#0F1414",
+   "culoare": "#A8E0D2"
+  }
+ }
+}

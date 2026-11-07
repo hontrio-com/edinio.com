@@ -1,0 +1,51 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/machiaj",
+    "categorii/ingrijire-fata",
+    "categorii/par",
+    "categorii/igiena-orala",
+    "categorii/sanatate",
+    "categorii/bebe",
+    "categorii/casa",
+    "categorii/animale",
+    "produse/hrana-pisici-plic"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/crema-hidratanta",
+    "produse/sampon-reparator",
+    "produse/pasta-dinti",
+    "produse/vitamina-c",
+    "produse/scutece-4",
+    "produse/detergent-gel",
+    "produse/fond-ten",
+    "produse/servetele-umede",
+    "produse/mascara-volum"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1400
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "B",
+   "fundal": "#23336B",
+   "culoare": "#F7C600"
+  }
+ }
+}

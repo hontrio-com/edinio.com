@@ -1,0 +1,53 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/noutati",
+    "categorii/tricouri",
+    "categorii/hanorace",
+    "categorii/sepci",
+    "categorii/mingi",
+    "categorii/copii",
+    "categorii/rucsacuri",
+    "categorii/accesorii",
+    "produse/sosete-sport"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/tricou-albastru",
+    "produse/hanorac-gri",
+    "produse/sapca-snapback",
+    "produse/minge-fotbal-american",
+    "produse/tricou-copii",
+    "produse/rucsac-sport",
+    "produse/minge-baschet",
+    "produse/fes-iarna",
+    "produse/sticla-sport"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4,
+   "pozitie": "centru"
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120,
+  "faviconLitera": {
+   "litera": "R",
+   "fundal": "#5BBCE4",
+   "culoare": "#0E1B2C"
+  }
+ }
+}

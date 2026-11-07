@@ -23,6 +23,7 @@ export const CHEI_TEME = [
   "vega", "altair", "rigel", "polaris",
   "antares", "arcturus", "aldebaran", "capella",
   "deneb", "spica", "procyon", "canopus",
+  "regulus", "bellatrix", "betelgeuse", "achernar",
 ] as const;
 
 /** Tema (subdomeniul) -> slugul magazinului ei demo. Un `Map`, nu un obiect: `constructor.edinio.com` nu e o tema. */

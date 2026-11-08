@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Check, Database, Loader2, Palette, RotateCcw, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
+import { ArrowUpRight, Check, Database, Loader2, Palette, RotateCcw, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -110,9 +110,6 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
       {/* Capul paginii */}
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl">
-          <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-            <Sparkles className="h-3 w-3 text-primary" /> {teme.length} teme gata de folosit
-          </p>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Teme</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             Un design întreg pentru magazinul tău: antetul, prima pagină, paginile de categorie și de produs, cardul de produs,

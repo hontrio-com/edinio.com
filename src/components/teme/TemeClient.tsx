@@ -58,15 +58,18 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
 }) {
   const router = useRouter();
   const [deAplicat, setDeAplicat] = useState<TemaPeCard | null>(null);
-  // Bifa „Importă și datele demo”: oprita la fiecare deschidere a ferestrei (raspunsul lui: „in caz ca vrea”).
-  const [cuDate, setCuDate] = useState(false);
+  /*
+   * Bifa „Importă și datele demo”: PORNITA la fiecare deschidere a ferestrei (cerut de el, 08.11.2026; pana atunci
+   * oprita, „in caz ca vrea”). Cand planul n-o incape, ramane oprita si stinsa (`motivOprit`), deci nu pleaca.
+   */
+  const [cuDate, setCuDate] = useState(true);
   const [laLoc, setLaLoc] = useState(false);
   const [deSters, setDeSters] = useState(false);
   const [lucreaza, porneste] = useLucru();
   const temaActiva = aplicata ? teme.find((t) => t.cheie === aplicata.cheie) ?? null : null;
 
   const deschideAplicarea = (t: TemaPeCard) => {
-    setCuDate(false);
+    setCuDate(true);
     setDeAplicat(t);
   };
 

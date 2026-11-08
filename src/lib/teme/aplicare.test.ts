@@ -186,10 +186,10 @@ test("„Aplică”, „Pune la loc” si „Șterge datele demo” improspateaz
   assert.doesNotMatch(s, /revalidatePath\("\/dashboard\/teme"\)/);
 });
 
-test("18.2/18.4 pe pagina „Teme”: bifa porneste oprita, se opreste cand planul n-o incape; stergerea asteapta ciorna", () => {
+test("18.2/18.4 pe pagina „Teme”: bifa porneste PORNITA (din 08.11), se opreste cand planul n-o incape; stergerea asteapta ciorna", () => {
   const c = cod("src/components/teme/TemeClient.tsx");
-  // La fiecare deschidere a ferestrei, bifa oprita (raspunsul lui: datele demo, „in caz ca vrea”).
-  assert.match(c, /const deschideAplicarea = \(t: TemaPeCard\) => \{\s*setCuDate\(false\);\s*setDeAplicat\(t\);\s*\};/);
+  // La fiecare deschidere a ferestrei, bifa pornita (cerut de el, 08.11.2026; pana atunci oprita, „in caz ca vrea”).
+  assert.match(c, /const deschideAplicarea = \(t: TemaPeCard\) => \{\s*setCuDate\(true\);\s*setDeAplicat\(t\);\s*\};/);
   assert.match(c, /disabled=\{lucreaza \|\| deAplicat\.demo\.motivOprit !== null\}/);
   assert.match(c, /checked=\{cuDate && deAplicat\.demo\.motivOprit === null\}/);
   assert.match(c, /const r = await stergeDateleDemo\(businessId\);/);

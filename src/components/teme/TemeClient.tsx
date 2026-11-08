@@ -336,9 +336,17 @@ function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
   lucreaza: boolean;
   onAplica: () => void;
 }) {
-  // Derularea tine cat pagina: ~2,4 s pe fiecare „ecran” al cardului, ca o pagina lunga sa nu treaca in fuga.
+  // Derularea tine cat pagina: ~3 s pe fiecare „ecran” al cardului, ca o pagina lunga sa nu treaca in fuga.
   const ecrane = t.captura ? Math.max(0, t.captura.inaltime / t.captura.latime - FEREASTRA) / FEREASTRA : 0;
-  const durata = `${Math.max(2, ecrane * 2.4).toFixed(1)}s`;
+  const durata = `${Math.max(2.5, ecrane * 3).toFixed(1)}s`;
+  /*
+   * Starea, nu `group-hover`: cu durata scrisa ca clasa arbitrara, Tailwind lasa tranzitia scurta de baza (0,7 s) si
+   * poza sarea jos dintr-odata (vazut de el pe 08.11: „sa fie asa de sus in jos”). Stilul scris pe element se aplica sigur.
+   */
+  const [derulata, setDerulata] = useState(false);
+  const stilDerulare: React.CSSProperties = derulata
+    ? { top: "100%", transform: "translateY(-100%)", transition: `top ${durata} cubic-bezier(0.45, 0, 0.55, 1), transform ${durata} cubic-bezier(0.45, 0, 0.55, 1)` }
+    : { top: 0, transform: "translateY(0)", transition: "top 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)" };
 
   return (
     <li className="group/card flex flex-col">
@@ -346,6 +354,10 @@ function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
         href={t.adresaDemo}
         target="_blank"
         rel="noopener noreferrer"
+        onPointerEnter={(e) => { if (e.pointerType === "mouse") setDerulata(true); }}
+        onPointerLeave={() => setDerulata(false)}
+        onFocus={(e) => setDerulata(e.currentTarget.matches(":focus-visible"))}
+        onBlur={() => setDerulata(false)}
         aria-label={`Vezi demo-ul temei ${t.nume}, într-o filă nouă`}
         className={cn(
           "group/poza relative block aspect-[4/3] overflow-hidden rounded-2xl bg-muted outline-none",
@@ -361,8 +373,8 @@ function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
            * deci josul pozei ajunge la josul cardului, oricat de lunga ar fi. Inapoi, mai repede.
            */
           <span
-            className="absolute inset-x-0 top-0 block transition-[top,transform] duration-700 ease-out group-hover/poza:top-full group-hover/poza:-translate-y-full group-hover/poza:ease-linear group-hover/poza:[transition-duration:var(--durata)] group-focus-visible/poza:top-full group-focus-visible/poza:-translate-y-full group-focus-visible/poza:ease-linear group-focus-visible/poza:[transition-duration:var(--durata)] motion-reduce:transition-none"
-            style={{ "--durata": durata } as React.CSSProperties}
+            className="absolute inset-x-0 block will-change-transform motion-reduce:transition-none!"
+            style={stilDerulare}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

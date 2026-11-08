@@ -118,8 +118,9 @@ test("3. ⚠ magazinele de azi nu se schimba: implicitul variantei ramane galeri
   assert.match(p, /const galerieCompacta = setari\.galleryHeight === "compact";/);
   assert.match(p, /miniaturiInStanga=\{miniaturiInStanga\} compacta=\{galerieCompacta\} \/>/);
   assert.match(p, /\$\{compacta \? "bg-\[var\(--st-surface\)\] lg:aspect-auto lg:h-\[var\(--inaltime-galerie\)\]" : "bg-muted\/20"\}/, "fara `compacta`, panoul de dinainte, patrat si gri");
-  assert.match(p, /\$\{galerieCompacta \? "xl:grid-cols-\[minmax\(0,1fr\)_minmax\(0,33rem\)\]" : ""\}/, "fara `compacta`, coloanele de dinainte");
-  assert.match(p, /const INALTIME_COMPACTA = "clamp\(26rem, calc\(100vh - 18rem\), 40rem\)";/);
+  // Coloanele 6/5 pe orice inaltime (proba temelor 2-30: galeria ajungea la 700-800 px pe temele late).
+  assert.match(p, /lg:grid-cols-\[minmax\(0,6fr\)_minmax\(0,5fr\)\]/);
+  assert.match(p, /const INALTIME_COMPACTA = "clamp\(24rem, calc\(100vh - 16rem\), 34rem\)";/);
 });
 
 test("4. subsolul temei n-are newsletter, iar coloana lui de identitate e prima", () => {
@@ -170,13 +171,15 @@ test("4. pistele subsolului se fac din coloanele desenate: una goala nu lasa o g
   assert.doesNotMatch(f, /sablonColoane/);
   // Celelalte subsoluri isi pastreaza culoarea cuvantului „Edinio”: doar acesta o cere altfel.
   const l = cod("src/components/storefront/sections/_shared/FooterLegal.tsx");
-  assert.match(l, /color=\{culoareEdinio \?\? color\}/);
+  assert.match(l, /const culoare = culoareEdinio \?\? \(contrastEdinio !== null && contrastEdinio < 4\.5 \? rezerva : color\);/);
+  assert.match(l, /color=\{culoare\}/);
   assert.doesNotMatch(cod("src/components/storefront/sections/chrome/FooterColumns.tsx"), /culoareEdinio/);
 });
 
 test("4. culorile alese de el bat fundalul variantei, iar sigla sta pe placa doar cand exista", () => {
   const f = cod(SUBSOL);
-  assert.match(f, /const radacina = \{ "--st-footer-bg": FUNDAL, "--st-footer-text": "#FFFFFF", \.\.\.culori \} as CSSProperties;/);
+  // Culorile alese de el (`culori`) vin ULTIMELE, deci bat si fundalul variantei, si accentul inlocuit pe fond.
+  assert.match(f, /\.\.\.\(accentSters \? \{ "--st-accent": "#FFFFFF", "--st-accent-contrast": "#111827" \} : \{\}\),\s*\.\.\.culori,\s*\} as CSSProperties;/);
   assert.match(f, /const tonLegal = culori \? "deschis" : "inchis";/);
   assert.match(f, /placaSigla: true,/);
   // Fara sigla, numele magazinului e scris cu culoarea subsolului: pe o placa alba n-ar mai fi citit.

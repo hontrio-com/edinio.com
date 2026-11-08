@@ -212,20 +212,25 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
     <>
       <button ref={declansator} type="button" aria-label="Deschide meniul" aria-expanded={open}
         aria-controls={idPanou} onClick={() => setOpen(true)}
-        className={`${bp.buton} ${STIL_BUTON[stil]}`}>
+        /* La „simplu” pe un antet al vitrinei, culoarea textului temei, nu `currentColor`: antetul centrat nu pune nicio
+           culoare pe randul hamburgerului, deci se mostenea negrul documentului si pe fond inchis nu se vedea (Marte). */
+        className={`${bp.buton} ${STIL_BUTON[stil]} ${stil === "simplu" && tema === "vitrina" ? "text-[var(--st-text)]" : ""}`}>
         <Menu className={stil === "simplu" ? "h-6 w-6" : "h-4.5 w-4.5 text-foreground"} size={stil === "simplu" ? 24 : 18} />
       </button>
 
       {tinta && open && createPortal(
         <>
-          <div aria-hidden="true" className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-[70] ${bp.panou}`} onClick={() => setOpen(false)} />
+          {/* Fara `backdrop-blur` pe strat si cu panoul un nivel MAI SUS: cu amandoua pe acelasi nivel si filtrul pe
+              strat, sigla si butonul de inchidere ieseau incetosate pe telefon (gasit la proba temei Marte). Filtrul
+              era si cel mai scump lucru din deschiderea meniului pe un telefon slab. */}
+          <div aria-hidden="true" className={`fixed inset-0 bg-black/60 z-[70] ${bp.panou}`} onClick={() => setOpen(false)} />
           <div ref={panou} id={idPanou} role="dialog" aria-modal="true" aria-label="Meniu"
-            className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] z-[70] ${t.panou} ${bp.panou} flex flex-col shadow-2xl`}>
+            className={`fixed inset-y-0 left-0 w-72 max-w-[82vw] z-[71] ${t.panou} ${bp.panou} flex flex-col shadow-2xl`}>
             <div className={`flex items-center justify-between px-4 h-16 ${t.antet}`}>
               <div className="flex items-center gap-2 min-w-0">
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={cdnImage(logoUrl, 256)} alt={storeName} className="h-8 w-auto max-w-[120px] object-contain" />
+                  <img src={cdnImage(logoUrl, 480)} alt={storeName} className="h-8 w-auto max-w-[140px] object-contain" />
                 ) : (
                   // Fara logo, panoul arata NUMELE, ca header-ul de deasupra lui.
                   // Patratul cu initiala era a doua cadere de rezerva pentru

@@ -93,7 +93,7 @@ export const PROCYON = temaDupaReteta({
   nume: "Procyon",
   descriere: "Pentru magazine de electronice și electrocasnice: zmeuriu, antet alb cu meniul de categorii, rând de carduri înalte cu oferte, bandă de beneficii și plăci pe fotografii.",
   date: DATE_DEMO_PROCYON,
-  identitate: { culoare: "#E4185D", fundal: "#FFFFFF", fontTitluri: "figtree", fontText: "inter" },
+  identitate: { culoare: "#CF1550", fundal: "#FFFFFF", fontTitluri: "figtree", fontText: "inter" },
   reteta: {
     stil: {
       colors: { accent: "#1C1C24", surface: "#FFFFFF", text: "#1C1C24", muted: "#686874", border: "#E6E6EC", footerBg: "#F5F5F8", footerText: "#1C1C24" },

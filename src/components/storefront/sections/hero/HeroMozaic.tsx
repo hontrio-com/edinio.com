@@ -9,8 +9,10 @@ import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 /** Fondul si scrisul fiecarui fel de placa. „Inchis” e aproape negru, nu negru: pe el poza decupata are adancime. */
 const FONDURI: Record<FondPlaca, { fond: string; scris: string; estompat: string }> = {
   inchis: { fond: "#0F1216", scris: "#FFFFFF", estompat: "rgba(255,255,255,0.72)" },
-  principala: { fond: "var(--st-primary)", scris: "var(--st-primary-contrast)", estompat: "color-mix(in srgb, var(--st-primary-contrast) 78%, transparent)" },
-  deschis: { fond: "color-mix(in srgb, var(--st-text) 7%, var(--st-surface))", scris: "var(--st-text)", estompat: "var(--st-muted)" },
+  /* Textul mic nu se mai estompeaza pe placa colorata: albul la 78% pe verdele temei Terra dadea 3,76:1, iar principala
+     abia trece ea insasi pragul. Pe placa deschisa, griul temei e tras spre text (fondul e nuantat, 4,20:1 cu el). */
+  principala: { fond: "var(--st-primary)", scris: "var(--st-primary-contrast)", estompat: "var(--st-primary-contrast)" },
+  deschis: { fond: "color-mix(in srgb, var(--st-text) 7%, var(--st-surface))", scris: "var(--st-text)", estompat: "color-mix(in srgb, var(--st-muted) 70%, var(--st-text))" },
 };
 
 /**

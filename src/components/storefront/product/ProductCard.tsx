@@ -166,18 +166,18 @@ export function ProductCard({
               </span>
             )}
             {hasDiscount && (
-              <span className="bg-red-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
+              <span className="bg-red-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm">
                 -{discountPct}%
               </span>
             )}
             {product.is_featured && !hasDiscount && (
-              <span className="text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm"
+              <span className="text-[var(--st-primary-contrast,#fff)] text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm"
                 style={{ backgroundColor: color }}>
                 Popular
               </span>
             )}
             {isNew && !hasDiscount && !product.is_featured && (
-              <span className="text-white text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm" style={{ backgroundColor: color }}>
+              <span className="text-[var(--st-primary-contrast,#fff)] text-[11px] font-bold px-2 py-0.5 rounded-lg shadow-sm" style={{ backgroundColor: color }}>
                 Nou
               </span>
             )}
@@ -224,7 +224,7 @@ export function ProductCard({
           type="button"
           onClick={onAddToCart}
           disabled={isOutOfStock}
-          className="w-full py-2.5 text-sm font-bold text-white rounded-xl transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+          className="w-full py-2.5 text-sm font-bold text-[var(--st-primary-contrast,#fff)] rounded-xl transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
           style={{
             backgroundColor: color,
             boxShadow: isAdded ? `0 0 0 3px ${color}33` : `0 2px 8px ${color}40`,

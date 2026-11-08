@@ -471,7 +471,7 @@ export function CheckoutForm({
                   type="button"
                   onClick={handleApplyDiscount}
                   disabled={isValidatingDiscount || !discountInput.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                  className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-[var(--st-primary-contrast,#fff)] rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                   style={{ backgroundColor: color }}
                 >
                   {isValidatingDiscount
@@ -551,7 +551,7 @@ export function CheckoutForm({
           <button
             type="submit"
             disabled={isPending || belowMinOrder || liniiDeRevizuit.length > 0 || liniiNevalidate.length > 0}
-            className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-[var(--st-primary-contrast,#fff)] rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >
             {/*

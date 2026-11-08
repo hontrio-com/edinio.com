@@ -126,7 +126,7 @@ export const TERRA = temaDupaReteta({
   nume: "Terra",
   descriere: "Pentru magazine de gadgeturi și tehnologie: banner în mozaic, bandă de beneficii, categorii pe plăci gri și carduri minimaliste cu coșul pe imagine.",
   date: DATE_DEMO_TERRA,
-  identitate: { culoare: "#0E7C6B", fundal: "#FFFFFF", fontTitluri: "sora", fontText: "inter" },
+  identitate: { culoare: "#0D7767", fundal: "#FFFFFF", fontTitluri: "sora", fontText: "inter" },
   reteta: {
     stil: {
       colors: { accent: "#111827", surface: "#FFFFFF", text: "#111827", muted: "#6B7280", border: "#E5E7EB", footerBg: "#F7F7F8", footerText: "#111827" },

@@ -7,6 +7,7 @@ import {
   OPEN_SETTINGS_EVENT,
   type ConsentCategory, type ConsentState, type CookieBannerPosition,
 } from "@/lib/cookie-consent";
+import { contrastOn, raportContrast } from "@/lib/storefront/design/css-vars";
 
 const CATEGORY_LABELS: Record<ConsentCategory, { title: string; desc: string }> = {
   analytics: {
@@ -27,6 +28,8 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   policyHref: string | null;
   storeName: string;
 }) {
+  /* Panoul e alb: culoarea magazinului prea deschisa (lime-ul temei Canopus, 1,28:1) nu se vede pe el. */
+  const culoareIconita = (raportContrast(color, "#FFFFFF") ?? 3) < 3 ? "#374151" : color;
   const hasChoices = categories.length > 0;
   const [mounted, setMounted] = useState(false); // render nothing until storage is read (no SSR flash)
   const [open, setOpen] = useState(false);
@@ -99,15 +102,15 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
             ? "max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3"
             : "p-5"}>
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <Cookie className="h-5 w-5 shrink-0 mt-0.5" style={{ color }} />
+              <Cookie className="h-5 w-5 shrink-0 mt-0.5" style={{ color: culoareIconita }} />
               <p className="text-[13px] leading-relaxed text-gray-600">
                 Folosim doar cookie-uri esentiale, necesare functionarii magazinului.{" "}
                 {policyHref && <a href={policyHref} className="underline hover:text-gray-900">Afla mai mult</a>}
               </p>
             </div>
             <button type="button" onClick={() => persist(CONSENT_NONE)}
-              className="shrink-0 px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
-              style={{ backgroundColor: color }}>
+              className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ backgroundColor: color, color: contrastOn(color) }}>
               Am inteles
             </button>
           </div>
@@ -123,7 +126,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
         <div className="bg-white border-t border-black/10 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
           <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <Cookie className="h-5 w-5 shrink-0 mt-0.5" style={{ color }} />
+              <Cookie className="h-5 w-5 shrink-0 mt-0.5" style={{ color: culoareIconita }} />
               <p className="text-[13px] leading-relaxed text-gray-600">
                 Folosim cookie-uri pentru a imbunatati experienta pe {storeName}.{" "}
                 {policyHref && <a href={policyHref} className="underline hover:text-gray-900">Detalii</a>}
@@ -139,8 +142,8 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
                 Refuza
               </button>
               <button type="button" onClick={acceptAll}
-                className="px-4 py-2 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
-                style={{ backgroundColor: color }}>
+                className="px-4 py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
+                style={{ backgroundColor: color, color: contrastOn(color) }}>
                 Accepta
               </button>
             </div>
@@ -158,7 +161,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-2.5">
               <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}1A` }}>
-                <Cookie className="h-5 w-5" style={{ color }} />
+                <Cookie className="h-5 w-5" style={{ color: culoareIconita }} />
               </span>
               <h2 className="text-[15px] font-semibold text-gray-900">Preferinte cookie-uri</h2>
             </div>
@@ -214,8 +217,8 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
               Salveaza alegerea
             </button>
             <button type="button" onClick={acceptAll}
-              className="flex-1 px-4 py-2.5 rounded-lg text-white text-sm font-semibold transition-opacity hover:opacity-90"
-              style={{ backgroundColor: color }}>
+              className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
+              style={{ backgroundColor: color, color: contrastOn(color) }}>
               Accepta tot
             </button>
           </div>

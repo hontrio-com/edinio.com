@@ -11,6 +11,7 @@ import { menuItemHref } from "@/lib/pages/menu";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { ButonSetariCookie } from "./ButonSetariCookie";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
+import { raportContrast } from "@/lib/storefront/design/css-vars";
 
 /**
  * Blocul legal obligatoriu din footer. NU e optional si nu are setare de ascundere.
@@ -209,15 +210,24 @@ export function FooterCredit({ ton = "inchis", text, culoareEdinio }: {
   /** Culoarea cuvantului „Edinio”, cand cea a magazinului nu se citeste pe fundalul subsolului; lipsa = a magazinului. */
   culoareEdinio?: string;
 } = {}) {
-  const { business, color } = useStoreChrome();
+  const { business, color, design } = useStoreChrome();
   const t = TON[ton];
+  /*
+   * Culoarea magazinului pe un subsol de aceeasi culoare nu se vede: tema Vega are negrul si ca principala, si ca fond
+   * al subsolului (1,00:1, gasit la proba), iar rosul temei Alnilam pe subsolul ei gri-inchis da 3,6:1. Textul e de
+   * 11 px, deci sub 4,5:1 cuvantul ia textul subsolului.
+   */
+  const fondSubsol = ton === "inchis" ? (design?.style?.colors?.footerBg ?? "#0A0A0A") : design?.style?.colors?.background;
+  const rezerva = ton === "inchis" ? "var(--st-footer-text)" : "var(--st-text)";
+  const contrastEdinio = raportContrast(color, fondSubsol);
+  const culoare = culoareEdinio ?? (contrastEdinio !== null && contrastEdinio < 4.5 ? rezerva : color);
 
   return (
     <div className="pt-5 flex items-center justify-between gap-3">
       <p className={t.copyright}>
         &copy; {new Date().getFullYear()} {text ?? business.store_name ?? business.business_name}
       </p>
-      <EdinioCredit businessId={business.id} color={culoareEdinio ?? color} className={t.copyright} />
+      <EdinioCredit businessId={business.id} color={culoare} className={t.copyright} />
     </div>
   );
 }

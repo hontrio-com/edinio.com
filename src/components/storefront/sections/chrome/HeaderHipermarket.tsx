@@ -17,6 +17,7 @@ import { useHeaderSettings } from "@/components/storefront/sections/_shared/head
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
+import { amestecHex, raportContrast } from "@/lib/storefront/design/css-vars";
 
 const STROKE = 1.7;
 
@@ -36,7 +37,8 @@ export function tonulBarei(v: unknown): { chenar: string; stil: CSSProperties } 
   }) as CSSProperties;
   switch (v) {
     case "principala":
-      return { chenar: "", stil: variabile("var(--st-primary)", "color-mix(in srgb, var(--st-primary-contrast) 88%, transparent)", "var(--st-primary-contrast)", "var(--st-primary-contrast)", "color-mix(in srgb, var(--st-primary) 72%, #000)", "var(--st-primary-contrast)") };
+      // Scrisul plin, nu 88%: pe rosul temei Achernar albul estompat dadea 4,10:1 (proba temelor 2-30).
+      return { chenar: "", stil: variabile("var(--st-primary)", "var(--st-primary-contrast)", "var(--st-primary-contrast)", "var(--st-primary-contrast)", "color-mix(in srgb, var(--st-primary) 72%, #000)", "var(--st-primary-contrast)") };
     case "accent":
       return { chenar: "", stil: variabile("var(--st-accent)", "var(--st-accent-contrast)", "var(--st-accent-contrast)", "var(--st-primary)", "var(--st-primary)", "var(--st-primary-contrast)") };
     case "deschisa":
@@ -65,10 +67,13 @@ const RAND_MENIU = "group flex items-center gap-3 px-2.5 py-2 rounded-[var(--st-
 export function HeaderHipermarket({ settings }: { settings: Record<string, unknown> }) {
   const {
     business, basePath, categoriiRoot, categoriiPePagina, menu, pageContent, hasAnnouncementBar, currentPageSlug,
-    searchCategories, isHome, cartMode,
+    searchCategories, isHome, cartMode, color, design,
   } = useStoreChrome();
   const { count } = useCart();
   const catalog = useStorefrontOptional();
+  /* Iconita barei de sus, in accent doar cand se vede pe bara (accentul antracit al temei Alnilam pe rosu: 2,4:1). */
+  const accent = design?.style?.colors?.accent ?? color;
+  const iconitaSus = (raportContrast(accent, amestecHex(color, "#000000", 0.78)) ?? 3) >= 3 ? "var(--st-accent)" : "currentColor";
   const [meniuDeschis, setMeniuDeschis] = useState(false);
 
   const nume = business.store_name ?? business.business_name;
@@ -99,7 +104,7 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
               <div className="h-8 lg:h-9 flex items-center justify-center lg:justify-between gap-4 text-[12.5px] font-medium tracking-[0.01em]">
                 {textSus ? (
                   <span className="inline-flex items-center gap-1.5 truncate">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--st-accent)" }} strokeWidth={2} />
+                    <MapPin className="h-3.5 w-3.5 shrink-0" style={{ color: iconitaSus }} strokeWidth={2} />
                     <span className="truncate">{textSus}</span>
                   </span>
                 ) : <span />}

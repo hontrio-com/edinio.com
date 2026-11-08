@@ -370,7 +370,7 @@ export function CartDrawerClassic({
               </p>
             )}
             <button type="button" onClick={onCheckout} disabled={belowMinOrder || liniiNevalidate > 0}
-              className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+              className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-[var(--st-primary-contrast,#fff)] rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               Finalizeaza comanda
               <ChevronRight className="h-4 w-4" />

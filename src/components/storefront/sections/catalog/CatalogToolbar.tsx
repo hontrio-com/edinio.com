@@ -165,7 +165,7 @@ export function CatalogToolbar() {
           <Filter className="h-4 w-4" />
           Filtre
           {activeFilterCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: color }}>
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-[var(--st-primary-contrast,#fff)]" style={{ backgroundColor: color }}>
               {activeFilterCount}
             </span>
           )}
@@ -267,7 +267,7 @@ function FoaieFiltre({ onClose }: { onClose: () => void }) {
             Reseteaza
           </button>
           <button type="button" onClick={onClose}
-            className="flex-1 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-opacity hover:opacity-90"
+            className="flex-1 px-4 py-2.5 text-sm font-semibold text-[var(--st-primary-contrast,#fff)] rounded-xl transition-opacity hover:opacity-90"
             style={{ backgroundColor: color }}>
             Vezi {totalFiltrate} {totalFiltrate === 1 ? "produs" : "produse"}
           </button>

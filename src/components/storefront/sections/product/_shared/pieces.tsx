@@ -86,7 +86,7 @@ export function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boole
 
 /* ─── CTA Button with effects ─────────────────────────────────────────────── */
 
-const BTN_CLS = "w-full py-4 text-base font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
+const BTN_CLS = "w-full py-4 text-base font-bold text-[var(--st-primary-contrast,#fff)] rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
 
 export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCardPayment, effect, onClick, eticheta, clase }: {
   color: string; isOutOfStock: boolean; isPreorder: boolean; needsVariant: boolean; hasCardPayment: boolean; effect: string; onClick: () => void;

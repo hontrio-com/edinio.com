@@ -108,7 +108,7 @@ function CosGolLaComanda({ catreProduse, color }: { catreProduse: string; color:
       <p className="text-base font-semibold text-foreground mb-1">Nu ai produse in cos</p>
       <p className="text-sm text-muted-foreground mb-6">Adauga produse ca sa poti comanda</p>
       <a href={catreProduse}
-        className="inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        className="inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold text-[var(--st-primary-contrast,#fff)] transition-opacity hover:opacity-90"
         style={{ backgroundColor: color }}>
         Vezi produsele
       </a>

@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
 import { CHEI_SCRISE_DE_IMPORT } from "./golire-demo";
 import { temaDupaCheie } from "./teme";
+import { VARIANTE_MARI, VARIANTE_MICI, adresaVarianteiTemei } from "./variante-imagini";
 import {
   bannereDupaImport, categoriiDeCreat, externalIdDemo, idRandDemo, importaDateleDemo, randuriDupaImport, sluguriUnice, urmaDateDemoDin, urmaDupaImport,
 } from "./import-demo";
@@ -68,6 +69,13 @@ test("⚠ pozele temei sunt mici (vitrina le descarca intregi: incarcatorul nu l
   assert.ok(peDisc.length > 0);
   for (const cale of peDisc) {
     const adresa = `/${relative("public", cale).split(sep).join("/")}`;
+    // Variantele mici (`scripts/teme/variante-imagini.mjs`) nu le foloseste setul, ci loaderul, in locul originalului.
+    if (/\.w\d+\.webp$/.test(adresa)) {
+      const baza = adresa.replace(/\.w\d+\.webp$/, ".");
+      const original = [...folosite].find((f) => f.startsWith(baza) && !/\.w\d+\.webp$/.test(f));
+      assert.ok(original, `${adresa}: varianta unei poze nefolosite`);
+      continue;
+    }
     assert.ok(folosite.has(adresa), `${adresa}: pe disc, dar nefolosita de set`);
     const fel = dirname(relative(join("public", "teme", "jupiter"), cale)).split(sep)[0];
     const kb = statSync(cale).size / 1024;
@@ -269,4 +277,20 @@ test("⚠⚠ o cadere la subcategorii lasa urma cu toate id-urile alese: „Ște
   assert.ok(primul.length > 0 && primul.every((id) => urma!.categorii.includes(id)), "primul nivel, scris, e in urma");
   assert.equal(urma!.categorii.length, categoriiDeCreat([], D).length, "si subcategoriile alese, chiar daca nescrise");
   assert.ok(!b.jurnal.some((x) => x.op === "insert products"), "dupa cadere, nimic altceva");
+});
+
+test("⚠ fiecare poza din `public/teme` are variantele pe care le cere loaderul (altfel poza iese rupta)", () => {
+  const poze = fisiere(join("public", "teme")).filter((f) => /\.(webp|png|jpe?g)$/i.test(f) && !/\.w\d+\.webp$/.test(f));
+  assert.ok(poze.length > 700);
+  for (const cale of poze) {
+    const adresa = `/${relative("public", cale).split(sep).join("/")}`;
+    for (const w of [...VARIANTE_MICI, ...(VARIANTE_MARI[adresa] ?? [])]) {
+      const varianta = adresaVarianteiTemei(adresa, w)!;
+      assert.ok(existsSync(join("public", varianta)), `${varianta} lipseste: ruleaza scripts/teme/variante-imagini.mjs`);
+    }
+  }
+  // Regula loaderului: cea mai mica varianta care acopera latimea; peste ultima, poza intreaga.
+  assert.equal(adresaVarianteiTemei("/teme/x/a.webp", 300), "/teme/x/a.w384.webp");
+  assert.equal(adresaVarianteiTemei("/teme/x/a.webp", 640), "/teme/x/a.webp", "o poza mica n-are varianta de 640");
+  assert.equal(adresaVarianteiTemei("/products/a.webp", 300), null, "doar pozele temelor");
 });

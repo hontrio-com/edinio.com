@@ -117,7 +117,7 @@ export function CartPageCompact({
             </p>
           </div>
           <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder || liniiNevalidate > 0}
-            className="ml-auto shrink-0 h-11 px-5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            className="ml-auto shrink-0 h-11 px-5 rounded-xl text-sm font-semibold text-[var(--st-primary-contrast,#fff)] transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color }}>
             Finalizeaza comanda
           </button>

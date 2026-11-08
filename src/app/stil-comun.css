@@ -2040,7 +2040,9 @@
 .policy-content ul { list-style-type: disc; }
 .policy-content ol { list-style-type: decimal; }
 .policy-content li + li { margin-top: 0.2em; }
-.policy-content a  { color: var(--primary); text-decoration: underline; }
+/* Culoarea MAGAZINULUI cand exista (`--st-primary`, pe vitrina), altfel verdele aplicatiei: pe o tema neagra-aurie,
+   linkurile din descriere ieseau verzi (gasit la proba temelor 2-30). */
+.policy-content a  { color: var(--st-primary, var(--primary)); text-decoration: underline; }
 .policy-content blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 0.75em 0; }
 .policy-content code { font-family: monospace; font-size: 0.85em; background: var(--muted); border-radius: 4px; padding: 0.1em 0.35em; }
 

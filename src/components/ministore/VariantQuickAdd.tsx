@@ -198,7 +198,7 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd, deferCom
             type="button"
             onClick={handleAdd}
             disabled={!canAdd}
-            className="w-full py-3.5 text-sm font-bold text-white rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            className="w-full py-3.5 text-sm font-bold text-[var(--st-primary-contrast,#fff)] rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0 2px 12px ${color}55` }}
           >
             <ShoppingCart className="h-4 w-4" />

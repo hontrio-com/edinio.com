@@ -52,7 +52,7 @@ export const ARCTURUS = temaDupaReteta({
   nume: "Arcturus",
   descriere: "Pentru magazine de suplimente și nutriție sportivă: portocaliu cu negru, meniul lângă siglă, banner jumătate culoare, bandă de beneficii și obiectivele pe fotografii.",
   date: DATE_DEMO_ARCTURUS,
-  identitate: { culoare: "#FF5A1F", fundal: "#FFFFFF", fontTitluri: "spacegrotesk", fontText: "manrope" },
+  identitate: { culoare: "#C43400", fundal: "#FFFFFF", fontTitluri: "spacegrotesk", fontText: "manrope" },
   reteta: {
     stil: {
       colors: { accent: "#111111", surface: "#FFFFFF", text: "#111111", muted: "#666666", border: "#E8E8E8", footerBg: "#111111", footerText: "#FFFFFF" },
@@ -124,7 +124,7 @@ export const CAPELLA = temaDupaReteta({
   nume: "Capella",
   descriere: "Pentru pet shop-uri: verde cu galben, antet cu bara de categorii, bannere cu două carduri alăturate, animalele în cercuri și carduri cu prețul mare.",
   date: DATE_DEMO_CAPELLA,
-  identitate: { culoare: "#2F9E41", fundal: "#FFFFFF", fontTitluri: "quicksand", fontText: "inter" },
+  identitate: { culoare: "#247A32", fundal: "#FFFFFF", fontTitluri: "quicksand", fontText: "inter" },
   reteta: {
     stil: {
       colors: { accent: "#FFD23F", surface: "#FFFFFF", text: "#1E2B22", muted: "#66736A", border: "#E3EAE4", footerBg: "#F3F8F3", footerText: "#1E2B22" },

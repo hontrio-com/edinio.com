@@ -62,7 +62,7 @@ export const ALNILAM = temaDupaReteta({
   nume: "Alnilam",
   descriere: "Pentru magazine de piese și accesorii auto: antracit cu roșu, antet cu meniul de categorii, categoriile lângă bannere, plăci pe categorii și carduri cu prețul mare.",
   date: DATE_DEMO_ALNILAM,
-  identitate: { culoare: "#E52E3A", fundal: "#F4F5F7", fontTitluri: "sora", fontText: "opensans" },
+  identitate: { culoare: "#D01A26", fundal: "#F4F5F7", fontTitluri: "sora", fontText: "opensans" },
   reteta: {
     stil: {
       colors: { accent: "#1E2329", surface: "#FFFFFF", text: "#1E2329", muted: "#646B75", border: "#E2E5EA", footerBg: "#1E2329", footerText: "#FFFFFF" },

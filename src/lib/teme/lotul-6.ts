@@ -24,7 +24,7 @@ export const REGULUS = temaDupaReteta({
   nume: "Regulus",
   descriere: "Pentru magazine de articole sportive și merchandise: albastru-cer cu vișiniu, meniu pe butoane rotunjite, fotografie panoramică, categorii colorate și carduri minimaliste.",
   date: DATE_DEMO_REGULUS,
-  identitate: { culoare: "#5BBCE4", fundal: "#FFFFFF", fontTitluri: "anton", fontText: "rubik" },
+  identitate: { culoare: "#187095", fundal: "#FFFFFF", fontTitluri: "anton", fontText: "rubik" },
   reteta: {
     stil: {
       colors: { accent: "#8A1538", surface: "#FFFFFF", text: "#0E1B2C", muted: "#5D6B7A", border: "#E1E8EE", footerBg: "#0E1B2C", footerText: "#FFFFFF" },
@@ -138,7 +138,7 @@ export const ACHERNAR = temaDupaReteta({
   nume: "Achernar",
   descriere: "Pentru magazine de bricolaj și amenajări: roșu, bara de navigare roșie cu meniul de produse, banner lat, proiectele pe fotografii și carduri cu prețul mare.",
   date: DATE_DEMO_ACHERNAR,
-  identitate: { culoare: "#E30613", fundal: "#F5F5F5", fontTitluri: "outfit", fontText: "inter" },
+  identitate: { culoare: "#D40612", fundal: "#F5F5F5", fontTitluri: "outfit", fontText: "inter" },
   reteta: {
     stil: {
       colors: { accent: "#1F1F1F", surface: "#FFFFFF", text: "#1F1F1F", muted: "#646464", border: "#E4E4E4", footerBg: "#1F1F1F", footerText: "#FFFFFF" },

@@ -1343,7 +1343,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                             {tier.qty} {tier.qty === 1 ? "bucata" : "bucati"}
                           </p>
                           {tier.badge ? (
-                            <span className="inline-block mt-0.5 text-white text-[10px] font-bold px-2 py-0.5 rounded"
+                            <span className="inline-block mt-0.5 text-[var(--st-primary-contrast,#fff)] text-[10px] font-bold px-2 py-0.5 rounded"
                               style={{ backgroundColor: color }}>
                               {tier.badge}
                             </span>
@@ -1364,7 +1364,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                           style={selected
                             ? { borderColor: color, backgroundColor: color }
                             : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                          {selected && <Check size={10} className="text-white" strokeWidth={3} />}
+                          {selected && <Check size={10} className="text-[var(--st-primary-contrast,#fff)]" strokeWidth={3} />}
                         </div>
                       </button>
                     );
@@ -1847,7 +1847,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       type="button"
                       onClick={handleApplyDiscount}
                       disabled={isValidating || !discountInput.trim()}
-                      className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-white rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                      className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-[var(--st-primary-contrast,#fff)] rounded-lg disabled:opacity-50 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                       style={{ backgroundColor: color }}
                     >
                       {isValidating
@@ -2019,7 +2019,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {/* Submit */}
               <button type="submit" disabled={isPending || belowMinOrder || liniiNevalidate > 0}
-                className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-[var(--st-primary-contrast,#fff)] rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
                 {/*
                   ⚠ SI ETICHETA POARTA TOTALUL. Stins cum e, butonul tot scria „Plata la livrare -

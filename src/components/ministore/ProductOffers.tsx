@@ -154,8 +154,8 @@ function FbtCard({ offer, anchor, color, onBuyTogether, indisponibil, ingust }: 
           )}
           <button type="button" onClick={() => onBuyTogether(offer)} disabled={!!indisponibil}
             className={ingust
-              ? "w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-              : "w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"}
+              ? "w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-[var(--st-primary-contrast,#fff)] rounded-lg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              : "w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-[var(--st-primary-contrast,#fff)] rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"}
             /* ⚠ Fără umbră colorată la varianta îngustă: lângă butonul de
                „Adaugă în coș”, două umbre în aceeași culoare fac zona de
                cumpărare să pară un teanc de butoane. */
@@ -222,7 +222,7 @@ function OfferCard({ product, basePath, color, onAddToCart }: {
           ? <Image src={product.imageUrl} alt={product.name} fill sizes="(max-width:1024px) 50vw, 280px" className="object-contain p-2 group-hover:scale-105 transition-transform duration-300" />
           : <div className="w-full h-full flex items-center justify-center"><Package className="h-8 w-8 text-muted-foreground/40" /></div>}
         {hasDiscount && (
-          <span className="absolute top-2 right-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: color }}>
+          <span className="absolute top-2 right-2 text-[var(--st-primary-contrast,#fff)] text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: color }}>
             -{Math.round((1 - product.price / product.compareAtPrice!) * 100)}%
           </span>
         )}
@@ -241,7 +241,7 @@ function OfferCard({ product, basePath, color, onAddToCart }: {
           </div>
           {onAddToCart && !product.needsChoice ? (
             <button type="button" onClick={handleAdd} disabled={product.outOfStock} aria-label={`Adauga ${product.name}`}
-              className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-semibold text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-semibold text-[var(--st-primary-contrast,#fff)] transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ backgroundColor: color }}>
               {product.outOfStock ? "Epuizat" : added ? <><Check className="h-3.5 w-3.5" /> Adaugat</> : <><Plus className="h-3.5 w-3.5" /> Adauga</>}
             </button>

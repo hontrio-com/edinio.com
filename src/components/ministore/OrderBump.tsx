@@ -128,7 +128,7 @@ function RandDeOferta({ x, color, checked, onToggle, onAlege }: {
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 rounded flex items-center justify-center border-2 flex-shrink-0 transition-colors"
             style={checked ? { borderColor: color, backgroundColor: color } : { borderColor: "var(--color-border)" }}>
-            {checked && <Check size={12} className="text-white" strokeWidth={3} />}
+            {checked && <Check size={12} className="text-[var(--st-primary-contrast,#fff)]" strokeWidth={3} />}
           </div>
 
           <Miniatura product={p} />

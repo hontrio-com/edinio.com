@@ -98,7 +98,7 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
                   style={bifat
                     ? { backgroundColor: color, borderColor: color }
                     : { borderColor: "var(--st-border)" }}>
-                  {bifat && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                  {bifat && <Check className="h-3 w-3 text-[var(--st-primary-contrast,#fff)]" strokeWidth={3} />}
                 </span>
                 <span className="text-[13px] text-[var(--st-text)] group-hover:opacity-70 transition-opacity truncate">
                   {v.valoare}
@@ -456,7 +456,7 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
         <SlidersHorizontal className="h-4 w-4" />
         Filtre
         {activeFilterCount > 0 && (
-          <span className="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
+          <span className="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold text-[var(--st-primary-contrast,#fff)] inline-flex items-center justify-center"
             style={{ backgroundColor: "var(--st-primary)" }}>
             {activeFilterCount}
           </span>
@@ -486,7 +486,7 @@ export function FiltrePeTelefon({ grupuriPornite, panaLa = "lg" }: { grupuriPorn
                 </button>
               )}
               <button type="button" onClick={() => setFiltersOpen(false)}
-                className="flex-1 py-3 text-sm font-bold text-white rounded-[var(--st-radius-sm)]"
+                className="flex-1 py-3 text-sm font-bold text-[var(--st-primary-contrast,#fff)] rounded-[var(--st-radius-sm)]"
                 style={{ backgroundColor: "var(--st-primary)" }}>
                 Arata {totalFiltrate} {totalFiltrate === 1 ? "produs" : "produse"}
               </button>

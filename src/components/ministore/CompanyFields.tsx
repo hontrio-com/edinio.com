@@ -204,7 +204,7 @@ export function CompanyFields({
                 aria-checked={activ}
                 onClick={() => setCompany((c) => ({ ...c, entityType: opt.id }))}
                 className={`py-2.5 rounded-lg text-sm font-semibold border transition-colors ${
-                  activ ? "text-white" : "border-border text-muted-foreground bg-surface hover:border-foreground/30"
+                  activ ? "text-[var(--st-primary-contrast,#fff)]" : "border-border text-muted-foreground bg-surface hover:border-foreground/30"
                 }`}
                 style={activ ? { backgroundColor: color, borderColor: color } : undefined}
               >
@@ -262,7 +262,7 @@ export function CompanyFields({
                 type="button"
                 onClick={cautaCui}
                 disabled={anafLoading || !company.cui.trim()}
-                className="flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold text-white transition-opacity disabled:opacity-50 whitespace-nowrap shrink-0"
+                className="flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold text-[var(--st-primary-contrast,#fff)] transition-opacity disabled:opacity-50 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: color }}
               >
                 {anafLoading ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <Search className="h-3.5 w-3.5 shrink-0" />}

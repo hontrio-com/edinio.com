@@ -13,6 +13,7 @@
 // nicio migrare de date, nici acum, nici cand s-a pornit CDN-ul.
 
 import { CALITATE, adresaDirectaVariantei, gazdaImaginiDirecte } from "./latimi-imagini";
+import { adresaVarianteiTemei } from "./teme/variante-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
 /* ⚠ Citit LITERAL: Next inlocuieste in pachetul browserului doar `process.env.NEXT_PUBLIC_…` scris intreg. */
@@ -43,6 +44,10 @@ export default function imageLoader({
 }): string {
   // Don't re-wrap an already-optimized URL (our route or a CF transform).
   if (src.includes("/api/img") || src.includes("/cdn-cgi/image/")) return src;
+
+  /* Pozele temelor (`public/teme`), locale: varianta mica facuta dinainte, nu bannerul intreg pe telefon. */
+  const aTemei = adresaVarianteiTemei(src, width);
+  if (aTemei) return aTemei;
 
   const key = extractR2Key(src);
   if (!key) return src; // non-R2 image (external/local) — pass through untouched

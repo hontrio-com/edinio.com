@@ -86,5 +86,6 @@ test("pagina Magazin: placile sub titlu, cu aceeasi placa de categorie ca pe pri
 test("pagina de produs „Detaliat” urmeaza latimea din stil (72rem ramane implicitul)", () => {
   const p = cod("src/components/storefront/sections/product/ProductPageDetailed.tsx");
   assert.doesNotMatch(p, /max-w-6xl/);
-  assert.equal((p.match(/max-w-\[var\(--st-container,72rem\)\] mx-auto/g) ?? []).length, 6);
+  // Plafonata la 76rem: pe temele late (80-100rem) galeria iesea de 700-800 px.
+  assert.equal((p.match(/max-w-\[min\(var\(--st-container,72rem\),76rem\)\] mx-auto/g) ?? []).length, 6);
 });

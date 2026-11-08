@@ -9,6 +9,7 @@ import { MarcajBloc } from "@/components/storefront/MarcajBloc";
 import { FooterCredit, FooterLegal, type TonFooter } from "@/components/storefront/sections/_shared/FooterLegal";
 import { SocialLinks, areSocialLinks } from "@/components/storefront/sections/_shared/SocialLinks";
 import { stilSigla } from "@/lib/storefront/logo-box";
+import { esteDeschisa } from "@/lib/storefront/design/css-vars";
 import { coloaneVazute, culoriSubsol, etichetaColoanei, inapoiSusPornit, sablonColoane, textCopyright } from "@/lib/storefront/design/subsol";
 import type { BlockInstance, SectionInstance } from "@/lib/storefront/design/types";
 import { FormularNewsletterSubsol, ImagineSubsol, MesajGol, sir, useLinkuriColoanei } from "./subsol-coloane";
@@ -30,22 +31,32 @@ import { FormularNewsletterSubsol, ImagineSubsol, MesajGol, sir, useLinkuriColoa
  * acolo pentru ce contin si de ce nu pot lipsi din nicio varianta.
  */
 export function FooterColumns({ ton = "deschis", sectiune }: { ton?: TonFooter; sectiune: SectionInstance }) {
-  const { business, hasStickyBottomBar } = useStoreChrome();
+  const { business, hasStickyBottomBar, design } = useStoreChrome();
   const nume = business.store_name ?? business.business_name;
   const spatiuJos = hasStickyBottomBar ? "pb-24 lg:pb-8" : "pb-8";
   const coloane = coloaneVazute(sectiune);
   // Culorile alese (etapa 11) cad ca variabile pe radacina; partea legala trece atunci pe tonul care le citeste.
   const culori = culoriSubsol(sectiune);
-  const tonLegal: TonFooter = culori ? "deschis" : ton;
   const inchis = ton === "inchis";
+  /*
+   * Varianta „dark” pe un fundal de subsol ales DESCHIS (tema Uranus, #F4F5F7): blocul legal scria alb 50% pe el
+   * (1,04:1) si textele marunte negru 50% (3,3:1). Atunci trece pe tonul deschis. Fundalul implicit, inchis, nu se
+   * schimba, deci niciun subsol de azi nu arata altfel.
+   */
+  const fundalDeschis = inchis && esteDeschisa(design?.style?.colors?.footerBg) === true;
+  const tonLegal: TonFooter = culori || fundalDeschis ? "deschis" : ton;
   // Pe fundal inchis culorile vin din perechea de footer a magazinului, ca sa
   // ramana reglabila dintr-un singur loc.
   const fundal = inchis
     ? "bg-[var(--st-footer-bg)] text-[var(--st-footer-text)]"
     : "bg-[var(--st-bg)] text-[var(--st-text)] border-t border-[var(--st-border)]";
   const separator = inchis ? "border-[var(--st-footer-text)]/10" : "border-[var(--st-border)]";
-  const marunt = inchis ? "text-[var(--st-footer-text)]/50" : "text-[var(--st-muted)]";
-  const stil = { separator, marunt, inchis };
+  const marunt = inchis ? (fundalDeschis ? "text-[var(--st-footer-text)]/75" : "text-[var(--st-footer-text)]/50") : "text-[var(--st-muted)]";
+  const stil: StilColoane = {
+    separator, marunt, inchis,
+    // Linkurile coloanelor, pe acelasi fond deschis: la 50% ieseau la 3,32:1 (Uranus).
+    ...(fundalDeschis ? { legatura: "flex items-start gap-2 text-[13px] text-[var(--st-footer-text)]/75 hover:text-[var(--st-footer-text)] transition-colors" } : {}),
+  };
   /*
    * Latimile coloanelor (identitatea si contactul mai late) printr-o variabila: clasa de grila e aceeasi oricate
    * coloane ar fi. Peste patru, pe tableta intai doua pe rand, ca sa nu se stranga.

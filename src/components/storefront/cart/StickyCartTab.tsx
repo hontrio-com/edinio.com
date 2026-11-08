@@ -49,7 +49,7 @@ export function StickyCartTab({
        * `z-30` il aseaza sub sertar (`z-50`) si sub stratul lui (`z-40`), deci
        * dispare firesc sub ele chiar daca `hidden` ar intarzia o clipa.
        */
-      className="fixed right-0 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-2xl px-3 py-4 text-white shadow-lg transition-transform duration-200 hover:scale-[1.03] active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:flex"
+      className="fixed right-0 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center gap-1.5 rounded-l-2xl px-3 py-4 text-[var(--st-primary-contrast,#fff)] shadow-lg transition-transform duration-200 hover:scale-[1.03] active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:flex"
       style={{ backgroundColor: color, boxShadow: `0 10px 30px -10px ${color}` }}
     >
       <span className="relative">
@@ -60,7 +60,7 @@ export function StickyCartTab({
           10 produse.
         */}
         <span
-          className="absolute -right-2.5 -top-2 min-w-[18px] rounded-full bg-white px-1 text-[11px] font-bold leading-[18px] tabular-nums"
+          className="absolute -right-2.5 -top-2 min-w-[18px] rounded-full bg-[var(--st-primary-contrast,#fff)] px-1 text-[11px] font-bold leading-[18px] tabular-nums"
           style={{ color }}
           aria-hidden
         >

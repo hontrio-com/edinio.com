@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { esteFontPagina } from "@/lib/pages/fonturi";
-import { tokeniPeSuprafataInchisa } from "@/lib/storefront/design/css-vars";
+import { amestecHex, raportContrast, tokeniPeCulorileMagazinului } from "@/lib/storefront/design/css-vars";
 import { cardurileVitrinei, placileMozaic, imagineaBannerului, textSetare } from "@/lib/storefront/design/hero-teme";
 import { variantMeta } from "@/lib/storefront/design/registry";
 import type { DesignContext } from "@/lib/storefront/design/types";
@@ -155,7 +155,7 @@ test("vitrina si mozaicul: demo-ul intra doar cu datele demo, iar „Șterge dat
 });
 
 test("pe suprafata inchisa, placile cu poze iau fondul ei si fara `multiply` (pozele nu se mai sting)", () => {
-  const inchis = tokeniPeSuprafataInchisa("#151515");
+  const inchis = tokeniPeCulorileMagazinului("#151515");
   assert.match(inchis["--st-fond-placa"], /var\(--st-surface\)/);
   assert.equal(inchis["--st-amestec-placa"], "normal");
   for (const f of ["src/components/storefront/product/ProductCardJupiter.tsx", "src/components/storefront/sections/catalog/CategoryNavPlaci.tsx"]) {
@@ -165,19 +165,78 @@ test("pe suprafata inchisa, placile cu poze iau fondul ei si fara `multiply` (po
   }
 });
 
-test("⚠ tokenii aplicatiei trec pe culorile magazinului DOAR pe o suprafata inchisa (niciun magazin de azi nu se schimba)", () => {
-  assert.deepEqual(tokeniPeSuprafataInchisa("#FFFFFF"), {});
-  assert.deepEqual(tokeniPeSuprafataInchisa("#F5F6F8"), {});
-  assert.deepEqual(tokeniPeSuprafataInchisa("var(--x)"), {}, "o valoare care nu e hex nu schimba nimic");
-  const inchis = tokeniPeSuprafataInchisa("#1A1A1A");
+test("⚠ tokenii aplicatiei trec pe culorile magazinului doar cand designul ARE culori (niciun magazin de azi nu se schimba)", () => {
+  // Magazinele fara culori in design (toate cele de azi): suprafata e `var(--color-surface)`, deci nimic.
+  assert.deepEqual(tokeniPeCulorileMagazinului("var(--color-surface)"), {}, "o valoare care nu e hex nu schimba nimic");
+  // Pe o tema deschisa: tokenii trec pe culorile ei (textul secundar al aplicatiei iesea la 4,43:1 pe fondul Alnilam).
+  const deschis = tokeniPeCulorileMagazinului("#FFFFFF");
+  assert.equal(deschis["--muted-foreground"], "var(--st-muted)");
+  assert.equal(deschis["--foreground"], "var(--st-text)");
+  // ...dar fara inversarea „negrului” si fara placile pentru fond inchis.
+  assert.equal(deschis["--st-actiune-inchisa"], undefined);
+  assert.equal(deschis["--st-fond-placa"], undefined);
+  const inchis = tokeniPeCulorileMagazinului("#1A1A1A");
   assert.equal(inchis["--foreground"], "var(--st-text)");
   assert.equal(inchis["--border"], "var(--st-border)");
   assert.equal(inchis["--color-surface"], "var(--st-surface)");
-  // Marte e singura tema din lot cu suprafata inchisa.
+  // Marte e singura tema din lot cu suprafata inchisa: doar ea inverseaza „negrul”.
   for (const cheie of LOTUL_1) {
     const s = temaDupaCheie(cheie)!.design(ctx, null).style.colors?.surface ?? "#FFFFFF";
-    assert.equal(Object.keys(tokeniPeSuprafataInchisa(s)).length > 0, cheie === "marte", cheie);
+    assert.equal("--st-actiune-inchisa" in tokeniPeCulorileMagazinului(s), cheie === "marte", cheie);
   }
+});
+
+test("⚠ fiecare tema: textul principal, cel secundar si culoarea principala se citesc pe fondurile ei (WCAG AA, 4,5:1)", () => {
+  for (const cheie of DUPA_RETETA) {
+    const t = temaDupaCheie(cheie)!;
+    const c = t.design(ctx, null).style.colors!;
+    const fond = t.identitate!.fundal;
+    for (const [nume, culoare, pe] of [
+      ["textul pe suprafata", c.text, c.surface], ["textul secundar pe suprafata", c.muted, c.surface],
+      ["textul secundar pe fond", c.muted, fond], ["textul subsolului", c.footerText, c.footerBg],
+      // Culoarea principala e si text (preturi, „In stoc”, telefonul): bejul, portocaliul si lime-ul doar pe fond inchis.
+      ["principala pe fond", t.identitate!.culoare, fond],
+      // ...si pe nuanta suprafetei (`--muted`, 8% text): randurile din formularul de comanda si cosul stau pe ea.
+      ["principala pe nuanta", t.identitate!.culoare, amestecHex(c.text!, c.surface!, 0.08)],
+    ] as const) {
+      const r = raportContrast(culoare, pe);
+      assert.ok(r !== null && r >= 4.5, `${cheie}: ${nume} ${culoare} pe ${pe} = ${r?.toFixed(2)}`);
+    }
+  }
+});
+
+test("⚠ pe suprafata inchisa: textul mostenit, tokenii cititi direct ca `var(--color-*)` si „negrul” inversat", () => {
+  const inchis = tokeniPeCulorileMagazinului("#17171A");
+  // „Total” din formularul de comanda nu-si pune culoare: o mosteneste de pe radacina temei.
+  assert.equal(inchis.color, "var(--st-text)");
+  // Fila „Descriere”, cifra cantitatii si +/- citesc `var(--color-foreground)` direct, in `style`.
+  for (const v of ["--color-foreground", "--color-text-primary"]) assert.equal(inchis[v], "var(--st-text)", v);
+  for (const v of ["--color-muted-foreground", "--color-text-secondary"]) assert.equal(inchis[v], "var(--st-muted)", v);
+  assert.equal(inchis["--color-border"], "var(--st-border)");
+  // „Comanda acum” (Detaliat) era negru pe negru pe Marte si Saturn.
+  assert.equal(inchis["--st-actiune-inchisa"], "var(--st-text)");
+  assert.equal(inchis["--st-actiune-inchisa-text"], "var(--st-surface)");
+  const pagina = readFileSync("src/components/storefront/sections/product/ProductPageDetailed.tsx", "utf8");
+  assert.ok(pagina.includes("bg-[var(--st-actiune-inchisa,#111111)]!"), "butonul negru citeste variabila, cu negrul ca rezerva");
+  assert.doesNotMatch(pagina, /backgroundColor: NEGRU/, "nicio actiune nu mai poarta negrul fix");
+  // Pagina de produs nu mai creste cu containerul temei (panoul de 700-800 px pe temele late).
+  assert.ok(pagina.includes("max-w-[min(var(--st-container,72rem),76rem)]"));
+  assert.doesNotMatch(pagina, /minmax\(0,26rem\)/);
+});
+
+test("textul de pe culoarea magazinului se alege dupa contrast, nu alb fix (bej, portocaliu, lime)", () => {
+  const fisiere = [
+    "src/components/ministore/OrderModal.tsx",
+    "src/components/storefront/sections/cart/CartDrawerClassic.tsx",
+    "src/components/storefront/sections/cart/_shared/CartPieces.tsx",
+    "src/components/storefront/cart/StickyCartTab.tsx",
+    "src/components/ministore/MiniStoreRenderer.tsx",
+    "src/components/storefront/sections/checkout/CheckoutForm.tsx",
+  ];
+  for (const f of fisiere) assert.ok(readFileSync(f, "utf8").includes("text-[var(--st-primary-contrast,#fff)]"), f);
+  // Butonul de trimitere al comenzii: fara alb fix pe fundalul `color`.
+  const modal = readFileSync("src/components/ministore/OrderModal.tsx", "utf8");
+  assert.doesNotMatch(modal, /py-4 font-bold text-base text-white/);
 });
 
 test("magazinele demo pe productie: SQL-ul le are pe toate temele dupa reteta, cu slugul si emailul temei, si nu sterge nimic", () => {

@@ -439,7 +439,7 @@ export function RezumatCos({
       )}
 
       <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder || liniiNevalidate > 0}
-        className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+        className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-[var(--st-primary-contrast,#fff)] rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
         style={{ backgroundColor: color }}>
         {etichetaButon}
       </button>
@@ -511,7 +511,7 @@ export function CosGol({ basePath, color }: { basePath: string; color: string })
       <p className="text-base font-semibold text-foreground mb-1">Cosul este gol</p>
       <p className="text-sm text-muted-foreground mb-6">Adauga produse ca sa continui</p>
       <a href={catreProduse}
-        className="inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        className="inline-flex items-center justify-center h-11 px-5 rounded-xl text-sm font-semibold text-[var(--st-primary-contrast,#fff)] transition-opacity hover:opacity-90"
         style={{ backgroundColor: color }}>
         Vezi produsele
       </a>

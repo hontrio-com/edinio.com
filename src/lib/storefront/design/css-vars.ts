@@ -185,28 +185,87 @@ export function styleToCssVars(style: ResolvedStyle): Record<string, string> {
     "--st-card-shadow-hover": shadow.hover,
     "--st-card-border": style.cardStyle === "bordered" ? "1px solid var(--st-border)" : "1px solid transparent",
     "--st-card-ratio": CARD_RATIO[style.cardRatio],
-    ...tokeniPeSuprafataInchisa(c.surface),
+    ...tokeniPeCulorileMagazinului(c.surface),
   };
 }
 
 /**
- * Pe un magazin cu SUPRAFATA inchisa (tema Marte, etapa 24 din `docs/editor-magazin/PLAN.md`), si tokenii aplicatiei pe
+ * Amestecul a doua culori hex de 6 cifre, ca `color-mix(in srgb, a p, b)`; `b` cand vreuna nu e hex. Pentru socoteala
+ * contrastului pe fondurile scrise cu `color-mix` (bara de sus a antetului si subsolul „hipermarket”).
+ */
+export function amestecHex(a: string, b: string, p: number): string {
+  const ok = /^#[0-9a-f]{6}$/i;
+  if (!ok.test(a) || !ok.test(b)) return b;
+  const c = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  return "#" + [0, 1, 2].map((i) => Math.round(c(a, i) * p + c(b, i) * (1 - p)).toString(16).padStart(2, "0")).join("");
+}
+
+/** Raportul de contrast WCAG dintre doua culori hex; `null` daca vreuna nu e hex. */
+export function raportContrast(a: string | undefined | null, b: string | undefined | null): number | null {
+  const hex = (v: string | undefined | null) => {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((v ?? "").trim());
+    return m ? (m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1]) : null;
+  };
+  const x = hex(a), y = hex(b);
+  return x && y ? contrast(luminanta(x), luminanta(y)) : null;
+}
+
+/**
+ * Daca o culoare hex e deschisa (luminanta peste jumatate). `null` pentru orice nu e hex (`var(...)`): nu se stie.
+ * O citeste subsolul „dark”, ca sa nu scrie alb pe un fundal de subsol ales deschis (tema Uranus).
+ */
+export function esteDeschisa(culoare: string | undefined | null): boolean | null {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((culoare ?? "").trim());
+  if (!m) return null;
+  const hex = m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1];
+  return luminanta(hex) > 0.5;
+}
+
+/**
+ * Pe un magazin cu SUPRAFATA din design (o tema, etapa 24 din `docs/editor-magazin/PLAN.md`), tokenii aplicatiei pe
  * care ii folosesc paginile comune (pagina de produs, cosul, rândul clasic: `text-foreground`, `bg-muted`,
  * `border-border`, `bg-surface`) trec pe culorile magazinului. Altfel titlul si pretul produsului ramaneau inchise pe
- * fond inchis (gasit la proba). `@theme inline` pune `var(--foreground)` direct in utilitare, deci suprascrierea pe
- * radacina vitrinei ajunge peste tot in ea.
+ * fond inchis (Marte), iar textul secundar sub prag pe fondurile gri-deschis (Alnilam). `@theme inline` pune
+ * `var(--foreground)` direct in utilitare, deci suprascrierea pe radacina vitrinei ajunge peste tot in ea. Inversarea
+ * „negrului” si placile cu poze decupate se schimba DOAR pe suprafata inchisa.
  *
  * ⚠ Dupa SUPRAFATA din stilul designului, nu dupa fondul paginii: suprafata o pune doar o tema (implicit e alba), iar
  * productia n-are niciun magazin cu culori in design (verificat 08.11.2026), deci niciun magazin de azi nu se schimba.
  * Un magazin cu fond inchis ales din „Stil” (unul singur azi) ramane cum e.
  */
-export function tokeniPeSuprafataInchisa(suprafata: string): Record<string, string> {
+export function tokeniPeCulorileMagazinului(suprafata: string): Record<string, string> {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(suprafata.trim());
   if (!m) return {};
   const hex = m[1].length === 3 ? m[1].replace(/./g, (ch) => ch + ch) : m[1];
-  if (luminanta(hex) >= 0.18) return {};
+  const inchisa = luminanta(hex) < 0.18;
   const nuanta = "color-mix(in srgb, var(--st-text) 8%, var(--st-surface))";
   return {
+    ...tokeniAplicatiei(nuanta),
+    ...(inchisa ? {
+      // A doua actiune, „negrul” variantelor (ex. „Comanda acum” din pagina Detaliat): pe suprafata inchisa se
+      // inverseaza, altfel butonul negru disparea in fond (gasit la proba pe temele Marte si Saturn).
+      "--st-actiune-inchisa": "var(--st-text)",
+      "--st-actiune-inchisa-text": "var(--st-surface)",
+      // Fondul placilor cu poze decupate (`FOND_PLACA`): pe suprafata inchisa, o nuanta a ei, nu griul deschis al
+      // temelor albe (tema Aldebaran, lotul 4: placile de categorii ieseau ca niste ferestre albe pe fond negru).
+      "--st-fond-placa": "color-mix(in srgb, var(--st-text) 10%, var(--st-surface))",
+      // Si fara `multiply` pe pozele lor: pe fond inchis le stingea (ramaneau spalacite, gasit la proba).
+      "--st-amestec-placa": "normal",
+    } : {}),
+  };
+}
+
+/**
+ * Tokenii aplicatiei, pe culorile magazinului. Pe orice suprafata HEX, nu doar pe cele inchise: pe fondul gri-deschis
+ * al temelor (Alnilam #F4F5F7) textul secundar al aplicatiei iesea la 4,43:1, sub prag, desi tema are un gri al ei care
+ * trece (gasit la proba temelor 2-30). Suprafata hex o pune doar o tema sau culorile alese de om in „Stil”; productia
+ * n-are magazine cu culori in design (verificat 08.11.2026), deci magazinele de azi nu se schimba.
+ */
+function tokeniAplicatiei(nuanta: string): Record<string, string> {
+  return {
+    // Textul mostenit: `body` isi ia culoarea de pe radacina documentului, deja rezolvata acolo, deci fara asta tot ce
+    // nu-si pune singur o culoare (randul „Total” din formularul de comanda, gasit la proba) ramanea aproape negru.
+    color: "var(--st-text)",
     "--background": "var(--st-bg)",
     "--foreground": "var(--st-text)",
     "--card": "var(--st-surface)",
@@ -219,10 +278,19 @@ export function tokeniPeSuprafataInchisa(suprafata: string): Record<string, stri
     "--input": "var(--st-border)",
     "--color-surface": "var(--st-surface)",
     "--color-surface-raised": nuanta,
-    // Fondul placilor cu poze decupate (`FOND_PLACA`): pe suprafata inchisa, o nuanta a ei, nu griul deschis al
-    // temelor albe (tema Aldebaran, lotul 4: placile de categorii ieseau ca niste ferestre albe pe fond negru).
-    "--st-fond-placa": "color-mix(in srgb, var(--st-text) 10%, var(--st-surface))",
-    // Si fara `multiply` pe pozele lor: pe fond inchis le stingea (ramaneau spalacite, gasit la proba).
-    "--st-amestec-placa": "normal",
+    // Aceiasi tokeni, cititi DIRECT ca `var(--color-*)` (in `style`, nu prin utilitare): `@theme inline` ii declara pe
+    // radacina documentului, deja rezolvati acolo, deci fara rescriere aici ramaneau pe culorile temei albe (fila
+    // „Descriere”, cifra cantitatii si butoanele +/- din formularul de comanda ieseau negre pe negru).
+    "--color-foreground": "var(--st-text)",
+    "--color-muted-foreground": "var(--st-muted)",
+    "--color-background": "var(--st-bg)",
+    "--color-card": "var(--st-surface)",
+    "--color-muted": nuanta,
+    "--color-input": "var(--st-border)",
+    "--color-border": "var(--st-border)",
+    "--color-border-strong": "color-mix(in srgb, var(--st-text) 22%, var(--st-surface))",
+    "--color-text-primary": "var(--st-text)",
+    "--color-text-secondary": "var(--st-muted)",
+    "--color-text-tertiary": "var(--st-muted)",
   };
 }

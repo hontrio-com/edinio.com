@@ -10,6 +10,7 @@ import { insigneDeAratat } from "@/lib/storefront/insigne-implicite";
 import type { SectionInstance } from "@/lib/storefront/design/types";
 import { ColoanaSubsol, type StilColoane } from "./FooterColumns";
 import { TRUST_ICONS } from "./UspStripIcons";
+import { amestecHex, raportContrast } from "@/lib/storefront/design/css-vars";
 
 /** Fundalul: o noapte scoasa din culoarea principala, deci ramane potrivit si cand magazinul o schimba din „Stil”. */
 const FUNDAL = "color-mix(in srgb, var(--st-primary) 36%, #070B14)";
@@ -37,7 +38,7 @@ const STIL: StilColoane = {
  * obligatorii, ca in orice varianta.
  */
 export function FooterHipermarket({ sectiune }: { sectiune: SectionInstance }) {
-  const { business, hasStickyBottomBar, pageContent } = useStoreChrome();
+  const { business, hasStickyBottomBar, pageContent, color, design } = useStoreChrome();
   const nume = business.store_name ?? business.business_name;
   const coloane = coloaneVazute(sectiune);
   const beneficii = sectiune.settings.beneficii !== false ? insigneDeAratat(pageContent.store_trust_badges) : [];
@@ -45,7 +46,18 @@ export function FooterHipermarket({ sectiune }: { sectiune: SectionInstance }) {
   // Culorile alese (etapa 11) cad peste ale variantei; partea legala trece atunci pe tonul care le citeste.
   const culori = culoriSubsol(sectiune);
   const tonLegal = culori ? "deschis" : "inchis";
-  const radacina = { "--st-footer-bg": FUNDAL, "--st-footer-text": "#FFFFFF", ...culori } as CSSProperties;
+  /*
+   * Accentul pe fondul de noapte: un accent inchis (tema Achernar, #1F1F1F) facea iconitele beneficiilor si cuvantul
+   * „Edinio” nevazute (1,09:1 si 1,00:1, gasit la proba). Sub 3:1 fata de fond, in subsol accentul devine alb.
+   */
+  const accent = design?.style?.colors?.accent ?? color;
+  const fondAprox = amestecHex(color, "#070B14", 0.36);
+  const accentSters = !culori && (raportContrast(accent, fondAprox) ?? 3) < 3;
+  const radacina = {
+    "--st-footer-bg": FUNDAL, "--st-footer-text": "#FFFFFF",
+    ...(accentSters ? { "--st-accent": "#FFFFFF", "--st-accent-contrast": "#111827" } : {}),
+    ...culori,
+  } as CSSProperties;
 
   return (
     <footer className="bg-[var(--st-footer-bg)] text-[var(--st-footer-text)]" style={radacina}>

@@ -51,7 +51,7 @@ export function HeroImpartit({ settings }: { settings: Record<string, unknown> }
             {titlu}
             {titlu !== nume && <span className="sr-only"> - {nume}</span>}
           </h1>
-          {text && <p className="mt-5 text-[15.5px] sm:text-[17px] leading-relaxed opacity-85 max-w-lg">{text}</p>}
+          {text && <p className="mt-5 text-[15.5px] sm:text-[17px] leading-relaxed max-w-lg">{text}</p>}
           <a href={href}
             className="mt-8 self-start inline-flex items-center gap-2 h-12 px-7 rounded-[var(--st-radius-btn)] text-[15px] font-bold shadow-[0_8px_20px_-8px_rgba(0,0,0,0.4)] transition-transform hover:-translate-y-0.5"
             style={{ backgroundColor: fondButon, color: scrisButon }}>

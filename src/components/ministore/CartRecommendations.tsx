@@ -131,13 +131,13 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
               {p.needsChoice ? (
                 /* Are variante sau cere personalizare — trimite cumparatorul pe pagina lui. */
                 <a href={p.slug ? hrefProdus(basePath, p.slug, prefixProdus) : basePath || "/"} aria-label={`Alege optiunile pentru ${p.name}`}
-                  className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--st-primary-contrast,#fff)] shrink-0 transition-transform active:scale-90"
                   style={{ backgroundColor: color }}>
                   <ChevronRight size={13} />
                 </a>
               ) : (
                 <button type="button" onClick={() => handleAdd(p)} aria-label={`Adauga ${p.name}`}
-                  className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--st-primary-contrast,#fff)] shrink-0 transition-transform active:scale-90"
                   style={{ backgroundColor: color }}>
                   {added.has(p.id) ? <Check size={13} /> : <Plus size={13} />}
                 </button>

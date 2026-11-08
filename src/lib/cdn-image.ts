@@ -6,6 +6,7 @@
 // non-R2 / already-transformed URL, the original string is returned unchanged.
 
 import { CALITATE, LATIMI_ECRAN, adresaDirectaVariantei, gazdaImaginiDirecte, latimeaDePeScara } from "./latimi-imagini";
+import { adresaVarianteiTemei } from "./teme/variante-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
 /* ⚠ Citit LITERAL: Next inlocuieste in pachetul browserului doar `process.env.NEXT_PUBLIC_…` scris intreg. */
@@ -41,6 +42,9 @@ export function cdnImage(url: string, width: number, quality = CALITATE): string
    * ⚠ Si o adresa deja transformata se lasa in pace: ar fi intrat a doua oara in optimizator.
    */
   if (!url || url.includes("/cdn-cgi/image/")) return url;
+  /* Pozele temelor (`public/teme`): varianta facuta dinainte, ca in loaderul lui `next/image`. */
+  const aTemei = adresaVarianteiTemei(url, width);
+  if (aTemei) return aTemei;
   const key = extractR2Key(url);
   if (!key) return url;
   /*

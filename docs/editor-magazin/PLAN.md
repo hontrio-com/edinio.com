@@ -2099,7 +2099,7 @@ meniul centrat, poza mare pe toata latimea cu titlul peste, Lexend).
   `baraNavigare` (alba = Jupiter / principala / accent / deschisa), `cautareForma` (pastila = Jupiter / dreptunghi),
   `etichetaCategorii`. Butonul cardului Jupiter citeste `--st-radius-btn` (Jupiter are butoane `full`, deci la fel).
   ⚠ Fondul inchis (Marte): pagina de produs comuna folosea tokenii aplicatiei (`text-foreground`, `bg-muted`), deci titlul
-  si pretul ieseau inchise pe inchis; `tokeniPeSuprafataInchisa` (`css-vars.ts`) ii trece pe culorile magazinului DOAR cand
+  si pretul ieseau inchise pe inchis; `tokeniPeCulorileMagazinului` (`css-vars.ts`) ii trece pe culorile magazinului DOAR cand
   suprafata DIN DESIGN e inchisa (o pune doar o tema; productia n-are magazine cu culori in design, verificat). In productie
   un singur magazin are fondul paginii inchis din „Stil” (`couture-fashion`, mov): neatins, ramane cum e. Galeria compacta
   a paginii de produs: `bg-white` -> `bg-[var(--st-surface)]` (doar temele o folosesc).
@@ -2155,6 +2155,33 @@ Fiecare model vazut in Chrome inainte de reteta; fiecare tema vazuta pe ecran du
   orizontala (masurat in cadre pe `localhost:3000/tema-<cheie>`), pagina de produs si Magazin pe fond inchis (Canopus).
   NERULAT: `build:ci` (serverul de dezvoltare ocupa `.next`), inainte de push. Productia: REGISTRU „E” (29 de magazine demo,
   29 de subdomenii, umplerea fiecaruia).
+
+### Mentiunile lui din 08.11 (dupa prima privire) si verificarea tuturor temelor
+Cererea: galeria paginii de produs „mult prea mare si lata”; pe Marte hamburgerul negru pe fond inchis, sigla si „X” din
+meniu incetosate, „Comanda acum” fara fundal vizibil, „Total” negru, +/- si cantitatea negre in cos; pe Saturn la fel plus
+fila „DESCRIERE” neagra. Apoi: fiecare tema verificata pe rand (UI/UX, performanta PC si mobil, responsive) „la 10/10”.
+- [x] 24.12 Cauzele, nu simptomele:
+  - Galeria: coloana imaginii lua tot ce ramanea din containerul temei (80-100rem), deci panoul iesea de 700-800 px. Pagina
+    „Detaliat” e plafonata la 76rem, coloanele 6/5, panoul compact 24-34rem.
+  - Fondul inchis: `@theme inline` declara `--color-*` pe radacina documentului, deja rezolvati, iar `body` isi mosteneste
+    culoarea de acolo; `tokeniPeCulorileMagazinului` (fost `tokeniPeSuprafataInchisa`) pune si `color`, si `--color-*`.
+    Acum pe ORICE suprafata hex (o tema), nu doar pe cele inchise: textul secundar al aplicatiei iesea la 4,43:1 pe fondurile
+    gri-deschis. „Negrul” paginii Detaliat (`--st-actiune-inchisa`) se inverseaza doar pe suprafata inchisa.
+  - Textul de pe culoarea magazinului: alb fix in 30 de locuri (butoane, insigne, cos, comanda, cookie). Acum
+    `--st-primary-contrast` / `contrastOn`. ⚠ VIZIBIL si pe magazinele de azi cu culoare deschisa (verdele platformei
+    primeste text inchis, ca in restul sistemului): de spus la push.
+  - Paleta: Arcturus, Capella, Regulus, Alnilam, Achernar si Procyon aveau principala sub 4,5:1 pe fondul lor, si ea e si
+    text (preturi, „In stoc”, telefonul): nuante mai inchise, aceeasi familie (proba noua pe toate temele).
+  - Subsolurile: „dark” pe fond ales deschis (Uranus) scria alb pe gri; „hipermarket” cu accent inchis (Achernar) avea
+    iconitele si „Edinio” nevazute; „Edinio” in culoarea magazinului pe un subsol de aceeasi culoare (Vega). Bara de sus a
+    antetului „hipermarket”: iconita in accent doar cand se vede.
+  - Meniul de pe telefon: hamburgerul ia textul temei; fara `backdrop-blur` pe strat, panoul un nivel mai sus.
+  - Performanta: pozele mari din `public/teme` plecau intregi pe telefon (loaderul lasa caile locale neatinse): variante de
+    640/1080 px (`scripts/teme/variante-imagini.mjs`, `VARIANTE_TEME`), citite de loader si `cdnImage`. ⚠ Dupa orice poza
+    noua in `public/teme`, scriptul se ruleaza din nou.
+  - Unealta: o proba in Chrome pe toate cele 30 de teme, la 390 si 1440 px (acasa, catalog, produs, meniu, comanda, cos):
+    contrastul fiecarui text si al fiecarei iconite fata de fondul real, butoanele pierdute in fond, depasirea orizontala,
+    pozele rupte, CLS/LCP/greutatea pozelor. Falsii pozitivi (text peste fotografii, separatori „|”) verificati pe ecran.
 
 ## Deciziile proprietarului
 

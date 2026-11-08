@@ -14,6 +14,7 @@ import {
   Calendar, ShoppingCart, CreditCard, Truck, RotateCcw, ShieldCheck, MessageCircle, Phone,
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
+import { contrastOn } from "@/lib/storefront/design/css-vars";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { disponibilitatePachet } from "@/lib/bundles";
 import type { BundleComponent } from "@/lib/storefront/product-data";
@@ -92,7 +93,7 @@ const SPECIFICATII_LANGA_GALERIE = 6;
  * ⚠ Panoul e alb, nu gri ca la cel patrat: e mai lat decat fotografia, iar fotografiile decupate pe alb ar fi aparut ca
  * un patrat pe fond gri.
  */
-const INALTIME_COMPACTA = "clamp(26rem, calc(100vh - 18rem), 40rem)";
+const INALTIME_COMPACTA = "clamp(24rem, calc(100vh - 16rem), 34rem)";
 
 function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, color, miniaturiInStanga, compacta }: {
   slides: string[];
@@ -171,8 +172,8 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
             </div>
           ))}
           {hasDiscount && (
-            <span className="absolute top-3 left-3 px-2 py-1 rounded-sm text-[11px] font-bold text-white tracking-wide"
-              style={{ backgroundColor: color }}>
+            <span className="absolute top-3 left-3 px-2 py-1 rounded-sm text-[11px] font-bold tracking-wide"
+              style={{ backgroundColor: color, color: contrastOn(color) }}>
               -{discountPct}%
             </span>
           )}
@@ -205,6 +206,12 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
  * drepte, si nu trebuie sa se schimbe cu paleta magazinului.
  */
 const NEGRU = "#111111";
+/**
+ * Clasele „negrului”: fundalul si textul din variabilele temei, cu negrul de mai sus ca rezerva. Pe suprafata inchisa
+ * (`tokeniPeCulorileMagazinului`) se inverseaza, altfel butonul negru disparea in fondul temei (Marte, Saturn).
+ * ⚠ Cu `!`: `CTAButton` pune culoarea primita ca stil, iar fundalul de aici trebuie sa castige peste el.
+ */
+const ACTIUNE_INCHISA = "bg-[var(--st-actiune-inchisa,#111111)]! text-[var(--st-actiune-inchisa-text,#ffffff)]";
 
 /* ─── Bucati mici ale coloanei de cumparare ──────────────────────────────── */
 
@@ -352,6 +359,8 @@ export function ProductPageDetailed({
 
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
   const color = business.primary_color ?? "#07c527";
+  /* Textul de pe culoarea magazinului: alb doar cand chiar se citeste (bejul temei Marte dadea 2,36:1 cu alb). */
+  const peCuloare = contrastOn(color);
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = pragTransportGratuit(storeSettings?.free_shipping_threshold);
@@ -1040,8 +1049,8 @@ export function ProductPageDetailed({
             {(arataButonCos || editare.activ) && (
               <button type="button" onClick={adaugaInCos}
                 disabled={isOutOfStock || needsVariant || (!demo && !cos)}
-                className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-                style={{ backgroundColor: color }}>
+                className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+                style={{ backgroundColor: color, color: peCuloare }}>
                 {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
                 <span className="truncate">{editare.activ ? "Salveaza" : adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
               </button>
@@ -1058,7 +1067,7 @@ export function ProductPageDetailed({
           {!editare.activ && <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
             needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
             onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
-            clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
+            clase={`w-full h-12 text-sm font-semibold ${ACTIUNE_INCHISA} rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30`}
             eticheta={
               <>
                 <CreditCard size={18} />
@@ -1246,7 +1255,7 @@ export function ProductPageDetailed({
       <>
         {/* ─── Continutul pachetului ───────────────────────────────────── */}
         {product.is_bundle && bundleComponents.length > 0 && (
-          <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12">
+          <div className="max-w-[min(var(--st-container,72rem),76rem)] mx-auto px-4 lg:px-6 pb-12">
             <h2 className="text-lg font-bold text-foreground mb-4">Pachetul conține</h2>
             {/* `grid-cols-1` din acelasi motiv ca la grila eroului, dar aici
                 numele componentei e cel care umfla pista: `truncate` inseamna
@@ -1292,7 +1301,7 @@ export function ProductPageDetailed({
       <>
         {/* ─── Beneficii ───────────────────────────────────────────────── */}
         {benefitsSection && (benefitsSection.items?.length ?? 0) > 0 && (
-          <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12">
+          <div className="max-w-[min(var(--st-container,72rem),76rem)] mx-auto px-4 lg:px-6 pb-12">
             <h2 className="text-lg font-bold text-foreground mb-4">{benefitsSection.title}</h2>
             {/* `grid-cols-1` ca peste tot in fisier: textele de aici se rup
                 la spatii, deci azi nu umfla pista, dar un singur sir fara
@@ -1313,13 +1322,13 @@ export function ProductPageDetailed({
       <>
         {/* ─── Cum functioneaza ────────────────────────────────────────── */}
         {howItWorksSection && (howItWorksSection.steps?.length ?? 0) > 0 && (
-          <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12">
+          <div className="max-w-[min(var(--st-container,72rem),76rem)] mx-auto px-4 lg:px-6 pb-12">
             <h2 className="text-lg font-bold text-foreground mb-4">{howItWorksSection.title}</h2>
             <ol className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {howItWorksSection.steps.map((s, i) => (
                 <li key={i} className="rounded-md border border-border p-4">
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold text-white mb-2"
-                    style={{ backgroundColor: color }}>{i + 1}</span>
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold mb-2"
+                    style={{ backgroundColor: color, color: peCuloare }}>{i + 1}</span>
                   <p className="font-semibold text-foreground text-sm mb-1">{s.title}</p>
                   <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
                 </li>
@@ -1335,7 +1344,7 @@ export function ProductPageDetailed({
     <>
       {/* ─── Firimituri ─────────────────────────────────────────────────── */}
       {!isHome && setari.showBreadcrumb !== false && (
-        <nav aria-label="Firimituri" className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pt-4 pb-1">
+        <nav aria-label="Firimituri" className="max-w-[min(var(--st-container,72rem),76rem)] mx-auto px-4 lg:px-6 pt-4 pb-1">
           <ol className="flex items-center gap-1.5 text-[13px] text-muted-foreground overflow-x-auto">
             <li className="shrink-0">
               <a href={radacinaCatalog} onClick={laMagazin}
@@ -1356,7 +1365,7 @@ export function ProductPageDetailed({
       )}
 
       {/* ─── Galerie + coloana de cumparare ─────────────────────────────── */}
-      <div className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
+      <div className="max-w-[min(var(--st-container,72rem),76rem)] mx-auto px-4 lg:px-6 pt-3 pb-8 lg:pt-5 lg:pb-14">
         {/* Doua randuri pe desktop: galeria sus-stanga, datele sub ea, iar
             coloana de cumparare intinsa peste amandoua. Pe telefon grila are o
             singura coloana si totul curge in ordinea din marcaj.
@@ -1373,8 +1382,12 @@ export function ProductPageDetailed({
             interiorul ei, iar restul incape. `lg:` de mai jos avea deja
             `minmax(0, ...)` pe amandoua coloanele, de aceea desktopul era
             intreg si nimeni nu vedea nimic in editor, unde produsul
-            demonstrativ are trei poze. */}
-        <div className={`grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start ${galerieCompacta ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,33rem)]" : ""}`}>
+            demonstrativ are trei poze.
+
+            Coloanele 6/5, intr-o pagina plafonata la 76rem (vezi `max-w` de mai sus): cu galeria pe `1fr` si
+            cumpararea fixa la 26rem, temele cu containerul lat (80-100rem) duceau panoul fotografiei la 700-800 px,
+            mult peste fisierul de 800 px si peste ecranul unui laptop (gasit la proba temelor 2-30). */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-6 lg:items-start">
           <div className="lg:col-start-1 lg:row-start-1">
             <Galerie slides={slides} activ={activeSlide} mergiLa={mergiLa} imgAlt={imgAlt}
               hasDiscount={!!hasDiscount} discountPct={discountPct} color={color}
@@ -1409,7 +1422,7 @@ export function ProductPageDetailed({
         <>
           {/* ─── File ────────────────────────────────────────────────────── */}
           {fileVizibile.length > 0 && (
-            <div ref={fileRef} className="max-w-[var(--st-container,72rem)] mx-auto px-4 lg:px-6 pb-12 scroll-mt-24">
+            <div ref={fileRef} className="max-w-[min(var(--st-container,72rem),76rem)] mx-auto px-4 lg:px-6 pb-12 scroll-mt-24">
               <div className="border-b border-border flex gap-6 overflow-x-auto">
                 {fileVizibile.map((f) => (
                   <button key={f.id} type="button" onClick={() => setFila(f.id)}
@@ -1482,15 +1495,14 @@ export function ProductPageDetailed({
               <button type="button" onClick={adaugaInCos}
                 disabled={isOutOfStock || needsVariant || (!demo && !cos)}
                 aria-label={adaugat ? "Adaugat in cos" : "Adauga in cos"}
-                className="w-12 h-12 shrink-0 rounded-md flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
-                style={{ backgroundColor: color }}>
+                className="w-12 h-12 shrink-0 rounded-md flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
+                style={{ backgroundColor: color, color: peCuloare }}>
                 {adaugat ? <Check size={18} /> : <ShoppingCart size={18} />}
               </button>
             )}
             <button type="button" onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
               disabled={isOutOfStock || needsVariant}
-              className="shrink-0 px-5 h-12 rounded-md text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
-              style={{ backgroundColor: NEGRU }}>
+              className={`shrink-0 px-5 h-12 rounded-md text-sm font-bold ${ACTIUNE_INCHISA} disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90`}>
               {isOutOfStock ? "Epuizat" : isPreorder ? "Precomanda" : "Comanda"}
             </button>
           </div>

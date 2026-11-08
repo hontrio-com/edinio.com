@@ -118,10 +118,3 @@ export function adresaDemo(tema: Pick<Tema, "cheie" | "slugDemo">, host: string 
   return `/${tema.slugDemo}`;
 }
 
-/**
- * Miniatura vie de pe pagina „Teme”: pe ACEEASI origine cu panoul, fiindca vitrina raspunde cu
- * `X-Frame-Options: SAMEORIGIN`, deci un cadru de pe subdomeniu n-ar fi aratat nimic.
- */
-export function adresaMiniaturii(tema: Pick<Tema, "slugDemo">): string {
-  return `/${tema.slugDemo}`;
-}

@@ -7,7 +7,8 @@ import { temaAplicataDin } from "@/lib/teme/aplicare";
 import { urmaDateDemoDin } from "@/lib/teme/import-demo";
 import { citesteContextulPentruDemo, loculDinContext, motivulLimitei } from "@/lib/teme/limita-demo";
 import { SURSA_DEMO } from "@/lib/teme/produse-demo";
-import { adresaDemo, adresaMiniaturii, TEME } from "@/lib/teme/teme";
+import { adresaDemo, TEME } from "@/lib/teme/teme";
+import { adresaCapturii, CAPTURI_TEME } from "@/lib/teme/capturi-teme";
 import { TemeClient } from "@/components/teme/TemeClient";
 
 export const metadata = { title: "Teme" };
@@ -56,8 +57,10 @@ export default async function TemePage() {
       teme={TEME.map((t) => {
         const loc = "error" in context ? context : loculDinContext(context, t.cheie, t.date);
         return {
-          cheie: t.cheie, nume: t.nume, descriere: t.descriere, culoare: t.identitate.culoare,
-          adresaDemo: adresaDemo(t, gazda), adresaMiniaturii: adresaMiniaturii(t),
+          cheie: t.cheie, nume: t.nume, descriere: t.descriere,
+          adresaDemo: adresaDemo(t, gazda),
+          // Captura primei pagini (08.11.2026), in locul demo-ului viu: `scripts/teme/capturi-teme.mjs`.
+          captura: CAPTURI_TEME[t.cheie] ? { adresa: adresaCapturii(t.cheie), ...CAPTURI_TEME[t.cheie] } : null,
           demo: {
             produse: t.date.produse.length, bannere: t.date.bannere.length, randuri: t.date.randuri.length,
             // Citirea cazuta lasa bifa la vedere: actiunea reface verificarea si spune ea daca nu incap.

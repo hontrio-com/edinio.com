@@ -5,7 +5,8 @@ import { join } from "node:path";
 import {
   adreseFaraSlug, CHEIE_MAGAZIN_DEMO, esteMagazinDemo, esteSlugDeMagazinDemo, MAGAZINE_DEMO, MESAJ_COMENZI_OPRITE, slugDemoDupaGazda,
 } from "./gazde-demo";
-import { adresaDemo, adresaMiniaturii, TEME, temaDupaCheie } from "./teme";
+import { adresaDemo, TEME, temaDupaCheie } from "./teme";
+import { adresaCapturii, CAPTURI_TEME } from "./capturi-teme";
 
 /*
  * Etapa 19: demo-ul temei pe subdomeniul ei (`jupiter.edinio.com`, local `jupiter.localhost:3000`), magazinul demo fara
@@ -111,17 +112,24 @@ test("slugurile `tema-*` sunt rezervate la crearea magazinului si la intrebarea 
   assert.match(b, /if \(motivSlugRespins\(normalizat\)\) return false;/);
 });
 
-test("„Vezi demo” pe subdomeniu, dupa gazda panoului; miniatura pe aceeasi origine (cadrul nu vine de pe alta)", () => {
+test("„Vezi demo” pe subdomeniu, dupa gazda panoului; pe card, captura temei (nu demo-ul viu, din 08.11)", () => {
   const j = temaDupaCheie("jupiter")!;
   assert.equal(adresaDemo(j, "localhost:3000"), "http://jupiter.localhost:3000");
   assert.equal(adresaDemo(j, "www.edinio.com"), "https://jupiter.edinio.com");
   assert.equal(adresaDemo(j, "edinio.com"), "https://jupiter.edinio.com");
   assert.equal(adresaDemo(j, "edinio-git-x.vercel.app"), "/tema-jupiter", "pe o desfasurare, subdomeniul nu exista");
   assert.equal(adresaDemo(j, null), "/tema-jupiter");
-  assert.equal(adresaMiniaturii(j), "/tema-jupiter");
   const p = cod("src/app/(dashboard)/dashboard/editor/teme/page.tsx");
-  assert.match(p, /adresaDemo: adresaDemo\(t, gazda\), adresaMiniaturii: adresaMiniaturii\(t\),/);
-  assert.match(cod("src/components/teme/TemeClient.tsx"), /<MiniaturaDemo adresa=\{t\.adresaMiniaturii\} nume=\{t\.nume\} \/>/);
+  assert.match(p, /adresaDemo: adresaDemo\(t, gazda\),/);
+  assert.match(p, /captura: CAPTURI_TEME\[t\.cheie\] \? \{ adresa: adresaCapturii\(t\.cheie\), \.\.\.CAPTURI_TEME\[t\.cheie\] \} : null,/);
+  // 30 de magazine intregi in iframe-uri, doar ca sa fie privite: nu mai.
+  assert.doesNotMatch(cod("src/components/teme/TemeClient.tsx"), /<iframe/);
+  // Fiecare tema are captura ei pe disc, cu dimensiunile scrise de script (`scripts/teme/capturi-teme.mjs`).
+  for (const t of TEME) {
+    const c = CAPTURI_TEME[t.cheie];
+    assert.ok(c && c.latime > 0 && c.inaltime > c.latime, `${t.cheie}: captura lipseste din CAPTURI_TEME`);
+    assert.ok(statSync(join("public", adresaCapturii(t.cheie))).size > 0, `${t.cheie}: lipseste fisierul capturii`);
+  }
   assert.match(cod("next.config.ts"), /allowedDevOrigins: \["\*\.localhost"\],/);
 });
 

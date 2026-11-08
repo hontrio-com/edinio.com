@@ -125,6 +125,22 @@ function GrupNav({
 
   return (
     <div>
+      {intrare.doarDeschide ? (
+        // Tot randul deschide lista (`doarDeschide`, „Editeaza magazinul”): pagina lui e pe tot ecranul.
+        <button
+          type="button"
+          onClick={() => setDeschisManual(!deschis)}
+          aria-expanded={deschis}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg py-2 pr-2.5 pl-3 text-left text-sm font-medium transition-all",
+            activ ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <Icon className="h-4 w-4 flex-shrink-0" />
+          <span className="flex-1 truncate">{intrare.label}</span>
+          <ChevronRight className={cn("h-3.5 w-3.5 flex-shrink-0 transition-transform", deschis && "rotate-90")} />
+        </button>
+      ) : (
       <div className={cn(
         "flex items-center rounded-lg pr-1 transition-all",
         activ ? "bg-primary/10" : "hover:bg-accent",
@@ -157,6 +173,7 @@ function GrupNav({
           <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", deschis && "rotate-90")} />
         </button>
       </div>
+      )}
 
       {deschis && (
         <div className="mt-0.5 ml-7 space-y-0.5 border-l border-border pl-3">

@@ -2198,6 +2198,19 @@ Cererea lui: „sa dau click dreapta pe un bloc si sa fac diferite chestii cu el
   editor si fara scrieri). Gasit acolo: inchiderea la ORICE derulare stingea meniul imediat (caruselul si bara de anunt se
   deruleaza singure); acum doar derularea paginii.
 
+### Pagina „Teme” refacuta si „Editează magazinul” in meniu (08.11)
+
+- Meniul din bara laterala: clicul pe „Editează magazinul” DESCHIDE lista (Editor, Teme, Biblioteca Media), nu mai duce
+  direct in editor (`doarDeschide` in `navigatie-panou.ts`). Editorul e pe tot ecranul, deci cine intra direct in el nu
+  afla de Teme si de Biblioteca Media. Pe telefon sertarul facea deja asa.
+- Pagina „Teme”: grila de 1/2/3/4 coloane (4 peste 1800 px), carduri cu captura primei pagini care se deruleaza pana jos
+  cat tii mouse-ul pe ea (durata dupa lungimea paginii), fara bulina de culoare; tema din magazin, „Pune la loc” si
+  „Șterge datele demo” intr-o singura caseta sus; fereastra „Aplică tema” pe doua coloane (captura temei + ce se
+  intampla), cu comutator pentru datele demo.
+- Capturile: `scripts/teme/capturi-teme.mjs` (Chrome-ul instalat, fara fereastra, prin protocolul de depanare) ->
+  `public/teme-capturi/<cheie>.webp` (720 px lat) + `src/lib/teme/capturi-teme.ts`. ⚠ Dupa ce se schimba aspectul unei
+  teme, se ruleaza din nou (cu serverul local pornit). Demo-ul viu din iframe (30 de magazine incarcate deodata) a plecat.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

@@ -37,6 +37,8 @@ export type IntrarePanou = {
   label: string;
   /** Adevarat doar pentru intrarile care apar cand comerciantul are functia pornita. */
   cheieOptionala?: "smso";
+  /** Grupul se deschide la clic pe nume, fara sa duca nicaieri: pagina lui principala e pe tot ecranul. */
+  doarDeschide?: true;
   children?: { href: string; label: string; beta?: boolean }[];
 };
 
@@ -71,9 +73,13 @@ export const MENIU_PANOU: IntrarePanou[] = [
     /*
      * Un singur editor din 25.10.2026 (etapa 2 a editorului unic): „Design
      * magazin” si „Design sectiuni” erau doua ecrane pentru acelasi magazin.
+     *
+     * ⚠ Clicul pe nume DESCHIDE lista, nu duce in editor (cerut de el, 08.11.2026): editorul e pe tot ecranul, fara
+     * bara laterala, deci cine intra direct in el nu afla niciodata ca exista „Teme” si „Biblioteca Media”.
      */
+    doarDeschide: true,
     children: [
-      { href: "/dashboard/editor", label: "Editorul" },
+      { href: "/dashboard/editor", label: "Editor" },
       // Etapa 17 a editorului unic (28.10.2026, raspunsul lui: „Pagină nouă „Teme””).
       { href: "/dashboard/editor/teme", label: "Teme" },
       { href: "/dashboard/editor/media", label: "Biblioteca Media" },

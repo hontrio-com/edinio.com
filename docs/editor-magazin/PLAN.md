@@ -2182,6 +2182,21 @@ fila „DESCRIERE” neagra. Apoi: fiecare tema verificata pe rand (UI/UX, perfo
   - Unealta: o proba in Chrome pe toate cele 30 de teme, la 390 si 1440 px (acasa, catalog, produs, meniu, comanda, cos):
     contrastul fiecarui text si al fiecarei iconite fata de fondul real, butoanele pierdute in fond, depasirea orizontala,
     pozele rupte, CLS/LCP/greutatea pozelor. Falsii pozitivi (text peste fotografii, separatori „|”) verificati pe ecran.
+  - Sigla Marte iesea de 290 px lata (inaltimea 58): acum 40; proba in `lotul-1.test.ts` (nicio tema peste 240 px in antet).
+
+### Meniul de clic dreapta in previzualizare (08.11)
+
+Cererea lui: „sa dau click dreapta pe un bloc si sa fac diferite chestii cu el si sa il sterg practic ca e mai simplu asa”.
+- Clic dreapta pe un element din previzualizare: Editează, Mută mai sus / jos, Duplică, Ascunde / Arată, Șterge, dupa ce
+  i se potriveste (`lib/editor-magazin/meniu-contextual.ts`, cu probele lui). Aceleasi operatii ca arborele; o intrare
+  apare activa doar daca operatia chiar schimba ceva. Antetul, subsolul, paginile fixe: doar Editează.
+- Protocolul: `meniu` (cadru -> editor), `meniuActiuni` (editor -> cadru, intrarile), `actiune` (cadru -> editor, verificata
+  din nou pe lista de acum). Meniul il deseneaza `ConturEditor`; alegerea o citeste `useDesignPreview`, ca pe „+”.
+- Totul prin ciorna sau istoricul paginii proprii, deci „Anulează” desface; dupa Șterge, mesajul are chiar butonul.
+  Ultimul bloc dintr-un „Conținut liber” sterge tot containerul (altfel ramanea un loc gol, de negasit).
+- Proba in Chrome: doar previzualizarea, intr-o pagina de proba care tine locul editorului (sesiunea era a lui, deci fara
+  editor si fara scrieri). Gasit acolo: inchiderea la ORICE derulare stingea meniul imediat (caruselul si bara de anunt se
+  deruleaza singure); acum doar derularea paginii.
 
 ## Deciziile proprietarului
 

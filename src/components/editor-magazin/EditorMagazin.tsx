@@ -56,6 +56,7 @@ import {
   ceAdaugaPlusul, continutNou, puncteDeAdaugare, sectiuneNoua, tintaLangaBloc, type Adaugare, type ContextAdaugare,
 } from "@/lib/editor-magazin/adaugare";
 import { blocUnic } from "@/lib/storefront/design/continut-liber";
+import { actiuniMeniu, aplicaPeDesign, operatiaPeBlocuri, tintaDinId, type CheieActiune, type TintaMeniu } from "@/lib/editor-magazin/meniu-contextual";
 import { FurnizorLegaturi } from "@/components/pages/editor/CampLink";
 
 /** Filele panoului din stanga; „Setări” din etapa 8 (lista lui, 27.10.2026). */
@@ -573,6 +574,34 @@ export function EditorMagazin({
     toast.success("Conținutul a fost șters. Îl aduci înapoi cu „Anulează”, din bara de sus.");
   };
 
+  /** Pagina principala are lista ei de sectiuni in arbore: acolo meniul de clic dreapta le muta, ascunde, sterge. */
+  const listaAcasa = pagina === "acasa" && !paginiAfisate.unSingurProdus;
+
+  /**
+   * O actiune aleasa din meniul de clic dreapta (08.11.2026), deja verificata pe lista elementului. Prin ciorna (sau
+   * istoricul paginii proprii), deci „Anulează” o desface; dupa o stergere, mesajul are chiar butonul.
+   */
+  const executaActiunea = useCallback((tinta: TintaMeniu, cheie: CheieActiune) => {
+    const anuleazaPas = tinta.fel === "pagina" ? paginaDeschisa.anuleaza : ciorna.anuleaza;
+    if (tinta.fel === "pagina") {
+      const op = operatiaPeBlocuri(cheie, tinta.bloc);
+      if (!op) return;
+      aplicaPeEcran((s) => ({ ...s, blocks: op(s.blocks) }), cheie === "sus" || cheie === "jos" ? "ordine-pagina" : `${cheie}:${tinta.bloc}`);
+      if (cheie === "sterge" && blocPagina === tinta.bloc) setBlocPagina(null);
+    } else {
+      const idSectiune = tinta.fel === "bloc" ? tinta.sectiune : tinta.fel === "liber" ? tinta.cale.sectiune : tinta.id;
+      // Cheile arborelui: mutarile si ochiul se aduna intr-un singur pas, ca acolo.
+      const cheieIstoric = cheie === "sus" || cheie === "jos" ? (tinta.fel === "sectiune" ? "ordine" : "ordine-blocuri")
+        : cheie === "ascunde" || cheie === "arata" ? `ochi-meniu:${idSectiune}` : undefined;
+      ciorna.aplica((d: StoreDesign) => aplicaPeDesign(d, tinta, cheie), cheieIstoric);
+      // Panoul deschis pe ce s-a sters ar fi ramas fara nod.
+      if (cheie === "sterge" && selectat === idSectiune) inapoiLaArbore();
+    }
+    if (cheie === "sterge") {
+      toast.success("Șters.", { action: { label: "Anulează", onClick: () => anuleazaPas() }, duration: 8000 });
+    }
+  }, [aplicaPeEcran, blocPagina, ciorna, inapoiLaArbore, paginaDeschisa.anuleaza, selectat]);
+
   const schimbaPagina = useCallback((p: CheiePagina) => {
     setPagina(p);
     setSelectat(null);
@@ -733,59 +762,79 @@ export function EditorMagazin({
         else cereDateBlocuri();
       }
       else if (tip === "conturGata") trimiteEvidentierea();
-      else if (tip === "select") {
-        /*
-         * Sectiunea poate sta pe alta pagina decat cea aleasa: pe „Coșul” cu cos
-         * in sertar, previzualizarea arata prima pagina. Atunci editorul trece pe
-         * pagina ei, altfel clicul n-ar fi avut ce nod sa deschida.
-         */
-        // Un bloc vine ca `<sectiune>/<bloc>` (`preview-protocol.ts`).
-        const { sectiune: id, bloc } = despartireId(e.data.sectionId);
-        const unde = paginaSectiunii(design, id, pagina, paginiAfisate);
-        if (!unde) return;
-        if (unde !== pagina) {
-          // Pagina proprie nesalvata: intai intrebarea. Clicul nu se reia: dupa raspuns editorul e pe
-          // pagina sectiunii, iar sectiunea se alege din nou.
-          if (paginaDeschisa.modificata) {
-            setSchimbareCeruta(unde);
-            return;
-          }
-          schimbaPagina(unde);
-        }
-        // Continutul sau un bloc al paginii proprii (etapa 5): panoul blocului, nu al unei sectiuni.
-        if (estePaginaProprie(unde) && id.startsWith(PREFIX_PAGINA_PROPRIE)) {
-          setFila("sectiuni");
-          setPeste(null);
-          setSelectat(null);
-          setBlocSelectat(null);
-          setSetariPaginii(false);
-          setTintaBloc(null);
-          setBlocPagina(bloc);
-          setVedereMobil("panou");
+      else if (tip === "select") alege(e.data.sectionId);
+      // Clic dreapta pe un element (08.11.2026): intrarile meniului lui, inapoi la previzualizare, care il deseneaza.
+      else if (tip === "meniu") {
+        const { id, x, y } = e.data;
+        if (typeof id !== "string" || typeof x !== "number" || typeof y !== "number") return;
+        const tinta = tintaDinId(design, id, listaAcasa);
+        const actiuni = tinta ? actiuniMeniu(design, tinta, blocuriPaginii) : [];
+        rama.current?.contentWindow?.postMessage({ [PREVIEW_MESSAGE]: "meniuActiuni", id, x, y, actiuni }, window.location.origin);
+      }
+      else if (tip === "actiune") {
+        // Din cadru: actiunea se cauta din nou pe lista elementului de ACUM, nu se crede.
+        const { id, cheie } = e.data;
+        if (typeof id !== "string" || typeof cheie !== "string") return;
+        const tinta = tintaDinId(design, id, listaAcasa);
+        if (!tinta || !actiuniMeniu(design, tinta, blocuriPaginii).some((a) => a.cheie === cheie && !a.dezactivata)) return;
+        if (cheie === "editeaza") alege(id);
+        else executaActiunea(tinta, cheie as CheieActiune);
+      }
+    }
+
+    /** Clic pe un element din previzualizare (sau „Editează” din meniul lui): nodul lui, in panou. */
+    function alege(idDinCadru: string) {
+      /*
+       * Sectiunea poate sta pe alta pagina decat cea aleasa: pe „Coșul” cu cos
+       * in sertar, previzualizarea arata prima pagina. Atunci editorul trece pe
+       * pagina ei, altfel clicul n-ar fi avut ce nod sa deschida.
+       */
+      // Un bloc vine ca `<sectiune>/<bloc>` (`preview-protocol.ts`).
+      const { sectiune: id, bloc } = despartireId(idDinCadru);
+      const unde = paginaSectiunii(design, id, pagina, paginiAfisate);
+      if (!unde) return;
+      if (unde !== pagina) {
+        // Pagina proprie nesalvata: intai intrebarea. Clicul nu se reia: dupa raspuns editorul e pe
+        // pagina sectiunii, iar sectiunea se alege din nou.
+        if (paginaDeschisa.modificata) {
+          setSchimbareCeruta(unde);
           return;
         }
-        // Pagina unui sablon de produs: arborele trece pe sablonul ei (4b).
-        if (unde === "produs") setSablonEditat(design.product.sabloane?.some((s) => s.page.id === id) ? id : null);
-        setSetariSablon(false);
+        schimbaPagina(unde);
+      }
+      // Continutul sau un bloc al paginii proprii (etapa 5): panoul blocului, nu al unei sectiuni.
+      if (estePaginaProprie(unde) && id.startsWith(PREFIX_PAGINA_PROPRIE)) {
         setFila("sectiuni");
         setPeste(null);
-        /*
-         * Un bloc dintr-un „Conținut liber” (etapa 9): pe pagina principala vine ca `<sectiune>/<bloc>`, cu
-         * sectiunea `continut_liber`; sub produs si pe Pagina Magazin, ca `<pagina>/<continut>/<bloc>`.
-         * Se deschide continutul, cu blocul ales in panou.
-         */
-        const { blocStructural, interior } = alegereDinClic(design, id, bloc);
-        setSelectat(id);
-        setBlocSelectat(blocStructural);
-        setLiber(interior ? { ...interior, tinta: null } : null);
-        setContinutNouCerut(null);
-        setColoanaNouaCeruta(null);
+        setSelectat(null);
+        setBlocSelectat(null);
+        setSetariPaginii(false);
+        setTintaBloc(null);
+        setBlocPagina(bloc);
         setVedereMobil("panou");
+        return;
       }
+      // Pagina unui sablon de produs: arborele trece pe sablonul ei (4b).
+      if (unde === "produs") setSablonEditat(design.product.sabloane?.some((s) => s.page.id === id) ? id : null);
+      setSetariSablon(false);
+      setFila("sectiuni");
+      setPeste(null);
+      /*
+       * Un bloc dintr-un „Conținut liber” (etapa 9): pe pagina principala vine ca `<sectiune>/<bloc>`, cu
+       * sectiunea `continut_liber`; sub produs si pe Pagina Magazin, ca `<pagina>/<continut>/<bloc>`.
+       * Se deschide continutul, cu blocul ales in panou.
+       */
+      const { blocStructural, interior } = alegereDinClic(design, id, bloc);
+      setSelectat(id);
+      setBlocSelectat(blocStructural);
+      setLiber(interior ? { ...interior, tinta: null } : null);
+      setContinutNouCerut(null);
+      setColoanaNouaCeruta(null);
+      setVedereMobil("panou");
     }
     window.addEventListener("message", laMesaj);
     return () => window.removeEventListener("message", laMesaj);
-  }, [trimiteDesignul, trimiteEvidentierea, trimitePagina, trimiteDateBlocuri, trimiteReluari, cereDateBlocuri, design, pagina, paginiAfisate, paginaDeschisa.modificata, schimbaPagina, ctxAdaugare, deschideAdaugarea]);
+  }, [trimiteDesignul, trimiteEvidentierea, trimitePagina, trimiteDateBlocuri, trimiteReluari, cereDateBlocuri, design, pagina, paginiAfisate, paginaDeschisa.modificata, schimbaPagina, ctxAdaugare, deschideAdaugarea, listaAcasa, blocuriPaginii, executaActiunea]);
 
   const adaugaSectiune = useCallback(async (kind: SectionKind) => {
     const loc = locAdaugare?.loc;

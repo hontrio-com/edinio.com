@@ -4,10 +4,14 @@ import { useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { cutiaSectiunii, sectiuneaDeSub, type Cutie } from "@/lib/storefront/design/contur-editor";
 import {
+  ACTIUNE_ATTR,
+  ACTIUNE_ID_ATTR,
   ADAUGA_ATTR,
   ETICHETA_ATTR,
   MARGINE_ATTR,
+  MENIU_ATTR,
   PREVIEW_MESSAGE,
+  type IntrareMeniu,
   isPreviewMessage,
   selectorMarcaj,
 } from "@/lib/storefront/design/preview-protocol";
@@ -25,6 +29,10 @@ import {
  * tactil, unde nu exista „peste”), pe marginea de jos si, la primul din lista lui,
  * si pe cea de sus. Unde are voie il spune editorul (`adaugare`); clicul il citeste
  * `useDesignPreview`, care opreste orice clic inainte de React, si il anunta editorului.
+ *
+ * Meniul de clic dreapta (08.11.2026): clicul dreapta pe un element il anunta editorului (`meniu`), care raspunde cu
+ * intrarile lui (`meniuActiuni`); aici doar se deseneaza, iar alegerea o citeste `useDesignPreview`, ca pe „+”. Cat
+ * e deschis, conturul subtire ramane pe elementul meniului, nu pe ce atinge mouse-ul in drum spre el.
  *
  * Se incarca la cerere si DOAR in modul editor (`next/dynamic` cu `ssr: false`
  * in gazde), deci magazinul public nu primeste nimic din el, iar `document`
@@ -52,6 +60,7 @@ export default function ConturEditor() {
   const plusuri = useRef<HTMLDivElement>(null);
   const plusSus = useRef<HTMLButtonElement>(null);
   const plusJos = useRef<HTMLButtonElement>(null);
+  const meniu = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let dinMouse: string | null = null;
@@ -60,6 +69,56 @@ export default function ConturEditor() {
     /** Elementele cu „+”, si daca au si „deasupra”; le trimite editorul in `evidentiere`. */
     let puncte = new Map<string, boolean>();
     let cadru = 0;
+    /** Elementul meniului deschis; tine conturul subtire pe el. */
+    let idMeniu: string | null = null;
+
+    function inchideMeniul() {
+      if (!idMeniu) return;
+      idMeniu = null;
+      if (meniu.current) meniu.current.style.display = "none";
+      programeaza();
+    }
+
+    function deschideMeniul(id: string, x: number, y: number, actiuni: IntrareMeniu[]) {
+      const el = meniu.current;
+      if (!el || actiuni.length === 0) return;
+      const marcaj = document.querySelector<HTMLElement>(selectorMarcaj(id));
+      el.replaceChildren();
+      const titlu = document.createElement("div");
+      titlu.textContent = marcaj?.getAttribute(ETICHETA_ATTR) || "Element";
+      Object.assign(titlu.style, stilTitluMeniu());
+      el.appendChild(titlu);
+      for (const a of actiuni) {
+        // „Șterge” sta deoparte, sub o linie: sa nu se apese din greseala in locul vecinului.
+        if (a.cheie === "sterge") {
+          const linie = document.createElement("div");
+          Object.assign(linie.style, { height: "1px", margin: "4px 0", background: "#e2e8f0" });
+          el.appendChild(linie);
+        }
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = a.eticheta;
+        b.setAttribute("role", "menuitem");
+        b.setAttribute(ACTIUNE_ATTR, a.cheie);
+        b.setAttribute(ACTIUNE_ID_ATTR, id);
+        if (a.dezactivata) b.setAttribute("aria-disabled", "true");
+        Object.assign(b.style, stilIntrareMeniu(a.cheie === "sterge", !!a.dezactivata));
+        if (!a.dezactivata) {
+          const fundal = a.cheie === "sterge" ? "#fef2f2" : "#f1f5f9";
+          b.addEventListener("pointerenter", () => { b.style.background = fundal; });
+          b.addEventListener("pointerleave", () => { b.style.background = "transparent"; });
+        }
+        el.appendChild(b);
+      }
+      idMeniu = id;
+      el.style.display = "block";
+      // Masurat dupa umplere; intors spre stanga sau in sus cand nu incape langa cursor.
+      const { width, height } = el.getBoundingClientRect();
+      const stanga = Math.max(4, Math.min(x, window.innerWidth - width - 4));
+      const sus = y + height > window.innerHeight - 4 ? Math.max(4, y - height) : y;
+      el.style.transform = `translate(${stanga}px, ${sus}px)`;
+      programeaza();
+    }
 
     /** Un „+” la mijlocul unei margini a cutiei, in afara ei (`sus` = marginea `y` e deasupra lui); ascuns cand n-are ce arata. */
     function punePlus(buton: HTMLButtonElement | null, id: string | null, y: number | null, cutie: Cutie | null, sus: boolean) {
@@ -106,7 +165,7 @@ export default function ConturEditor() {
 
     function deseneaza() {
       cadru = 0;
-      const idPeste = dinMouse ?? dinArbore;
+      const idPeste = idMeniu ?? dinMouse ?? dinArbore;
       pune(selectat.current, idSelectat);
       // Peste cel selectat nu se mai pune al doilea contur: ar dubla eticheta.
       pune(peste.current, idPeste && idPeste !== idSelectat ? idPeste : null);
@@ -123,6 +182,7 @@ export default function ConturEditor() {
       // Pe „+” elementul ramane cel de dinainte: butonul sta pe granita cu vecinul,
       // iar fara asta ar fi sarit pe vecin (sau ar fi disparut) chiar sub cursor.
       if (plusuri.current?.contains(e.target as Node | null)) return;
+      if (meniu.current?.contains(e.target as Node | null)) return;
       const id = sectiuneaDeSub(e.target as Element | null)?.id ?? null;
       if (id !== dinMouse) {
         dinMouse = id;
@@ -136,6 +196,13 @@ export default function ConturEditor() {
     }
     function laMesaj(e: MessageEvent) {
       if (e.origin !== window.location.origin || !isPreviewMessage(e.data)) return;
+      if (e.data[PREVIEW_MESSAGE] === "meniuActiuni") {
+        const { id, x, y, actiuni } = e.data;
+        deschideMeniul(id, x, y, actiuni);
+        return;
+      }
+      // Designul schimbat (dupa o actiune din meniu, dupa Anulează) muta elementele: meniul vechi nu mai e al lor.
+      if (e.data[PREVIEW_MESSAGE] === "design") inchideMeniul();
       if (e.data[PREVIEW_MESSAGE] !== "evidentiere") return;
       idSelectat = e.data.selectat;
       dinArbore = e.data.peste;
@@ -143,6 +210,43 @@ export default function ConturEditor() {
       programeaza();
     }
 
+    /** Clic dreapta: meniul elementului de sub cursor, nu cel al browserului. In afara oricarui element, al browserului. */
+    function laMeniu(e: MouseEvent) {
+      if (meniu.current?.contains(e.target as Node | null)) {
+        e.preventDefault();
+        return;
+      }
+      const id = sectiuneaDeSub(e.target as Element | null)?.id;
+      if (!id) return;
+      e.preventDefault();
+      inchideMeniul();
+      window.parent.postMessage({ [PREVIEW_MESSAGE]: "meniu", id, x: e.clientX, y: e.clientY }, window.location.origin);
+    }
+    /*
+     * Orice clic inchide meniul. DUPA clic, nu inainte: alegerea o citeste `useDesignPreview` din acelasi clic. Pe
+     * fereastra, in faza de captura: inaintea opririi din `useDesignPreview`, care sta pe document.
+     */
+    const laClic = () => { if (idMeniu) setTimeout(inchideMeniul, 0); };
+    function laApasare(e: PointerEvent) {
+      if (idMeniu && e.button !== 2 && !meniu.current?.contains(e.target as Node | null)) inchideMeniul();
+    }
+    function laTasta(e: KeyboardEvent) {
+      if (e.key === "Escape") inchideMeniul();
+    }
+    /*
+     * Doar derularea PAGINII muta elementul de sub meniu. Nu orice derulare: un carusel sau o bara de anunt care se
+     * misca singure trimit derulari tot timpul, iar meniul se inchidea imediat ce aparea (vazut la proba din 08.11).
+     */
+    function laDerulare(e: Event) {
+      if (e.target === document || e.target === document.documentElement || e.target === document.scrollingElement) inchideMeniul();
+    }
+
+    document.addEventListener("contextmenu", laMeniu);
+    window.addEventListener("click", laClic, true);
+    window.addEventListener("pointerdown", laApasare, true);
+    window.addEventListener("keydown", laTasta);
+    window.addEventListener("scroll", laDerulare, { passive: true, capture: true });
+    window.addEventListener("blur", inchideMeniul);
     document.addEventListener("pointermove", laMiscare, { passive: true });
     document.addEventListener("pointerout", laIesire);
     window.addEventListener("scroll", programeaza, { passive: true, capture: true });
@@ -155,7 +259,7 @@ export default function ConturEditor() {
      * desen ar fi cerut urmatorul, la nesfarsit.
      */
     const observator = new MutationObserver((schimbari) => {
-      if (schimbari.some((s) => !radacina.current?.contains(s.target) && !plusuri.current?.contains(s.target))) programeaza();
+      if (schimbari.some((s) => !radacina.current?.contains(s.target) && !plusuri.current?.contains(s.target) && !meniu.current?.contains(s.target))) programeaza();
     });
     observator.observe(document.body, { childList: true, subtree: true });
     const redimensionare = new ResizeObserver(programeaza);
@@ -164,6 +268,12 @@ export default function ConturEditor() {
     window.parent.postMessage({ [PREVIEW_MESSAGE]: "conturGata" }, window.location.origin);
 
     return () => {
+      document.removeEventListener("contextmenu", laMeniu);
+      window.removeEventListener("click", laClic, true);
+      window.removeEventListener("pointerdown", laApasare, true);
+      window.removeEventListener("keydown", laTasta);
+      window.removeEventListener("scroll", laDerulare, { capture: true });
+      window.removeEventListener("blur", inchideMeniul);
       document.removeEventListener("pointermove", laMiscare);
       document.removeEventListener("pointerout", laIesire);
       window.removeEventListener("scroll", programeaza, { capture: true });
@@ -198,9 +308,60 @@ export default function ConturEditor() {
           <SemnPlus />
         </button>
       </div>
+      {/* Meniul de clic dreapta: il umple `deschideMeniul`, din intrarile trimise de editor. */}
+      <div ref={meniu} role="menu" aria-label="Acțiuni" {...{ [MENIU_ATTR]: "" }} style={stilMeniu()} />
     </>,
     document.body,
   );
+}
+
+/** Meniul de clic dreapta: culori fixe, ale editorului, ca si conturul. */
+function stilMeniu(): CSSProperties {
+  return {
+    display: "none",
+    position: "fixed",
+    top: 0,
+    left: 0,
+    minWidth: 180,
+    padding: 4,
+    zIndex: 2147483647,
+    pointerEvents: "auto",
+    background: "#fff",
+    borderRadius: 10,
+    boxShadow: "0 0 0 1px rgba(15, 23, 42, 0.08), 0 10px 30px rgba(15, 23, 42, 0.18)",
+    font: "500 13px/1.2 system-ui, -apple-system, Segoe UI, sans-serif",
+    color: "#0f172a",
+    textAlign: "left",
+  };
+}
+
+function stilTitluMeniu(): Partial<CSSStyleDeclaration> {
+  return {
+    padding: "6px 10px",
+    font: "600 11px/1.3 system-ui, -apple-system, Segoe UI, sans-serif",
+    color: "#64748b",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "240px",
+  };
+}
+
+function stilIntrareMeniu(periculoasa: boolean, stinsa: boolean): Partial<CSSStyleDeclaration> {
+  return {
+    display: "block",
+    width: "100%",
+    padding: "8px 10px",
+    margin: "0",
+    border: "0",
+    borderRadius: "6px",
+    background: "transparent",
+    textAlign: "left",
+    font: "inherit",
+    color: stinsa ? "#cbd5e1" : periculoasa ? "#dc2626" : "#0f172a",
+    cursor: stinsa ? "default" : "pointer",
+    whiteSpace: "nowrap",
+  };
 }
 
 function SemnPlus() {

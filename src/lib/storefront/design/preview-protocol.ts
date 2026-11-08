@@ -226,7 +226,61 @@ export interface PreviewReluariMessage {
   reluari: Record<string, number>;
 }
 
+/**
+ * Meniul de clic dreapta (08.11.2026, `lib/editor-magazin/meniu-contextual.ts`). Preview -> editor: clic dreapta pe
+ * elementul `id`, la `x`/`y` in fereastra previzualizarii. Ce se poate face decide editorul.
+ */
+export interface PreviewMeniuMessage {
+  [PREVIEW_MESSAGE]: "meniu";
+  id: string;
+  x: number;
+  y: number;
+}
+
+/** O intrare din meniul de clic dreapta, cum o deseneaza previzualizarea. */
+export interface IntrareMeniu {
+  cheie: string;
+  eticheta: string;
+  dezactivata?: true;
+}
+
+/** Editor -> preview: deseneaza meniul elementului `id`, la `x`/`y`, cu intrarile astea (lista goala = nimic). */
+export interface PreviewMeniuActiuniMessage {
+  [PREVIEW_MESSAGE]: "meniuActiuni";
+  id: string;
+  x: number;
+  y: number;
+  actiuni: IntrareMeniu[];
+}
+
+/** Preview -> editor: s-a ales `cheie` din meniul elementului `id`. Editorul verifica din nou ca se poate. */
+export interface PreviewActiuneMessage {
+  [PREVIEW_MESSAGE]: "actiune";
+  id: string;
+  cheie: string;
+}
+
+/** Atributele unei intrari din meniu: actiunea si elementul. Clicul il citeste `useDesignPreview`, ca pe „+”. */
+export const ACTIUNE_ATTR = "data-st-actiune";
+export const ACTIUNE_ID_ATTR = "data-st-actiune-id";
+/** Pus pe meniul insusi: un clic pe el (titlu, intrare stinsa) nu alege elementul de dedesubt. */
+export const MENIU_ATTR = "data-st-meniu";
+
+/** Clicul a fost pe o intrare (activa) din meniu? Actiunea si elementul; `null` altfel. */
+export function actiuneaDeSub(
+  tinta: { closest(selector: string): { getAttribute(nume: string): string | null } | null } | null | undefined,
+): { id: string; cheie: string } | null {
+  const buton = tinta?.closest(`[${ACTIUNE_ATTR}]`);
+  const cheie = buton?.getAttribute(ACTIUNE_ATTR);
+  const id = buton?.getAttribute(ACTIUNE_ID_ATTR);
+  if (!cheie || !id || buton?.getAttribute("aria-disabled") === "true") return null;
+  return { id, cheie };
+}
+
 export type PreviewMessage =
+  | PreviewMeniuMessage
+  | PreviewMeniuActiuniMessage
+  | PreviewActiuneMessage
   | PreviewAdaugaMessage
   | PreviewReluariMessage
   | PreviewDesignMessage

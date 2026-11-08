@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { sectiuneaDeSub } from "@/lib/storefront/design/contur-editor";
 import {
+  MENIU_ATTR,
   PREVIEW_MESSAGE,
+  actiuneaDeSub,
   isPreviewMessage,
   plusulDeSub,
   selectorMarcaj,
@@ -83,6 +85,14 @@ export function useDesignPreview(
         window.parent.postMessage({ [PREVIEW_MESSAGE]: "adauga", ...plus }, window.location.origin);
         return;
       }
+      // O intrare din meniul de clic dreapta (desenat de `ConturEditor`): ce face decide editorul.
+      const actiune = actiuneaDeSub(event.target as Element | null);
+      if (actiune) {
+        window.parent.postMessage({ [PREVIEW_MESSAGE]: "actiune", ...actiune }, window.location.origin);
+        return;
+      }
+      // Clic pe meniu in afara unei intrari active (titlul, o intrare stinsa): nu e o alegere de element.
+      if ((event.target as Element | null)?.closest?.(`[${MENIU_ATTR}]`)) return;
       // Blocul, cand e unul sub clic, altfel sectiunea (`sectiuneaDeSub`).
       const id = sectiuneaDeSub(event.target as Element | null)?.id;
       if (!id) return;

@@ -51,6 +51,18 @@ test("fiecare tema dupa reteta: fonturile sunt in lista celor gazduite, toate po
   }
 });
 
+test("sigla demo nu iese mai lata de 240 px in antet (Marte iesea la 290, a observat el)", async () => {
+  const { default: sharp } = await import("sharp");
+  for (const cheie of DUPA_RETETA) {
+    const t = temaDupaCheie(cheie)!;
+    const inaltime = Number(t.setariDemo.logo_size);
+    const { width, height } = await sharp(poza(t.siglaDemo)).metadata();
+    // Ca `stilSigla`: inaltimea data, latimea taiata la de 5 ori inaltimea.
+    const latime = Math.min(inaltime * (width! / height!), inaltime * 5);
+    assert.ok(latime <= 240, `${cheie}: sigla iese la ${Math.round(latime)} px`);
+  }
+});
+
 test("setul demo se tine: produsele pe categorii care exista, randurile pe produse care exista, chei unice", () => {
   for (const cheie of DUPA_RETETA) {
     const { date } = temaDupaCheie(cheie)!;

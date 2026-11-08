@@ -186,6 +186,6 @@ export const MARTE = temaDupaReteta({
   },
   meniuDemo: MENIU_DEMO_MARTE,
   sloganDemo: "Mobilier pentru case liniștite.",
-  siglaMarime: 58,
+  siglaMarime: 40,
   magazinDemo: { nume: "Marte Interior", descriere: "Magazin demonstrativ al temei Marte: canapele, fotolii, mese, iluminat și decorațiuni.", email: "marte@edinio-demo.test" },
 });

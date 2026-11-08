@@ -63,6 +63,15 @@ test("setul demo se tine: produsele pe categorii care exista, randurile pe produ
   }
 });
 
+test("meniul demo trimite doar la categorii care exista in setul demo (altfel linkul din antet cade pe o categorie goala)", () => {
+  for (const cheie of DUPA_RETETA) {
+    const t = temaDupaCheie(cheie)!;
+    const categorii = new Set(t.date.categorii.flatMap((c) => [c.nume, ...c.copii]));
+    const meniu = (t.setariDemo.menu ?? []) as { type?: string; target?: string }[];
+    for (const m of meniu.filter((x) => x.type === "category")) assert.ok(categorii.has(String(m.target)), `${cheie}: meniul -> ${m.target}`);
+  }
+});
+
 test("designul fiecarei teme: variantele alese exista in registry, iar magazinul primeste ce a cerut reteta", () => {
   const asteptat: Record<string, { antet: string; banner: string; card: string; subsol: string }> = {
     mercur: { antet: "hipermarket", banner: "impartit", card: "jupiter", subsol: "hipermarket" },

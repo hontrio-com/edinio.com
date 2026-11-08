@@ -46,7 +46,12 @@ begin
       ('tema-regulus', 'Regulus Store', 'Pentru fanii adevărați.', 'Magazin demonstrativ al temei Regulus: tricouri, hanorace, șepci, mingi și accesorii.', 'regulus@edinio-demo.test', '#5BBCE4'),
       ('tema-bellatrix', 'Bellatrix Drogerie', 'Aici sunt om, aici cumpăr.', 'Magazin demonstrativ al temei Bellatrix: machiaj, îngrijire, sănătate, bebeluși și casă.', 'bellatrix@edinio-demo.test', '#23336B'),
       ('tema-betelgeuse', 'Betelgeuse Parfumerie', 'Parfumul care te definește.', 'Magazin demonstrativ al temei Betelgeuse: parfumuri, machiaj, îngrijire, lumânări și seturi cadou.', 'betelgeuse@edinio-demo.test', '#0F1414'),
-      ('tema-achernar', 'Achernar Brico', 'Puși pe treabă, împreună.', 'Magazin demonstrativ al temei Achernar: unelte, construcții, baie, grădină și iluminat.', 'achernar@edinio-demo.test', '#E30613')
+      ('tema-achernar', 'Achernar Brico', 'Puși pe treabă, împreună.', 'Magazin demonstrativ al temei Achernar: unelte, construcții, baie, grădină și iluminat.', 'achernar@edinio-demo.test', '#E30613'),
+      ('tema-mira', 'Mira Home', 'Mobilier simplu, făcut să dureze.', 'Magazin demonstrativ al temei Mira: scaune, comode, mese, iluminat și oglinzi.', 'mira@edinio-demo.test', '#1A1A1A'),
+      ('tema-alnilam', 'Alnilam Auto', 'Piese bune, montate corect.', 'Magazin demonstrativ al temei Alnilam: faruri, jante, baterii, uleiuri și scule.', 'alnilam@edinio-demo.test', '#E52E3A'),
+      ('tema-mintaka', 'Mintaka Fashion', 'Stilul tău, în fiecare sezon.', 'Magazin demonstrativ al temei Mintaka: haine pentru femei, bărbați și copii, încălțăminte și genți.', 'mintaka@edinio-demo.test', '#1C1C1C'),
+      ('tema-electra', 'Electra Living', 'Mobilier care definește stilul.', 'Magazin demonstrativ al temei Electra: canapele, fotolii, paturi, mese și iluminat.', 'electra@edinio-demo.test', '#2B2B2B'),
+      ('tema-maia', 'Maia Electronics', 'Electronice bune, la prețuri corecte.', 'Magazin demonstrativ al temei Maia: laptopuri, telefoane, foto, audio și console.', 'maia@edinio-demo.test', '#333E48')
     ) as v(slug, nume, slogan, descriere, email, culoare)
   loop
     select id into magazin from public.businesses where slug = t.slug;

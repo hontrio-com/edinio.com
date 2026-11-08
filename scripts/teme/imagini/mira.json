@@ -1,0 +1,52 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/scaune",
+    "categorii/comode",
+    "categorii/depozitare",
+    "categorii/mese",
+    "categorii/textile",
+    "categorii/iluminat",
+    null,
+    null,
+    "produse/vaza-ceramica"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/fotoliu-piele",
+    "produse/comoda-tv",
+    "produse/raft-modular",
+    "produse/masa-rotunda",
+    "produse/covor-lana",
+    "produse/lampa-pendul",
+    "produse/perdea-in",
+    "produse/oglinda-arcada",
+    "produse/scaun-dining"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "M",
+   "fundal": "#1A1A1A",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

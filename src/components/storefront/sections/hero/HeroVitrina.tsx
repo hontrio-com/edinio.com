@@ -21,6 +21,10 @@ export function HeroVitrina({ settings }: { settings: Record<string, unknown> })
   const nume = business.store_name ?? business.business_name;
   const carduri = cardurileVitrinei(settings);
   const catreProduse = hrefCatreProduse(chrome);
+  // Pe desktop umplu randul: doua sau trei carduri se impart latimea (tema Mintaka are trei), de la patru se vad patru.
+  const latimeDesktop = carduri.length === 2 ? "lg:w-[calc((100%-1rem)/2)]"
+    : carduri.length === 3 ? "lg:w-[calc((100%-2rem)/3)]"
+    : "lg:w-[calc((100%-3rem)/4)]";
 
   return (
     <section className="mx-auto px-4 pt-5 sm:pt-6" style={{ maxWidth: "var(--st-container)" }}>
@@ -32,7 +36,7 @@ export function HeroVitrina({ settings }: { settings: Record<string, unknown> })
         <div className="-mx-4 px-4 flex gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {carduri.map((c, i) => (
             <a key={i} href={c.link ? resolveHref(c.link, basePath) : catreProduse}
-              className="group relative isolate shrink-0 snap-start overflow-hidden rounded-[var(--st-radius-lg)] w-[78%] sm:w-[46%] lg:w-[calc((100%-3rem)/4)] aspect-[3/4]"
+              className={`group relative isolate shrink-0 snap-start overflow-hidden rounded-[var(--st-radius-lg)] w-[78%] sm:w-[46%] ${latimeDesktop} aspect-[3/4] ${carduri.length <= 3 ? "lg:aspect-[4/5]" : ""}`}
               style={{ backgroundColor: "color-mix(in srgb, var(--st-primary) 35%, #0b0b0b)" }}>
               <Image src={c.imagine} alt="" fill priority={i < 2}
                 sizes="(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 25vw"

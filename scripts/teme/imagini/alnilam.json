@@ -1,0 +1,56 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/faruri",
+    "categorii/interior",
+    "categorii/jante",
+    "categorii/scule",
+    "categorii/siguranta",
+    "categorii/baterii",
+    "categorii/uleiuri",
+    "categorii/frane",
+    "produse/placute-frana"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/far-led",
+    "produse/husa-volan",
+    "produse/janta-aliaj",
+    "produse/cheie-dinamometrica",
+    "produse/trusa-prim-ajutor",
+    "produse/baterie-auto",
+    "produse/ulei-motor",
+    "produse/camera-marsarier",
+    "produse/redresor-baterie"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/montaj",
+   "latime": 1600
+  },
+  {
+   "fisier": "banner-2.png",
+   "iesire": "bannere/lumini",
+   "latime": 1600
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 130,
+  "faviconLitera": {
+   "litera": "A",
+   "fundal": "#E52E3A",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

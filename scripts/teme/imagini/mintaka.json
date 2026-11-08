@@ -1,0 +1,61 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/femei",
+    "categorii/barbati",
+    "categorii/copii",
+    "categorii/incaltaminte",
+    "categorii/genti",
+    "categorii/accesorii",
+    "categorii/pulovere",
+    "categorii/geci",
+    "produse/fular-lana"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/blazer-carouri",
+    "produse/jacheta-denim",
+    "produse/bluza-satin",
+    "produse/hanorac-copii",
+    "produse/mocasini-piele",
+    "produse/geanta-umar",
+    "produse/pulover-cablu",
+    "produse/geaca-puf",
+    "produse/ochelari-cat-eye"
+   ]
+  },
+  {
+   "fisier": "grila-c-foto.png",
+   "fond": "pastreaza",
+   "latime": 720,
+   "celule": [
+    "poze/vitrina-toamna",
+    "poze/vitrina-oferta",
+    "poze/vitrina-iarna",
+    "poze/placa-ea",
+    "poze/placa-el",
+    "poze/placa-copii",
+    "poze/placa-accesorii",
+    null,
+    null
+   ]
+  }
+ ],
+ "poze": [],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "M",
+   "fundal": "#2F55D4",
+   "culoare": "#FFFFFF"
+  }
+ }
+}

@@ -8,6 +8,7 @@ import { ALTAIR, POLARIS, RIGEL, VEGA } from "./lotul-3";
 import { ALDEBARAN, ANTARES, ARCTURUS, CAPELLA } from "./lotul-4";
 import { CANOPUS, DENEB, PROCYON, SPICA } from "./lotul-5";
 import { ACHERNAR, BELLATRIX, BETELGEUSE, REGULUS } from "./lotul-6";
+import { ALNILAM, ELECTRA, MAIA, MINTAKA, MIRA } from "./lotul-7";
 import type { IdentitateTema, OptiuniTema, SetDateDemo } from "./tipuri";
 
 /*
@@ -94,6 +95,11 @@ export const TEME: readonly Tema[] = [
   BELLATRIX,
   BETELGEUSE,
   ACHERNAR,
+  MIRA,
+  ALNILAM,
+  MINTAKA,
+  ELECTRA,
+  MAIA,
 ];
 
 export function temaDupaCheie(v: unknown): Tema | null {

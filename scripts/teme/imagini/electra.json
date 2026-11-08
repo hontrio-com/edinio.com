@@ -1,0 +1,53 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/living",
+    "categorii/dormitor",
+    "categorii/dining",
+    "categorii/birou",
+    "categorii/decoratiuni",
+    "categorii/iluminat",
+    "categorii/exterior",
+    "categorii/copii",
+    "produse/perna-decorativa"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/fotoliu-scoica",
+    "produse/pat-tapitat",
+    "produse/masa-marmura",
+    "produse/scaun-birou",
+    "produse/masuta-aurie",
+    "produse/lampa-podea",
+    "produse/sezlong-gradina",
+    "produse/patut-copii",
+    "produse/canapea-3-locuri"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "hero.png",
+   "iesire": "poze/hero",
+   "latime": 1920,
+   "raport": 2.4,
+   "pozitie": "dreapta"
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 110,
+  "faviconLitera": {
+   "litera": "E",
+   "fundal": "#2B2B2B",
+   "culoare": "#E8A598"
+  }
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "grile": [
+  {
+   "fisier": "grila-a-t.png",
+   "fond": "transparent",
+   "celule": [
+    "categorii/laptopuri",
+    "categorii/telefoane",
+    "categorii/foto",
+    "categorii/imprimante",
+    "categorii/audio",
+    "categorii/smartwatch",
+    "categorii/console",
+    "categorii/accesorii",
+    "produse/incarcator-wireless"
+   ]
+  },
+  {
+   "fisier": "grila-b-t.png",
+   "fond": "transparent",
+   "celule": [
+    "produse/laptop-gaming",
+    "produse/telefon-pliabil",
+    "produse/camera-mirrorless",
+    "produse/imprimanta-laser",
+    "produse/casti-studio",
+    "produse/smartwatch-sport",
+    "produse/consola-portabila",
+    "produse/mouse-gaming",
+    "produse/boxa-smart"
+   ]
+  }
+ ],
+ "poze": [
+  {
+   "fisier": "banner-1.png",
+   "iesire": "bannere/oferta",
+   "latime": 1600,
+   "raport": 2.14
+  }
+ ],
+ "sigla": {
+  "fisier": "sigla.png",
+  "fond": "alb",
+  "inaltime": 120,
+  "faviconLitera": {
+   "litera": "M",
+   "fundal": "#FED700",
+   "culoare": "#333E48"
+  }
+ }
+}

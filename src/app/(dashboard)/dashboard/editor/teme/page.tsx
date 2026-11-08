@@ -5,7 +5,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { areDesignDeDinainteDeTema } from "@/lib/actions/store-design.actions";
 import { temaAplicataDin } from "@/lib/teme/aplicare";
 import { urmaDateDemoDin } from "@/lib/teme/import-demo";
-import { citesteLoculPentruDemo, motivulLimitei } from "@/lib/teme/limita-demo";
+import { citesteContextulPentruDemo, loculDinContext, motivulLimitei } from "@/lib/teme/limita-demo";
 import { SURSA_DEMO } from "@/lib/teme/produse-demo";
 import { adresaDemo, adresaMiniaturii, TEME } from "@/lib/teme/teme";
 import { TemeClient } from "@/components/teme/TemeClient";
@@ -41,8 +41,9 @@ export default async function TemePage() {
     : null;
 
   // Etapa 18: locul din planul lui pentru datele demo ale fiecarei teme, si ce date demo sunt acum in magazin.
-  const [locuri, { count: produseDemo }] = await Promise.all([
-    Promise.all(TEME.map((t) => citesteLoculPentruDemo(supabase, user.id, magazin.id, t.cheie, t.date))),
+  // O singura citire pentru toate temele (30 din lotul 7): planul si produsele nu depind de tema.
+  const [context, { count: produseDemo }] = await Promise.all([
+    citesteContextulPentruDemo(supabase, user.id, magazin.id),
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", magazin.id).eq("source", SURSA_DEMO),
   ]);
   const urma = urmaDateDemoDin(setari?.page_content);
@@ -52,8 +53,8 @@ export default async function TemePage() {
   return (
     <TemeClient
       businessId={magazin.id}
-      teme={TEME.map((t, i) => {
-        const loc = locuri[i];
+      teme={TEME.map((t) => {
+        const loc = "error" in context ? context : loculDinContext(context, t.cheie, t.date);
         return {
           cheie: t.cheie, nume: t.nume, descriere: t.descriere, culoare: t.identitate.culoare,
           adresaDemo: adresaDemo(t, gazda), adresaMiniaturii: adresaMiniaturii(t),

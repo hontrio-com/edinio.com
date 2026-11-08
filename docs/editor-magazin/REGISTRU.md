@@ -367,5 +367,12 @@ pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
 4. **Umplerea:** `scripts/teme/seamana-demo.ts <cheie> --productie` pentru fiecare tema. Pozele sunt in `public/teme/<cheie>/`
    (pleaca odata cu codul), deci nu se urca nimic separat.
 5. **Verificari:** ca la Jupiter, pe fiecare subdomeniu.
-⚠ Pagina „Teme” arata cate o miniatura vie (un cadru cu magazinul demo) pe tema: la 30 de teme, 30 de magazine incarcate
-deodata. De rezolvat inainte de lotul in care se simte (miniatura incarcata la vedere sau o captura statica).
+**Loturile 2-7 (08.11.2026, noaptea): TOATE cele 29.** `CHEI_TEME` are acum 30 de chei (Jupiter + 29), SQL-ul are 29 de
+randuri, iar umplerea se ruleaza pe rand: `mercur venus terra marte saturn uranus neptun sirius vega altair rigel polaris
+antares arcturus aldebaran capella deneb spica procyon canopus regulus bellatrix betelgeuse achernar mira alnilam mintaka
+electra maia`, fiecare cu `--productie`. Cu subdomeniile una cate una sunt 29 de CNAME-uri si 29 de domenii Vercel: cu
+stea (`*.edinio.com`) e unul singur, de hotarat de el. Pe baza demo toate 29 sunt create si umplute (verificat: 30 de
+magazine `tema-*`).
+Miniaturile vii de pe pagina „Teme”: cadrele sunt `loading="lazy"` (se incarca doar la vedere), iar pagina citeste acum
+locul pentru datele demo o singura data pentru toate temele (nu de 30 de ori). Proba pe ecran cu 30 de teme: incarcarea
+ramane acceptabila; o captura statica in locul cadrului ramane o idee, nu o nevoie.

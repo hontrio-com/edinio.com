@@ -197,7 +197,8 @@ test("18.2/18.4 pe pagina „Teme”: bifa porneste oprita, se opreste cand plan
   // Cu magazinul vizibil, fereastra spune ca produsele demo se pot comanda.
   assert.match(c, /\{estePublic && <li>Magazinul e vizibil: clienții văd produsele demo și le pot comanda până le ștergi\.<\/li>\}/);
   const p = cod("src/app/(dashboard)/dashboard/editor/teme/page.tsx");
-  assert.match(p, /TEME\.map\(\(t\) => citesteLoculPentruDemo\(supabase, user\.id, magazin\.id, t\.cheie, t\.date\)\)/);
+  assert.match(p, /citesteContextulPentruDemo\(supabase, user\.id, magazin\.id\)/);
+  assert.match(p, /loculDinContext\(context, t\.cheie, t\.date\)/);
   assert.match(p, /motivOprit: "error" in loc \|\| loc\.incap \? null : motivulLimitei\(loc\),/);
   assert.match(p, /dateDemo=\{urma \|\| \(produseDemo \?\? 0\) > 0 \? \{ produse: produseDemo \?\? 0 \} : null\}/);
 });

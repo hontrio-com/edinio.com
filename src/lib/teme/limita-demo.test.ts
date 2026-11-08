@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { DATE_DEMO_JUPITER } from "./jupiter/date-demo";
 import { externalIdDemo } from "./import-demo";
-import { citesteLoculPentruDemo, loculPentruDemo, motivulLimitei, produseDemoNoi } from "./limita-demo";
+import { citesteContextulPentruDemo, citesteLoculPentruDemo, loculDinContext, loculPentruDemo, motivulLimitei, produseDemoNoi } from "./limita-demo";
 
 /*
  * Etapa 18.2: „Importă și datele demo” nu trece de limita de produse a planului (gratuit 10, Basic 500, Premium 2500,
@@ -90,4 +90,15 @@ test("⚠ un plan necitit e o eroare, nu „gratuit”; un plan lipsa sau necuno
   }
   const ultra = await citesteLoculPentruDemo(baza({ plan: "ultra", produse: 5000 }).client as never, "u1", "m1", "jupiter", D);
   assert.ok(!("error" in ultra) && ultra.incap && ultra.limita === null);
+});
+
+test("pagina „Teme”: o singura citire pentru toate temele da acelasi loc ca citirea pe fiecare tema", async () => {
+  const b = baza({ plan: "basic", produse: 300, coduri: [externalIdDemo("jupiter", D.produse[0].cheie)] });
+  const context = await citesteContextulPentruDemo(b.client as never, "u1", "m1");
+  assert.ok(!("error" in context));
+  const unaCateUna = await citesteLoculPentruDemo(baza({ plan: "basic", produse: 300, coduri: [externalIdDemo("jupiter", D.produse[0].cheie)] }).client as never, "u1", "m1", "jupiter", D);
+  assert.deepEqual(loculDinContext(context, "jupiter", D), unaCateUna);
+  // Codul demo al altei teme nu scade din produsele noi ale lui Jupiter.
+  assert.equal(loculDinContext(context, "mercur", D).noi, N);
+  assert.ok("error" in (await citesteContextulPentruDemo(baza({ ePlan: "timeout" }).client as never, "u1", "m1")));
 });

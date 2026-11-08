@@ -55,6 +55,26 @@ export async function citesteLoculPentruDemo(
   tema: string,
   date: SetDateDemo,
 ): Promise<LoculPentruDemo | { error: string }> {
+  const context = await citesteContextulPentruDemo(supabase, userId, businessId);
+  return "error" in context ? context : loculDinContext(context, tema, date);
+}
+
+/** Ce nu depinde de tema: planul, codurile demo din magazin si cate produse are contul. */
+export interface ContextPentruDemo {
+  limita: number;
+  produse: number;
+  coduri: (string | null)[];
+}
+
+/**
+ * Citirea comuna tuturor temelor. Pagina „Teme” o face O DATA si socoteste locul pentru fiecare tema din ea: cu 30 de
+ * teme (loturile 1-7), `citesteLoculPentruDemo` pe fiecare facea 90 de interogari identice la fiecare deschidere.
+ */
+export async function citesteContextulPentruDemo(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  businessId: string,
+): Promise<ContextPentruDemo | { error: string }> {
   const [{ data: profil, error: ePlan }, { data: coduri, error: eCoduri }] = await Promise.all([
     supabase.from("users_profile").select("plan").eq("id", userId).single(),
     supabase.from("products").select("external_id").eq("business_id", businessId).eq("source", SURSA_DEMO),
@@ -62,5 +82,10 @@ export async function citesteLoculPentruDemo(
   if (ePlan) return { error: `planul: ${ePlan.message}` };
   if (eCoduri) return { error: `produsele demo: ${eCoduri.message}` };
   const produse = await numaraProduseleContului(supabase, userId);
-  return loculPentruDemo(getProductLimit(profil?.plan ?? "free"), produse, produseDemoNoi(tema, date, (coduri ?? []).map((c) => c.external_id)));
+  return { limita: getProductLimit(profil?.plan ?? "free"), produse, coduri: (coduri ?? []).map((c) => c.external_id) };
+}
+
+/** Locul pentru datele demo ale unei teme, din citirea comuna. */
+export function loculDinContext(context: ContextPentruDemo, tema: string, date: SetDateDemo): LoculPentruDemo {
+  return loculPentruDemo(context.limita, context.produse, produseDemoNoi(tema, date, context.coduri));
 }

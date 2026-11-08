@@ -2119,6 +2119,43 @@ meniul centrat, poza mare pe toata latimea cu titlul peste, Lexend).
   meniurile demo, siglele mici (`logo_size` pe demo), pagina de produs pe fond inchis (24.2). NERULAT: `build:ci` (serverul
   de dezvoltare ocupa `.next`), inainte de push.
 
+### Loturile 2-7 (6-30), facute pe 08.11 noaptea, fara oprire intre loturi
+Cererea lui dupa lotul 1: „Continua pana finalizezi absolut tot complet si la final o sa testez tot”. Retetele in
+`lib/teme/lotul-2.ts` ... `lotul-7.ts`, datele in `lib/teme/<cheie>/date-demo.ts` (scrise de `scratchpad/gen_date.py`
+dintr-o specificatie JSON pe lot), pozele cu ElevenLabs (un flux pe tema), magazinele demo pe baza demo (SQL + umplere).
+Fiecare model vazut in Chrome inainte de reteta; fiecare tema vazuta pe ecran dupa umplere.
+- [x] 24.5 Lotul 2: Saturn (ATV Rom, fond inchis, antet „wedge”, panoramic), Uranus (NAPA, bara galbena, carduri), Neptun
+  (Modivo, alb-negru, impartit inchis), Sirius (Fashion Days, sigla la mijloc, impartit deschis).
+- [x] 24.6 Lotul 3: Vega (Gymshark, Bebas, panoramic, activitatile pe fotografii), Altair (Kramp, categorii langa bannere,
+  placi galbene), Rigel (Sephora, fara cutiile in dungi ale lor: carduri cu placi rotunde), Polaris (epantofi, alt drum decat
+  Neptun: ton coniac, antet „pills”, categorii in cercuri). Placile colorate nu mai scriu „0” la categoriile fara produse.
+- [x] 24.7 Lotul 4: Antares (Forit, bleumarin + portocaliu, „Doar imagini” + beneficii), Arcturus (GymBeam, antet „nav”,
+  impartit portocaliu, obiectivele pe fotografii), Aldebaran (King, fond inchis + auriu, mozaic), Capella (Animax, alt drum
+  decat Mercur: antet „market”, carduri, animalele in cercuri). ⚠ GASIT pe Aldebaran: placile cu poze decupate aveau fondul
+  gri-deschis fix (`FOND_PLACA`) si `mix-blend-multiply`, deci pe fond inchis ieseau ferestre albe si poze spalacite:
+  pe suprafata inchisa `--st-fond-placa` (nuanta suprafetei) si `--st-amestec-placa: normal`; pe cele deschise neschimbat.
+- [x] 24.8 Lotul 5 si bannerul nou „vitrina” (`HeroVitrina`, `cardurileVitrinei`: un rand de carduri inalte cu fotografie,
+  eticheta, titlu, text si buton; 2-5 carduri, pe desktop umplu randul; pe telefon se trag cu degetul; in galerie si in
+  previzualizare cu `DEMO_VITRINA_HERO`; „Șterge datele demo” scoate si cardurile lui). Deneb (Timestore, antet „classic”,
+  carduri), Spica (Solartech, bara neagra, mozaic pe placi inchise), Procyon (evomag, vitrina), Canopus (QwertyKey, fond
+  inchis, vitrina). ⚠ GASIT: decuparea ElevenLabs STERGE obiectele translucide (keycap din rasina): celula se ia din grila
+  bruta cu `"fond": "alb"`, restul celulelor `null` (lipseau din manifest). Probele lotului 1 acopera acum toate temele
+  dupa reteta (`DUPA_RETETA`).
+- [x] 24.9 Lotul 6: Regulus (Dude Perfect, antet „pills”, Anton, panoramic), Bellatrix (dm, cautare mare, impartit deschis,
+  beneficii), Betelgeuse (Douglas, alt drum decat Rigel: negru + menta, colturi drepte, colectiile pe fotografii), Achernar
+  (Bricostore, alt drum decat Jupiter: bara rosie, banner lat, proiectele pe fotografii).
+- [x] 24.10 Lotul 7: Mira (XStore Furniture 3, antet „market” negru, panoramic centrat, categorii in cercuri), Alnilam
+  (Partdo, categorii langa bannere), Mintaka (Unimart Fashion, vitrina cu trei carduri pe fonduri pastelate), Electra (Unimart
+  Furniture, antet „nav”, roz pudrat), Maia (Electro, bara galbena, carduri). ⚠ GASIT: decuparea a sters si perdelele
+  transparente si oglinda (Mira): categoriile lor iau poza produsului. ⚠ GASIT: meniul demo al lui Alnilam si Maia trimitea
+  la nume scurte de categorii care nu existau („Faruri”, „Foto”): proba noua, meniul doar spre categorii din setul demo.
+- [x] 24.11 Incheiere: pagina „Teme” citea planul, codurile demo si produsele contului de 30 de ori (90 de interogari la
+  fiecare deschidere): acum o data (`citesteContextulPentruDemo` + `loculDinContext`); miniaturile raman `loading="lazy"`.
+  Centrul de ajutor: „Temele de acum” cu toate cele 30. Proba pe ecran: toate cele 29 de teme noi la 390 px fara derulare
+  orizontala (masurat in cadre pe `localhost:3000/tema-<cheie>`), pagina de produs si Magazin pe fond inchis (Canopus).
+  NERULAT: `build:ci` (serverul de dezvoltare ocupa `.next`), inainte de push. Productia: REGISTRU „E” (29 de magazine demo,
+  29 de subdomenii, umplerea fiecaruia).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

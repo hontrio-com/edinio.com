@@ -114,6 +114,31 @@ test("„Conținut liber”: blocul se muta, se duplica, se sterge; ULTIMUL bloc
   assert.ok(!faraB.home.some((s) => s.id === cl));
 });
 
+test("⚠ „Conținut liber” cu un singur bloc Coloane: Sterge pe un bloc DIN coloana scoate doar blocul, nu tot continutul", () => {
+  /*
+   * Gasit la recitirea din 09.11: regula „ultimul bloc sterge containerul” numara doar primul nivel. Coloanele isi
+   * marcheaza si ele blocurile (acelasi `marcheazaBloc`), deci clicul dreapta pe un text dintr-o coloana trimite id-ul
+   * textului; cu Coloanele singure pe primul nivel, „Șterge” scotea toata sectiunea, cu tot ce era in ea.
+   */
+  const coloane = { id: "col", type: "columns", count: 2, items: [{ blocks: [text("n1"), text("n2")] }, { blocks: [text("n3")] }] } as unknown as Block;
+  const { d, cl } = acasaCuContinut([coloane]);
+  const t = tintaDinId(d, `${cl}/n1`, true)!;
+  assert.deepEqual(t, { fel: "liber", cale: { sectiune: cl, bloc: null }, bloc: "n1" });
+  assert.ok(chei(actiuniMeniu(d, t, null)).includes("sterge"));
+  const faraN1 = citit(aplicaPeDesign(d, t, "sterge"));
+  assert.ok(faraN1.home.some((s) => s.id === cl), "sectiunea ramane");
+  const coloaneDupa = (l: StoreDesign) => blocuriLaCale(l, { sectiune: cl, bloc: null })!;
+  assert.deepEqual(coloaneDupa(faraN1).map((b) => b.id), ["col"]);
+  const celule = (l: StoreDesign) => ((coloaneDupa(l)[0] as unknown as { items: { blocks: Block[] }[] }).items).map((it) => it.blocks.map((b) => b.id));
+  assert.deepEqual(celule(faraN1), [["n2"], ["n3"]]);
+  // Si singurul bloc dintr-o coloana pleaca singur (coloana ramane goala, ca in arbore), nu cu tot continutul.
+  const faraN3 = citit(aplicaPeDesign(faraN1, tintaDinId(faraN1, `${cl}/n3`, true)!, "sterge"));
+  assert.ok(faraN3.home.some((s) => s.id === cl), "sectiunea ramane si dupa ultimul bloc al unei coloane");
+  assert.deepEqual(celule(faraN3), [["n2"], []]);
+  // Coloanele insele, singure pe primul nivel: regula ramane, pleaca tot containerul (altfel ramanea un loc gol).
+  assert.ok(!aplicaPeDesign(d, tintaDinId(d, `${cl}/col`, true)!, "sterge").home.some((s) => s.id === cl));
+});
+
 test("blocurile paginii proprii: pe lista paginii deschise, cu operatiile din `block-tree`", () => {
   const { d } = acasaCuContinut([text("a")]);
   const blocuri = [text("x"), text("y")];

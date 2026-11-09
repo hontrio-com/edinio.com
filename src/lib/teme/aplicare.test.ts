@@ -167,7 +167,7 @@ test("17.4: pagina „Teme”: magazinul LUI, Istoricul intrebat prin actiunea e
   assert.match(c, /const \[lucreaza, porneste\] = useLucru\(\);/);
   assert.doesNotMatch(c, /useTransition/, "o tranzitie async ar fi tinut pe loc navigarea");
   // Etapa 18.2: bifa „Importă și datele demo”, trimisa doar cand se poate alege (planul o incape).
-  assert.match(c, /const r = await aplicaTema\(businessId, t\.cheie, cuDate && t\.demo\.motivOprit === null\);/);
+  assert.match(c, /const cuDateDemo = cuDate && t\.demo\.motivOprit === null;\s*const r = await aplicaTema\(businessId, t\.cheie, cuDateDemo\);/);
   assert.match(c, /const r = await puneLaLocDesignulDeDinainte\(businessId\);/);
   assert.match(c, /disabled=\{lucreaza \|\| areCiorna\} onClick=\{puneLaLoc\}/, "cu o ciorna nepublicata, „Pune la loc” asteapta");
   assert.match(cod("src/lib/navigatie-panou.ts"), /\{ href: "\/dashboard\/editor\/teme", label: "Teme" \},/);
@@ -201,4 +201,20 @@ test("18.2/18.4 pe pagina „Teme”: bifa porneste PORNITA (din 08.11), se opre
   assert.match(p, /loculDinContext\(context, t\.cheie, t\.date\)/);
   assert.match(p, /motivOprit: "error" in loc \|\| loc\.incap \? null : motivulLimitei\(loc\),/);
   assert.match(p, /dateDemo=\{urma \|\| \(produseDemo \?\? 0\) > 0 \? \{ produse: produseDemo \?\? 0 \} : null\}/);
+});
+
+test("⚠ „Aplică tema”: mesajul spune „cu datele demo” doar cand datele chiar au plecat spre server", () => {
+  /*
+   * Din 08.11 bifa porneste pornita, iar cand planul n-o incape starea ramane `true` (comutatorul doar se vede oprit).
+   * Gasit la recitirea din 09.11: mesajul de succes se lua dupa `cuDate` singur, deci tema aplicata FARA date spunea
+   * „cu datele demo”. Regula: in `aplica`, bifa bruta se citeste O SINGURA DATA, ca sa dea valoarea care pleaca; tot ce
+   * urmeaza (cererea, mesajul) se ia dupa ea. Orice ramura noua pe `cuDate` singur o rupe.
+   */
+  const c = cod("src/components/teme/TemeClient.tsx");
+  const i = c.indexOf("const aplica = (t: TemaPeCard) => porneste(async () => {");
+  assert.ok(i >= 0, "lipseste aplica");
+  const f = c.slice(i, c.indexOf("\n  });\n", i));
+  assert.equal(f.match(/\bcuDate\b/g)?.length, 1, "bifa bruta se citeste o singura data, in valoarea care pleaca");
+  assert.match(f, /const cuDateDemo = cuDate && t\.demo\.motivOprit === null;\s*const r = await aplicaTema\(businessId, t\.cheie, cuDateDemo\);/);
+  assert.match(f, /toast\.success\(cuDateDemo\s*\?\s*`Tema \$\{t\.nume\} e în magazin, cu datele demo\./);
 });

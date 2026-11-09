@@ -51,7 +51,7 @@ import { useCiornaDesign } from "./useCiornaDesign";
 import { useContinutMagazin } from "./useContinutMagazin";
 import { usePaginaProprie } from "./usePaginaProprie";
 import type { CheieSetare } from "@/lib/editor-magazin/setari";
-import { alegereDinClic } from "@/lib/editor-magazin/continut-liber";
+import { alegereDinClic, esteBloculUnic } from "@/lib/editor-magazin/continut-liber";
 import {
   ceAdaugaPlusul, continutNou, puncteDeAdaugare, sectiuneNoua, tintaLangaBloc, type Adaugare, type ContextAdaugare,
 } from "@/lib/editor-magazin/adaugare";
@@ -369,6 +369,15 @@ export function EditorMagazin({
   const blocLiberDeschis = useMemo(() => findBlock(blocuriLibere, liberAici?.bloc ?? null), [blocuriLibere, liberAici]);
   /** Un container de pe Acasa cu un singur bloc: se deschide direct pe el, iar „Înapoi” duce in arbore (etapa 13). */
   const unBlocPeAcasa = !!caleLiber && !caleLiber.bloc && blocuriLibere.length === 1;
+  /**
+   * Panoul deschis e chiar acel bloc unic, nu unul dintr-o coloana a lui (`esteBloculUnic`): doar atunci „Șterge” din
+   * capul panoului scoate tot continutul, iar „Înapoi” duce in arbore. Pentru un bloc din coloane, panoul e cel
+   * obisnuit, cu „Înapoi” spre lista continutului. In `useMemo`, ca `findBlock` mai sus (React Compiler).
+   */
+  const blocUnicDeschis = useMemo(
+    () => !!caleLiber && !caleLiber.bloc && esteBloculUnic(blocuriLibere, blocLiberDeschis?.id),
+    [caleLiber, blocuriLibere, blocLiberDeschis],
+  );
   /** Unde sta continutul deschis, in cuvinte, pentru capul panourilor. */
   const locLiber = useMemo(() => {
     if (!sectiuneSelectata || !caleLiber) return "";
@@ -1093,13 +1102,13 @@ export function EditorMagazin({
                 onInapoi={() => setLiber({ cheie: cheieLiber, bloc: unBlocPeAcasa ? blocuriLibere[0].id : null, tinta: null })} />
             ) : caleLiber && cheieLiber && blocLiberDeschis && dateBlocuri ? (
               <PanouBlocComun key={blocLiberDeschis.id} bloc={blocLiberDeschis} date={dateBlocuri} loc={locLiber}
-                inapoiLa={unBlocPeAcasa ? "secțiuni" : "conținut"}
+                inapoiLa={blocUnicDeschis ? "secțiuni" : "conținut"}
                 onSchimba={(patch, cheie) => ciorna.aplica(
                   (d: StoreDesign) => schimbaBlocuriLaCale(d, caleLiber, (bs) => updateBlockInTree(bs, blocLiberDeschis.id, patch)),
                   cheie,
                 )}
-                onInapoi={unBlocPeAcasa ? inapoiLaArbore : () => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })}
-                actiuneSus={unBlocPeAcasa ? (
+                onInapoi={blocUnicDeschis ? inapoiLaArbore : () => setLiber({ cheie: cheieLiber, bloc: null, tinta: null })}
+                actiuneSus={blocUnicDeschis ? (
                   <div className="flex gap-2">
                     <button type="button"
                       onClick={() => setLiber({

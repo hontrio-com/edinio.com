@@ -52,6 +52,10 @@ etapa 20 nu rulase, serverul de dezvoltare era pornit). **Etapa 21 (patru mentiu
 noi”, pozele mari de pe pagina de produs, subsolul premium fara newsletter) FACUTA si PROBATA**, 30.10. **Etapa 22 (faviconul
 demo-ului, butoanele magazinului cu mana, hoverul cardului) FACUTA si PROBATA**, 30.10.
 Productia demo-ului: REGISTRU „E”, doar dupa push, cu acordul lui.
+**Etapa 23 (Jupiter cu aspect propriu) si etapa 24 (temele 2-30, toate 29) FACUTE, 07-08.11; mentiunile lui din 08.11
+FACUTE** (sigla Marte, meniul de clic dreapta, pagina „Teme” refacuta, „Editează magazinul” care deschide lista, datele
+demo pornite implicit). **Recitirea din 09.11, dupa caderea editorului, a gasit si a reparat trei lucruri** (sectiunea
+„Recitirea din 09.11”). Tot fara push si fara migratie, pana spune el.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).
@@ -2210,6 +2214,25 @@ Cererea lui: „sa dau click dreapta pe un bloc si sa fac diferite chestii cu el
 - Capturile: `scripts/teme/capturi-teme.mjs` (Chrome-ul instalat, fara fereastra, prin protocolul de depanare) ->
   `public/teme-capturi/<cheie>.webp` (720 px lat) + `src/lib/teme/capturi-teme.ts`. ⚠ Dupa ce se schimba aspectul unei
   teme, se ruleaza din nou (cu serverul local pornit). Demo-ul viu din iframe (30 de magazine incarcate deodata) a plecat.
+- „Importă și datele demo” porneste PORNIT la fiecare deschidere a ferestrei (cerut de el: „Importa si datele demo sa
+  fie bifat by default”, `14f6a771`); oprit si stins doar cand planul nu incape datele.
+
+### Recitirea din 09.11 (dupa caderea editorului)
+
+La reluare nu ramasese nimic pe jumatate (arbore curat, ultimul comit `14f6a771`, raportul trimis). Lucrul din 08.11 s-a
+recitit cu ochi noi inainte de orice altceva. Gasite si reparate:
+- „Aplică tema”: mesajul de succes se lua dupa bifa bruta (`cuDate`). Cu bifa pornita implicit si planul plin, tema se
+  aplica FARA date, dar mesajul spunea „cu datele demo”. Acum cererea si mesajul vin din aceeasi valoare (`cuDateDemo`);
+  proba in `aplicare.test.ts` (in `aplica`, bifa bruta se citeste o singura data), mutantul prins.
+- ⚠ Un „Conținut liber” cu un singur bloc Coloane: „Șterge” pe un bloc DIN coloana scotea tot continutul, in doua
+  locuri: meniul de clic dreapta (08.11) si panoul blocului deschis cu clic, cu „Șterge” langa „Adaugă alt bloc aici”
+  (etapa 13). Amandoua numarau doar primul nivel, iar coloanele isi marcheaza si ele blocurile. Regula e acum una,
+  `esteBloculUnic` (`lib/editor-magazin/continut-liber.ts`): blocul trebuie sa fie chiar singurul de pe primul nivel.
+  Probe in `meniu-contextual.test.ts` (scrisa intai, cazuta pe codul vechi) si `etapa-13.test.ts`, ambii mutanti prinsi.
+- Centrul de ajutor ramasese in urma: `cum-aplici-o-tema` spunea „bifează «Importă și datele demo»” si „Vezi demo” (pe card,
+  butonul e „Previzualizare”, iar poza se deruleaza); clicul dreapta lipsea din ghiduri. Aduse la zi (REGISTRU D).
+- REGISTRU: bifa pornita, capturile statice in locul miniaturilor vii, verificarile din 08.11 (tabelul C).
+- Proba in Chrome nu s-a facut: serverul local fusese oprit de Claude Code (memorie putina) si se reporneste doar la cererea lui.
 
 ## Deciziile proprietarului
 

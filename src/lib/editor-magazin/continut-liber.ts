@@ -23,3 +23,17 @@ export function alegereDinClic(
   const continut = bloc.slice(0, i);
   return { blocStructural: continut, interior: { cheie: `${idSectiune}/${continut}`, bloc: bloc.slice(i + 1) } };
 }
+
+/**
+ * `bloc` e SINGURUL bloc de pe primul nivel al containerului, deci containerul si blocul sunt, pentru om, acelasi lucru:
+ * a-l sterge inseamna a sterge tot continutul (altfel ramane in pagina un loc gol, de negasit). Regula o folosesc si
+ * panoul din arbore (etapa 13: containerul cu un singur bloc se deschide direct pe el, cu „Șterge” pe tot continutul),
+ * si meniul de clic dreapta.
+ *
+ * ⚠ Un bloc dintr-o coloana NU e blocul unic, chiar daca Coloanele sunt singure pe primul nivel: coloanele isi marcheaza
+ * si ele blocurile, deci un clic pe un text din ele il deschide pe el. Gasit la recitirea din 09.11: numarand doar
+ * primul nivel, „Șterge” pe un astfel de text scotea toata sectiunea, cu tot ce era in coloane.
+ */
+export function esteBloculUnic(blocuri: readonly { id: string }[], bloc: string | null | undefined): boolean {
+  return blocuri.length === 1 && blocuri[0].id === bloc;
+}

@@ -10,7 +10,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 5. Capturile din tabelul D refacute pe ecranele finale.
 6. Unire `editor-magazin` -> `main`, push, verificare productie + CI (tabelul C).
 7. Magazinul demo al temei Jupiter (etapa 19, vezi „E. Demo-ul temelor”), cu acordul lui: subdomeniul, contul tehnic si
-   magazinul, umplerea. Pagina „Teme” arata miniatura si „Vezi demo” abia dupa pasul asta.
+   magazinul, umplerea. Pe pagina „Teme”, „Vezi demo” si „Previzualizare” merg abia dupa pasul asta (captura de pe card
+   e fisier static din 08.11, deci se vede oricum).
 
 ## A. Migratii
 | nr | fisier | ce face | demo | productie |
@@ -219,7 +220,8 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 - **Etapa 17 (pagina „Teme”, aplicarea direct in magazin, cu Istoric), de verificat dupa push:**
   - ⚠⚠ Migratia 1 din tabelul A (cu originile `tema` si `ciorna`) INAINTEA codului: fara ea, „Aplică tema” cade la
     scrierea Istoricului si nu aplica nimic (asa e facuta: fara versiunea de dinainte, nu se aplica).
-  - ⚠⚠ Pagina „Teme” cere magazinul demo in productie (etapa 19): fara el, miniatura vie si „Vezi demo” dau 404.
+  - ⚠⚠ Pagina „Teme” cere magazinul demo in productie (etapa 19): fara el, „Vezi demo” si „Previzualizare” dau 404. Din
+    08.11 cardul arata o captura statica (`public/teme-capturi/`), nu miniatura vie, deci poza se vede oricum.
   - Magazinele de azi nu se schimba pana nu apasa cineva „Aplică tema”.
   - Editează magazinul > Teme: cardul Jupiter, „Vezi demo”, „Aplică tema” (fereastra spune ce se schimba si ce
     ramane); dupa aplicare „În magazin”, „Deschide editorul” si „Pune la loc designul de dinainte”.
@@ -233,7 +235,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   - Produsele demo (abia dupa etapa 18.2, la un magazin care le importa): lipsesc din fluxuri, sitemap si cozi; pagina
     lor are `noindex`; in easySales apar blocate cu „Produs demo din temă: rămâne doar în magazin.”.
 - **Etapa 18.2-18.4 („Importă și datele demo”, „Șterge datele demo”), de verificat dupa push:**
-  - ⚠⚠ Nimic nu se intampla singur: bifa porneste oprita, iar fara ea „Aplică tema” face exact ce facea la 17.
+  - ⚠⚠ Din 08.11 comutatorul porneste PORNIT (cerut de el; pana atunci oprit): cine apasa „Aplică tema” fara sa-l opreasca
+    primeste si datele demo, iar pe un magazin vizibil clientii le vad si le pot comanda (fereastra o spune). Oprit, „Aplică
+    tema” face exact ce facea la 17. Nimic nu se aplica singur, fara „Aplică tema”.
+  - Pe un cont cu planul plin: comutatorul e oprit si stins, cu motivul; dupa „Aplică tema”, mesajul e „Tema ... e în
+    magazin.”, FARA „cu datele demo” (reparat la recitirea din 09.11: mesajul se lua dupa bifa, nu dupa ce a plecat).
   - Pe un cont de test cu plan Basic: „Aplică tema” cu bifa adauga 10 produse demo (setul lui, etapa 20), 20 de
     categorii, 3 bannere, 2 randuri si textele temei; produsele lipsesc din fluxuri (Google, Meta, Pepita) si din sitemap;
     „Șterge datele demo” le scoate pe toate, iar categoriile in care s-a pus un produs al lui raman.
@@ -265,6 +271,17 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     mana (`[data-store-theme] button:not(:disabled)`). Doar cursorul, fara nimic pe asezare. Dupa push, pe un magazin real:
     mana pe „Adauga in cos” si in cos, sageata interzisa pe butoanele oprite.
   - Pe `jupiter.edinio.com`, in tab, planeta din sigla (`/teme/jupiter/favicon.png`). Magazinele reale raman cu faviconul lor.
+- **Mentiunile din 08.11 si recitirea din 09.11, de verificat dupa push:**
+  - ⚠ La TOATE conturile, in bara laterala: clicul pe „Editează magazinul” deschide lista (Editor, Teme, Biblioteca
+    Media), nu mai duce direct in editor. Ghidurile spun tot „Intră în Editează magazinul...”: „Editor” e primul din lista.
+  - Clic dreapta in previzualizarea editorului, pe un magazin real, doar in ciorna (fara „Publică”, la sfarsit „Renunță”):
+    pe o sectiune de pe Acasa, Editează / Mută mai sus / Mută mai jos / Duplică / Ascunde / Șterge; pe antet, doar
+    Editează; dupa Șterge, mesajul „Șters.” cu „Anulează”, care o aduce inapoi.
+  - ⚠ Un „Conținut liber” de pe Acasa care are DOAR un bloc Coloane: „Șterge” pe un text din coloana (din meniul de clic
+    dreapta si din panoul deschis cu clic) scoate doar textul; sectiunea si coloanele raman (reparat 09.11; inainte pleca
+    tot continutul). „Șterge” pe Coloane insele scoate tot continutul, ca pana acum.
+  - Pagina „Teme”: grila, cardurile cu captura care se deruleaza la mouse, fereastra „Aplică tema” pe doua coloane, cu
+    comutatorul datelor demo pornit (vezi etapa 18.2-18.4). Sigla temei Marte: 40 px in antet (iesea 290 px lata).
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
@@ -283,6 +300,9 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
   `cum-pui-la-loc-designul-de-dinainte-de-tema`, nou `cum-stergi-datele-demo-ale-temei` (431 de ghiduri). Fara capturi noi.
   Etapa 20.5-21: `cum-alegi-cum-arata-categoriile` („0 produse”), `cum-reglezi-headerul-magazinului` (randul cu cautarea, reglajul
   telefonului), subsolul „Hipermarket, închis, cu beneficii”, „Înălțimea galeriei” la Detaliat, „Despre noi” in `cum-aplici-o-tema`. Fara capturi noi.
+  Mentiunile din 08.11 (scrise la recitirea din 09.11): `cum-aplici-o-tema` (comutatorul pornit de la inceput, „Previzualizare”
+  si poza de pe card), clicul dreapta in `cum-asezi-ordinea-sectiunilor`, `cum-muti-duplici-sau-stergi-un-bloc` si
+  `cum-adaugi-continut-liber-in-magazin`. Fara capturi noi.
 - **De facut (vazut la 18.1): listele din panoul canalelor** (eMAG, OLX, Trendyol, About You, Pepita) inca arata
   produsele demo printre cele de ales; trimiterea le sare (ca pe un inactiv), deci nimic nu pleaca, dar omul le poate
   bifa degeaba. De scos din liste cand e cazul (Meta si Google le scot deja).
@@ -331,7 +351,7 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 
 ## E. Demo-ul temelor (etapa 19), LA PUSH, cu acordul lui
 Magazinul demo al temei Jupiter (`tema-jupiter`) exista DOAR in baza demo. In productie nu exista nimic din el: pana la
-pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
+pasii de mai jos, pe pagina „Teme” „Vezi demo” si „Previzualizare” dau 404 (captura de pe card se vede: e fisier static, din 08.11).
 - **29.10.2026: pasii 1 si 2 FACUTI de el** („Am adaugat subdomeniul jupiter.edinio.com”). Masurat atunci: DNS spre
   Vercel, certificat valid, dar productia (fara codul etapei 19) serveste pe subdomeniu TOT site-ul de prezentare:
   `/`, `/preturi`, `/login` cu 200, „index, follow”, `robots.txt` „Allow: /”; canonicalul duce la `www.edinio.com`.
@@ -355,7 +375,7 @@ pasii de mai jos, pe pagina „Teme” miniatura si „Vezi demo” dau 404.
 5. **Verificari:** `https://jupiter.edinio.com` arata magazinul demo, adresele fara `/tema-jupiter`, antetul
    `X-Robots-Tag: noindex, follow`; `/robots.txt` = „Disallow: /”; `/sitemap.xml` = 404; o comanda (din cos si din
    formularul produsului) e refuzata cu „Acesta e un magazin demo: poti incerca tot, dar comenzile sunt oprite.”, fara
-   rand nou in `orders`; pe pagina „Teme”, miniatura vie si „Vezi demo” deschide `jupiter.edinio.com`.
+   rand nou in `orders`; pe pagina „Teme”, „Vezi demo” si „Previzualizare” deschid `jupiter.edinio.com`.
 
 **Temele 2-30 (etapa 24, pe loturi), tot la push, cu acordul lui.** Lotul 1 (08.11.2026): `mercur`, `venus`, `terra`,
 `marte`. Aceiasi pasi ca la Jupiter, pe cheia fiecarei teme:
@@ -373,6 +393,10 @@ antares arcturus aldebaran capella deneb spica procyon canopus regulus bellatrix
 electra maia`, fiecare cu `--productie`. Cu subdomeniile una cate una sunt 29 de CNAME-uri si 29 de domenii Vercel: cu
 stea (`*.edinio.com`) e unul singur, de hotarat de el. Pe baza demo toate 29 sunt create si umplute (verificat: 30 de
 magazine `tema-*`).
-Miniaturile vii de pe pagina „Teme”: cadrele sunt `loading="lazy"` (se incarca doar la vedere), iar pagina citeste acum
+~~Miniaturile vii de pe pagina „Teme”: cadrele sunt `loading="lazy"` (se incarca doar la vedere), iar pagina citeste acum
 locul pentru datele demo o singura data pentru toate temele (nu de 30 de ori). Proba pe ecran cu 30 de teme: incarcarea
-ramane acceptabila; o captura statica in locul cadrului ramane o idee, nu o nevoie.
+ramane acceptabila; o captura statica in locul cadrului ramane o idee, nu o nevoie.~~ **Inlocuite pe 08.11 (cerut de el)
+de capturi statice:** `public/teme-capturi/<cheie>.webp` (30 de fisiere, 720 px lat), facute de
+`scripts/teme/capturi-teme.mjs` din serverul local; dupa ce se schimba aspectul unei teme, scriptul se ruleaza din nou.
+Pagina citeste tot o singura data locul pentru datele demo. Dupa push: `https://www.edinio.com/teme-capturi/jupiter.webp`
+= 200 `image/webp`.

@@ -9,7 +9,7 @@ import {
 } from "@/lib/storefront/design/edit";
 import { PREFIX_PAGINA_PROPRIE, despartireId } from "@/lib/storefront/design/preview-protocol";
 import type { StoreDesign } from "@/lib/storefront/design/types";
-import { alegereDinClic } from "./continut-liber";
+import { alegereDinClic, esteBloculUnic } from "./continut-liber";
 
 /**
  * Meniul de clic dreapta din previzualizarea editorului (cerut de el, 08.11.2026: „sa dau click dreapta pe un bloc si
@@ -77,9 +77,9 @@ const ETICHETE: Record<CheieActiune, string> = {
   sterge: "Șterge",
 };
 
-/** Blocurile containerului pe care le-ar lasa stergerea: unul singur pe Acasa = se sterge tot containerul. */
-function ultimulDinContainer(design: StoreDesign, cale: CaleContinut): boolean {
-  return (blocuriLaCale(design, cale)?.length ?? 0) <= 1;
+/** Stergerea lui `bloc` ar lasa containerul gol: atunci pleaca tot containerul (regula e in `esteBloculUnic`). */
+function ultimulDinContainer(design: StoreDesign, cale: CaleContinut, bloc: string): boolean {
+  return esteBloculUnic(blocuriLaCale(design, cale) ?? [], bloc);
 }
 
 /**
@@ -111,7 +111,7 @@ export function aplicaPeDesign(design: StoreDesign, tinta: TintaMeniu, cheie: Ch
     }
     case "liber": {
       const { cale, bloc } = tinta;
-      if (cheie === "sterge" && ultimulDinContainer(design, cale)) {
+      if (cheie === "sterge" && ultimulDinContainer(design, cale, bloc)) {
         // Ultimul bloc al containerului: pleaca tot containerul, altfel ramanea in pagina un loc gol, de negasit.
         return cale.bloc === null
           ? removeSection(design, cale.sectiune)

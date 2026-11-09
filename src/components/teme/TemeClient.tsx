@@ -60,7 +60,8 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
   const [deAplicat, setDeAplicat] = useState<TemaPeCard | null>(null);
   /*
    * Bifa „Importă și datele demo”: PORNITA la fiecare deschidere a ferestrei (cerut de el, 08.11.2026; pana atunci
-   * oprita, „in caz ca vrea”). Cand planul n-o incape, ramane oprita si stinsa (`motivOprit`), deci nu pleaca.
+   * oprita, „in caz ca vrea”). Cand planul n-o incape (`motivOprit`), starea ramane `true`: comutatorul doar SE VEDE
+   * oprit si stins. Ce conteaza e `cuDate && motivOprit === null`, calculat o data in `aplica`, nu `cuDate` singur.
    */
   const [cuDate, setCuDate] = useState(true);
   const [laLoc, setLaLoc] = useState(false);
@@ -74,13 +75,18 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
   };
 
   const aplica = (t: TemaPeCard) => porneste(async () => {
-    const r = await aplicaTema(businessId, t.cheie, cuDate && t.demo.motivOprit === null);
+    /*
+     * Ce pleaca spre server si ce spune mesajul vin din ACEEASI valoare. Cu `cuDate` singur in mesaj (gasit la
+     * recitirea din 09.11), un magazin al carui plan nu incape datele primea tema fara ele, dar citea „cu datele demo”.
+     */
+    const cuDateDemo = cuDate && t.demo.motivOprit === null;
+    const r = await aplicaTema(businessId, t.cheie, cuDateDemo);
     if ("error" in r) {
       toast.error(r.error);
       return;
     }
     setDeAplicat(null);
-    toast.success(cuDate
+    toast.success(cuDateDemo
       ? `Tema ${t.nume} e în magazin, cu datele demo. O reglezi în editor, ca orice design.`
       : `Tema ${t.nume} e în magazin. O reglezi în editor, ca orice design.`);
     router.refresh();

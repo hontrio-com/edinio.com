@@ -56,6 +56,10 @@ Productia demo-ului: REGISTRU „E”, doar dupa push, cu acordul lui.
 FACUTE** (sigla Marte, meniul de clic dreapta, pagina „Teme” refacuta, „Editează magazinul” care deschide lista, datele
 demo pornite implicit). **Recitirea din 09.11, dupa caderea editorului, a gasit si a reparat trei lucruri** (sectiunea
 „Recitirea din 09.11”). Tot fara push si fara migratie, pana spune el.
+**10.11.2026, seara: el a hotarat lansarea pe 11.11** („Vreau ca maine sa il lansam”). Pregatirea: portile complete verzi,
+schema din Git = productia, `verifica:coloane` pe productie cere doar migratia 1; hotararile lui pentru demo-uri (domeniul cu
+stea `*.edinio.com`, contactul fictiv) si regula noua din `proxy.ts` (orice alt subdomeniu -> www). Ziua lansarii, pas cu
+pas: REGISTRU, sectiunea „F”.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).

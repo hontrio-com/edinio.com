@@ -448,6 +448,26 @@ describe("gazdele platformei care nu primesc antetul", () => {
     assert.equal(r.headers.get("location"), "https://www.edinio.com/ajutor/primii-pasi?x=1");
   });
 
+  test("orice alt subdomeniu e trimis la www (domeniul cu stea al temelor); www si temele raman pe loc", async () => {
+    /*
+      Din 10.11.2026 demo-urile temelor stau pe `*.edinio.com` in Vercel, deci ORICE subdomeniu ajunge la
+      aplicatie. Fara regula, `app.edinio.com` ar fi servit tot site-ul a doua oara, ca `ajutor` pana pe 04.09.
+    */
+    for (const [url, tinta] of [
+      ["https://app.edinio.com/preturi?x=1", "https://www.edinio.com/preturi?x=1"],
+      ["https://constructor.edinio.com/", "https://www.edinio.com/"],
+      ["https://blog.edinio.com/floraria-mea/product/x", "https://www.edinio.com/floraria-mea/product/x"],
+    ]) {
+      const r = await proxy(cerere(url));
+      assert.equal(r.status, 308, url);
+      assert.equal(r.headers.get("location"), tinta, url);
+    }
+    assert.notEqual((await proxy(cerere("https://www.edinio.com/preturi"))).status, 308, "www s-a redirectat");
+    const tema = await proxy(cerere("https://mercur.edinio.com/"));
+    assert.notEqual(tema.status, 308, "subdomeniul unei teme s-a redirectat");
+    assert.equal(new URL(tema.headers.get("x-middleware-rewrite") ?? "http://x/nimic").pathname, "/tema-mercur");
+  });
+
   test("previzualizarea din editor NU se muta de pe gazda ei", async () => {
     /* Cadrul din panou e pe aceeasi origine; un salt cross-origin l-ar bloca
        X-Frame-Options. Aceeasi scutire ca inainte, acum si pentru subdomeniu. */

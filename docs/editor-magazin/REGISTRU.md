@@ -9,9 +9,10 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 4. Variabilele din tabelul B in Vercel (Production) inainte de push.
 5. Capturile din tabelul D refacute pe ecranele finale.
 6. Unire `editor-magazin` -> `main`, push, verificare productie + CI (tabelul C).
-7. Magazinul demo al temei Jupiter (etapa 19, vezi „E. Demo-ul temelor”), cu acordul lui: subdomeniul, contul tehnic si
-   magazinul, umplerea. Pe pagina „Teme”, „Vezi demo” si „Previzualizare” merg abia dupa pasul asta (captura de pe card
-   e fisier static din 08.11, deci se vede oricum).
+7. Magazinele demo ale celor 30 de teme (etapa 19 si 24, vezi „E. Demo-ul temelor”), cu acordul lui: domeniul cu stea,
+   contul tehnic si magazinele, umplerea. Pe pagina „Teme”, „Vezi demo” si „Previzualizare” merg abia dupa pasul asta
+   (captura de pe card e fisier static din 08.11, deci se vede oricum).
+Pas cu pas, cu comenzile, pentru ziua lansarii: sectiunea „F”.
 
 ## A. Migratii
 | nr | fisier | ce face | demo | productie |
@@ -282,6 +283,11 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
     tot continutul). „Șterge” pe Coloane insele scoate tot continutul, ca pana acum.
   - Pagina „Teme”: grila, cardurile cu captura care se deruleaza la mouse, fereastra „Aplică tema” pe doua coloane, cu
     comutatorul datelor demo pornit (vezi etapa 18.2-18.4). Sigla temei Marte: 40 px in antet (iesea 290 px lata).
+- **Subdomeniile edinio.com (10.11.2026, odata cu domeniul cu stea al temelor), de verificat dupa push:** orice
+  subdomeniu care nu e al unei teme se muta pe www cu 308, cu tot cu cale si interogare (`https://app.edinio.com/preturi?x=1`
+  -> `https://www.edinio.com/preturi?x=1`); `ajutor.edinio.com` la fel, ca pana acum; `www` si subdomeniile temelor raman pe
+  loc. Inainte de domeniul cu stea, subdomeniile nelegate raspund `DEPLOYMENT_NOT_FOUND` de la Vercel (masurat 10.11: `app`,
+  `blog`, `cdn`, `magazin`, `panou`), deci regula lucreaza abia dupa el.
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
@@ -350,6 +356,15 @@ Tot ce productia NU are inca. Se scrie in clipa schimbarii, nu la final.
 - ~~Ghidurile mutate in Setari (formularul de comanda, catalogul, datele magazinului, retelele) stau inca in categoria „Design si pagini”.~~ Rezolvat de etapa 8: setarile s-au intors in editor, deci ghidurile lor stau iar langa el. Invers, cele din categoria „Setări” despre datele firmei, ANAF si numerotarea comenzilor descriu acum fila „Setări” a editorului; titlul categoriei ramane potrivit. O mutare intre categorii schimba adresa (`/ajutor/<categorie>/<ghid>`) si cere redirectari.
 
 ## E. Demo-ul temelor (etapa 19), LA PUSH, cu acordul lui
+**Hotarat de el pe 10.11.2026, pentru lansare:**
+- **Subdomeniile: unul cu stea**, `*.edinio.com`, adaugat in Vercel (proiectul aplicatiei > Settings > Domains). DNS-ul
+  domeniului e chiar al lui Vercel (`ns1/ns2.vercel-dns.com`), deci nu se scrie nicio inregistrare: masurat 10.11, orice
+  subdomeniu rezolva deja spre Vercel, iar cele nelegate raspund `DEPLOYMENT_NOT_FOUND`. `jupiter` si `ajutor` sunt legate
+  pe nume si raman asa. In cod, orice alt subdomeniu se muta pe www (`proxy.ts`, tabelul C), ca sa nu serveasca site-ul a
+  doua oara.
+- **Contactul din subsolul demo-urilor ramane fictiv** (`<tema>@edinio-demo.test`, `0700 000 000`, „Strada Exemplului 1”):
+  se vede ca e demonstrativ, iar comenzile sunt oprite oricum.
+
 Magazinul demo al temei Jupiter (`tema-jupiter`) exista DOAR in baza demo. In productie nu exista nimic din el: pana la
 pasii de mai jos, pe pagina „Teme” „Vezi demo” si „Previzualizare” dau 404 (captura de pe card se vede: e fisier static, din 08.11).
 - **29.10.2026: pasii 1 si 2 FACUTI de el** („Am adaugat subdomeniul jupiter.edinio.com”). Masurat atunci: DNS spre
@@ -400,3 +415,29 @@ de capturi statice:** `public/teme-capturi/<cheie>.webp` (30 de fisiere, 720 px 
 `scripts/teme/capturi-teme.mjs` din serverul local; dupa ce se schimba aspectul unei teme, scriptul se ruleaza din nou.
 Pagina citeste tot o singura data locul pentru datele demo. Dupa push: `https://www.edinio.com/teme-capturi/jupiter.webp`
 = 200 `image/webp`.
+
+## F. Ziua lansarii (hotarata de el pe 10.11.2026: „Vreau ca maine sa il lansam”)
+**Starea din 10.11, seara, pe ramura:** porti verzi (tsc, `lint:prag --check`, `npm test` 11.488 / 0 cazute / 2 sarite,
+`verifica-tipuri-db --check`, `build:ci`); `schema-baseline.sh --check` = productia; `verifica:coloane` pe productie: lipseste
+DOAR `storefront_design_versions` (migratia 1, anume). `main` (`ec9cec9c`) e deja in ramura. Copie de siguranta:
+`arhiva/editor-magazin-2026-11-10.bundle` (`main` + ramura la `de3465be`, verificata).
+
+Fiecare pas cu acordul lui, in ordinea asta:
+0. `git fetch`. Daca `main` a primit ceva: merge `main` in ramura, apoi suita si `build:ci` din nou.
+1. **Migratia 1** pe productie (`apply_migration` pe `rtefdpioqmowkdiybwrr`, numele `istoricul_publicarilor`, continutul
+   fisierului). Verificarea e chiar in migratie: cade daca RLS, politicile sau drepturile nu sunt cum trebuie. Apoi
+   `node --env-file=.env.local scripts/tests/coloane-cerute-exista.mjs` = nimic lipsa.
+2. **Schema din Git:** `bash scripts/schema-baseline.sh` (regenereaza), apoi `--check` si
+   `node scripts/verifica-tipuri-db.mjs --check`; commit pe ramura. Fara el, CI cade la „schema din Git = productie”.
+3. **Push:** in `edinio-main`, `git merge --ff-only editor-magazin`, apoi `git push origin main` (fereastra GCM „Select an
+   account” poate astepta dupa el).
+4. **Verificari:** desfasurarea READY in Vercel, CI verde. Apoi tabelul C, intai ce atinge toate magazinele: un magazin fara
+   design salvat si unul cu design (acasa, produs, subsol; calculator si telefon), eSAFE si VetDepo (cataloagele mari),
+   editorul pe contul lui (o schimbare in ciorna, apoi „Renunță”), panoul (Setari, Produse), subdomeniile (tabelul C).
+5. **Demo-urile (E):** `*.edinio.com` in Vercel > Domains; `scripts/teme/magazinul-demo.sql`, apoi
+   `scripts/teme/magazinele-demo-teme.sql` (`execute_sql` pe productie; verificarile din coada fisierelor); umplerea, pe
+   rand, pentru cele 30 de chei din `CHEI_TEME`:
+   `node --env-file=.env.local --conditions=react-server --import ./scripts/tests/register.mjs scripts/teme/seamana-demo.ts <cheie> --productie`.
+   Apoi E.5 pe 2-3 subdomenii (si o comanda refuzata) si pagina „Teme” cu „Vezi demo”.
+- **Plasa:** o problema in magazine dupa push -> Vercel > Deployments > desfasurarea de dinainte > „Instant Rollback” (cam
+  un minut). Migratia doar adauga un tabel, deci codul vechi merge si cu ea: nu se desface.

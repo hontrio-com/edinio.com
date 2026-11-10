@@ -266,8 +266,15 @@ export async function proxy(request: NextRequest) {
    *
    * 308, nu 301: pastreaza metoda si corpul, si e permanentul pe care il
    * foloseste tot restul aplicatiei (`next.config.ts`, www→apex pe domenii).
+   *
+   * ⚠ SI ORICE ALT SUBDOMENIU (hotarat 10.11.2026, la lansarea temelor). Demo-urile
+   * celor 30 de teme stau pe UN domeniu cu stea in Vercel (`*.edinio.com`), nu pe
+   * 30 de domenii, deci de atunci ORICE subdomeniu ajunge aici, nu doar `ajutor`.
+   * Ale temelor s-au intors mai sus; restul (`app.`, `blog.`, o greseala de
+   * tastare) ar fi servit tot site-ul a doua oara, adica defectul de mai sus.
+   * Ramane doar `www`.
    */
-  if ((bare === "edinio.com" || bare === "ajutor.edinio.com") && !isPreview) {
+  if ((bare === "edinio.com" || (bare.endsWith(".edinio.com") && bare !== "www.edinio.com")) && !isPreview) {
     const url = request.nextUrl.clone();
     url.host = "www.edinio.com";
     /* Portul mostenit de la gazda de dezvoltare n-are ce cauta pe adresa reala. */

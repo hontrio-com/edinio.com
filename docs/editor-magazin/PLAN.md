@@ -60,6 +60,15 @@ demo pornite implicit). **Recitirea din 09.11, dupa caderea editorului, a gasit 
 schema din Git = productia, `verifica:coloane` pe productie cere doar migratia 1; hotararile lui pentru demo-uri (domeniul cu
 stea `*.edinio.com`, contactul fictiv) si regula noua din `proxy.ts` (orice alt subdomeniu -> www). Ziua lansarii, pas cu
 pas: REGISTRU, sectiunea „F”.
+**10-11.11.2026, noaptea: proba completa ceruta de el** („cont Gol ca un utilizator nou ... toate temele pe rand ... absolut
+tot ... note”). Cont nou pe demo, toate 30 de teme aplicate pe rand cu datele demo (4,5-5,4 s fiecare, 0 erori), masurate pe
+telefon si calculator; editorul trecut prin toate paginile si panourile, si pe telefon; utilizator existent (produse proprii,
+schimbare de tema, „Pune la loc”, „Șterge datele demo”); 149/149 designuri reale din productie prin parserul nou; securitate
+(proprietar, XSS, cadrul izolat, ciorne, versiuni); performanta pe build de productie (CLS ~0 la toate, LCP pe telefon median
+2,2 s, TBT <= 182 ms). Reparate trei lucruri (doua existau si in productie): poarta MFA lua orice cookie `sb-*-auth-token`
+(403 la orice actiune cu un cookie strain pe gazda), onboardingul dupa plata se oprea in „A apărut o eroare” (redirectarea
+actiunii spre /dashboard), „Renunță” fara confirmare. Ramase de hotarat de el (raportul din 11.11): datele demo care se
+aduna de la o tema la alta, prima pagina fara produse dupa o tema aplicata fara datele demo, greutatea JS a vitrinei.
 
 Intre 4.5 si 4.6 s-a intercalat o reparatie ceruta de el pe `main` (VetDepo: pret fix la punct si
 Sameday Point scos, `122bfbff`, impinsa si in productie); `main` e adus in ramura (`01bd3eae`).

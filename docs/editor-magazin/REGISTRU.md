@@ -288,6 +288,21 @@ Pas cu pas, cu comenzile, pentru ziua lansarii: sectiunea „F”.
   -> `https://www.edinio.com/preturi?x=1`); `ajutor.edinio.com` la fel, ca pana acum; `www` si subdomeniile temelor raman pe
   loc. Inainte de domeniul cu stea, subdomeniile nelegate raspund `DEPLOYMENT_NOT_FOUND` de la Vercel (masurat 10.11: `app`,
   `blog`, `cdn`, `magazin`, `panou`), deci regula lucreaza abia dupa el.
+- **Proba completa de dinaintea lansarii (10-11.11.2026): doua defecte vechi reparate si o confirmare, de verificat dupa push:**
+  - ⚠⚠ Poarta MFA (`src/lib/auth/poarta-mfa.ts`) citeste doar cookie-ul de sesiune AL PROIECTULUI (`sb-<ref>-auth-token`,
+    cu `<ref>` din adresa Supabase), nu orice `sb-*-auth-token`. Defect EXISTENT si in productie: cu un cookie Supabase
+    strain pe aceeasi gazda (domeniul propriu al unui magazin, ramas de la site-ul de dinainte; sau localhost langa alt
+    proiect), `sub`-ul strain nu era in `users_profile`, deci ORICE actiune de server primea 403, inclusiv comanda din cos,
+    fara mesaj. Dupa push: conectarea si MFA (un cont cu MFA pornit, fara cod = tot refuzat), o comanda din cos.
+  - ⚠⚠ Onboarding dupa plata: `updateSession` nu mai trimite cu 307 spre `/dashboard` o ACTIUNE de server (POST cu
+    `next-action`) facuta pe `/onboarding` dupa ce onboardingul s-a terminat; iar pe pagina de plan, o cadere a verificarii
+    pentru conversie (`verificaPlataOnboarding`) nu mai opreste drumul spre panou. Defect EXISTENT si in productie: omul
+    care tocmai platise vedea „A apărut o eroare. Încearcă din nou.” si planurile din nou, desi magazinul era creat (risc de
+    plata dubla). Probat cap-coada pe demo (cont nou, „plata”, panou in 5,9 s, fara eroare). Dupa push: la primul cont nou
+    platitor, omul ajunge in panou fara mesaj de eroare.
+  - Editorul: „Renunță” (din bara si din meniul „...”) intreaba intai: „Renunți la modificările nepublicate?” cu „Rămân” /
+    „Renunță la ele” (pasul arunca ciorna intreaga si pasii Anuleaza / Refa, fara drum inapoi). Ghidul „Renunță” spune la fel.
+    Dupa push: un text schimbat, „Renunță” > „Rămân” = ramane; „Renunță” > „Renunță la ele” = dispare.
 - **Defect vechi reparat pe ramura (29.10, `9c8cdfc4`), de verificat dupa push:** in alegatorul de produse al unui
   feed Meta (Marketing > Meta, „Adaugă produse”), cautarea dupa un nume cu `%` sau `_` (de pilda „50%”) nu gasea
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,

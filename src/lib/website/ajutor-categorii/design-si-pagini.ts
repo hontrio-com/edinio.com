@@ -817,7 +817,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           detalii: [
             { titlu: "Ciorna", text: "Tot ce schimbi în „Secțiuni” și în „Stil” se salvează singur, la o secundă după ultima modificare, într-o ciornă pe care o vezi doar tu. O regăsești și dacă închizi editorul sau browserul." },
             { titlu: "Anulează și Refă", text: "Butoanele cu săgeți din bara de sus desfac și refac pașii din ciornă, și din tastatură: Ctrl+Z și Ctrl+Y." },
-            { titlu: "Renunță", text: "„Renunță” aruncă toată ciorna și aduce editorul înapoi la ce e în magazin. Apare „Ai renunțat la modificările nepublicate.”." },
+            { titlu: "Renunță", text: "„Renunță” întreabă întâi, fiindcă pasul nu se mai poate desface. Cu „Renunță la ele” aruncă toată ciorna, de pe toate paginile, și aduce editorul înapoi la ce e în magazin; apare „Ai renunțat la modificările nepublicate.”. Cu „Rămân” nu se schimbă nimic." },
             { titlu: "De ce setările nu așteaptă „Publică”", text: "Fila „Setări” ține date care ating comenzile, transportul și facturile: numele firmei, formularul de comandă, catalogul. Ele se salvează direct, cu butonul lor." },
             { titlu: "Mesaje de eroare la ciornă", text: "„Nu am putut salva ciorna. Verifică legătura la internet; încercăm din nou la următoarea modificare.” apare când pică legătura. „Designul a fost modificat în altă filă. Reîncarcă pagina ca să nu pierzi acele modificări.” apare când editorul e deschis în două file deodată: reîncarcă și lucrează într-una singură." },
           ],

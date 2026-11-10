@@ -653,6 +653,16 @@ test("bara spune o singura stare pentru tot: nepublicat sau publicat", () => {
   assert.doesNotMatch(s, /de design nepublicate|Designul e publicat/);
 });
 
+test("⚠⚠ „Renunță” intreaba inainte: arunca ciorna intreaga si pasii Anuleaza / Refa (proba din 10.11)", () => {
+  const s = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
+  // Nici butonul din bara, nici randul din meniul „...” nu mai arunca ciorna direct: amandoua deschid fereastra.
+  assert.doesNotMatch(s, /onClick=\{\(\) => void ciorna\.renunta\(\)\}/);
+  assert.equal((s.match(/onClick=\{\(\) => setConfirmaRenuntarea\(true\)\}/g) ?? []).length, 2);
+  // Singurul drum spre renuntare e butonul din fereastra.
+  assert.equal((s.match(/ciorna\.renunta\(\)/g) ?? []).length, 1);
+  assert.match(s, /<Dialog open=\{confirmaRenuntarea\}[\s\S]*?Renunți la modificările nepublicate\?[\s\S]*?void ciorna\.renunta\(\);/);
+});
+
 test("⚠ codul culorii din Stil urmeaza ciorna, si la Anuleaza / Renunță (vazut la proba 6.5)", () => {
   // O copie locala a culorii ramanea pe verdele renuntat cand bulina arata deja portocaliul publicat.
   const s = faraComentarii("src/components/editor-magazin/continut/PanouStil.tsx");
@@ -729,8 +739,10 @@ test("⚠⚠ cat se publica sau se renunta, ciorna nu primeste modificari (nici 
   const e = faraComentarii(EDITOR);
   assert.match(e, /<div className="flex flex-1 min-h-0" inert=\{ciorna\.blocata\}>\s*<aside/);
   const b = faraComentarii("src/components/editor-magazin/BaraEditor.tsx");
-  assert.match(b, /onClick=\{\(\) => void ciorna\.renunta\(\)\} disabled=\{ciorna\.blocata\}/);
-  assert.match(b, /disabled=\{ciorna\.blocata\} onClick=\{\(\) => void ciorna\.renunta\(\)\}>Renunță la modificările nepublicate/);
+  // „Renunță” deschide intai fereastra (10.11); butonul din bara, randul din meniu si cel din fereastra sunt oprite cat e blocata.
+  assert.match(b, /onClick=\{\(\) => setConfirmaRenuntarea\(true\)\} disabled=\{ciorna\.blocata\}/);
+  assert.match(b, /disabled=\{ciorna\.blocata\} onClick=\{\(\) => setConfirmaRenuntarea\(true\)\}>Renunță la modificările nepublicate/);
+  assert.match(b, /<Button variant="destructive" disabled=\{ciorna\.blocata\}\s*onClick=\{\(\) => \{ setConfirmaRenuntarea\(false\); void ciorna\.renunta\(\); \}\}>/);
   assert.match(b, /onClick=\{\(\) => void ciorna\.publica\(\)\} disabled=\{!ciorna\.areModificari \|\| ciorna\.blocata \|\| seIncarca\}/);
   assert.match(b, /<Button disabled=\{ciorna\.blocata\} onClick=\{\(\) => void pleaca\(true\)\}>Publică și ieși<\/Button>/);
   // Fereastra istoricului nu spune „Ai readus...” cand pasul n-a intrat.
@@ -896,7 +908,7 @@ test("⚠⚠ „Publică” ramane in ecran pe orice latime: ce iese din bara st
     reincarca: clasa(/onClick=\{onReincarca\}[^>]*?className="([^"]+)"/),
     deschide: clasa(/<a href=\{adresaPublica\}[^>]*?className="([^"]+)"/),
     vizibil: clasa(/onClick=\{\(\) => setConfirma\(true\)\} disabled=\{publicareInCurs\}[^>]*?className="([^"]+)"/),
-    renunta: clasa(/onClick=\{\(\) => void ciorna\.renunta\(\)\} disabled=\{ciorna\.blocata\}\s*className="([^"]+)"/),
+    renunta: clasa(/onClick=\{\(\) => setConfirmaRenuntarea\(true\)\} disabled=\{ciorna\.blocata\}\s*className="([^"]+)"/),
     stare: clasa(/<div className="(hidden \w+:block min-w-0 text-right)">/),
   };
   for (const [nume, c] of Object.entries(dinBara)) {

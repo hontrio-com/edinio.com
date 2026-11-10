@@ -173,8 +173,20 @@ export async function updateSession(request: NextRequest) {
   // Cookie flag: skip DB queries if onboarding already confirmed
   const onboardingDone = request.cookies.get("onboarding_done")?.value === "1";
 
+  /*
+   * ⚠ O ACTIUNE DE SERVER NU SE REDIRECTIONEAZA (gasit 10.11.2026, la proba de dinaintea lansarii editorului).
+   *
+   * Dupa plata, pagina de plan cheama `createBusiness`, care pune `onboarding_completed`, si imediat dupa ea
+   * `verificaPlataOnboarding`, tot o actiune, tot pe `/onboarding/plan`. Ramura de mai jos o trimitea cu 307 pe
+   * `/dashboard`: fetch-ul actiunii urma redirectarea si primea pagina HTML a panoului, clientul arunca „An unexpected
+   * response was received from the server”, iar omul, care tocmai platise si avea magazinul creat, vedea „A apărut o
+   * eroare. Încearcă din nou.” si planurile din nou, de unde putea plati a doua oara. Redirectarea e pentru NAVIGARE;
+   * actiunea isi verifica singura cine o cheama.
+   */
+  const eActiuneDeServer = request.method === "POST" && request.headers.has("next-action");
+
   // Authenticated on onboarding → redirect to dashboard if already completed
-  if (user && isOnboarding) {
+  if (user && isOnboarding && !eActiuneDeServer) {
     if (onboardingDone) {
       return redirectTo("/dashboard");
     }

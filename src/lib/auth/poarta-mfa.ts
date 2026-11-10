@@ -24,18 +24,42 @@ import { MESAJ_REFUZ, sesiuneNeconfirmataPentru } from "./stare-mfa";
  */
 
 /**
- * Numele cookie-ului de sesiune, eventual taiat in bucati `.0`, `.1`.
+ * Numele cookie-ului de sesiune AL PROIECTULUI NOSTRU, eventual taiat in bucati `.0`, `.1`.
  *
  * `-code-verifier` e exclus dinadins: e cookie-ul PKCE, nu sesiunea. Cine il
  * confunda ajunge sa creada ca exista sesiune acolo unde nu e.
+ *
+ * ⚠ DOAR AL NOSTRU, NU ORICE `sb-*-auth-token` (gasit 10.11.2026, la proba de
+ * dinaintea lansarii editorului). Pe aceeasi gazda pot sta cookie-urile ALTEI
+ * aplicatii facute cu Supabase: pe domeniul propriu al unui magazin, ramase de la
+ * site-ul de dinainte (traiesc pana la 400 de zile), sau pe `localhost`, langa alt
+ * proiect. Poarta le lua drept sesiune, citea `sub`-ul lor, nu-l gasea in
+ * `users_profile` si refuza (fara profil = neconfirmat): ORICE actiune de server
+ * primea 403, deci si comanda din cos a unui cumparator anonim, fara niciun mesaj.
+ *
+ * Aplicatia citeste doar cheia `sb-<ref>-auth-token`, cu `<ref>` = prima eticheta
+ * din adresa Supabase (`defaultStorageKey` din `@supabase/supabase-js`;
+ * `COOKIE_SESIUNE` nu-i schimba numele). Deci poarta se uita exact acolo: un cookie
+ * cu alt nume nu autentifica pe nimeni, nici la noi, nici dupa poarta.
  */
-const NUME_COOKIE_SESIUNE = /^sb-.*-auth-token(\.\d+)?$/;
+export function numeleCookieuluiDeSesiune(adresa = process.env.NEXT_PUBLIC_SUPABASE_URL): RegExp {
+  let ref = "";
+  try {
+    ref = new URL(adresa ?? "").hostname.split(".")[0] ?? "";
+  } catch {
+    ref = "";
+  }
+  // Fara adresa nu exista nici sesiune (clientul Supabase n-are unde se conecta): ramane forma larga, ca inainte.
+  if (!/^[a-z0-9-]+$/i.test(ref)) return /^sb-.*-auth-token(\.\d+)?$/;
+  return new RegExp(`^sb-${ref}-auth-token(\\.\\d+)?$`);
+}
 
 function areCookieDeSesiune(request: NextRequest): boolean {
   // Fara niciun cookie de sesiune nu exista utilizator de verificat, deci
   // webhook-urile, cronurile si vizitatorii anonimi ies de aici fara sa atinga
   // nici serverul de autentificare, nici baza.
-  return request.cookies.getAll().some((c) => NUME_COOKIE_SESIUNE.test(c.name));
+  const nume = numeleCookieuluiDeSesiune();
+  return request.cookies.getAll().some((c) => nume.test(c.name));
 }
 
 /**
@@ -62,9 +86,11 @@ function claimuriDinCookieuri(request: NextRequest): ClaimuriSesiune | null {
   // Ordonare NUMERICA dupa indicele bucatii, nu alfabetica: cu 10 bucati sau mai
   // multe, `.10` ar veni inaintea lui `.2` si JSON-ul s-ar reasambla gresit.
   const indice = (nume: string) => Number(nume.match(/\.(\d+)$/)?.[1] ?? -1);
+  // Tot doar al nostru: altfel bucatile a doua sesiuni de pe aceeasi gazda s-ar lipi intr-un singur sir.
+  const numeSesiune = numeleCookieuluiDeSesiune();
   const bucati = request.cookies
     .getAll()
-    .filter((c) => NUME_COOKIE_SESIUNE.test(c.name))
+    .filter((c) => numeSesiune.test(c.name))
     .sort((a, b) => indice(a.name) - indice(b.name));
   if (bucati.length === 0) return null;
 

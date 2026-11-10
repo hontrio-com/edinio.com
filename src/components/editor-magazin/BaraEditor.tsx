@@ -67,6 +67,8 @@ export function BaraEditor({
 }) {
   const ist = anulare ?? ciorna;
   const [confirma, setConfirma] = useState(false);
+  /* „Renunță” arunca ciorna intreaga si pasii Anuleaza / Refa, fara drum inapoi: intreaba inainte (10.11.2026). */
+  const [confirmaRenuntarea, setConfirmaRenuntarea] = useState(false);
   const router = useRouter();
   /** „intreaba” = fereastra de iesire deschisa; „pleaca” = ciorna se trimite, apoi se iese. */
   const [iesire, setIesire] = useState<"intreaba" | "pleaca" | null>(null);
@@ -187,7 +189,7 @@ export function BaraEditor({
         </button>
 
         {ciorna.areModificari && (
-          <button type="button" onClick={() => void ciorna.renunta()} disabled={ciorna.blocata}
+          <button type="button" onClick={() => setConfirmaRenuntarea(true)} disabled={ciorna.blocata}
             className="hidden lg:inline-flex h-9 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-40 disabled:pointer-events-none transition-colors items-center">
             Renunță
           </button>
@@ -218,7 +220,7 @@ export function BaraEditor({
               {publicat ? "Magazin vizibil: ascunde-l" : "Magazin ascuns: fă-l vizibil"}
             </DropdownMenuItem>
             {ciorna.areModificari && (
-              <DropdownMenuItem className="rounded-lg p-2.5" disabled={ciorna.blocata} onClick={() => void ciorna.renunta()}>Renunță la modificările nepublicate</DropdownMenuItem>
+              <DropdownMenuItem className="rounded-lg p-2.5" disabled={ciorna.blocata} onClick={() => setConfirmaRenuntarea(true)}>Renunță la modificările nepublicate</DropdownMenuItem>
             )}
             <DropdownMenuItem className="rounded-lg p-2.5" onClick={onReincarca}><RotateCw className="h-4 w-4" /> Reîncarcă previzualizarea</DropdownMenuItem>
             <DropdownMenuItem className="rounded-lg p-2.5" render={<a href={adresaPublica} target="_blank" rel="noopener noreferrer" />}>
@@ -249,6 +251,29 @@ export function BaraEditor({
             <Button variant={publicat ? "destructive" : "default"} disabled={publicareInCurs}
               onClick={async () => { await onComutaPublicarea(); setConfirma(false); }}>
               {publicat ? "Da, ascunde magazinul" : "Da, fă-l vizibil"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        ⚠ „Renunță” sterge ciorna INTREAGA (designul si continutul, pe toate paginile) si pasii Anuleaza / Refa: nu exista
+        drum inapoi, iar Istoricul tine doar ce s-a publicat. Pana la proba de dinaintea lansarii (10.11.2026) pleca la un
+        singur clic, pe un buton mic langa „Publică”.
+      */}
+      <Dialog open={confirmaRenuntarea} onOpenChange={setConfirmaRenuntarea}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renunți la modificările nepublicate?</DialogTitle>
+            <DialogDescription>
+              Tot ce ai schimbat de la ultima „Publică”, pe toate paginile, se aruncă și nu se mai poate recupera. Clienții văd magazinul ca până acum.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmaRenuntarea(false)}>Rămân</Button>
+            <Button variant="destructive" disabled={ciorna.blocata}
+              onClick={() => { setConfirmaRenuntarea(false); void ciorna.renunta(); }}>
+              Renunță la ele
             </Button>
           </DialogFooter>
         </DialogContent>

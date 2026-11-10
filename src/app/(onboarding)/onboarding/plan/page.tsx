@@ -318,12 +318,22 @@ function PlanPageContent() {
           merge direct in panou). Ce nu se lamureste in atat ramane
           nelamurit — nu inventam o conversie ca sa nu ne lipseasca.
         */
+        /*
+          ⚠ MASURATOAREA NU-L TINE PE LOC PE OMUL CARE TOCMAI A PLATIT (10.11.2026). Magazinul e deja creat aici; daca
+          verificarea pentru conversie cade (retea, o redirectare, Stripe), omul merge totusi in panou. Pana atunci caderea
+          ajungea in `catch`-ul de jos: „A apărut o eroare. Încearcă din nou.” si planurile din nou, de unde putea plati a
+          doua oara. O conversie pierduta se vede si se recupereaza; o plata dubla nu.
+        */
         const sid = searchParams.get("sid") ?? "";
-        let plata = await verificaPlataOnboarding(sid);
+        // O cadere e un „nu stiu”, ca Stripe care nu raspunde: se reia de doua ori, apoi se renunta la masuratoare.
+        const verifica = (id: string) => verificaPlataOnboarding(id).catch(
+          () => ({ ok: false as const, motiv: "indisponibil" as const }),
+        );
+        let plata = await verifica(sid);
         for (const pauza of [600, 1800]) {
           if (plata.ok || plata.motiv !== "indisponibil") break;
           await new Promise((r) => setTimeout(r, pauza));
-          plata = await verificaPlataOnboarding(sid);
+          plata = await verifica(sid);
         }
         /*
           ⚠ SI MONEDA SE VERIFICA, nu se toarna — aceeasi regula ca in webhook.

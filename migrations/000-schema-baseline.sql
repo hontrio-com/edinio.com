@@ -13522,6 +13522,15 @@ create table if not exists public.stock_feed_sources (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null);
 
+create table if not exists public.storefront_design_versions (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  design jsonb not null,
+  continut jsonb not null,
+  origine text default 'publicare'::text not null,
+  publicat_de uuid,
+  created_at timestamp with time zone default now() not null);
+
 create table if not exists public.stripe_events (
   event_id text not null,
   type text,
@@ -13951,6 +13960,7 @@ alter table public.sms_campaigns add constraint sms_campaigns_pkey PRIMARY KEY (
 alter table public.sms_optout add constraint sms_optout_pkey PRIMARY KEY (id);
 alter table public.sms_templates add constraint sms_templates_pkey PRIMARY KEY (id);
 alter table public.stock_feed_sources add constraint stock_feed_sources_pkey PRIMARY KEY (id);
+alter table public.storefront_design_versions add constraint storefront_design_versions_pkey PRIMARY KEY (id);
 alter table public.stripe_events add constraint stripe_events_pkey PRIMARY KEY (event_id);
 alter table public.support_messages add constraint support_messages_pkey PRIMARY KEY (id);
 alter table public.support_tickets add constraint support_tickets_pkey PRIMARY KEY (id);
@@ -14108,6 +14118,7 @@ alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK
 alter table public.stock_feed_sources add constraint stock_feed_sources_frequency_check CHECK ((frequency = ANY (ARRAY['hourly'::text, 'daily'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_last_status_check CHECK ((last_status = ANY (ARRAY['ok'::text, 'error'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_run_hour_check CHECK (((run_hour >= 0) AND (run_hour <= 23)));
+alter table public.storefront_design_versions add constraint storefront_design_versions_origine_check CHECK ((origine = ANY (ARRAY['publicare'::text, 'inainte'::text, 'tema'::text, 'ciorna'::text])));
 alter table public.support_messages add constraint support_messages_sender_type_check CHECK ((sender_type = ANY (ARRAY['user'::text, 'agent'::text])));
 alter table public.support_tickets add constraint support_tickets_category_check CHECK ((category = ANY (ARRAY['store_design'::text, 'products'::text, 'orders'::text, 'customers'::text, 'payments'::text, 'integrations'::text, 'account'::text, 'technical'::text, 'billing'::text, 'feature'::text, 'other'::text])));
 alter table public.support_tickets add constraint support_tickets_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text])));
@@ -14286,6 +14297,8 @@ alter table public.sms_templates add constraint sms_templates_business_id_fkey F
 alter table public.stock_feed_sources add constraint stock_feed_sources_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.stock_feed_sources add constraint stock_feed_sources_last_import_id_fkey FOREIGN KEY (last_import_id) REFERENCES product_imports(id) ON DELETE SET NULL;
 alter table public.stock_feed_sources add constraint stock_feed_sources_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.storefront_design_versions add constraint storefront_design_versions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.storefront_design_versions add constraint storefront_design_versions_publicat_de_fkey FOREIGN KEY (publicat_de) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.support_messages add constraint support_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE;
 alter table public.support_tickets add constraint support_tickets_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE SET NULL;
 alter table public.support_tickets add constraint support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -14698,6 +14711,7 @@ CREATE UNIQUE INDEX sms_campaigns_cheie_unica ON public.sms_campaigns USING btre
 CREATE INDEX sms_optout_cautare_idx ON public.sms_optout USING btree (business_id, phone);
 CREATE INDEX stock_feed_sources_business_idx ON public.stock_feed_sources USING btree (business_id);
 CREATE INDEX stock_feed_sources_due_idx ON public.stock_feed_sources USING btree (enabled, last_run_at NULLS FIRST);
+CREATE INDEX storefront_design_versions_business_idx ON public.storefront_design_versions USING btree (business_id, created_at DESC);
 CREATE INDEX stripe_events_created_at_idx ON public.stripe_events USING btree (created_at);
 CREATE INDEX support_messages_ticket_id_idx ON public.support_messages USING btree (ticket_id);
 CREATE INDEX support_tickets_business_id_idx ON public.support_tickets USING btree (business_id);
@@ -14967,6 +14981,7 @@ alter table public.sms_campaigns enable row level security;
 alter table public.sms_optout enable row level security;
 alter table public.sms_templates enable row level security;
 alter table public.stock_feed_sources enable row level security;
+alter table public.storefront_design_versions enable row level security;
 alter table public.stripe_events enable row level security;
 alter table public.support_messages enable row level security;
 alter table public.support_tickets enable row level security;
@@ -17353,6 +17368,13 @@ grant SELECT on table public.store_settings to service_role;
 grant TRIGGER on table public.store_settings to service_role;
 grant TRUNCATE on table public.store_settings to service_role;
 grant UPDATE on table public.store_settings to service_role;
+grant DELETE on table public.storefront_design_versions to service_role;
+grant INSERT on table public.storefront_design_versions to service_role;
+grant REFERENCES on table public.storefront_design_versions to service_role;
+grant SELECT on table public.storefront_design_versions to service_role;
+grant TRIGGER on table public.storefront_design_versions to service_role;
+grant TRUNCATE on table public.storefront_design_versions to service_role;
+grant UPDATE on table public.storefront_design_versions to service_role;
 grant DELETE on table public.stripe_events to anon;
 grant INSERT on table public.stripe_events to anon;
 grant REFERENCES on table public.stripe_events to anon;

@@ -72,10 +72,25 @@ test("IMPLICIT, produsele raman si pe pagina principala", () => {
   assert.equal(sectiuniAcasa(d), d.home);
 });
 
+/** Cu un rand de produse aprins pe prima pagina: abia atunci grila are unde sa plece (etapa 25.4). */
+const cuRand = (d: StoreDesign): StoreDesign => ({ ...d, home: d.home.map((s) => (s.kind === "product_row" ? { ...s, enabled: true } : s)) });
+
 test("comerciantul poate cere despartirea curata, si atunci grila pleaca", () => {
-  const acasa = sectiuniAcasa(cuVarianta("sidebar", { pastreazaGrilaAcasa: false }));
+  const acasa = sectiuniAcasa(cuRand(cuVarianta("sidebar", { pastreazaGrilaAcasa: false })));
   assert.ok(!acasa.some((s) => s.kind === "product_grid"));
   assert.ok(!acasa.some((s) => s.kind === "catalog_toolbar"));
+});
+
+test("⚠⚠ 25.4: fara niciun rand de produse aprins, grila RAMANE acasa (altfel prima pagina n-ar arata niciun produs)", () => {
+  // Asa ajungea orice tema aplicata fara datele demo, si orice magazin dupa „Șterge datele demo” (proba din 10-11.11).
+  const d = cuVarianta("sidebar", { pastreazaGrilaAcasa: false });
+  const faraRanduri = { ...d, home: d.home.map((s) => (s.kind === "product_row" ? { ...s, enabled: false } : s)) };
+  assert.equal(grilaRamaneAcasa(faraRanduri), true);
+  assert.ok(sectiuniAcasa(faraRanduri).some((s) => s.kind === "product_grid"));
+  // Fara sectiunea grilei (pagina principala proprie fara blocul de catalog), mutarea ramane: n-are ce ramane acasa.
+  assert.equal(grilaRamaneAcasa({ ...faraRanduri, home: faraRanduri.home.filter((s) => s.kind !== "product_grid") }), false);
+  // Un rand aprins: grila pleaca, ca inainte.
+  assert.equal(grilaRamaneAcasa(cuRand(d)), false);
 });
 
 test("chiar si atunci, categoriile si randurile de produse RAMAN acasa", () => {

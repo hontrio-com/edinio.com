@@ -2247,6 +2247,71 @@ recitit cu ochi noi inainte de orice altceva. Gasite si reparate:
 - REGISTRU: bifa pornita, capturile statice in locul miniaturilor vii, verificarile din 08.11 (tabelul C).
 - Proba in Chrome nu s-a facut: serverul local fusese oprit de Claude Code (memorie putina) si se reporneste doar la cererea lui.
 
+## Etapa 25: toate notele la 10, inainte de lansare (cerut 11.11.2026, dimineata)
+
+Cererea lui, dupa raportul probei complete: „Vreau sa duci scorurile alea toate la nota 10, vreau sa fie perfect inainte de
+lansare”. Lansarea (REGISTRU F) asteapta etapa asta. FARA agenti, in chat (regula lui).
+
+**Regula notelor:** la final se refac cu ACEEASI masuratoare ca in proba din 10-11.11 (build de productie pe demo, telefon
+390 px DPR 3, procesor x4, 4G lent; calculator 1440 px; scara performantei: LCP-ul primei pagini pe telefon, <= 2,2 s = 9,
+-0,5 peste 1,5 MB). Nicio nota nu urca fara o schimbare masurata; unde nu ajunge la 10, raportul spune exact ce lipseste.
+Recitirea de dimineata (dupa caderea VS Code) a adaugat defectul cosului (25.1).
+
+Hotarari luate de mine pe recomandarile din raport (spuse in raport, el le poate intoarce): datele demo ale temei de dinainte
+se INLOCUIESC (25.3), grila ramane pe prima pagina cand nu exista randuri de produse (25.4), comutatorul datelor demo pornit
+doar la magazinele fara produse proprii (25.5).
+
+### A. Fiabilitate si drumul banilor
+- [x] 25.1 Cosul (`useCheckoutOrder`, `checkout-core.ts`; existent si in productie): fiecare asteptare prinsa (`maiECerut`,
+  `placeCartOrder`, `fetch`-ul platii), mesajele din `OrderModal`, `placedRef` pastrat; proba pe APEL, nu „un catch oriunde”.
+- [x] 25.2 Inscrierea (`register/page.tsx`): o cadere a actiunii arata un mesaj (fara sa prinda redirectarea).
+- [x] 25.3 Datele demo se inlocuiesc: tema noua cu date demo scoate intai datele temei de dinainte (produse, categorii,
+  bannere, randuri, texte); „Pune la loc” readuce si datele demo ale temei readuse.
+- [x] 25.4 Prima pagina fara produse: grila ramane acasa cand magazinul n-are randuri de produse; arborele nu mai arata
+  „Catalog produse” vizibil cand nu se randeaza.
+- [x] 25.5 Comutatorul „Importă și datele demo”: pornit doar la magazinele fara produse proprii.
+- [x] 25.6 Istoricul: designul de dinainte de PRIMA tema nu se mai taie (dupa 15 teme se pierdea).
+- [x] 25.7 Pagina „Teme” dupa „Pune la loc”: stie tema readusa.
+
+Facute 11.11, dimineata (A, plus 25.8 si 25.12): probe noi si mutanti prinsi; proba cap-coada pe demo (Playwright, contul
+`proba-lansare-1011`): Electra cu demo (bifa pornita OPRITA, magazinul are produse), Jupiter cu demo (datele Electrei scoase,
+0 texte ramase), „Pune la loc” (Electra cu datele ei inapoi, randurile pe produsele reimportate, semnul), „Șterge datele
+demo” (0 demo, prima pagina arata produsele lui). Clichetul de tranzitii e acum pe APEL (241 de callbackuri, 0 descoperite).
+
+### B. Editorul
+- [x] 25.8 Stergerea din arbore (si din panoul sectiunii): mesaj cu „Anulează”, ca la clic dreapta.
+- [ ] 25.9 Link `javascript:`: mesaj in camp, nu inlocuire tacuta cu „#”.
+- [ ] 25.10 Linkurile se arata decodate in campuri („Termice și...”, nu „%C8%99”).
+- [ ] 25.11 Etichetele panoului cu diacritice (`registry.ts`, `BLOCK_META`, selectorul Bibliotecii Media); vitrina ramane
+  fara; ghidurile la zi.
+- [x] 25.12 „(19 produse din 500)”: text limpede.
+- [ ] 25.13 Sablonul „Contact”: telefonul si emailul magazinului, nu „07xx” si „contact@magazin.ro”.
+- [ ] 25.14 axe-core pe editor (calculator si telefon): toate incalcarile reparate.
+- [ ] 25.15 Performanta editorului masurata pe build de productie; ce nu trebuie la deschidere, incarcat la nevoie.
+
+### C. Temele
+- [ ] 25.16 Tinte de atins: punctele bannerului, butonul cosului (Sirius), linkurile legale din subsol.
+- [ ] 25.17 Bannerele cu text in poza (Rigel, Deneb, Antares): lizibile pe telefon.
+- [ ] 25.18 Incadrarea pe telefon (Vega, Mira).
+- [ ] 25.19 Sigla demo Betelgeuse lizibila.
+- [ ] 25.20 Canopus: marginea de 16 px la 1440.
+- [ ] 25.21 axe-core pe toate 30 (acasa, Magazin, produs; telefon si calculator): toate incalcarile reparate.
+- [ ] 25.22 Recitirea vizuala a fiecarei teme (390 si 1440): defectele gasite, reparate.
+
+### D. Performanta vitrinei
+- [ ] 25.23 Poza LCP: prioritate, dimensiuni corecte, densitate plafonata pe telefon.
+- [ ] 25.24 Placile de categorii: variantele mici.
+- [ ] 25.25 JavaScript: ce nu trebuie la prima afisare (Supabase, Stripe, animatiile), incarcat la nevoie; masurat inainte/dupa.
+- [ ] 25.26 Fonturile: doar grosimile folosite.
+- [ ] 25.27 Paginile peste 1,5 MB: sub prag.
+
+### E. Securitate
+- [ ] 25.28 Actiunile si rutele noi ale ramurii, recitite cu ochi de atacator.
+
+### F. Proba finala
+- [ ] 25.29 Portile complete; proba pe demo (toate temele, editorul, cosul); performanta pe build de productie; notele
+  refacute cu aceeasi masuratoare; raportul.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

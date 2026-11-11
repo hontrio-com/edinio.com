@@ -118,7 +118,18 @@ const MUTATE_PE_PAGINA_DE_CATALOG: readonly SectionKind[] = ["product_grid", "ca
  * arata catre pagina de catalog); al doilea ramane.
  */
 export function grilaRamaneAcasa(design: StoreDesign): boolean {
-  return design.shop.page.settings?.pastreazaGrilaAcasa !== false;
+  if (design.shop.page.settings?.pastreazaGrilaAcasa !== false) return true;
+  /*
+   * ⚠ ETAPA 25.4 (11.11.2026): FARA RANDURI DE PRODUSE, GRILA RAMANE SI ACASA. Altfel prima pagina nu arata niciun
+   * produs. Asa ajungea orice magazin care aplica o tema fara datele demo (temele muta grila pe pagina Magazin, iar
+   * randurile lor vin doar cu datele demo) si orice magazin dupa „Șterge datele demo”. In productie, la 11.11, niciun
+   * magazin nu avea grila mutata, deci regula atinge doar temele.
+   * Doar cand pagina chiar ARE grila: o pagina principala proprie fara blocul de catalog (`sectiuniDinBlocuri`, in
+   * `[slug]/page.tsx`) n-are, deci adresele grilei pleaca tot la pagina de catalog.
+   */
+  const areGrila = design.home.some((s) => s.kind === "product_grid" && s.enabled);
+  const areRanduri = design.home.some((s) => s.kind === "product_row" && s.enabled);
+  return areGrila && !areRanduri;
 }
 
 /**

@@ -43,9 +43,12 @@ export default async function TemePage() {
 
   // Etapa 18: locul din planul lui pentru datele demo ale fiecarei teme, si ce date demo sunt acum in magazin.
   // O singura citire pentru toate temele (30 din lotul 7): planul si produsele nu depind de tema.
-  const [context, { count: produseDemo }] = await Promise.all([
+  const [context, { count: produseDemo }, { count: produseProprii }] = await Promise.all([
     citesteContextulPentruDemo(supabase, user.id, magazin.id),
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", magazin.id).eq("source", SURSA_DEMO),
+    // Etapa 25.5: produsele LUI (sursa goala sau alta decat demo; 1.009 au sursa NULL in productie, deci `or`, nu `neq`).
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", magazin.id)
+      .or(`source.is.null,source.neq.${SURSA_DEMO}`),
   ]);
   const urma = urmaDateDemoDin(setari?.page_content);
   // Etapa 19: „Vezi demo” pe subdomeniul temei, dupa gazda pe care s-a deschis panoul (local, `jupiter.localhost`).
@@ -73,7 +76,10 @@ export default async function TemePage() {
       aplicataLa={aplicataLa}
       // Citirea cazuta lasa butonul la vedere: actiunea spune ea daca n-are ce pune la loc.
       poatePuneLaLoc={inainte !== null && ("error" in inainte || inainte.exista)}
-      dateDemo={urma || (produseDemo ?? 0) > 0 ? { produse: produseDemo ?? 0 } : null}
+      laLocDemoInainte={inainte && !("error" in inainte) ? inainte.demoInainte : undefined}
+      dateDemo={urma || (produseDemo ?? 0) > 0 ? { produse: produseDemo ?? 0, tema: urma?.tema || null } : null}
+      // O citire cazuta conteaza ca „are produse”: bifa porneste oprita, deci nu pune produse demo intr-un magazin care vinde.
+      areProduseProprii={produseProprii === null || produseProprii > 0}
       areCiorna={!!setari?.storefront_design_draft}
       public={magazin.is_published === true}
     />

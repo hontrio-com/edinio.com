@@ -580,7 +580,8 @@ export function EditorMagazin({
       ? schimbaBlocurile(d, cale.sectiune, (l, sch) => stergeContinut(l, sch, cale.bloc!))
       : removeSection(d, cale.sectiune)));
     inapoiLaArbore();
-    toast.success("Conținutul a fost șters. Îl aduci înapoi cu „Anulează”, din bara de sus.");
+    // Etapa 25.8: butonul „Anulează” chiar in mesaj, ca la clic dreapta.
+    toast.success("Conținutul a fost șters.", { action: { label: "Anulează", onClick: () => ciorna.anuleaza() }, duration: 8000 });
   };
 
   /** Pagina principala are lista ei de sectiuni in arbore: acolo meniul de clic dreapta le muta, ascunde, sterge. */

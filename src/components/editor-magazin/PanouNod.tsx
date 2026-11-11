@@ -88,7 +88,8 @@ export function PanouNod({ sectiune, ciorna, continut, onInapoi, onSchimbaDesign
   const sterge = () => {
     ciorna.aplica((d: StoreDesign) => removeSection(d, sectiune.id));
     onInapoi();
-    toast.success("Secțiunea a fost ștearsă. O aduci înapoi cu „Anulează”, din bara de sus.");
+    // Etapa 25.8: si aici butonul „Anulează” chiar in mesaj, ca la clic dreapta si in arbore.
+    toast.success("Secțiunea a fost ștearsă.", { action: { label: "Anulează", onClick: () => ciorna.anuleaza() }, duration: 8000 });
   };
 
   return (

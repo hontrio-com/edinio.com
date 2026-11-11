@@ -51,16 +51,18 @@ import { readdirSync, readFileSync } from "node:fs";
    altele; o scutire pe fisier intreg le-ar fi lasat tocmai pe cele reparate nepazite. Aici
    fisierele lor nici nu apar in harta, deci numarul lor asteptat e ZERO.
 
-   ═══ ⚠ CE NU APARA PROBA ASTA, SCRIS CINSTIT ═══
+   ═══ ⚠ PANA PE 11.11.2026 PLASA ERA MAI LARGA DECAT REGULA ═══
 
-   Se cere un `catch` UNDEVA in corpul callbackului, nu neaparat pe drumul asteptarii. Un
-   `catch` intr-o functie scrisa pe loc inauntru ar trece, desi apelul de afara ramane
-   descoperit. Plasa e deci mai larga decat regula.
+   Se cerea un `catch` UNDEVA in corpul callbackului, nu pe drumul asteptarii, si asa a trecut
+   chiar drumul banilor: `checkout-core.ts` (cosul si /checkout) era in `PRIND_DEJA` fiindca
+   prindea `res.json()`, iar `placeCartOrder` si `fetch`-ul platii erau descoperite. O cadere
+   dadea pagina „500” peste cos, si putea face a doua comanda. Gasit la recitirea probei de
+   dinaintea lansarii, nu de proba asta.
 
-   Asta o face sa greseasca INTR-O SINGURA DIRECTIE: poate numi reparat ceva ce nu e, niciodata
-   invers. Riscul e marginit, fiindca singurele intrari noi in categoria „prinde" sunt
-   reparatiile mele, scrise in forma casei de mai jos. Cand un lot repara un fisier, ingustimea
-   se cere acolo, pe apelul anume, nu aici.
+   Acum se cere pentru FIECARE `await`: sa stea intr-un `try { }` al callbackului sau sa aiba
+   `.catch(` pe acelasi enunt. Singurele exceptii sunt apelurile care isi prind singure caderile,
+   numite in `NU_ARUNCA`, fiecare cu motivul. O asteptare intr-o functie scrisa pe loc si chemata
+   din `try` ar fi socotita descoperita (greseala in directia sigura); masurat pe 11.11: niciuna.
 
    ═══ FORMA CASEI, LUATA DIN CELE 9 CARE PRIND DEJA ═══
 
@@ -196,7 +198,40 @@ function corpDeCallback(t: string, dupaAsync: number): { corp: string | null; fo
 
 const DESCHIDERE = /\bstart([A-Z][A-Za-z0-9]*)\s*\(\s*async\s*(?=[(<])/g;
 
-type Callback = { cheie: string; rand: number; nume: string; asteapta: boolean; prinde: boolean };
+/**
+ * Asteptarile care NU pot arunca, deci nu cer `try`. Fiecare cu motivul; o intrare noua aici e o
+ * afirmatie despre codul chemat, de verificat in el, nu o scutire de comoditate.
+ */
+const NU_ARUNCA: Array<[RegExp, string]> = [
+  [/^await contLaComanda\.maiECerut\(\)/,
+    "`maiECerut` (contul-la-comanda.ts) cheama `intreaba`, care isi prinde singura cererea si intoarce null"],
+];
+
+/**
+ * Enunturile cu `await` din corp care nu stau intr-un `try { }` al corpului si n-au `.catch(` pe
+ * acelasi enunt. Corpul vine fara comentarii (vezi `faraComentarii`).
+ */
+function asteptariDescoperite(corp: string): string[] {
+  const incercari: Array<[number, number]> = [];
+  for (const m of corp.matchAll(/\btry\s*\{/g)) {
+    const deschis = (m.index ?? 0) + m[0].length - 1;
+    const inchis = pereche(corp, deschis);
+    if (inchis > 0) incercari.push([deschis, inchis]);
+  }
+  const descoperite: string[] = [];
+  for (const m of corp.matchAll(/\bawait\s+/g)) {
+    const p = m.index ?? 0;
+    if (incercari.some(([a, b]) => p > a && p < b)) continue;
+    const sfarsit = corp.indexOf(";", p);
+    const enunt = corp.slice(p, sfarsit > 0 ? sfarsit : p + 200).replace(/\s+/g, " ");
+    if (/\.catch\s*\(/.test(enunt)) continue;
+    if (NU_ARUNCA.some(([re]) => re.test(enunt))) continue;
+    descoperite.push(enunt.slice(0, 120));
+  }
+  return descoperite;
+}
+
+type Callback = { cheie: string; rand: number; nume: string; asteapta: boolean; prinde: boolean; descoperite: string[] };
 
 function callbackuri(): { toate: Callback[]; ciudate: string[] } {
   const toate: Callback[] = [];
@@ -218,12 +253,15 @@ function callbackuri(): { toate: Callback[]; ciudate: string[] } {
         continue;
       }
 
+      const descoperite = asteptariDescoperite(corp);
       toate.push({
         cheie,
         rand,
         nume: m[1],
         asteapta: corp.includes("await "),
-        prinde: /catch\s*[({]/.test(corp),
+        // Pe APEL (din 11.11.2026), nu „un catch oriunde in corp”: vezi nota de sus.
+        prinde: descoperite.length === 0,
+        descoperite,
       });
     }
   }
@@ -276,8 +314,30 @@ test("⚠⚠ un callback de tranzitie care asteapta trebuie sa PRINDA caderea", 
     + "nou, o actiune care arunca inlocuieste tot panoul cu pagina de 500 de la radacina si "
     + "comerciantul pierde formularul completat:\n"
     + `masurat  = ${JSON.stringify(masurat, null, 2)}\n`
-    + `asteptat = ${JSON.stringify(INCA_DESCOPERITE, null, 2)}`,
+    + `asteptat = ${JSON.stringify(INCA_DESCOPERITE, null, 2)}\n`
+    + `asteptarile descoperite:\n${descoperite.map((c) => `${c.cheie}:${c.rand} start${c.nume}: ${c.descoperite.join(" | ")}`).join("\n")}`,
   );
+});
+
+test("⚠⚠ plasa e pe APEL: un `catch` pus altundeva in corp nu mai apara o asteptare descoperita", () => {
+  // Forma exacta in care a scapat cosul pana pe 11.11.2026: `catch` doar pe `res.json()`.
+  const corp = `{
+    const result = await placeCartOrder(payload);
+    if ("error" in result) return;
+    const res = await fetch(endpoint, { method: "POST" });
+    let data = {};
+    try { data = await res.json(); } catch { }
+  }`;
+  assert.deepEqual(asteptariDescoperite(corp).map((e) => e.split("(")[0]),
+    ["await placeCartOrder", "await fetch"]);
+
+  const reparat = `{
+    let result;
+    try { result = await placeCartOrder(payload); } catch { return; }
+    const r = await fetch(x).catch(() => null);
+    if (contLaComanda.necesar && (await contLaComanda.maiECerut())) return;
+  }`;
+  assert.deepEqual(asteptariDescoperite(reparat), []);
 });
 
 test("⚠⚠ cele care prind deja raman prinse, si sunt numite", () => {
@@ -295,8 +355,8 @@ test("⚠⚠ cele care prind deja raman prinse, si sunt numite", () => {
       + "daca nu, potrivirea corpului s-a stricat.");
 
     assert.ok(gasit.prinde,
-      `${cheie} · start${nume}: nu mai prinde caderea. Era unul dintre cele 9 reparate, iar `
-      + "acum o actiune care arunca acolo inlocuieste pagina cu 500. Pune `catch`-ul inapoi.");
+      `${cheie} · start${nume}: nu mai prinde caderea (${gasit.descoperite.join(" | ")}). Era unul `
+      + "dintre cele reparate, iar acum o actiune care arunca acolo inlocuieste pagina cu 500. Pune `catch`-ul inapoi.");
   }
 
   const cateBune = toate.filter((c) => c.asteapta && c.prinde).length;

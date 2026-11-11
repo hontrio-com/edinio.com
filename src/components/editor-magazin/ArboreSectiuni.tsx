@@ -5,7 +5,8 @@ import { ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, Lock, Plus } from "l
 import { Callout } from "@/components/ui/callout";
 import { SectionList } from "@/components/store-editor/SectionList";
 import { comutaBloc, esteContinut, mutaBloc, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
-import { shopOnPage } from "@/lib/storefront/design/commerce";
+import { toast } from "sonner";
+import { sectiuniAcasa, shopOnPage } from "@/lib/storefront/design/commerce";
 import { blocuriDinSetari, ETICHETA_CONTINUT_LIBER } from "@/lib/storefront/design/continut-liber";
 import { rezumatBloc } from "@/lib/editor-magazin/pagina-proprie";
 import { comutaBaraDeAnunt, duplicateSection, ID_BARA_ANUNT, moveSection, removeSection, schimbaBlocurile, toggleSection } from "@/lib/storefront/design/edit";
@@ -230,7 +231,25 @@ export function ArboreSectiuni({
   const nota = notaPaginii(pagina, design, magazin);
   const numePagina = titluPagina ?? PAGINI_EDITOR.find((p) => p.cheie === pagina)?.eticheta ?? "";
   const bara = design.chrome.announcement;
-  const marcaj = (s: SectionInstance) => (nesalvat(felContinut(s)) ? <PunctNesalvat /> : null);
+  /*
+   * Etapa 25.4 (11.11.2026): sectiunile aprinse pe care prima pagina NU le arata (grila si cautarea, mutate pe pagina
+   * Magazin cand exista randuri de produse; `sectiuniAcasa`). Pana atunci „Catalog produse” aparea vizibil in arbore,
+   * desi nu se vedea nicaieri pe prima pagina.
+   */
+  const randate = new Set(sectiuniAcasa(design).map((s) => s.id));
+  const marcaj = (s: SectionInstance) => (
+    <>
+      {nesalvat(felContinut(s)) ? <PunctNesalvat /> : null}
+      {eListaPaginii && s.enabled && !randate.has(s.id) && (
+        <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Pe pagina Magazin</span>
+      )}
+    </>
+  );
+  /** Etapa 25.8: stergerea din arbore are, ca la clic dreapta, mesajul cu „Anulează” (pana atunci, doar Ctrl+Z). */
+  const stergeSectiunea = (id: string) => {
+    aplica((d: StoreDesign) => removeSection(d, id));
+    toast.success("Secțiunea a fost ștearsă.", { action: { label: "Anulează", onClick: () => ciorna.anuleaza() }, duration: 8000 });
+  };
 
   return (
     <div className="space-y-1">
@@ -274,7 +293,7 @@ export function ArboreSectiuni({
             onMove={(from, to) => aplica((d: StoreDesign) => moveSection(d, from, to), "ordine")}
             onToggle={(id) => aplica((d: StoreDesign) => toggleSection(d, id), `ochi:${id}`)}
             onDuplicate={(id) => aplica((d: StoreDesign) => duplicateSection(d, id))}
-            onRemove={(id) => aplica((d: StoreDesign) => removeSection(d, id))}
+            onRemove={stergeSectiunea}
             primaMutabila={0}
             ultimaMutabila={design.home.length - 1}
             marcaj={marcaj}

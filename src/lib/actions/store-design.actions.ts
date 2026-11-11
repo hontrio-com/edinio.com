@@ -9,9 +9,17 @@ import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
 import { ciornaDinVersiune, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
 import { CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, type TemaAplicata } from "@/lib/teme/aplicare";
 import { CHEIE_DATE_DEMO, importaDateleDemo, urmaDateDemoDin, type UrmaDateDemo } from "@/lib/teme/import-demo";
+import {
+  continutCuRandurileDemoDeAcum,
+  faraTexteleTemelor,
+  pcFaraDemoAlAltorTeme,
+  produseDemoDeScos,
+  stareDinVersiune,
+  stareaMagazinului,
+} from "@/lib/teme/inlocuire-demo";
 import { citesteLoculPentruDemo, motivulLimitei } from "@/lib/teme/limita-demo";
 import { SURSA_DEMO } from "@/lib/teme/produse-demo";
-import { categoriiDemoDeSters, continutFaraDateleDemo } from "@/lib/teme/stergere-demo";
+import { categoriiDemoDeSters } from "@/lib/teme/stergere-demo";
 import { temaDupaCheie } from "@/lib/teme/teme";
 import { bulkProductAction } from "@/lib/actions/product.actions";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
@@ -185,21 +193,45 @@ async function pastreazaVersiunea(
   }
 }
 
-/** Pastreaza cele mai noi `VERSIUNI_PASTRATE` versiuni ale magazinului; pe cele mai vechi le sterge. */
-async function taieVersiunileVechi(admin: ReturnType<typeof createAdminClient>, businessId: string): Promise<void> {
-  const { data: vechi, error: eVechi } = await admin
+/**
+ * Prima versiune `tema` a magazinului: designul lui de dinainte de PRIMA tema aplicata vreodata. Nu se taie (etapa 25.6,
+ * 11.11.2026): fiecare tema scrie doua versiuni, deci dupa 15 teme incercate designul lui original disparea din Istoric.
+ */
+async function primaVersiuneDeTema(admin: ReturnType<typeof createAdminClient>, businessId: string): Promise<string | null> {
+  const { data, error } = await admin
     .from("storefront_design_versions")
     .select("id")
     .eq("business_id", businessId)
-    .order("created_at", { ascending: false })
-    .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 99);
+    .eq("origine", "tema")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.id ?? null;
+}
+
+/**
+ * Pastreaza cele mai noi `VERSIUNI_PASTRATE` versiuni ale magazinului, plus prima versiune `tema` (designul lui de
+ * dinainte de prima tema); pe celelalte, mai vechi, le sterge.
+ */
+async function taieVersiunileVechi(admin: ReturnType<typeof createAdminClient>, businessId: string): Promise<void> {
+  const [{ data: vechi, error: eVechi }, prima] = await Promise.all([
+    admin
+      .from("storefront_design_versions")
+      .select("id")
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false })
+      .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 99),
+    primaVersiuneDeTema(admin, businessId),
+  ]);
   if (eVechi) throw new Error(eVechi.message);
-  if (vechi && vechi.length > 0) {
+  const deSters = (vechi ?? []).map((r) => r.id).filter((id) => id !== prima);
+  if (deSters.length > 0) {
     const { error: eSters } = await admin
       .from("storefront_design_versions")
       .delete()
       .eq("business_id", businessId)
-      .in("id", vechi.map((r) => r.id));
+      .in("id", deSters);
     if (eSters) throw new Error(eSters.message);
   }
 }
@@ -384,22 +416,34 @@ export async function listDesignVersions(
   if ("error" in owned) return owned;
 
   const supabase = await createClient();
-  const [{ data, error }, { data: setari }] = await Promise.all([
-    createAdminClient()
+  const admin = createAdminClient();
+  const [{ data, error }, { data: prima, error: ePrima }, { data: setari }] = await Promise.all([
+    admin
       .from("storefront_design_versions")
       .select("id, created_at, origine")
       .eq("business_id", owned.businessId)
       .order("created_at", { ascending: false })
       .limit(VERSIUNI_PASTRATE),
+    // Prima versiune `tema` ramane si cand e mai veche decat cele 30 (etapa 25.6): o arata si lista, ultima.
+    admin
+      .from("storefront_design_versions")
+      .select("id, created_at, origine")
+      .eq("business_id", owned.businessId)
+      .eq("origine", "tema")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
     supabase.from("store_settings").select("storefront_design_pub_at").eq("business_id", owned.businessId).single(),
   ]);
   // ⚠ O citire cazuta NU e „n-ai nicio versiune”: lista goala ar fi mintit.
-  if (error) {
-    logError({ action: "listDesignVersions", businessId: owned.businessId, message: error.message });
+  if (error || ePrima) {
+    logError({ action: "listDesignVersions", businessId: owned.businessId, message: (error ?? ePrima)!.message });
     return { error: "Nu am putut citi istoricul. Încearcă din nou." };
   }
+  const randuri = [...(data ?? [])];
+  if (prima && !randuri.some((r) => r.id === prima.id)) randuri.push(prima);
   return {
-    versiuni: (data ?? []).map((r) => ({ id: r.id, la: r.created_at, origine: origineDinBaza(r.origine) })),
+    versiuni: randuri.map((r) => ({ id: r.id, la: r.created_at, origine: origineDinBaza(r.origine) })),
     publicatLa: setari?.storefront_design_pub_at ?? null,
   };
 }
@@ -487,6 +531,47 @@ async function scrieSemnulTemei(businessId: string, semn: TemaAplicata | null): 
 }
 
 /**
+ * Scoate din magazin datele demo ale altor teme decat `pastreaza` (`null` = ale tuturor), etapa 25.3: produsele (prin
+ * stergerea in masa a panoului: retragerile, pachetele, sincronizarile, proiectia), categoriile create de importul lor
+ * ramase goale, bannerele, randurile si urma din `page_content`. Ce e al lui ramane. Urma se scrie ultima, deci o
+ * cadere la mijloc se poate relua.
+ */
+async function scoateDateleDemo(owned: OwnedStore, pastreaza: string | null): Promise<{ error: string } | null> {
+  const supabase = await createClient();
+  const { data: produse, error: eProduse } = await supabase
+    .from("products")
+    .select("id, external_id")
+    .eq("business_id", owned.businessId)
+    .eq("source", SURSA_DEMO);
+  if (eProduse) return { error: `produse demo: ${eProduse.message}` };
+  const iduri = produseDemoDeScos(produse ?? [], pastreaza);
+  if (iduri.length > 0) {
+    const sterse = await bulkProductAction(owned.businessId, iduri, { kind: "delete" });
+    if ("error" in sterse) return sterse;
+  }
+
+  const urma = urmaDateDemoDin(owned.ctx.pageContent);
+  if (urma && urma.tema !== pastreaza) {
+    const categorii = await stergeCategoriileDemo(owned.businessId, urma);
+    if (categorii) return categorii;
+  }
+
+  // ⚠ Fara citire reusita nu se scrie nimic (o citire cazuta ar fi golit tot `page_content`, vezi `scrieCheiaTemei`).
+  const { data, error } = await supabase.from("store_settings").select("page_content").eq("business_id", owned.businessId).single();
+  if (error || !data) return { error: `setari: ${error?.message ?? "lipsa"}` };
+  const pc = (data.page_content ?? {}) as Record<string, unknown>;
+  const patch = pcFaraDemoAlAltorTeme(pc, pastreaza);
+  if (Object.keys(patch).length === 0) return null;
+  const nou: Record<string, unknown> = { ...pc };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete nou[k];
+    else nou[k] = v;
+  }
+  const scris = await writeSettings(owned.businessId, { page_content: nou as Json }, "scoateDateleDemo");
+  return "error" in scris ? scris : null;
+}
+
+/**
  * Aplica o tema direct in magazin, cu Istoric:
  * 1. ce era publicat intra in Istoric ca `tema`, iar ciorna nepublicata, intreaga, ca `ciorna`;
  * 2. cu „Importă și datele demo” (etapa 18), datele temei se ADAUGA in magazin (`importaDateleDemo`), marcate demo;
@@ -526,11 +611,12 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
     if (!loc.incap) return { error: `${motivulLimitei(loc)} Aplică tema fără datele demo.` };
   }
 
-  // 1. Ce era, INAINTE de orice scriere.
+  // 1. Ce era, INAINTE de orice scriere. Si starea de atunci (etapa 25.3): tema aplicata si datele demo, ca „Pune la loc”
+  //    sa readuca magazinul intocmai, cu datele demo ale temei de atunci.
   const la = dateleVersiunilorDeDinainte(Date.now());
   const randuri: RandVersiune[] = [{
     business_id: owned.businessId, design: (row?.storefront_design ?? {}) as Json,
-    continut: instantaneuContinut(owned.ctx.pageContent, owned.magazin) as unknown as Json,
+    continut: { ...instantaneuContinut(owned.ctx.pageContent, owned.magazin), stare: stareaMagazinului(owned.ctx.pageContent) } as unknown as Json,
     origine: "tema", publicat_de: owned.userId, created_at: la.tema,
   }];
   if (row?.storefront_design_draft) {
@@ -545,6 +631,16 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
   }
   if (!(await pastreazaInainteDeTema(owned, randuri))) {
     return { error: "Nu am putut păstra designul de acum în Istoric, deci tema nu s-a aplicat. Încearcă din nou." };
+  }
+
+  // 1b. Etapa 25.3: cu datele demo, ale celorlalte teme pleaca INTAI, dupa Istoric (care le tine minte pentru „Pune la
+  //     loc”). In magazin ramane o singura tema demo; inainte, 30 de teme incercate lasau 331 de produse demo.
+  if (cuDate) {
+    const scos = await scoateDateleDemo(owned, tema.cheie);
+    if (scos) {
+      logError({ action: "aplicaTema.scoateDemo", businessId: owned.businessId, message: scos.error });
+      return { error: "Datele demo de dinainte nu s-au putut scoate, deci tema nu s-a aplicat. Încearcă din nou." };
+    }
   }
 
   // 2. Datele demo: dupa Istoric (bannerele si randurile lor sunt chei ale editorului, deci „Pune la loc” le scoate) si
@@ -564,10 +660,12 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
     ctxMagazin = dupaImport.ctx;
   }
 
-  // 3. Tema, prin „Publică”.
+  // 3. Tema, prin „Publică”. Peste designul publicat FARA textele puse de o tema (etapa 25.3): altfel tema noua le-ar fi
+  //    pastrat drept ale lui („Alege camera” de la Electra ajungea pe prima pagina Jupiter).
   const continut = continutIdentitate(tema.identitate);
   const ctxTema = contextCuCiorna(ctxMagazin, continut);
-  const design = tema.design(ctxTema, cuDate ? tema.date : null, parseStoreDesign(row?.storefront_design ?? {}, ctxTema), { radacinaCatalog });
+  const baza = faraTexteleTemelor(parseStoreDesign(row?.storefront_design ?? {}, ctxTema), { siTexteleTemei: true }).design;
+  const design = tema.design(ctxTema, cuDate ? tema.date : null, baza, { radacinaCatalog });
   const publicat = await publishDesign(owned.businessId, ciornaCuContinut(design, continut));
   if ("error" in publicat) {
     // Datele demo au intrat deja: omul trebuie sa stie, iar pagina „Teme” ii arata „Șterge datele demo” (urma exista).
@@ -584,8 +682,13 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
  * „Pune la loc designul de dinainte”: versiunea `tema` cea mai noua (ce era in magazin inainte de ultima tema), designul
  * si identitatea, publicata prin `publishDesign`. Ce s-a publicat dupa aplicare ramane in Istoric. Cu o ciorna
  * nepublicata, nu: `publishDesign` ar fi golit-o fara urma.
+ *
+ * Etapa 25.3 (11.11.2026): versiunile scrise de atunci tin si starea magazinului (tema aplicata, datele demo). Cand datele
+ * demo de acum nu sunt ale temei de atunci, ele pleaca si se reimporta cele de atunci, iar semnul temei revine: magazinul
+ * arata INTOCMAI ca inainte de tema. O versiune mai veche, fara stare, readuce ca pana atunci designul si continutul.
+ * `nota` = datele demo de atunci n-au mai incaput in plan (designul revine fara ele).
  */
-export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<ActionResult> {
+export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<ActionResult | { success: true; nota: string }> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
 
@@ -613,32 +716,88 @@ export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<A
   }
   if (!v) return { error: "Nu există în Istoric un design de dinainte de temă." };
 
-  const ciorna = ciornaDinVersiune(v, { pc: owned.ctx.pageContent, magazin: owned.magazin }, owned.ctx);
+  const stare = stareDinVersiune(v.continut);
+  let ctx = owned.ctx;
+  let continut: unknown = v.continut;
+  let nota: string | null = null;
+  if (stare) {
+    const demoInainte = stare.demo?.tema || null;
+    const urmaAcum = urmaDateDemoDin(owned.ctx.pageContent);
+    const { data: produseDemo, error: eDemo } = await supabase
+      .from("products")
+      .select("id, external_id")
+      .eq("business_id", owned.businessId)
+      .eq("source", SURSA_DEMO);
+    if (eDemo) {
+      logError({ action: "puneLaLocDesignulDeDinainte.demo", businessId: owned.businessId, message: eDemo.message });
+      return { error: "Nu am putut citi produsele demo. Încearcă din nou." };
+    }
+    const straine = produseDemoDeScos(produseDemo ?? [], demoInainte).length > 0;
+    const deReadus = demoInainte !== null && urmaAcum?.tema !== demoInainte;
+    if (straine || deReadus || (urmaAcum !== null && urmaAcum.tema !== demoInainte)) {
+      const scos = await scoateDateleDemo(owned, demoInainte);
+      if (scos) {
+        logError({ action: "puneLaLocDesignulDeDinainte.scoateDemo", businessId: owned.businessId, message: scos.error });
+        return { error: "Datele demo de acum nu s-au putut scoate, deci designul nu s-a pus la loc. Încearcă din nou." };
+      }
+      const temaInainte = deReadus && demoInainte ? temaDupaCheie(demoInainte) : null;
+      if (temaInainte) {
+        const loc = await citesteLoculPentruDemo(supabase, owned.userId, owned.businessId, temaInainte.cheie, temaInainte.date);
+        if ("error" in loc || !loc.incap) {
+          nota = `Datele demo ale temei ${temaInainte.nume} nu mai încap în planul tău, deci designul a revenit fără ele.`;
+        } else {
+          try {
+            await importaDateleDemo(createAdminClient(), owned.businessId, temaInainte.cheie, temaInainte.date, radacinaCatalogTemei(owned.ctx.pageContent));
+          } catch (e) {
+            logError({ action: "puneLaLocDesignulDeDinainte.import", businessId: owned.businessId, message: e instanceof Error ? e.message : String(e) });
+            return { error: "Datele demo de dinainte nu s-au putut readuce, deci designul nu s-a pus la loc. Încearcă din nou." };
+          }
+        }
+      }
+      // Magazinul de acum: randurile demo reimportate au produse noi, deci versiunea le ia pe acestea.
+      const dupa = await loadOwnedStore(owned.businessId);
+      if ("error" in dupa) return dupa;
+      ctx = dupa.ctx;
+      continut = continutCuRandurileDemoDeAcum(v.continut, dupa.ctx.pageContent);
+    }
+  }
+
+  const ciorna = ciornaDinVersiune({ design: v.design, continut }, { pc: ctx.pageContent, magazin: owned.magazin }, ctx);
   const publicat = await publishDesign(owned.businessId, ciornaCuContinut(ciorna.design, ciorna.continut));
   if ("error" in publicat) return publicat;
 
-  await scrieSemnulTemei(owned.businessId, null);
+  // Etapa 25.7: semnul temei de atunci, ca pagina „Teme” sa stie ce e in magazin; fara stare (versiune veche), niciunul.
+  await scrieSemnulTemei(owned.businessId, stare?.tema ?? null);
   revalidatePath("/dashboard/editor/teme");
-  return { success: true };
+  if (owned.slug) revalidatePath(`/${owned.slug}`, "layout");
+  return nota ? { success: true, nota } : { success: true };
 }
 
 /**
  * Pentru pagina „Teme”: are magazinul in Istoric un design de dinainte de tema, de pus la loc? O citire cazuta e o
  * eroare, nu „nu”: altfel butonul ar fi disparut tocmai cand omul are nevoie de el.
  */
-export async function areDesignDeDinainteDeTema(businessId: string): Promise<{ exista: boolean } | { error: string }> {
+export async function areDesignDeDinainteDeTema(
+  businessId: string,
+): Promise<{ exista: boolean; demoInainte?: string | null } | { error: string }> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
-  const { count, error } = await createAdminClient()
+  // Si starea versiunii (etapa 25.3), ca fereastra „Pune la loc” sa spuna ce date demo revin; `undefined` = versiune veche.
+  const { data, error } = await createAdminClient()
     .from("storefront_design_versions")
-    .select("id", { count: "exact", head: true })
+    .select("continut")
     .eq("business_id", owned.businessId)
-    .eq("origine", "tema");
+    .eq("origine", "tema")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (error) {
     logError({ action: "areDesignDeDinainteDeTema", businessId: owned.businessId, message: error.message });
     return { error: "Nu am putut citi Istoricul." };
   }
-  return { exista: (count ?? 0) > 0 };
+  if (!data) return { exista: false };
+  const stare = stareDinVersiune(data.continut);
+  return stare ? { exista: true, demoInainte: stare.demo?.tema || null } : { exista: true };
 }
 
 /**
@@ -716,12 +875,14 @@ export async function stergeDateleDemo(businessId: string): Promise<ActionResult
   const iduri = (produse ?? []).map((p) => p.id);
   if (!urma && iduri.length === 0) return { error: "Nu sunt date demo de șters." };
 
-  // 1. Bannerele, randurile si textele demo, prin „Publică”.
-  if (urma) {
-    const continut = continutFaraDateleDemo(owned.ctx.pageContent, urma);
-    const tema = temaDupaCheie(urma.tema);
+  // 1. Bannerele, randurile si textele demo, prin „Publică”. Etapa 25.3: ale ORICAREI teme (dupa urma si dupa forma), nu
+  //    doar ale temei din urma: un magazin care a adunat date de la mai multe teme ramanea cu textele celorlalte.
+  {
+    const chei = pcFaraDemoAlAltorTeme(owned.ctx.pageContent, null);
+    delete chei[CHEIE_DATE_DEMO]; // urma iese la sfarsit (pasul 4), ca o stergere cazuta sa se poata relua
+    const continut: ContinutCiorna = { pc: chei, magazin: {} };
     const design = parseStoreDesign(row?.storefront_design ?? {}, contextCuCiorna(owned.ctx, continut));
-    const fara = tema ? tema.faraTexteleDemo(design, tema.date) : { design, schimbat: false };
+    const fara = faraTexteleTemelor(design, { siTexteleTemei: false });
     if (atingeCheiPc(continut) || fara.schimbat) {
       const publicat = await publishDesign(owned.businessId, ciornaCuContinut(fara.design, continut));
       if ("error" in publicat) return publicat;

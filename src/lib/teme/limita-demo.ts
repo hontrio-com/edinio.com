@@ -85,7 +85,11 @@ export async function citesteContextulPentruDemo(
   return { limita: getProductLimit(profil?.plan ?? "free"), produse, coduri: (coduri ?? []).map((c) => c.external_id) };
 }
 
-/** Locul pentru datele demo ale unei teme, din citirea comuna. */
+/**
+ * Locul pentru datele demo ale unei teme, din citirea comuna. Etapa 25.3: datele demo ale CELORLALTE teme pleaca la
+ * aplicare (in magazin ramane o singura tema demo), deci produsele lor nu mai ocupa loc.
+ */
 export function loculDinContext(context: ContextPentruDemo, tema: string, date: SetDateDemo): LoculPentruDemo {
-  return loculPentruDemo(context.limita, context.produse, produseDemoNoi(tema, date, context.coduri));
+  const pleaca = context.coduri.filter((c) => !String(c ?? "").startsWith(`${tema}:`)).length;
+  return loculPentruDemo(context.limita, Math.max(0, context.produse - pleaca), produseDemoNoi(tema, date, context.coduri));
 }

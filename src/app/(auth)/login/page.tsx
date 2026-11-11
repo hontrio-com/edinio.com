@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { login } from "@/lib/actions/auth.actions";
+import { esteRedirectareNext } from "@/lib/utils/redirectare-next";
 import { GoogleAuthButton } from "@/components/ui/GoogleAuthButton";
 
 export default function LoginPage() {
@@ -47,7 +48,11 @@ export default function LoginPage() {
         toast.error(result.error);
         setLoading(false);
       }
-    } catch {
+    } catch (e) {
+      // `login` intoarce `mergiLa`, nu redirectioneaza; ramura ramane pentru cazul in care o face vreodata.
+      if (esteRedirectareNext(e)) return;
+      // O cadere adevarata (retea, server): pana pe 11.11.2026 butonul revenea fara niciun cuvant.
+      toast.error("Nu am putut intra in cont. Verifica conexiunea si incearca din nou.");
       setLoading(false);
     }
   }

@@ -70,8 +70,9 @@ test("⚠⚠ tabelul versiunilor se atinge NUMAI cu magazinul proprietarului", (
   const s = sursa();
   // Fiecare lant, pana la `;` sau pana la capatul elementului din `Promise.all`, fara sa treaca in alt `.from(`.
   const cereri = [...s.matchAll(/\.from\("storefront_design_versions"\)((?:(?!\.from\()[\s\S])*?)(?:;|,\n)/g)].map((m) => m[1]);
-  // Etapa 17: si versiunile de dinainte de tema, „Pune la loc” si intrebarea paginii „Teme” (9).
-  assert.equal(cereri.length, 9, "o cerere noua pe tabel trebuie trecuta si aici");
+  // Etapa 17: si versiunile de dinainte de tema, „Pune la loc” si intrebarea paginii „Teme” (9). Etapa 25.6: prima
+  // versiune `tema`, pastrata la taiere si aratata in lista (11).
+  assert.equal(cereri.length, 11, "o cerere noua pe tabel trebuie trecuta si aici");
   for (const c of cereri) {
     // Insertul poarta magazinul in fiecare rand (mai jos).
     if (c.trimStart().startsWith(".insert(")) continue;
@@ -102,15 +103,20 @@ test("⚠ o versiune ceruta: id-ul validat, citirea cazuta deosebita de lipsa", 
   assert.match(f, /\.eq\("id", idVersiune\)\s*\.eq\("business_id", owned\.businessId\)\s*\.maybeSingle\(\);/);
   assert.match(f, /if \(error\) \{[\s\S]*?return \{ error: "Nu am putut citi versiunea acum\. Încearcă din nou\." \};\s*\}\s*if \(!data\) return \{ error: "Versiunea nu mai există\." \};/);
   const l = functia(sursa(), "listDesignVersions");
-  assert.match(l, /if \(error\) \{[\s\S]*?return \{ error: "Nu am putut citi istoricul\. Încearcă din nou\." \};/);
+  // Etapa 25.6: si citirea primei versiuni `tema`; oricare cazuta e o eroare, nu o lista mai scurta.
+  assert.match(l, /if \(error \|\| ePrima\) \{[\s\S]*?return \{ error: "Nu am putut citi istoricul\. Încearcă din nou\." \};/);
   assert.match(l, /\.order\("created_at", \{ ascending: false \}\)\s*\.limit\(VERSIUNI_PASTRATE\)/);
 });
 
 test("plafonul: ce trece de `VERSIUNI_PASTRATE` se sterge la scriere, cele mai vechi", () => {
   assert.match(pastreaza(), /if \(\(count \?\? 0\) \+ randuri\.length > VERSIUNI_PASTRATE\) await taieVersiunileVechi\(admin, owned\.businessId\);/);
   const t = taie();
-  assert.match(t, /\.order\("created_at", \{ ascending: false \}\)\s*\.range\(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE \+ 99\);/);
-  assert.match(t, /\.delete\(\)\s*\.eq\("business_id", businessId\)\s*\.in\("id", vechi\.map\(\(r\) => r\.id\)\);/);
+  assert.match(t, /\.order\("created_at", \{ ascending: false \}\)\s*\.range\(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE \+ 99\),/);
+  // Etapa 25.6: prima versiune `tema` (designul de dinainte de prima tema) nu se taie, oricate teme s-ar incerca.
+  assert.match(t, /const deSters = \(vechi \?\? \[\]\)\.map\(\(r\) => r\.id\)\.filter\(\(id\) => id !== prima\);/);
+  assert.match(t, /\.delete\(\)\s*\.eq\("business_id", businessId\)\s*\.in\("id", deSters\);/);
+  const prima = corp(sursa(), "async function primaVersiuneDeTema(");
+  assert.match(prima, /\.eq\("business_id", businessId\)\s*\.eq\("origine", "tema"\)\s*\.order\("created_at", \{ ascending: true \}\)\s*\.limit\(1\)/);
 });
 
 test("⚠⚠ migratia: RLS fara politici, niciun drept pentru `anon` si `authenticated`, verificate chiar in ea", () => {

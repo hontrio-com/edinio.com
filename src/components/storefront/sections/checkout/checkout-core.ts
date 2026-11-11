@@ -902,7 +902,23 @@ export function useCheckoutOrder({
           value: grandTotal, currency: "RON",
           ...continutTikTokDinCos(items.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
         });
-        const result = await placeCartOrder(payload);
+        /*
+         * ⚠ PRINDEREA, ca in `OrderModal` (gasit 11.11.2026, la recitirea probei de dinaintea lansarii; existent si in
+         * productie). Fara ea, o actiune care arunca (retea, timp depasit, un raspuns refuzat) era re-aruncata de React
+         * la randare, iar singurele bariere de erori sunt la radacina (`app/error.tsx`): cumparatorul primea pagina
+         * „500” peste cos si pierdea formularul. Iar daca se pierduse doar raspunsul, comanda era deja inregistrata si,
+         * fara `placedRef` (pierdut odata cu pagina), a doua trimitere facea a doua comanda.
+         * ⚠ Mesajul spune ce stim si ce nu: comanda poate sa fi intrat. Clichetul de tranzitii socotea fisierul prins
+         * fiindca gasea `catch`-ul de pe `res.json()`, de mai jos; acum se uita la fiecare asteptare. Mesajele:
+         * `lib/orders/cosul-prinde-caderea-comenzii.test.ts`.
+         */
+        let result: Awaited<ReturnType<typeof placeCartOrder>>;
+        try {
+          result = await placeCartOrder(payload);
+        } catch {
+          setErrors({ _: "Nu am primit raspuns de la server si nu stim daca s-a inregistrat comanda. Verifica-ti emailul sau scrie-ne inainte sa trimiti din nou." });
+          return;
+        }
         if ("error" in result) {
           /*
             ⚠⚠ CUPONUL SE SCOATE DIN COS CAND CHIAR EL A OPRIT COMANDA.
@@ -944,11 +960,19 @@ export function useCheckoutOrder({
           : paymentMethod === "klarna" ? "/api/klarna/start"
           : paymentMethod === "revolut" ? "/api/revolut/start"
           : "/api/ipay/start";
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, businessId }),
-        });
+        /* ⚠ Aceeasi prindere, cu ALT mesaj: comanda EXISTA deja si `placedRef` e pus, deci o reincercare nu creeaza
+           a doua comanda (ca in `OrderModal`). */
+        let res: Response;
+        try {
+          res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId, businessId }),
+          });
+        } catch {
+          setErrors({ _: "Comanda s-a inregistrat, dar plata nu a pornit. Incearca din nou: nu se va crea o a doua comanda." });
+          return;
+        }
         let data: { url?: string; redirectUrl?: string; error?: string } = {};
         try { data = await res.json(); } catch { /* non-JSON response (e.g. error page) — show generic error below */ }
         const redirect = data.url ?? data.redirectUrl;

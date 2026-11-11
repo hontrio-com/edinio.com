@@ -9,6 +9,7 @@ import { Loader2, Eye, EyeOff, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { registerSchema, type RegisterInput } from "@/lib/validations/auth";
 import { register as registerAction } from "@/lib/actions/auth.actions";
+import { esteRedirectareNext } from "@/lib/utils/redirectare-next";
 import { GoogleAuthButton } from "@/components/ui/GoogleAuthButton";
 
 function PasswordStrength({ password }: { password: string }) {
@@ -75,7 +76,11 @@ function RegisterForm() {
         toast.error(result.error);
         setLoading(false);
       }
-    } catch {
+    } catch (e) {
+      // Inscrierea reusita se incheie cu `redirect()`, care ajunge aici ca respingere: pagina pleaca, nu e o cadere.
+      if (esteRedirectareNext(e)) return;
+      // O cadere adevarata (retea, server): pana pe 11.11.2026 butonul revenea fara niciun cuvant.
+      toast.error("Nu am putut crea contul. Verifica conexiunea si incearca din nou.");
       setLoading(false);
     }
   }

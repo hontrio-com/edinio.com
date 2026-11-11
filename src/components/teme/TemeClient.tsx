@@ -44,15 +44,22 @@ export interface TemaPeCard {
  * Refacuta pe 08.11.2026 (cererea lui: mai moderna, mai multe teme pe rand, carduri premium, fara bulina de culoare,
  * poza care se deruleaza in loc de demo-ul viu, fereastra „Aplică tema” mai premium).
  */
-export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLaLoc, dateDemo, areCiorna, public: estePublic }: {
+export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLaLoc, laLocDemoInainte, dateDemo, areProduseProprii, areCiorna, public: estePublic }: {
   businessId: string;
   teme: TemaPeCard[];
   aplicata: { cheie: string } | null;
   /** Data aplicarii, scrisa pe server (fusul orar al Romaniei). */
   aplicataLa: string | null;
   poatePuneLaLoc: boolean;
-  /** Datele demo din magazin acum (etapa 18.4); `null` = niciunele. */
-  dateDemo: { produse: number } | null;
+  /**
+   * Etapa 25.3: tema ale carei date demo revin la „Pune la loc” (`null` = niciuna); `undefined` = versiune de dinainte de
+   * 11.11.2026, care readuce doar designul.
+   */
+  laLocDemoInainte?: string | null;
+  /** Datele demo din magazin acum (etapa 18.4) si tema lor, dupa urma (`null` = necunoscuta); `null` = niciunele. */
+  dateDemo: { produse: number; tema: string | null } | null;
+  /** Magazinul are produse care nu sunt demo (etapa 25.5): atunci bifa datelor demo porneste OPRITA. */
+  areProduseProprii: boolean;
   areCiorna: boolean;
   public: boolean;
 }) {
@@ -60,19 +67,23 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
   const [deAplicat, setDeAplicat] = useState<TemaPeCard | null>(null);
   /*
    * Bifa „Importă și datele demo”: PORNITA la fiecare deschidere a ferestrei (cerut de el, 08.11.2026; pana atunci
-   * oprita, „in caz ca vrea”). Cand planul n-o incape (`motivOprit`), starea ramane `true`: comutatorul doar SE VEDE
-   * oprit si stins. Ce conteaza e `cuDate && motivOprit === null`, calculat o data in `aplica`, nu `cuDate` singur.
+   * oprita, „in caz ca vrea”), dar din 11.11.2026 (etapa 25.5) doar la un magazin FARA produse proprii: la unul care vinde
+   * deja, un clic grabit punea produse demo pe care clientii le puteau comanda. Cand planul n-o incape (`motivOprit`),
+   * comutatorul doar SE VEDE oprit si stins. Ce conteaza e `cuDate && motivOprit === null`, calculat o data in `aplica`.
    */
-  const [cuDate, setCuDate] = useState(true);
+  const bifaImplicita = !areProduseProprii;
+  const [cuDate, setCuDate] = useState(bifaImplicita);
   const [laLoc, setLaLoc] = useState(false);
   const [deSters, setDeSters] = useState(false);
   const [lucreaza, porneste] = useLucru();
   const temaActiva = aplicata ? teme.find((t) => t.cheie === aplicata.cheie) ?? null : null;
 
   const deschideAplicarea = (t: TemaPeCard) => {
-    setCuDate(true);
+    setCuDate(bifaImplicita);
     setDeAplicat(t);
   };
+  const numeTema = (cheie: string | null | undefined) => (cheie ? teme.find((t) => t.cheie === cheie)?.nume ?? null : null);
+  const temaDemoAcum = numeTema(dateDemo?.tema);
 
   const aplica = (t: TemaPeCard) => porneste(async () => {
     /*
@@ -111,6 +122,7 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
     }
     setLaLoc(false);
     toast.success("Designul de dinainte e din nou în magazin.");
+    if ("nota" in r) toast.message(r.nota);
     router.refresh();
   });
 
@@ -163,7 +175,7 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
             <div className={cn("flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5", (temaActiva || poatePuneLaLoc) && "border-t border-border")}>
               <Database className="h-4 w-4 shrink-0 text-muted-foreground" />
               <p className="min-w-[16rem] flex-1 text-sm text-muted-foreground">
-                În magazin sunt datele demo ale temei: {pluralRo(dateDemo.produse, "produs demo", "produse demo")}, cu categoriile,
+                În magazin sunt datele demo ale temei{temaDemoAcum ? ` ${temaDemoAcum}` : ""}: {pluralRo(dateDemo.produse, "produs demo", "produse demo")}, cu categoriile,
                 bannerele și rândurile lor. Le ștergi într-un clic, când nu mai ai nevoie de ele.
               </p>
               <Button variant="outline" size="sm" disabled={lucreaza} onClick={() => setDeSters(true)}>
@@ -223,6 +235,7 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
                             Ca magazinul să arate ca în demo: {pluralRo(deAplicat.demo.produse, "produs", "produse")} cu categoriile lor,{" "}
                             {pluralRo(deAplicat.demo.bannere, "banner", "bannere")}, {pluralRo(deAplicat.demo.randuri, "rând", "rânduri")} pe prima pagină
                             și textele de exemplu ale temei.
+                            {areProduseProprii && " Magazinul tău are deja produse, de aceea pornește oprită."}
                           </span>
                         )}
                       </span>
@@ -235,10 +248,15 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
                     </label>
                     {cuDate && deAplicat.demo.motivOprit === null && (
                       <ul className="mt-3 space-y-1.5 border-t border-border pt-3 text-xs text-foreground list-disc pl-5">
-                        <li>Se adaugă lângă ale tale, marcate demo; nu se șterge și nu se suprascrie nimic din ce ai.</li>
+                        <li>Se adaugă lângă ale tale, marcate demo; nu se șterge și nu se suprascrie nimic din ce e al tău.</li>
+                        {dateDemo && dateDemo.tema !== deAplicat.cheie && (
+                          <li>
+                            Datele demo de acum{temaDemoAcum ? ` (ale temei ${temaDemoAcum})` : ""} pleacă întâi: în magazin rămân doar cele ale temei {deAplicat.nume}.
+                          </li>
+                        )}
                         <li>Produsele demo nu pleacă în Google, Meta, marketplace-uri sau newsletter și nu apar în căutările Google.</li>
                         {deAplicat.demo.limita !== null && (
-                          <li>Intră în limita planului tău ({pluralRo(deAplicat.demo.produse)} din {deAplicat.demo.limita.toLocaleString("ro-RO")}) până le ștergi.</li>
+                          <li>Cele {pluralRo(deAplicat.demo.produse)} intră în limita planului tău, de {pluralRo(deAplicat.demo.limita)}, până le ștergi.</li>
                         )}
                         {estePublic && <li>Magazinul e vizibil: clienții văd produsele demo și le pot comanda până le ștergi.</li>}
                         <li>Le ștergi oricând de aici, cu „Șterge datele demo”.</li>
@@ -272,9 +290,16 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
               Magazinul revine la designul, culoarea și fonturile de dinainte de temă. Ce ai publicat după aplicare rămâne în Istoric.
             </DialogDescription>
           </DialogHeader>
-          {dateDemo && (
+          {laLocDemoInainte === undefined ? (dateDemo && (
             <p className="text-sm text-foreground">
               Bannerele și rândurile demo pleacă odată cu designul, dar produsele și categoriile demo rămân în magazin până le ștergi cu „Șterge datele demo”.
+            </p>
+          )) : (dateDemo?.tema ?? null) !== laLocDemoInainte && (
+            /* Etapa 25.3: versiunile din 11.11.2026 readuc magazinul intocmai, cu datele demo de atunci. */
+            <p className="text-sm text-foreground">
+              {dateDemo
+                ? `Datele demo de acum${temaDemoAcum ? ` (ale temei ${temaDemoAcum})` : ""} pleacă${laLocDemoInainte ? `, iar cele ale temei ${numeTema(laLocDemoInainte) ?? laLocDemoInainte} revin` : ""}.`
+                : `Revin și datele demo ale temei ${numeTema(laLocDemoInainte) ?? laLocDemoInainte}, ca înainte.`}
             </p>
           )}
           {areCiorna && (

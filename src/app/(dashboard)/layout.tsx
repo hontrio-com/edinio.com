@@ -19,6 +19,9 @@ import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { CadruPanou } from "@/components/dashboard/CadruPanou";
 import { NotificariToast } from "@/components/ui/NotificariToast";
+import { Suspense } from "react";
+import { TurActualizare } from "@/components/dashboard/TurActualizare";
+import { deschideLaIntrare } from "@/lib/actualizari/tur-actualizare";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -28,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const esteImpersonare = (await cookies()).get("impersonare")?.value != null;
 
   const [{ data: profile }, { data: businesses }] = await Promise.all([
-    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at, mfa_email_enabled").eq("id", user.id).single(),
+    supabase.from("users_profile").select("full_name, plan, role, onboarding_completed, plan_expires_at, orders_seen_at, payment_failed_at, mfa_email_enabled, announcements_seen_at").eq("id", user.id).single(),
     supabase.from("businesses").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
   ]);
 
@@ -56,6 +59,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   if (!profile?.onboarding_completed) redirect("/onboarding/details");
+
+  /*
+   * Turul actualizarii („Ce e nou în Edinio”): se deschide singur o singura data, pentru conturile de dinainte de
+   * lansare care nu l-au inchis inca, si niciodata in impersonare. Regula si continutul: `lib/actualizari`.
+   */
+  const turLaIntrare = deschideLaIntrare({
+    contCreatLa: user.created_at,
+    vazutLa: profile.announcements_seen_at,
+    impersonare: esteImpersonare,
+  });
 
   const allBusinesses = businesses ?? [];
   const currentBusiness = allBusinesses[0] ?? null;
@@ -227,6 +240,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         {children}
       </CadruPanou>
       <NotificariToast />
+      {/* `Suspense`: fereastra citeste `?tur=actualizare` din adresa (`useSearchParams`). */}
+      <Suspense fallback={null}>
+        <TurActualizare laIntrare={turLaIntrare} />
+      </Suspense>
     </div>
   );
 }

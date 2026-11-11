@@ -401,12 +401,20 @@ async function ContinutPanou({
         </div>
       </div>
 
-      {noutati.length > 0 && (
-        <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Noutati</h2>
-          <ListaNoutati noutati={noutati} />
+      {/*
+        Turul actualizarii se redeschide oricand de aici (fereastra din layout citeste `?tur=actualizare`), deci
+        capul sectiunii se vede si cand nu e niciun anunt publicat.
+      */}
+      <div className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-foreground">Noutăți</h2>
+          <Link href="/dashboard?tur=actualizare" scroll={false}
+            className="inline-flex min-h-6 items-center rounded-md text-xs font-medium text-[var(--primary-text)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+            Ce e nou în editor
+          </Link>
         </div>
-      )}
+        {noutati.length > 0 && <ListaNoutati noutati={noutati} />}
+      </div>
     </>
   );
 }

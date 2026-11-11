@@ -85,6 +85,8 @@
   --popover-foreground: oklch(0.141 0.005 285.823);
   --primary: oklch(0.528 0.173 143.725);
   --primary-foreground: oklch(1 0 0);
+  /* Etapa 25.14: verdele ca TEXT pe fondul lui pal (`bg-primary/10`, meniul lateral): 4,31:1 cu --primary, ~5,5:1 asa. */
+  --primary-text: oklch(0.47 0.16 143.725);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.141 0.005 285.823);
   --muted: oklch(0.967 0.001 286.375);
@@ -1512,6 +1514,7 @@
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.573 0.187 143.725);
   --primary-foreground: oklch(1 0 0);
+  --primary-text: oklch(0.72 0.17 143.725);
   --secondary: oklch(0.269 0.005 285.823);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0.005 285.823);

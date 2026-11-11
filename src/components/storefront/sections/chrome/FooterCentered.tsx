@@ -42,7 +42,8 @@ export function FooterCentered({ sectiune }: { sectiune: SectionInstance }) {
         <div className="flex flex-col items-center text-center gap-5">
           {coloane.map((c) => (
             <MarcajBloc key={c.id} idSectiune={sectiune.id} idBlocului={c.id} eticheta={etichetaColoanei(c)}>
-              <RandCentrat coloana={c} idSubsol={sectiune.id} />
+              <RandCentrat coloana={c} idSubsol={sectiune.id}
+                nrLinkuri={coloane.filter((k) => k.type === "linkuri").findIndex((k) => k.id === c.id) + 1} />
             </MarcajBloc>
           ))}
 
@@ -52,7 +53,7 @@ export function FooterCentered({ sectiune }: { sectiune: SectionInstance }) {
               al doilea URL pentru aceeasi pagina si ar sari brusc sus. */}
           {inapoiSusPornit(sectiune) && (
             <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
+              className="mt-1 inline-flex min-h-8 items-center gap-1.5 px-2 text-xs font-medium cursor-pointer text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors">
               <ArrowUp className="h-3.5 w-3.5" />
               Inapoi sus
             </button>
@@ -86,7 +87,7 @@ function CuTitlu({ titlu, children }: { titlu: string; children: ReactNode }) {
 }
 
 /** Un rand al subsolului centrat, dupa tipul coloanei: copiii lui stau direct in coloana cu `gap-5`. */
-function RandCentrat({ coloana, idSubsol }: { coloana: BlockInstance; idSubsol: string }) {
+function RandCentrat({ coloana, idSubsol, nrLinkuri = 1 }: { coloana: BlockInstance; idSubsol: string; nrLinkuri?: number }) {
   const { business, basePath, pageContent, social, esteEditorDesign } = useStoreChrome();
   const linkuri = useLinkuriColoanei(coloana);
   const s = coloana.settings;
@@ -134,7 +135,8 @@ function RandCentrat({ coloana, idSubsol }: { coloana: BlockInstance; idSubsol: 
       if (linkuri.length === 0) return gol("Coloana nu are linkuri.");
       return (
         <CuTitlu titlu={titlu}>
-          <nav className="flex flex-wrap items-center justify-center gap-x-7 gap-y-2">
+          {/* Etapa 25.21: un subsol poate avea mai multe coloane de linkuri; fiecare reper are numele lui (axe, „landmark-unique”). */}
+          <nav aria-label={titlu || (nrLinkuri > 1 ? `Linkuri subsol ${nrLinkuri}` : "Linkuri subsol")} className="flex flex-wrap items-center justify-center gap-x-7 gap-y-2">
             {linkuri.map((l) => (
               <a key={l.cheie} href={l.href} {...(l.extern ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 className="text-sm font-medium hover:opacity-60 transition-opacity">

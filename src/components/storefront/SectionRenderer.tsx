@@ -335,7 +335,11 @@ function LocGol({ eticheta }: { eticheta: string }) {
  * ca orice sectiune mutata dupa una pe toata latimea se lipeste de marginea ei
  * de jos — adica exact ce produce reordonarea din editor.
  */
-export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
+export function SectionRenderer({ sections, faraMain = false }: {
+  sections: SectionInstance[];
+  /** Pagina are deja un <main> in jurul tuturor sectiunilor (`MiniStoreRenderer`, etapa 25.21): seria lui e un simplu container. */
+  faraMain?: boolean;
+}) {
   // Imaginile din PRIMA sectiune sunt candidatele pentru LCP („cel mai mare
   // element vizibil"), metrica dupa care Google judeca viteza perceputa. Fara
   // `priority`, `next/image` le incarca lenes: browserul le descopera abia dupa
@@ -350,7 +354,7 @@ export function SectionRenderer({ sections }: { sections: SectionInstance[] }) {
           <Fragment key={bloc.section.id}>
             <Marcata section={bloc.section} estePrima={bloc.section.id === idPrimeiSectiuni} />
           </Fragment>
-        ) : bloc.esteMain ? (
+        ) : bloc.esteMain && !faraMain ? (
           <main key={`grup-${bloc.sections[0].id}`} className="max-w-[var(--st-container,72rem)] mx-auto px-4 py-10">
             {bloc.sections.map((s) => <Marcata key={s.id} section={s} estePrima={s.id === idPrimeiSectiuni} />)}
           </main>

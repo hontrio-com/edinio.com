@@ -60,8 +60,8 @@ test("⚠ proba chiar citeste doua fisiere diferite", () => {
 
 test("ordinea sectiunilor e cea ceruta de proprietar (20.09.2026)", () => {
   const ceruta = [
-    "Panou principal", "Comenzi", "Clienti", "Produse", "Discounturi",
-    "Oferte", "Statistici", "Cosuri abandonate", "SMS Marketing", "Integrari",
+    "Panou principal", "Comenzi", "Clienți", "Produse", "Discounturi",
+    "Oferte", "Statistici", "Coșuri abandonate", "SMS Marketing", "Integrări",
   ];
   assert.deepEqual(MENIU_PANOU.map((i) => i.label).slice(0, ceruta.length), ceruta);
 });

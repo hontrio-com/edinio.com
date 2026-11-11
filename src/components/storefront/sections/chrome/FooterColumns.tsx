@@ -80,7 +80,7 @@ export function FooterColumns({ ton = "deschis", sectiune }: { ton?: TonFooter; 
           <div className="pb-6 flex justify-center">
             {/* Buton, nu ancora: nu e o destinatie (vezi `FooterCentered`). */}
             <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className={`inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer ${marunt} hover:opacity-80 transition-opacity`}>
+              className={`inline-flex min-h-8 items-center gap-1.5 px-2 text-xs font-medium cursor-pointer ${marunt} hover:opacity-80 transition-opacity`}>
               <ArrowUp className="h-3.5 w-3.5" />
               Inapoi sus
             </button>
@@ -289,7 +289,8 @@ function Coloana({ titlu, children, separator, marunt, titluCls }: {
           dispare cu totul in loc sa fie doar inert: altfel ar ramane in ordinea
           de tabulare si ar anunta „restrans" peste o lista vizibila. */}
       <button type="button" onClick={() => setDeschisa((v) => !v)} aria-expanded={deschisa} aria-controls={idLista}
-        className="w-full flex items-center justify-between gap-2 md:hidden">
+        // Etapa 25.16: 44 px pe telefon (era cat titlul, 18 px): sunt butoane de deget, pe toata latimea.
+        className="w-full min-h-11 flex items-center justify-between gap-2 md:hidden">
         <span className={clasaTitlu}>{titlu}</span>
         <ChevronDown className={`h-4 w-4 transition-transform ${marunt} ${deschisa ? "rotate-180" : ""}`} />
       </button>

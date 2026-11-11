@@ -69,8 +69,8 @@ export function MediaLibraryClient() {
     maxBatch: 100,
     imageBucket: "gallery",
     onComplete: ({ done, failed }) => {
-      if (done > 0) { toast.success(`${done} fisier(e) incarcate.`); load(); }
-      if (failed > 0) toast.error(`${failed} fisier(e) nu au putut fi incarcate.`);
+      if (done > 0) { toast.success(`${done} fișier(e) încărcate.`); load(); }
+      if (failed > 0) toast.error(`${failed} fișier(e) nu au putut fi încărcate.`);
     },
   });
 
@@ -161,7 +161,7 @@ export function MediaLibraryClient() {
     const res = await deleteMedia(ids);
     setDeleteTargets(null);
     if ("error" in res) { toast.error(res.error); return; }
-    toast.success(`${res.deleted} fisier(e) sterse.`);
+    toast.success(`${res.deleted} fișier(e) șterse.`);
     setRows((prev) => prev.filter((r) => !ids.includes(r.id)));
     setSelected(new Set());
     setSelectionMode(false);
@@ -201,7 +201,7 @@ export function MediaLibraryClient() {
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="Cauta dupa nume, titlu, text alternativ..."
+            placeholder="Caută după nume, titlu, text alternativ..."
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
         </div>
         <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value as TypeFilter); setPage(1); }}
@@ -217,7 +217,7 @@ export function MediaLibraryClient() {
         </select>
         <select value={usageFilter} onChange={(e) => { setUsageFilter(e.target.value as UsageFilter); setPage(1); }}
           className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
-          <option value="all">Folosite si nefolosite</option>
+          <option value="all">Folosite și nefolosite</option>
           <option value="used">Doar folosite</option>
           <option value="unused">Doar nefolosite</option>
         </select>
@@ -235,7 +235,7 @@ export function MediaLibraryClient() {
           <div className="flex items-center gap-3 text-sm">
             <span className="font-medium">{selected.size} selectate</span>
             <button onClick={selectAllFiltered} className="text-primary hover:underline">Selecteaza tot ({filtered.length})</button>
-            {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="text-muted-foreground hover:underline">Deselecteaza</button>}
+            {selected.size > 0 && <button onClick={() => setSelected(new Set())} className="text-muted-foreground hover:underline">Deselectează</button>}
           </div>
           <button onClick={() => requestDelete(selectedRows)} disabled={selected.size === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-40">
@@ -403,7 +403,7 @@ function MediaDrawer({
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-background border-l border-border w-full max-w-md h-full overflow-y-auto shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border sticky top-0 bg-background z-10">
-          <h3 className="text-sm font-bold">Detalii fisier</h3>
+          <h3 className="text-sm font-bold">Detalii fișier</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-accent text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
 
@@ -419,10 +419,10 @@ function MediaDrawer({
           <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
             <div className="truncate"><span className="font-medium text-foreground">Nume:</span> {row.file_name ?? "—"}</div>
             <div><span className="font-medium text-foreground">Tip:</span> {row.type === "video" ? "Video" : "Imagine"}</div>
-            <div><span className="font-medium text-foreground">Marime:</span> {formatBytes(row.size_bytes)}</div>
+            <div><span className="font-medium text-foreground">Mărime:</span> {formatBytes(row.size_bytes)}</div>
             <div><span className="font-medium text-foreground">Dimensiuni:</span> {row.width && row.height ? `${row.width}×${row.height}` : "—"}</div>
             <div><span className="font-medium text-foreground">Sursa:</span> {FOLDER_LABELS[row.folder ?? "other"] ?? row.folder}</div>
-            <div><span className="font-medium text-foreground">Adaugat:</span> {new Date(row.created_at).toLocaleDateString("ro-RO")}</div>
+            <div><span className="font-medium text-foreground">Adăugat:</span> {new Date(row.created_at).toLocaleDateString("ro-RO")}</div>
           </div>
 
           <button onClick={copyUrl} className="flex items-center gap-1.5 text-xs text-primary hover:underline">
@@ -441,16 +441,16 @@ function MediaDrawer({
 
           {/* SEO metadata */}
           <div className="space-y-3">
-            <Field label="Titlu" value={title} onChange={setTitle} placeholder="Titlu fisier" />
-            <Field label="Text alternativ (alt)" value={alt} onChange={setAlt} placeholder="Descrie imaginea pentru SEO si accesibilitate" />
-            <Field label="Text asociat (caption)" value={caption} onChange={setCaption} placeholder="Legenda afisata sub imagine" />
+            <Field label="Titlu" value={title} onChange={setTitle} placeholder="Titlu fișier" />
+            <Field label="Text alternativ (alt)" value={alt} onChange={setAlt} placeholder="Descrie imaginea pentru SEO și accesibilitate" />
+            <Field label="Text asociat (caption)" value={caption} onChange={setCaption} placeholder="Legenda afișată sub imagine" />
             <div>
               <label className="text-xs font-semibold text-foreground">Descriere</label>
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
-                placeholder="Descriere detaliata (SEO)"
+                placeholder="Descriere detaliată (SEO)"
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
-            <Field label="Etichete (separate prin virgula)" value={tags} onChange={setTags} placeholder="ex: vara, reducere, nou" />
+            <Field label="Etichete (separate prin virgula)" value={tags} onChange={setTags} placeholder="ex: vară, reducere, nou" />
           </div>
 
           <div className="flex items-center gap-2 pt-2">
@@ -524,7 +524,7 @@ function DeleteDialog({
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 mt-5">
-            <button onClick={onCancel} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent">Anuleaza</button>
+            <button onClick={onCancel} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent">Anulează</button>
             <button onClick={() => { setBusy(true); onConfirm(); }} disabled={busy}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50">
               {busy && <Loader2 className="h-4 w-4 animate-spin" />} Sterge definitiv

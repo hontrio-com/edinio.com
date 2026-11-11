@@ -29,9 +29,9 @@ const DE_ADAUGAT = [
 export function ButonAdauga() {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-xs font-semibold text-background transition-colors hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+      <DropdownMenuTrigger aria-label="Adaugă" className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-xs font-semibold text-background transition-colors hover:bg-foreground/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
         <Plus className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Adauga</span>
+        <span className="hidden sm:inline">Adaugă</span>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" sideOffset={8} className="w-64 p-1.5">

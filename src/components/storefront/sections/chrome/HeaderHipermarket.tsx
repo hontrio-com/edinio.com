@@ -110,9 +110,9 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
                 ) : <span />}
                 <div className="hidden lg:flex items-center gap-6 shrink-0 text-white/80">
                   {business.email && (
-                    <a href={`mailto:${business.email}`} className="hover:text-white transition-colors truncate max-w-[16rem]">{business.email}</a>
+                    <a href={`mailto:${business.email}`} className="py-2.5 hover:text-white transition-colors truncate max-w-[16rem]">{business.email}</a>
                   )}
-                  <a href={`${basePath}/retur`} className="inline-flex items-center gap-1.5 hover:text-white transition-colors whitespace-nowrap">
+                  <a href={`${basePath}/retur`} className="inline-flex items-center gap-1.5 py-2.5 hover:text-white transition-colors whitespace-nowrap">
                     <Undo2 className="h-3.5 w-3.5" strokeWidth={2} />
                     Retur produs
                   </a>

@@ -188,7 +188,7 @@ function SearchBar({
         onChange={(e) => scrie(e.target.value)}
         placeholder="Cauta produse..."
         aria-label="Cauta produse"
-        className="flex-1 min-w-0 px-4 bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none rounded-l-[inherit]"
+        className="flex-1 min-w-0 self-stretch px-4 bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none rounded-l-[inherit]"
       />
 
       {categorii.length > 0 && (

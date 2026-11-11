@@ -79,8 +79,9 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
   // scrie comerciantul in bara de sus, iar ascuns sub `lg` nu l-ar vedea tocmai
   // clientul de pe telefon. Emailul are oricum pagina de contact.
   const emailCls = textSus
-    ? "hidden lg:block hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]"
-    : "hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]";
+    // Etapa 25.16: linkurile barii de sus au inaltimea barii (36 px), nu a randului de text (16 px).
+    ? "hidden lg:block py-2.5 hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]"
+    : "py-2.5 hover:text-[var(--st-text)] transition-colors truncate max-w-[14rem]";
   const despartitorCls = textSus ? "hidden lg:block text-[var(--st-border)]" : "text-[var(--st-border)]";
 
   return (
@@ -97,7 +98,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
                   </a>
                 )}
                 {business.email && <span aria-hidden className={despartitorCls}>|</span>}
-                <a href={`${basePath}/retur`} className="inline-flex items-center gap-1.5 hover:text-[var(--st-text)] transition-colors whitespace-nowrap">
+                <a href={`${basePath}/retur`} className="inline-flex items-center gap-1.5 py-2.5 hover:text-[var(--st-text)] transition-colors whitespace-nowrap">
                   <Undo2 className="h-3.5 w-3.5" strokeWidth={STROKE} />
                   Retur produs
                 </a>

@@ -165,7 +165,7 @@ test("⚠⚠ pagina de Decontari are un drum in meniu", () => {
     const s = sursa(fisier);
     assert.match(s, /href: "\/dashboard\/settlements"/,
       `${fisier} nu are intrarea „Decontari": pagina lipseste de pe ecranele servite de el`);
-    assert.match(s, /label: "Decontari"/, `${fisier} nu numeste intrarea`);
+    assert.match(s, /label: "Decontări"/, `${fisier} nu numeste intrarea`);
     /* Ancora: daca meniul nu mai contine nimic cunoscut, potrivirile de sus n-ar insemna nimic. */
     assert.match(s, /href: "\/dashboard\/orders"/, `${fisier} nu mai pare a fi un meniu`);
   }

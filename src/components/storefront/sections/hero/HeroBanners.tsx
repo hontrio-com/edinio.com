@@ -1,5 +1,6 @@
 "use client";
 
+import { incadrareMobil, SLOT_INCADRAT_MOBIL } from "@/lib/teme/incadrare-bannere";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
@@ -40,15 +41,19 @@ export function HeroBanners({ banners, links, alt, basePath }: HeroBannersProps)
   if (banners.length === 1) {
     const href = links?.[0] ? resolveHref(links[0], basePath) : null;
     const srcSet = bannerSrcSet(banners[0]);
+    // Etapa 25.17: un banner demo cu text in poza se arata pe telefon mai inalt, incadrat pe text (`incadrare-bannere.ts`).
+    const incadrare = incadrareMobil(banners[0]);
     const img = (
       // eslint-disable-next-line @next/next/no-img-element
       <img src={cdnImage(banners[0], 1600)} srcSet={srcSet} sizes={srcSet ? "100vw" : undefined} alt={href ? alt : ""} fetchPriority="high"
-        className="block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl" />
+        className={`block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl${incadrare ? " max-sm:h-full max-sm:object-cover" : ""}`}
+        style={incadrare ? { objectPosition: incadrare } : undefined} />
     );
+    const cadru = incadrare ? <div className={`${SLOT_INCADRAT_MOBIL} max-sm:overflow-hidden`}>{img}</div> : img;
     return (
       <section className="relative overflow-hidden md:pt-6">
         <div className="mx-auto md:max-w-6xl md:px-4">
-          {href ? <a href={href} className="block">{img}</a> : img}
+          {href ? <a href={href} className="block">{cadru}</a> : cadru}
         </div>
       </section>
     );
@@ -101,6 +106,9 @@ export function BannerSlider({
   // dinainte si hidratarea nu se plange.
   const [miscareRedusa, setMiscareRedusa] = useState(false);
   const count = banners.length;
+  // Etapa 25.17-25.18: bannerele demo cu incadrare pe telefon; una singura face tot caruselul mai inalt acolo (`max-sm`).
+  const incadrari = banners.map((b) => incadrareMobil(b));
+  const slot = incadrari.some(Boolean) ? `${slideClass} ${SLOT_INCADRAT_MOBIL}` : slideClass;
 
   const onScroll = useCallback(() => {
     const el = ref.current;
@@ -192,10 +200,11 @@ export function BannerSlider({
                 // magazinului — acelasi pentru toate slide-urile, deja citit ca H1.
                 // Cel cu link ramane cu nume, altfel linkul n-ar avea niciunul.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={cdnImage(src, 1600)} srcSet={srcSet} sizes={srcSet ? "100vw" : undefined} alt={href ? alt : ""} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover" />
+                <img src={cdnImage(src, 1600)} srcSet={srcSet} sizes={srcSet ? "100vw" : undefined} alt={href ? alt : ""} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover"
+                  style={incadrari[i] ? { objectPosition: incadrari[i]! } : undefined} />
               );
               return (
-                <div key={i} className={slideClass}>
+                <div key={i} className={slot}>
                   {href ? (
                     <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
                   ) : img}
@@ -204,6 +213,8 @@ export function BannerSlider({
             })}
           </div>
 
+          {/* Etapa 25.22: cu un singur banner (Deneb, Antares), nici sageti, nici puncte, nici pauza: n-au ce face. */}
+          {count > 1 && (<>
           <button type="button" aria-label="Banner anterior" onClick={() => goTo(index - 1)} className={`${arrow} left-2`}>
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -211,13 +222,20 @@ export function BannerSlider({
             <ChevronRight className="h-5 w-5" />
           </button>
 
-          <div className={`absolute left-1/2 -translate-x-1/2 z-10 flex ${paginare === "segmente" ? "bottom-4 gap-1.5" : "bottom-3 gap-1.5"}`}>
+          {/*
+            Etapa 25.16 (11.11.2026): butonul e tinta de atins, de cel putin 24x24 px (WCAG 2.5.8); punctul sau segmentul
+            se deseneaza inauntru. Pana atunci butonul era chiar desenul: 40x3 px, prea mic pentru deget.
+          */}
+          <div className={`absolute left-1/2 -translate-x-1/2 z-10 flex ${paginare === "segmente" ? "bottom-2.5 gap-1.5" : "bottom-1.5 gap-0"}`}>
             {banners.map((_, i) => (
               <button key={i} type="button" aria-label={`Mergi la banner ${i + 1}`} aria-current={i === index ? "true" : undefined} onClick={() => goTo(i)}
-                className={paginare === "segmente"
-                  ? `h-[3px] w-10 sm:w-14 rounded-full transition-colors ${i === index ? "" : "bg-white/75 hover:bg-white"}`
-                  : `h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 hover:bg-surface/80"}`}
-                style={paginare === "segmente" && i === index ? { backgroundColor: "var(--st-accent)" } : undefined} />
+                className="group/punct flex h-6 min-w-6 items-center justify-center">
+                <span aria-hidden="true"
+                  className={paginare === "segmente"
+                    ? `block h-[3px] w-10 sm:w-14 rounded-full transition-colors ${i === index ? "" : "bg-white/75 group-hover/punct:bg-white"}`
+                    : `block h-1.5 rounded-full transition-all ${i === index ? "w-5 bg-surface" : "w-1.5 bg-surface/60 group-hover/punct:bg-surface/80"}`}
+                  style={paginare === "segmente" && i === index ? { backgroundColor: "var(--st-accent)" } : undefined} />
+              </button>
             ))}
           </div>
 
@@ -226,7 +244,9 @@ export function BannerSlider({
               butonul e vizibil pe orice ecran, in coltul opus punctelor. Cand
               sistemul cere miscare redusa nu porneste nimic, deci nici butonul
               n-are ce opri. */}
-          {!miscareRedusa && (
+          </>)}
+
+          {!miscareRedusa && count > 1 && (
             <button type="button"
               onClick={() => {
                 // Butonul ramane focusat dupa click, iar focusul e el insusi o

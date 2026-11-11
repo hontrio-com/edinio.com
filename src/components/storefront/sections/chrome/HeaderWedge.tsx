@@ -106,7 +106,7 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
             {/* Intrarile se scurteaza cand nu incap, in loc sa iasa din nav: textul
                 meniului are culoarea benzii inchise si peste pana ar deveni
                 ilizibil, iar ultimele intrari ar trece si peste iconite. */}
-            <nav className={`hidden lg:flex items-center gap-8 min-w-0 ${meniuStanga ? "" : "mx-auto"}`}>
+            <nav aria-label="Meniu principal" className={`hidden lg:flex items-center gap-8 min-w-0 ${meniuStanga ? "" : "mx-auto"}`}>
               {menu.map((it) => {
                 const activ = esteActiv(it, { currentPageSlug, isHome });
                 return (

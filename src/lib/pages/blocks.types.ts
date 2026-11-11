@@ -585,11 +585,11 @@ export type Block =
 export type TipPaginaProprie = "pagina" | "articol" | "lista-articole" | "colectie" | "contact";
 
 export const TIPURI_PAGINA_PROPRIE: { valoare: TipPaginaProprie; eticheta: string; ajutor: string }[] = [
-  { valoare: "pagina", eticheta: "Pagina obisnuita", ajutor: "Orice pagina de continut: Despre noi, Termeni, o prezentare." },
-  { valoare: "articol", eticheta: "Articol de blog", ajutor: "Google o poate arata ca articol, cu titlu, imagine si data publicarii." },
-  { valoare: "lista-articole", eticheta: "Lista de articole (blog)", ajutor: "Pagina care aduna articolele. Le listeaza automat pe cele marcate ca articol." },
-  { valoare: "colectie", eticheta: "Colectie / categorie de produse", ajutor: "Pagina care prezinta o familie de produse (ex. Prosoape Hotel)." },
-  { valoare: "contact", eticheta: "Pagina de contact", ajutor: "Pagina cu datele de contact sau formularul de contact." },
+  { valoare: "pagina", eticheta: "Pagină obișnuită", ajutor: "Orice pagină de conținut: Despre noi, Termeni, o prezentare." },
+  { valoare: "articol", eticheta: "Articol de blog", ajutor: "Google o poate arăta ca articol, cu titlu, imagine și data publicării." },
+  { valoare: "lista-articole", eticheta: "Listă de articole (blog)", ajutor: "Pagina care adună articolele. Le listează automat pe cele marcate ca articol." },
+  { valoare: "colectie", eticheta: "Colecție / categorie de produse", ajutor: "Pagina care prezintă o familie de produse (ex. Prosoape Hotel)." },
+  { valoare: "contact", eticheta: "Pagină de contact", ajutor: "Pagina cu datele de contact sau formularul de contact." },
 ];
 
 /** SEO stored on the page row (custom_pages.seo jsonb). */
@@ -651,17 +651,17 @@ export const BLOCK_META: Record<BlockType, BlockMeta> = {
   gallery:  { type: "gallery",  label: "Galerie",         icon: "Images",       category: "media" },
   button:   { type: "button",   label: "Buton",           icon: "MousePointerClick", category: "content" },
   columns:  { type: "columns",  label: "Coloane",         icon: "Columns3",     category: "layout" },
-  spacer:   { type: "spacer",   label: "Spatiu",          icon: "MoveVertical", category: "layout" },
+  spacer:   { type: "spacer",   label: "Spațiu",          icon: "MoveVertical", category: "layout" },
   divider:  { type: "divider",  label: "Linie",           icon: "Minus",        category: "layout" },
   video:    { type: "video",    label: "Video",           icon: "Video",        category: "media" },
-  map:      { type: "map",      label: "Harta",           icon: "MapPin",       category: "media" },
-  faq:      { type: "faq",      label: "Intrebari (FAQ)", icon: "MessageCircleQuestion", category: "content" },
+  map:      { type: "map",      label: "Hartă",           icon: "MapPin",       category: "media" },
+  faq:      { type: "faq",      label: "Întrebări (FAQ)", icon: "MessageCircleQuestion", category: "content" },
   trust:    { type: "trust",    label: "Beneficii",       icon: "ShieldCheck",  category: "content" },
   products: { type: "products", label: "Produse",         icon: "Package",      category: "store" },
   social:   { type: "social",   label: "Social",          icon: "Share2",       category: "content" },
   contact:  { type: "contact",  label: "Formular contact", icon: "Mail",        category: "content" },
   html:     { type: "html",     label: "Cod personalizat", icon: "Code",        category: "advanced", advanced: true },
-  acasa:    { type: "acasa",    label: "Din pagina principala", icon: "Home",   category: "store" },
+  acasa:    { type: "acasa",    label: "Din pagina principală", icon: "Home",   category: "store" },
 };
 
 /** Order shown in the "add block" palette. */

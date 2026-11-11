@@ -73,7 +73,7 @@ export function DesignGallery({
             );
           })}
         </div>
-        <button type="button" onClick={onClose} aria-label="Inchide galeria"
+        <button type="button" onClick={onClose} aria-label="Închide galeria"
           className="w-10 h-10 rounded-xl border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
           <X className="h-4 w-4" />
         </button>

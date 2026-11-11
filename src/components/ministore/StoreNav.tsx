@@ -32,7 +32,7 @@ export function StoreNavLinks({ items, basePath, color, currentSlug, className }
   // isi taie continutul la marginea de START, iar acolo nu se poate derula —
   // primele intrari din meniu ar deveni de neatins.
   return (
-    <nav className={`hidden md:flex items-center min-w-0 overflow-x-auto ${className ?? ""}`}>
+    <nav aria-label="Meniu principal" className={`hidden md:flex items-center min-w-0 overflow-x-auto ${className ?? ""}`}>
       <span className="flex items-center gap-0.5 mx-auto">
       {items.map((it) => {
         const href = menuItemHref(it, basePath, categoriiRoot);
@@ -243,7 +243,7 @@ export function StoreNavHamburger({ items, basePath, color, currentSlug, logoUrl
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+            <nav aria-label="Meniu" className="flex-1 overflow-y-auto p-3 space-y-1">
               {items.map((it) => {
                 const href = menuItemHref(it, basePath, categoriiRoot);
                 const ext = isExternalLink(it);

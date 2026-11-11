@@ -79,7 +79,7 @@ export function MediaPicker({
     accept,
     imageBucket: bucket,
     onComplete: ({ failed, urls }) => {
-      if (failed > 0) toast.error(`${failed} fisier(e) nu au putut fi incarcate.`);
+      if (failed > 0) toast.error(`${failed} fișier(e) nu au putut fi încărcate.`);
       if (urls.length === 0) return;
       void load();
       setTab("library");
@@ -122,7 +122,7 @@ export function MediaPicker({
             <div className="px-5 pt-3">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cauta..."
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Caută..."
                   className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
             </div>
@@ -186,7 +186,7 @@ export function MediaPicker({
         <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border">
           <span className="text-xs text-muted-foreground">{selected.size} selectat(e)</span>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent">Anuleaza</button>
+            <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-accent">Anulează</button>
             <button type="button" onClick={confirm} disabled={selected.size === 0}
               className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40">
               Adauga {selected.size > 0 ? `(${selected.size})` : ""}

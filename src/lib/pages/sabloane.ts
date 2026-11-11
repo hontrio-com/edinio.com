@@ -31,8 +31,27 @@ export const DESPRE_SABLOANE: Record<Sablon, { nume: string; descriere: string; 
 
 export const esteSablon = (v: unknown): v is Sablon => typeof v === "string" && (SABLOANE as readonly string[]).includes(v);
 
-/** Blocurile unui sablon. `titlu` = titlul paginii, pus in capul ei unde are rost. */
-export function blocuriSablon(sablon: Sablon, titlu: string): Block[] {
+/** Datele de contact ale magazinului, pentru sablonul „Contact” (etapa 25.13). */
+export interface ContactMagazin {
+  telefon?: string | null;
+  email?: string | null;
+}
+
+const scapaHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * Randul cu datele de contact din sablonul „Contact”. Etapa 25.13 (11.11.2026): pana atunci scria mereu „07xx xxx xxx” si
+ * „contact@magazin.ro”, iar comerciantul care nu observa publica date false. Acum telefonul si emailul MAGAZINULUI; un
+ * camp lipsa ramane de completat, cu exemplul vechi.
+ */
+export function htmlContact(contact: ContactMagazin = {}): string {
+  const telefon = contact.telefon?.trim() ? scapaHtml(contact.telefon.trim()) : "07xx xxx xxx";
+  const email = contact.email?.trim() ? scapaHtml(contact.email.trim()) : "contact@magazin.ro";
+  return `<p><strong>Telefon:</strong> ${telefon}<br><strong>Email:</strong> ${email}<br><strong>Program:</strong> Luni–Vineri, 9:00–18:00</p>`;
+}
+
+/** Blocurile unui sablon. `titlu` = titlul paginii, pus in capul ei unde are rost; `contact`, la sablonul „Contact”. */
+export function blocuriSablon(sablon: Sablon, titlu: string, contact?: ContactMagazin): Block[] {
   const t = titlu.trim();
   const b = <T extends Block>(tip: T["type"], p: Partial<T>): Block => ({ ...createBlock(tip), ...p }) as Block;
 
@@ -65,7 +84,7 @@ export function blocuriSablon(sablon: Sablon, titlu: string): Block[] {
             { blocks: [{ ...createBlock("contact", { inColumn: true }), title: "Trimite-ne un mesaj" } as Block] },
             {
               blocks: [
-                { ...createBlock("text", { inColumn: true }), html: "<p><strong>Telefon:</strong> 07xx xxx xxx<br><strong>Email:</strong> contact@magazin.ro<br><strong>Program:</strong> Luni–Vineri, 9:00–18:00</p>" } as Block,
+                { ...createBlock("text", { inColumn: true }), html: htmlContact(contact) } as Block,
                 { ...createBlock("map", { inColumn: true }), wazeButton: true, googleButton: true, height: 280 } as Block,
               ],
             },

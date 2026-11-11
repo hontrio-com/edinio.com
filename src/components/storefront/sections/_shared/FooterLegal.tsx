@@ -41,16 +41,17 @@ const TON = {
   inchis: {
     // Alb 30% pe #0A0A0A da 2,6:1, sub pragul AA de 4,5:1 la 10px; 50% da 5,3:1.
     titlu: "text-[10px] font-semibold text-white/50 uppercase tracking-widest mb-3",
-    link: "text-[13px] text-white/50 hover:text-white transition-colors",
-    linkTare: "text-[13px] text-white/70 hover:text-white transition-colors font-medium",
+    // Etapa 25.16: tinta de cel putin 24 px inaltime (WCAG 2.5.8); pana atunci linkul era cat randul de text, 21 px.
+    link: "inline-flex min-h-6 items-center text-[13px] text-white/50 hover:text-white transition-colors",
+    linkTare: "inline-flex min-h-6 items-center text-[13px] text-white/70 hover:text-white transition-colors font-medium",
     // Alb 25% pe #0A0A0A da 2,1:1, sub pragul AA de 4,5:1 cerut la 11px; 50% il
     // urca la 5,3:1 si il aliniaza cu linkurile din acelasi bloc.
     copyright: "text-[11px] text-white/50",
   },
   deschis: {
     titlu: "text-[10px] font-semibold text-[var(--st-muted)] uppercase tracking-widest mb-3",
-    link: "text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors",
-    linkTare: "text-[13px] text-[var(--st-text)] hover:opacity-70 transition-opacity font-medium",
+    link: "inline-flex min-h-6 items-center text-[13px] text-[var(--st-muted)] hover:text-[var(--st-text)] transition-colors",
+    linkTare: "inline-flex min-h-6 items-center text-[13px] text-[var(--st-text)] hover:opacity-70 transition-opacity font-medium",
     copyright: "text-[11px] text-[var(--st-muted)]",
   },
 } as const;

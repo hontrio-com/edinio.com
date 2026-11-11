@@ -7,6 +7,7 @@ import {
 import { cn } from "@/lib/utils/cn";
 import { searchProductsForPicker } from "@/lib/actions/product-picker.actions";
 import { hrefCategorie } from "@/lib/storefront/category-href";
+import { linkAfisat, linkDeSalvat, schemaRefuzata } from "@/lib/pages/href";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -58,6 +59,8 @@ export function CampLink({
   const [cauta, setCauta] = useState(false);
   const cutie = useRef<HTMLDivElement>(null);
   const text = valoare ?? "";
+  // Etapa 25.9: un link pe care magazinul il refuza (`javascript:` si altele) se spune pe loc, nu devine tacut „#”.
+  const refuzata = schemaRefuzata(text);
 
   useEffect(() => {
     if (!deschis) return;
@@ -67,7 +70,7 @@ export function CampLink({
   }, [deschis]);
 
   /* Produsele se cauta pe server, dupa o pauza scurta, numai cand omul scrie un cuvant. */
-  const termen = text.trim();
+  const termen = linkAfisat(text).trim();
   const cautaProduse = deschis && !!date && termen.length >= 2 && !/^(https?:|mailto:|tel:|\/|#)/i.test(termen);
   useEffect(() => {
     if (!cautaProduse || !date) return;
@@ -110,7 +113,7 @@ export function CampLink({
 
   const filtrate = useMemo(() => {
     const q = termen.toLowerCase();
-    const potrivite = !q || q === "/" ? fixe : fixe.filter((s) => s.eticheta.toLowerCase().includes(q) || s.href.toLowerCase().includes(q));
+    const potrivite = !q || q === "/" ? fixe : fixe.filter((s) => s.eticheta.toLowerCase().includes(q) || linkAfisat(s.href).toLowerCase().includes(q));
     return [...potrivite.slice(0, 40), ...(cautaProduse ? produse : [])];
   }, [fixe, termen, produse, cautaProduse]);
 
@@ -133,8 +136,9 @@ export function CampLink({
       <label htmlFor={id} className="mb-1.5 block text-xs font-semibold text-foreground">{eticheta}</label>
       <input
         id={id}
-        value={text}
-        onChange={(e) => { onChange(e.target.value); setDeschis(true); }}
+        // Etapa 25.10: textul citibil („Termice și”, nu „%C8%99”); se salveaza tot forma codificata, fara pierderi.
+        value={linkAfisat(text)}
+        onChange={(e) => { onChange(linkDeSalvat(e.target.value)); setDeschis(true); }}
         onFocus={() => setDeschis(true)}
         onKeyDown={(e) => { if (e.key === "Escape") setDeschis(false); }}
         placeholder={placeholder ?? "Caută o pagină sau scrie un link"}
@@ -142,8 +146,16 @@ export function CampLink({
         role="combobox"
         aria-expanded={deschis}
         aria-controls={`${id}-lista`}
+        aria-invalid={refuzata ? true : undefined}
+        aria-describedby={refuzata ? `${id}-refuz` : undefined}
         className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30"
       />
+      {refuzata && (
+        <p id={`${id}-refuz`} role="alert" className="mt-1 text-[11px] leading-snug text-destructive">
+          Linkurile care încep cu „{refuzata}” nu sunt permise: în magazin nu duc nicăieri. Alege o pagină sau scrie o adresă
+          care începe cu https://, tel: sau mailto:.
+        </p>
+      )}
       {eticheteCunoscute && !deschis && (
         <p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
           <eticheteCunoscute.Icon className="h-3 w-3" /> {eticheteCunoscute.eticheta}
@@ -175,7 +187,7 @@ export function CampLink({
                   <s.Icon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate text-foreground">{s.eticheta}</span>
                   {s.nota && <span className="flex-shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{s.nota}</span>}
-                  <span className="max-w-[40%] flex-shrink-0 truncate font-mono text-[10px] text-muted-foreground">{s.href}</span>
+                  <span className="max-w-[40%] flex-shrink-0 truncate font-mono text-[10px] text-muted-foreground">{linkAfisat(s.href)}</span>
                 </button>
               ))}
             </div>

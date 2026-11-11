@@ -100,7 +100,7 @@ function ControlImagine({
         )}
         <button type="button" onClick={() => setDeschis(true)}
           className="flex-1 h-10 px-3 text-sm border border-border rounded-xl bg-surface text-foreground hover:bg-muted transition-colors">
-          {url ? "Schimba imaginea" : "Alege o imagine"}
+          {url ? "Schimbă imaginea" : "Alege o imagine"}
         </button>
         {url && (
           <button type="button" onClick={() => onChange(undefined)} aria-label="Scoate imaginea"

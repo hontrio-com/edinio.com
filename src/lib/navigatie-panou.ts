@@ -49,10 +49,10 @@ export const MENIU_PANOU: IntrarePanou[] = [
     children: [
       { href: "/dashboard/orders", label: "Toate comenzile" },
       { href: "/dashboard/returns", label: "Retururi" },
-      { href: "/dashboard/settlements", label: "Decontari" },
+      { href: "/dashboard/settlements", label: "Decontări" },
     ],
   },
-  { href: "/dashboard/customers", icon: Users, label: "Clienti" },
+  { href: "/dashboard/customers", icon: Users, label: "Clienți" },
   {
     href: "/dashboard/products", icon: Package, label: "Produse",
     children: [
@@ -65,11 +65,11 @@ export const MENIU_PANOU: IntrarePanou[] = [
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
   { href: "/dashboard/offers", icon: Sparkles, label: "Oferte" },
   { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
-  { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
+  { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Coșuri abandonate" },
   { href: "/dashboard/sms", icon: MessageSquare, label: "SMS Marketing", cheieOptionala: "smso" },
-  { href: "/dashboard/features", icon: Zap, label: "Integrari" },
+  { href: "/dashboard/features", icon: Zap, label: "Integrări" },
   {
-    href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
+    href: "/dashboard/editor", icon: Pencil, label: "Editează magazinul",
     /*
      * Un singur editor din 25.10.2026 (etapa 2 a editorului unic): „Design
      * magazin” si „Design sectiuni” erau doua ecrane pentru acelasi magazin.

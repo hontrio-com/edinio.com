@@ -217,7 +217,7 @@ export function VariantCard({
             {motivIndisponibil}
           </span>
         ) : activ ? (
-          <span className="shrink-0 h-9 px-3 rounded-xl bg-primary/10 text-primary text-sm font-semibold inline-flex items-center gap-1.5">
+          <span className="shrink-0 h-9 px-3 rounded-xl bg-primary/10 text-[var(--primary-text)] text-sm font-semibold inline-flex items-center gap-1.5">
             <Check className="h-4 w-4" />
             Activ
           </span>

@@ -170,12 +170,16 @@ export async function createPage(input: {
     : DESPRE_SABLOANE[sablon].tip;
   const descriere = (input.descriere ?? "").trim().slice(0, 300);
   const seo = curataSeoPagina({ tip, ...(descriere ? { description: descriere } : {}) } as PageSeo);
+  // Etapa 25.13: sablonul „Contact” scrie telefonul si emailul magazinului (proprietarul e deja verificat in `ctx`).
+  const { data: contactMagazin } = sablon === "contact"
+    ? await supabase.from("businesses").select("phone, email").eq("id", input.businessId).maybeSingle()
+    : { data: null };
 
   const { data, error } = await supabase
     .from("custom_pages")
     .insert({
       business_id: input.businessId, title, slug,
-      blocks: gateRawBlocks(blocuriSablon(sablon, title), ctx.isAdmin, ctx.userId) as never,
+      blocks: gateRawBlocks(blocuriSablon(sablon, title, { telefon: contactMagazin?.phone, email: contactMagazin?.email }), ctx.isAdmin, ctx.userId) as never,
       is_published: input.publicata === true,
       seo: seo as never,
     })

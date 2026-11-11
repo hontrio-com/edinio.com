@@ -1692,32 +1692,37 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       <ChromeSection section={standaloneAnnouncement(design)} />
       <ChromeSection section={design.chrome.header} />
 
-      {!areTitluDePagina && (
-        <h1 className="sr-only">
-          {business.store_name ?? business.business_name}
-          {business.tagline ? ` - ${business.tagline}` : ""}
-        </h1>
-      )}
-      {surface === "shop" ? (
-        <main>
+      {/*
+        Etapa 25.21 (11.11.2026): un singur <main>, cu TOT continutul paginii. Pana atunci <main> era doar seria cu catalogul,
+        iar H1-ul ascuns si sectiunile pe toata latimea (bannerul, beneficiile) stateau in afara oricarui reper (axe, „region”,
+        pe toate cele 30 de teme).
+      */}
+      <main>
+        {!areTitluDePagina && (
+          <h1 className="sr-only">
+            {business.store_name ?? business.business_name}
+            {business.tagline ? ` - ${business.tagline}` : ""}
+          </h1>
+        )}
+        {surface === "shop" ? (
           <MarcajSectiune sectiune={design.shop.page}>
             <FurnizorSloturiBlocuri sloturi={sloturiContinut}>
               <ShopPageSection variant={design.shop.page.variant} setari={design.shop.page.settings}
                 blocuri={continutMagazin ? design.shop.page.blocks : undefined} idPagina={design.shop.page.id} />
             </FurnizorSloturiBlocuri>
           </MarcajSectiune>
-        </main>
-      ) : (
-        <FurnizorSloturiBlocuri sloturi={sloturiAcasa}>
-          <SectionRenderer sections={sectiuniDeAcasa} />
-        </FurnizorSloturiBlocuri>
-      )}
+        ) : (
+          <FurnizorSloturiBlocuri sloturi={sloturiAcasa}>
+            <SectionRenderer sections={sectiuniDeAcasa} faraMain />
+          </FurnizorSloturiBlocuri>
+        )}
+      </main>
 
       <ChromeSection section={design.chrome.footer} />
       {editorDesign && <ConturEditor />}
 
-      {/* Floating buttons */}
-      <div className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>
+      {/* Floating buttons. Etapa 25.21: reper cu nume, ca linkurile de contact sa nu ramana in afara oricarui reper. */}
+      <aside aria-label="Contact rapid" className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>
         {showCall && (
           <a href={`tel:${business.phone}`}
             className="hover:scale-110 active:scale-95 transition-transform"
@@ -1742,7 +1747,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             </svg>
           </a>
         )}
-      </div>
+      </aside>
 
       {/*
         Manerul de cos de pe marginea din dreapta, pentru ecrane mari.

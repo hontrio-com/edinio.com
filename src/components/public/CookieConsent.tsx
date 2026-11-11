@@ -94,7 +94,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   // ── Informational only (store has no trackers) ───────────────────────────
   if (!hasChoices) {
     return (
-      <div className={wrapperClass}>
+      <div role="region" aria-label="Cookie-uri" className={wrapperClass}>
         <div className={isBar
           ? "bg-white border-t border-black/10 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]"
           : "bg-white rounded-2xl border border-black/10 shadow-xl"}>
@@ -122,7 +122,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   // ── Simple bottom-bar view (first visit, full-consent quick choice) ──────
   if (isBar) {
     return (
-      <div className={wrapperClass}>
+      <div role="region" aria-label="Cookie-uri" className={wrapperClass}>
         <div className="bg-white border-t border-black/10 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
           <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -155,7 +155,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
 
   // ── Card / details view (corner cards + center modal + bottom-bar "Setari") ─
   return (
-    <div className={wrapperClass}>
+    <div role="region" aria-label="Cookie-uri" className={wrapperClass}>
       <div className={`bg-white rounded-2xl border border-black/10 shadow-xl w-full ${isCenter ? "max-w-md" : ""} overflow-hidden`}>
         <div className="p-5">
           <div className="flex items-start justify-between gap-3 mb-3">

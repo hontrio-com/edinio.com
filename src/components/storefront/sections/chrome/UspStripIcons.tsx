@@ -46,14 +46,15 @@ export function UspStripIcons() {
           {badges.map((badge, i) => {
             const Icon = TRUST_ICONS[badge.icon] ?? ShieldCheck;
             return (
-              <div key={i} className="flex items-center gap-2.5">
+              <div key={i} className="flex items-start gap-2.5">
                 <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center"
                   style={{ backgroundColor: `${color}15`, color }}>
                   <Icon className="h-4.5 w-4.5" size={18} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-foreground truncate">{badge.title}</p>
-                  <p className="text-[10px] text-muted-foreground leading-tight truncate">{badge.desc}</p>
+                  {/* Etapa 25.22: pe doua randuri si la 11 px; taiat la unul, scria „Platesti cash curierului. Zer...” pe telefon. */}
+                  <p className="text-[11px] text-muted-foreground leading-tight line-clamp-2">{badge.desc}</p>
                 </div>
               </div>
             );

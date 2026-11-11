@@ -6,6 +6,7 @@ import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
 import { imagineaBannerului, textSetare } from "@/lib/storefront/design/hero-teme";
 import { hrefCatreProduse } from "@/lib/storefront/category-href";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
+import { incadrareMobil } from "@/lib/teme/incadrare-bannere";
 
 /**
  * Bannerul „panoramic” (tema Marte, etapa 24 din `docs/editor-magazin/PLAN.md`, dupa XStore Furniture Dark): o
@@ -32,7 +33,9 @@ export function HeroPanoramic({ settings }: { settings: Record<string, unknown> 
     <section className="mx-auto px-4 pt-5 sm:pt-6" style={{ maxWidth: "var(--st-container)" }}>
       <div className="relative isolate overflow-hidden rounded-[var(--st-radius-lg)] min-h-[440px] sm:min-h-[520px] lg:min-h-0 lg:aspect-[2.4/1] flex items-end"
         style={{ backgroundColor: "color-mix(in srgb, var(--st-primary) 30%, #0b0b0b)" }}>
-        {imagine && <Image src={imagine} alt="" fill priority sizes="100vw" className="-z-10 object-cover" />}
+        {/* Etapa 25.18: pe telefon placa e inalta, deci poza lata se decupeaza; o poza demo isi pastreaza subiectul in cadru. */}
+        {imagine && <Image src={imagine} alt="" fill priority sizes="100vw" className="-z-10 object-cover"
+          style={incadrareMobil(imagine) ? { objectPosition: incadrareMobil(imagine)! } : undefined} />}
         <span aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/25 to-black/5" />
         <div className={`w-full px-6 pb-10 sm:px-12 sm:pb-14 lg:pb-16 text-white ${laStanga ? "text-left lg:px-16" : "text-center"}`}>
           <h1 className="text-[36px] sm:text-[54px] xl:text-[72px] font-semibold leading-[1.02] tracking-tight"

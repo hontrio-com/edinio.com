@@ -2280,23 +2280,30 @@ demo” (0 demo, prima pagina arata produsele lui). Clichetul de tranzitii e acu
 
 ### B. Editorul
 - [x] 25.8 Stergerea din arbore (si din panoul sectiunii): mesaj cu „Anulează”, ca la clic dreapta.
-- [ ] 25.9 Link `javascript:`: mesaj in camp, nu inlocuire tacuta cu „#”.
-- [ ] 25.10 Linkurile se arata decodate in campuri („Termice și...”, nu „%C8%99”).
-- [ ] 25.11 Etichetele panoului cu diacritice (`registry.ts`, `BLOCK_META`, selectorul Bibliotecii Media); vitrina ramane
+- [x] 25.9 Link `javascript:`: mesaj in camp, nu inlocuire tacuta cu „#”.
+- [x] 25.10 Linkurile se arata decodate in campuri („Termice și...”, nu „%C8%99”).
+- [x] 25.11 Etichetele panoului cu diacritice (`registry.ts`, `BLOCK_META`, selectorul Bibliotecii Media); vitrina ramane
   fara; ghidurile la zi.
 - [x] 25.12 „(19 produse din 500)”: text limpede.
-- [ ] 25.13 Sablonul „Contact”: telefonul si emailul magazinului, nu „07xx” si „contact@magazin.ro”.
-- [ ] 25.14 axe-core pe editor (calculator si telefon): toate incalcarile reparate.
+- [x] 25.13 Sablonul „Contact”: telefonul si emailul magazinului, nu „07xx” si „contact@magazin.ro”.
+- [x] 25.14 axe-core pe editor (calculator si telefon): toate incalcarile reparate.
 - [ ] 25.15 Performanta editorului masurata pe build de productie; ce nu trebuie la deschidere, incarcat la nevoie.
 
 ### C. Temele
-- [ ] 25.16 Tinte de atins: punctele bannerului, butonul cosului (Sirius), linkurile legale din subsol.
-- [ ] 25.17 Bannerele cu text in poza (Rigel, Deneb, Antares): lizibile pe telefon.
-- [ ] 25.18 Incadrarea pe telefon (Vega, Mira).
+- [x] 25.16 Tinte de atins: punctele bannerului, butonul cosului (Sirius), linkurile legale din subsol.
+- [x] 25.17 Bannerele cu text in poza (Rigel, Deneb, Antares): lizibile pe telefon.
+- [x] 25.18 Incadrarea pe telefon (Vega, Mira).
 - [ ] 25.19 Sigla demo Betelgeuse lizibila.
-- [ ] 25.20 Canopus: marginea de 16 px la 1440.
-- [ ] 25.21 axe-core pe toate 30 (acasa, Magazin, produs; telefon si calculator): toate incalcarile reparate.
+- [x] 25.20 Canopus: marginea de 16 px la 1440.
+- [x] 25.21 axe-core pe toate 30 (acasa, Magazin, produs; telefon si calculator): toate incalcarile reparate.
 - [ ] 25.22 Recitirea vizuala a fiecarei teme (390 si 1440): defectele gasite, reparate.
+
+Facute 11.11 (B si C, mai putin 25.15, 25.19, 25.22): axe-core (WCAG 2.0-2.2 A/AA + best-practice) pe toate cele 30 de
+teme (180 de pagini) si pe editor (10 stari, calculator si telefon). Gasite: `select-name` (critic, 25 de pagini), `region`
+(toate), `landmark-one-main` (pagina de produs), `heading-order` (Magazin), `landmark-unique`, `image-redundant-alt`; in
+panou doua <main>, fara H1, contrast 4,31 in meniul lateral, 3 butoane fara nume, sertarul de pe telefon citibil inchis.
+Toate reparate; reverificat: editorul curat in toate 10, temele verificate curate. Tintele de atins: puncte, subsol,
+cos, cautare, bara de sus, firimituri. Bannerele demo incadrate pe telefon (capturi: Rigel, Deneb, Antares, Vega, Mira).
 
 ### D. Performanta vitrinei
 - [ ] 25.23 Poza LCP: prioritate, dimensiuni corecte, densitate plafonata pe telefon.

@@ -126,7 +126,8 @@ export const CANOPUS = temaDupaReteta({
   reteta: {
     stil: {
       colors: { accent: "#FF4D1F", surface: "#151515", text: "#F2F2F2", muted: "#9B9B9B", border: "#2A2A2A", footerBg: "#050505", footerText: "#F2F2F2" },
-      fontScale: "md", radius: "lg", container: "xwide", buttonStyle: "solid", buttonRadius: "full", cardStyle: "plain", cardRatio: "square", density: "normal",
+      // Etapa 25.20 (11.11.2026): „wide” (80rem), nu „xwide” (100rem): la 1440 px continutul statea la 16 px de margine.
+      fontScale: "md", radius: "lg", container: "wide", buttonStyle: "solid", buttonRadius: "full", cardStyle: "plain", cardRatio: "square", density: "normal",
     },
     antet: { varianta: "nav", setari: {} },
     subsol: { varianta: "dark", coloane: COLOANE },

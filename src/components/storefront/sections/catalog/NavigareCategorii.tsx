@@ -151,7 +151,8 @@ function CerculeteCuImagini({ className }: { className?: string }) {
                   boxShadow: activ ? `0 0 0 2px ${color}40` : "none",
                 }}>
                 {item.image ? (
-                  <Image src={item.image} alt={item.name} fill sizes="72px" className="object-cover" />
+                  /* Etapa 25.21: numele e scris chiar langa poza; un alt identic il citea de doua ori (axe, „image-redundant-alt”). */
+                  <Image src={item.image} alt="" fill sizes="72px" className="object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center"
                     style={{ backgroundColor: activ ? `${color}15` : "var(--color-muted)" }}>

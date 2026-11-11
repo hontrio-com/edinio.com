@@ -346,7 +346,9 @@ export function Sortare() {
     <label className="inline-flex items-center gap-2 text-[13px] text-[var(--st-muted)]">
       <span className="hidden sm:inline">Sorteaza</span>
       <span className="relative inline-flex items-center">
+        {/* Etapa 25.21: pe telefon eticheta vizibila e ascunsa (`hidden sm:inline`), deci selectorul n-avea nume (axe). */}
         <select
+          aria-label="Sorteaza produsele"
           value={effectiveSort}
           onChange={(e) => { setSortTouched(true); setSort(e.target.value); }}
           className="appearance-none pl-3 pr-8 py-2 text-[13px] rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]">
@@ -549,12 +551,19 @@ export function GrilaProduse({ coloane, coloaneMobil = 2 }: { coloane: number; c
    * `aria-busy` spune acelasi lucru cititoarelor de ecran.
    */
   return (
-    <div className={`grid ${clase} gap-3 sm:gap-4 transition-opacity${catalogSeIncarca ? " opacity-50 pointer-events-none" : ""}`}
-      aria-busy={catalogSeIncarca || undefined}>
-      {paginatedProducts.map((p, i) => (
-        <StoreProductCard key={p.id} product={p} priority={i < 4} />
-      ))}
-    </div>
+    <>
+      {/*
+        Etapa 25.21 (11.11.2026): titlul listei, pentru cititoarele de ecran. Titlurile cardurilor sunt H3, iar pagina sarea
+        de la H1 la H3 (axe, „heading-order”, pagina Magazin la toate cele 30 de teme).
+      */}
+      <h2 className="sr-only">Produse</h2>
+      <div className={`grid ${clase} gap-3 sm:gap-4 transition-opacity${catalogSeIncarca ? " opacity-50 pointer-events-none" : ""}`}
+        aria-busy={catalogSeIncarca || undefined}>
+        {paginatedProducts.map((p, i) => (
+          <StoreProductCard key={p.id} product={p} priority={i < 4} />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -717,14 +726,15 @@ export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; arat
     <div className="space-y-2">
       {setariMagazin.arataFirimituri && (
         <nav aria-label="Firimituri" className="flex items-center gap-1.5 text-[13px] text-[var(--st-muted)]">
-          <a href={basePath || "/"} className="hover:text-[var(--st-text)] transition-colors">
+          {/* Etapa 25.16: linkurile firimiturilor au 24 px inaltime (erau 21). */}
+          <a href={basePath || "/"} className="inline-flex min-h-6 items-center hover:text-[var(--st-text)] transition-colors">
             {business.store_name ?? business.business_name}
           </a>
           <span aria-hidden="true">/</span>
           {/* Din categorie, „Magazin" e drumul inapoi la catalogul intreg — singurul
               loc din pagina de unde se iese fara butonul browserului. */}
           {inAdancime ? (
-            <a href={catalogRoot} className="hover:text-[var(--st-text)] transition-colors">{titlu}</a>
+            <a href={catalogRoot} className="inline-flex min-h-6 items-center hover:text-[var(--st-text)] transition-colors">{titlu}</a>
           ) : (
             <span className="text-[var(--st-text)] font-medium">{titlu}</span>
           )}
@@ -732,7 +742,7 @@ export function AntetPagina({ titlu, aratatTitlu = true }: { titlu: string; arat
             <>
               <span aria-hidden="true">/</span>
               <a href={hrefCategorie(categoriiRoot, parinteCategorie, categoriiPePagina)}
-                className="hover:text-[var(--st-text)] transition-colors truncate">{parinteCategorie}</a>
+                className="inline-block min-h-6 leading-6 hover:text-[var(--st-text)] transition-colors truncate">{parinteCategorie}</a>
             </>
           )}
           {inCategorie && (

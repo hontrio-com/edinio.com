@@ -386,6 +386,8 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
       <StorefrontThemeScope style={resolved.style}>
         <StorePageShell chrome={chrome} design={resolved.design} esteEditorDesign={esteEditorDesign} className="min-h-screen">
           {/* Varianta si sablonul din designul VIU: in editor se schimba fara reincarcare. Marcajul e inauntru. */}
+          {/* Etapa 25.21: reperul paginii (axe, „landmark-one-main” pe toate cele 30 de teme). */}
+          <main>
           <FurnizorSloturiBlocuri sloturi={sloturiContinut}>
           <ProductPageDinDesign
             paginaImplicita={paginaProdusului}
@@ -411,6 +413,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             privitori={privitori}
           />
           </FurnizorSloturiBlocuri>
+          </main>
         </StorePageShell>
       </StorefrontThemeScope>
     </>

@@ -119,7 +119,7 @@ export function HeaderEditorial({ settings }: { settings: Record<string, unknown
             {cauta ? (
               <CampCautare onInchide={() => setCauta(false)} />
             ) : (
-              <nav className="hidden lg:flex items-center gap-9 mx-auto min-w-0">
+              <nav aria-label="Meniu principal" className="hidden lg:flex items-center gap-9 mx-auto min-w-0">
                 {menu.map((it) => {
                   const activ = esteActiv(it, { currentPageSlug, isHome });
                   return (

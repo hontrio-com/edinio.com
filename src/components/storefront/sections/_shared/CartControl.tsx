@@ -68,13 +68,18 @@ export function CartControl({
 }) {
   const tinta = useCartTarget();
   if (tinta.fel === "ascuns") return null;
+  /*
+   * Etapa 25.16 (11.11.2026): tinta de atins ocupa 8 px in plus pe fiecare latura (`before`), fara sa miste nimic in antet.
+   * La antetele cu doar iconita, butonul era cat ea, 21-22 px (Marte, Saturn, Sirius, Mintaka), sub cei 24 ceruti de WCAG 2.5.8.
+   */
+  const cuTinta = `relative before:absolute before:-inset-2 before:content-[""] ${className}`;
 
   return tinta.fel === "buton" ? (
-    <button type="button" aria-label={tinta.eticheta} onClick={tinta.onClick} className={className} style={style}>
+    <button type="button" aria-label={tinta.eticheta} onClick={tinta.onClick} className={cuTinta} style={style}>
       {children}
     </button>
   ) : (
-    <a href={tinta.href} aria-label={tinta.eticheta} className={className} style={style}>
+    <a href={tinta.href} aria-label={tinta.eticheta} className={cuTinta} style={style}>
       {children}
     </a>
   );

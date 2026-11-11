@@ -47,7 +47,7 @@ type PlatformNotif = {
 const PLAN_BADGE_STYLES: Record<string, string> = {
   free:    "bg-muted text-muted-foreground",
   basic:   "bg-info/10 text-info",
-  premium: "bg-primary/10 text-primary",
+  premium: "bg-primary/10 text-[var(--primary-text)]",
   ultra:   "bg-warning/10 text-warning",
 };
 
@@ -256,7 +256,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
             type="button"
             onClick={() => { setNotifOpen(v => !v); setUserOpen(false); }}
             className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors"
-            aria-label="Notificari"
+            aria-label="Notificări"
           >
             <Bell className="h-4.5 w-4.5 text-muted-foreground" />
             {totalUnread > 0 && (
@@ -274,7 +274,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-foreground">Notificari</p>
                     {totalUnread > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-[var(--primary-text)] text-[11px] font-bold">
                         {totalUnread} noi
                       </span>
                     )}
@@ -393,6 +393,9 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
           <button
             type="button"
             onClick={() => { setUserOpen(v => !v); setNotifOpen(false); }}
+            // Etapa 25.14: pe telefon se vede doar avatarul, deci butonul n-avea nume (axe, „button-name”).
+            aria-label="Contul tău"
+            aria-expanded={userOpen}
             className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-accent transition-colors"
           >
             {/* ⚠ SVG venit de pe server, desenat din id-ul utilizatorului. Nu trece
@@ -446,14 +449,14 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
       )}
 
       {/* Mobile drawer */}
-      <div className={cn(
+      <aside aria-label="Meniul panoului" inert={!mobileOpen} className={cn(
         "lg:hidden fixed inset-y-0 left-0 w-72 bg-sidebar border-r border-sidebar-border z-50 flex flex-col transition-transform duration-300",
         mobileOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         {/* Drawer header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
           <Logo size="sm" href="/dashboard" eager />
-          <button type="button" onClick={() => setMobileOpen(false)}
+          <button type="button" onClick={() => setMobileOpen(false)} aria-label="Închide meniul"
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors">
             <X className="h-4.5 w-4.5 text-muted-foreground" />
           </button>
@@ -465,7 +468,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
+        <nav aria-label="Meniu" className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
           {meniu.map((item) => {
             const Icon = item.icon;
             const subCopil = item.children?.some((c) => pathname.startsWith(c.href)) ?? false;
@@ -483,7 +486,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
                     aria-expanded={expanded}
                     className={cn(
                       "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                      active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      active ? "bg-primary/10 text-[var(--primary-text)]" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                     )}
                   >
                     <Icon className="h-4 w-4 flex-shrink-0" />
@@ -499,7 +502,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
                           onClick={() => setMobileOpen(false)}
                           className={cn(
                             "block px-2 py-2 rounded-md text-xs font-medium transition-all",
-                            pathname === child.href ? "text-primary bg-primary/5" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                            pathname === child.href ? "text-[var(--primary-text)] bg-primary/5" : "text-muted-foreground hover:text-foreground hover:bg-accent"
                           )}
                         >
                           {child.label}
@@ -515,7 +518,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
               <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                  active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  active ? "bg-primary/10 text-[var(--primary-text)]" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}>
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{item.label}</span>
@@ -531,7 +534,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
           <Link href="/dashboard/suport" onClick={() => setMobileOpen(false)}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-              pathname.startsWith("/dashboard/suport") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              pathname.startsWith("/dashboard/suport") ? "bg-primary/10 text-[var(--primary-text)]" : "text-muted-foreground hover:bg-accent hover:text-foreground"
             )}>
             <LifeBuoy className="h-4 w-4 flex-shrink-0" />
             <span className="flex-1">Suport</span>
@@ -577,7 +580,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
               pathname.startsWith("/dashboard/settings")
-                ? "bg-primary/10 text-primary"
+                ? "bg-primary/10 text-[var(--primary-text)]"
                 : "text-muted-foreground hover:bg-accent hover:text-foreground"
             )}
           >
@@ -603,7 +606,7 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
             </form>
           </div>
         </div>
-      </div>
+      </aside>
     </>
   );
 }

@@ -179,10 +179,10 @@ export interface SectionMeta {
  * ce schimba designul header-ului.
  */
 export const HEADER_ACTIONS = [
-  { value: "cautare", label: "Cautare" },
+  { value: "cautare", label: "Căutare" },
   { value: "telefon", label: "Telefon" },
   { value: "whatsapp", label: "WhatsApp" },
-  { value: "cos", label: "Cos" },
+  { value: "cos", label: "Coș" },
 ];
 
 export type HeaderAction = "cautare" | "telefon" | "whatsapp" | "cos";
@@ -226,8 +226,8 @@ function headerFields(suportate: readonly HeaderAction[]): Field[] {
     {
       key: "actions",
       type: "actions",
-      label: "Iconite",
-      help: "Ordinea si care se vad. Cele fara date completate lipsesc oricum.",
+      label: "Iconițe",
+      help: "Ordinea și care se văd. Cele fără date completate lipsesc oricum.",
       // Ordinea implicita ramane cea din HEADER_ACTIONS, comuna tuturor
       // variantelor: cine muta cosul inaintea telefonului gaseste aceeasi
       // optiune si dupa ce schimba designul header-ului.
@@ -247,8 +247,8 @@ function headerFields(suportate: readonly HeaderAction[]): Field[] {
       type: "select",
       label: "Scrierea meniului",
       options: [
-        { value: "normal", label: "Normala" },
-        { value: "majuscule", label: "Majuscule spatiate" },
+        { value: "normal", label: "Normală" },
+        { value: "majuscule", label: "Majuscule spațiate" },
       ],
     },
   ];
@@ -266,10 +266,10 @@ const HEADER_DEFAULTS = { menuFont: "body", menuCase: "normal" };
  * comerciant care stinge unul si nu intelege de ce lucrul ramane aprins.
  */
 const PDP_FIELDS_COMUNE: Field[] = [
-  { key: "showBreadcrumb", type: "toggle", label: "Arata firimiturile de navigare" },
+  { key: "showBreadcrumb", type: "toggle", label: "Arată firimiturile de navigare" },
   {
-    key: "showAddToCart", type: "toggle", label: "Arata butonul „Adauga in cos”",
-    help: "Stins, ramane doar comanda directa. In magazinul cu un singur produs butonul nu apare oricum, fiindca acolo nu exista cos.",
+    key: "showAddToCart", type: "toggle", label: "Arată butonul „Adaugă în coș”",
+    help: "Stins, rămâne doar comanda directă. În magazinul cu un singur produs butonul nu apare oricum, fiindcă acolo nu există coș.",
   },
 ];
 
@@ -287,14 +287,14 @@ const CART_PAGE_FIELDS: Field[] = [
   {
     key: "showProgress",
     type: "toggle",
-    label: "Arata progresul catre livrarea gratuita",
-    help: "Se vede doar daca ai setat un prag de livrare gratuita.",
+    label: "Arată progresul către livrarea gratuită",
+    help: "Se vede doar dacă ai setat un prag de livrare gratuită.",
   },
   {
     key: "showRecommendations",
     type: "toggle",
-    label: "Arata produse recomandate",
-    help: "Sub lista de produse, ca in sertarul de cos.",
+    label: "Arată produse recomandate",
+    help: "Sub lista de produse, ca în sertarul de coș.",
   },
 ];
 
@@ -311,11 +311,11 @@ const CART_PAGE_DEFAULTS = { showProgress: true, showRecommendations: true };
  */
 export const GRUPURI_FILTRE = [
   { value: "categorii", label: "Categorii" },
-  { value: "pret", label: "Pret, reduceri si stoc" },
-  { value: "atribute", label: "Atribute (marime, culoare)" },
+  { value: "pret", label: "Preț, reduceri și stoc" },
+  { value: "atribute", label: "Atribute (mărime, culoare)" },
   { value: "brand", label: "Brand" },
   { value: "etichete", label: "Etichete" },
-  { value: "specificatii", label: "Specificatii" },
+  { value: "specificatii", label: "Specificații" },
 ];
 
 /**
@@ -351,32 +351,32 @@ export const SORTARI_CATALOG = [
 
 const SHOP_FIELDS: Field[] = [
   {
-    key: "pastreazaGrilaAcasa", type: "toggle", label: "Pastreaza produsele si pe pagina principala",
-    help: "Pornit, pagina principala ramane cu grila ei, iar pagina Magazin e locul cu toate filtrele. Stins, produsele se muta complet aici.",
+    key: "pastreazaGrilaAcasa", type: "toggle", label: "Păstrează produsele și pe pagina principală",
+    help: "Pornit, pagina principală rămâne cu grila ei, iar pagina Magazin e locul cu toate filtrele. Stins, grila se mută aici; dacă pagina principală n-are niciun rând de produse, grila rămâne și acolo, ca să nu fie fără produse.",
   },
 
   // --- Antet ---------------------------------------------------------------
   { key: "titlu", type: "text", label: "Titlul paginii", placeholder: "Toate produsele", maxLength: 60 },
   {
-    key: "arataTitlu", type: "toggle", label: "Arata titlul",
-    help: "Stins, titlul ramane doar pentru cititoarele de ecran si pentru Google.",
+    key: "arataTitlu", type: "toggle", label: "Arată titlul",
+    help: "Stins, titlul rămâne doar pentru cititoarele de ecran și pentru Google.",
   },
   {
     key: "subtitlu", type: "textarea", label: "Text sub titlu",
     placeholder: "Echipamente de protectie pentru santier, birou si atelier.",
     maxLength: 300,
-    help: "Un rand-doua despre ce gaseste vizitatorul aici. Ajuta si la cautari.",
+    help: "Un rând-două despre ce găsește vizitatorul aici. Ajută și la căutări.",
   },
   {
     key: "imagineAntet", type: "image", label: "Imagine de antet",
-    help: "Se intinde pe toata latimea, deasupra titlului. Fara ea, pagina incepe direct cu titlul.",
+    help: "Se întinde pe toată lățimea, deasupra titlului. Fără ea, pagina începe direct cu titlul.",
   },
-  { key: "arataFirimituri", type: "toggle", label: "Arata firimiturile de navigare" },
-  { key: "arataNumarul", type: "toggle", label: "Arata cate produse s-au gasit" },
+  { key: "arataFirimituri", type: "toggle", label: "Arată firimiturile de navigare" },
+  { key: "arataNumarul", type: "toggle", label: "Arată câte produse s-au găsit" },
 
   // --- Grila ---------------------------------------------------------------
   {
-    key: "coloane", type: "select", label: "Produse pe rand, pe calculator",
+    key: "coloane", type: "select", label: "Produse pe rând, pe calculator",
     options: [
       { value: "2", label: "2" },
       { value: "3", label: "3" },
@@ -386,55 +386,55 @@ const SHOP_FIELDS: Field[] = [
     ],
   },
   {
-    key: "coloaneMobil", type: "select", label: "Produse pe rand, pe telefon",
+    key: "coloaneMobil", type: "select", label: "Produse pe rând, pe telefon",
     options: [
       { value: "1", label: "1, cu carduri mari" },
       { value: "2", label: "2" },
     ],
   },
   {
-    key: "perPage", type: "range", label: "Produse pe pagina",
+    key: "perPage", type: "range", label: "Produse pe pagină",
     min: 8, max: 96, step: 4, unit: " produse",
-    help: "Mai multe inseamna mai putine apasari, dar o pagina mai grea pe telefon.",
+    help: "Mai multe înseamnă mai puține apăsări, dar o pagină mai grea pe telefon.",
   },
   {
-    key: "modPaginare", type: "select", label: "Cum se vad urmatoarele produse",
+    key: "modPaginare", type: "select", label: "Cum se văd următoarele produse",
     options: [
       { value: "pagini", label: "Pagini numerotate" },
-      { value: "buton", label: "Buton „Incarca mai multe”" },
-      { value: "infinit", label: "Se incarca la derulare" },
+      { value: "buton", label: "Buton „Încarcă mai multe”" },
+      { value: "infinit", label: "Se încarcă la derulare" },
     ],
-    help: "Paginile numerotate raman scrise in adresa la toate trei, deci Google le gaseste oricum.",
+    help: "Paginile numerotate rămân scrise în adresă la toate trei, deci Google le găsește oricum.",
   },
 
   // --- Filtre --------------------------------------------------------------
   {
     key: "grupuriFiltre", type: "actions", label: "Filtre",
-    help: "Ordinea si care se vad. Cele fara date in produse lipsesc oricum.",
+    help: "Ordinea și care se văd. Cele fără date în produse lipsesc oricum.",
     options: GRUPURI_FILTRE,
   },
   {
-    key: "valoriVizibile", type: "range", label: "Cate valori se vad per filtru",
+    key: "valoriVizibile", type: "range", label: "Câte valori se văd per filtru",
     min: 3, max: 20, step: 1, unit: " valori",
-    help: "Restul se deschid cu o apasare. Valorile bifate raman mereu la vedere.",
+    help: "Restul se deschid cu o apăsare. Valorile bifate rămân mereu la vedere.",
   },
-  { key: "arataNumaratori", type: "toggle", label: "Arata cate produse are fiecare valoare" },
+  { key: "arataNumaratori", type: "toggle", label: "Arată câte produse are fiecare valoare" },
   {
-    key: "filtreDesfasurate", type: "toggle", label: "Filtrele pornesc desfasurate",
-    help: "Implicit sunt pliate, ca vizitatorul sa vada toata lista de filtre dintr-o privire si sa deschida doar ce il intereseaza. Porneste-l daca ai putine atribute si vrei totul la vedere.",
+    key: "filtreDesfasurate", type: "toggle", label: "Filtrele pornesc desfășurate",
+    help: "Implicit sunt pliate, ca vizitatorul să vadă toată lista de filtre dintr-o privire și să deschidă doar ce îl interesează. Pornește-l dacă ai puține atribute și vrei totul la vedere.",
   },
 
   // --- Sortare -------------------------------------------------------------
   {
-    key: "sortareImplicita", type: "select", label: "Sortarea implicita a paginii",
+    key: "sortareImplicita", type: "select", label: "Sortarea implicită a paginii",
     options: [
-      { value: "", label: "Ca in Editeaza magazinul" },
+      { value: "", label: "Ca în Editează magazinul" },
       ...SORTARI_CATALOG,
     ],
-    help: "Gol = ramane sortarea aleasa pentru tot magazinul. Aici o poti schimba doar pentru pagina asta.",
+    help: "Gol = rămâne sortarea aleasă pentru tot magazinul. Aici o poți schimba doar pentru pagina asta.",
   },
   {
-    key: "sortariOferite", type: "actions", label: "Sortari oferite vizitatorului",
+    key: "sortariOferite", type: "actions", label: "Sortări oferite vizitatorului",
     options: SORTARI_CATALOG,
   },
 
@@ -442,7 +442,7 @@ const SHOP_FIELDS: Field[] = [
   {
     key: "textSubGrila", type: "textarea", label: "Text sub produse",
     maxLength: 2000,
-    help: "Apare sub grila, dupa paginare. Locul obisnuit pentru un text de prezentare a gamei.",
+    help: "Apare sub grilă, după paginare. Locul obișnuit pentru un text de prezentare a gamei.",
   },
 ];
 
@@ -470,7 +470,7 @@ function campuriSubsol(): Field[] {
     {
       key: "showTagline",
       type: "toggle",
-      label: "Arata sloganul sub logo",
+      label: "Arată sloganul sub logo",
       retras: "Sloganul se arata din coloana „Logo și text”; valoarea veche da doar coloana ei implicita (etapa 11).",
     },
     {
@@ -520,7 +520,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     variants: {
       classic: { label: "Simplu", tags: ["clasic"], layout: "full", previewHeight: 70, fields: [] },
       search: {
-        label: "Cu bara mare de cautare",
+        label: "Cu bara mare de căutare",
         tags: ["indraznet"],
         layout: "full",
         // Cauta in catalog direct din header, cu selector de categorie. Pe pagina
@@ -539,7 +539,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         previewHeight: 148,
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.centered),
-          { key: "showContact", type: "toggle", label: "Arata contactul langa logo" },
+          { key: "showContact", type: "toggle", label: "Arată contactul lângă logo" },
         ],
         defaults: { ...HEADER_DEFAULTS, showContact: true },
       },
@@ -553,12 +553,12 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         note: "Mesajul derulant se scrie la „Bara de anunț”, sus în lista de secțiuni, și se pornește din ochiul ei. Aici îl vezi ca exemplu.",
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.editorial),
-          { key: "showTopBar", type: "toggle", label: "Arata bara de contact" },
+          { key: "showTopBar", type: "toggle", label: "Arată bara de contact" },
         ],
         defaults: { ...HEADER_DEFAULTS, showTopBar: true },
       },
       wedge: {
-        label: "Fundal inchis, colt colorat",
+        label: "Fundal închis, colț colorat",
         tags: ["indraznet", "simplu"],
         layout: "full",
         previewHeight: 88,
@@ -567,10 +567,10 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           {
             key: "menuAlign",
             type: "select",
-            label: "Pozitia meniului",
+            label: "Poziția meniului",
             options: [
               { value: "centru", label: "La mijloc" },
-              { value: "stanga", label: "Langa logo" },
+              { value: "stanga", label: "Lângă logo" },
             ],
           },
         ],
@@ -587,16 +587,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         replacesCatalogSearch: true,
         fields: [
           ...headerFields(HEADER_VARIANT_ACTIONS.market),
-          { key: "showTopBar", type: "toggle", label: "Arata bara de sus" },
+          { key: "showTopBar", type: "toggle", label: "Arată bara de sus" },
           {
             key: "topText",
             type: "text",
-            label: "Mesaj in bara de sus",
+            label: "Mesaj în bara de sus",
             placeholder: "Livrare gratuita peste 300 lei",
             maxLength: 90,
             showIf: { key: "showTopBar", equals: true },
           },
-          { key: "showHotline", type: "toggle", label: "Arata telefonul in bara de categorii" },
+          { key: "showHotline", type: "toggle", label: "Arată telefonul în bara de categorii" },
         ],
         defaults: { ...HEADER_DEFAULTS, showTopBar: true, showHotline: true },
       },
@@ -660,8 +660,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           {
             key: "showAction",
             type: "toggle",
-            label: "Arata butonul de actiune",
-            help: "Stins, header-ul ramane cu categoriile, cautarea si iconitele.",
+            label: "Arată butonul de acțiune",
+            help: "Stins, antetul rămâne cu categoriile, căutarea și iconițele.",
           },
           {
             key: "actionLabel",
@@ -675,7 +675,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
             key: "actionHref",
             type: "link",
             label: "Link buton",
-            help: "Gol = produsele cu reducere din magazin. Poti pune o pagina proprie sau o adresa externa.",
+            help: "Gol = produsele cu reducere din magazin. Poți pune o pagină proprie sau o adresă externă.",
             showIf: { key: "showAction", equals: true },
           },
         ],
@@ -684,7 +684,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...HEADER_DEFAULTS, showAction: false, actionLabel: "Reduceri" },
       },
       nav: {
-        label: "Meniu langa logo",
+        label: "Meniu lângă logo",
         tags: ["simplu", "elegant"],
         layout: "full",
         // Meniul sta langa logo, cautarea deschide un panou in loc sa ocupe
@@ -706,7 +706,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     inCatalog: true,
     variants: {
       dark: {
-        label: "Inchis, pe coloane",
+        label: "Închis, pe coloane",
         tags: ["clasic", "indraznet"],
         layout: "full",
         previewHeight: 560,
@@ -757,7 +757,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
       // `overlay` numele magazinului scris peste imagine.
       banners: { label: "Doar imagini", tags: ["clasic", "cu imagine"], layout: "full", previewHeight: 655, providesH1: true, fields: [] },
       categories: {
-        label: "Categorii la stanga, bannere la dreapta",
+        label: "Categorii la stânga, bannere la dreapta",
         tags: ["cu imagine", "compact"],
         layout: "full",
         previewHeight: 515,
@@ -769,7 +769,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           {
             key: "maxCategories",
             type: "range",
-            label: "Cate categorii se vad",
+            label: "Câte categorii se văd",
             // De la doua: magazinul cu putine categorii alege oricum varianta, iar
             // un prag mai mare decat cate are ar fi fost un reglaj fara efect.
             min: 2,
@@ -915,7 +915,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      icons: { label: "Iconite", tags: ["detaliat"], layout: "full", fields: [] },
+      icons: { label: "Iconițe", tags: ["detaliat"], layout: "full", fields: [] },
     },
   },
   catalog_toolbar: {
@@ -925,7 +925,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      classic: { label: "Cautare, sortare si filtre", tags: ["clasic"], layout: "contained", fields: [] },
+      classic: { label: "Căutare, sortare și filtre", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
   category_nav: {
@@ -1008,7 +1008,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
      */
     removable: false,
     variants: {
-      grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
+      grid: { label: "Grilă", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
       carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
     },
   },
@@ -1029,7 +1029,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      list: { label: "Lista", tags: ["clasic"], layout: "contained", fields: [] },
+      list: { label: "Listă", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
   reviews: {
@@ -1039,7 +1039,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      grid: { label: "Grila", tags: ["clasic"], layout: "contained", fields: [] },
+      grid: { label: "Grilă", tags: ["clasic"], layout: "contained", fields: [] },
     },
   },
   gallery: {
@@ -1049,7 +1049,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     singleton: true,
     removable: true,
     variants: {
-      grid: { label: "Grila", tags: ["clasic", "cu imagine"], layout: "contained", fields: [] },
+      grid: { label: "Grilă", tags: ["clasic", "cu imagine"], layout: "contained", fields: [] },
     },
   },
   about: {
@@ -1171,7 +1171,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           {
             key: "galleryThumbs", type: "select", label: "Miniaturile galeriei",
             options: [
-              { value: "left", label: "In stanga imaginii" },
+              { value: "left", label: "În stânga imaginii" },
               { value: "bottom", label: "Sub imagine" },
             ],
           },
@@ -1183,16 +1183,16 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
               { value: "compact", label: "Cât ecranul" },
             ],
           },
-          { key: "showDetails", type: "toggle", label: "Arata caseta „Detalii produs”", retras: "ochiul blocului „Caseta Detalii produs”" },
-          { key: "showSpecsSummary", type: "toggle", label: "Arata un rezumat al specificatiilor", retras: "ochiul blocului „Rezumatul specificațiilor”" },
+          { key: "showDetails", type: "toggle", label: "Arată caseta „Detalii produs”", retras: "ochiul blocului „Caseta Detalii produs”" },
+          { key: "showSpecsSummary", type: "toggle", label: "Arată un rezumat al specificațiilor", retras: "ochiul blocului „Rezumatul specificațiilor”" },
           // Fara `showIf` pe rezumat: comutatorul lui a iesit din editor, iar
           // rezumatul il aprinde acum ochiul blocului, nu el.
           {
-            key: "specsCount", type: "range", label: "Cate specificatii in rezumat",
+            key: "specsCount", type: "range", label: "Câte specificații în rezumat",
             min: 3, max: 12, step: 1, unit: " randuri",
           },
-          { key: "showTiers", type: "toggle", label: "Arata reducerile de cantitate", help: "Se completeaza din fisa produsului. Preturile de treapta se aplica la comanda directa.", retras: "ochiul blocului „Reducerile de cantitate”" },
-          { key: "showContact", type: "toggle", label: "Arata telefonul si WhatsApp sub produs", retras: "ochiul blocului „Telefon și WhatsApp”" },
+          { key: "showTiers", type: "toggle", label: "Arată reducerile de cantitate", help: "Se completează din fișa produsului. Prețurile de treaptă se aplică la comanda directă.", retras: "ochiul blocului „Reducerile de cantitate”" },
+          { key: "showContact", type: "toggle", label: "Arată telefonul și WhatsApp sub produs", retras: "ochiul blocului „Telefon și WhatsApp”" },
         ],
         defaults: {
           ...PDP_DEFAULTS_COMUNE,
@@ -1231,14 +1231,14 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     inCatalog: true,
     variants: {
       none: {
-        label: "Produsele stau pe pagina principala",
+        label: "Produsele stau pe pagina principală",
         tags: ["clasic"],
         layout: "contained",
         previewHeight: 420,
         fields: [],
       },
       sidebar: {
-        label: "Filtre in bara laterala",
+        label: "Filtre în bara laterală",
         tags: ["clasic", "detaliat"],
         layout: "full",
         surface: "page",
@@ -1250,7 +1250,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: { ...SHOP_DEFAULTS, coloane: "4" },
       },
       toolbar: {
-        label: "Filtre in capul paginii",
+        label: "Filtre în capul paginii",
         tags: ["simplu", "elegant"],
         layout: "full",
         surface: "page",
@@ -1315,7 +1315,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         fields: [],
       },
       page_split: {
-        label: "Pagina pe doua coloane",
+        label: "Pagină pe două coloane",
         tags: ["clasic"],
         layout: "full",
         surface: "page",
@@ -1327,7 +1327,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Cheia e veche, eticheta spune ce face: o singura coloana centrata, cea
         // mai ingusta dintre cele trei pagini de cos. „Pe toata latimea" trimitea
         // comerciantul exact in partea cealalta.
-        label: "Pagina centrata, o coloana",
+        label: "Pagină centrată, o coloană",
         tags: ["simplu", "elegant"],
         layout: "full",
         surface: "page",
@@ -1336,7 +1336,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         defaults: CART_PAGE_DEFAULTS,
       },
       page_compact: {
-        label: "Pagina compacta, cu bara de comanda mereu vizibila",
+        label: "Pagină compactă, cu bara de comandă mereu vizibilă",
         tags: ["compact", "indraznet"],
         layout: "full",
         surface: "page",
@@ -1356,7 +1356,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
     // La fel ca la cos: `classic` ramane prima cheie declarata.
     variants: {
       classic: {
-        label: "Formular in fereastra",
+        label: "Formular în fereastră",
         tags: ["clasic", "compact"],
         layout: "full",
         // Cat inaltimea data panoului in miniatura: formularul intreg trece de
@@ -1366,7 +1366,7 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         fields: [],
       },
       page_two_col: {
-        label: "Pagina separata, cu rezumat lateral",
+        label: "Pagină separată, cu rezumat lateral",
         tags: ["clasic", "elegant"],
         layout: "full",
         surface: "page",

@@ -1023,6 +1023,8 @@ export function EditorMagazin({
     */
     <DeschideSetareaContext.Provider value={deschideSetarea}>
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Etapa 25.14: titlul paginii, pentru cititoarele de ecran (editorul n-avea niciun H1; axe, „page-has-heading-one”). */}
+      <h1 className="sr-only">Editează magazinul</h1>
       <BaraEditor
         pagina={pagina} onPagina={cerePagina} ciorna={ciorna}
         dispozitiv={dispozitiv} onDispozitiv={setDispozitiv} onReincarca={reincarca} adresaPublica={adresaPublica}
@@ -1217,7 +1219,8 @@ export function EditorMagazin({
           )}
         </aside>
 
-        <main className={`relative flex-1 min-w-0 flex-col bg-muted/30 ${vedereMobil === "previzualizare" || galerieDesign || adaugaDeschis ? "flex" : "hidden lg:flex"}`}>
+        {/* Etapa 25.14: zona previzualizarii e o regiune cu nume, nu un al doilea <main> (cel al panoului e in `CadruPanou`; axe). */}
+        <section aria-label="Previzualizarea magazinului" className={`relative flex-1 min-w-0 flex-col bg-muted/30 ${vedereMobil === "previzualizare" || galerieDesign || adaugaDeschis ? "flex" : "hidden lg:flex"}`}>
           {sectiuneGalerie && (
             <DesignGallery
               section={sectiuneGalerie}
@@ -1246,7 +1249,7 @@ export function EditorMagazin({
               <RamaPreview src={src} dispozitiv={dispozitivVazut} cheie={cheieRama} rama={rama} titlu="Previzualizarea magazinului" />
             </div>
           </div>
-        </main>
+        </section>
       </div>
 
       {/* Alta pagina, cu pagina proprie nesalvata: munca nu se pierde fara intrebare (etapa 5). */}

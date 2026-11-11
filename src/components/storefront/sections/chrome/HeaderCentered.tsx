@@ -128,14 +128,15 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
 
       {menu.length > 0 && (
         <div className="hidden lg:block border-t border-[var(--st-border)]">
-          <nav className="mx-auto px-4 h-12 flex items-center justify-center gap-8" style={{ maxWidth: "var(--st-container)" }}>
+          <nav aria-label="Meniu principal" className="mx-auto px-4 h-12 flex items-center justify-center gap-8" style={{ maxWidth: "var(--st-container)" }}>
             {menu.map((it) => {
               const activ = esteActiv(it, { currentPageSlug, isHome });
               return (
                 // Pagina curenta nu se marcheaza doar prin culoare: subliniere
                 // pentru cine nu o distinge, `aria-current` pentru cititoare.
                 <a key={it.id} href={menuItemHref(it, basePath, categoriiRoot)} aria-current={activ ? "page" : undefined}
-                  className={`text-[13px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
+                  // Etapa 25.16: linkul ocupa toata inaltimea barii (48 px), nu doar randul de text (20 px).
+                  className={`self-stretch inline-flex items-center text-[13px] font-semibold text-[var(--st-text)] hover:opacity-60 transition-opacity whitespace-nowrap ${meniuCls}`}
                   style={{ ...meniuStyle, ...(activ ? { color: "var(--st-primary)", textDecoration: "underline", textUnderlineOffset: "6px" } : {}) }}>
                   {it.label}
                 </a>

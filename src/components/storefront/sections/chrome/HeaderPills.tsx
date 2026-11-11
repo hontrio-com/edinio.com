@@ -270,7 +270,7 @@ function CautareRotunjita({ compact = false }: { compact?: boolean }) {
         onChange={(e) => scrie(e.target.value)}
         placeholder="Cauta produse..."
         aria-label="Cauta produse"
-        className="flex-1 min-w-0 bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none"
+        className="flex-1 min-w-0 self-stretch bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none"
       />
       <button type="submit" aria-label="Cauta"
         className={`shrink-0 rounded-full flex items-center justify-center transition-opacity hover:opacity-85 ${compact ? "w-9 h-9" : "w-10 h-10"}`}

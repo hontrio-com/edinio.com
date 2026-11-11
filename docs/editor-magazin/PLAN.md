@@ -2287,16 +2287,28 @@ demo” (0 demo, prima pagina arata produsele lui). Clichetul de tranzitii e acu
 - [x] 25.12 „(19 produse din 500)”: text limpede.
 - [x] 25.13 Sablonul „Contact”: telefonul si emailul magazinului, nu „07xx” si „contact@magazin.ro”.
 - [x] 25.14 axe-core pe editor (calculator si telefon): toate incalcarile reparate.
-- [ ] 25.15 Performanta editorului masurata pe build de productie; ce nu trebuie la deschidere, incarcat la nevoie.
+- [x] 25.15 Performanta editorului masurata pe build de productie; ce nu trebuie la deschidere, incarcat la nevoie.
+  Prima masuratoare pe build de productie (nota 8 din 10-11.11 era din `next dev`). Cel mai mare fisier de la deschidere
+  era TipTap cu ProseMirror (124 KB gzip), folosit doar in panoul blocului „Text” / al coloanelor clasice: acum vine prin
+  `RichTextEditorLaNevoie` (`next/dynamic`, chenar cu `role="status"` cat se incarca). Manifestul editorului: 481 -> 359 KB
+  gzip. Masurat (calculator / laptop x4, doua treceri): arborele gata 1425/572 -> 881/481 ms si 1248/967 -> 836/830 ms;
+  TBT pe laptop x4 359/202 -> 240/58 ms. Proba pe build: 0 fisiere ProseMirror la deschidere, unul la deschiderea blocului
+  „Text”, cu bara si campul editabil. Editorul la 390/768/1440: 0 depasiri, 0 tinte sub 24 px; din tastatura 45 de pasi
+  fara capcana, selectorul de pagina fara inel de focus (reparat). Probe: `text-bogat-la-nevoie.test.ts`,
+  `editor-accesibil.test.ts`, mutantii prinsi.
 
 ### C. Temele
 - [x] 25.16 Tinte de atins: punctele bannerului, butonul cosului (Sirius), linkurile legale din subsol.
 - [x] 25.17 Bannerele cu text in poza (Rigel, Deneb, Antares): lizibile pe telefon.
 - [x] 25.18 Incadrarea pe telefon (Vega, Mira).
-- [ ] 25.19 Sigla demo Betelgeuse lizibila.
+- [x] 25.19 Sigla demo Betelgeuse lizibila.
 - [x] 25.20 Canopus: marginea de 16 px la 1440.
 - [x] 25.21 axe-core pe toate 30 (acasa, Magazin, produs; telefon si calculator): toate incalcarile reparate.
-- [ ] 25.22 Recitirea vizuala a fiecarei teme (390 si 1440): defectele gasite, reparate.
+- [x] 25.22 Recitirea vizuala a fiecarei teme (390 si 1440): defectele gasite, reparate.
+  Foi de contact (30 de teme, telefon si calculator), apoi capturi la marime reala unde nu se putea judeca micsorat. Gasit:
+  magazinul demo Canopus de pe baza demo avea inca designul vechi (`xwide`), salvat la aplicare; refacut cu
+  `seamana-demo.ts canopus` (in productie demo-urile se fac din reteta, la lansare). Sigla Aldebaran verificata la marime
+  reala: se citeste. Capturile paginii „Teme” (`public/teme-capturi`, 30) refacute din build-ul de productie.
 
 Facute 11.11 (B si C, mai putin 25.15, 25.19, 25.22): axe-core (WCAG 2.0-2.2 A/AA + best-practice) pe toate cele 30 de
 teme (180 de pagini) si pe editor (10 stari, calculator si telefon). Gasite: `select-name` (critic, 25 de pagini), `region`
@@ -2306,18 +2318,52 @@ Toate reparate; reverificat: editorul curat in toate 10, temele verificate curat
 cos, cautare, bara de sus, firimituri. Bannerele demo incadrate pe telefon (capturi: Rigel, Deneb, Antares, Vega, Mira).
 
 ### D. Performanta vitrinei
-- [ ] 25.23 Poza LCP: prioritate, dimensiuni corecte, densitate plafonata pe telefon.
-- [ ] 25.24 Placile de categorii: variantele mici.
-- [ ] 25.25 JavaScript: ce nu trebuie la prima afisare (Supabase, Stripe, animatiile), incarcat la nevoie; masurat inainte/dupa.
-- [ ] 25.26 Fonturile: doar grosimile folosite.
-- [ ] 25.27 Paginile peste 1,5 MB: sub prag.
+- [x] 25.23 Poza LCP: prioritate, dimensiuni corecte, densitate plafonata pe telefon.
+- [x] 25.24 Placile de categorii: variantele mici.
+- [x] 25.25 JavaScript: ce nu trebuie la prima afisare (Supabase, Stripe, animatiile), incarcat la nevoie; masurat inainte/dupa.
+- [x] 25.26 Fonturile: doar grosimile folosite. (Nimic de taiat: fonturile sunt variabile, un fisier pe familie.)
+- [x] 25.27 Paginile peste 1,5 MB: sub prag. (Cea mai grea prima pagina: 1368 KB; azi-noapte 1699.)
+
+Facute 11.11 (D, cifre in raport): Supabase adus la nevoie in `VariantQuickAdd` (singurul import din vitrina); framer-motion
+scos din vitrina (pagina de produs si fereastra de comanda: `data-anim` + `PornesteAnimatiile`, efectele butonului `.cta-*` in
+`stil-comun.css`, intrarea ferestrei cu tw-animate-css); ⚠ galeria si zona de cumparare porneau cu opacitate 0 pana la
+hidratare (imaginea principala, elementul LCP, astepta JavaScript-ul); `sizes` cu 75vw pe telefon la bannerele principale,
+384/640 la placi si cardurile bannerului. JS (gzip, Jupiter): acasa 487 -> 381 KB, Magazin 406 -> 343, produs 472 -> 366.
+Fonturile lasate: variabile, gazduite, descarcate doar cand se folosesc, `latin-ext` necesar.
+
+Masurat la final (aceeasi masuratoare ca in 10-11.11, cea mai buna din doua treceri pe tema): prima pagina pe telefon, LCP
+median 2216 -> 2048 ms, maxim 3440 -> 2256 (Mercur), sub 2,2 s 15/30 -> 29/30; greutatea mediana 1302 -> 1072 KB, maxim
+1699 -> 1368; TBT median 115 ms, CLS maxim 0,014. Pozele prea mari: 0 (o placa Rigel cere varianta imediat urmatoare).
+⚠ CE OPRESTE PERFORMANTA LA 9: FCP = LCP peste tot, deci poza e gata cand se deseneaza pagina; asteapta foaia CSS globala
+(338 KB, 52 KB gzip, utilitarele intregii aplicatii, impreuna cu panoul) si cea de fonturi (191 de `@font-face`, 9 KB gzip).
+Experiment (fara schimbare in proiect): foaia globala inlocuita pe disc, in build-ul local, cu una DOAR a vitrinei (aceeasi
+compilare, din cele 702 fisiere la care ajung rutele magazinului: 167 KB, 27,6 KB gzip): pe 6 teme LCP median 2096 -> 1592
+ms (-24%), pixeli diferiti 0,00%. E reparatia spre 10, ca `website.css` din 31.08; de hotarat de el (atinge stilul celor
+149 de magazine live). ⚠ Inainte: HTML-ul scris de comercianti (descrieri, pagini) poate folosi clase care exista azi doar
+fiindca se scaneaza tot proiectul (ex. `text-primary underline` puse de editorul de text) -> verificat in baza productiei.
 
 ### E. Securitate
-- [ ] 25.28 Actiunile si rutele noi ale ramurii, recitite cu ochi de atacator.
+- [x] 25.28 Actiunile si rutele noi ale ramurii, recitite cu ochi de atacator. Actiunile noi (`datePaginaInEditor`,
+  `dateBlocuriInEditor`, `produsPentruSablon`, temele, istoricul) verifica utilizatorul si proprietarul si marginesc
+  intrarile; proxy-ul: subdomeniile demo dintr-o lista fixa, redirectarea spre www cu gazda si protocolul fixate (fara
+  redirectare deschisa). Intarire: limita de frecventa pe aplicare / „Pune la loc” / „Șterge datele demo” (10 pe minut).
 
 ### F. Proba finala
-- [ ] 25.29 Portile complete; proba pe demo (toate temele, editorul, cosul); performanta pe build de productie; notele
+- [x] 25.29 Portile complete; proba pe demo (toate temele, editorul, cosul); performanta pe build de productie; notele
   refacute cu aceeasi masuratoare; raportul.
+
+Facuta 11.11, dupa-amiaza, pe build-ul de productie local (baza demo):
+- axe-core: 180/180 de pagini curate (30 de teme x acasa, Magazin, produs x telefon, calculator); editorul curat.
+- Tinte WCAG 2.5.8 (cu zona `::before` si exceptia de spatiere): 0 cazute. Pozele prea mari: 0.
+- Tastatura (35 de opriri pe pagina, 90 de pagini; 45 in editor): 0 capcane; focus INVIZIBIL gasit (axe nu-l vede) la
+  pret minim/maxim, sortare si cautarea din Magazin (toate temele), cautarea `HeaderSearch` (13 pagini) si selectorul de
+  pagina din editor -> inel `focus-visible`, reverificat pe build. Depasiri pe orizontala la 390: 0 (90 de pagini, editorul
+  la 390/768/1440).
+- Cosul (proba prin sertar, Jupiter): serverul refuza comanda demo -> mesajul de comenzi oprite; cererea actiunii taiata in
+  browser -> „Nu am primit raspuns...”, formularul pastrat, fara pagina 500, 0 erori JS.
+- Editorul de text la nevoie: 0 fisiere ProseMirror la deschidere, unul la blocul „Text”, bara si campul editabil.
+- Capturile paginii „Teme” refacute (30). Lighthouse n-a putut rula (refuzat de permisiunile sesiunii); masuratoarea ramane
+  cea cu Playwright, aceeasi ca in 10-11.11.
 
 ## Deciziile proprietarului
 

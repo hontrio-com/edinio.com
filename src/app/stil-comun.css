@@ -1872,6 +1872,35 @@
 [data-anim-delay="1400"] { --edinio-anim-dl: 1400ms; }
 [data-anim-delay="1500"] { --edinio-anim-dl: 1500ms; }
 
+/* Efectele butonului „Comanda acum” de pe pagina de produs (etapa 25.25, 11.11.2026): aceleasi cadre si timpi ca in
+   framer-motion, care aducea ~54 KB pe pagina de produs. `--fx-c` = culoarea butonului; procentele din `color-mix` sunt
+   alfa de dinainte (55 = 33%, B3 = 70%, 44 = 27%, CC = 80%). */
+@keyframes edinio-cta-puls {
+  from { box-shadow: 0 4px 16px color-mix(in srgb, var(--fx-c) 33%, transparent), 0 0 0 0 color-mix(in srgb, var(--fx-c) 70%, transparent); }
+  to { box-shadow: 0 4px 16px color-mix(in srgb, var(--fx-c) 33%, transparent), 0 0 0 18px transparent; }
+}
+@keyframes edinio-cta-scutura {
+  0%, 14.29%, 100% { transform: translateX(0); }
+  2.86% { transform: translateX(-5px); } 5.71% { transform: translateX(5px); }
+  8.57% { transform: translateX(-5px); } 11.43% { transform: translateX(5px); }
+}
+@keyframes edinio-cta-salt { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes edinio-cta-stralucire {
+  0%, 100% { box-shadow: 0 4px 16px color-mix(in srgb, var(--fx-c) 27%, transparent); }
+  50% { box-shadow: 0 4px 36px color-mix(in srgb, var(--fx-c) 80%, transparent); }
+}
+@keyframes edinio-cta-bataie {
+  0%, 20%, 40%, 100% { transform: scale(1); } 10%, 30% { transform: scale(1.06); }
+}
+.cta-puls { animation: edinio-cta-puls 1.2s ease-out infinite; }
+.cta-scutura { animation: edinio-cta-scutura 3.5s linear infinite; }
+.cta-salt { animation: edinio-cta-salt 0.8s ease-in-out infinite; }
+.cta-stralucire { animation: edinio-cta-stralucire 1.5s ease-in-out infinite; }
+.cta-bataie { animation: edinio-cta-bataie 2.5s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .cta-puls, .cta-scutura, .cta-salt, .cta-stralucire, .cta-bataie { animation: none; }
+}
+
 /* Efectele noi ale butonului. `--fx-c` = culoarea butonului, pusa inline. */
 @keyframes edinio-fx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes edinio-fx-wobble { 0%, 70%, 100% { transform: rotate(0); } 75% { transform: rotate(-3deg); } 80% { transform: rotate(3deg); } 85% { transform: rotate(-2deg); } 90% { transform: rotate(2deg); } }

@@ -34,7 +34,7 @@ export function HeroPanoramic({ settings }: { settings: Record<string, unknown> 
       <div className="relative isolate overflow-hidden rounded-[var(--st-radius-lg)] min-h-[440px] sm:min-h-[520px] lg:min-h-0 lg:aspect-[2.4/1] flex items-end"
         style={{ backgroundColor: "color-mix(in srgb, var(--st-primary) 30%, #0b0b0b)" }}>
         {/* Etapa 25.18: pe telefon placa e inalta, deci poza lata se decupeaza; o poza demo isi pastreaza subiectul in cadru. */}
-        {imagine && <Image src={imagine} alt="" fill priority sizes="100vw" className="-z-10 object-cover"
+        {imagine && <Image src={imagine} alt="" fill priority sizes="(max-width: 640px) 75vw, 100vw" className="-z-10 object-cover"
           style={incadrareMobil(imagine) ? { objectPosition: incadrareMobil(imagine)! } : undefined} />}
         <span aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/25 to-black/5" />
         <div className={`w-full px-6 pb-10 sm:px-12 sm:pb-14 lg:pb-16 text-white ${laStanga ? "text-left lg:px-16" : "text-center"}`}>

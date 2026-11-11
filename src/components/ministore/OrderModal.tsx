@@ -4,7 +4,6 @@ import { CAMP_COD_POSTAL_OPRIT, codPostalDeTrimis, eroareCodPostalRo } from "@/l
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useEffect, useId, useRef, useTransition } from "react";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard,
   Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
@@ -1277,26 +1276,26 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     });
   }
 
+  /*
+   * Etapa 25.25 (11.11.2026): intrarea ferestrei in CSS (fond si panou, ca inainte), nu cu framer-motion (~54 KB pe pagina
+   * de produs). Iesirea e pe loc; cu miscare redusa nu se misca nimic.
+   */
   return (
-    <AnimatePresence>
+    <>
       {open && (
         <>
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+          <div
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
           />
-          <motion.div
+          <div
             ref={panouRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={titluId}
             tabIndex={-1}
             onKeyDown={laTabInPanou}
-            initial={{ opacity: 0, y: 60 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 60 }}
-            transition={{ type: "spring", stiffness: 380, damping: 32 }}
-            className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-surface"
+            className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50 w-full md:max-w-md max-h-[94vh] overflow-y-auto bg-surface motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-[60px] motion-safe:duration-300"
             style={{ borderRadius: "21px 21px 0 0", boxShadow: "rgba(0,0,0,0.5) 0px 4px 24px", border: `3px solid ${color}` }}
           >
             {/* Mobile handle */}
@@ -2047,9 +2046,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               {/* Notificarea armonizata privind garantia legala, inainte de plasarea comenzii (OUG 18/2026). */}
               <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />
             </form>
-          </motion.div>
+          </div>
         </>
       )}
-    </AnimatePresence>
+    </>
   );
 }

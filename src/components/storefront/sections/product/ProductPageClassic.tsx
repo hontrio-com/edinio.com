@@ -1,10 +1,10 @@
 "use client";
 
+import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
 import {
   ChevronLeft, ChevronRight, ShieldCheck, Truck, RotateCcw,
   ShoppingBag, ShoppingCart, Check, ArrowLeft, Package, Plus, Calendar, Star,
@@ -982,13 +982,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
             </div>
           )}
           {!isOutOfStock && !isPreorder && stocRamas !== null && stocRamas > 0 && stocRamas <= 10 && (
-            <motion.div className="flex items-center gap-2"
-              animate={demo || reduceMotion ? undefined : { opacity: [1, 0.5, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+            <div className={`flex items-center gap-2${demo || reduceMotion ? "" : " animate-pulse"}`}>
               <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
               <span className="text-sm font-semibold text-red-600">
                 Doar {stocRamas} {stocRamas === 1 ? "bucata ramasa" : "bucati ramase"} in stoc
               </span>
-            </motion.div>
+            </div>
           )}
         </>
       ),
@@ -1168,24 +1167,20 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {benefitsSection && (benefitsSection.items ?? []).length > 0 && (
           <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
             <div className="max-w-6xl mx-auto">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
+              <div data-anim="fade-up" className="text-center mb-14">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">De ce sa alegi</p>
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{benefitsSection.title}</h2>
-              </motion.div>
+              </div>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-6">
                 {benefitsSection.items.map((b, i) => (
-                  <motion.div key={i}
-                    initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.08 }}
-                    className="bg-surface border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                  <div key={i} data-anim="fade-up" style={{ ["--edinio-anim-dl" as string]: `${i * 80}ms` }} className="bg-surface border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
                       style={{ backgroundColor: `${color}20` }}>
                       <span className="text-lg font-bold" style={{ color }}>{i + 1}</span>
                     </div>
                     <h3 className="font-semibold text-foreground text-base mb-2">{b.title}</h3>
                     <p className="text-muted-foreground text-sm leading-relaxed">{b.desc}</p>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -1199,18 +1194,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {howItWorksSection && (howItWorksSection.steps ?? []).length > 0 && (
           <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
             <div className="max-w-6xl mx-auto">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-16">
+              <div data-anim="fade-up" className="text-center mb-16">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Simplu de folosit</p>
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{howItWorksSection.title}</h2>
-              </motion.div>
+              </div>
               {/* Mobile */}
               <div className="md:hidden flex flex-col gap-3">
                 {howItWorksSection.steps.map((step, i) => (
-                  <motion.div key={i}
-                    initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
-                    className="flex items-center gap-4 bg-surface border border-border rounded-xl p-4 shadow-sm">
+                  <div key={i} data-anim="fade-right" style={{ ["--edinio-anim-dl" as string]: `${i * 100}ms` }} className="flex items-center gap-4 bg-surface border border-border rounded-xl p-4 shadow-sm">
                     <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold text-lg text-white"
                       style={{ backgroundColor: color }}>
                       {String(i + 1).padStart(2, "0")}
@@ -1219,23 +1210,20 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                       <h3 className="font-semibold text-foreground text-sm mb-0.5">{step.title}</h3>
                       <p className="text-muted-foreground text-xs leading-relaxed">{step.desc}</p>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
               {/* Desktop */}
               <div className="hidden md:grid md:grid-cols-3 gap-8 relative">
                 <div className="absolute top-12 left-[calc(16.66%+2rem)] right-[calc(16.66%+2rem)] h-px bg-gradient-to-r from-border via-border to-border" />
                 {howItWorksSection.steps.map((step, i) => (
-                  <motion.div key={i}
-                    initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }} transition={{ duration: 0.6, delay: i * 0.15 }}
-                    className="flex flex-col items-center text-center relative">
+                  <div key={i} data-anim="fade-up" style={{ ["--edinio-anim-dl" as string]: `${i * 150}ms` }} className="flex flex-col items-center text-center relative">
                     <div className="w-24 h-24 rounded-full bg-surface border-2 border-border shadow-sm flex flex-col items-center justify-center mb-6 z-10">
                       <span className="font-bold text-xl" style={{ color }}>{String(i + 1).padStart(2, "0")}</span>
                     </div>
                     <h3 className="font-semibold text-foreground text-xl mb-3">{step.title}</h3>
                     <p className="text-muted-foreground text-sm leading-relaxed max-w-xs">{step.desc}</p>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -1249,10 +1237,9 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {hasShortDesc && hasLongDesc && (
           <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
             <div className="max-w-3xl mx-auto">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-10">
+              <div data-anim="fade-up" className="text-center mb-10">
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Descriere</h2>
-              </motion.div>
+              </div>
               <div className="policy-content text-muted-foreground leading-relaxed text-base"
                 dangerouslySetInnerHTML={{ __html: product.description ?? "" }} />
             </div>
@@ -1266,11 +1253,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {product.is_bundle && bundleComponents.length > 0 && (
           <section className="py-12 md:py-24 px-4 md:px-6 bg-surface">
             <div className="max-w-4xl mx-auto">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-12">
+              <div data-anim="fade-up" className="text-center mb-12">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Pachet</p>
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Ce conține pachetul</h2>
-              </motion.div>
+              </div>
               {/* `grid-cols-1` ca la grila eroului: numele componentelor se rup
                   aici la spatii, deci pista nu se umfla azi, dar plafonul costa
                   o clasa si inchide cazul. */}
@@ -1317,14 +1303,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {specifications.length > 0 && (
           <section className="py-12 md:py-28 px-4 md:px-6 bg-background">
             <div className="max-w-4xl mx-auto">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
+              <div data-anim="fade-up" className="text-center mb-14">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Detalii tehnice</p>
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Specificatii</h2>
-              </motion.div>
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
-                className="border border-border rounded-xl overflow-hidden shadow-sm">
+              </div>
+              <div data-anim="fade-up" style={{ ["--edinio-anim-dl" as string]: `100ms` }} className="border border-border rounded-xl overflow-hidden shadow-sm">
                 {specifications.map((spec, i) => (
                   // Randul se stivuieste pe telefon: cu eticheta fixata la 11rem si
                   // px-6, pe un ecran de 320 px ramaneau 80 px pentru valoare.
@@ -1334,7 +1317,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                     <span className="text-sm font-semibold text-foreground">{spec.value}</span>
                   </div>
                 ))}
-              </motion.div>
+              </div>
             </div>
           </section>
         )}
@@ -1346,19 +1329,16 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         {faqSection && (faqSection.items ?? []).length > 0 && (
           <section className="py-12 md:py-28 px-4 md:px-6 bg-surface">
             <div className="max-w-3xl mx-auto">
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6 }} className="text-center mb-14">
+              <div data-anim="fade-up" className="text-center mb-14">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground font-mono mb-3">Intrebari frecvente</p>
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{faqSection.title}</h2>
-              </motion.div>
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 }}
-                className="bg-surface border border-border rounded-xl shadow-sm px-4 md:px-8">
+              </div>
+              <div data-anim="fade-up" style={{ ["--edinio-anim-dl" as string]: `100ms` }} className="bg-surface border border-border rounded-xl shadow-sm px-4 md:px-8">
                 {faqSection.items.map((faq, i) => (
                   <FAQItem key={i} faq={faq} isOpen={openFaq === i}
                     onToggle={() => setOpenFaq(openFaq === i ? null : i)} />
                 ))}
-              </motion.div>
+              </div>
             </div>
           </section>
         )}
@@ -1409,7 +1389,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
             </div>
             {/* Animatia de intrare a fost dintotdeauna doar pe desktop; aici sta pe
                 un invelis `hidden lg:block`, deci pe telefon nu are ce misca. */}
-            <motion.div className="hidden lg:block" initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+            <div className="hidden lg:block motion-safe:lg:animate-in motion-safe:lg:fade-in motion-safe:lg:slide-in-from-left-8 motion-safe:lg:duration-[600ms]">
               <Gallery mobile={false} slides={slides} activeSlide={activeSlide} goTo={goTo} color={color}
                 imgAlt={imgAlt} hasDiscount={!!hasDiscount} discountPct={discountPct}
                 onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} />
@@ -1424,14 +1404,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                   ))}
                 </div>
               )}
-            </motion.div>
+            </div>
           </div>
           {/* `contents` pe telefon: elementul nu genereaza cutie, deci animatia de
               intrare (desktop-only, ca inainte) nu are efect, iar zona de cumparare
               ramane copil direct al grilei. */}
-          <motion.div className="contents lg:block" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
+          <div className="contents lg:block motion-safe:lg:animate-in motion-safe:lg:fade-in motion-safe:lg:slide-in-from-right-8 motion-safe:lg:duration-[600ms] motion-safe:lg:delay-100">
             {zonaDeCumparare()}
-          </motion.div>
+          </div>
         </div>
       </div>
 
@@ -1442,6 +1422,9 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           ramane transparente. */}
       {demo ? null : (
       <>
+      {/* Etapa 25.25: porneste aparitiile `data-anim` ale sectiunilor de mai jos (in locul lui framer-motion). Fara
+          JavaScript sau cu miscare redusa nu se ascunde nimic. */}
+      <PornesteAnimatiile />
       {blocurileZonei(blocuriPagina, SCHEMA_BLOCURI, "jos").map((b) => (
         <MarcajBloc key={b.id} idSectiune={idPagina} idBlocului={b.id} eticheta={SCHEMA_BLOCURI.tipuri[b.type].label}>
           {/* „Conținut liber” (etapa 9): se repeta, deci dupa id, nu din harta bucatilor. */}

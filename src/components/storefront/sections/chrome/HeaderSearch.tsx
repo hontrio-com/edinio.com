@@ -181,7 +181,7 @@ function SearchBar({
 
   return (
     <form {...propsForm} {...propsZona}
-      className={`relative flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] transition-colors ${compact ? "h-11" : "h-12"}`}>
+      className={`relative flex items-stretch rounded-[var(--st-radius)] border border-[var(--st-border)] bg-[var(--st-surface)] focus-within:border-[var(--st-primary)] focus-within:ring-2 focus-within:ring-[var(--st-primary)]/30 transition-colors ${compact ? "h-11" : "h-12"}`}>
       <input
         type="search"
         value={valoare}

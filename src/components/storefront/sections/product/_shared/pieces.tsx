@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { ShoppingBag, Plus, Minus, Eye } from "lucide-react";
 import type { FaqItem } from "./product-page.types";
 import { textulContorului, type FereastraContor } from "@/lib/storefront/contor-vizitatori";
@@ -71,20 +70,30 @@ export function FAQItem({ faq, isOpen, onToggle }: { faq: FaqItem; isOpen: boole
         </span>
         <span className="font-semibold text-foreground text-base pr-4">{faq.q}</span>
       </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden">
-            <p className="text-muted-foreground text-sm leading-relaxed pb-5 pl-10 pr-4">{faq.a}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/*
+        Etapa 25.25 (11.11.2026): deschiderea in CSS (randurile grilei de la 0fr la 1fr, 0,3 s), nu cu framer-motion (~54 KB pe
+        pagina de produs). Raspunsul inchis ramane in pagina, dar `inert`: nu se citeste si nu primeste focus.
+      */}
+      <div inert={!isOpen}
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out motion-reduce:transition-none ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden">
+          <p className="text-muted-foreground text-sm leading-relaxed pb-5 pl-10 pr-4">{faq.a}</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ─── CTA Button with effects ─────────────────────────────────────────────── */
+
+/** Efectul ales de comerciant -> clasa lui din `stil-comun.css` (`pulse` si `glow` deseneaza halo-ul din `box-shadow`). */
+const CLASA_EFECT: Record<string, string> = {
+  pulse: "cta-puls",
+  shake: "cta-scutura",
+  bounce: "cta-salt",
+  glow: "cta-stralucire",
+  heartbeat: "cta-bataie",
+};
 
 const BTN_CLS = "w-full py-4 text-base font-bold text-[var(--st-primary-contrast,#fff)] rounded-xl hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
 
@@ -140,49 +149,17 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
    * Umbra de asezare din `base` intra in cadrele animatiei: altfel animarea lui
    * `box-shadow` ar fi sters-o.
    */
-  if (effect === "pulse") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls}
-      style={{ backgroundColor: color }}
-      animate={{ boxShadow: [
-        `0px 4px 16px ${color}55, 0px 0px 0px 0px ${color}B3`,
-        `0px 4px 16px ${color}55, 0px 0px 0px 18px ${color}00`,
-      ] }}
-      transition={{ duration: 1.2, repeat: Infinity, ease: "easeOut" }}>
+  /*
+   * Etapa 25.25 (11.11.2026): efectele in CSS (`stil-comun.css`, `.cta-*`), cu aceleasi cadre si timpi ca in framer-motion,
+   * care aducea ~54 KB pe pagina de produs. Umbra de asezare sta in `base`; la puls si stralucire o reia chiar animatia
+   * (animarea lui `box-shadow` ar fi sters-o). Cu miscare redusa, efectele se opresc si ramane butonul cu umbra lui.
+   */
+  const efect = CLASA_EFECT[effect];
+  if (efect) return (
+    <button type="button" onClick={onClick} disabled={disabled} className={`${cls} ${efect}`}
+      style={{ ...base, ["--fx-c" as string]: color }}>
       {label}
-    </motion.button>
-  );
-
-  if (effect === "shake") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}
-      animate={{ x: [0, -5, 5, -5, 5, 0] }}
-      transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 3 }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "bounce") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}
-      animate={{ y: [0, -6, 0] }}
-      transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "glow") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls}
-      style={{ backgroundColor: color }}
-      animate={{ boxShadow: [`0px 4px 16px ${color}44`, `0px 4px 36px ${color}CC`, `0px 4px 16px ${color}44`] }}
-      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}>
-      {label}
-    </motion.button>
-  );
-
-  if (effect === "heartbeat") return (
-    <motion.button type="button" onClick={onClick} disabled={disabled} className={cls} style={base}
-      animate={{ scale: [1, 1.06, 1, 1.06, 1] }}
-      transition={{ duration: 1, repeat: Infinity, repeatDelay: 1.5 }}>
-      {label}
-    </motion.button>
+    </button>
   );
 
   return (

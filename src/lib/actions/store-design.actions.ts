@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { esteUuid } from "@/lib/supabase/ids";
 import { logError } from "@/lib/error-logger";
+import { rateLimit } from "@/lib/utils/rate-limit";
 import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
 import { ciornaDinVersiune, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
 import { CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, type TemaAplicata } from "@/lib/teme/aplicare";
@@ -65,6 +66,14 @@ const MAX_DESIGN_BYTES = 200_000;
 const PREA_MARE = "Designul e prea mare. Scurtează sau scoate din blocurile „Conținut liber”.";
 
 type ActionResult = { error: string } | { success: true };
+
+/*
+ * Etapa 25.28 (11.11.2026): actiunile temelor sterg si importa produse si categorii; apasate in bucla (un script, un
+ * dublu-clic tinut) ar incarca baza. 10 pe minut pe om ajung oricui alege o tema. Limitatorul e in memorie, pe instanta:
+ * o plasa, nu un zid (vezi `rate-limit.ts`).
+ */
+const PREA_DES_TEME = "Prea multe schimbări de temă într-un minut. Așteaptă puțin și încearcă din nou.";
+const prea_des = (userId: string) => !rateLimit(`teme:${userId}`, 10, 60_000);
 
 interface OwnedStore {
   businessId: string;
@@ -585,6 +594,7 @@ async function scoateDateleDemo(owned: OwnedStore, pastreaza: string | null): Pr
 export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?: boolean): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
+  if (prea_des(owned.userId)) return { error: PREA_DES_TEME };
   const tema = temaDupaCheie(cheie);
   if (!tema) return { error: "Tema nu există." };
   // Doar un `true` adevarat: argumentul vine din browser.
@@ -691,6 +701,7 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
 export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<ActionResult | { success: true; nota: string }> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
+  if (prea_des(owned.userId)) return { error: PREA_DES_TEME };
 
   const supabase = await createClient();
   const { data: row } = await supabase
@@ -847,6 +858,7 @@ async function stergeCategoriileDemo(businessId: string, urma: UrmaDateDemo): Pr
 export async function stergeDateleDemo(businessId: string): Promise<ActionResult> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
+  if (prea_des(owned.userId)) return { error: PREA_DES_TEME };
 
   const supabase = await createClient();
   const { data: row, error: eCitit } = await supabase

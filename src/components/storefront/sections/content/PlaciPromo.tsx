@@ -43,8 +43,10 @@ export function PlaciPromo({ settings, varianta }: { settings: Record<string, un
             const continut = (
               <span className="relative block aspect-[4/5] overflow-hidden rounded-[var(--st-radius-lg)] bg-[var(--st-border)]">
                 {p.imagine && (
+                  // Etapa 25.24: 384 sau 640 dupa latimea placii (pe telefon ~150 px), nu mereu 640.
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={cdnImage(p.imagine, 600)} alt="" loading="lazy"
+                  <img src={cdnImage(p.imagine, 640)} srcSet={`${cdnImage(p.imagine, 384)} 384w, ${cdnImage(p.imagine, 640)} 640w`}
+                    sizes="(max-width: 1024px) 32vw, 300px" alt="" loading="lazy"
                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.06] transition-transform duration-700" />
                 )}
                 <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
@@ -85,7 +87,8 @@ export function PlaciPromo({ settings, varianta }: { settings: Record<string, un
               )}
               {p.imagine && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={cdnImage(p.imagine, 600)} alt="" loading="lazy"
+                <img src={cdnImage(p.imagine, 640)} srcSet={`${cdnImage(p.imagine, 384)} 384w, ${cdnImage(p.imagine, 640)} 640w`}
+                  sizes="(max-width: 1024px) 32vw, 240px" alt="" loading="lazy"
                   className="absolute right-2 bottom-2 sm:right-3 sm:bottom-3 w-[84%] h-[54%] sm:w-[78%] sm:h-[66%] object-contain object-right-bottom rounded-[var(--st-radius)] group-hover:scale-[1.05] origin-bottom-right transition-transform duration-500" />
               )}
             </span>

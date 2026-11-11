@@ -6,6 +6,13 @@ import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { resolveHref } from "@/lib/pages/href";
 
+/**
+ * Latimea ceruta pe telefon (etapa 25.23, 11.11.2026): 75vw, nu 100vw. Un telefon cu densitate 3 cerea 1170 px, deci
+ * varianta de 1280 sau originalul (95-136 KB la temele demo, chiar elementul LCP pe 4G lent); asa ia ~880 px, adica
+ * densitate ~2,5, cu ~40% mai putini octeti si fara diferenta la vedere. Pe ecranele mari ramane latimea intreaga.
+ */
+export const SIZES_BANNER = "(max-width: 640px) 75vw, 100vw";
+
 /** Treptele de latime cerute CDN-ului pentru bannere. */
 const LATIMI_BANNER = [640, 960, 1280, 1600];
 
@@ -45,7 +52,7 @@ export function HeroBanners({ banners, links, alt, basePath }: HeroBannersProps)
     const incadrare = incadrareMobil(banners[0]);
     const img = (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={cdnImage(banners[0], 1600)} srcSet={srcSet} sizes={srcSet ? "100vw" : undefined} alt={href ? alt : ""} fetchPriority="high"
+      <img src={cdnImage(banners[0], 1600)} srcSet={srcSet} sizes={srcSet ? SIZES_BANNER : undefined} alt={href ? alt : ""} fetchPriority="high"
         className={`block mx-auto w-full h-auto md:w-auto md:max-w-full md:max-h-[60vh] md:rounded-2xl${incadrare ? " max-sm:h-full max-sm:object-cover" : ""}`}
         style={incadrare ? { objectPosition: incadrare } : undefined} />
     );
@@ -200,7 +207,7 @@ export function BannerSlider({
                 // magazinului — acelasi pentru toate slide-urile, deja citit ca H1.
                 // Cel cu link ramane cu nume, altfel linkul n-ar avea niciunul.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={cdnImage(src, 1600)} srcSet={srcSet} sizes={srcSet ? "100vw" : undefined} alt={href ? alt : ""} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover"
+                <img src={cdnImage(src, 1600)} srcSet={srcSet} sizes={srcSet ? SIZES_BANNER : undefined} alt={href ? alt : ""} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover"
                   style={incadrari[i] ? { objectPosition: incadrari[i]! } : undefined} />
               );
               return (

@@ -66,7 +66,7 @@ function Placa({ placa, mare, inalta, cls, basePath, prioritate }: {
       {placa.imagine && (
         mare ? (
           <>
-            <Image src={placa.imagine} alt="" fill priority={prioritate} sizes="(max-width: 1024px) 100vw, 45vw"
+            <Image src={placa.imagine} alt="" fill priority={prioritate} sizes="(max-width: 640px) 75vw, (max-width: 1024px) 100vw, 45vw"
               className="object-cover group-hover:scale-[1.03] transition-transform duration-700" />
             <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent" />
           </>

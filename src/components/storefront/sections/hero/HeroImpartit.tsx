@@ -61,7 +61,7 @@ export function HeroImpartit({ settings }: { settings: Record<string, unknown> }
         </div>
         <div className="relative min-h-[260px] sm:min-h-[340px] lg:min-h-[500px]" style={{ backgroundColor: fond }}>
           {imagine && (
-            <Image src={imagine} alt="" fill priority sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
+            <Image src={imagine} alt="" fill priority sizes="(max-width: 640px) 75vw, (max-width: 1024px) 100vw, 50vw" className="object-cover" />
           )}
         </div>
       </div>

@@ -788,6 +788,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         layout: "full",
         previewHeight: 420,
         fields: [],
+        // Etapa 25.22 (11.11.2026): bannerele demo ale unor teme au textul scris in poza; peste ele, titlul s-ar suprapune.
+        note: "Titlul și textul magazinului se scriu peste primul banner. Dacă bannerul are deja text în poză (cum au bannerele demo ale unor teme), cele două se suprapun: pune o poză fără text sau alege altă variantă.",
       },
       carduri: {
         // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri in dreapta (in degrade de la etapa 23).

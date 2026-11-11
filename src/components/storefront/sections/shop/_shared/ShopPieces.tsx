@@ -128,8 +128,10 @@ export function GrupFatete({ fateta }: { fateta: Fateta }) {
 export function FiltreDeBaza() {
   const { color, facets, priceMin, setPriceMin, priceMax, setPriceMax, onSaleOnly, setOnSaleOnly, inStockOnly, setInStockOnly } =
     useStorefront();
+  // Etapa 25 (11.11.2026), trecerea din tastatura: doar marginea de 1 px isi schimba culoarea la focus, prea putin ca sa
+  // se vada (WCAG 2.4.7); inelul se adauga peste, ca la restul vitrinei.
   const input =
-    "w-full min-w-0 px-2.5 py-2 text-sm border border-[var(--st-border)] rounded-[var(--st-radius-sm)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]";
+    "w-full min-w-0 px-2.5 py-2 text-sm border border-[var(--st-border)] rounded-[var(--st-radius-sm)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)] focus-visible:ring-2 focus-visible:ring-[var(--st-primary)]/30";
   const comutator = "px-2 py-2 rounded-[var(--st-radius-sm)] text-[13px] border transition-colors text-center truncate";
   const inactiv = { backgroundColor: "transparent", color: "var(--st-text)", borderColor: "var(--st-border)" };
   const activ = { backgroundColor: color, color: "#fff", borderColor: color };
@@ -351,7 +353,7 @@ export function Sortare() {
           aria-label="Sorteaza produsele"
           value={effectiveSort}
           onChange={(e) => { setSortTouched(true); setSort(e.target.value); }}
-          className="appearance-none pl-3 pr-8 py-2 text-[13px] rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]">
+          className="appearance-none pl-3 pr-8 py-2 text-[13px] rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)] focus-visible:ring-2 focus-visible:ring-[var(--st-primary)]/30">
           {hasSearchMatches && <option value="relevance">Relevanta</option>}
           {SORTARI_CATALOG
             .filter((o) => setariMagazin.sortariOferite.includes(o.value))
@@ -401,7 +403,7 @@ export function CautareCatalog() {
         onChange={(e) => { if (!search && e.target.value) setSortTouched(false); setSearch(e.target.value); }}
         placeholder={catalogPeServer ? "Cauta in magazin, apoi Enter" : "Cauta in magazin"}
         aria-label="Cauta produse"
-        className="w-full px-3.5 py-2.5 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)]"
+        className="w-full px-3.5 py-2.5 text-sm rounded-[var(--st-radius-sm)] border border-[var(--st-border)] bg-[var(--st-surface)] text-[var(--st-text)] focus:outline-none focus:border-[var(--st-primary)] focus-visible:ring-2 focus-visible:ring-[var(--st-primary)]/30"
       />
     </form>
   );

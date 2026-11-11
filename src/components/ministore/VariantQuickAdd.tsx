@@ -5,7 +5,6 @@ import Image from "next/image";
 import { ShoppingCart, X, Package } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import type { PriceRange } from "@/lib/utils/product-price";
-import { createClient } from "@/lib/supabase/client";
 import {
   parseVariants, comboTitle, findCombo, comboUnitPrice, comboCompareAtPrice,
 } from "@/lib/storefront/variants";
@@ -90,11 +89,16 @@ export function VariantQuickAdd({ product, color, open, onClose, onAdd, deferCom
   useEffect(() => {
     if (!open || !productId || !deferCombinations || loadedPs !== null) return;
     let cancelled = false;
-    createClient()
-      .from("products")
-      .select("page_sections")
-      .eq("id", productId)
-      .maybeSingle()
+    /*
+     * Etapa 25.25 (11.11.2026): clientul Supabase (~57 KB comprimat) se aduce abia la deschiderea ferestrei, nu cu pagina:
+     * importat sus, intra in pachetul primei pagini a ORICARUI magazin, desi cei mai multi vizitatori nu deschid fereastra.
+     */
+    import("@/lib/supabase/client")
+      .then(({ createClient }) => createClient()
+        .from("products")
+        .select("page_sections")
+        .eq("id", productId)
+        .maybeSingle())
       .then(
         ({ data }) => { if (!cancelled) setLoadedPs(data?.page_sections ?? {}); },
         () => { if (!cancelled && product) setLoadedPs(product.page_sections); },

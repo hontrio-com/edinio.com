@@ -28,7 +28,7 @@ export function HeroOverlay() {
     <section className="relative overflow-hidden">
       <div className="absolute inset-0" style={{ backgroundColor: "var(--st-primary)" }} />
       {banners[0] && (
-        <Image src={banners[0]} alt="" fill className="object-cover" sizes="100vw" priority />
+        <Image src={banners[0]} alt="" fill className="object-cover" sizes="(max-width: 640px) 75vw, 100vw" priority />
       )}
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/40 to-black/70" />
       <div className="relative z-10 max-w-3xl mx-auto px-4 py-20 sm:py-28 text-center text-white">

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { X, Plus, AlertTriangle, ImagePlus } from "lucide-react";
-import { RichTextEditor } from "@/components/ui/RichTextEditor";
+// La nevoie: TipTap (~124 KB gzip) nu mai pleaca odata cu editorul magazinului (etapa 25.15).
+import { RichTextEditor } from "@/components/ui/RichTextEditorLaNevoie";
 import { MediaPicker } from "@/components/media/MediaPicker";
 import { MAX_VIDEO_MB } from "@/lib/pages/video-config";
 import { isFlexibleColumns, classicItemToBlocks, columnsPerRow, gridTemplateFor } from "@/lib/pages/block-tree";

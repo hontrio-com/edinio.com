@@ -53,7 +53,7 @@ export function CategoryNavColorate({ settings }: { settings: Record<string, unk
               </span>
               {c.image && (
                 <span className="absolute right-1 bottom-1 sm:right-2 sm:bottom-2 w-[80%] h-[72%]">
-                  <Image src={c.image} alt="" fill sizes="(max-width: 640px) 35vw, 200px"
+                  <Image src={c.image} alt="" fill sizes="(max-width: 640px) 30vw, 200px"
                     className="object-contain object-right-bottom drop-shadow-[0_10px_16px_rgba(0,0,0,0.18)] group-hover:scale-[1.06] origin-bottom-right transition-transform duration-500" />
                 </span>
               )}

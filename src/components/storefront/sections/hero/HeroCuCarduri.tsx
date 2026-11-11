@@ -71,7 +71,7 @@ function Card({ card, basePath }: { card: CardHero; basePath: string }) {
       {card.imagine && (
         // Intre 1024 si 1280 coloana cardurilor are ~270 px: o poza mai mica, altfel textul se rupea cuvant cu cuvant.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cdnImage(card.imagine, 400)} alt="" className="w-28 h-24 sm:w-40 sm:h-32 lg:w-24 lg:h-24 xl:w-40 xl:h-32 shrink-0 object-contain rounded-[var(--st-radius)] group-hover:scale-[1.06] transition-transform duration-500" />
+        <img src={cdnImage(card.imagine, 384)} srcSet={`${cdnImage(card.imagine, 384)} 384w, ${cdnImage(card.imagine, 640)} 640w`} sizes="(max-width: 640px) 112px, (max-width: 1024px) 160px, (max-width: 1280px) 96px, 160px" alt="" className="w-28 h-24 sm:w-40 sm:h-32 lg:w-24 lg:h-24 xl:w-40 xl:h-32 shrink-0 object-contain rounded-[var(--st-radius)] group-hover:scale-[1.06] transition-transform duration-500" />
       )}
     </>
   );

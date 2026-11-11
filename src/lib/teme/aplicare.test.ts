@@ -90,7 +90,8 @@ function functia(s: string, nume: string): string {
 test("⚠⚠ aplicarea: proprietarul intai; ce era intra in Istoric INAINTE de publicare, iar o cadere acolo o opreste", () => {
   const f = functia(cod("src/lib/actions/store-design.actions.ts"), "aplicaTema");
   // Etapa 18.2: al treilea argument, „Importă și datele demo”; doar un `true` adevarat il porneste (vine din browser).
-  assert.match(f, /^export async function aplicaTema\(businessId: string, cheie: string, cuDateDemo\?: boolean\): Promise<ActionResult> \{\s*const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;\s*const tema = temaDupaCheie\(cheie\);\s*if \(!tema\) return \{ error: "Tema nu există\." \};\s*const cuDate = cuDateDemo === true;/);
+  // Etapa 25.28: dupa proprietar, limita de frecventa (actiunea sterge si importa produse).
+  assert.match(f, /^export async function aplicaTema\(businessId: string, cheie: string, cuDateDemo\?: boolean\): Promise<ActionResult> \{\s*const owned = await loadOwnedStore\(businessId\);\s*if \("error" in owned\) return owned;\s*if \(prea_des\(owned\.userId\)\) return \{ error: PREA_DES_TEME \};\s*const tema = temaDupaCheie\(cheie\);\s*if \(!tema\) return \{ error: "Tema nu există\." \};\s*const cuDate = cuDateDemo === true;/);
   const istoric = f.indexOf("if (!(await pastreazaInainteDeTema(owned, randuri))) {");
   const publicare = f.indexOf("const publicat = await publishDesign(owned.businessId, ciornaCuContinut(design, continut));");
   const semn = f.indexOf("await scrieSemnulTemei(owned.businessId, { cheie: tema.cheie,");
@@ -239,4 +240,17 @@ test("⚠ „Aplică tema”: mesajul spune „cu datele demo” doar cand datel
   assert.equal(f.match(/\bcuDate\b/g)?.length, 1, "bifa bruta se citeste o singura data, in valoarea care pleaca");
   assert.match(f, /const cuDateDemo = cuDate && t\.demo\.motivOprit === null;\s*const r = await aplicaTema\(businessId, t\.cheie, cuDateDemo\);/);
   assert.match(f, /toast\.success\(cuDateDemo\s*\?\s*`Tema \$\{t\.nume\} e în magazin, cu datele demo\./);
+});
+
+test("⚠ 25.28: aplicarea, „Pune la loc” si „Șterge datele demo” au limita de frecventa, dupa proprietar", () => {
+  const s = cod("src/lib/actions/store-design.actions.ts");
+  assert.match(s, /const prea_des = \(userId: string\) => !rateLimit\(`teme:\$\{userId\}`, 10, 60_000\);/);
+  for (const nume of ["aplicaTema", "puneLaLocDesignulDeDinainte", "stergeDateleDemo"]) {
+    const f = functia(s, nume);
+    const owned = f.indexOf("const owned = await loadOwnedStore(businessId);");
+    const limita = f.indexOf("if (prea_des(owned.userId)) return { error: PREA_DES_TEME };");
+    assert.ok(owned > 0 && limita > owned, `${nume}: limita dupa proprietar`);
+    // Inaintea oricarei scrieri: nimic nu se atinge cand e refuzat.
+    assert.ok(limita < f.indexOf("createAdminClient()") || f.indexOf("createAdminClient()") < 0, nume);
+  }
 });

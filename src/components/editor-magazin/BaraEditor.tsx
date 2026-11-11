@@ -112,7 +112,7 @@ export function BaraEditor({
       <label className="flex-1 sm:flex-initial flex items-center gap-2 min-w-0">
         <span className="hidden xl:inline text-xs text-muted-foreground">Editezi</span>
         <select value={pagina} onChange={(e) => onPagina(e.target.value as CheiePagina)} aria-label="Pagina pe care o editezi"
-          className="h-9 w-full sm:w-auto min-w-0 pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary">
+          className="h-9 w-full sm:w-auto min-w-0 pl-3 pr-8 rounded-lg border border-border bg-surface text-sm font-medium text-foreground focus:outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/40">
           {PAGINI_EDITOR.map((p) => <option key={p.cheie} value={p.cheie}>{ingust ? p.scurt : p.eticheta}</option>)}
           {paginiProprii.length > 0 && (
             <optgroup label="Paginile tale">

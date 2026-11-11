@@ -9,6 +9,7 @@ import { NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
 import { ANTET_ROBOTS } from "@/lib/storefront/indexare-pe-platforma";
 import { UA_SANTINELA } from "@/lib/storefront/vizita-de-masurat";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
+import { esteRandDeMagazinDemo } from "@/lib/teme/gazde-demo";
 import { caiInterziseStraine } from "@/app/robots";
 import { numeScurtMagazin } from "@/lib/storefront/catalog/descriere-generata";
 import { continutMeta, problemeDescriere } from "./descrieri";
@@ -353,19 +354,26 @@ async function magazineVii(admin: Admin): Promise<{
 }> {
   const { data: mag, error } = await admin
     .from("businesses")
-    // `page_content` doar pentru modul magazinului (un singur produs sau catalog).
+    // `page_content` pentru modul magazinului (un singur produs sau catalog) si pentru semnul magazinului demo.
     .select("id, slug, user_id, suspended_until, custom_domain, custom_domain_healthy, store_settings(page_content)")
     .eq("is_published", true)
     .not("slug", "is", null);
   if (error) return { vii: [], publicateFaraDomeniu: [], publicateCuDomeniu: 0, eroare: `citirea magazinelor a esuat: ${error.message}` };
 
-  const publicateFaraDomeniu: MagazinPublicat[] = (mag ?? [])
+  /*
+   * ⚠ Fara magazinele demo ale temelor (`tema-*`, semnul `magazin_demo`), in AMBELE liste: nu sunt ale unui comerciant
+   * si au dinadins noindex, fara sitemap, feeduri goale si comenzile oprite. Probate, dau doar alarme false: la o ora
+   * dupa lansarea lor (11.11.2026, 16:17), „feedul Facebook e GOL” pe tema-vega si tema-venus.
+   */
+  const reale = (mag ?? []).filter((b) => !esteRandDeMagazinDemo(b));
+
+  const publicateFaraDomeniu: MagazinPublicat[] = reale
     .filter((b) => !(b.custom_domain ?? "").trim())
     .map((b) => ({ slug: b.slug }))
     .sort((a, b) => a.slug.localeCompare(b.slug));
-  const publicateCuDomeniu = (mag ?? []).length - publicateFaraDomeniu.length;
+  const publicateCuDomeniu = reale.length - publicateFaraDomeniu.length;
 
-  const idUtilizatori = [...new Set((mag ?? []).map((b) => b.user_id))];
+  const idUtilizatori = [...new Set(reale.map((b) => b.user_id))];
   const { data: profiluri, error: eProfil } = await admin
     .from("users_profile")
     .select("id, plan, plan_expires_at")
@@ -374,7 +382,7 @@ async function magazineVii(admin: Admin): Promise<{
   const planDupaUtilizator = new Map((profiluri ?? []).map((p) => [p.id, p]));
 
   const vii: MagazinViu[] = [];
-  for (const b of mag ?? []) {
+  for (const b of reale) {
     const p = planDupaUtilizator.get(b.user_id);
     /*
      * Fara profil nu putem sti daca abonamentul mai tine. Santinela nu proba ce nu

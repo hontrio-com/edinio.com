@@ -74,3 +74,17 @@ export const MESAJ_COMENZI_OPRITE = "Acesta e un magazin demo: poti incerca tot,
 export function esteSlugDeMagazinDemo(slug: string): boolean {
   return slug.startsWith("tema-");
 }
+
+/**
+ * Un rand din `businesses` (cu `store_settings(page_content)` alaturi, obiect sau lista) e al unui magazin demo?
+ * Dupa slugul rezervat SAU dupa semnul din `page_content`: oricare singur ajunge.
+ *
+ * ⚠ Pentru cine alege magazine „reale” (santinela): un demo are dinadins noindex, fara sitemap, feeduri goale (produsele
+ * lui stau in afara canalelor, etapa 18.1) si comenzile oprite. Probat ca un magazin de comerciant, da doar alarme
+ * false: in ziua lansarii (11.11.2026, 16:17) santinela a scris „feedul Facebook e GOL” pe `tema-vega` si `tema-venus`.
+ */
+export function esteRandDeMagazinDemo(rand: { slug: string | null; store_settings?: unknown }): boolean {
+  if (rand.slug && esteSlugDeMagazinDemo(rand.slug)) return true;
+  const setari = rand.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
+  return esteMagazinDemo((Array.isArray(setari) ? setari[0] : setari)?.page_content);
+}

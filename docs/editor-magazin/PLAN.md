@@ -6,6 +6,10 @@ blocuri in sectiuni, stil global) plus un strat „Avansat” strans implicit. F
 
 ## Stare si reluare (citeste intai)
 
+**⚠ 11.11.2026: LANSAT IN PRODUCTIE** (acordul lui: „Gata, poti da push la tot, lansam update ul”). Ramura e chiar
+`main` de acum; pasii facuti, ce s-a verificat si ce ramane de hotarat de el: `REGISTRU.md`, sectiunea „F”, la coada.
+Mai jos e istoria proiectului, pastrata pentru reluarea unei discutii vechi.
+
 **Ultima stare, 28.10.2026:** etapele 1, 2 si 3 FACUTE, comise local si PROBATE pe ecran. **Etapa 4a
 (blocurile paginii de produs) FACUTA si PROBATA pe ecran (4.6)**, cu acordul lui: „Da, continua. O
 sa iti dau la final lista cu toate mentiunile mele”. **4.7, editorul pe tot ecranul („mentiune foarte

@@ -456,3 +456,37 @@ Fiecare pas cu acordul lui, in ordinea asta:
    Apoi E.5 pe 2-3 subdomenii (si o comanda refuzata) si pagina „Teme” cu „Vezi demo”.
 - **Plasa:** o problema in magazine dupa push -> Vercel > Deployments > desfasurarea de dinainte > „Instant Rollback” (cam
   un minut). Migratia doar adauga un tabel, deci codul vechi merge si cu ea: nu se desface.
+
+**11.11.2026: LANSAT** (acordul lui: „Gata, poti da push la tot, lansam update ul. Dupa lansare, verifici toate magazinele
+active sa nu se strice ceva la ele.”). Toti pasii de mai sus, in ordine:
+- **0.** `main` neschimbat (`ec9cec9c`, deja in ramura). Turul actualizarii comis inainte (`52d382f4`). Porti verzi:
+  tsc, `lint:prag --check`, tipurile DB, `npm test` 11.543 / 0 cazute / 2 sarite, `build:ci`. Copie de siguranta:
+  `arhiva/editor-magazin-2026-11-11.bundle` (`main` + ramura, verificata).
+- **1.** Migratia 1 aplicata in productie (`istoricul_publicarilor`); verificata pe rezultat: RLS pornit, 0 politici, niciun
+  drept pentru `anon` si `authenticated`, `service_role` scrie si citeste, originile temelor in constrangere.
+  `coloane-cerute-exista`: 432 / 432.
+- **2.** Schema din Git regenerata si comisa (`1439acce`): `--check` egal cu productia, tipurile fara deriva.
+- **3.** `main` dus prin fast-forward la `1439acce` si impins (~15:58 ora RO). Vercel: „Deployment has completed”, productia
+  servea codul nou la ~200 s dupa push. CI: 4 / 4 verde.
+- **4.** TOATE magazinele publicate (79: 18 active, 61 suspendate) fotografiate INAINTE de push si DUPA (Playwright, cu
+  pixelii tertilor si semnalul de analitice blocate, deci fara vizite in statisticile lor): 179 de pagini (acasa si produs
+  pe calculator si telefon, Magazin, o categorie, cosul). Niciun cod HTTP schimbat, nicio eroare JS noua, nicio depasire
+  orizontala, aceleasi legaturi de produs si aceleasi butoane de comanda; cele 61 suspendate arata tot „indisponibil”.
+  Diferentele vizuale, toate din etapele ramurii: pe telefon textele beneficiilor nu se mai taie si randurile subsolului
+  sunt mai inalte; butonul bannerului de cookie-uri are contrast citibil; contorul de vizitatori e cel masurat (⚠ in
+  primele 24 de ore numara si vederile scrise INAINTE de push, cu roboti: la eSAFE „339 ... in ultimele 24 de ore” pe un
+  produs, ultima vedere la 15:53); ⚠ **pagina de produs Detaliat pe coloane 6/5** (`0eb6baa3`, 08.11, „galeria iesea de
+  700-800 px pe temele late”), care a ajuns si la magazinele de azi si NU fusese scrisa aici: la 72rem galeria are ~602 px
+  in loc de ~688, coloana de cumparare ~502 in loc de 416 (eSAFE, VetDepo, MNY Aroma, Suporti-Numar, Tiara, Insula
+  Bucuriei). Nimic stricat; de hotarat de el daca ramane. Problema DE DINAINTE (si inainte de push): la Cleanixo, primul
+  produs din prima pagina duce la 404.
+- **5.** `*.edinio.com` adaugat de el in Vercel. `magazinul-demo.sql` si `magazinele-demo-teme.sql` rulate in productie
+  (declansatoarele recitite: niciun email, niciun apel extern): 30 de magazine `tema-*` pe contul tehnic, publicate, fara
+  domeniu. Umplute toate 30 (`seamana-demo.ts <cheie> --productie`): 331 de produse demo, toate cu sursa `tema-demo`,
+  comenzile oprite pe 30 / 30, 0 comenzi. Verificat: 30 / 30 subdomenii 200 cu `noindex, follow` si numele magazinului,
+  fara `/tema-` in legaturi; `robots.txt` „Disallow: /”, sitemap 404; orice alt subdomeniu (`app`, `blog`, `ajutor`, unul
+  inventat) 308 spre `www`, cu cale si interogare.
+- **Dupa lansare:** santinela a scris la 16:17 o alarma CRITICA, „feedul Facebook e GOL” pe `tema-vega` si `tema-venus`:
+  falsa, demo-urile n-au feed dinadins. Reparat in acelasi commit cu insemnarea asta: `magazineVii` scoate magazinele demo
+  (slugul `tema-*` SAU semnul `magazin_demo`) inaintea ambelor liste (`esteRandDeMagazinDemo`, proba in `gazde-demo.test.ts`).
+  `error_logs` dupa push, in rest: doar avertismentele care se repeta de dinainte (eMAG, DPD, Netopia).

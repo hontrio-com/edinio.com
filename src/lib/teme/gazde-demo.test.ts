@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
-  adreseFaraSlug, CHEIE_MAGAZIN_DEMO, esteMagazinDemo, esteSlugDeMagazinDemo, MAGAZINE_DEMO, MESAJ_COMENZI_OPRITE, slugDemoDupaGazda,
+  adreseFaraSlug, CHEIE_MAGAZIN_DEMO, esteMagazinDemo, esteRandDeMagazinDemo, esteSlugDeMagazinDemo, MAGAZINE_DEMO,
+  MESAJ_COMENZI_OPRITE, slugDemoDupaGazda,
 } from "./gazde-demo";
 import { adresaDemo, TEME, temaDupaCheie } from "./teme";
 import { adresaCapturii, CAPTURI_TEME } from "./capturi-teme";
@@ -141,4 +142,25 @@ test("productia, pregatita si oprita: scriptul cere `--productie`, SQL-ul nu pre
   assert.match(sql, /update public\.users_profile set plan = 'ultra', plan_expires_at = '2099-12-31 00:00:00\+00' where id = cont;/);
   assert.match(sql, /insert into privat\.store_settings \(business_id\) values \(magazin\) on conflict \(business_id\) do nothing;/);
   assert.doesNotMatch(sql, /\bdelete\b|\bdrop\b|\btruncate\b/i, "procedura nu sterge nimic");
+});
+
+test("santinela nu probeaza magazinele demo: slugul rezervat SAU semnul ajung singure, in orice forma a setarilor", () => {
+  // Magazine de comerciant: slug obisnuit, fara semn (si cu setarile lipsa sau ca lista).
+  assert.equal(esteRandDeMagazinDemo({ slug: "esafero-echipamente-protectia-muncii", store_settings: { page_content: { pagina_acasa: "x" } } }), false);
+  assert.equal(esteRandDeMagazinDemo({ slug: "okxi", store_settings: null }), false);
+  assert.equal(esteRandDeMagazinDemo({ slug: "okxi", store_settings: [{ page_content: { [CHEIE_MAGAZIN_DEMO]: false } }] }), false);
+  // Un sir „true” nu e semnul: semnul e boolean, ca la poarta comenzilor (`esteMagazinDemo`).
+  assert.equal(esteRandDeMagazinDemo({ slug: "un-magazin", store_settings: { page_content: { [CHEIE_MAGAZIN_DEMO]: "true" } } }), false);
+  // Demo: slugul ajunge singur (intre SQL-ul care face magazinul si umplere, semnul inca lipseste)...
+  assert.equal(esteRandDeMagazinDemo({ slug: "tema-vega", store_settings: null }), true);
+  // ...si semnul ajunge singur, fie ca PostgREST da setarile ca obiect, fie ca lista.
+  assert.equal(esteRandDeMagazinDemo({ slug: "un-magazin", store_settings: { page_content: { [CHEIE_MAGAZIN_DEMO]: true } } }), true);
+  assert.equal(esteRandDeMagazinDemo({ slug: "un-magazin", store_settings: [{ page_content: { [CHEIE_MAGAZIN_DEMO]: true } }] }), true);
+
+  // Si santinela chiar ii scoate, o singura data, INAINTEA ambelor liste (vii si publicate fara domeniu).
+  const ruta = readFileSync("src/app/api/cron/santinela/route.ts", "utf8").replace(/\r\n/g, "\n");
+  assert.match(ruta, /const reale = \(mag \?\? \[\]\)\.filter\(\(b\) => !esteRandDeMagazinDemo\(b\)\);/);
+  assert.equal((ruta.match(/mag \?\? \[\]/g) ?? []).length, 1, "o lista citita pe langa filtru ar aduce demo-urile inapoi");
+  assert.match(ruta, /const publicateFaraDomeniu: MagazinPublicat\[\] = reale\n/);
+  assert.match(ruta, /for \(const b of reale\) \{/);
 });

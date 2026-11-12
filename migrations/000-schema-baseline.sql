@@ -13287,7 +13287,9 @@ create table if not exists public.pepita_articole (
   product_id uuid,
   combinatie text default ''::text not null,
   articol_id text not null,
-  creat_la timestamp with time zone default now() not null);
+  creat_la timestamp with time zone default now() not null,
+  pret_vitrina_trimis numeric,
+  pret_taiat_trimis numeric);
 
 create table if not exists public.pepita_chei (
   id uuid default gen_random_uuid() not null,

@@ -59,6 +59,13 @@ export interface ArticolPepita {
   pret: number;
   pretRedus: number | null;
   tva: number;
+  /**
+   * Pretul de vitrina din care s-au socotit `pret` si `pretRedus` (inainte de strategie, TVA si
+   * curs), si pretul taiat de vitrina. ⚠ NU pleaca in feed: e ce tine minte evidenta
+   * (`pepita_articole.pret_vitrina_trimis`) ca sa se poata ingheta pretul. Vezi `preturiInghetate`.
+   */
+  pretVitrina: number;
+  pretTaiatVitrina: number | null;
   transportBucata: number | null;
   categorii: CategoriePepita[];
   poze: PozaPepita[];
@@ -155,6 +162,21 @@ export interface ContextArticole {
   pragMagazin?: number;
   /** Cand s-a atins ultima oara listarea produsului asta (pret propriu, stoc de siguranta). */
   listareAtinsaLa?: string | null;
+  /**
+   * Preturile de vitrina INGHETATE, pe `<Id>` (12.11.2026). Date numai cand comerciantul a oprit
+   * „Trimite prețul la Pepita”: articolul pleaca atunci cu pretul de vitrina de la ultima
+   * trimitere, nu cu cel de acum. Strategia, TVA-ul si cursul se aplica peste el, ca de obicei.
+   *
+   * ⚠ Un articol care lipseste din harta (nou, n-a plecat niciodata) pleaca cu pretul de acum.
+   * Lipsa hartii = pretul se trimite, purtarea dinainte.
+   */
+  preturiInghetate?: ReadonlyMap<string, PretVitrina>;
+}
+
+/** Pretul de vitrina al unui articol: cel de vanzare si cel taiat (`null` = fara reducere). */
+export interface PretVitrina {
+  pret: number;
+  pretTaiat: number | null;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -257,6 +279,28 @@ function pieteCuPretZero(
     if (p.pret <= 0) rele.push({ eticheta: pi.eticheta, moneda: pi.moneda });
   }
   return rele;
+}
+
+/**
+ * Pretul de vitrina cu care pleaca articolul: cel INGHETAT, cand comerciantul a oprit pretul si
+ * articolul a mai plecat o data; altfel cel de acum.
+ *
+ * ⚠ SE INLOCUIESC AMANDOUA, si pretul si cel taiat: pretul taiat de acum langa pretul de vanzare
+ * de ieri ar fi aratat la Pepita o „reducere” pe care n-a facut-o nimeni.
+ *
+ * ⚠ Un pret inghetat zero sau stricat nu se foloseste (ar opri produsul cu „preț 0”): atunci
+ * pleaca pretul de acum, ca la un articol nou.
+ */
+function vitrinaArticolului(
+  ctx: ContextArticole, articolId: string, pretAcum: number, pretTaiatAcum: number | null,
+): PretVitrina {
+  const inghetat = ctx.preturiInghetate?.get(articolId);
+  if (inghetat && Number.isFinite(inghetat.pret) && inghetat.pret > 0) {
+    const taiat = inghetat.pretTaiat != null && Number.isFinite(inghetat.pretTaiat) && inghetat.pretTaiat > 0
+      ? inghetat.pretTaiat : null;
+    return { pret: inghetat.pret, pretTaiat: taiat };
+  }
+  return { pret: pretAcum, pretTaiat: pretTaiatAcum };
 }
 
 function eroare(cod: string, mesaj: string, combinatie?: string): ProblemaPepita {
@@ -376,12 +420,14 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
   const gtinProdus = codBun(g.gtin, probleme);
 
   if (!variante || combinatii.length === 0) {
-    const preturi = preturilePentruFeed(pretDeBaza, numarPozitiv(p.compare_at_price) ?? null, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
+    /* ⚠ Pretul de vitrina INGHETAT, cand exista: vezi `preturiInghetate`. */
+    const vitrina = vitrinaArticolului(ctx, idArticol(p.id, null), pretDeBaza, numarPozitiv(p.compare_at_price) ?? null);
+    const preturi = preturilePentruFeed(vitrina.pret, vitrina.pretTaiat, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
     if (preturi.pret <= 0) {
       probleme.push(eroare("pret-zero", "Prețul pentru Pepita este 0. Pepita nu acceptă produse cu preț zero."));
     } else {
       /* ⚠ Bun aici, dar poate fi zero in alta moneda: vezi `pieteDeVerificat`. */
-      for (const rea of pieteCuPretZero(ctx, pretDeBaza, numarPozitiv(p.compare_at_price) ?? null)) {
+      for (const rea of pieteCuPretZero(ctx, vitrina.pret, vitrina.pretTaiat)) {
         probleme.push(eroare(
           "pret-zero-piata",
           `Prețul ajunge 0 pentru ${rea.eticheta} (${rea.moneda}), la cursul pe care l-ai scris. `
@@ -413,6 +459,8 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
         pret: preturi.pret,
         pretRedus: preturi.pretRedus,
         tva: preturi.tva,
+        pretVitrina: vitrina.pret,
+        pretTaiatVitrina: vitrina.pretTaiat,
         poze: poze.map((u, i) => ({ url: u, principala: i === 0 })),
         disponibil: disp.disponibil,
         cantitate: disp.cantitate,
@@ -457,14 +505,16 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     }
     amprente.set(id, titlu);
 
-    const pretUnitar = comboUnitPrice(combo, pretDeBaza);
-    const pretTaiat = comboCompareAtPrice(combo, pretTaiatBaza);
-    const preturi = preturilePentruFeed(pretUnitar, pretTaiat, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
+    /* ⚠ Pretul de vitrina INGHETAT al combinatiei, cand exista: vezi `preturiInghetate`. */
+    const vitrina = vitrinaArticolului(
+      ctx, id, comboUnitPrice(combo, pretDeBaza), comboCompareAtPrice(combo, pretTaiatBaza),
+    );
+    const preturi = preturilePentruFeed(vitrina.pret, vitrina.pretTaiat, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
     if (preturi.pret <= 0) {
       probleme.push(eroare("pret-zero", `Varianta „${titlu}” ajunge la prețul 0 pentru Pepita.`, titlu));
       continue;
     }
-    for (const rea of pieteCuPretZero(ctx, pretUnitar, pretTaiat)) {
+    for (const rea of pieteCuPretZero(ctx, vitrina.pret, vitrina.pretTaiat)) {
       probleme.push(eroare(
         "pret-zero-piata",
         `Varianta „${titlu}” ajunge la prețul 0 pentru ${rea.eticheta} (${rea.moneda}).`,
@@ -519,6 +569,8 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
       pret: preturi.pret,
       pretRedus: preturi.pretRedus,
       tva: preturi.tva,
+      pretVitrina: vitrina.pret,
+      pretTaiatVitrina: vitrina.pretTaiat,
       poze: pozeCombo.map((u, i) => ({ url: u, principala: i === 0 })),
       disponibil: disp.disponibil,
       cantitate: disp.cantitate,

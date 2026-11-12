@@ -59,7 +59,13 @@ const IGNORATE = /^(zz_|_)/;
  * exceptia sa nu-si supravietuiasca motivul.
  */
 const IN_ASTEPTARE = [
-  // Gol. Ultima intrare (migratia 74, catalogul easySales) a intrat in productie pe 15.10.2026.
+  /*
+   * 12.11.2026: pretul trimis la Pepita, tinut minte pe articol („Trimite prețul la Pepita”).
+   * ⚠ Codul care o foloseste NU e oprit de un comutator: feedul citeste si scrie coloanele la
+   * fiecare trecere. Deci migratia se aplica in productie INAINTEA push-ului, apoi fisierul se
+   * muta in `migrations/`, intrarea de aici se scoate si baseline-ul se regenereaza.
+   */
+  "docs/pepita/2027-02-02-pepita-pretul-trimis.sql",
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

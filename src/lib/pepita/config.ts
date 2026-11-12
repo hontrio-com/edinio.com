@@ -83,6 +83,10 @@ export function citesteConfig(brut: unknown): PepitaConfig {
     piata,
     piete: citestePiete(c.piete, piata),
     strategie_pret: citesteStrategia(c.strategie_pret),
+    /* ⚠ Numai un `false` scris opreste pretul. Lipsa, un JSON vechi sau o valoare stricata dau
+       PORNIT, adica purtarea de dinainte de 12.11.2026: un pret inghetat din greseala ar fi
+       ramas vechi la Pepita fara ca nimeni sa fi cerut asta. */
+    sincronizeaza_pretul: c.sincronizeaza_pretul !== false,
     safety_stock: intreg(c.safety_stock, CONFIG_IMPLICIT.safety_stock),
     shipping_delay: c.shipping_delay == null || c.shipping_delay === "" ? null : intreg(c.shipping_delay, 0),
     shipping_price: numarSauNul(c.shipping_price),

@@ -5418,6 +5418,8 @@ export type Database = {
           combinatie: string
           creat_la: string
           id: string
+          pret_taiat_trimis: number | null
+          pret_vitrina_trimis: number | null
           product_id: string | null
         }
         Insert: {
@@ -5426,6 +5428,8 @@ export type Database = {
           combinatie?: string
           creat_la?: string
           id?: string
+          pret_taiat_trimis?: number | null
+          pret_vitrina_trimis?: number | null
           product_id?: string | null
         }
         Update: {
@@ -5434,6 +5438,8 @@ export type Database = {
           combinatie?: string
           creat_la?: string
           id?: string
+          pret_taiat_trimis?: number | null
+          pret_vitrina_trimis?: number | null
           product_id?: string | null
         }
         Relationships: [

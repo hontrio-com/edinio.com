@@ -176,6 +176,11 @@ export interface SetariPepita {
   garantie_durata: number;
   mod_includere: "toate" | "selectate";
   factureaza_clientul: boolean;
+  /**
+   * „Trimite prețul la Pepita” (12.11.2026). Oprit, feedul trimite pretul de vitrina de la ultima
+   * trimitere. Vezi `PepitaConfig.sincronizeaza_pretul`. Lipsa = nu se atinge.
+   */
+  sincronizeaza_pretul?: boolean;
 }
 
 export async function salveazaSetariPepita(businessId: string, s: SetariPepita) {
@@ -196,6 +201,9 @@ export async function salveazaSetariPepita(businessId: string, s: SetariPepita) 
       garantie: tip && tip !== "None" && durata > 0 ? { tip, durata } : null,
       mod_includere: s.mod_includere === "toate" ? "toate" : "selectate",
       factureaza_clientul: s.factureaza_clientul === true,
+      /* ⚠ Numai un `boolean` adevarat; altfel cheia nu se atinge. `citesteConfig` ia orice
+         altceva drept PORNIT, deci un sir ajuns aici ar fi aratat oprit ce feedul trimite. */
+      ...(typeof s.sincronizeaza_pretul === "boolean" ? { sincronizeaza_pretul: s.sincronizeaza_pretul } : {}),
     });
   } catch (e) {
     await logError({

@@ -168,6 +168,28 @@ cand difera de cea pastrata in `pepita_config`, scrie una noua impreuna cu clipa
 stampila e clipa in care s-a OBSERVAT schimbarea: mereu mai tarziu decat schimbarea, niciodata
 mai devreme, deci nu poate ingheta un pret vechi.
 
+## „Trimite prețul la Pepita”: pretul inghetat (12.11.2026)
+
+Ca la Trendyol si eMAG, dar Pepita n-are API: pretul e obligatoriu in AMANDOUA feedurile (in cel de
+stoc din 24.09), iar noi nu putem citi ce pret are Pepita. Deci „oprit” nu poate insemna „nu trimite
+pretul”, ci doar „trimite acelasi pret ca data trecuta”. Hotararea proprietarului: numai pretul se poate
+opri; stocul se trimite mereu (Pepita nu-l poate lua de altundeva, iar inghetat ar vinde marfa care nu e).
+
+- **Se ingheata pretul de VITRINA, pe articol** (`pepita_articole.pret_vitrina_trimis`,
+  `pret_taiat_trimis`): inainte de strategie, TVA si curs, deci o valoare pentru toate pietele.
+  Strategia de pret si cursul raman vii si se aplica peste el.
+- **Se tine minte la fiecare trimitere de preturi:** feedul de produse rescrie tot (o data pe zi),
+  feedul de stoc numai articolele al caror pret s-a schimbat (el duce si preturi, de 24 de ori pe zi).
+  Altfel pretul inghetat ar fi fost cel de ieri, nu cel pe care il are Pepita.
+- **Cu pretul oprit:** articolul cu pret tinut minte pleaca cu el; un articol nou pleaca cu pretul de
+  acum, care de atunci ramane. Pretul si pretul taiat se inlocuiesc IMPREUNA.
+- ⚠ **Cu pretul oprit, o citire cazuta a preturilor tinute minte opreste feedul** (503 inainte de primul
+  octet): altfel tot catalogul ar fi plecat cu preturile de acum. Cu pretul pornit, citirea cazuta doar
+  sare peste tinerea la zi in feedul de stoc.
+- Comutatorul intra in amprenta lui `<LastMod>`: repornit, preturile sar la cele de acum si ei trebuie
+  sa reciteasca.
+- Panoul verifica produsele cu acelasi context ca feedul (`pregateste`), deci vede si el pretul inghetat.
+
 ## Adresele, si cheile lor
 
 ```

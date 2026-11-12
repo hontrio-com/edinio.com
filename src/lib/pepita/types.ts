@@ -153,6 +153,16 @@ export interface PepitaConfig {
   piete: SetariPiete;
   strategie_pret: StrategiePret;
   /**
+   * „Trimite prețul la Pepita” (12.11.2026, ca la Trendyol si eMAG). Nescris = pornit.
+   *
+   * ⚠ OPRIT NU INSEAMNA „FARA PRET”: pretul e obligatoriu in amandoua feedurile, iar noi nu putem
+   * citi ce pret are Pepita. Inseamna „acelasi pret de vitrina ca la ultima trimitere”, tinut minte
+   * pe articol (`pepita_articole.pret_vitrina_trimis`). Strategia si cursul se aplica in continuare
+   * peste el. Articolul nou pleaca cu pretul de acum. STOCUL se trimite mereu (hotararea
+   * proprietarului: oprit, Pepita ar vinde ce nu mai e). Vezi `feed.ts`, `preturiInghetate`.
+   */
+  sincronizeaza_pretul: boolean;
+  /**
    * Cate bucati se tin deoparte si NU se anunta la Pepita.
    *
    * ⚠ Nu atinge stocul real din Edinio. Scade numai cifra EXPORTATA.
@@ -205,6 +215,7 @@ export const CONFIG_IMPLICIT: PepitaConfig = {
   */
   piete: {},
   strategie_pret: { fel: "identic", valoare: 0 },
+  sincronizeaza_pretul: true,
   safety_stock: 0,
   shipping_delay: null,
   shipping_price: null,

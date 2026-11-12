@@ -81,6 +81,14 @@ const TABELE = [
   */
   "storefront_design_versions",
   /*
+    Evidenta articolelor trimise la Pepita, cu pretul de vitrina trimis (12.11.2026, „Trimite prețul la
+    Pepita”, migratia `docs/pepita/2027-02-02-pepita-pretul-trimis.sql`). Feedul cere coloanele pe
+    fata, la FIECARE trecere, fara comutator: pusat inaintea migratiei, scrierea evidentei ar fi cazut
+    pe fiecare pagina, iar odata cu ea si legarea comenzilor intarziate de produse. Pana intra
+    migratia in productie, unealta TREBUIE sa cada aici, rulata inainte de push.
+  */
+  "pepita_articole",
+  /*
     ⚠ LISTA E INCHISA, si asta e limita ei cea mai mare.
 
     Unealta verifica DOAR tabelele scrise aici. Un tabel nou, cu coloane cerute pe fata din cod,

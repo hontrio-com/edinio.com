@@ -5,7 +5,8 @@ import type { Database } from "@/types/database.types";
 import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { storeBaseUrl } from "@/lib/seo";
 import { logError } from "@/lib/error-logger";
-import { articolelePentruProdus, type ContextArticole, type ProdusPepita } from "./articole";
+import { articolelePentruProdus, type ContextArticole, type PretVitrina, type ProdusPepita } from "./articole";
+import { rotunjeste2 } from "./pret";
 import { PIETE, type PiataPepita } from "./types";
 import { aceeasiMoneda, opreste } from "./piete";
 import { caleaCategoriilor, type RandCategorie } from "./categorii";
@@ -67,6 +68,14 @@ export interface PregatireFeed {
   ctx: ContextArticole;
   config: PepitaConfig;
   listari: Map<string, RandListare>;
+  /**
+   * Pretul de vitrina trimis data trecuta, pe `<Id>` (12.11.2026). Cu pretul oprit, din el pleaca
+   * articolele (`ctx.preturiInghetate`); cu pretul pornit, se tine la zi.
+   *
+   * ⚠ `null` = nu s-a putut citi, si atunci feedul de stoc NU-l tine la zi (n-are cu ce compara).
+   * Se intampla numai cu pretul pornit: cu el oprit, o citire cazuta opreste feedul.
+   */
+  preturiTrimise: ReadonlyMap<string, PretVitrina> | null;
 }
 
 /**
@@ -191,6 +200,8 @@ export async function pregateste(
     if (randuri.length < 1000) break;
   }
 
+  const preturiTrimise = await citestePreturileTrimise(admin, businessId, config.sincronizeaza_pretul);
+
   const s = (setari ?? {}) as {
     vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean; currency?: string | null;
     pepita_config?: Record<string, unknown> | null;
@@ -253,9 +264,78 @@ export async function pregateste(
     baza: storeBaseUrl(business),
     prefixProdus: permalinkuriDin({ permalinks: s.permalinks }).produs,
     pragMagazin,
+    /*
+     * ⚠ NUMAI CU PRETUL OPRIT. Data mereu, harta ar fi inghetat preturile si cu comutatorul pornit.
+     * Si panoul citeste ctx-ul de aici (`verificaProdusePepita`), deci vede acelasi pret ca feedul.
+     */
+    ...(config.sincronizeaza_pretul ? {} : { preturiInghetate: preturiTrimise ?? new Map() }),
   };
 
-  return { ctx, config: configPiata, listari };
+  return { ctx, config: configPiata, listari, preturiTrimise };
+}
+
+/**
+ * Pretul de vitrina trimis data trecuta, pentru fiecare `<Id>` care il are scris.
+ *
+ * ═══ ⚠ CU PRETUL OPRIT, O CITIRE CAZUTA OPRESTE FEEDUL (12.11.2026) ═══
+ *
+ * Fara harta, fiecare articol ar pleca cu pretul de ACUM, adica exact ce comerciantul a oprit, si
+ * pe tot catalogul deodata. Aruncata aici, inainte de primul octet, eroarea devine un 503 cinstit:
+ * Pepita pastreaza ce avea si reia la ora urmatoare.
+ *
+ * ⚠ CU PRETUL PORNIT NU ARUNCA: harta serveste doar la a o tine la zi. Atunci intoarce `null`, iar
+ * feedul de stoc sare peste scriere in trecerea asta (cel de produse rescrie oricum tot).
+ *
+ * ⚠ PE CHEIE, cate o mie, ca evidenta din `pietreDeMormant`: PostgREST taie tacut la 1000.
+ */
+async function citestePreturileTrimise(
+  admin: Db, businessId: string, pretulPleaca: boolean,
+): Promise<Map<string, PretVitrina> | null> {
+  const harta = new Map<string, PretVitrina>();
+  try {
+    let dupaArticol: string | null = null;
+    for (;;) {
+      let q = admin
+        .from("pepita_articole").select("articol_id, pret_vitrina_trimis, pret_taiat_trimis")
+        .eq("business_id", businessId).not("pret_vitrina_trimis", "is", null)
+        .order("articol_id").limit(1000);
+      if (dupaArticol) q = q.gt("articol_id", dupaArticol);
+      const { data, error } = await q;
+      if (error) throw error;
+      const randuri = (data ?? []) as { articol_id: string; pret_vitrina_trimis: unknown; pret_taiat_trimis: unknown }[];
+      if (randuri.length === 0) break;
+      const ultimul = randuri[randuri.length - 1].articol_id;
+      if (ultimul === dupaArticol) break;
+      dupaArticol = ultimul;
+      for (const r of randuri) {
+        const pret = Number(r.pret_vitrina_trimis);
+        if (!Number.isFinite(pret) || pret <= 0) continue;
+        const taiat = r.pret_taiat_trimis == null ? null : Number(r.pret_taiat_trimis);
+        harta.set(r.articol_id, { pret, pretTaiat: taiat != null && Number.isFinite(taiat) && taiat > 0 ? taiat : null });
+      }
+      if (randuri.length < 1000) break;
+    }
+    return harta;
+  } catch (e) {
+    if (!pretulPleaca) throw e;
+    await logError({
+      action: "pepita/preturi-trimise",
+      message: `preturile trimise data trecuta nu s-au putut citi: ${e instanceof Error ? e.message : String(e)}`,
+      businessId, severity: "warning",
+    });
+    return null;
+  }
+}
+
+/**
+ * S-a schimbat pretul de vitrina fata de ce stie evidenta? In bani intregi, ca `pret.ts`: `19.99`
+ * citit din `numeric` si `19.99` socotit in cod nu ies mereu egali bit cu bit.
+ */
+function altPretDecatCelTrimis(a: { id: string; pretVitrina: number; pretTaiatVitrina: number | null }, trimise: ReadonlyMap<string, PretVitrina>): boolean {
+  const vechi = trimise.get(a.id);
+  if (!vechi) return true;
+  const bani = (n: number | null) => (n == null ? null : Math.round(rotunjeste2(n) * 100));
+  return bani(vechi.pret) !== bani(a.pretVitrina) || bani(vechi.pretTaiat) !== bani(a.pretTaiatVitrina);
 }
 
 /**
@@ -290,6 +370,9 @@ async function stampilaConfigurarii(
      */
     config.piete[config.piata]?.curs ?? null,
     config.strategie_pret,
+    /* ⚠ SI COMUTATORUL PRETULUI (12.11.2026). Repornit, preturile sar la cele de acum, iar un
+       `<LastMod>` ramas pe loc i-ar fi lasat pe ei sa creada ca n-are ce sa reciteasca. */
+    config.sincronizeaza_pretul,
     config.safety_stock,
     config.shipping_delay,
     config.shipping_price,
@@ -408,8 +491,21 @@ export async function* scrieFeed(
         for (const a of articole) {
           /* ⚠ Perechea (produs, combinatie) se tine minte pentru drumul INAPOI: vezi
              `tineMinteArticolele`. `a.id` e chiar ce pleaca in `<Id>`. */
-          if (fel === "produse") trimise.push({ productId: p.id, combinatie: a.combinatie, articolId: a.id });
-          else plecateAzi.add(a.id);
+          const deTinutMinte: ArticolTrimis = {
+            productId: p.id, combinatie: a.combinatie, articolId: a.id,
+            pretVitrina: a.pretVitrina, pretTaiat: a.pretTaiatVitrina,
+          };
+          if (fel === "produse") trimise.push(deTinutMinte);
+          else {
+            plecateAzi.add(a.id);
+            /*
+             * ⚠ SI FEEDUL DE STOC DUCE PRETURI (cerute de ei, 24.09), deci pretul pe care il
+             * cunoaste Pepita se poate schimba si aici, de 24 de ori pe zi. Se tine minte NUMAI ce
+             * s-a schimbat: rescris tot, la fiecare ora, ar fi fost mii de scrieri fara niciun
+             * castig. Fara harta citita (`null`) nu se scrie nimic: n-avem cu ce compara.
+             */
+            if (pre.preturiTrimise && altPretDecatCelTrimis(a, pre.preturiTrimise)) trimise.push(deTinutMinte);
+          }
           yield fel === "produse" ? produsXml(a) : stocXml(a);
         }
       }
@@ -624,7 +720,14 @@ async function disponibilitateaPachetelor(
   return out;
 }
 
-interface ArticolTrimis { productId: string; combinatie: string; articolId: string }
+interface ArticolTrimis {
+  productId: string;
+  combinatie: string;
+  articolId: string;
+  /** Pretul de vitrina care a plecat acum (inghetat sau de acum). Vezi `PregatireFeed.preturiTrimise`. */
+  pretVitrina: number;
+  pretTaiat: number | null;
+}
 
 /**
  * Tine minte ce `<Id>` a plecat pentru fiecare produs si combinatie.
@@ -636,9 +739,11 @@ interface ArticolTrimis { productId: string; combinatie: string; articolId: stri
  * mai potriveste: linia ajungea in carantina fara sa stim macar despre ce produs e vorba.
  * Cu randul scris aici, cautarea e exacta si raspunsul e precis.
  *
- * ⚠ SE SCRIE DOAR PE FEEDUL DE PRODUSE, nu si pe cel de stoc. Ids-urile sunt aceleasi, dar
+ * ⚠ SE SCRIE INTREG DOAR PE FEEDUL DE PRODUSE. Ids-urile sunt aceleasi pe cel de stoc, dar
  * stocul se citeste de douazeci si patru de ori mai des, iar randurile ar fi identice: ar fi
- * douazeci si trei de scrieri pe zi fara niciun castig.
+ * douazeci si trei de scrieri pe zi fara niciun castig. Din 12.11.2026 feedul de stoc scrie
+ * totusi articolele al caror PRET de vitrina s-a schimbat (el duce si preturi): altfel pretul
+ * inghetat la oprirea comutatorului ar fi fost cel de ieri, nu cel pe care il are Pepita.
  *
  * ⚠ NU ARUNCA NICIODATA. Se cheama din mijlocul unui flux deja pornit; o exceptie ar rupe
  * feedul si ar lasa XML-ul neinchis, adica ar transforma o scriere ratata de evidenta intr-un
@@ -653,6 +758,14 @@ async function tineMinteArticolele(admin: Db, businessId: string, trimise: Artic
         product_id: t.productId,
         combinatie: t.combinatie,
         articol_id: t.articolId,
+        /*
+         * ⚠ PRETUL CARE A PLECAT ACUM, inghetat sau nu (12.11.2026). Cu pretul oprit, el e chiar cel
+         * citit din evidenta, deci scrierea nu muta nimic; la un articol nou e primul lui pret, si de
+         * aici inainte ramane acela. Cheile sunt aceleasi pe toate randurile: un rand fara ele ar fi
+         * facut PostgREST sa scrie NULL peste pretul tinut minte al celorlalte.
+         */
+        pret_vitrina_trimis: t.pretVitrina,
+        pret_taiat_trimis: t.pretTaiat,
       })) as never,
       /*
        * ═══ ⚠ AICI ERA `ignoreDuplicates: true`, SI A DEVENIT GRESIT (09.09.2026) ═══

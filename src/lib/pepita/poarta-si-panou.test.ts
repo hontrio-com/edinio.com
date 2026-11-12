@@ -455,3 +455,12 @@ test("⚠ „ultima comanda” nu se afirma pe o citire cazuta", () => {
   assert.match(ACTIUNI, /ultimaComanda: ultima\.error \? null :/,
     "o citire cazuta se scrie ca „nicio comanda”, adica exact zeroul fals");
 });
+
+test("„Trimite prețul la Pepita”: numai un `false` scris il opreste (12.11.2026)", () => {
+  /* Un pret inghetat din greseala ar ramane vechi la Pepita fara ca nimeni sa fi cerut asta; deci
+     lipsa, un JSON vechi sau o valoare stricata citesc PORNIT, purtarea de dinainte. */
+  assert.equal(citesteConfig({}).sincronizeaza_pretul, true);
+  assert.equal(citesteConfig({ sincronizeaza_pretul: "false" }).sincronizeaza_pretul, true);
+  assert.equal(citesteConfig({ sincronizeaza_pretul: null }).sincronizeaza_pretul, true);
+  assert.equal(citesteConfig({ sincronizeaza_pretul: false }).sincronizeaza_pretul, false);
+});

@@ -548,6 +548,7 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
     garantie_durata: config.garantie?.durata ?? 0,
     mod_includere: config.mod_includere,
     factureaza_clientul: config.factureaza_clientul,
+    sincronizeaza_pretul: config.sincronizeaza_pretul,
   });
 
   const salveaza = async () => {
@@ -667,6 +668,25 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
           </div>
         </Field>
       </div>
+
+      {/*
+        ═══ ⚠ PREȚUL SE POATE ÎNGHEȚA, STOCUL NU (12.11.2026) ═══
+
+        Ca „Trimite prețul la Trendyol / eMAG”. Dar Pepita n-are API: citește feedurile noastre, iar
+        prețul e obligatoriu în amândouă. Deci „oprit” înseamnă că feedul trimite prețul de vitrină de
+        la ultima trimitere (ținut minte pe articol), cu strategia și cursul aplicate peste. Stocul nu
+        are comutator, dinadins (hotărârea proprietarului): Pepita nu-l poate lua de altundeva, iar
+        înghețat ar vinde marfă care nu mai e. Vezi `feed.ts`, `citestePreturileTrimise`.
+      */}
+      <RandDeComutator
+        titlu="Trimite prețul la Pepita"
+        text="Oprit, Pepita rămâne cu prețul pe care îl are acum, iar schimbările de preț din magazin nu mai ajung acolo. Strategia de preț și cursul se aplică în continuare, iar un produs nou pleacă cu prețul din magazin. Stocul se trimite mereu."
+        atentie={f.sincronizeaza_pretul === false
+          ? "Cât timp e oprit, o scumpire în magazin nu ajunge la Pepita: acolo produsul se vinde mai departe la prețul vechi."
+          : undefined}
+        pornit={f.sincronizeaza_pretul !== false}
+        comuta={(v) => setF({ ...f, sincronizeaza_pretul: v })}
+      />
 
       {/*
         ⚠ CINE FACTUREAZĂ NU E O ÎNTREBARE: factura către clientul final o emite PARTENERUL,

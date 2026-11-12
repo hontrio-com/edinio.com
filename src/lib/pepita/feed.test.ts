@@ -59,6 +59,11 @@ interface Optiuni {
   evidenta?: string[];
   /** Citirea evidentei cade. Feedul de stoc NU are voie sa se rupa din asta. */
   cadeCitireaEvidentei?: boolean;
+  /**
+   * Pretul de vitrina tinut minte pe `<Id>`, ca in `pepita_articole.pret_vitrina_trimis`
+   * (12.11.2026). Articolele de aici intra si in evidenta.
+   */
+  preturiTrimise?: Record<string, { pret: number; taiat?: number | null }>;
 }
 
 /**
@@ -101,7 +106,7 @@ function faceBaza(o: Optiuni = {}) {
   const stampile: Record<string, unknown>[] = [];
   let pagini = 0;
   /* Ce a scris feedul in evidenta articolelor trimise. */
-  const scrise: { product_id: string; combinatie: string; articol_id: string }[] = [];
+  const scrise: { product_id: string; combinatie: string; articol_id: string; pret_vitrina_trimis?: number; pret_taiat_trimis?: number | null }[] = [];
 
   const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null, coloane?: string, optiuni?: { onConflict?: string }, dupa?: string | null, cate?: number | null) => {
     /*
@@ -163,7 +168,14 @@ function faceBaza(o: Optiuni = {}) {
        */
       if (corp === null) {
         if (o.cadeCitireaEvidentei) return { data: null, error: { code: "57014", message: "citirea evidentei a cazut" } };
-        const toate = [...(o.evidenta ?? [])].sort().map((articol_id) => ({ articol_id }));
+        /* ⚠ Cu preturile tinute minte langa id, ca in tabela; un rand fara pret are coloanele NULL. */
+        const preturi = o.preturiTrimise ?? {};
+        const ids = [...new Set([...(o.evidenta ?? []), ...Object.keys(preturi)])].sort();
+        const toate = ids.map((articol_id) => ({
+          articol_id,
+          pret_vitrina_trimis: preturi[articol_id]?.pret ?? null,
+          pret_taiat_trimis: preturi[articol_id]?.taiat ?? null,
+        }));
         return { data: felie(toate, (r) => r.articol_id).map((r) => doar(r, coloane)), error: null };
       }
       if (o.cadeEvidenta) return { data: null, error: { code: "42P01", message: "relation does not exist" } };
@@ -176,7 +188,7 @@ function faceBaza(o: Optiuni = {}) {
       if (optiuni?.onConflict !== "business_id,articol_id") {
         return { data: null, error: { code: "42P10", message: "there is no unique constraint matching the ON CONFLICT specification" } };
       }
-      for (const r of (corp as { product_id: string; combinatie: string; articol_id: string }[]) ?? []) scrise.push(r);
+      for (const r of (corp as { product_id: string; combinatie: string; articol_id: string; pret_vitrina_trimis?: number; pret_taiat_trimis?: number | null }[]) ?? []) scrise.push(r);
       return { data: null, error: null };
     }
     if (tabela === "products") {
@@ -593,10 +605,93 @@ test("produsul simplu se tine minte cu combinatia sir GOL, nu `null`", async () 
   assert.deepEqual(scrise.map((r) => r.combinatie), [""]);
 });
 
-test("⚠ feedul de STOC nu scrie evidenta: aceleasi randuri, de 24 de ori pe zi", async () => {
+/* ══════════════════════════════════════════════════════════════════════════
+   PRETUL TRIMIS, TINUT MINTE SI INGHETAT (12.11.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   „Trimite prețul la Pepita” oprit = Pepita ramane cu pretul de vitrina de la ultima trimitere.
+   Ca sa existe ce ingheta, fiecare feed care duce preturi tine minte ce a trimis: cel de produse
+   rescrie tot (o data pe zi), cel de stoc numai ce s-a schimbat (de 24 de ori pe zi).
+*/
+
+type RandScris = { product_id: string; combinatie: string; articol_id: string; pret_vitrina_trimis?: number; pret_taiat_trimis?: number | null };
+const scriseDin = (db: SupabaseClient<Database>) => (db as unknown as { __scrise: RandScris[] }).__scrise;
+
+/** Ce tine minte o trecere a feedului de produse, in forma din `pepita_articole`. */
+async function tinuteMinte(produse: ReturnType<typeof produs>[]): Promise<Record<string, { pret: number; taiat: number | null }>> {
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse });
+  await feed(db, "produse");
+  return Object.fromEntries(scriseDin(db).map((r) => [r.articol_id, { pret: r.pret_vitrina_trimis!, taiat: r.pret_taiat_trimis ?? null }]));
+}
+
+test("⚠ feedul de STOC nu rescrie evidenta cand pretul e cel tinut minte: aceleasi randuri, de 24 de ori pe zi", async () => {
+  const preturiTrimise = await tinuteMinte([cuDouaVariante(1)]);
+  assert.equal(Object.keys(preturiTrimise).length, 2, "feedul de produse tine minte pretul fiecarei combinatii");
+  assert.deepEqual(Object.values(preturiTrimise).map((p) => p.pret), [100, 100]);
+
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [cuDouaVariante(1)], preturiTrimise });
+  await feed(db, "stoc");
+  assert.deepEqual(scriseDin(db), []);
+});
+
+test("feedul de STOC scrie NUMAI articolul al carui pret s-a schimbat, cu pretul nou", async () => {
+  const preturiTrimise = await tinuteMinte([cuDouaVariante(1)]);
+  const [idS] = Object.keys(preturiTrimise);
+  preturiTrimise[idS] = { pret: 90, taiat: null };
+
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [cuDouaVariante(1)], preturiTrimise });
+  await feed(db, "stoc");
+  const scrise = scriseDin(db);
+  assert.deepEqual(scrise.map((r) => [r.articol_id, r.pret_vitrina_trimis]), [[idS, 100]]);
+});
+
+test("prima trecere, fara nimic tinut minte, scrie o data preturile, ca sa aiba ce ingheta", async () => {
   const db = faceBaza({ config: { mod_includere: "toate" }, produse: [cuDouaVariante(1)] });
   await feed(db, "stoc");
-  assert.deepEqual((db as unknown as { __scrise: unknown[] }).__scrise, []);
+  assert.deepEqual(scriseDin(db).map((r) => r.pret_vitrina_trimis), [100, 100]);
+});
+
+test("⚠ pret OPRIT: articolul pleaca cu pretul de vitrina tinut minte, iar strategia se aplica peste", async () => {
+  const p = produs(1); /* 100 lei azi in magazin */
+  const id = idArticol(p.id, null);
+  const config = { mod_includere: "toate", sincronizeaza_pretul: false, strategie_pret: { fel: "procent", valoare: 10 } };
+
+  const db = faceBaza({ config, produse: [p], preturiTrimise: { [id]: { pret: 50 } } });
+  const xml = await feed(db, "produse");
+  assert.ok(xml.includes("<Price>55</Price>"), `pretul inghetat (50) cu adaosul de 10%, nu 110: ${xml.match(/<Price>[^<]*<\/Price>/)?.[0]}`);
+  assert.deepEqual(scriseDin(db).map((r) => r.pret_vitrina_trimis), [50], "evidenta ramane pe pretul inghetat");
+
+  const stoc = await feed(faceBaza({ config, produse: [p], preturiTrimise: { [id]: { pret: 50 } } }), "stoc");
+  assert.ok(stoc.includes("<Price>55</Price>"), "si feedul de stoc, care duce si el preturi, pleaca cu pretul inghetat");
+});
+
+test("pret OPRIT, articol nou: pleaca cu pretul de acum, si de aici inainte acela ramane", async () => {
+  const db = faceBaza({ config: { mod_includere: "toate", sincronizeaza_pretul: false }, produse: [produs(1)] });
+  const xml = await feed(db, "produse");
+  assert.ok(xml.includes("<Price>100</Price>"));
+  assert.deepEqual(scriseDin(db).map((r) => r.pret_vitrina_trimis), [100]);
+});
+
+test("pret PORNIT: pretul tinut minte nu ingheata nimic", async () => {
+  const p = produs(1);
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [p], preturiTrimise: { [idArticol(p.id, null)]: { pret: 50 } } });
+  const xml = await feed(db, "produse");
+  assert.ok(xml.includes("<Price>100</Price>"));
+  assert.deepEqual(scriseDin(db).map((r) => r.pret_vitrina_trimis), [100], "evidenta trece pe pretul de acum");
+});
+
+test("⚠ pret OPRIT: fara preturile tinute minte, feedul NU porneste cu cele de acum", async () => {
+  /* Pornit, ar fi trimis pe TOT catalogul exact pretul pe care comerciantul l-a oprit. Cazut
+     inainte de primul octet, e un 503 cinstit: Pepita pastreaza ce avea si reia la ora urmatoare. */
+  const db = faceBaza({ config: { mod_includere: "toate", sincronizeaza_pretul: false }, produse: [produs(1)], cadeCitireaEvidentei: true });
+  await assert.rejects(pregateste(db, BID));
+});
+
+test("pret PORNIT: o citire cazuta a preturilor tinute minte nu rupe feedul de stoc", async () => {
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1)], cadeCitireaEvidentei: true });
+  const xml = await feed(db, "stoc");
+  assert.ok(XMLValidator.validate(xml) === true, "feedul ramane intreg");
+  assert.deepEqual(scriseDin(db), [], "fara harta nu se scrie nimic: n-are cu ce compara");
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -835,6 +930,8 @@ test("⚠ FIECARE camp al amprentei conteaza: schimbat, stampila se rescrie", as
   const referinta = await amprenta(deBaza);
   const variante: [string, Record<string, unknown>, Partial<Optiuni>][] = [
     ["strategia de pret", { ...deBaza, strategie_pret: { fel: "procent", valoare: 10 } }, {}],
+    /* 12.11.2026: repornit, preturile sar la cele de acum; `<LastMod>` trebuie sa urce. */
+    ["comutatorul pretului", { ...deBaza, sincronizeaza_pretul: false }, {}],
     ["stocul de siguranta", { ...deBaza, safety_stock: 3 }, {}],
     ["termenul de livrare", { ...deBaza, shipping_delay: 4 }, {}],
     ["pretul transportului", { ...deBaza, shipping_price: 19.99 }, {}],

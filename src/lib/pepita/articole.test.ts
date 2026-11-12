@@ -302,3 +302,65 @@ test("textSimplu intoarce rezerva cand nu ramane nimic", () => {
   assert.equal(textSimplu("<p>  </p>", "rezerva"), "rezerva");
   assert.equal(textSimplu(null, "rezerva"), "rezerva");
 });
+
+/* ── Pretul inghetat (12.11.2026) ─────────────────────────────────────────── */
+
+/*
+ * „Trimite prețul la Pepita” oprit: articolul pleaca cu pretul de VITRINA de la ultima trimitere,
+ * iar strategia, TVA-ul si cursul se aplica peste el, ca de obicei. Harta o da feedul (`feed.ts`),
+ * numai cu comutatorul oprit.
+ */
+
+const variante = (pretM: string) => ({
+  variants: {
+    enabled: true,
+    options: [{ id: "o1", name: "Mărime", values: ["S", "M"] }],
+    combinations: [
+      { id: "s", title: "S", price: "", compare_at_price: "", sku: "", stock_quantity: "2", image: "", enabled: true },
+      { id: "m", title: "M", price: pretM, compare_at_price: "", sku: "", stock_quantity: "2", image: "", enabled: true },
+    ],
+  },
+});
+
+test("pretul inghetat inlocuieste pretul de acum, iar strategia se aplica peste el", () => {
+  const p = produs({ price: 200 });
+  const acum = articolelePentruProdus(p, ctx({ strategie_pret: { fel: "procent", valoare: 10 } })).articole[0];
+  assert.equal(acum.pret, 220);
+  assert.equal(acum.pretVitrina, 200, "evidenta afla pretul de vitrina, nu pe cel din XML");
+
+  const inghetat = articolelePentruProdus(p, {
+    ...ctx({ strategie_pret: { fel: "procent", valoare: 10 } }),
+    preturiInghetate: new Map([[acum.id, { pret: 150, pretTaiat: null }]]),
+  }).articole[0];
+  assert.equal(inghetat.pret, 165);
+  assert.equal(inghetat.pretVitrina, 150);
+});
+
+test("pe variante, fiecare combinatie isi ia pretul ei inghetat; cea fara pret tinut minte ramane pe cel de acum", () => {
+  const p = produs({ price: 100, page_sections: variante("120") });
+  const [s, m] = articolelePentruProdus(p, ctx()).articole;
+  assert.deepEqual([s.pret, m.pret], [100, 120]);
+
+  const r = articolelePentruProdus(p, { ...ctx(), preturiInghetate: new Map([[m.id, { pret: 90, pretTaiat: 130 }]]) });
+  const [s2, m2] = r.articole;
+  assert.equal(s2.pret, 100, "S n-a mai plecat cu alt pret: pleaca cu cel de acum");
+  assert.equal(m2.pret, 130, "pretul taiat inghetat devine `<Price>`");
+  assert.equal(m2.pretRedus, 90, "iar cel de vanzare inghetat, `<DiscountedPrice>`");
+});
+
+test("pretul taiat de ACUM nu se lipeste de pretul inghetat: s-ar fi vazut o reducere pe care n-a facut-o nimeni", () => {
+  const p = produs({ price: 100, compare_at_price: 150 });
+  const id = articolelePentruProdus(p, ctx()).articole[0].id;
+  const a = articolelePentruProdus(p, { ...ctx(), preturiInghetate: new Map([[id, { pret: 80, pretTaiat: null }]]) }).articole[0];
+  assert.equal(a.pret, 80);
+  assert.equal(a.pretRedus, null);
+});
+
+test("un pret inghetat zero sau stricat nu opreste produsul: pleaca pretul de acum", () => {
+  const p = produs({ price: 100 });
+  const id = articolelePentruProdus(p, ctx()).articole[0].id;
+  for (const rau of [0, -5, Number.NaN]) {
+    const r = articolelePentruProdus(p, { ...ctx(), preturiInghetate: new Map([[id, { pret: rau, pretTaiat: null }]]) });
+    assert.equal(r.articole[0]?.pret, 100, `pretul inghetat ${rau}`);
+  }
+});

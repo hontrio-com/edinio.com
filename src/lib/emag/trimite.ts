@@ -29,14 +29,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import {
-  cautaDupaEan, isEmagError, salveazaMasuratori, salveazaOferte,
+  cautaDupaEan, citesteOferte, isEmagError, salveazaMasuratori, salveazaOferte,
   salveazaProduseOferte,
 } from "./client";
 import { ePreaMareLotul, sAIncheiat, type VerdictEmag } from "./errors";
 import {
-  amprentaContinutului, construiesteOferte, eanDeTrimis, masuratoriEmag, oferteUsoare,
+  amprentaContinutului, bandaDePret, construiesteOferte, eanDeTrimis, masuratoriEmag, oferteUsoare,
   stocuriDeTrimis, type IdentitateUsoara, type ProdusDeCartografiat,
 } from "./mapping";
+import {
+  ofertaGreaDupaPolitica, ofertaUsoaraDupaPolitica, politicaSincronizare, valorileLaEi,
+  type PoliticaSincronizare, type ValoriLaEi,
+} from "./politica-sincronizare";
 import { rutaDeTrimitere } from "./rute";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { EAN_PE_CERERE, eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan, type RaspunsEan } from "./ean";
@@ -246,10 +250,24 @@ async function dusPanaLaCapat(
 
   if (ruta.fel === "retrage") return retrage(admin, ctx, randuri);
   if (!produs) return { verdict: "sarit", mesaj: "Produsul nu mai există în magazin." };
-  if (ruta.fel === "stoc") return duStocul(admin, ctx, produs, randuri);
+
+  /*
+   * ═══ ⚠ CE PLEACA HOTARASC COMUTATOARELE MAGAZINULUI (12.11.2026) ═══
+   *
+   * Ruta de mai sus a hotarat DACA pleaca ceva (oferta pornita, preluata, oprita). Politica
+   * hotaraste CE: stocul, pretul, amandoua. Se aplica AICI, intr-un singur loc, fiindca pe aici
+   * trec toate drumurile: coada, deriva, propagarea setarilor si butoanele omului. Pusa in
+   * coada, ar fi scapat apasarile directe; pusa in `oferteUsoare`, ar fi orbit deriva. Vezi
+   * `politica-sincronizare.ts`.
+   *
+   * ⚠ Retragerea a trecut deja, mai sus, si dinadins: oprirea de la vanzare a unui produs sters
+   * nu e nici pret, nici stoc.
+   */
+  const pol = politicaSincronizare(ctx.config, { fortat });
+  if (ruta.fel === "stoc") return duStocul(admin, ctx, produs, randuri, pol);
   if (ruta.fel === "masuratori") return duMasuratorile(ctx, produs, randuri);
-  if (ruta.fel === "oferta") return duOferta(admin, ctx, produs, randuri);
-  return duTotul(admin, ctx, produs, randuri, fortat);
+  if (ruta.fel === "oferta") return duOferta(admin, ctx, produs, randuri, pol);
+  return duTotul(admin, ctx, produs, randuri, fortat, pol);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -335,6 +353,8 @@ async function duTotul(
    * cerere. Coada nu forteaza niciodata.
    */
   fortat = false,
+  /** Ce pleaca: stocul, pretul. Vezi `politica-sincronizare.ts`. Implicit, tot. */
+  pol: PoliticaSincronizare = { stoc: true, pret: true },
 ): Promise<RezultatTrimitere> {
   const categorie = ctx.config.category_map?.[produs.category ?? ""];
   if (!categorie?.category_id) {
@@ -554,7 +574,35 @@ async function duTotul(
     return { verdict: "refuz", mesaj: m };
   }
 
-  const r = await trimiteInLoturi(admin, ctx, produs.id, oferte, (lot) =>
+  /*
+   * ═══ ⚠ JUMATATEA OPRITA PLEACA CU CE AU EI (12.11.2026) ═══
+   *
+   * Ruta asta duce fisa SI oferta, cu pret si stoc cu tot. La o oferta pe care eMAG o are deja,
+   * cu pretul (sau stocul) oprit din setari, valoarea noastra ar fi rescris-o pe a lor la fiecare
+   * schimbare de fisa. Deci se citeste ce au ei chiar acum si se trimite inapoi. Vezi
+   * `ofertaGreaDupaPolitica`.
+   *
+   * ⚠ O OFERTA NOUA PLEACA CU VALORILE MAGAZINULUI, cu orice comutator: la creare n-are ce pastra,
+   * iar eMAG nu creeaza o oferta fara pret si stoc. Din clipa aia, pretul pus acolo ramane al lor.
+   */
+  let deTrimis = oferte as EmagProdusOferta[];
+  if (!pol.stoc || !pol.pret) {
+    const existente = new Set(cuCheie.filter(ofertaEsteLaEi).map((x) => x.emag_id));
+    const pastrate = await cuValorileLorPastrate(ctx, deTrimis, existente, pol, magazinDin(ctx, produs).price_band_pct);
+    if (pastrate.fel === "eroare") {
+      /* ⚠ `trecatoare` nu se scrie pe oferta: se reia singura, iar un motiv rosu pentru o pana
+         de un minut l-ar trimite pe om sa repare ceva ce nu e stricat. */
+      if (pastrate.verdict !== "trecatoare") await scrieEroare(admin, ctx.businessId, produs.id, pastrate.mesaj);
+      return { verdict: pastrate.verdict, mesaj: pastrate.mesaj };
+    }
+    if (pastrate.fel === "lipsa") {
+      await scrieEroare(admin, ctx.businessId, produs.id, pastrate.mesaj);
+      return { verdict: "refuz", mesaj: pastrate.mesaj };
+    }
+    deTrimis = pastrate.oferte;
+  }
+
+  const r = await trimiteInLoturi(admin, ctx, produs.id, deTrimis, (lot) =>
     salveazaProduseOferte(ctx.auth, lot as EmagProdusOferta[]),
   );
 
@@ -603,10 +651,10 @@ async function duTotul(
    * construita inseamna exact „am omis ceva". O a doua socoteala s-ar fi departat de prima,
    * ca de trei ori azi.
    */
-  const aRamasCeva = (oferte as EmagProdusOferta[]).some((o) => !o.part_number);
+  const aRamasCeva = deTrimis.some((o) => !o.part_number);
 
   if (sAIncheiat(r.verdict as VerdictEmag) && aRamasCeva) {
-    await maiTrebuieOTrecere(admin, ctx, produs.id, oferte as EmagProdusOferta[]);
+    await maiTrebuieOTrecere(admin, ctx, produs.id, deTrimis);
   }
 
   if (sAIncheiat(r.verdict as VerdictEmag) && !aRamasCeva) {
@@ -769,6 +817,77 @@ function areVariante(p: ProdusDeCartografiat): boolean {
   return !!ps.variants?.enabled && (ps.variants.combinations ?? []).some((c) => c?.enabled);
 }
 
+/** Ce raspunde `duStocul` cand trimiterea stocului e oprita din setari. */
+const STOC_OPRIT = "Trimiterea stocului la eMAG e oprită din setări.";
+
+export type Pastrare =
+  | { fel: "gata"; oferte: EmagProdusOferta[] }
+  | { fel: "eroare"; verdict: VerdictEmag; mesaj: string }
+  | { fel: "lipsa"; mesaj: string };
+
+/**
+ * Pune peste ofertele care EXISTA deja la eMAG valorile lor de acum, pentru jumatatea oprita
+ * din setari (pretul, stocul). Vezi `ofertaGreaDupaPolitica`.
+ *
+ * ⚠ O CITIRE PE OFERTA, prin aceeasi cale ca webhookul (`product_offer/read` cu `id`). Se face
+ * numai pe ruta grea, adica la o schimbare de fisa, nu la fiecare vanzare.
+ *
+ * ⚠ O CITIRE CAZUTA NU E „N-AU NIMIC”. Luata drept lipsa, oferta ar fi plecat cu pretul nostru,
+ * adica exact ce comerciantul a oprit. Verdictul citirii merge mai departe: `trecatoare` se reia
+ * fara sa arda incercari, `chei` opreste magazinul ca orice alta cerere.
+ *
+ * ⚠ O OFERTA FARA VALORI DE PASTRAT OPRESTE TOT PRODUSUL, cu motivul scris. Trimisa pe jumatate,
+ * fisa ar fi ajuns doar la unele marimi, iar amprenta ar fi spus ca a plecat toata.
+ *
+ * Exportata numai ca s-o cheme proba (`politica-pe-drum.test.ts`), cu eMAG-ul ei fals.
+ */
+export async function cuValorileLorPastrate(
+  ctx: ContextEmag,
+  oferte: EmagProdusOferta[],
+  existente: ReadonlySet<number>,
+  pol: PoliticaSincronizare,
+  bandaPct: number,
+): Promise<Pastrare> {
+  const depozit = ctx.config.warehouse_id ?? 1;
+  const laEi = new Map<number, ValoriLaEi>();
+
+  for (const o of oferte) {
+    if (!existente.has(o.id)) continue;
+    const r = await citesteOferte(ctx.auth, { id: o.id });
+    if (isEmagError(r)) {
+      const verdict: VerdictEmag = r.verdict === "chei" || r.verdict === "trecatoare" ? r.verdict : "refuz";
+      return {
+        fel: "eroare",
+        verdict,
+        mesaj: `Nu am putut citi de pe eMAG prețul și stocul de acum ale ofertei ${o.id}: ${r.error}`,
+      };
+    }
+    const gasita = (Array.isArray(r.data) ? r.data : []).find((x) => Number(x?.id) === o.id);
+    const v = gasita ? valorileLaEi(gasita, depozit) : null;
+    if (v) laEi.set(o.id, v);
+  }
+
+  const iesite: EmagProdusOferta[] = [];
+  for (const o of oferte) {
+    /* O oferta noua n-are ce pastra: pleaca cu valorile magazinului, ca la orice creare. */
+    if (!existente.has(o.id)) { iesite.push(o); continue; }
+    const v = laEi.get(o.id);
+    const p = ofertaGreaDupaPolitica(o, v, pol, (pret) => bandaDePret(pret, bandaPct));
+    if (!p) {
+      /* Fara nimic citit lipseste pretul (cand e oprit); cu valori citite, lipseste stocul. */
+      const pretul = !v && !pol.pret;
+      return {
+        fel: "lipsa",
+        mesaj: `Nu am găsit pe eMAG ${pretul ? "prețul" : "stocul"} de acum al ofertei ${o.id}. `
+          + `Cu trimiterea ${pretul ? "prețului" : "stocului"} oprită din setări, fișa nu pleacă fără el, `
+          + "ca să nu-l rescrie cu cel din magazin.",
+      };
+    }
+    iesite.push(p);
+  }
+  return { fel: "gata", oferte: iesite };
+}
+
 /**
  * `POST /offer/save` — NU atinge documentatia.
  *
@@ -779,8 +898,12 @@ function areVariante(p: ProdusDeCartografiat): boolean {
  */
 async function duOferta(
   admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+  pol: PoliticaSincronizare,
 ): Promise<RezultatTrimitere> {
-  const usoare = oferteUsoare(produs, magazinDin(ctx, produs), identitatiUsoare(randuri));
+  /* ⚠ Politica PESTE `oferteUsoare`, nu inauntru: deriva foloseste aceeasi functie si are nevoie
+     de pretul intreg ca sa masoare. Vezi `ofertaUsoaraDupaPolitica`. */
+  const usoare = oferteUsoare(produs, magazinDin(ctx, produs), identitatiUsoare(randuri))
+    .map((o) => ofertaUsoaraDupaPolitica(o, pol));
 
   /*
    * ═══ ⚠ ZERO OFERTE NU E O REUSITA ═══
@@ -819,7 +942,15 @@ async function duOferta(
  */
 async function duStocul(
   admin: Admin, ctx: ContextEmag, produs: ProdusDeCartografiat, randuri: RandOfertaLocal[],
+  pol: PoliticaSincronizare,
 ): Promise<RezultatTrimitere> {
+  /*
+   * ⚠ STOCUL OPRIT DIN SETARI: nu pleaca nimic, si NU se scrie ca eroare pe oferta. E alegerea
+   * comerciantului, nu o problema de reparat; scrisa pe rand, ar fi aparut „De reparat” pe tot
+   * catalogul la prima vanzare. `sarit` scoate lucrarea din coada fara sa arda incercari.
+   */
+  if (!pol.stoc) return { verdict: "sarit", mesaj: STOC_OPRIT };
+
   const stocuri = stocuriDeTrimis(produs, identitatiUsoare(randuri), ctx.config.stoc_rezervat);
 
   /* ⚠ Aceeasi paza ca la pret, si aici e si mai scumpa: o miscare de stoc care

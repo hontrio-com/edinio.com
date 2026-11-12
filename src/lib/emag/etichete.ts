@@ -43,3 +43,16 @@ export const BUTON_ADU_OFERTELE_SCURT = "Leagă produsele";
 
 /** Blocul de setări cerute înainte de prima publicare. */
 export const BLOC_PREGATIRE_PUBLICARE = "Ce cere eMAG înainte de prima publicare";
+
+/**
+ * Comutatorul mare din „Setări”: dacă pleacă ceva singur spre eMAG.
+ *
+ * ⚠ Până pe 12.11.2026 se numea „Trimite automat prețul și stocul”. Lângă „Trimite stocul la
+ * eMAG” și „Trimite prețul la eMAG” numele vechi ar fi spus că el le hotărăște pe amândouă,
+ * deci s-a luat numele de la Trendyol, unde aceeași pereche stă sub el din 04.11.
+ */
+export const COMUTATOR_SINCRONIZARE_EMAG = "Sincronizează automat schimbările de produs, stoc și preț";
+
+/** Ce pleacă la ofertele care se sincronizează (12.11.2026). Vezi `politica-sincronizare.ts`. */
+export const COMUTATOR_STOC_EMAG = "Trimite stocul la eMAG";
+export const COMUTATOR_PRET_EMAG = "Trimite prețul la eMAG";

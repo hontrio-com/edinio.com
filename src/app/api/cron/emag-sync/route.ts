@@ -20,6 +20,7 @@ import { oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import {
   citesteMemoriaDerivei, derivaOfertei, hotarasteDeriva, sursaAdevarului,
 } from "@/lib/emag/deriva";
+import { politicaSincronizare } from "@/lib/emag/politica-sincronizare";
 import {
   publicaPeEmagMany, reluaAutomatEmagMany,
 } from "@/lib/emag/queue";
@@ -1685,6 +1686,15 @@ async function masoaraDeriva(
     pret: sursaAdevarului(ctx.config.deriva_pret),
     stoc: sursaAdevarului(ctx.config.deriva_stoc),
   };
+  /*
+   * ═══ ⚠ JUMATATEA OPRITA DIN SETARI NU E DERIVA (12.11.2026) ═══
+   *
+   * Cu „Trimite prețul la eMAG” oprit, pretul de acolo e AL LOR, dinadins: o diferenta fata de
+   * magazin e chiar ce a cerut comerciantul. Numarata ca deriva, ar fi aparut in panou ca o
+   * problema pe tot catalogul, iar cu sursa „Edinio” s-ar fi si „reparat”, adica rescris.
+   * Deci campul oprit nu se masoara deloc. Vezi `politica-sincronizare.ts`.
+   */
+  const pol = politicaSincronizare(ctx.config);
   const acum = new Date().toISOString();
   const dePusLaRand = { pret: new Set<string>(), stoc: new Set<string>() };
   let gasite = 0;
@@ -1743,7 +1753,7 @@ async function masoaraDeriva(
       const campuri = derivaOfertei(
         { pret: trimisa.sale_price, stoc: trimisa.stock?.[0]?.value ?? 0 },
         { pret: aLor.sale_price ?? null, stoc: stocLor },
-      );
+      ).filter((d) => (d.camp === "pret" ? pol.pret : pol.stoc));
 
       const veche = citesteMemoriaDerivei(rand.deriva);
       const h = hotarasteDeriva(campuri, veche, surse, acum);

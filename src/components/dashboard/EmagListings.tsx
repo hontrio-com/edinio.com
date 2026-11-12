@@ -46,6 +46,8 @@ const FILTRE = [
 
 export function EmagListings({ businessId }: { businessId: string }) {
   const [randuri, setRanduri] = useState<RandOfertaEcran[] | null>(null);
+  /* Ce pleaca la o oferta pornita, dupa comutatoarele din Setari. Vezi `CeSeTrimite`. */
+  const [ceTrimite, setCeTrimite] = useState<CeSeTrimite>("prețul și stocul");
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
   const [filtru, setFiltru] = useState<string>("");
@@ -91,6 +93,7 @@ export function EmagListings({ businessId }: { businessId: string }) {
         return;
       }
       setRanduri(r.randuri);
+      setCeTrimite(r.ceTrimite);
       setTotal(r.total);
       setPagina(r.pagina);
     });
@@ -213,6 +216,7 @@ export function EmagListings({ businessId }: { businessId: string }) {
               key={r.id}
               businessId={businessId}
               rand={r}
+              ceTrimite={ceTrimite}
               laSchimbare={() => incarca()}
               ales={!!r.productId && alese.has(r.productId)}
               laBifa={() => {
@@ -281,11 +285,51 @@ const TON_VERDICT: Record<string, TonEticheta> = {
   "Încă necitit de la eMAG": "neutru",
 };
 
+/**
+ * Ce pleaca la o oferta pornita, in cuvinte. Vezi `ceSeTrimite` din `politica-sincronizare.ts`.
+ * `null` = stocul si pretul sunt amandoua oprite din Setari.
+ */
+type CeSeTrimite = "prețul și stocul" | "prețul" | "stocul" | null;
+
+/**
+ * Textele butonului de pe rand, dupa ce pleaca (12.11.2026).
+ *
+ * ⚠ Cand pleaca amandoua, sirurile sunt EXACT cele de dinainte, si dinadins: ghidul „Cum oprești
+ * o ofertă de pe eMAG” le citeaza cuvant cu cuvant, iar acela e cazul obisnuit.
+ */
+function texteComutator(ce: CeSeTrimite): { opreste: string; porneste: string; oprit: string; pornit: string } {
+  if (ce === "prețul și stocul") {
+    return {
+      opreste: "Oprește trimiterea automată a prețului și stocului",
+      porneste: "Lasă Edinio să conducă prețul și stocul",
+      oprit: "Prețul și stocul nu se mai trimit automat pentru produsul ăsta.",
+      pornit: "Prețul și stocul din Edinio vor conduce de acum oferta de pe eMAG.",
+    };
+  }
+  if (ce === null) {
+    return {
+      opreste: "Oprește sincronizarea automată a ofertei",
+      porneste: "Pornește sincronizarea automată a ofertei",
+      oprit: "Oferta nu se mai sincronizează automat.",
+      pornit: "Oferta se sincronizează din nou. Prețul și stocul rămân oprite din Setări.",
+    };
+  }
+  const cine = ce === "prețul" ? "Prețul" : "Stocul";
+  return {
+    opreste: `Oprește trimiterea automată a ${ce === "prețul" ? "prețului" : "stocului"}`,
+    porneste: `Lasă Edinio să conducă ${ce}`,
+    oprit: `${cine} nu se mai trimite automat pentru produsul ăsta.`,
+    pornit: `${cine} din Edinio va conduce de acum oferta de pe eMAG.`,
+  };
+}
+
 function RandOferta({
-  businessId, rand, laSchimbare, ales, laBifa,
+  businessId, rand, ceTrimite, laSchimbare, ales, laBifa,
 }: {
   businessId: string;
   rand: RandOfertaEcran;
+  /** Ce pleaca la o oferta pornita, dupa comutatoarele din Setari. */
+  ceTrimite: CeSeTrimite;
   /** Bifat pentru o trimitere in masa. */
   ales: boolean;
   laBifa: () => void;
@@ -372,11 +416,8 @@ function RandOferta({
         toast.error(r.error);
         return;
       }
-      toast.success(
-        rand.autoSync
-          ? "Prețul și stocul nu se mai trimit automat pentru produsul ăsta."
-          : "Prețul și stocul din Edinio vor conduce de acum oferta de pe eMAG.",
-      );
+      const t = texteComutator(ceTrimite);
+      toast.success(rand.autoSync ? t.oprit : t.pornit);
       laSchimbare();
     });
   }
@@ -556,11 +597,7 @@ function RandOferta({
                 onClick={comuta}
                 disabled={seLucreaza}
                 className="rounded-lg border border-border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
-                title={
-                  rand.autoSync
-                    ? "Oprește trimiterea automată a prețului și stocului"
-                    : "Lasă Edinio să conducă prețul și stocul"
-                }
+                title={rand.autoSync ? texteComutator(ceTrimite).opreste : texteComutator(ceTrimite).porneste}
               >
                 {rand.autoSync ? "Nu mai trimite" : "Trimite automat"}
               </button>

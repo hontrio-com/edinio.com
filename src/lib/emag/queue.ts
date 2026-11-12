@@ -444,7 +444,7 @@ async function enqueueManyDetaliat(
      *
      * `publicaSiFaraOferta` se pune NUMAI de pe drumurile care spun „Publică" — vezi nota
      * de la `OptiuniCoadaMulti`. Iar acolo omul tocmai a apasat, deci a cerut-o el, acum.
-     * Comutatorul „Trimite automat prețul și stocul" vorbeste despre ce se intampla FARA
+     * Comutatorul mare (`auto_sync`) vorbeste despre ce se intampla FARA
      * ca el sa ceara; n-are ce cauta in calea unei cereri explicite.
      *
      * ⚠ Ce pate omul pana acum: apasa „Publică" pe zece produse si primea zero puse, cu un

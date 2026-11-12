@@ -83,7 +83,10 @@ test("⚠ codul omis nu mai asteapta o trecere care nu vine", () => {
    */
   const cod = faraComentarii(fisier("src/lib/emag/trimite.ts"));
   assert.match(cod, /sAIncheiat\(r\.verdict as VerdictEmag\) && aRamasCeva/, "ramura noua");
-  assert.match(cod, /await maiTrebuieOTrecere\(admin, ctx, produs\.id, oferte as EmagProdusOferta\[\]\)/);
+  /* ⚠ Din 12.11.2026 incarcatura TRIMISA e `deTrimis`: lista de dupa comutatoarele de stoc si pret
+     (`ofertaGreaDupaPolitica`). Tot din ea se citeste omisiunea, nu din `oferte`. */
+  assert.match(cod, /await maiTrebuieOTrecere\(admin, ctx, produs\.id, deTrimis\)/);
+  assert.match(cod, /const r = await trimiteInLoturi\(admin, ctx, produs\.id, deTrimis,/, "pleaca exact lista citita mai sus");
   assert.match(cod, /await enqueueEmagSyncMany\(ctx\.businessId, \[productId\]\)/, "chiar se repune in coada");
 
   /*

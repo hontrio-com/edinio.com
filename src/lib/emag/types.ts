@@ -817,7 +817,12 @@ export interface EmagConfig {
 
   /** Comerciantul a schimbat parola sau i s-a scos dreptul de API. */
   needs_reconnect?: boolean;
-  /** Se trimit automat schimbarile de pret si stoc? */
+  /**
+   * Se trimit automat schimbarile catre eMAG? Comutatorul mare, al magazinului.
+   *
+   * ⚠ Din 12.11.2026 spune doar DACA pleaca ceva singur; CE anume hotarasc `sincronizeaza_stocul`,
+   * `sincronizeaza_pretul` si `sync_continut`. Oprit, nu pleaca nimic, oricum ar sta acelea.
+   */
   auto_sync?: boolean;
   /** Un produs nou se publica singur? */
   auto_publish?: boolean;
@@ -914,7 +919,7 @@ export interface EmagConfig {
    *
    * ═══ ⚠ ALTA INTREBARE DECAT `auto_sync` ═══
    *
-   * `auto_sync` e „trimite pretul si stocul”. Asta e „rescrie si fisa produsului”.
+   * `auto_sync` e „trimite ceva singur”. Asta e „rescrie si fisa produsului”.
    *
    * Multi comercianti isi ingrijesc fisa direct in panoul eMAG — poze mai bune, text
    * scris pentru cumparatorul de acolo — si vor ca Edinio sa conduca numai pretul si
@@ -924,6 +929,19 @@ export interface EmagConfig {
    * Implicit PORNIT: cine publica din Edinio se asteapta ca fisa sa vina tot de acolo.
    */
   sync_continut?: boolean;
+
+  /**
+   * Trimite stocul din Edinio la eMAG. Separat de pret (12.11.2026), ca la Trendyol.
+   *
+   * ⚠ Nescris inseamna pornit, adica purtarea de dinainte. Alege CE pleaca, nu CARE oferte:
+   * ofertele oprite una cate una raman oprite. Vezi `politica-sincronizare.ts`.
+   */
+  sincronizeaza_stocul?: boolean;
+  /**
+   * Trimite pretul din Edinio la eMAG. Oprit, pretul pus de comerciant acolo ramane, iar
+   * cota de TVA a ofertei la fel (`sale_price` e fara TVA). Vezi `politica-sincronizare.ts`.
+   */
+  sincronizeaza_pretul?: boolean;
 
   /** Cat de larg e intervalul min/max fata de pretul de vanzare, in procente. */
   price_band_pct?: number;

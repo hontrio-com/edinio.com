@@ -179,8 +179,10 @@ test("cand codul a fost omis, amprenta NU se scrie", () => {
    */
   const t = readFileSync("src/lib/emag/trimite.ts", "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "");
+  /* ⚠ Din 12.11.2026 incarcatura trimisa se numeste `deTrimis` (lista de dupa comutatoarele de stoc
+     si pret). Regula e aceeasi: omisiunea se citeste din ce pleaca. */
   assert.match(
-    t, /const aRamasCeva = \(oferte as EmagProdusOferta\[\]\)\.some\(\(o\) => !o\.part_number\)/,
+    t, /const aRamasCeva = deTrimis\.some\(\(o\) => !o\.part_number\)/,
     "omisiunea se citeste din INCARCATURA, nu se re-socoteste",
   );
 });

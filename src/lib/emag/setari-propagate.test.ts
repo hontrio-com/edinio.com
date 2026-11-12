@@ -46,8 +46,15 @@ test("⚠ fiecare camp cere ruta care il DUCE, nu cea mai grea", () => {
    * campuri care n-au o ruta mai usoara.
    */
   assert.match(viu, /const cereRutaGrea = sASchimbat\("green_tax"\) \|\| sASchimbat\("supply_lead_time"\) \|\| gpsrSAChimbat;/);
-  assert.match(viu, /const cerePret = sASchimbat\("vat_id"\) \|\| sASchimbat\("handling_time"\);/);
-  assert.match(viu, /const cereStoc = sASchimbat\("stoc_rezervat"\) \|\| sASchimbat\("warehouse_id"\);/);
+  /*
+   * ⚠ 12.11.2026: pornirea stocului sau a pretului (comutatoarele noi, ori cel mare aprins acum)
+   * cere si ea o trecere, si tot pe ruta care il DUCE: pretul pe `pret`, stocul pe `stoc`. Niciuna
+   * nu intra in `cereRutaGrea`, altfel o simpla pornire de stoc ar fi retrimis fisa intregului
+   * catalog.
+   */
+  assert.match(viu, /const cerePret = sASchimbat\("vat_id"\) \|\| sASchimbat\("handling_time"\) \|\| pornestePretul;/);
+  assert.match(viu, /const cereStoc = sASchimbat\("stoc_rezervat"\) \|\| sASchimbat\("warehouse_id"\) \|\| pornesteStocul;/);
+  assert.doesNotMatch(viu, /const cereRutaGrea = [^;]*pornes/);
 });
 
 test("⚠ o SINGURA operatie, cea mai grea dintre cele cerute", () => {

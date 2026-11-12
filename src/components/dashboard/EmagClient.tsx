@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useLucru } from "@/components/dashboard/useLucru";
 import {
   BLOC_PREGATIRE_PUBLICARE, BUTON_ADU_OFERTELE, BUTON_ADU_OFERTELE_SCURT,
+  COMUTATOR_PRET_EMAG, COMUTATOR_STOC_EMAG, COMUTATOR_SINCRONIZARE_EMAG,
 } from "@/lib/emag/etichete";
+import { ceSeTrimite } from "@/lib/emag/politica-sincronizare";
 import {
   AlertTriangle, Ban, Check, CheckCircle, ClipboardCheck, Clock, Copy, Download,
   EyeOff, FilePen, HelpCircle, Hourglass, Layers, Link2, Loader2, PackagePlus, PackageX,
@@ -228,7 +230,10 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
     });
   }
 
-  function comuta(camp: "auto_sync" | "auto_publish" | "sync_continut" | "emag_club", valoare: boolean) {
+  function comuta(
+    camp: "auto_sync" | "auto_publish" | "sync_continut" | "emag_club" | "sincronizeaza_stocul" | "sincronizeaza_pretul",
+    valoare: boolean,
+  ) {
     incepe(async () => {
       const r = await salveazaSetariEmag(businessId, { [camp]: valoare });
       if ("error" in r) toast.error(r.error);
@@ -243,9 +248,16 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
   function porneșteToateAutoSync() {
     /* ⚠ `status?.` fiindca ingustarea de mai sus nu trece in inchidere. */
     const cate = status?.oferte.preluate ?? 0;
+    /* ⚠ Intrebarea spune ce pleaca ACUM, dupa comutatoarele de stoc si pret: cu pretul oprit,
+       „prețul și stocul le vor rescrie” ar fi speriat omul cu ceva ce nu se intampla. */
+    const ce = ceSeTrimite({ stoc: status?.sincronizeazaStocul ?? true, pret: status?.sincronizeazaPretul ?? true })
+      ?? "prețul și stocul";
+    const rescrie = ce === "prețul și stocul"
+      ? "le vor rescrie pe cele puse de tine în panoul eMAG"
+      : "îl va rescrie pe cel pus de tine în panoul eMAG";
     if (!window.confirm(
       `Pornești trimiterea automată pentru ${cate} ${cate === 1 ? "ofertă" : "oferte"}?\n\n`
-      + "De acum prețul și stocul din Edinio le vor rescrie pe cele puse de tine în panoul eMAG.",
+      + `De acum ${ce} din Edinio ${rescrie}.`,
     )) return;
     incepe(async () => {
       const r = await pornesteSincronizareaTuturor(businessId);
@@ -253,7 +265,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
       toast.success(
         r.cate === 0
           ? "Nu era nimic de pornit."
-          : `Gata: ${r.cate} ${r.cate === 1 ? "ofertă își trimite" : "oferte își trimit"} de acum prețul și stocul.`,
+          : `Gata: ${r.cate} ${r.cate === 1 ? "ofertă își trimite" : "oferte își trimit"} de acum ${ce}.`,
       );
     });
   }
@@ -383,6 +395,10 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
   /* ⚠ O DATA, din TOATE cifrele randului: lasata pe seama fiecarui card, „4" ar fi
      iesit la 44px langa „3754" la 36px, adica niste cutii care nu mai arata ca un set. */
   const marimeCifre = marimeaRandului(cifre.map((c) => c.value));
+
+  /* Ce pleaca la ofertele care se sincronizeaza, in cuvinte: „prețul și stocul”, „prețul”,
+     „stocul”, sau nimic. Un singur loc pentru butonul, avertismentul si intrebarea de sub el. */
+  const ceTrimite = ceSeTrimite({ stoc: status.sincronizeazaStocul, pret: status.sincronizeazaPretul });
 
   /* ── Conectat ───────────────────────────────────────────────────────────── */
   return (
@@ -605,12 +621,47 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
       */}
       <Panel title="Setări" className="p-5">
         <div className="space-y-3">
+          {/*
+            ⚠ NUMELE E CEL DE LA TRENDYOL, din etichete. Vechiul „Trimite automat prețul și
+            stocul” ar fi spus, lângă cele două de dedesubt, că el le hotărăște pe amândouă.
+            Oprit, nu pleacă nimic singur, oricum ar sta ele: se spune pe loc, fiindcă așa e
+            starea VetDepo pe 12.11, iar pornirea „Trimite stocul” de dedesubt n-ar fi făcut nimic.
+          */}
           <RandDeComutator
-            titlu="Trimite automat prețul și stocul"
-            text="Când schimbi ceva în magazin, pleacă și către eMAG."
+            titlu={COMUTATOR_SINCRONIZARE_EMAG}
+            text="Când schimbi ceva în magazin, pleacă singur către eMAG."
+            atentie={!status.autoSync
+              ? "Oprit, nu pleacă nimic singur spre eMAG, oricum ar sta comutatoarele de mai jos. Alege întâi ce vrei să plece, apoi pornește-l."
+              : undefined}
             pornit={status.autoSync}
             dezactivat={seLucreaza}
             comuta={(v) => comuta("auto_sync", v)}
+          />
+
+          {/*
+            ═══ ⚠ STOCUL ȘI PREȚUL, SEPARAT (12.11.2026, ca la Trendyol din 04.11) ═══
+
+            Cu prețul oprit, eMAG păstrează prețul pus de comerciant acolo: pe ruta ușoară
+            prețul nu se mai trimite deloc, iar pe cea grea (cu fișa) se trimite înapoi cel citit
+            de la ei chiar înainte. Se aplică ofertelor care se sincronizează; cele oprite una câte
+            una rămân oprite (hotărârea proprietarului). Vezi `politica-sincronizare.ts`.
+          */}
+          <RandDeComutator
+            titlu={COMUTATOR_STOC_EMAG}
+            text="Cantitatea din magazin ajunge pe eMAG la fiecare vânzare sau modificare, la ofertele care se sincronizează."
+            atentie={!status.sincronizeazaStocul
+              ? "Cu stocul oprit, eMAG poate vinde produse pe care nu le mai ai. Un produs dezactivat sau șters în magazin se scoate totuși de la vânzare."
+              : undefined}
+            pornit={status.sincronizeazaStocul}
+            dezactivat={seLucreaza}
+            comuta={(v) => comuta("sincronizeaza_stocul", v)}
+          />
+          <RandDeComutator
+            titlu={COMUTATOR_PRET_EMAG}
+            text="Oprit, prețul de pe eMAG rămâne cel pus de tine acolo. Pornit, prețul din magazin îl înlocuiește pe cel de pe eMAG."
+            pornit={status.sincronizeazaPretul}
+            dezactivat={seLucreaza}
+            comuta={(v) => comuta("sincronizeaza_pretul", v)}
           />
 
           {/*
@@ -632,26 +683,33 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
             sus: nu e o statistică, e o excepție de la bifa de deasupra. Pusă printre
             carduri, ar fi arătat ca încă o numărătoare oarecare.
           */}
-          {status.oferte.preluate > 0 && (
+          {/*
+            ⚠ TEXTUL SPUNE CE AR PLECA ACUM, după comutatoarele de deasupra (12.11.2026). Cu prețul
+            oprit, butonul pornește doar stocul, deci „Trimite prețul și stocul” ar fi promis o
+            rescriere care nu se întâmplă. Cu amândouă oprite nu pleacă nimic nici la celelalte,
+            deci excepția n-are de ce excepta și nu se arată.
+          */}
+          {status.oferte.preluate > 0 && ceTrimite && (
             <Callout
               variant="warning"
               icon={AlertTriangle}
               title={`${status.oferte.preluate} ${status.oferte.preluate === 1
                 ? "ofertă nu ascultă"
-                : "oferte nu ascultă"} de comutatorul de mai sus`}
+                : "oferte nu ascultă"} de comutatoarele de mai sus`}
               action={
                 <Button variant="outline" size="sm" onClick={porneșteToateAutoSync} disabled={seLucreaza}>
                   {seLucreaza ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                  Trimite prețul și stocul și pentru {status.oferte.preluate === 1 ? "ea" : "ele"}
+                  Trimite {ceTrimite} și pentru {status.oferte.preluate === 1 ? "ea" : "ele"}
                 </Button>
               }
             >
               <span className="text-xs leading-relaxed">
                 {status.oferte.preluate === 1
-                  ? "Nu-și trimite prețul și stocul către eMAG. E preluată"
-                  : "Nu-și trimit prețul și stocul către eMAG. Sunt preluate"} din contul tău, iar
-                Edinio nu suprascrie ce ai pus în panoul lor.{" "}
-                {status.oferte.total > 0 && status.oferte.preluate * 2 > status.oferte.total && (
+                  ? `Nu-și trimite ${ceTrimite} către eMAG. E preluată`
+                  : `Nu-și trimit ${ceTrimite} către eMAG. Sunt preluate`} din contul tău sau
+                oprite de tine, iar Edinio nu suprascrie ce ai pus în panoul lor.{" "}
+                {status.sincronizeazaPretul && status.oferte.total > 0
+                  && status.oferte.preluate * 2 > status.oferte.total && (
                   <>
                     <strong className="text-foreground">
                       Asta înseamnă că pentru cea mai mare parte a catalogului prețul de pe eMAG nu
@@ -659,8 +717,8 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
                     </strong>{" "}
                   </>
                 )}
-                Dacă vrei ca Edinio să conducă prețul și stocul, pornește-le de aici, sau una câte
-                una din lista de oferte.
+                Dacă vrei ca Edinio să conducă {ceTrimite} și pentru ele, pornește-le de aici, sau
+                una câte una din lista de oferte.
               </span>
             </Callout>
           )}
@@ -703,7 +761,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 
           <RandDeComutator
             titlu="Trimite și fișa produsului"
-            text="Nume, descriere, poze, caracteristici. Oprit, Edinio trimite doar prețul și stocul, iar fișa rămâne cum ai făcut-o pe eMAG."
+            text="Nume, descriere, poze, caracteristici. Oprit, fișa rămâne cum ai făcut-o pe eMAG, iar Edinio trimite doar ce ai ales mai sus."
             pornit={status.syncContinut}
             dezactivat={seLucreaza}
             comuta={(v) => comuta("sync_continut", v)}
@@ -721,28 +779,36 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
           a-și pierde campaniile la fiecare trecere și a-și vinde marfa de două ori.
 
           ⚠ Comutatoarele astea privesc numai repararea AUTOMATĂ. Când schimbi prețul
-          în Edinio, el pleacă spre eMAG oricum: aia e o hotărâre a ta, nu o derivă. Se
-          spune pe ecran, ca nimeni să nu creadă că a oprit sincronizarea cu totul.
+          în Edinio, el pleacă spre eMAG după comutatoarele de sus: aia e o hotărâre a ta,
+          nu o derivă. Se spune pe ecran, ca nimeni să nu creadă că a oprit sincronizarea.
+
+          ⚠ Și un câmp oprit sus nu se repară aici (12.11.2026): diferența lui e voită, iar
+          cronul nici n-o mai măsoară. Rândul rămâne, dar stins și cu motivul scris, ca omul
+          să nu caute de ce alegerea lui „Edinio” nu face nimic.
         */}
         <div className="space-y-3 border-t border-border pt-5">
           <h3 className="text-sm font-semibold text-foreground">Când eMAG are altceva decât Edinio</h3>
           <p className="-mt-1 text-xs leading-relaxed text-muted-foreground">
             Verificăm periodic ce e pe eMAG față de ce trimitem. Aici spui cine are
             ultimul cuvânt. <strong className="text-foreground">Nu se aplică</strong> la modificările
-            făcute de tine în magazin: acelea pleacă spre eMAG oricum.
+            făcute de tine în magazin: acelea pleacă spre eMAG după comutatoarele de mai sus.
           </p>
           <AlegereSursa
             eticheta="Prețul"
-            descriere="Alege «eMAG» dacă îți faci campaniile în panoul lor și nu vrei să ți le suprascriem."
-            valoare={status.derivaPret}
-            dezactivat={seLucreaza}
+            descriere={status.sincronizeazaPretul
+              ? "Alege «eMAG» dacă îți faci campaniile în panoul lor și nu vrei să ți le suprascriem."
+              : `„${COMUTATOR_PRET_EMAG}” e oprit, deci prețul de pe eMAG rămâne al tău și nu se repară.`}
+            valoare={status.sincronizeazaPretul ? status.derivaPret : "emag"}
+            dezactivat={seLucreaza || !status.sincronizeazaPretul}
             laSchimbare={(v) => alegeSursa("deriva_pret", v)}
           />
           <AlegereSursa
             eticheta="Stocul"
-            descriere="Aproape mereu «Edinio»: un singur inventar e chiar rostul integrării."
-            valoare={status.derivaStoc}
-            dezactivat={seLucreaza}
+            descriere={status.sincronizeazaStocul
+              ? "Aproape mereu «Edinio»: un singur inventar e chiar rostul integrării."
+              : `„${COMUTATOR_STOC_EMAG}” e oprit, deci stocul de pe eMAG nu se repară.`}
+            valoare={status.sincronizeazaStocul ? status.derivaStoc : "emag"}
+            dezactivat={seLucreaza || !status.sincronizeazaStocul}
             laSchimbare={(v) => alegeSursa("deriva_stoc", v)}
           />
         </div>
@@ -760,7 +826,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         <PanouGpsr businessId={businessId} status={status} />
       </Panel>
 
-      <PanouSincronizare businessId={businessId} />
+      <PanouSincronizare businessId={businessId} stoc={status.sincronizeazaStocul} pret={status.sincronizeazaPretul} />
 
       <PanouNotificari
         url={status.webhookUrl}
@@ -1001,7 +1067,12 @@ function PanouStoculSiTaxa({ businessId, status }: { businessId: string; status:
  * doar preturile ar fi platit costul intreg, n-ar fi stiut de ce dureaza, si a doua
  * oara n-ar mai fi apasat.
  */
-function PanouSincronizare({ businessId }: { businessId: string }) {
+function PanouSincronizare({ businessId, stoc, pret }: {
+  businessId: string;
+  /** Pleaca stocul / pretul la eMAG? Oprite din Setari, butoanele lor nu au ce trimite. */
+  stoc: boolean;
+  pret: boolean;
+}) {
   const [seLucreaza, incepe] = useLucru();
 
   function felie(f: "preturi" | "stocuri" | "produse", nume: string) {
@@ -1046,10 +1117,23 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
           {seLucreaza ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           Adu comenzile
         </Button>
-        <Button variant="outline" onClick={() => felie("stocuri", "stocuri")} disabled={seLucreaza}>
+        {/* ⚠ Cand jumatatea lor e oprita din Setari, actiunea refuza si spune de ce (altfel ar fi
+            pus la rand mii de produse fara sa plece nimic). NU se sting: butonul stins nu-si arata
+            titlul, iar omul ar fi ramas cu un buton gri si fara niciun motiv. */}
+        <Button
+          variant="outline"
+          onClick={() => felie("stocuri", "stocuri")}
+          disabled={seLucreaza}
+          title={stoc ? undefined : `„${COMUTATOR_STOC_EMAG}” e oprit în Setări.`}
+        >
           Trimite stocurile
         </Button>
-        <Button variant="outline" onClick={() => felie("preturi", "prețuri")} disabled={seLucreaza}>
+        <Button
+          variant="outline"
+          onClick={() => felie("preturi", "prețuri")}
+          disabled={seLucreaza}
+          title={pret ? undefined : `„${COMUTATOR_PRET_EMAG}” e oprit în Setări.`}
+        >
           Trimite prețurile
         </Button>
         <Button

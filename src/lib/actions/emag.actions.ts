@@ -21,7 +21,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 /* ⚠ Numele butonului se CITEAZA, nu se scrie a doua oara: de doua ori in doua zile am
    trimis comerciantul la un buton care nu exista. */
-import { BUTON_ADU_OFERTELE } from "@/lib/emag/etichete";
+import {
+  BUTON_ADU_OFERTELE, COMUTATOR_PRET_EMAG, COMUTATOR_SINCRONIZARE_EMAG, COMUTATOR_STOC_EMAG,
+} from "@/lib/emag/etichete";
 import { logError } from "@/lib/error-logger";
 import {
   emagGloballyEnabled, emagIpDeAlbit, emagWebhookUrl, iesireEmag, maskSecret, monedaEmag,
@@ -78,6 +80,7 @@ import {
 } from "@/lib/emag/types";
 import { traducereaPoateBloca } from "@/lib/emag/rute";
 import { citesteMemoriaDerivei, sursaAdevarului } from "@/lib/emag/deriva";
+import { ceSeTrimite, politicaSincronizare } from "@/lib/emag/politica-sincronizare";
 import { grupeaza, VALIDARE_RA, type GrupProbleme, type Necaz } from "@/lib/emag/probleme";
 import { alegeSupplyLeadTime, oferteUsoare, type ProdusDeCartografiat } from "@/lib/emag/mapping";
 import { dimensiuniPropuse, numarDeColete, type LinieColet, type PropunereDimensiuni } from "@/lib/emag/colete";
@@ -233,6 +236,12 @@ export interface StareEmag {
     reprezentantEmail: string;
   };
   syncContinut: boolean;
+  /**
+   * Ce pleacă la ofertele care se sincronizează: stocul, prețul (12.11.2026). Nescrise = pornite.
+   * Vezi `lib/emag/politica-sincronizare.ts`.
+   */
+  sincronizeazaStocul: boolean;
+  sincronizeazaPretul: boolean;
   /**
    * Cine are ultimul cuvânt când ce e pe eMAG nu mai e ce am trimis (§69).
    *
@@ -440,6 +449,10 @@ export async function getEmagStatus(businessId: string): Promise<StareEmag | { e
     },
     /* ⚠ Implicit PORNIT: cine publică din Edinio se așteaptă ca fișa să vină tot de acolo. */
     syncContinut: config.sync_continut !== false,
+    /* ⚠ Prin `politicaSincronizare`, aceeasi functie ca la trimitere: ecranul arata ce face
+       expeditorul, nu o a doua citire a acelorasi doua campuri. */
+    sincronizeazaStocul: politicaSincronizare(config).stoc,
+    sincronizeazaPretul: politicaSincronizare(config).pret,
     /* ⚠ Prin `sursaAdevarului`, nu prin `?? "edinio"`. O valoare stricată în config ar
        fi ajuns pe ecran ca atare, iar comutatorul ar fi arătat altceva decât face
        cronul — care trece oricum valoarea prin aceeași funcție. */
@@ -867,6 +880,9 @@ export async function salveazaSetariEmag(
     /** Cine are ultimul cuvant la o derivare. Vezi `deriva.ts` (§69). */
     deriva_pret?: "edinio" | "emag";
     deriva_stoc?: "edinio" | "emag";
+    /** Ce pleaca la ofertele care se sincronizeaza (12.11.2026). Vezi `politica-sincronizare.ts`. */
+    sincronizeaza_stocul?: boolean;
+    sincronizeaza_pretul?: boolean;
   },
 ): Promise<{ success: true } | { error: string }> {
   const g = await guard(businessId);
@@ -978,6 +994,10 @@ export async function salveazaSetariEmag(
       ? { deriva_pret: setari.deriva_pret } : {}),
     ...(setari.deriva_stoc === "edinio" || setari.deriva_stoc === "emag"
       ? { deriva_stoc: setari.deriva_stoc } : {}),
+    /* ⚠ Numai un `boolean` adevarat. Un sir ajuns aici ar fi fost citit de `politicaSincronizare`
+       drept „pornit” (`!== false`), iar ecranul ar fi aratat oprit ce expeditorul trimite. */
+    ...(typeof setari.sincronizeaza_stocul === "boolean" ? { sincronizeaza_stocul: setari.sincronizeaza_stocul } : {}),
+    ...(typeof setari.sincronizeaza_pretul === "boolean" ? { sincronizeaza_pretul: setari.sincronizeaza_pretul } : {}),
   };
 
   /*
@@ -1048,9 +1068,30 @@ export async function salveazaSetariEmag(
    * ⚠ CE COSTA: un produs respins de ei tocmai fiindca ii lipsea GPSR-ul ramanea respins
    * dupa ce comerciantul completa datele. El le vedea salvate, ei nu le primeau.
    */
+  /*
+   * ═══ ⚠ CE SE PORNESTE ACUM PLEACA SINGUR LA OFERTE (12.11.2026) ═══
+   *
+   * Aceeasi lectie ca la Trendyol pe 04.11: salvata doar in configurare, o pornire ar fi ajuns la
+   * o oferta abia la urmatoarea ei vanzare sau modificare. Deci, cand stocul sau pretul INCEP sa
+   * plece (comutatorul lor, sau cel mare, aprins acum), toate ofertele care se sincronizeaza le
+   * primesc prin coada, cu ritmul ei.
+   *
+   * ⚠ SE COMPARA POLITICA, NU BIFELE. „Nescris” si „pornit” inseamna acelasi lucru (vezi
+   * `politicaSincronizare`): prima scriere a unui „pornit” peste nimic nu schimba nimic si n-are
+   * voie sa puna tot catalogul in coada. Iar o OPRIRE nu cere nimic: ce nu mai pleaca nu se trimite.
+   */
+  const polVeche = politicaSincronizare(veche);
+  const polNoua = politicaSincronizare({ ...veche, ...petic });
+  const pornitInainte = veche.auto_sync !== false;
+  const pornitAcum = (petic.auto_sync ?? veche.auto_sync) !== false;
+  const aprinsAcum = pornitAcum && !pornitInainte;
+  const pornestePretul = pornitAcum && polNoua.pret && (!polVeche.pret || aprinsAcum);
+  const pornesteStocul = pornitAcum && polNoua.stoc && (!polVeche.stoc || aprinsAcum);
+
   const cereRutaGrea = sASchimbat("green_tax") || sASchimbat("supply_lead_time") || gpsrSAChimbat;
-  const cerePret = sASchimbat("vat_id") || sASchimbat("handling_time");
-  const cereStoc = sASchimbat("stoc_rezervat") || sASchimbat("warehouse_id");
+  /* ⚠ `pret` duce pe ruta usoara si stocul, cand stocul pleaca: o singura trecere pentru amandoua. */
+  const cerePret = sASchimbat("vat_id") || sASchimbat("handling_time") || pornestePretul;
+  const cereStoc = sASchimbat("stoc_rezervat") || sASchimbat("warehouse_id") || pornesteStocul;
 
   /*
    * ═══ SI INTENTIA SE SCRIE ODATA CU DATELE, NU DUPA ELE (25.08.2026) ═══
@@ -2071,7 +2112,15 @@ const RETURURI_PE_PAGINA = 50;
 export async function listaOferteEmag(
   businessId: string,
   filtru: FiltruOferteEcran = {},
-): Promise<{ randuri: RandOfertaEcran[]; total: number; pagina: number; pePagina: number } | { error: string }> {
+): Promise<{
+  randuri: RandOfertaEcran[]; total: number; pagina: number; pePagina: number;
+  /**
+   * Ce pleaca la o oferta care se sincronizeaza, dupa comutatoarele magazinului (12.11.2026).
+   * Butonul de pe rand („Trimite automat” / „Nu mai trimite”) il spune pe nume, ca omul sa nu
+   * creada ca porneste pretul cand pretul e oprit din Setari.
+   */
+  ceTrimite: ReturnType<typeof ceSeTrimite>;
+} | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
 
@@ -2079,6 +2128,7 @@ export async function listaOferteEmag(
   /* ⚠ Se citeste config-ul ca sa se stie CINE conduce fiecare camp: cu sursa pe eMAG,
      deriva nu se repara niciodata, si randul trebuie sa spuna asta. */
   const config = await loadConfig(businessId);
+  const pol = politicaSincronizare(config);
   const pagina = Math.max(1, Math.floor(filtru.pagina ?? 1));
   const de_la = (pagina - 1) * OFERTE_PE_PAGINA;
 
@@ -2243,7 +2293,12 @@ export async function listaOferteEmag(
           campuri: m.campuri,
           renuntat: m.renuntatLa != null,
           din: m.prima,
-          sursa: { pret: sursaAdevarului(config.deriva_pret), stoc: sursaAdevarului(config.deriva_stoc) },
+          /* ⚠ Un camp oprit din Setari (12.11.2026) nu se repara, la fel ca unul condus de eMAG:
+             fara asta, o memorie veche de deriva ar fi promis o reparatie care nu mai vine. */
+          sursa: {
+            pret: pol.pret ? sursaAdevarului(config.deriva_pret) : "emag",
+            stoc: pol.stoc ? sursaAdevarului(config.deriva_stoc) : "emag",
+          },
         };
       })(),
       concurenta: (r.number_of_offers ?? 0) > 1
@@ -2256,7 +2311,7 @@ export async function listaOferteEmag(
     };
   });
 
-  return { randuri, total: count ?? 0, pagina, pePagina: OFERTE_PE_PAGINA };
+  return { randuri, total: count ?? 0, pagina, pePagina: OFERTE_PE_PAGINA, ceTrimite: ceSeTrimite(pol) };
 }
 
 /**
@@ -2340,7 +2395,7 @@ export async function publicaCategoriaPeEmag(
    */
   const verdict = await publicaPeEmagStrict(businessId, produse.map((p) => p.id));
   /*
-   * De ce ar putea iesi zero DUPA 25.08.2026: „Trimite automat prețul și stocul" nu mai e
+   * De ce ar putea iesi zero DUPA 25.08.2026: comutatorul mare (`auto_sync`) nu mai e
    * un motiv — o apasare pe „Publică" trece peste el (vezi `enqueueMany`). Deci raman
    * doua, si se deosebesc, fiindca duc in locuri diferite:
    *
@@ -2941,6 +2996,19 @@ export async function sincronizeazaFelieEmag(
   if (!config.connected) return { error: "Contul eMAG nu este conectat." };
   if (config.needs_reconnect) return { error: "eMAG a refuzat acreditările. Reconectează contul." };
 
+  /*
+   * ⚠ JUMĂTATEA OPRITĂ DIN SETĂRI SE SPUNE, NU SE PUNE LA RÂND (12.11.2026). Pusă în coadă, felia
+   * „prețuri” ar fi plecat fără niciun preț (expeditorul îl taie), iar ecranul ar fi scris „400 de
+   * produse puse la rând” pentru o apăsare care nu schimbă nimic la eMAG.
+   */
+  const pol = politicaSincronizare(config);
+  if (felie === "preturi" && !pol.pret) {
+    return { error: `„${COMUTATOR_PRET_EMAG}” e oprit în Setări, deci prețurile nu pleacă. Pornește-l, dacă vrei ca Edinio să le conducă.` };
+  }
+  if (felie === "stocuri" && !pol.stoc) {
+    return { error: `„${COMUTATOR_STOC_EMAG}” e oprit în Setări, deci stocurile nu pleacă. Pornește-l, dacă vrei ca Edinio să le conducă.` };
+  }
+
   const admin = createAdminClient();
 
   /*
@@ -2983,7 +3051,7 @@ export async function sincronizeazaFelieEmag(
   if (puse === 0) {
     return {
       error: config.auto_sync === false
-        ? "„Trimite automat prețul și stocul” e oprit, așa că nu s-a pus nimic la rând. " +
+        ? `„${COMUTATOR_SINCRONIZARE_EMAG}” e oprit, așa că nu s-a pus nimic la rând. ` +
           "Pornește-l, sau folosește „Trimite acum” pe produsul care te interesează."
         : "Nu s-a pus nimic la rând: ofertele tale sunt preluate din eMAG, iar acelea nu se " +
           "trimit automat. Folosește „Trimite acum” pe produsul care te interesează.",
@@ -4156,7 +4224,7 @@ export async function publicaProduseleEmag(
 
   const verdict = await publicaPeEmagStrict(businessId, deTrimis);
   /*
-   * De ce ar putea iesi zero DUPA 25.08.2026: „Trimite automat prețul și stocul" nu mai e
+   * De ce ar putea iesi zero DUPA 25.08.2026: comutatorul mare (`auto_sync`) nu mai e
    * un motiv — o apasare pe „Publică" trece peste el (vezi `enqueueMany`). Deci raman
    * doua, si se deosebesc, fiindca duc in locuri diferite:
    *

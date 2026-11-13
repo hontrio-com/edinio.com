@@ -216,7 +216,8 @@ test("⚠ fiecare tip de camp din registru are control in panou: cardurile si pl
 
 test("16.6: cardul se alege din fila Stil, cu aceeasi galerie, iar miniatura lui trece prin cardul magazinului", () => {
   const e = cod("src/components/editor-magazin/EditorMagazin.tsx");
-  assert.match(e, /<PanouStil continut=\{continut\} cardul=\{\{\s*sectiune: designViu\.commerce\.productCard,\s*numar: numarVariante\(designViu\.commerce\.productCard\),\s*onSchimba: \(\) => \{ setGalerieDesign\(designViu\.commerce\.productCard\.id\); setVedereMobil\("previzualizare"\); \},\s*\}\} \/>/);
+  // Dupa card poate veni culoarea secundara (13.11.2026, `culoarea-secundara.test.ts`).
+  assert.match(e, /<PanouStil continut=\{continut\} cardul=\{\{\s*sectiune: designViu\.commerce\.productCard,\s*numar: numarVariante\(designViu\.commerce\.productCard\),\s*onSchimba: \(\) => \{ setGalerieDesign\(designViu\.commerce\.productCard\.id\); setVedereMobil\("previzualizare"\); \},\s*\}\}(?: \/>| secundara=\{\{)/);
   assert.match(cod("src/components/editor-magazin/continut/PanouStil.tsx"),
     /Cardul de produs<\/p>\s*\{cardul && <RandDesign sectiune=\{cardul\.sectiune\} numar=\{cardul\.numar\} onSchimba=\{cardul\.onSchimba\} \/>\}/);
   assert.match(cod("src/components/editor-magazin/PanouNod.tsx"), /<RandDesign sectiune=\{sectiune\} numar=\{variante\} onSchimba=\{\(\) => onSchimbaDesignul\(sectiune\.id\)\} \/>/);

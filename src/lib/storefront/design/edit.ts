@@ -145,6 +145,23 @@ export function updateSection(
 }
 
 /**
+ * Culoarea secundara a magazinului (`style.colors.accent`), aleasa din fila „Stil” (13.11.2026, cerut de el: „sa poti
+ * selecta si culoarea secundara”). Sta in design, ca la teme (Jupiter isi pune aici portocaliul), deci ajunge la clienti
+ * la „Publică” si intra in istoric. `null` scoate cheia: accentul cade iar pe culoarea principala (`defaultColors`).
+ *
+ * ⚠ Fara `colors` gol: parserul nu-l pastreaza, iar un `{}` ramas ar fi facut designul „modificat” fata de cel publicat.
+ */
+export function cuCuloareaSecundara(design: StoreDesign, culoare: string | null): StoreDesign {
+  const colors = { ...(design.style.colors ?? {}) };
+  if (culoare) colors.accent = culoare;
+  else delete colors.accent;
+  const style = { ...design.style };
+  if (Object.keys(colors).length > 0) style.colors = colors;
+  else delete style.colors;
+  return { ...design, style };
+}
+
+/**
  * Aprinde sau stinge o sectiune din editorul de design.
  *
  * ⚠ Scrie SI `enabledOverride`, nu doar `enabled`. Sectiunile derivate isi iau

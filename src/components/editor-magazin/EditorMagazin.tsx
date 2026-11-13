@@ -6,8 +6,8 @@ import { DesignGallery } from "@/components/store-editor/DesignGallery";
 import { RamaPreview, type Dispozitiv } from "@/components/store-editor/RamaPreview";
 import { newProductSection } from "@/lib/store-sections";
 import {
-  blocuriLaCale, caleInText, completeazaBlocurileSectiunii, ID_BARA_ANUNT, mutaSectiuneaLa, schimbaBlocuriLaCale, schimbaBlocurile,
-  removeSection, toateSectiunile, toggleSection, updateSection, type CaleContinut, type LocNou,
+  blocuriLaCale, caleInText, completeazaBlocurileSectiunii, cuCuloareaSecundara, ID_BARA_ANUNT, mutaSectiuneaLa, schimbaBlocuriLaCale,
+  schimbaBlocurile, removeSection, toateSectiunile, toggleSection, updateSection, type CaleContinut, type LocNou,
 } from "@/lib/storefront/design/edit";
 import { adaugaColoana, adaugaContinut, comutaBloc, duplicaContinut, esteContinut, schemaBlocurilor, stergeContinut } from "@/lib/storefront/design/blocuri";
 import { resolveStyle } from "@/lib/storefront/design/defaults";
@@ -1062,6 +1062,10 @@ export function EditorMagazin({
                 sectiune: designViu.commerce.productCard,
                 numar: numarVariante(designViu.commerce.productCard),
                 onSchimba: () => { setGalerieDesign(designViu.commerce.productCard.id); setVedereMobil("previzualizare"); },
+              }} secundara={{
+                // Culoarea secundara (13.11.2026): accentul designului, prin ciorna, ca restul designului.
+                valoare: design.style.colors?.accent ?? null,
+                onAlege: (c) => ciorna.aplica((d: StoreDesign) => cuCuloareaSecundara(d, c), "stil:secundara"),
               }} />
             ) : continutNouCerut && !dateBlocuri ? (
               <div className="space-y-2" aria-busy="true">

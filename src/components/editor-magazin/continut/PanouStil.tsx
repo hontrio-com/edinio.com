@@ -23,7 +23,53 @@ import { Grup } from "./ui";
  */
 
 const CULORI_PRINCIPALE = ["#07c527", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2"];
+/** Accente care se vad langa o culoare principala inchisa: portocaliu, galben, rosu, roz, verde-albastrui, albastru, mov, antracit. */
+const CULORI_SECUNDARE = ["#F47B20", "#FFC72C", "#E4002B", "#E8336D", "#0D9488", "#2563EB", "#7C3AED", "#111827"];
 const CULORI_FUNDAL = ["#FFFFFF", "#FAFAFA", "#F5F5F4", "#F0FDF4", "#FDF2F8", "#FFF7ED", "#F0F9FF", "#FAF5FF"];
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+/**
+ * Culoarea secundara (13.11.2026, cerut de el), adica accentul designului: `style.colors.accent`, in ciorna designului,
+ * deci la clienti abia la „Publică”. Nealeasa, e chiar culoarea principala (`defaultColors`); „La fel ca cea principală”
+ * scoate alegerea. Codul scris pe jumatate se tine local, ca la culoarea principala (vezi `hexScris` mai jos).
+ */
+function CuloareaSecundara({ valoare, principala, onAlege }: {
+  valoare: string | null;
+  principala: string;
+  onAlege: (c: string | null) => void;
+}) {
+  const [hexScris, setHexScris] = useState<string | null>(null);
+  const efectiva = valoare ?? principala;
+  const alege = (c: string | null) => { setHexScris(null); onAlege(c); };
+  return (
+    <Grup titlu="Culoarea secundară">
+      <p className="text-[11px] text-muted-foreground">
+        Pentru accente: bulina coșului, paginarea bannerelor, plăcile de categorii, detaliile din subsol. Nu toate designurile o folosesc.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        {CULORI_SECUNDARE.map((c) => (
+          <button key={c} type="button" onClick={() => alege(c)} aria-label={`Culoarea secundară ${c}`} aria-pressed={valoare === c}
+            className="w-7 h-7 rounded-full border-2 transition-all"
+            style={{ backgroundColor: c, borderColor: valoare === c ? "white" : c, boxShadow: valoare === c ? `0 0 0 2px ${c}` : "none", transform: valoare === c ? "scale(1.15)" : "scale(1)" }} />
+        ))}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <input type="color" value={HEX.test(efectiva) ? efectiva : "#F47B20"} aria-label="Alege altă culoare secundară"
+          onChange={(e) => alege(e.target.value)} className="w-8 h-8 rounded border border-border cursor-pointer" />
+        <input type="text" value={hexScris ?? efectiva} maxLength={7} placeholder="#F47B20" aria-label="Codul culorii secundare"
+          onChange={(e) => { const v = e.target.value; if (HEX.test(v)) alege(v); else setHexScris(v); }}
+          className="w-28 px-2 py-1.5 text-xs border border-border rounded-lg bg-surface font-mono focus:outline-none focus:border-primary" />
+        {valoare ? (
+          <button type="button" onClick={() => alege(null)} className="text-[11px] font-medium text-primary hover:text-primary/80">
+            La fel ca cea principală
+          </button>
+        ) : (
+          <span className="text-[11px] text-muted-foreground">Acum e la fel ca cea principală.</span>
+        )}
+      </div>
+    </Grup>
+  );
+}
 
 /** O imagine aleasa prin incarcare sau din Biblioteca Media, cu miniatura. */
 function CampImagine({ eticheta, previzualizare, onFisier, onScoate, onAlege, ajutor }: {
@@ -73,9 +119,11 @@ function CampImagine({ eticheta, previzualizare, onFisier, onScoate, onAlege, aj
  * `cardul`: cardul de produs din designul viu, cu cate design-uri are si deschiderea galeriei (etapa 16.6). Cardul n-are
  * rand in arbore, deci designul lui se alege de aici, cu acelasi „Schimbă designul” ca sectiunile.
  */
-export function PanouStil({ continut, cardul }: {
+export function PanouStil({ continut, cardul, secundara }: {
   continut: ContinutMagazin;
   cardul?: { sectiune: SectionInstance; numar: number; onSchimba: () => void };
+  /** Culoarea secundara din designul viu (`style.colors.accent`, `null` = nealeasa) si scrierea ei in ciorna. */
+  secundara?: { valoare: string | null; onAlege: (c: string | null) => void };
 }) {
   const { pc, seteaza, logo, setLogo, favicon, setFavicon, culoare, setCuloare } = continut;
   /*
@@ -121,6 +169,8 @@ export function PanouStil({ continut, cardul }: {
               className="w-28 px-2 py-1.5 text-xs border border-border rounded-lg bg-surface font-mono focus:outline-none focus:border-primary" />
           </div>
         </Grup>
+
+        {secundara && <CuloareaSecundara valoare={secundara.valoare} principala={culoare} onAlege={secundara.onAlege} />}
 
         <Grup titlu="Fundalul magazinului">
           <div className="flex items-center gap-2 flex-wrap">

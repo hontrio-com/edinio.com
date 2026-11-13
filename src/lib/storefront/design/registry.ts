@@ -203,6 +203,25 @@ export type HeaderAction = "cautare" | "telefon" | "whatsapp" | "cos";
  */
 const CAMP_BANDA_RAND: Field = { key: "banda", type: "toggle", label: "Pe panou gri, cu titlu mare" };
 
+/**
+ * Cate produse se vad pe un rand, pe calculator (13.11.2026, cerut de el). „Automat” (si cheia lipsa) = ce era pana
+ * atunci, deci niciun magazin nu se schimba pana nu alege; regula si clasele sunt in `coloane-rand.ts`.
+ */
+const CAMP_COLOANE_RAND: Field = {
+  key: "coloane",
+  type: "select",
+  label: "Produse pe rând (pe calculator)",
+  help: "Automat: 4, iar pe panoul gri 5. Pe telefon se văd câte 2, pe tabletă cel mult 3.",
+  options: [
+    { value: "auto", label: "Automat" },
+    { value: "2", label: "2 produse" },
+    { value: "3", label: "3 produse" },
+    { value: "4", label: "4 produse" },
+    { value: "5", label: "5 produse" },
+    { value: "6", label: "6 produse" },
+  ],
+};
+
 export const HEADER_VARIANT_ACTIONS: Record<string, HeaderAction[]> = {
   search: ["telefon", "whatsapp", "cos"],
   centered: ["cautare", "whatsapp", "cos"],
@@ -1010,8 +1029,8 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
      */
     removable: false,
     variants: {
-      grid: { label: "Grilă", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
-      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [CAMP_BANDA_RAND] },
+      grid: { label: "Grilă", tags: ["clasic"], layout: "contained", fields: [CAMP_COLOANE_RAND, CAMP_BANDA_RAND] },
+      carousel: { label: "Carusel", tags: ["clasic"], layout: "contained", fields: [CAMP_COLOANE_RAND, CAMP_BANDA_RAND] },
     },
   },
   product_grid: {

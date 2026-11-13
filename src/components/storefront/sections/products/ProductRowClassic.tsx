@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useStorefront } from "@/components/storefront/StorefrontProvider";
+import { claseGrila, coloaneEfective, latimeCardCarusel, type ColoaneRand } from "@/lib/storefront/design/coloane-rand";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 import { StoreProductCard } from "./StoreProductCard";
 
@@ -12,9 +13,10 @@ const GRI_BANDA = "color-mix(in srgb, var(--st-primary) 4%, var(--st-bg))";
 /**
  * Un rand de produse deasupra catalogului, varianta classic.
  *
- * Doua asezari, cu acelasi antet: grila de patru pe desktop, sau derulare
- * orizontala cu fixare la card. Asezarea vine din editorul magazinului, nu din
- * sistemul de design: randul n-are inca design-uri proprii.
+ * Doua asezari, cu acelasi antet: grila (implicit patru pe desktop, cinci pe
+ * panoul gri), sau derulare orizontala cu fixare la card. Asezarea vine din
+ * editorul magazinului, nu din sistemul de design: randul n-are inca design-uri
+ * proprii. Cate produse pe rand: reglajul `coloane` (13.11.2026, `coloane-rand.ts`).
  */
 export function ProductRowClassic({
   title,
@@ -24,10 +26,13 @@ export function ProductRowClassic({
   headerGap = "gap-2",
   prioritate = false,
   banda = false,
+  coloane = null,
 }: {
   title: string;
   items: StorefrontProduct[];
   layout?: "grid" | "carousel";
+  /** Cate produse pe rand pe calculator (reglajul randului, 13.11.2026); `null` = „Automat”: 4, pe panoul gri 5. */
+  coloane?: ColoaneRand | null;
   /** Prima sectiune a paginii: primele carduri isi incarca imaginea nerabdator. */
   prioritate?: boolean;
   onViewAll?: () => void;
@@ -46,6 +51,8 @@ export function ProductRowClassic({
 }) {
   const { color } = useStorefront();
   if (items.length === 0) return null;
+  // Primele carduri de pe ecranul de calculator isi incarca imaginea nerabdator.
+  const pePrimulRand = coloaneEfective(coloane, banda);
 
   if (banda) {
     return (
@@ -61,11 +68,11 @@ export function ProductRowClassic({
           )}
         </div>
         {layout === "carousel" ? (
-          <ProductRail items={items} prioritate={prioritate} banda />
+          <ProductRail items={items} prioritate={prioritate} banda coloane={coloane} />
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          <div className={`grid ${claseGrila(coloane, true)} gap-3 sm:gap-4`}>
             {items.map((product, i) => (
-              <StoreProductCard key={product.id} product={product} priority={prioritate && i < 5} />
+              <StoreProductCard key={product.id} product={product} priority={prioritate && i < pePrimulRand} />
             ))}
           </div>
         )}
@@ -89,11 +96,11 @@ export function ProductRowClassic({
       </div>
 
       {layout === "carousel" ? (
-        <ProductRail items={items} prioritate={prioritate} />
+        <ProductRail items={items} prioritate={prioritate} coloane={coloane} />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className={`grid ${claseGrila(coloane, false)} gap-3 sm:gap-4`}>
           {items.map((product, i) => (
-            <StoreProductCard key={product.id} product={product} priority={prioritate && i < 4} />
+            <StoreProductCard key={product.id} product={product} priority={prioritate && i < pePrimulRand} />
           ))}
         </div>
       )}
@@ -119,7 +126,13 @@ export function ProductRowClassic({
  * de deasupra si de dedesubt. Marginea de fixare readuce oprirea pe marginea
  * continutului, adica exact unde incepe titlul.
  */
-function ProductRail({ items, prioritate, banda = false }: { items: StorefrontProduct[]; prioritate: boolean; banda?: boolean }) {
+function ProductRail({ items, prioritate, banda = false, coloane = null }: {
+  items: StorefrontProduct[];
+  prioritate: boolean;
+  banda?: boolean;
+  /** Cate carduri intregi se vad pe calculator; `null` = ca pana atunci (`latimeCardCarusel`). */
+  coloane?: ColoaneRand | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef({ down: false, startX: 0, startLeft: 0, moved: false });
   const [spreStanga, setSpreStanga] = useState(false);
@@ -156,8 +169,9 @@ function ProductRail({ items, prioritate, banda = false }: { items: StorefrontPr
    * Un ecran de carduri, rotunjit la card intreg.
    *
    * Pasul se masoara din pozitiile reale a doua carduri vecine, nu dintr-un
-   * procent scris a doua oara: latimea traieste in clase (`w-[44%] sm:w-[30%]
-   * lg:w-[23%]`) si a doua copie s-ar desincroniza la prima ajustare de design.
+   * procent scris a doua oara: latimea traieste in clase (`latimeCardCarusel`,
+   * dupa cate produse pe rand s-au ales) si a doua copie s-ar desincroniza la
+   * prima ajustare de design.
    */
   const sari = (directie: 1 | -1) => {
     const el = ref.current;
@@ -219,8 +233,8 @@ function ProductRail({ items, prioritate, banda = false }: { items: StorefrontPr
         }}
       >
         {items.map((product, i) => (
-          <div key={product.id} className={`snap-start shrink-0 w-[44%] sm:w-[30%] ${banda ? "lg:w-[calc((100%-4rem)/5)]" : "lg:w-[23%]"}`}>
-            <StoreProductCard product={product} priority={prioritate && i < 4} />
+          <div key={product.id} className={`snap-start shrink-0 ${latimeCardCarusel(coloane, banda)}`}>
+            <StoreProductCard product={product} priority={prioritate && i < (coloane ?? 4)} />
           </div>
         ))}
       </div>
@@ -247,7 +261,11 @@ function ProductRail({ items, prioritate, banda = false }: { items: StorefrontPr
  * Sectiunea „Recomandate": produsele marcate ca populare, in grila.
  * Titlul e configurabil din editor.
  */
-export function FeaturedRowClassic({ prioritate = false, banda = false }: { prioritate?: boolean; banda?: boolean }) {
+export function FeaturedRowClassic({ prioritate = false, banda = false, coloane = null }: {
+  prioritate?: boolean;
+  banda?: boolean;
+  coloane?: ColoaneRand | null;
+}) {
   const { pageContent, featuredProducts } = useStorefront();
   // ⚠ Fara a doua poarta pe `show_featured_section`. Sectiunea ajunge aici doar
   // daca e `enabled` in design, iar `enabled` se deriva chiar din flagul acela
@@ -260,6 +278,7 @@ export function FeaturedRowClassic({ prioritate = false, banda = false }: { prio
       items={featuredProducts}
       prioritate={prioritate}
       banda={banda}
+      coloane={coloane}
     />
   );
 }
@@ -272,7 +291,12 @@ export function FeaturedRowClassic({ prioritate = false, banda = false }: { prio
  * randurile fara produse sunt deja eliminate din context, deci lipsa lui aici
  * inseamna „nimic de afisat".
  */
-export function CustomProductRow({ sectionId, prioritate = false, banda = false }: { sectionId: string; prioritate?: boolean; banda?: boolean }) {
+export function CustomProductRow({ sectionId, prioritate = false, banda = false, coloane = null }: {
+  sectionId: string;
+  prioritate?: boolean;
+  banda?: boolean;
+  coloane?: ColoaneRand | null;
+}) {
   const { productSections, viewAllCategory } = useStorefront();
   const rand = productSections.find((x) => x.section.id === sectionId);
   if (!rand) return null;
@@ -286,6 +310,7 @@ export function CustomProductRow({ sectionId, prioritate = false, banda = false 
       layout={section.layout === "carousel" ? "carousel" : "grid"}
       headerGap="gap-3"
       banda={banda}
+      coloane={coloane}
       onViewAll={
         section.mode === "category" && section.category
           ? () => viewAllCategory(section.category!)

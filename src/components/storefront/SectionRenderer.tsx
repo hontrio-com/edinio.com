@@ -19,6 +19,7 @@ import { CategoryNavClassic } from "./sections/catalog/CategoryNavClassic";
 import { ProductGridClassic } from "./sections/catalog/ProductGridClassic";
 import { ShippingProgressBanner } from "./sections/shipping/ShippingProgressBanner";
 import { CustomProductRow, FeaturedRowClassic } from "./sections/products/ProductRowClassic";
+import { coloaneRand } from "@/lib/storefront/design/coloane-rand";
 import { AboutClassic } from "./sections/content/AboutClassic";
 import { BenefitsClassic } from "./sections/content/BenefitsClassic";
 import { ContactClassic } from "./sections/content/ContactClassic";
@@ -209,10 +210,12 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
       // Asezarea randului vine din editorul magazinului (`page_content`), nu din
       // varianta: randul n-are catalog de design-uri, iar o varianta salvata ar
       // ingheta o alegere pe care comerciantul o schimba din alta parte.
+      // Cate produse pe rand (13.11.2026): reglajul `coloane`, „Automat” cand lipseste (`coloane-rand.ts`).
       return section.settings.mode === "featured" ? (
-        <FeaturedRowClassic prioritate={estePrima} banda={section.settings.banda === true} />
+        <FeaturedRowClassic prioritate={estePrima} banda={section.settings.banda === true} coloane={coloaneRand(section.settings.coloane)} />
       ) : (
-        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} prioritate={estePrima} banda={section.settings.banda === true} />
+        <CustomProductRow sectionId={String(section.settings.sectionRef ?? section.id)} prioritate={estePrima}
+          banda={section.settings.banda === true} coloane={coloaneRand(section.settings.coloane)} />
       );
     case "product_grid":
       return <ProductGridClassic prioritate={estePrima} />;

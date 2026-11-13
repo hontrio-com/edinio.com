@@ -281,8 +281,13 @@ function BaraCautare({
         className="flex-1 min-w-0 px-4 bg-transparent text-sm text-[var(--st-text)] placeholder:text-[var(--st-muted)] focus:outline-none"
       />
 
+      {/*
+        ⚠ Colturile din dreapta urmeaza chenarul (13.11.2026, Antares si Capella): bara are colturi rotunjite si chenar de
+        2 px, dar nu `overflow-hidden` (ar taia lista categoriilor si rezultatele de sub ea), deci un buton plin cu colturi
+        drepte iesea peste rotunjire. Raza lui = raza interioara a chenarului: a barei minus grosimea chenarului.
+      */}
       <button type="submit" aria-label="Cauta"
-        className={`shrink-0 flex items-center justify-center font-bold text-sm transition-opacity hover:opacity-85 ${compact ? "w-12" : "px-7"}`}
+        className={`shrink-0 flex items-center justify-center font-bold text-sm transition-opacity hover:opacity-85 rounded-r-[calc(var(--st-radius-sm)-2px)] ${compact ? "w-12" : "px-7"}`}
         style={{ backgroundColor: "var(--st-primary)", color: "var(--st-primary-contrast)" }}>
         {compact ? <Search className="h-5 w-5" strokeWidth={2} /> : "Cauta"}
       </button>

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { resolveHref } from "@/lib/pages/href";
+import type { MarimeBanner } from "@/lib/storefront/design/hero-banners";
+import { LIMITE_RAPORT, potrivireaPozei, raportDin, raportulLocului, type LimiteRaport } from "@/lib/storefront/design/raport-bannere";
 
 /**
  * Latimea ceruta pe telefon (etapa 25.23, 11.11.2026): 75vw, nu 100vw. Un telefon cu densitate 3 cerea 1170 px, deci
@@ -41,9 +43,11 @@ export interface HeroBannersProps {
   links?: (string | undefined)[];
   alt: string;
   basePath: string;
+  /** Marimile stiute de server (`resolveHeroBanners`), aliniate cu `banners`: caruselul isi ia raportul din ele. */
+  marimi?: (MarimeBanner | null)[];
 }
 
-export function HeroBanners({ banners, links, alt, basePath }: HeroBannersProps) {
+export function HeroBanners({ banners, links, alt, basePath, marimi }: HeroBannersProps) {
   if (banners.length === 0) return null;
   if (banners.length === 1) {
     const href = links?.[0] ? resolveHref(links[0], basePath) : null;
@@ -65,14 +69,14 @@ export function HeroBanners({ banners, links, alt, basePath }: HeroBannersProps)
       </section>
     );
   }
-  return <BannerCarousel banners={banners} links={links} alt={alt} basePath={basePath} />;
+  return <BannerCarousel banners={banners} links={links} alt={alt} basePath={basePath} marimi={marimi} />;
 }
 
-export function BannerCarousel({ banners, links, alt, basePath }: HeroBannersProps) {
+export function BannerCarousel({ banners, links, alt, basePath, marimi }: HeroBannersProps) {
   return (
     <section className="relative overflow-hidden md:pt-6">
       <div className="mx-auto md:max-w-6xl md:px-4">
-        <BannerSlider banners={banners} links={links} alt={alt} basePath={basePath} />
+        <BannerSlider banners={banners} links={links} alt={alt} basePath={basePath} marimi={marimi} limiteRaport={LIMITE_RAPORT.carusel} />
       </div>
     </section>
   );
@@ -96,11 +100,18 @@ export function BannerSlider({
   // cu productia ar semnala o diferenta acolo unde CSS-ul e identic.
   slideClass = "shrink-0 w-full snap-center aspect-[16/9] bg-muted",
   paginare = "puncte",
+  marimi,
+  limiteRaport,
 }: HeroBannersProps & {
   wrapperClass?: string;
   slideClass?: string;
   /** `segmente`: bare subtiri, cea curenta in culoarea de accent (tema Jupiter, etapa 16.3). */
   paginare?: "puncte" | "segmente";
+  /**
+   * Intre ce rapoarte poate lua locul raportul primului banner (13.11.2026, `raport-bannere.ts`). Fara ele, locul ramane
+   * cel din `slideClass`, ca pana atunci.
+   */
+  limiteRaport?: LimiteRaport;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const invelis = useRef<HTMLDivElement>(null);
@@ -116,6 +127,31 @@ export function BannerSlider({
   // Etapa 25.17-25.18: bannerele demo cu incadrare pe telefon; una singura face tot caruselul mai inalt acolo (`max-sm`).
   const incadrari = banners.map((b) => incadrareMobil(b));
   const slot = incadrari.some(Boolean) ? `${slideClass} ${SLOT_INCADRAT_MOBIL}` : slideClass;
+
+  /*
+   * Locul ia raportul primului banner (13.11.2026: la eSafe, bannerele 16:9 se taiau in locul de 2,14:1 al temei). Marimea
+   * vine de pe server cand poza e in Biblioteca Media, deci pagina se aseaza corect de la primul cadru; altfel se masoara
+   * aici, la incarcarea pozei. Bannerele demo incadrate pe telefon raman pe locul lor: sunt facute pe masura lui.
+   */
+  const adaptiv = !!limiteRaport && !incadrari.some(Boolean);
+  // Pe adresa, nu pe pozitie: o ordine noua a bannerelor nu muta un raport pe alt banner.
+  const [masurate, setMasurate] = useState<Record<string, number>>({});
+  const rapoarte = banners.map((src, i) => raportDin(marimi?.[i]) ?? masurate[src] ?? null);
+  const raportLoc = adaptiv && limiteRaport ? raportulLocului(rapoarte[0], limiteRaport) : null;
+  const noteaza = useCallback((img: HTMLImageElement) => {
+    const src = img.dataset.banner;
+    if (!src || !img.naturalWidth || !img.naturalHeight) return;
+    const r = img.naturalWidth / img.naturalHeight;
+    setMasurate((m) => (m[src] !== undefined && Math.abs(m[src] - r) < 0.001 ? m : { ...m, [src]: r }));
+  }, []);
+  // Pozele incarcate inainte de hidratare nu mai trimit `load`: se citesc o data, dupa montare.
+  const cheieBannere = banners.join("\n");
+  useEffect(() => {
+    if (!adaptiv) return;
+    ref.current?.querySelectorAll<HTMLImageElement>("img[data-banner]").forEach((img) => {
+      if (img.complete) noteaza(img);
+    });
+  }, [adaptiv, noteaza, cheieBannere]);
 
   const onScroll = useCallback(() => {
     const el = ref.current;
@@ -207,11 +243,14 @@ export function BannerSlider({
                 // magazinului — acelasi pentru toate slide-urile, deja citit ca H1.
                 // Cel cu link ramane cu nume, altfel linkul n-ar avea niciunul.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={cdnImage(src, 1600)} srcSet={srcSet} sizes={srcSet ? SIZES_BANNER : undefined} alt={href ? alt : ""} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"} className="w-full h-full object-cover"
+                <img src={cdnImage(src, 1600)} srcSet={srcSet} sizes={srcSet ? SIZES_BANNER : undefined} alt={href ? alt : ""} draggable={false} fetchPriority={i === 0 ? "high" : "low"} loading={i === 0 ? "eager" : "lazy"}
+                  // Cu alt raport decat locul, poza se arata intreaga (`contain`), nu taiata (`raport-bannere.ts`).
+                  className={`w-full h-full ${potrivireaPozei(rapoarte[i], raportLoc) === "contain" ? "object-contain" : "object-cover"}`}
+                  data-banner={src} onLoad={adaptiv ? (e) => noteaza(e.currentTarget) : undefined}
                   style={incadrari[i] ? { objectPosition: incadrari[i]! } : undefined} />
               );
               return (
-                <div key={i} className={slot}>
+                <div key={i} className={slot} style={raportLoc ? { aspectRatio: String(raportLoc) } : undefined}>
                   {href ? (
                     <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
                   ) : img}

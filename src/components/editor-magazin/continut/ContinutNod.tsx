@@ -31,7 +31,7 @@ export function ContinutNod({ sectiune, continut, businessId, categorii, planGra
     case "anunt": return <ContinutAnunt continut={continut} />;
     case "header": return <ContinutHeader continut={continut} laStil={laStil} />;
     case "footer": return <ContinutFooter continut={continut} planGratuit={planGratuit} />;
-    case "hero": return <ContinutHero continut={continut} />;
+    case "hero": return <ContinutHero continut={continut} varianta={sectiune.variant} />;
     case "usp": return <ContinutUsp continut={continut} />;
     case "cautare": return <ContinutCautare continut={continut} />;
     case "recomandate": return <ContinutRecomandate continut={continut} />;

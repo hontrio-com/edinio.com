@@ -28,7 +28,22 @@ const ETICHETE_ASEZARE: Record<string, string> = {
   popular: "recomandate primele",
 };
 
-export function ContinutHero({ continut }: { continut: ContinutMagazin }) {
+/**
+ * Ce marime de banner se recomanda, dupa designul hero-ului (13.11.2026). Pana atunci scria „16:9” la orice design, iar
+ * la eSafe, pe tema Jupiter (locul de 2,14:1), bannerele facute exact asa se taiau. Acum caruselele isi iau raportul din
+ * primul banner (`raport-bannere.ts`), deci nu se mai taie; recomandarea spune doar la ce marime arata cel mai bine.
+ */
+function sfatMarimeBanner(varianta: string | undefined): string {
+  if (varianta === "carduri") {
+    return "Se afișează întreg, la proporția primului banner. Arată cel mai bine la 2,14:1, proporția designului (de exemplu 1600x748); pune-le pe toate la aceeași mărime. Cu mai multe bannere, se afișează ca un carusel.";
+  }
+  if (varianta === "banners" || varianta === "categories") {
+    return "Se afișează întreg, la proporția primului banner. Recomandat 16:9 (de exemplu 1920x1080); pune-le pe toate la aceeași mărime. Cu mai multe bannere, se afișează ca un carusel.";
+  }
+  return "Recomandat 16:9 (de exemplu 1920x1080). Cu mai multe bannere, se afișează ca un carusel.";
+}
+
+export function ContinutHero({ continut, varianta }: { continut: ContinutMagazin; varianta?: string }) {
   const { bannere, setBannere } = continut;
   const inputRef = useRef<HTMLInputElement>(null);
   const [pickerDeschis, setPickerDeschis] = useState(false);
@@ -99,7 +114,7 @@ export function ContinutHero({ continut }: { continut: ContinutMagazin }) {
               onSelect={(urls) => setBannere((l) => [...l, ...urls.map((url) => ({ id: idNou(), url, file: null, link: "" }))].slice(0, MAX_HERO_BANNERS))} />
           </>
         )}
-        <p className="text-[10px] text-muted-foreground">Recomandat 16:9 (de exemplu 1920x1080). Cu mai multe bannere, se afișează ca un carusel.</p>
+        <p className="text-[10px] text-muted-foreground">{sfatMarimeBanner(varianta)}</p>
       </Grup>
       <Nota>Cum arată hero-ul (doar imagini, text peste imagine, cu categorii) alegi mai sus, la Design.</Nota>
     </div>

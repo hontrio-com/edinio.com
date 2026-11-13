@@ -27,6 +27,7 @@ import { citesteFiltreDinAdresa, scrieFiltre } from "@/lib/storefront/catalog/ur
 import { metadataPaginiiPrincipale } from "@/lib/storefront/catalog/metadata-acasa";
 import { grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
 import { resolveDesign } from "@/lib/storefront/design/parse";
+import { cuMarimileBannerelor } from "@/lib/storefront/marimi-bannere";
 import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
 import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
@@ -320,6 +321,20 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * iar coloana bruta le-ar fi dus pe toate, necuratate, in HTML-ul fiecarui vizitator.
    */
   const setariDeTrimis = faraDesignulBrut(storeSettings);
+  /*
+   * Marimile bannerelor din Biblioteca Media (13.11.2026, `marimi-bannere.ts`): locul hero-ului ia raportul primului
+   * banner chiar de la primul cadru, fara sa sara dupa incarcarea pozei. Pornita aici, in paralel cu produsele, si
+   * asteptata abia la randare; o citire cazuta lasa `page_content` neatins (masoara atunci browserul). Nu si la magazinul
+   * „un singur produs”: acolo pagina principala e produsul, deci n-are hero.
+   */
+  const pcPentruRandare = parseStoreMode((storeSettings?.page_content as Json) ?? null).mode === "one_product"
+    ? Promise.resolve(null)
+    : cuMarimileBannerelor(
+      business.id,
+      (setariDeTrimis?.page_content ?? {}) as Record<string, unknown>,
+      resolved.design.home,
+      magazin.cover_url,
+    ).catch(() => null);
 
   const pcCatalog = (storeSettings?.page_content as Record<string, unknown>) ?? {};
   const faraImagini = pcCatalog.hide_products_without_images === true;
@@ -788,6 +803,12 @@ export default async function SlugPage({ params, searchParams }: Props) {
    */
   const sloturiContinut = paginaProprie ? undefined : sloturiContinutLiber(continuturiPeAcasa(resolved.continut), comunSloturi);
 
+  // Cu marimile bannerelor alaturi, cand s-au gasit (vezi `pcPentruRandare`).
+  const pcCuMarimi = await pcPentruRandare;
+  const setariDeRandat = setariDeTrimis && pcCuMarimi && pcCuMarimi !== setariDeTrimis.page_content
+    ? { ...setariDeTrimis, page_content: pcCuMarimi as typeof setariDeTrimis.page_content }
+    : setariDeTrimis;
+
   return (
     <>
       {storeJsonLd ? (
@@ -828,7 +849,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
           : undefined}
         featuredServer={featuredServer}
         sectiuniServer={sectiuniServer}
-        storeSettings={setariDeTrimis}
+        storeSettings={setariDeRandat}
         basePath={basePath}
         categories={categoriiDeNavigat}
         initialPage={initialPage}

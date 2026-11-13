@@ -3,6 +3,7 @@
 import { resolveHref } from "@/lib/pages/href";
 import { cdnImage } from "@/lib/cdn-image";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
+import { LIMITE_RAPORT } from "@/lib/storefront/design/raport-bannere";
 import { cardurileHero, type CardHero } from "@/lib/storefront/design/hero-carduri";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { ArrowRight } from "lucide-react";
@@ -19,11 +20,14 @@ import { BannerSlider } from "./HeroBanners";
  *
  * ⚠ Acelasi raport pe orice ecran, 2,14:1 (etapa 20): un banner facut la el nu se taie nicaieri. Pe telefon era 2:1,
  * deci `object-cover` taia cate 3% din fiecare margine, exact unde stau de obicei textul si sigla bannerului.
+ *
+ * ⚠ 2,14:1 e doar locul de pornire (13.11.2026): locul ia raportul primului banner, intre 4:3 si 2,25:1, iar o poza cu
+ * alt raport se arata intreaga. La eSafe, bannerele de 16:9 pierdeau ~8% sus si jos (vezi `raport-bannere.ts`).
  */
 export function HeroCuCarduri({ settings }: { settings: Record<string, unknown> }) {
   const { business, basePath, pageContent } = useStoreChrome();
   const nume = business.store_name ?? business.business_name;
-  const { banners, links } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
+  const { banners, links, marimi } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
   const carduri = cardurileHero(settings);
   if (banners.length === 0 && carduri.length === 0) return <h1 className="sr-only">{nume}</h1>;
 
@@ -37,7 +41,8 @@ export function HeroCuCarduri({ settings }: { settings: Record<string, unknown> 
         {banners.length > 0 && (
           <BannerSlider banners={banners} links={links} alt={nume} basePath={basePath} paginare="segmente"
             wrapperClass="relative rounded-[var(--st-radius-lg)] overflow-hidden"
-            slideClass="shrink-0 w-full snap-center aspect-[2.14/1] bg-[var(--st-bg)]" />
+            slideClass="shrink-0 w-full snap-center aspect-[2.14/1] bg-[var(--st-bg)]"
+            marimi={marimi} limiteRaport={LIMITE_RAPORT.carduri} />
         )}
         {carduri.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:grid-rows-2">

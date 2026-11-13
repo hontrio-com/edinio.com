@@ -4,6 +4,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
+import { LIMITE_RAPORT } from "@/lib/storefront/design/raport-bannere";
 import { useStoreChrome, useStorefrontOptional, type CategoryItem } from "@/components/storefront/StorefrontProvider";
 import { BannerSlider } from "./HeroBanners";
 import { hrefCategorie } from "@/lib/storefront/category-href";
@@ -29,7 +30,7 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
   const catalog = useStorefrontOptional();
 
   const nume = business.store_name ?? business.business_name;
-  const { banners, links } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
+  const { banners, links, marimi } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
 
   const maxim = typeof settings.maxCategories === "number" ? settings.maxCategories : MAX_IMPLICIT;
   // Si categoriile inca goale: vezi `rootCategoryItemsToate`.
@@ -178,6 +179,10 @@ export function HeroCategories({ settings }: { settings: Record<string, unknown>
                   basePath={basePath}
                   wrapperClass="relative md:rounded-2xl md:overflow-hidden"
                   slideClass="shrink-0 w-full snap-center bg-muted aspect-[16/9]"
+                  // Locul ia raportul primului banner (13.11.2026), dar nu devine mai scund decat 16:9: bara de categorii
+                  // sta pe inaltimea lui. Un banner mai lat se arata intreg, cu fundal sus si jos (`raport-bannere.ts`).
+                  marimi={marimi}
+                  limiteRaport={LIMITE_RAPORT.categorii}
                 />
               )}
             </div>

@@ -17,7 +17,7 @@ export function HeroBannersOnly() {
   const { business, basePath, pageContent } = useStoreChrome();
 
   const nume = business.store_name ?? business.business_name;
-  const { banners, links } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
+  const { banners, links, marimi } = resolveHeroBanners(pageContent as Record<string, unknown>, business.cover_url);
 
   return (
     <>
@@ -26,7 +26,7 @@ export function HeroBannersOnly() {
         {business.tagline ? ` - ${business.tagline}` : ""}
       </h1>
       {banners.length > 0 && (
-        <HeroBanners banners={banners} links={links} alt={nume} basePath={basePath} />
+        <HeroBanners banners={banners} links={links} alt={nume} basePath={basePath} marimi={marimi} />
       )}
     </>
   );

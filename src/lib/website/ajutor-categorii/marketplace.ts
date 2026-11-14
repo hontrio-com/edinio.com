@@ -122,8 +122,9 @@ export const MARKETPLACE: CategorieAjutor = {
             { titlu: "Pe cataloage mari, munca se termină în fundal", text: "Ecranul spune „Ai un catalog mare, iar restul produselor se creează în fundal.” și „Poți închide pagina; revino în câteva minute.” Nu trebuie să stai pe pagină." },
             { titlu: "De ce se leagă înainte de a publica", text: "eMAG nu permite două oferte ale aceluiași vânzător pe aceeași pagină de produs. O publicare făcută înaintea legării se lovește de asta, iar oferta nu se creează." },
             { titlu: "Ce înseamnă „De lămurit”", text: "Sunt ofertele pe care nu le-am putut potrivi singuri cu un produs din magazin, de obicei fiindcă nu se potrivește codul. Rămân în listă până le rezolvi." },
+            { titlu: "După ce ștergi și reimporți produse", text: "Ofertele rămân pe eMAG, dar fără produs în magazin, cu stocul și prețul de dinainte. Apasă din nou „Leagă produsele”: ofertele se leagă de produsele reimportate după cod sau EAN, iar stocul și prețul pleacă din nou. Mai sigur e să nu ștergi deloc: importul cu „Actualizeaza produsele importate anterior” schimbă produsele pe loc." },
           ],
-          termeni: ["import oferte", "leaga produsele", "duplicat", "oferta existenta", "doar pe emag", "de lamurit"],
+          termeni: ["import oferte", "leaga produsele", "duplicat", "oferta existenta", "doar pe emag", "de lamurit", "reimport", "produse sterse"],
         },
         {
           slug: "cum-trimiti-produse-noi-pe-emag",

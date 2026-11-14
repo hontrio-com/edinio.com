@@ -124,6 +124,8 @@ interface ListingRow {
   creat_de_edinio?: boolean | null;
   /** `contentId`-ul de la ei; singura cheie acceptata de `content-bulk-update`. */
   ty_content_id?: number | null;
+  /** A plecat vreodata la ei? Gol = ciorna; vezi `esteCiornaGoala`. */
+  last_synced_at?: string | null;
 }
 
 async function getListing(admin: Db, businessId: string, productId: string): Promise<ListingRow | null> {
@@ -132,7 +134,7 @@ async function getListing(admin: Db, businessId: string, productId: string): Pro
      pentru un produs care o are deja. */
   const data = randCitit<ListingRow>("trendyol.listarea", await admin
     .from("trendyol_listings")
-    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin")
+    .select("id, product_id, product_main_id, status, brand_id, category_id, attributes, dimensional_weight, cargo_company_id, auto_inventory, creat_de_edinio, ty_content_id, sgr_units, country_of_origin, last_synced_at")
     .eq("business_id", businessId).eq("product_id", productId).maybeSingle() as never);
   return (data as ListingRow) ?? null;
 }
@@ -707,11 +709,119 @@ export function faraStocSiPret(item: TrendyolProductItem): TrendyolItemActualiza
 
 export interface ListingPregatit { listingId: string; creatAcum: boolean }
 
+/** Ce scrie pe listarea preluata pana o confirma adoptarea (acelasi text ca la relegarea de mana din 14.11.2026). */
+export const MESAJ_LISTARE_PRELUATA = "Legat din nou de produsul reimportat. Se verifică pe Trendyol și se scoate din arhivă.";
+
+/**
+ * Listarea fara produs care tine EXACT codurile de bare ale produsului, preluata de el (14.11.2026).
+ *
+ * ═══ ⚠ DE CE: STERS SI REIMPORTAT, PRODUSUL ISI PIERDEA LISTAREA ═══
+ *
+ * VetDepo si-a sters catalogul si l-a reimportat (12-14.11). Stergerea lasa listarea fara produs
+ * (`product_id` SET NULL) si o scotea de la vanzare; produsul reimportat, cu ACELASI cod de bare,
+ * cadea apoi aici pe „Barcode-ul este deja folosit de alt produs”, fiindca il tinea chiar listarea
+ * lui de dinainte. Rezultat: 2.081 de ciorne goale, iar marfa arhivata pe Trendyol.
+ *
+ * Acum listarea orfana trece pe produsul nou, pe `error` cu motivul scris: drumurile care exista deja
+ * o duc mai departe (crearea cade pe „codul exista”, adoptarea o scoate din arhiva si ii trimite
+ * stocul; la fel cronul si butonul „Leagă produsele existente”). Retragerea pornita la stergere se
+ * opreste, ca stergerea definitiva amanata sa n-o mai loveasca.
+ *
+ * ⚠ NUMAI potrivirea intreaga: toate codurile produsului, pe o SINGURA listare, care n-are altele.
+ * Orice altceva (coduri pe doua listari, o listare cu un cod in plus) ramane conflictul de dinainte,
+ * vazut de om. ⚠ Scrierea e pazita pe `product_id is null`: doi lucratori pe acelasi cod nu pot
+ * prelua aceeasi listare de doua ori. Cazuta oriunde, intoarce `null` si lasa drumul vechi.
+ */
+async function preiaListareaOrfana(
+  admin: Db, ctx: TrendyolSyncContext, productId: string, coduriProdus: string[], ciornaId: string | null,
+): Promise<string | null> {
+  const coduri = [...new Set(coduriProdus.map((c) => c.trim()).filter(Boolean))];
+  if (coduri.length === 0) return null;
+  const { data: tinute, error: eTinute } = await admin.from("trendyol_variants")
+    .select("barcode, listing_id").eq("business_id", ctx.businessId).in("barcode", coduri);
+  if (eTinute || !tinute || tinute.length !== coduri.length) return null;
+  const listari = [...new Set((tinute as { listing_id: string }[]).map((t) => t.listing_id))];
+  if (listari.length !== 1) return null;
+  const [orfanaId] = listari;
+
+  const { data: aleEi, error: eAleEi } = await admin.from("trendyol_variants")
+    .select("barcode").eq("listing_id", orfanaId);
+  if (eAleEi || !aleEi || !aceleasiCoduri((aleEi as { barcode: string }[]).map((v) => v.barcode), coduri)) return null;
+
+  const acum = new Date().toISOString();
+  const { data: variante, error: eVariante } = await admin.from("trendyol_variants")
+    .update({ product_id: productId, updated_at: acum } as never)
+    .eq("listing_id", orfanaId).is("product_id", null).select("id");
+  if (eVariante || (variante ?? []).length !== coduri.length) {
+    /* Unele variante erau deja ale altcuiva sau scrierea a cazut: nimic preluat, totul pus la loc. */
+    await admin.from("trendyol_variants").update({ product_id: null } as never)
+      .eq("listing_id", orfanaId).eq("product_id", productId);
+    return null;
+  }
+  const { data: luata, error: eLuata } = await admin.from("trendyol_listings")
+    .update({
+      product_id: productId, status: "error", error: MESAJ_LISTARE_PRELUATA,
+      arhivat_la: null, sters_cerut_la: null, sters_eroare: null, updated_at: acum,
+    } as never)
+    .eq("id", orfanaId).eq("business_id", ctx.businessId).is("product_id", null).neq("status", "draft")
+    .select("id");
+  if (eLuata || (luata ?? []).length !== 1) {
+    await admin.from("trendyol_variants").update({ product_id: null } as never)
+      .eq("listing_id", orfanaId).eq("product_id", productId);
+    return null;
+  }
+
+  /* Ciorna goala lasata de o incercare de dinainte (fara variante, neplecata nicaieri) nu mai are rost. */
+  if (ciornaId && ciornaId !== orfanaId) {
+    await admin.from("trendyol_listings").delete()
+      .eq("id", ciornaId).eq("business_id", ctx.businessId).is("last_synced_at", null);
+  }
+  await logError({
+    action: "trendyol/preluare",
+    message: "listarea ramasa fara produs a fost preluata de produsul reimportat, cu aceleasi coduri de bare",
+    details: { listingId: orfanaId, productId, coduri: coduri.slice(0, 5) },
+    businessId: ctx.businessId, severity: "warning",
+  });
+  return orfanaId;
+}
+
+/** Aceleasi coduri de bare, fara ordine si fara spatii de margine. */
+export function aceleasiCoduri(a: string[], b: string[]): boolean {
+  const x = [...new Set(a.map((c) => c.trim()).filter(Boolean))].sort();
+  const y = [...new Set(b.map((c) => c.trim()).filter(Boolean))].sort();
+  return x.length === y.length && x.every((c, i) => c === y[i]);
+}
+
+/**
+ * O listare care n-a ajuns niciodata la Trendyol si n-are variante: ce lasa o pregatire cazuta pe
+ * conflictul de cod. Pentru ea se mai incearca preluarea listarii orfane (vezi mai sus).
+ */
+export function esteCiornaGoala(l: { status: string; last_synced_at?: string | null }, areVariante: boolean): boolean {
+  return (l.status === "draft" || l.status === "error") && !l.last_synced_at && !areVariante;
+}
+
 export async function ensureListingFromMapping(
   admin: Db, ctx: TrendyolSyncContext, product: MappableProduct,
 ): Promise<ListingPregatit | { error: string }> {
   const existing = await getListing(admin, ctx.businessId, product.id);
-  if (existing) return { listingId: existing.id, creatAcum: false };
+  if (existing) {
+    /* Intai ce se vede din rand (fara citire); variantele se intreaba numai pentru o ciorna posibila. */
+    if (!esteCiornaGoala(existing, false)) return { listingId: existing.id, creatAcum: false };
+    const { data: oVarianta, error: eVar } = await admin.from("trendyol_variants")
+      .select("id").eq("listing_id", existing.id).limit(1);
+    const goala = !eVar && esteCiornaGoala(existing, (oVarianta ?? []).length > 0);
+    if (!goala) return { listingId: existing.id, creatAcum: false };
+    const preluata = await preiaListareaOrfana(
+      admin, ctx, product.id, deriveVariantSlots(product).map((s) => s.barcode), existing.id,
+    );
+    return { listingId: preluata ?? existing.id, creatAcum: false };
+  }
+  {
+    const preluata = await preiaListareaOrfana(
+      admin, ctx, product.id, deriveVariantSlots(product).map((s) => s.barcode), null,
+    );
+    if (preluata) return { listingId: preluata, creatAcum: false };
+  }
 
   const entry = product.category ? ctx.config.category_map?.[product.category] : undefined;
   if (!entry?.category_id) {
@@ -1045,9 +1155,20 @@ async function computeInventoryItems(
     // Fara el, impingerea de stoc n-avea de unde sti cate bucati are marimea M si
     // trimitea totalul produsului pe fiecare barcode — iar reconcilierea, care
     // foloseste exact functia asta, confirma cifra gresita in loc s-o corecteze.
-    .from("products").select("id, sku, price, compare_at_price, track_inventory, stock_quantity, page_sections")
+    .from("products").select("id, sku, price, compare_at_price, track_inventory, stock_quantity, page_sections, is_active")
     .eq("id", productId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!product) return null;
+  /*
+   * ═══ ⚠ UN PRODUS INACTIV PLEACA MEREU CU STOCUL ZERO (14.11.2026) ═══
+   *
+   * Pana azi zeroizarea depindea de cine chema: `syncProductNow` trimitea `forceZero` pentru un
+   * produs dezactivat, dar adoptarea (`relegaListarileExistente` -> `enqueueTrendyolInventoryMany`)
+   * si reconcilierea de stoc veneau fara el, deci trimiteau stocul ADEVARAT. Gasit la VetDepo,
+   * 14.11: importurile lui intra cu „Activ” oprit, iar o listare adoptata ar fi pus la vanzare pe
+   * Trendyol un produs pe care el inca nu-l vinde nici in magazin. Regula sta acum aici, unde se
+   * face cantitatea, nu la fiecare apelant.
+   */
+  const zero = forceZero || (product as { is_active?: boolean | null }).is_active === false;
   const listing = await getListing(admin, ctx.businessId, productId);
   if (!listing) return null;
   // price-and-inventory only works for products that already exist on Trendyol; a
@@ -1069,7 +1190,7 @@ async function computeInventoryItems(
    * ⚠ Hotararea sta acum in `politicaSincronizare`: fara comutatoarele magazinului scrise, e
    * exact regula de mai sus (`auto_inventory === false && !manual && !forceZero` => nimic).
    */
-  const pol = politicaSincronizare(ctx.config, listing, { manual, forceZero });
+  const pol = politicaSincronizare(ctx.config, listing, { manual, forceZero: zero });
   if (!pol.stoc && !pol.pret) return null;
   const variants = (await getVariantData(admin, listing.id)).filter((v) => v.enabled && v.barcode);
   if (variants.length === 0) return null;
@@ -1085,7 +1206,7 @@ async function computeInventoryItems(
     if ("error" in priced) return { error: priced.error };
     items.push({
       barcode: v.barcode,
-      quantity: resolveVariantQuantity(prod, v.quantity, single, forceZero, stocVarianteiSalvate(stocuri, v)),
+      quantity: resolveVariantQuantity(prod, v.quantity, single, zero, stocVarianteiSalvate(stocuri, v)),
       salePrice: priced.salePrice,
       listPrice: priced.listPrice,
     });

@@ -259,3 +259,22 @@ test("⚠ „Editeaza” e primul buton al randului, si fiecare spune ce face", 
   assert.match(cod, /\{bandaConfirmare\(product\)\}/, "confirmarea lipseste pe telefon");
   assert.match(cod, /bandaConfirmare\(product, true\)/, "confirmarea lipseste in tabel");
 });
+
+test("⚠ 14.11.2026: stergerea spune ca scoate produsul si de pe marketplace, si arata calea buna", () => {
+  /*
+   * VetDepo si-a sters catalogul ca sa-l reimporte (12-14.11): produsele au iesit de la vanzare pe
+   * Trendyol, iar ofertele eMAG au ramas fara produs, cu stocul inghetat. Nimic din fereastra de
+   * stergere nu spunea asta. Acum, cu magazinul conectat, ambele confirmari o spun si trimit la
+   * optiunea de import care actualizeaza in loc sa stearga.
+   */
+  const cod = faraComentarii(lista);
+  assert.match(cod, /const pieteConectate = \[emagConnected \? "eMAG" : null, trendyolConnected \? "Trendyol" : null\]\.filter\(Boolean\)\.join\(" și "\);/);
+  /* Numele optiunii, intocmai ca pe ecranul importului: altfel omul cauta altceva decat vede. */
+  const optiune = cod.match(/const OPTIUNEA_DE_ACTUALIZARE = "„([^”]+)”";/)?.[1];
+  assert.ok(optiune, "lipseste numele optiunii");
+  assert.ok(readFileSync("src/components/dashboard/import/ImportWizard.tsx", "utf8").includes(`label="${optiune} (in loc sa le dublezi)"`),
+    "optiunea citata nu mai e pe ecranul importului");
+  const banda = corpExact(cod, "bandaConfirmare");
+  assert.match(banda, /\$\{pieteConectate\s*\?\s*` Dacă e pe \$\{pieteConectate\}, se scoate de la vânzare și acolo\./);
+  assert.match(cod, /\{pieteConectate && ` Cele de pe \$\{pieteConectate\} se scot de la vânzare și acolo\./, "lipseste din stergerea in masa");
+});

@@ -33,6 +33,7 @@ import { processImport, stageProducts } from "@/lib/import/committer";
 import { citesteCategorii, citesteOferte, isEmagError } from "./client";
 import { loadEmagContext } from "./sync";
 import { patchEmagConfig } from "./config";
+import { enqueueEmagPretMany, enqueueEmagStocMany } from "./queue";
 import {
   construiesteIndex, ofertaVenita, potriveste, raportImport,
   type OfertaCunoscuta, type Potrivire, type RandLocal, type RaportImport,
@@ -311,6 +312,7 @@ async function scrieOferte(
 ): Promise<void> {
   const noi: RandOferta[] = [];
   const dePotrivit: RandOferta[] = [];
+  const relegate: RandRelegat[] = [];
 
   for (const o of oferte) {
     const p = potriviri.get(o.id);
@@ -344,6 +346,12 @@ async function scrieOferte(
       dePotrivit.push(comun);
       continue;
     }
+    if (p.fel === "relegata") {
+      /* ⚠ Inainte de ramura de mai jos, care ar fi scris `auto_sync: false` peste o oferta care se
+         sincroniza. Aici se scrie numai legatura; vezi `scrieRelegate`. */
+      relegate.push({ ...comun, product_id: p.product_id, variant_title: p.variant_title });
+      continue;
+    }
 
     const legatura = p.fel === "legat"
       ? { product_id: p.product_id, variant_title: p.variant_title }
@@ -359,6 +367,76 @@ async function scrieOferte(
   for (const lot of bucati(dePotrivit, LOT_SCRIERE)) {
     const { error } = await admin.from("emag_offers").upsert(lot, { onConflict: "business_id,emag_id" });
     if (error) throw new Error(error.message);
+  }
+  if (relegate.length > 0) await scrieRelegate(admin, businessId, oferte, relegate);
+}
+
+/** Randul unei oferte stiute legate la loc: comunul si legatura, fara `auto_sync` si `creat_de_edinio`. */
+type RandRelegat = BazaRand & { product_id: string; variant_title: string | null };
+
+/** Ce scrie pe randul desprins ca sa-i faca loc ofertei de la eMAG. */
+export const MESAJ_DESPRINSA = "Înlocuită: produsul a fost legat de oferta lui existentă pe eMAG, după reimportul catalogului.";
+
+/**
+ * Ofertele stiute ramase fara produs, legate la loc de produsul reimportat (14.11.2026, vezi `potriveste`).
+ *
+ * ⚠ IN LOT SEPARAT, cu aceleasi chei pe fiecare rand: la o scriere in masa, PostgREST pune NULL pe
+ * cheile care lipsesc din unele randuri, deci amestecate cu `dePotrivit` le-ar fi sters acelora
+ * legatura. ⚠ FARA `auto_sync`: ramane al ofertei (se sincroniza inainte de stergere; oprita de om,
+ * ramane oprita).
+ *
+ * ⚠ Locul produsului il poate tine un rand care NU mai vine de la eMAG: oferta facuta de noi pentru
+ * produsul reimportat si refuzata ca dublura („You already hold a Product associated with this PN”).
+ * Acela se desprinde intai; altfel unicul `(business_id, product_id, variant_title)` ar fi picat tot
+ * lotul. Un rand care VINE de la eMAG si tine produsul nu se atinge, iar oferta ramane nelegata, ca la
+ * „ocupat” (n-ar trebui sa se intample: `potriveste` socoteste ocupate produsele ofertelor vii).
+ *
+ * La urma, stocul si pretul de acum pleaca prin coada, pe drumul obisnuit, cu regulile ofertei si ale
+ * magazinului: altfel eMAG ar fi ramas cu valorile de dinainte de stergere pana la urmatoarea vanzare.
+ */
+async function scrieRelegate(
+  admin: Admin, businessId: string, oferte: EmagOfertaCitita[], relegate: RandRelegat[],
+): Promise<void> {
+  const vii = new Set(oferte.map((o) => o.id));
+  const produse = [...new Set(relegate.map((r) => r.product_id))];
+  const loc = (productId: string, titlu: string | null) => `${productId} ${titlu ?? ""}`;
+
+  const tinute = new Map<string, { id: string; emag_id: number }[]>();
+  for (const lot of bucati(produse, 150)) {
+    const { data, error } = await admin.from("emag_offers")
+      .select("id, emag_id, product_id, variant_title")
+      .eq("business_id", businessId).in("product_id", lot);
+    if (error) throw new Error(error.message);
+    for (const r of (data ?? []) as { id: string; emag_id: number; product_id: string; variant_title: string | null }[]) {
+      const k = loc(r.product_id, r.variant_title);
+      tinute.set(k, [...(tinute.get(k) ?? []), { id: r.id, emag_id: r.emag_id }]);
+    }
+  }
+
+  const deDesprins: string[] = [];
+  const deScris: RandRelegat[] = [];
+  for (const r of relegate) {
+    const altii = (tinute.get(loc(r.product_id, r.variant_title)) ?? []).filter((t) => t.emag_id !== r.emag_id);
+    if (altii.some((t) => vii.has(t.emag_id))) continue;
+    deDesprins.push(...altii.map((t) => t.id));
+    deScris.push(r);
+  }
+
+  for (const lot of bucati(deDesprins, 150)) {
+    const { error } = await admin.from("emag_offers")
+      .update({ product_id: null, error: MESAJ_DESPRINSA } as never)
+      .eq("business_id", businessId).in("id", lot);
+    if (error) throw new Error(error.message);
+  }
+  for (const lot of bucati(deScris, LOT_SCRIERE)) {
+    const { error } = await admin.from("emag_offers").upsert(lot, { onConflict: "business_id,emag_id" });
+    if (error) throw new Error(error.message);
+  }
+
+  const legate = [...new Set(deScris.map((r) => r.product_id))];
+  if (legate.length > 0) {
+    await enqueueEmagStocMany(businessId, legate);
+    await enqueueEmagPretMany(businessId, legate);
   }
 }
 

@@ -148,6 +148,12 @@ export type CaleaPotrivirii = "emag_id" | "part_number_key" | "ean" | "sku";
 export type Potrivire =
   /** Oferta e deja in `emag_offers`. Nu se mai hotaraste nimic pentru ea. */
   | { fel: "cunoscuta"; product_id: string | null; variant_title: string | null }
+  /**
+   * Oferta era deja in `emag_offers`, dar FARA produs (al ei a fost sters din magazin), iar acum
+   * cheile ei duc la un produs de la noi: de obicei acelasi, sters si reimportat (14.11.2026).
+   * Se leaga la loc, fara sa i se atinga `auto_sync` (vezi `scrieOferte`).
+   */
+  | { fel: "relegata"; product_id: string; variant_title: string | null; prin: CaleaPotrivirii }
   /** S-a legat de un lucru vandabil de la noi. Nu se creeaza nimic. */
   | { fel: "legat"; product_id: string; variant_title: string | null; prin: CaleaPotrivirii }
   /** Mai multe raspunsuri la aceeasi cheie. NU se alege niciunul. */
@@ -293,6 +299,25 @@ export function potriveste(
   for (const o of inOrdine) {
     const cunoscuta = dupaEmagId.get(o.emag_id);
     if (cunoscuta) {
+      /*
+       * ═══ ⚠ O OFERTA STIUTA FARA PRODUS SE CAUTA DIN NOU DUPA CHEI (14.11.2026) ═══
+       *
+       * Pana azi „stiuta” insemna „nimic de hotarat”, si legatura ramanea cum era. Dar cand
+       * produsul e STERS din magazin, `product_id` devine NULL (cheia straina e `SET NULL`), iar
+       * daca e reimportat, oferta lui de la eMAG nu-l mai gasea niciodata: la VetDepo (12-14.11),
+       * mii de oferte vii au ramas cu stocul inghetat, iar butonul spre care trimiteau chiar
+       * mesajele noastre („Leagă produsele cu ofertele tale de pe eMAG”) nu facea nimic.
+       *
+       * ⚠ Numai legatura gasita intreaga (`legat`) se ia. Ocupat sau nehotarat ramane cum era:
+       * fara produs, vazut de om.
+       */
+      if (!cunoscuta.product_id) {
+        const p = cautaPerechea(o, dupaPnk, index, luate);
+        if (p.fel === "legat") {
+          iesire.set(o.emag_id, { fel: "relegata", product_id: p.product_id, variant_title: p.variant_title, prin: p.prin });
+          continue;
+        }
+      }
       iesire.set(o.emag_id, {
         fel: "cunoscuta",
         product_id: cunoscuta.product_id,
@@ -301,42 +326,39 @@ export function potriveste(
       continue;
     }
 
-    const prinPnk = o.part_number_key ? dupaPnk.get(o.part_number_key) : undefined;
-    if (prinPnk?.product_id) {
-      iesire.set(o.emag_id, incearcaSaLegi(
-        { product_id: prinPnk.product_id, variant_title: prinPnk.variant_title, sku: null, ean: null },
-        "part_number_key", luate,
-      ));
-      continue;
-    }
-
-    /* ⚠ O oferta poate purta mai multe EAN-uri. Se incearca fiecare, dar daca doua
-       EAN-uri ale ACELEIASI oferte duc la produse DIFERITE, e nehotarat: nu avem de
-       unde sti care dintre ele descrie obiectul. */
-    const dinEan = candidatiDinEan(o.ean, index);
-    if (dinEan.length === 1) {
-      iesire.set(o.emag_id, incearcaSaLegi(dinEan[0], "ean", luate));
-      continue;
-    }
-    if (dinEan.length > 1) {
-      iesire.set(o.emag_id, { fel: "nehotarat", prin: "ean", candidati: dinEan.length });
-      continue;
-    }
-
-    const dinSku = index.dupaSku.get(cheieSku(o.part_number) ?? NICIODATA) ?? [];
-    if (dinSku.length === 1) {
-      iesire.set(o.emag_id, incearcaSaLegi(dinSku[0], "sku", luate));
-      continue;
-    }
-    if (dinSku.length > 1) {
-      iesire.set(o.emag_id, { fel: "nehotarat", prin: "sku", candidati: dinSku.length });
-      continue;
-    }
-
-    iesire.set(o.emag_id, { fel: "nou" });
+    iesire.set(o.emag_id, cautaPerechea(o, dupaPnk, index, luate));
   }
 
   return { potriviri: iesire, disparute };
+}
+
+/**
+ * Cheile unei oferte, in ordinea increderii (vezi `potriveste`): `part_number_key`, EAN, SKU.
+ * Cand o cheie da mai multe raspunsuri, se opreste la „nehotarat” si nu coboara la urmatoarea.
+ */
+function cautaPerechea(
+  o: OfertaVenita, dupaPnk: Map<string, OfertaCunoscuta>, index: IndexLocal, luate: Set<string>,
+): Potrivire {
+  const prinPnk = o.part_number_key ? dupaPnk.get(o.part_number_key) : undefined;
+  if (prinPnk?.product_id) {
+    return incearcaSaLegi(
+      { product_id: prinPnk.product_id, variant_title: prinPnk.variant_title, sku: null, ean: null },
+      "part_number_key", luate,
+    );
+  }
+
+  /* ⚠ O oferta poate purta mai multe EAN-uri. Se incearca fiecare, dar daca doua
+     EAN-uri ale ACELEIASI oferte duc la produse DIFERITE, e nehotarat: nu avem de
+     unde sti care dintre ele descrie obiectul. */
+  const dinEan = candidatiDinEan(o.ean, index);
+  if (dinEan.length === 1) return incearcaSaLegi(dinEan[0], "ean", luate);
+  if (dinEan.length > 1) return { fel: "nehotarat", prin: "ean", candidati: dinEan.length };
+
+  const dinSku = index.dupaSku.get(cheieSku(o.part_number) ?? NICIODATA) ?? [];
+  if (dinSku.length === 1) return incearcaSaLegi(dinSku[0], "sku", luate);
+  if (dinSku.length > 1) return { fel: "nehotarat", prin: "sku", candidati: dinSku.length };
+
+  return { fel: "nou" };
 }
 
 /** Candidatii DISTINCTI la care duc EAN-urile unei oferte. */
@@ -395,7 +417,8 @@ export function raportImport(potriviri: Map<number, Potrivire>): RaportImport {
   const r: RaportImport = { citite: potriviri.size, cunoscute: 0, legate: 0, noi: 0, nehotarate: 0, ocupate: 0 };
   for (const p of potriviri.values()) {
     if (p.fel === "cunoscuta") r.cunoscute++;
-    else if (p.fel === "legat") r.legate++;
+    /* Relegata dupa un reimport e tot o legatura facuta acum. */
+    else if (p.fel === "legat" || p.fel === "relegata") r.legate++;
     else if (p.fel === "nou") r.noi++;
     else if (p.fel === "nehotarat") r.nehotarate++;
     else r.ocupate++;

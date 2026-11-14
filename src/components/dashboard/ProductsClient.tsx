@@ -69,6 +69,15 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
    * nimic: copia apare in lista, iar notificarea are „Deschide copia” pentru cine chiar o vrea.
    */
   const [confirmaRand, setConfirmaRand] = useState<{ id: string; fel: "duplica" | "sterge" } | null>(null);
+  /*
+   * ═══ ⚠ STERGEREA SCOATE PRODUSUL SI DE PE MARKETPLACE (14.11.2026) ═══
+   *
+   * VetDepo si-a sters tot catalogul ca sa-l reimporte (12-14.11): produsele au iesit de la vanzare pe
+   * Trendyol, iar ofertele de pe eMAG au ramas fara produs, cu stocul inghetat. Confirmarile spun asta
+   * acum, cu calea buna, cand magazinul e conectat la un marketplace.
+   */
+  const pieteConectate = [emagConnected ? "eMAG" : null, trendyolConnected ? "Trendyol" : null].filter(Boolean).join(" și ");
+  const OPTIUNEA_DE_ACTUALIZARE = "„Actualizeaza produsele importate anterior”";
   const [stergId, setStergId] = useState<string | null>(null);
   const [, startStergTransition] = useTransition();
   const [naviga, startNavigare] = useTransition();
@@ -334,7 +343,9 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
           sterg ? "border-destructive/20 bg-destructive/5" : "border-primary/20 bg-primary/5")}>
         <span className={cn("min-w-0 flex-1 basis-56 text-sm font-medium break-words", sterg ? "text-destructive" : "text-foreground")}>
           {sterg
-            ? `Stergi definitiv „${product.name}”? Actiunea nu poate fi anulata.`
+            ? `Stergi definitiv „${product.name}”? Actiunea nu poate fi anulata.${pieteConectate
+              ? ` Dacă e pe ${pieteConectate}, se scoate de la vânzare și acolo. Ca să-l schimbi, folosește importul cu ${OPTIUNEA_DE_ACTUALIZARE}, nu ștergerea și reimportul.`
+              : ""}`
             : `Creezi o copie a produsului „${product.name}”? Copia porneste inactiva, iar originalul ramane neschimbat.`}
         </span>
         <div className="flex items-center gap-2">
@@ -819,7 +830,10 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
 
           {confirmBulkDelete && (
             <div className="flex flex-wrap items-center gap-2 px-3 pb-3 pt-1 border-t border-destructive/20">
-              <span className="text-sm font-medium text-destructive">Stergi definitiv {selected.size} produse? Actiunea nu poate fi anulata.</span>
+              <span className="text-sm font-medium text-destructive">
+                Stergi definitiv {selected.size} produse? Actiunea nu poate fi anulata.
+                {pieteConectate && ` Cele de pe ${pieteConectate} se scot de la vânzare și acolo. Ca să schimbi produse existente, folosește importul cu ${OPTIUNEA_DE_ACTUALIZARE}, nu ștergerea și reimportul.`}
+              </span>
               <button type="button" disabled={bulkBusy} onClick={() => runBulk({ kind: "delete" }, "{n} produse sterse")} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-destructive hover:bg-destructive/90 rounded-lg transition-colors disabled:opacity-50">{bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Da, sterge</button>
               <button type="button" disabled={bulkBusy} onClick={() => setConfirmBulkDelete(false)} className={bulkBtn}>Anuleaza</button>
             </div>

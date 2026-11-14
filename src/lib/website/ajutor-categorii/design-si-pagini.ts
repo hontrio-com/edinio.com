@@ -907,7 +907,7 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
         {
           slug: "cum-pui-la-loc-designul-de-dinainte-de-tema",
           titlu: "Cum pui la loc designul de dinainte de temă",
-          rezumat: "„Pune la loc designul de dinainte” readuce magazinul cum era înainte de ultima temă aplicată: designul, culoarea și fonturile.",
+          rezumat: "„Pune la loc designul de dinainte” readuce magazinul cum era înainte de temă: designul, culoarea și fonturile. După mai multe teme încercate la rând, revine designul tău de dinainte de ele.",
           pasi: [
             "Intră în Editează magazinul > Teme.",
             "Apasă „Pune la loc designul de dinainte”, sub teme.",
@@ -917,10 +917,11 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             { titlu: "Ce se readuce", text: "Magazinul cum era înainte de temă: designul, culoarea principală, fundalul, fonturile și datele demo de atunci. Produsele și textele tale nu se schimbă, fiindcă nici tema nu le-a schimbat." },
             { titlu: "Ce ai publicat după temă", text: "Rămâne în Istoric: fiecare „Publică” e o versiune, pe care o readuci din editor, cu „Readu în editor”." },
             { titlu: "Cu modificări nepublicate", text: "„Pune la loc” e oprit până publici sau renunți la modificările din editor, ca ele să nu se piardă." },
-            { titlu: "Mai multe teme la rând", text: "Se readuce designul de dinainte de ultima aplicare. Designul tău de dinainte de prima temă rămâne mereu în Istoric, oricâte teme ai încerca." },
+            { titlu: "Mai multe teme la rând", text: "Temele doar încercate, aplicate una după alta fără să publici nimic între ele, se sar: revine designul de dinainte de prima dintre ele, într-un singur clic. Le aplici oricând din nou, de pe cardul lor. Dacă ai publicat modificări peste o temă, revine ea, cum ai lăsat-o, iar un nou clic te duce mai în urmă. Fereastra îți spune de dinaintea cărei teme e designul care revine." },
+            { titlu: "Designul de dinainte de prima temă", text: "Rămâne mereu în Istoric, oricâte teme ai încerca." },
             { titlu: "Cu datele demo", text: "Datele demo urmează designul: dacă tema de acum le-a adus pe ale ei, pleacă, iar dacă înainte erau ale altei teme, revin. Fereastra îți spune dinainte ce se întâmplă. Dacă datele de atunci nu mai încap în planul tău, designul revine fără ele și ți se spune." },
           ],
-          nota: "Butonul apare cât timp o temă e aplicată și dispare după ce ai pus la loc designul.",
+          nota: "Butonul apare cât timp în magazin e o temă și dispare când revine designul tău de dinainte de teme.",
           termeni: ["tema", "pune la loc", "revino", "design vechi", "anuleaza tema", "istoric"],
         },
         {

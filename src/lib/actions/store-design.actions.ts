@@ -8,7 +8,8 @@ import { logError } from "@/lib/error-logger";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import type { ContinutPublicat } from "@/lib/editor-magazin/ciorna";
 import { ciornaDinVersiune, instantaneuContinut, origineDinBaza, VERSIUNI_PASTRATE, type VersiuneInLista } from "@/lib/editor-magazin/versiuni";
-import { CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, type TemaAplicata } from "@/lib/teme/aplicare";
+import { CHEIE_TEMA_APLICATA, continutIdentitate, dateleVersiunilorDeDinainte, radacinaCatalogTemei, temaAplicataDin, type TemaAplicata } from "@/lib/teme/aplicare";
+import { drumulInapoi, versiuneaDePusLaLoc, versiuniDeCitit } from "@/lib/teme/pune-la-loc";
 import { CHEIE_DATE_DEMO, importaDateleDemo, urmaDateDemoDin, type UrmaDateDemo } from "@/lib/teme/import-demo";
 import {
   continutCuRandurileDemoDeAcum,
@@ -689,9 +690,48 @@ export async function aplicaTema(businessId: string, cheie: string, cuDateDemo?:
 }
 
 /**
- * „Pune la loc designul de dinainte”: versiunea `tema` cea mai noua (ce era in magazin inainte de ultima tema), designul
- * si identitatea, publicata prin `publishDesign`. Ce s-a publicat dupa aplicare ramane in Istoric. Cu o ciorna
- * nepublicata, nu: `publishDesign` ar fi golit-o fara urma.
+ * Versiunea pe care o readuce „Pune la loc” (14.11.2026; regula si de ce, in `lib/teme/pune-la-loc.ts`): magazinul de
+ * dinainte de tema din magazin, peste temele doar incercate. Doua citiri: lista Istoricului cu starea fiecarei versiuni
+ * (mica), apoi intregi doar versiunile de pe drum. `null` = nicio versiune `tema`; o citire cazuta e o eroare, nu „nimic
+ * de pus la loc”. `temaDupa` = tema aplicata chiar dupa versiune, pentru fereastra paginii „Teme”.
+ *
+ * ⚠ Clientul de serviciu (tabelul n-are politici), deci NUMAI cu `owned`, dupa `loadOwnedStore`.
+ */
+async function designulDeDinainteDeTema(
+  owned: OwnedStore,
+): Promise<{ design: Json; continut: Json; temaDupa: string | null } | null | { error: string }> {
+  const admin = createAdminClient();
+  const { data: lista, error } = await admin
+    .from("storefront_design_versions")
+    .select("id, origine, created_at, stare:continut->stare")
+    .eq("business_id", owned.businessId)
+    .order("created_at", { ascending: false })
+    .limit(VERSIUNI_PASTRATE * 2);
+  if (error) return { error: error.message };
+  const drum = drumulInapoi(lista ?? [], temaAplicataDin(owned.ctx.pageContent));
+  if (!drum) return null;
+
+  const { data: intregi, error: eIntregi } = await admin
+    .from("storefront_design_versions")
+    .select("id, design, continut")
+    .eq("business_id", owned.businessId)
+    .in("id", versiuniDeCitit(drum));
+  if (eIntregi) return { error: eIntregi.message };
+  const versiuni = new Map((intregi ?? []).map((r) => [r.id, r]));
+  const ales = versiuneaDePusLaLoc(drum, versiuni);
+  const v = ales ? versiuni.get(ales.id) : undefined;
+  // Startul lipsa = sters intre cele doua citiri (taierea Istoricului): o eroare, ca omul sa reincerce.
+  if (!ales || !v) return { error: "versiunea aleasa lipseste din a doua citire" };
+  return { design: v.design, continut: v.continut, temaDupa: ales.temaDupa };
+}
+
+/**
+ * „Pune la loc designul de dinainte”: magazinul de dinainte de tema din magazin, peste temele doar incercate (14.11.2026,
+ * `designulDeDinainteDeTema`), designul si identitatea, publicate prin `publishDesign`. Ce s-a publicat dupa aplicare
+ * ramane in Istoric. Cu o ciorna nepublicata, nu: `publishDesign` ar fi golit-o fara urma.
+ *
+ * Pana la 14.11.2026 readucea cea mai noua versiune `tema`, adica magazinul de dinainte de ULTIMA tema: dupa trei teme
+ * incercate la rand (MNY AROMA), fiecare apasare readucea tot tema a doua.
  *
  * Etapa 25.3 (11.11.2026): versiunile scrise de atunci tin si starea magazinului (tema aplicata, datele demo). Cand datele
  * demo de acum nu sunt ale temei de atunci, ele pleaca si se reimporta cele de atunci, iar semnul temei revine: magazinul
@@ -713,16 +753,9 @@ export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<A
     return { error: "Ai modificări nepublicate în editor. Publică-le sau renunță la ele, apoi pune la loc designul." };
   }
 
-  const { data: v, error } = await createAdminClient()
-    .from("storefront_design_versions")
-    .select("design, continut")
-    .eq("business_id", owned.businessId)
-    .eq("origine", "tema")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    logError({ action: "puneLaLocDesignulDeDinainte", businessId: owned.businessId, message: error.message });
+  const v = await designulDeDinainteDeTema(owned);
+  if (v && "error" in v) {
+    logError({ action: "puneLaLocDesignulDeDinainte", businessId: owned.businessId, message: v.error });
     return { error: "Nu am putut citi Istoricul. Încearcă din nou." };
   }
   if (!v) return { error: "Nu există în Istoric un design de dinainte de temă." };
@@ -787,28 +820,26 @@ export async function puneLaLocDesignulDeDinainte(businessId: string): Promise<A
 /**
  * Pentru pagina „Teme”: are magazinul in Istoric un design de dinainte de tema, de pus la loc? O citire cazuta e o
  * eroare, nu „nu”: altfel butonul ar fi disparut tocmai cand omul are nevoie de el.
+ *
+ * Chiar versiunea pe care o readuce „Pune la loc” (14.11.2026, `designulDeDinainteDeTema`), ca fereastra sa spuna ce
+ * revine intr-adevar: de dinaintea carei teme (`temaDupa`) si ce date demo.
  */
 export async function areDesignDeDinainteDeTema(
   businessId: string,
-): Promise<{ exista: boolean; demoInainte?: string | null } | { error: string }> {
+): Promise<{ exista: boolean; demoInainte?: string | null; temaDupa?: string | null } | { error: string }> {
   const owned = await loadOwnedStore(businessId);
   if ("error" in owned) return owned;
-  // Si starea versiunii (etapa 25.3), ca fereastra „Pune la loc” sa spuna ce date demo revin; `undefined` = versiune veche.
-  const { data, error } = await createAdminClient()
-    .from("storefront_design_versions")
-    .select("continut")
-    .eq("business_id", owned.businessId)
-    .eq("origine", "tema")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    logError({ action: "areDesignDeDinainteDeTema", businessId: owned.businessId, message: error.message });
+  const v = await designulDeDinainteDeTema(owned);
+  if (v && "error" in v) {
+    logError({ action: "areDesignDeDinainteDeTema", businessId: owned.businessId, message: v.error });
     return { error: "Nu am putut citi Istoricul." };
   }
-  if (!data) return { exista: false };
-  const stare = stareDinVersiune(data.continut);
-  return stare ? { exista: true, demoInainte: stare.demo?.tema || null } : { exista: true };
+  if (!v) return { exista: false };
+  // Si starea versiunii (etapa 25.3), ca fereastra „Pune la loc” sa spuna ce date demo revin; `undefined` = versiune veche.
+  const stare = stareDinVersiune(v.continut);
+  return stare
+    ? { exista: true, demoInainte: stare.demo?.tema || null, temaDupa: v.temaDupa }
+    : { exista: true, temaDupa: v.temaDupa };
 }
 
 /**

@@ -77,6 +77,8 @@ export default async function TemePage() {
       // Citirea cazuta lasa butonul la vedere: actiunea spune ea daca n-are ce pune la loc.
       poatePuneLaLoc={inainte !== null && ("error" in inainte || inainte.exista)}
       laLocDemoInainte={inainte && !("error" in inainte) ? inainte.demoInainte : undefined}
+      // 14.11.2026: de dinaintea carei teme revine designul (peste temele doar incercate), ca fereastra sa o numeasca.
+      laLocTemaDupa={inainte && !("error" in inainte) ? inainte.temaDupa ?? null : null}
       dateDemo={urma || (produseDemo ?? 0) > 0 ? { produse: produseDemo ?? 0, tema: urma?.tema || null } : null}
       // O citire cazuta conteaza ca „are produse”: bifa porneste oprita, deci nu pune produse demo intr-un magazin care vinde.
       areProduseProprii={produseProprii === null || produseProprii > 0}

@@ -71,7 +71,8 @@ test("⚠⚠ tabelul versiunilor se atinge NUMAI cu magazinul proprietarului", (
   // Fiecare lant, pana la `;` sau pana la capatul elementului din `Promise.all`, fara sa treaca in alt `.from(`.
   const cereri = [...s.matchAll(/\.from\("storefront_design_versions"\)((?:(?!\.from\()[\s\S])*?)(?:;|,\n)/g)].map((m) => m[1]);
   // Etapa 17: si versiunile de dinainte de tema, „Pune la loc” si intrebarea paginii „Teme” (9). Etapa 25.6: prima
-  // versiune `tema`, pastrata la taiere si aratata in lista (11).
+  // versiune `tema`, pastrata la taiere si aratata in lista (11). 14.11.2026: „Pune la loc” si intrebarea paginii au
+  // acum o alegere comuna (`designulDeDinainteDeTema`), cu doua cereri (lista, apoi versiunile de pe drum): tot 11.
   assert.equal(cereri.length, 11, "o cerere noua pe tabel trebuie trecuta si aici");
   for (const c of cereri) {
     // Insertul poarta magazinul in fiecare rand (mai jos).

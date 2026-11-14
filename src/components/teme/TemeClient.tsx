@@ -44,7 +44,7 @@ export interface TemaPeCard {
  * Refacuta pe 08.11.2026 (cererea lui: mai moderna, mai multe teme pe rand, carduri premium, fara bulina de culoare,
  * poza care se deruleaza in loc de demo-ul viu, fereastra „Aplică tema” mai premium).
  */
-export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLaLoc, laLocDemoInainte, dateDemo, areProduseProprii, areCiorna, public: estePublic }: {
+export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLaLoc, laLocDemoInainte, laLocTemaDupa, dateDemo, areProduseProprii, areCiorna, public: estePublic }: {
   businessId: string;
   teme: TemaPeCard[];
   aplicata: { cheie: string } | null;
@@ -56,6 +56,11 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
    * 11.11.2026, care readuce doar designul.
    */
   laLocDemoInainte?: string | null;
+  /**
+   * 14.11.2026: tema dinaintea careia e designul pe care il readuce „Pune la loc” (peste temele doar incercate la rand);
+   * `null` = nu se stie, si atunci textele spun doar „de dinainte de temă”.
+   */
+  laLocTemaDupa: string | null;
   /** Datele demo din magazin acum (etapa 18.4) si tema lor, dupa urma (`null` = necunoscuta); `null` = niciunele. */
   dateDemo: { produse: number; tema: string | null } | null;
   /** Magazinul are produse care nu sunt demo (etapa 25.5): atunci bifa datelor demo porneste OPRITA. */
@@ -84,6 +89,9 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
   };
   const numeTema = (cheie: string | null | undefined) => (cheie ? teme.find((t) => t.cheie === cheie)?.nume ?? null : null);
   const temaDemoAcum = numeTema(dateDemo?.tema);
+  // 14.11.2026: „de dinainte de tema Saturn”, nu doar „de temă”: dupa mai multe teme incercate, omul stie ce revine.
+  const temaLaLoc = numeTema(laLocTemaDupa);
+  const deDinainteDeTema = temaLaLoc ? `de dinainte de tema ${temaLaLoc}` : "de dinainte de temă";
 
   const aplica = (t: TemaPeCard) => porneste(async () => {
     /*
@@ -164,7 +172,7 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
             <div className={cn("flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5", temaActiva && "border-t border-border")}>
               <RotateCcw className="h-4 w-4 shrink-0 text-muted-foreground" />
               <p className="min-w-[16rem] flex-1 text-sm text-muted-foreground">
-                Designul de dinainte de temă e păstrat în Istoric. Îl pui la loc într-un clic, cu culoarea și fonturile lui.
+                Designul {deDinainteDeTema} e păstrat în Istoric. Îl pui la loc într-un clic, cu culoarea și fonturile lui.
               </p>
               <Button variant="outline" size="sm" disabled={lucreaza} onClick={() => setLaLoc(true)}>
                 Pune la loc designul de dinainte
@@ -287,7 +295,7 @@ export function TemeClient({ businessId, teme, aplicata, aplicataLa, poatePuneLa
           <DialogHeader>
             <DialogTitle>Pui la loc designul de dinainte?</DialogTitle>
             <DialogDescription>
-              Magazinul revine la designul, culoarea și fonturile de dinainte de temă. Ce ai publicat după aplicare rămâne în Istoric.
+              Magazinul revine la designul, culoarea și fonturile {deDinainteDeTema}. Ce ai publicat după aplicare rămâne în Istoric.
             </DialogDescription>
           </DialogHeader>
           {laLocDemoInainte === undefined ? (dateDemo && (

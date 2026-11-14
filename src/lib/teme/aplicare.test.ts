@@ -146,13 +146,17 @@ test("⚠⚠ cheile temelor din `page_content` nu se scriu peste o citire cazuta
   assert.match(s, /async function scrieSemnulTemei\(businessId: string, semn: TemaAplicata \| null\): Promise<void> \{\s*await scrieCheiaTemei\(businessId, CHEIE_TEMA_APLICATA, semn, "tema\.semn"\);/);
 });
 
-test("⚠⚠ „Pune la loc”: nu peste o ciorna nepublicata; versiunea `tema` cea mai noua a LUI, publicata; semnul de atunci", () => {
+test("⚠⚠ „Pune la loc”: nu peste o ciorna nepublicata; versiunea aleasa peste temele doar incercate, publicata; semnul de atunci", () => {
   const f = functia(cod("src/lib/actions/store-design.actions.ts"), "puneLaLocDesignulDeDinainte");
   const owned = f.indexOf("const owned = await loadOwnedStore(businessId);\n  if (\"error\" in owned) return owned;");
   const ciorna = f.indexOf("if (row?.storefront_design_draft) {");
-  const admin = f.indexOf("createAdminClient()");
-  assert.ok(owned > 0 && ciorna > owned && admin > ciorna, "proprietarul, apoi ciorna, abia apoi clientul de serviciu");
-  assert.match(f, /\.eq\("business_id", owned\.businessId\)\s*\.eq\("origine", "tema"\)\s*\.order\("created_at", \{ ascending: false \}\)\s*\.limit\(1\)\s*\.maybeSingle\(\);/);
+  const istoric = f.indexOf("const v = await designulDeDinainteDeTema(owned);");
+  assert.ok(owned > 0 && ciorna > owned && istoric > ciorna, "proprietarul, apoi ciorna, abia apoi Istoricul (clientul de serviciu)");
+  assert.ok(f.indexOf("createAdminClient()") > istoric, "clientul de serviciu, abia dupa ciorna");
+  // 14.11.2026: nu mai e „cea mai noua versiune `tema`” (MNY AROMA: dupa trei teme la rand, readucea tot tema a doua).
+  assert.doesNotMatch(f, /\.eq\("origine", "tema"\)/);
+  // O citire cazuta e o eroare, nu „nimic de pus la loc”.
+  assert.match(f, /if \(v && "error" in v\) \{\s*logError\(\{[^}]*\}\);\s*return \{ error: "Nu am putut citi Istoricul\. Încearcă din nou\." \};\s*\}\s*if \(!v\) return \{ error: "Nu există în Istoric un design de dinainte de temă\." \};/);
   // Etapa 25.3/25.7: magazinul de dupa readucerea datelor demo de atunci, apoi semnul TEMEI DE ATUNCI (nu „niciuna”).
   assert.match(f, /const ciorna = ciornaDinVersiune\(\{ design: v\.design, continut \}, \{ pc: ctx\.pageContent, magazin: owned\.magazin \}, ctx\);\s*const publicat = await publishDesign\(owned\.businessId, ciornaCuContinut\(ciorna\.design, ciorna\.continut\)\);\s*if \("error" in publicat\) return publicat;[\s\S]*?await scrieSemnulTemei\(owned\.businessId, stare\?\.tema \?\? null\);/);
   // Datele demo de acum pleaca INAINTE de reimport, iar randurile versiunii iau produsele reimportate.
@@ -163,6 +167,33 @@ test("⚠⚠ „Pune la loc”: nu peste o ciorna nepublicata; versiunea `tema` 
   assert.ok(scoase > 0 && reimport > scoase && randuri > reimport && publicare > randuri, "scoase, reimport, randurile, publicarea");
   // Plan plin: designul revine fara datele de atunci, si omul afla.
   assert.match(f, /if \("error" in loc \|\| !loc\.incap\) \{\s*nota = `Datele demo ale temei \$\{temaInainte\.nume\} nu mai încap în planul tău, deci designul a revenit fără ele\.`;/);
+});
+
+test("⚠⚠ 14.11.2026: versiunea de pus la loc se alege intr-un SINGUR loc, cu regula din `pune-la-loc.ts`, pentru buton si fereastra", () => {
+  const s = cod("src/lib/actions/store-design.actions.ts");
+  const i = s.indexOf("async function designulDeDinainteDeTema(");
+  assert.ok(i >= 0, "lipseste designulDeDinainteDeTema");
+  // Nu e un capat public: „use server” ar fi expus orice export.
+  assert.doesNotMatch(s, /export async function designulDeDinainteDeTema/);
+  const h = s.slice(i, s.indexOf("\n}\n", i) + 2);
+  // Lista cu starea fiecarei versiuni (mica), drumul dupa semnul din magazin, apoi intregi DOAR versiunile de pe drum.
+  assert.match(h, /\.from\("storefront_design_versions"\)\s*\.select\("id, origine, created_at, stare:continut->stare"\)\s*\.eq\("business_id", owned\.businessId\)/);
+  assert.match(h, /const drum = drumulInapoi\(lista \?\? \[\], temaAplicataDin\(owned\.ctx\.pageContent\)\);\s*if \(!drum\) return null;/);
+  assert.match(h, /\.from\("storefront_design_versions"\)\s*\.select\("id, design, continut"\)\s*\.eq\("business_id", owned\.businessId\)\s*\.in\("id", versiuniDeCitit\(drum\)\);/);
+  assert.match(h, /const ales = versiuneaDePusLaLoc\(drum, versiuni\);/);
+  // Citirile cazute si versiunea aleasa lipsa sunt erori, nu „nimic de pus la loc”.
+  assert.match(h, /if \(error\) return \{ error: error\.message \};/);
+  assert.match(h, /if \(eIntregi\) return \{ error: eIntregi\.message \};/);
+  assert.match(h, /if \(!ales \|\| !v\) return \{ error:/);
+  // Chemata numai de buton si de intrebarea paginii „Teme”, cu magazinul verificat.
+  assert.deepEqual([...s.matchAll(/designulDeDinainteDeTema\((\w+)\)/g)].map((m) => m[1]), ["owned", "owned"]);
+  for (const nume of ["puneLaLocDesignulDeDinainte", "areDesignDeDinainteDeTema"]) {
+    const f = functia(s, nume);
+    const owned = f.indexOf("const owned = await loadOwnedStore(businessId);");
+    assert.ok(owned > 0 && f.indexOf("await designulDeDinainteDeTema(owned)") > owned, nume);
+  }
+  // Fereastra numeste tema dinaintea careia revine designul (`temaDupa`), din aceeasi alegere.
+  assert.match(functia(s, "areDesignDeDinainteDeTema"), /temaDupa: v\.temaDupa/);
 });
 
 test("tema exista si are identitatea ei; o cheie necunoscuta nu aplica nimic", () => {
@@ -188,8 +219,13 @@ test("17.4: pagina „Teme”: magazinul LUI, Istoricul intrebat prin actiunea e
   assert.match(c, /disabled=\{lucreaza \|\| areCiorna\} onClick=\{puneLaLoc\}/, "cu o ciorna nepublicata, „Pune la loc” asteapta");
   assert.match(cod("src/lib/navigatie-panou.ts"), /\{ href: "\/dashboard\/editor\/teme", label: "Teme" \},/);
   const a = functia(cod("src/lib/actions/store-design.actions.ts"), "areDesignDeDinainteDeTema");
-  assert.ok(a.indexOf("loadOwnedStore(businessId)") > 0 && a.indexOf("loadOwnedStore(businessId)") < a.indexOf("createAdminClient()"));
+  assert.ok(a.indexOf("loadOwnedStore(businessId)") > 0 && a.indexOf("loadOwnedStore(businessId)") < a.indexOf("designulDeDinainteDeTema(owned)"));
   assert.match(a, /return \{ error: "Nu am putut citi Istoricul\." \};/);
+  // 14.11.2026: caseta si fereastra spun de dinaintea carei teme revine designul (peste temele doar incercate).
+  assert.match(p, /laLocTemaDupa=\{inainte && !\("error" in inainte\) \? inainte\.temaDupa \?\? null : null\}/);
+  assert.match(c, /const temaLaLoc = numeTema\(laLocTemaDupa\);\s*const deDinainteDeTema = temaLaLoc \? `de dinainte de tema \$\{temaLaLoc\}` : "de dinainte de temă";/);
+  assert.match(c, /Designul \{deDinainteDeTema\} e păstrat în Istoric\./);
+  assert.match(c, /Magazinul revine la designul, culoarea și fonturile \{deDinainteDeTema\}\./);
 });
 
 test("„Aplică”, „Pune la loc” si „Șterge datele demo” improspateaza chiar pagina „Teme”, de unde sta ea", () => {

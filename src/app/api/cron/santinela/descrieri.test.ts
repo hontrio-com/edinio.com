@@ -46,6 +46,8 @@ interface Pagina {
   /** Textul contorului; `null` = comerciantul l-a ascuns. */
   contor?: string | null;
   robots?: string;
+  /** Antetul cu coșul scris „Cosul meu / N produse” (Hipermarket), INAINTEA contorului. */
+  cos?: number;
 }
 
 function pagina(p: Pagina): { html: string; noduri: Record<string, unknown>[] } {
@@ -58,8 +60,10 @@ function pagina(p: Pagina): { html: string; noduri: Record<string, unknown>[] } 
     `<meta name="robots" content="${p.robots ?? "index, follow"}"/>`,
     meta("property", "og:description", p.og === undefined ? d : p.og),
     meta("name", "twitter:description", p.tw === undefined ? d : p.tw),
-    "</head><body><main>",
-    p.contor === null ? "" : `<p class="text-[13px] text-[var(--st-muted)]">${p.contor ?? "18 din 41 produse"}</p>`,
+    "</head><body>",
+    p.cos === undefined ? "" : `<header><a href="/cos"><span class="block text-[12px] text-[var(--st-muted)]">Cosul meu</span><span class="block text-[15px] font-semibold">${p.cos} produse</span></a></header>`,
+    "<main>",
+    p.contor === null ? "" : `<p data-contor="catalog" class="text-[13px] text-[var(--st-muted)]">${p.contor ?? "18 din 41 produse"}</p>`,
     "<p class=\"text-[13px] text-[var(--st-muted)]\" aria-live=\"polite\">20<!-- --> din <!-- -->41<!-- --> produse</p>",
     "</main></body></html>",
   ].join("");
@@ -220,6 +224,29 @@ describe("contorul paginii", () => {
 
   test("⚠ subsolul paginarii (din bucati) nu e contorul", () => {
     assert.equal(numarDinContor(pagina({ contor: null }).html), null);
+  });
+
+  /*
+   * ═══ ALARMA FALSA DE PE ESAFE.RO (15.11.2026) ═══
+   *
+   * Antetul Hipermarket scrie coșul „Cosul meu / 0 produse”, intr-un singur nod de text si MAI SUS
+   * in HTML decat contorul catalogului. Proba lua primul „N produse” din pagina, deci citea coșul:
+   * „descrierea spune 3301 produse, iar pagina arata 0”, din doua in doua ore, pe o pagina buna.
+   */
+  test("⚠ coșul din antet nu e contorul, nici cand contorul e ascuns", () => {
+    assert.equal(numarDinContor(pagina({ cos: 0, contor: "3301 produse" }).html), "3301");
+    assert.equal(numarDinContor(pagina({ cos: 2, contor: "18 din 41 produse" }).html), "18");
+    assert.equal(numarDinContor(pagina({ cos: 0, contor: null }).html), null, "contorul ascuns nu devine coșul gol");
+  });
+
+  test("⚠ si contorul vitrinei chiar poarta reperul (altfel proba tace pe veci)", () => {
+    /* Fara reper, `numarDinContor` da mereu `null`, iar comparatia cu descrierea nu se mai face
+       deloc: o plasa care nu mai prinde nimic si nici nu cade. */
+    const sursa = readFileSync("src/components/storefront/sections/shop/_shared/ShopPieces.tsx", "utf8");
+    const i = sursa.indexOf("export function NumarRezultate(");
+    assert.notEqual(i, -1, "NumarRezultate s-a mutat");
+    const corp = sursa.slice(i, sursa.indexOf("export function", i + 1));
+    assert.match(corp, /<p data-contor="catalog"/);
   });
 });
 

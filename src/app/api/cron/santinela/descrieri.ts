@@ -88,12 +88,15 @@ export function numarDinDescriere(descriere: string, numeScurt: string): string 
  * catalogul. Primul numar e chiar grila paginii. `null` cand comerciantul a ascuns
  * contorul.
  *
- * ⚠ Numai forma dintr-un singur nod de text. Subsolul paginarii scrie aceleasi cuvinte,
- * dar din bucati (`20<!-- --> din <!-- -->41<!-- --> produse`), iar primul lui numar e
- * cat s-a incarcat pana acum, nu cat are pagina.
+ * ⚠ NUMAI CONTORUL MARCAT (`data-contor="catalog"`, pus de `NumarRezultate`). Prima forma lua
+ * primul text „N produse” din toata pagina, si a sunat fals din doua in doua ore din 15.11.2026:
+ * antetul Hipermarket scrie si el cosul asa („Cosul meu / 0 produse”), mai sus in HTML decat
+ * contorul, deci esafe.ro/magazin „arata 0”, desi arata 3301. Subsolul paginarii scrie si el
+ * aceleasi cuvinte (`20<!-- --> din <!-- -->41<!-- --> produse`, cat s-a incarcat pana acum),
+ * dar n-are reperul. Fara contor marcat (comerciantul l-a ascuns): `null`, nu zero.
  */
 export function numarDinContor(html: string): string | null {
-  const m = html.match(/>(\d[\d.]*) din [\d.]+ produse</) ?? html.match(/>(\d[\d.]*) produse?</);
+  const m = html.match(/<p\b[^>]*\bdata-contor="catalog"[^>]*>(\d[\d.]*)(?: din [\d.]+)? produse?<\/p>/);
   return m ? cifre(m[1]) : null;
 }
 

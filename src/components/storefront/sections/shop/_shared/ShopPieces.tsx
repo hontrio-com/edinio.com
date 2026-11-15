@@ -371,8 +371,14 @@ export function NumarRezultate() {
   // Vezi nota de la `totalVizibile` in StorefrontProvider.
   const n = totalFiltrate;
   const total = totalVizibile;
+  /*
+   * ⚠ `data-contor="catalog"` e reperul santinelei (`numarDinContor`, `santinela/descrieri.ts`): ea compara
+   * cifra de aici cu cea din descrierea paginii. Fara reper, citea primul text „N produse” din pagina, iar
+   * antetul Hipermarket scrie si el cosul asa („Cosul meu / 0 produse”, mai sus in HTML): din 15.11.2026
+   * santinela striga din doua in doua ore ca esafe.ro/magazin arata 0 produse, desi arata 3301.
+   */
   return (
-    <p className="text-[13px] text-[var(--st-muted)]">
+    <p data-contor="catalog" className="text-[13px] text-[var(--st-muted)]">
       {n === total ? `${n} ${n === 1 ? "produs" : "produse"}` : `${n} din ${total} produse`}
     </p>
   );

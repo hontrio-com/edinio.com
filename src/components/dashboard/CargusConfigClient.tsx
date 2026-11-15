@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, ChevronRight } from "lucide-react";
+import { Banknote, ChevronRight, KeyRound, Loader2, MapPin, Truck } from "lucide-react";
 import {
   saveCargusConfig,
   disconnectCargus,
@@ -13,8 +13,11 @@ import type { CargusConfig, CargusPickupLocation, CargusPriceTable } from "@/lib
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
@@ -48,12 +51,26 @@ export function CargusConfigClient({
   const [repaymentType, setRepaymentType] = useState<"cash" | "bank">(initialConfig?.repayment_type ?? "cash");
   const [declaredValue, setDeclaredValue] = useState(initialConfig?.declared_value_enabled ?? false);
 
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = {
+    username, password, subscriptionKey, selectedLocationId, selectedLocationName,
+    selectedPriceTableId, selectedPriceTableName, repaymentType, declaredValue,
+  };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setUsername(reper.username); setPassword(reper.password); setSubscriptionKey(reper.subscriptionKey);
+    setSelectedLocationId(reper.selectedLocationId); setSelectedLocationName(reper.selectedLocationName);
+    setSelectedPriceTableId(reper.selectedPriceTableId); setSelectedPriceTableName(reper.selectedPriceTableName);
+    setRepaymentType(reper.repaymentType); setDeclaredValue(reper.declaredValue);
+  }
+
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && secretulEsteSalvat(initialConfig, "subscription_key"));
 
   async function handleLoadAccount() {
-    if (!username.trim()) return toast.error("Completeaza username-ul");
-    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola");
-    if (!subscriptionKey.trim() && !secretulEsteSalvat(initialConfig, "subscription_key")) return toast.error("Completeaza Subscription Key");
+    if (!username.trim()) return toast.error("Completează username-ul.");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completează parola.");
+    if (!subscriptionKey.trim() && !secretulEsteSalvat(initialConfig, "subscription_key")) return toast.error("Completează Subscription Key.");
 
     setLoading(true);
     const result = await loadCargusAccountAction(businessId, username.trim(), password.trim(), subscriptionKey.trim());
@@ -77,13 +94,13 @@ export function CargusConfigClient({
       setSelectedPriceTableName(result.priceTables[0].Name);
     }
 
-    toast.success(`Cont Cargus conectat · ${result.locations.length} puncte de ridicare, ${result.priceTables.length} tarife`);
+    toast.success(`Cont Cargus conectat: ${result.locations.length} puncte de ridicare, ${result.priceTables.length} tarife.`);
     setStep("settings");
   }
 
   async function handleSave() {
-    if (!selectedLocationId) return toast.error("Selecteaza un punct de ridicare");
-    if (!selectedPriceTableId) return toast.error("Selecteaza un tarif");
+    if (!selectedLocationId) return toast.error("Alege un punct de ridicare.");
+    if (!selectedPriceTableId) return toast.error("Alege un tarif.");
 
     // The sender county/locality feed the live ShippingCalculation quotes.
     const selectedLocation = locations.find((l) => Number(l.LocationId) === Number(selectedLocationId));
@@ -109,7 +126,8 @@ export function CargusConfigClient({
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success("Configuratie Cargus salvata");
+      toast.success("Configurația Cargus a fost salvată.");
+      setReper(valori);
       router.refresh();
     }
   }
@@ -121,7 +139,7 @@ export function CargusConfigClient({
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success("Cargus deconectat");
+      toast.success("Cargus a fost deconectat.");
       setStep("credentials");
       setLocations([]);
       setPriceTables([]);
@@ -129,177 +147,173 @@ export function CargusConfigClient({
     }
   }
 
+  const parolaSalvata = secretulEsteSalvat(initialConfig, "password");
+  const cheieSalvata = secretulEsteSalvat(initialConfig, "subscription_key");
+  const areContul = !!username.trim() && (!!password.trim() || parolaSalvata) && (!!subscriptionKey.trim() || cheieSalvata);
+  const arataSetarile = step === "settings" || locations.length > 0;
+  const stari: StareAntet[] = isActive ? [{ ton: "bun", text: "Activ" }] : [{ ton: "neutru", text: "Neconfigurat" }];
+
   return (
-    <div className="space-y-6">
-      {/* Status */}
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="Cargus activ"
-          action={
-            <ButonDeconectare
-              nume="Cargus"
-              cePierzi="Se șterge toată configurarea Cargus din Edinio: username, parolă, Subscription Key, punctul de ridicare și tariful ales. Ca să te întorci, le ceri din nou din contul tău Cargus; AWB-urile deja emise rămân pe comenzi."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          {initialConfig?.location_name} · {initialConfig?.price_table_name}
-        </Callout>
-      )}
-
-      {/* Step 1: Credentials */}
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
-          <h3 className="text-sm font-semibold text-foreground">Credentiale cont Cargus</h3>
-        </div>
-
+    <PaginaIntegrare
+      id="cargus"
+      titlu="Livrare"
+      descriere="Generezi AWB-uri Cargus din comenzi, cu punctul de ridicare și tariful din contractul tău."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Contul Cargus", facut: areContul },
+          { text: "Punctul de ridicare", facut: !!selectedLocationId },
+          { text: "Tariful", facut: !!selectedPriceTableId },
+          { text: "Cargus activ", facut: isActive },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Punct de ridicare", valoare: initialConfig?.location_name || "-" },
+            { eticheta: "Tarif", valoare: initialConfig?.price_table_name || "-" },
+            { eticheta: "Rambursul", valoare: initialConfig?.repayment_type === "bank" ? "în cont" : "numerar" },
+          ]} />
+        )}
+        <CumFunctioneaza id="cargus" puncte={[
+          { Icon: KeyRound, text: "Te conectezi cu contul WebExpress și cu Subscription Key din portalul API Cargus." },
+          { Icon: MapPin, text: "Alegi punctul de ridicare și tariful contractat; costul livrării se calculează pe loc, la comandă." },
+          { Icon: Truck, text: "AWB-ul îl generezi din pagina comenzii." },
+          { Icon: Banknote, text: "Rambursul îl primești în numerar sau în contul colector Cargus, după contract." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Contul Cargus" descriere="Datele contului WebExpress și cheia de acces la API.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Username Webexpress" required>
-            <Input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="utilizator.webexpress"
-            />
+          <Field label="Username WebExpress" htmlFor="cargus-user" required>
+            <Input id="cargus-user" type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="utilizator.webexpress" />
           </Field>
-          <Field label="Parola" required>
+          <Field label="Parola" htmlFor="cargus-parola" required>
             <Input
+              id="cargus-parola"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului webexpress"}
+              placeholder={parolaSalvata ? PLACEHOLDER_SECRET_SALVAT : "Parola contului WebExpress"}
             />
           </Field>
         </div>
-
-        <Field
-          label="Subscription Key"
-          required
-          hint="Gasesti cheia in portalul Azure API Cargus la PRODUCTS → StandardUrgentOnlineAPI → Primary Key"
-        >
+        <Field label="Subscription Key" htmlFor="cargus-cheie" required
+          ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="Subscription Key Cargus"
+            text="În portalul Azure API Cargus: PRODUCTS, apoi StandardUrgentOnlineAPI, apoi Primary Key." />}>
           <Input
+            id="cargus-cheie"
             type="text"
             value={subscriptionKey}
             onChange={e => setSubscriptionKey(e.target.value.trim())}
-            placeholder={secretulEsteSalvat(initialConfig, "subscription_key") ? PLACEHOLDER_SECRET_SALVAT : "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"}
+            placeholder={cheieSalvata ? PLACEHOLDER_SECRET_SALVAT : "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"}
             className="font-mono"
           />
         </Field>
+        <div>
+          <Button onClick={handleLoadAccount} disabled={loading || !areContul}>
+            {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {loading ? "Se conectează..." : "Conectează și încarcă datele"}
+          </Button>
+        </div>
+      </Sectiune>
 
-        <Button
-          onClick={handleLoadAccount}
-          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) || (!subscriptionKey.trim() && !secretulEsteSalvat(initialConfig, "subscription_key"))}
-        >
-          {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {loading ? "Se conecteaza..." : "Conecteaza si incarca datele"}
-        </Button>
-      </Panel>
-
-      {/* Step 2: Select location & price table */}
-      {(step === "settings" || locations.length > 0) && (
-        <Panel className="space-y-4 p-4">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
-            <h3 className="text-sm font-semibold text-foreground">Punct de ridicare si tarif</h3>
+      {arataSetarile && (
+        <Sectiune pas={2} titlu="Punct de ridicare și tarif" descriere="De unde ridică Cargus coletele și cu ce tarif se calculează livrarea.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Punct de ridicare expeditor" required>
+              {locations.length > 0 ? (
+                <select
+                  aria-label="Punct de ridicare expeditor"
+                  value={selectedLocationId}
+                  onChange={e => {
+                    const id = Number(e.target.value);
+                    const loc = locations.find(l => l.LocationId === id);
+                    setSelectedLocationId(id);
+                    setSelectedLocationName(loc?.Name ?? "");
+                  }}
+                  className={selectCls}
+                >
+                  {locations.map(loc => (
+                    <option key={loc.LocationId} value={loc.LocationId}>
+                      {loc.Name} · {loc.LocalityName}, {loc.CountyName}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  {initialConfig?.location_name || "Conectează contul ca să încarci punctele de ridicare"}
+                </div>
+              )}
+            </Field>
+            <Field label="Tarif contractat" required>
+              {priceTables.length > 0 ? (
+                <select
+                  aria-label="Tarif contractat"
+                  value={selectedPriceTableId}
+                  onChange={e => {
+                    const id = Number(e.target.value);
+                    const pt = priceTables.find(p => p.PriceTableId === id);
+                    setSelectedPriceTableId(id);
+                    setSelectedPriceTableName(pt?.Name ?? "");
+                  }}
+                  className={selectCls}
+                >
+                  {priceTables.map(pt => (
+                    <option key={pt.PriceTableId} value={pt.PriceTableId}>
+                      {pt.Name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  {initialConfig?.price_table_name || "Conectează contul ca să încarci tarifele"}
+                </div>
+              )}
+            </Field>
           </div>
 
-          <Field label="Punct de ridicare expeditor" required>
-            {locations.length > 0 ? (
-              <select
-                aria-label="Punct de ridicare expeditor"
-                value={selectedLocationId}
-                onChange={e => {
-                  const id = Number(e.target.value);
-                  const loc = locations.find(l => l.LocationId === id);
-                  setSelectedLocationId(id);
-                  setSelectedLocationName(loc?.Name ?? "");
-                }}
-                className={selectCls}
-              >
-                {locations.map(loc => (
-                  <option key={loc.LocationId} value={loc.LocationId}>
-                    {loc.Name} · {loc.LocalityName}, {loc.CountyName}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                {initialConfig?.location_name || "Conecteaza contul pentru a incarca punctele de ridicare"}
-              </div>
-            )}
-          </Field>
-
-          <Field label="Tarif contractat" required>
-            {priceTables.length > 0 ? (
-              <select
-                aria-label="Tarif contractat"
-                value={selectedPriceTableId}
-                onChange={e => {
-                  const id = Number(e.target.value);
-                  const pt = priceTables.find(p => p.PriceTableId === id);
-                  setSelectedPriceTableId(id);
-                  setSelectedPriceTableName(pt?.Name ?? "");
-                }}
-                className={selectCls}
-              >
-                {priceTables.map(pt => (
-                  <option key={pt.PriceTableId} value={pt.PriceTableId}>
-                    {pt.Name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                {initialConfig?.price_table_name || "Conecteaza contul pentru a incarca tarifele"}
-              </div>
-            )}
-          </Field>
-
-          <Field label="Returnarea rambursului">
+          <Field label="Returnarea rambursului" htmlFor="cargus-ramburs" hint="Cum îți returnează Cargus banii încasați ramburs de la clienți.">
             <select
-              aria-label="Returnarea rambursului"
+              id="cargus-ramburs"
               value={repaymentType}
               onChange={e => setRepaymentType(e.target.value as "cash" | "bank")}
               className={selectCls}
             >
-              <option value="cash">Numerar in plic (adus de curier)</option>
-              <option value="bank">In cont bancar (cont colector Cargus)</option>
+              <option value="cash">Numerar în plic (adus de curier)</option>
+              <option value="bank">În cont bancar (cont colector Cargus)</option>
             </select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Cum iti returneaza Cargus banii incasati ramburs de la clienti.
-            </p>
           </Field>
 
-          <label className="flex cursor-pointer items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={declaredValue}
-              onChange={e => setDeclaredValue(e.target.checked)}
-              className="mt-0.5 rounded border-border accent-primary"
-            />
-            <span className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
-              Fiecare AWB se asigura pentru valoarea produselor din comanda. Cargus percepe o prima de asigurare conform contractului.
-            </span>
-          </label>
-
-          <div className="flex justify-end">
-            <Button
-              size="lg"
-              onClick={handleSave}
-              disabled={saving || !selectedLocationId || !selectedPriceTableId}
-            >
-              {saving && <Loader2 className="animate-spin" />}
-              {saving ? "Se salveaza..." : "Salveaza configuratia"}
-            </Button>
-          </div>
-        </Panel>
+          <RandComutator
+            separat
+            titlu="Asigurare (valoare declarată)"
+            text="Fiecare AWB se asigură pentru valoarea produselor din comandă. Cargus percepe o primă de asigurare, conform contractului."
+            activ={declaredValue}
+            onChange={setDeclaredValue}
+          />
+        </Sectiune>
       )}
 
-    </div>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge configurarea Cargus din Edinio. AWB-urile deja emise rămân pe comenzi.">
+          <ButonDeconectare
+            nume="Cargus"
+            cePierzi="Se șterge toată configurarea Cargus din Edinio: username, parolă, Subscription Key, punctul de ridicare și tariful ales. Ca să te întorci, le ceri din nou din contul tău Cargus; AWB-urile deja emise rămân pe comenzi."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      {arataSetarile && (
+        <BaraSalvare
+          modificat={isActive ? modificat : undefined}
+          saving={saving}
+          onSalveaza={handleSave}
+          onRenunta={isActive ? renunta : undefined}
+          textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+        />
+      )}
+    </PaginaIntegrare>
   );
 }

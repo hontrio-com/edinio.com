@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, Info, KeyRound, ListChecks, Loader2, MapPin } from "lucide-react";
 import {
   disconnectCuriera,
   saveCurieraConfig,
@@ -23,9 +23,12 @@ import { JUDETE } from "@/lib/ro/judete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { aPropusCeva, type ExpeditorPropus } from "@/lib/curiera/precompletare";
@@ -48,15 +51,15 @@ import { aPropusCeva, type ExpeditorPropus } from "@/lib/curiera/precompletare";
  */
 
 const MARIMI: { valoare: DimensiuneEticheta; eticheta: string }[] = [
-  { valoare: "a6", eticheta: "A6 (eticheta compacta, imprimante de etichete)" },
-  { valoare: "a5", eticheta: "A5 (eticheta A6 marita de Edinio)" },
-  { valoare: "a4", eticheta: "A4 (foaie intreaga)" },
+  { valoare: "a6", eticheta: "A6 (etichetă compactă, imprimante de etichete)" },
+  { valoare: "a5", eticheta: "A5 (eticheta A6 mărită de Edinio)" },
+  { valoare: "a4", eticheta: "A4 (foaie întreagă)" },
 ];
 
 const TEXT_ANULARE: Record<DreptAnulare, string> = {
-  oricand: "Cheia poate anula un AWB oricand, si dupa ridicare.",
-  pana_la_ridicare: "Cheia poate anula un AWB doar pana cand curierul ridica coletul.",
-  niciodata: "Cheia nu are dreptul sa anuleze AWB-uri: anularea se cere din contul Curiera.",
+  oricand: "Cheia poate anula un AWB oricând, și după ridicare.",
+  pana_la_ridicare: "Cheia poate anula un AWB doar până când curierul ridică coletul.",
+  niciodata: "Cheia nu are dreptul să anuleze AWB-uri: anularea se cere din contul Curiera.",
   necunoscut: "Nu am putut afla ce drept de anulare are cheia.",
 };
 
@@ -67,7 +70,7 @@ const TEXT_ANULARE: Record<DreptAnulare, string> = {
  */
 function optiuni(lista: ServiciuCuriera[], ales: string): ServiciuCuriera[] {
   if (!ales || lista.some((s) => s.id === ales)) return lista;
-  return [...lista, { id: ales, nume: `${ales} (nu apare in lista contului)` }];
+  return [...lista, { id: ales, nume: `${ales} (nu apare în lista contului)` }];
 }
 
 export function CurieraConfigClient({
@@ -110,6 +113,20 @@ export function CurieraConfigClient({
   const [asigurare, setAsigurare] = useState(initialConfig?.asigurare === true);
   const [marime, setMarime] = useState<DimensiuneEticheta>(initialConfig?.dimensiune_eticheta ?? "a6");
   const [continut, setContinut] = useState(initialConfig?.continut_implicit ?? "");
+
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = {
+    cheie, nume, contact, telefon, email, adresa, oras, judet, codPostal, serviciuAdresa, serviciuPunct, lockere, extra,
+    asigurare, marime, continut,
+  };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setCheie(reper.cheie); setNume(reper.nume); setContact(reper.contact); setTelefon(reper.telefon); setEmail(reper.email);
+    setAdresa(reper.adresa); setOras(reper.oras); setJudet(reper.judet); setCodPostal(reper.codPostal);
+    setServiciuAdresa(reper.serviciuAdresa); setServiciuPunct(reper.serviciuPunct); setLockere(reper.lockere);
+    setExtra(reper.extra); setAsigurare(reper.asigurare); setMarime(reper.marime); setContinut(reper.continut);
+  }
 
   const cheieSalvata = secretulEsteSalvat(initialConfig, "api_key");
   const areCheie = cheie.trim() !== "" || cheieSalvata;
@@ -158,7 +175,7 @@ export function CurieraConfigClient({
   }
 
   async function handleTest() {
-    if (!areCheie) return toast.error("Completeaza cheia API din contul Curiera");
+    if (!areCheie) return toast.error("Completează cheia API din contul Curiera.");
     /* ⚠ Doar cheia pleaca la proba, si NIMIC nu se salveaza: o cheie gresita tastata aici
        nu are voie sa o inlocuiasca pe cea buna. Gol = cheia salvata, rezolvata pe server. */
     setTesting(true);
@@ -167,7 +184,7 @@ export function CurieraConfigClient({
       r = await testCurieraConnectionAction(businessId, cheie.trim());
     } catch (err) {
       setProba(null);
-      toast.error("Curiera nu a raspuns: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("Curiera nu a răspuns: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setTesting(false);
@@ -179,32 +196,33 @@ export function CurieraConfigClient({
       return;
     }
     setProba(r.proba);
-    toast.success(`Conectat la Curiera${r.proba.firma ? ` · ${r.proba.firma}` : ""}`);
+    toast.success(`Conectat la Curiera${r.proba.firma ? `: ${r.proba.firma}` : ""}.`);
   }
 
   async function handleSave() {
-    if (!areCheie) return toast.error("Completeaza cheia API");
+    if (!areCheie) return toast.error("Completează cheia API.");
     /* ⚠ Aceleasi campuri ca `curieraGata`: fara oricare, Curiera pune expedierea in
        ciorna („Lipseste orasul expeditorului"), deci configurarea n-ar emite nimic. */
     if (!nume.trim() || !adresa.trim() || !oras.trim() || !judet.trim()) {
-      return toast.error("Completeaza adresa de ridicare: nume, adresa, oras si judet");
+      return toast.error("Completează adresa de ridicare: nume, adresă, oraș și județ.");
     }
-    if (!telefon.trim()) return toast.error("Telefonul de la ridicare e obligatoriu");
+    if (!telefon.trim()) return toast.error("Telefonul de la ridicare e obligatoriu.");
 
     setSaving(true);
     let r: Awaited<ReturnType<typeof saveCurieraConfig>>;
     try {
       r = await saveCurieraConfig(businessId, construieste());
     } catch (err) {
-      toast.error("Configurarea nu s-a putut salva: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("Configurarea nu s-a putut salva: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setSaving(false);
     }
 
     if ("error" in r) return toast.error(r.error);
-    toast.success("Configurarea Curiera a fost salvata");
+    toast.success("Configurarea Curiera a fost salvată.");
     setCheie("");
+    setReper({ ...valori, cheie: "" });
     router.refresh();
   }
 
@@ -214,14 +232,14 @@ export function CurieraConfigClient({
     try {
       r = await disconnectCuriera(businessId);
     } catch (err) {
-      toast.error("Deconectarea nu s-a putut face: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("Deconectarea nu s-a putut face: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setDisconnecting(false);
     }
 
     if ("error" in r) return toast.error(r.error);
-    toast.success("Curiera a fost deconectat");
+    toast.success("Curiera a fost deconectat.");
     setProba(null);
     router.refresh();
   }
@@ -230,42 +248,47 @@ export function CurieraConfigClient({
     setExtra((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
   }
 
+  const stari: StareAntet[] = !isActive
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [adresaIncompleta ? { ton: "rau", text: "Adresă incompletă" } : { ton: "bun", text: "Activ" }];
+
   return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="Curiera e activ"
-          action={
-            <ButonDeconectare
-              nume="Curiera"
-              cePierzi="Se sterge toata configurarea Curiera din Edinio: cheia API, adresa de ridicare si serviciile alese. Cheia nu se mai poate citi din Edinio, deci ca sa te intorci o iei din nou din contul Curiera. AWB-urile deja emise raman pe comenzi si in contul Curiera, dar urmarirea lor se opreste, iar etichetele le descarci de acum din contul Curiera. Metoda Curiera se opreste si in Setari -> Livrare."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          Ridicare din {initialConfig?.expeditor?.oras || "adresa necompletata"}
-          {initialConfig?.expeditor?.judet ? `, ${initialConfig.expeditor.judet}` : ""}
-        </Callout>
-      )}
-
+    <PaginaIntegrare
+      id="curiera"
+      titlu="Livrare"
+      descriere="Generezi AWB-uri Curiera din comenzi, cu ramburs, livrare la adresă sau în lockere FANbox, și urmărirea coletului."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia API", facut: areCheie },
+          { text: "Adresa de ridicare", facut: !!(nume.trim() && adresa.trim() && oras.trim() && judet.trim() && telefon.trim()) },
+          { text: "Curiera activ", facut: isActive && !adresaIncompleta },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Ridicare din", valoare: [initialConfig?.expeditor?.oras, initialConfig?.expeditor?.judet].filter(Boolean).join(", ") || "necompletată" },
+            { eticheta: "Lockere la comandă", valoare: initialConfig?.lockere ? "da" : "nu" },
+          ]} />
+        )}
+        <CumFunctioneaza id="curiera" puncte={[
+          { Icon: KeyRound, text: "Cheia API o găsești în contul tău Curiera sau o ceri de la ei. E singura credențială." },
+          { Icon: MapPin, text: "Adresa de ridicare pleacă la fiecare AWB; fără ea, Curiera pune expedierea în ciornă." },
+          { Icon: ListChecks, text: "Serviciile se aleg din lista contului, după „Testează conexiunea”: unul scris greșit face emiterea să fie refuzată." },
+        ]} />
+      </>}
+    >
       {adresaIncompleta && (
-        <Callout variant="warning" icon={AlertTriangle} title="Adresa de ridicare e incompleta">
-          Fara nume, telefon, adresa, oras si judet, Curiera pune fiecare expediere in ciorna si
-          nu o ridica. Pana le completezi, Curiera nu apare in checkout si nu se pot emite AWB-uri.
+        <Callout variant="warning" icon={AlertTriangle} title="Adresa de ridicare e incompletă">
+          Fără nume, telefon, adresă, oraș și județ, Curiera pune fiecare expediere în ciornă și nu o ridică. Până le completezi,
+          Curiera nu apare la comandă și nu se pot emite AWB-uri.
         </Callout>
       )}
 
-      <Panel step={1} title="Cheia API">
-        <p className="text-xs text-muted-foreground">
-          Cheia API o gasesti in contul tau Curiera sau o ceri de la Curiera. E singura credentiala: cine o are poate
-          emite si anula AWB-uri pe contul tau.
-        </p>
-
-        <Field label="Cheia API" required>
+      <Sectiune pas={1} titlu="Cheia API"
+        descriere="O găsești în contul tău Curiera sau o ceri de la Curiera. E singura credențială: cine o are poate emite și anula AWB-uri pe contul tău.">
+        <Field label="Cheia API" htmlFor="curiera-cheie" required>
           <Input
+            id="curiera-cheie"
             type="password"
             value={cheie}
             onChange={(ev) => { setCheie(ev.target.value); setProba(null); }}
@@ -273,18 +296,19 @@ export function CurieraConfigClient({
           />
         </Field>
 
-        <Button onClick={handleTest} disabled={testing || !areCheie}>
-          {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {testing ? "Se verifica..." : "Testeaza conexiunea"}
-        </Button>
+        <div>
+          <Button variant="outline" onClick={handleTest} disabled={testing || !areCheie}>
+            {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {testing ? "Se verifică..." : "Testează conexiunea"}
+          </Button>
+        </div>
 
         {proba && (
-          <div className="space-y-1 rounded-lg border border-success/20 bg-success/5 p-3 text-xs">
-            <p className="font-semibold text-success">Conectat la Curiera</p>
-            {proba.firma && <p className="text-foreground">{proba.firma}</p>}
-            {proba.client && <p className="text-muted-foreground">Cont client: {proba.client}</p>}
-            <p className="text-muted-foreground">{TEXT_ANULARE[proba.anulare]}</p>
-          </div>
+          <Callout variant="success" icon={CheckCircle} title="Conectat la Curiera">
+            {proba.firma && <span className="block text-foreground">{proba.firma}</span>}
+            {proba.client && <span className="block">Cont client: {proba.client}</span>}
+            <span className="block">{TEXT_ANULARE[proba.anulare]}</span>
+          </Callout>
         )}
 
         {/*
@@ -294,34 +318,30 @@ export function CurieraConfigClient({
         */}
         {proba && !isActive && (
           <Callout variant="info" icon={Info}>
-            {"Cheia merge, dar nimic nu e salvat inca. Completeaza adresa de ridicare de la pasul 2 si apasa „Salveaza”, jos. Pana atunci Curiera nu apare la comenzi si nici in checkout."}
+            Cheia merge, dar nimic nu e salvat încă. Completează adresa de ridicare de la pasul 2 și apasă „Salvează”, jos. Până
+            atunci Curiera nu apare la comenzi și nici la comandă.
           </Callout>
         )}
         {proba && isActive && cheie.trim() !== "" && (
-          <Callout variant="info" icon={Info}>
-            {"Cheia noua merge, dar nu e salvata: pana apesi „Salveaza”, ramane cea veche."}
-          </Callout>
+          <Callout variant="info" icon={Info}>Cheia nouă merge, dar nu e salvată: până apeși „Salvează”, rămâne cea veche.</Callout>
         )}
 
         {/* ⚠ O cheie de angajat raspunde la proba, dar emiterea ar cere si contul clientului. */}
         {proba?.cheieDeClient === false && (
           <Callout variant="warning" icon={AlertTriangle}>
-            Cheia nu apartine unui cont de client Curiera, deci emiterea AWB-urilor nu va merge.
-            Foloseste cheia contului tau de client (o gasesti in contul Curiera sau o ceri de la ei).
+            Cheia nu aparține unui cont de client Curiera, deci emiterea AWB-urilor nu va merge. Folosește cheia contului tău de
+            client (o găsești în contul Curiera sau o ceri de la ei).
           </Callout>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={2} title="Adresa de ridicare">
-        <p className="text-xs text-muted-foreground">
-          De aici ridica Curiera coletele. Se trimite la fiecare AWB; diacriticele se scot la
-          trimitere, fiindca pe eticheta lor ar iesi semne de intrebare.
-        </p>
-
+      <Sectiune pas={2} titlu="Adresa de ridicare"
+        descriere="De aici ridică Curiera coletele. Se trimite la fiecare AWB; diacriticele se scot la trimitere, fiindcă pe eticheta lor ar ieși semne de întrebare.">
         {/* ⚠ De la Curiera nu vine nicio adresa (vezi `precompletare.ts`), deci sursa e magazinul. */}
         {aPropusCeva(propunere) && (
           <Callout variant="info" icon={Info}>
-            {"Am completat ce stiam din datele magazinului (Setari). Verifica-le: aici trebuie adresa de unde ridica Curiera coletele, iar ce lipseste completezi tu."}
+            Am completat ce știam din datele magazinului (Setări). Verifică-le: aici trebuie adresa de unde ridică Curiera coletele,
+            iar ce lipsește completezi tu.
           </Callout>
         )}
 
@@ -338,95 +358,72 @@ export function CurieraConfigClient({
           <Field label="Email">
             <Input value={email} onChange={(ev) => setEmail(ev.target.value)} placeholder="depozit@magazin.ro" />
           </Field>
-          <Field label="Adresa (strada, numar, bloc)" required className="sm:col-span-2">
+          <Field label="Adresa (stradă, număr, bloc)" required className="sm:col-span-2">
             <Input value={adresa} onChange={(ev) => setAdresa(ev.target.value)} placeholder="Strada Eroilor nr. 12, bl. A2" />
           </Field>
-          <Field label="Oras" required>
+          <Field label="Oraș" required>
             <Input value={oras} onChange={(ev) => setOras(ev.target.value)} placeholder="Cluj-Napoca" />
           </Field>
-          <Field label="Judet" required>
-            <select
-              value={judet}
-              onChange={(ev) => setJudet(ev.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Alege judetul</option>
+          <Field label="Județ" htmlFor="curiera-judet" required>
+            <select id="curiera-judet" value={judet} onChange={(ev) => setJudet(ev.target.value)} className={selectCls}>
+              <option value="">Alege județul</option>
               {judeteDeAles.map((j) => <option key={j} value={j}>{j}</option>)}
             </select>
           </Field>
-          <Field label="Cod postal">
+          <Field label="Cod poștal">
             <Input value={codPostal} onChange={(ev) => setCodPostal(ev.target.value)} placeholder="400129" />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={3} title="Servicii si eticheta">
+      <Sectiune pas={3} titlu="Servicii și etichetă">
         {!proba && (
           <Callout variant="info" icon={Info}>
-            {"Apasa „Testeaza conexiunea” ca sa alegi serviciile din lista contului tau."}
-            {" Un serviciu scris gresit face ca emiterea sa fie refuzata (Curiera nu il respinge pe loc, deci l-ai afla abia la primul AWB). Alege-l din lista."}
+            Apasă „Testează conexiunea” ca să alegi serviciile din lista contului tău. Un serviciu scris greșit face ca emiterea să
+            fie refuzată (Curiera nu îl respinge pe loc, deci l-ai afla abia la primul AWB). Alege-l din listă.
           </Callout>
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Serviciul pentru livrarea la adresa">
+          <Field label="Serviciul pentru livrarea la adresă">
             {proba && proba.servicii.length > 0 ? (
-              <select
-                value={serviciuAdresa}
-                onChange={(ev) => setServiciuAdresa(ev.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
+              <select aria-label="Serviciul pentru livrarea la adresă" value={serviciuAdresa} onChange={(ev) => setServiciuAdresa(ev.target.value)} className={selectCls}>
                 {optiuni(proba.servicii, serviciuAdresa).map((s) => (
                   <option key={s.id} value={s.id}>{s.nume}</option>
                 ))}
               </select>
             ) : (
-              <Input
-                value={serviciuAdresa}
-                onChange={(ev) => setServiciuAdresa(ev.target.value)}
-                placeholder={SERVICIU_ADRESA_IMPLICIT}
-              />
+              <Input value={serviciuAdresa} onChange={(ev) => setServiciuAdresa(ev.target.value)} placeholder={SERVICIU_ADRESA_IMPLICIT} />
             )}
           </Field>
           <Field label="Serviciul pentru livrarea la locker">
             {proba && proba.servicii.length > 0 ? (
-              <select
-                value={serviciuPunct}
-                onChange={(ev) => setServiciuPunct(ev.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
+              <select aria-label="Serviciul pentru livrarea la locker" value={serviciuPunct} onChange={(ev) => setServiciuPunct(ev.target.value)} className={selectCls}>
                 {optiuni(proba.servicii, serviciuPunct).map((s) => (
                   <option key={s.id} value={s.id}>{s.nume}</option>
                 ))}
               </select>
             ) : (
-              <Input
-                value={serviciuPunct}
-                onChange={(ev) => setServiciuPunct(ev.target.value)}
-                placeholder={SERVICIU_PUNCT_IMPLICIT}
-              />
+              <Input value={serviciuPunct} onChange={(ev) => setServiciuPunct(ev.target.value)} placeholder={SERVICIU_PUNCT_IMPLICIT} />
             )}
           </Field>
         </div>
         {proba && !proba.serviciiCitite && (
           <p className="text-xs text-muted-foreground">
-            {"Lista serviciilor nu s-a putut citi acum, deci campurile raman de scris de mana. Mai apasa o data „Testeaza conexiunea”."}
+            Lista serviciilor nu s-a putut citi acum, deci câmpurile rămân de scris de mână. Mai apasă o dată „Testează conexiunea”.
           </p>
         )}
 
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Ofera in checkout livrarea la locker sau punct de ridicare</p>
-            <p className="text-xs text-muted-foreground">
-              Cumparatorul isi alege un locker FANbox, un punct de ridicare sau un oficiu FAN (reteaua de puncte a Curiera).
-              {" Pretul e cel fix din „Setari -> Livrare”; rambursul merge si la punct."}
-            </p>
-          </div>
-          <Switch checked={lockere} onCheckedChange={setLockere} />
-        </div>
+        <RandComutator
+          separat
+          titlu="Oferă la comandă livrarea la locker sau punct de ridicare"
+          text="Cumpărătorul își alege un locker FANbox, un punct de ridicare sau un oficiu FAN (rețeaua de puncte a Curiera). Prețul e cel fix din Setări, Livrare; rambursul merge și la punct."
+          activ={lockere}
+          onChange={setLockere}
+        />
 
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Servicii extra puse pe fiecare AWB</p>
+        <div className="space-y-2 border-t border-border pt-4">
+          <p className="text-sm font-medium text-foreground">Servicii extra puse pe fiecare AWB</p>
           {extraDeAratat.length > 0 ? (
             <div className="space-y-1">
               {extraDeAratat.map((s) => (
@@ -445,52 +442,62 @@ export function CurieraConfigClient({
             <p className="text-xs text-muted-foreground">
               {/* ⚠ O lista PICATA nu e o lista goala: „contul nu are" ar fi o afirmatie falsa. */}
               {!proba
-                ? "Lista apare dupa „Testeaza conexiunea”."
+                ? "Lista apare după „Testează conexiunea”."
                 : proba.extraCitite
                   ? "Contul nu are servicii extra."
-                  : "Lista serviciilor extra nu s-a putut citi acum. Mai apasa o data „Testeaza conexiunea”."}
+                  : "Lista serviciilor extra nu s-a putut citi acum. Mai apasă o dată „Testează conexiunea”."}
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Se platesc per colet, deci pornesc nebifate. Cele bifate aici vin bifate pe fiecare AWB, si le poti scoate la un AWB anume.
+            Se plătesc per colet, deci pornesc nebifate. Cele bifate aici vin bifate pe fiecare AWB, și le poți scoate la un AWB anume.
           </p>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Declara valoarea comenzii ca asigurare</p>
-            <p className="text-xs text-muted-foreground">
-              Fereastra de AWB precompleteaza asigurarea cu totalul comenzii. Curiera o factureaza separat.
-            </p>
-          </div>
-          <Switch checked={asigurare} onCheckedChange={setAsigurare} />
-        </div>
+        <RandComutator
+          separat
+          titlu="Declară valoarea comenzii ca asigurare"
+          text="Fereastra de AWB precompletează asigurarea cu totalul comenzii. Curiera o facturează separat."
+          activ={asigurare}
+          onChange={setAsigurare}
+        />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field
-            label="Marimea etichetei"
+            label="Mărimea etichetei"
+            htmlFor="curiera-marime"
             hint={marime === "a5"
-              ? "Curiera nu face A5: Edinio ia eticheta A6 si o mareste pe A5, cu tot cu codul de bare. Tipareste una si verifica daca se scaneaza inainte sa trimiti colete."
+              ? "Curiera nu face A5: Edinio ia eticheta A6 și o mărește pe A5, cu tot cu codul de bare. Tipărește una și verifică dacă se scanează înainte să trimiți colete."
               : undefined}
           >
-            <select
-              value={marime}
-              onChange={(ev) => setMarime(ev.target.value as DimensiuneEticheta)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
+            <select id="curiera-marime" value={marime} onChange={(ev) => setMarime(ev.target.value as DimensiuneEticheta)} className={selectCls}>
               {MARIMI.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
             </select>
           </Field>
-          <Field label="Continut implicit" hint="Apare pe AWB cand comanda nu da unul mai bun.">
-            <Input value={continut} onChange={(ev) => setContinut(ev.target.value)} placeholder="Produse" maxLength={255} />
+          <Field label="Conținut implicit" htmlFor="curiera-continut" hint="Apare pe AWB când comanda nu dă unul mai bun.">
+            <Input id="curiera-continut" value={continut} onChange={(ev) => setContinut(ev.target.value)} placeholder="Produse" maxLength={255} />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Button onClick={handleSave} disabled={saving || !areCheie} className="w-full sm:w-auto">
-        {saving ? <Loader2 className="animate-spin" /> : null}
-        {saving ? "Se salveaza..." : "Salveaza"}
-      </Button>
-    </div>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge cheia și setările Curiera din Edinio. AWB-urile deja emise rămân pe comenzi.">
+          <ButonDeconectare
+            nume="Curiera"
+            cePierzi="Se șterge toată configurarea Curiera din Edinio: cheia API, adresa de ridicare și serviciile alese. Cheia nu se mai poate citi din Edinio, deci ca să te întorci o iei din nou din contul Curiera. AWB-urile deja emise rămân pe comenzi."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={saving}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

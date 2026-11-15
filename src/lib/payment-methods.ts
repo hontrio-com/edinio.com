@@ -1,3 +1,5 @@
+import { sumaInLimite, tbiGata, type LimiteTbi } from "@/lib/tbi/config";
+
 /**
  * "Metode de plata" — shared model.
  *
@@ -12,9 +14,9 @@
  *   merchant can then disable / reorder / rename them.
  */
 
-export type PaymentMethodType = "cash_on_delivery" | "netopia" | "stripe" | "ipay" | "klarna" | "revolut";
+export type PaymentMethodType = "cash_on_delivery" | "netopia" | "stripe" | "ipay" | "klarna" | "revolut" | "tbi";
 
-export const PAYMENT_PROCESSOR_TYPES = ["netopia", "stripe", "ipay", "klarna", "revolut"] as const;
+export const PAYMENT_PROCESSOR_TYPES = ["netopia", "stripe", "ipay", "klarna", "revolut", "tbi"] as const;
 export type PaymentProcessorType = (typeof PAYMENT_PROCESSOR_TYPES)[number];
 
 export type PaymentMethodEntry = {
@@ -30,6 +32,8 @@ export const PAYMENT_METHOD_DEFAULT_LABELS: Record<PaymentMethodType, string> = 
   ipay: "Card bancar (BT iPay)",
   klarna: "Klarna",
   revolut: "Card online (Revolut)",
+  /* Fara diacritice: eticheta implicita se vede in VITRINA, la comanda. Nu „card": e un credit. */
+  tbi: "Plata in rate prin tbi bank",
 };
 
 const ALL_TYPES: PaymentMethodType[] = ["cash_on_delivery", ...PAYMENT_PROCESSOR_TYPES];
@@ -53,6 +57,7 @@ const LEGACY_CODE_MAP: Record<string, PaymentMethodType> = {
   ipay: "ipay",
   klarna: "klarna",
   revolut: "revolut",
+  tbi: "tbi",
 };
 
 function coerceEntry(x: unknown): PaymentMethodEntry | null {
@@ -127,6 +132,7 @@ export type ConfiguratiiProcesatoare = {
   ipay_config?: unknown;
   klarna_config?: unknown;
   revolut_config?: unknown;
+  tbi_config?: unknown;
 };
 
 /**
@@ -150,7 +156,57 @@ export function processorReadiness(cfg: ConfiguratiiProcesatoare | null | undefi
     ipay: !!(ic?.enabled && ic?.username && ic?.password),
     klarna: !!(kc?.enabled && kc?.username && kc?.password),
     revolut: !!(rc?.enabled && rc?.secret_key),
+    /* Regula intreaga sta in `tbiGata`: si cheia privata, fara de care o aprobare n-ar ajunge la comanda. */
+    tbi: tbiGata(cfg?.tbi_config),
   };
+}
+
+/**
+ * Ruta care PORNESTE plata, pe procesator. Un singur loc pentru cele doua formulare de comanda
+ * (`checkout-core.ts` si `OrderModal.tsx`).
+ *
+ * ⚠ Pana la tbi (15.11.2026) fiecare formular avea propriul lant de ternare, cu iPay pe ramura
+ * „altfel": un procesator nou, uitat din lant, ar fi plecat TACUT la `/api/ipay/start`, care il
+ * refuza cu „iPay not configured". Cu `Record` pe tipul procesatoarelor, tsc cere ruta fiecaruia.
+ */
+export const RUTA_PORNIRE_PLATA: Record<PaymentProcessorType, string> = {
+  stripe: "/api/stripe/order-checkout",
+  netopia: "/api/netopia/start",
+  ipay: "/api/ipay/start",
+  klarna: "/api/klarna/start",
+  revolut: "/api/revolut/start",
+  tbi: "/api/tbi/start",
+};
+
+/**
+ * Metodele pe care le poate alege clientul ACUM, pentru comanda din formular. Un singur loc pentru
+ * cele doua formulare, ca regula sa nu se desparta intre ele.
+ *
+ *   - fara ramburs (comanda internationala, sau livrare Pall-Ex, care nu incaseaza la usa);
+ *   - Klarna si tbi numai in Romania: Klarna leaga tara clientului de moneda, iar creditul tbi se
+ *     acorda pe CNP, adica rezidentilor romani;
+ *   - tbi numai pentru persoane fizice (creditul de consum e al omului, nu al firmei: cererea lor n-are
+ *     CUI, are CNP) si numai cand totalul intra in limitele magazinului. Serverul refuza oricum in
+ *     afara lor (`refuzulSumeiTbi`); aici e ca omul sa nu aleaga ceva ce nu se poate.
+ */
+export function metodeLaComanda<T extends { type: PaymentMethodType }>(
+  metode: T[],
+  ctx: {
+    faraRamburs: boolean;
+    international: boolean;
+    /** Comanda pe persoana juridica. */
+    firma: boolean;
+    /** Totalul comenzii daca s-ar plati prin tbi (fara reducerea de card si fara taxa de ramburs). */
+    totalTbi: number;
+    tbi: LimiteTbi | null;
+  },
+): T[] {
+  return metode.filter((m) => {
+    if (m.type === "cash_on_delivery") return !ctx.faraRamburs;
+    if (m.type === "klarna") return !ctx.international;
+    if (m.type === "tbi") return !ctx.international && !ctx.firma && !!ctx.tbi && sumaInLimite(ctx.tbi, ctx.totalTbi);
+    return true;
+  });
 }
 
 export const METODA_NEOFERITA =

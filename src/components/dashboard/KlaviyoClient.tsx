@@ -1,28 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, CheckCircle, Plug, RefreshCw, Users, ExternalLink } from "lucide-react";
+import { ExternalLink, KeyRound, Loader2, MailCheck, Plug, RefreshCw, ShoppingBag, Users } from "lucide-react";
 import {
   connectKlaviyo, disconnectKlaviyo, getKlaviyoLists,
   saveKlaviyoSettings, syncExistingCustomers, syncKlaviyoCatalog,
 } from "@/lib/actions/klaviyo.actions";
 import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { selectCls } from "@/lib/ui";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 import type { KlaviyoPublicConfig, KlaviyoList } from "@/lib/klaviyo";
-
-const inputCls =
-  "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button type="button" onClick={() => onChange(!checked)}
-      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}>
-      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0"}`} />
-    </button>
-  );
-}
 
 export function KlaviyoClient({ businessId, initialConfig }: { businessId: string; initialConfig: KlaviyoPublicConfig }) {
   const [config, setConfig] = useState<KlaviyoPublicConfig>(initialConfig);
@@ -34,6 +30,14 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
   const [listId, setListId] = useState(initialConfig.list_id ?? "");
   const [checkoutSource, setCheckoutSource] = useState(initialConfig.sources.checkout);
   const [ecommerceSync, setEcommerceSync] = useState(initialConfig.ecommerce_sync);
+
+  /* Bara de salvare: apare doar cand setarile s-au departat de ultima salvare. */
+  const valori = { listId, checkoutSource, ecommerceSync };
+  const [reper, setReper] = useState(valori);
+  const modificat = config.connected && JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setListId(reper.listId); setCheckoutSource(reper.checkoutSource); setEcommerceSync(reper.ecommerceSync);
+  }
 
   const [connecting, startConnect] = useTransition();
   const [saving, startSave] = useTransition();
@@ -82,7 +86,7 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
       if ("error" in res) { toast.error(res.error); return; }
       setLists(res.lists);
       setListsLoaded(true);
-      if (res.lists.length === 0) toast.info("Contul nu are nicio lista. Creeaza una in Klaviyo.");
+      if (res.lists.length === 0) toast.info("Contul nu are nicio listă. Creează una în Klaviyo.");
     });
   }
 
@@ -108,7 +112,8 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
       }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
-      toast.success("Setari salvate.");
+      setReper(valori);
+      toast.success("Setări salvate.");
     });
   }
 
@@ -132,6 +137,7 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
       setLists([]);
       setListsLoaded(false);
       setListId("");
+      setReper({ ...valori, listId: "" });
       toast.success("Cont Klaviyo deconectat.");
     });
   }
@@ -156,164 +162,144 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      const sariti = res.sariti > 0 ? ` ${res.sariti} sariti: s-au dezabonat, au reclamat spam sau au adresa respinsa in Klaviyo.` : "";
-      if (res.total === 0) { toast.info(`Nu exista clienti de abonat.${sariti}`); return; }
-      toast.success(`Sincronizare pornita pentru ${res.total} contacte. Apar in lista dupa procesarea in Klaviyo.${sariti}`);
+      const sariti = res.sariti > 0 ? ` ${res.sariti} săriți: s-au dezabonat, au reclamat spam sau au adresa respinsă în Klaviyo.` : "";
+      if (res.total === 0) { toast.info(`Nu există clienți de abonat.${sariti}`); return; }
+      toast.success(`Sincronizare pornită pentru ${res.total} contacte. Apar în listă după procesarea în Klaviyo.${sariti}`);
       setConfig({ ...config, last_sync_at: new Date().toISOString() });
     });
   }
 
   const hasList = !!config.list_id;
 
+  const stari: StareAntet[] = config.connected
+    ? [{ ton: "bun", text: "Conectat" }]
+    : [{ ton: "neutru", text: "Neconectat" }];
+  const legatura = "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline";
+
   return (
-    <div className="p-6 max-w-2xl">
-      <Link href="/dashboard/features" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6">
-        <ArrowLeft className="h-4 w-4" /> Inapoi la integrari
-      </Link>
-
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-11 h-11 rounded-xl ring-1 ring-foreground/10 bg-card flex items-center justify-center p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/integrations/klaviyo.svg" alt="Klaviyo" className="w-full h-full object-contain" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Klaviyo</h1>
-          <p className="text-sm text-muted-foreground">Sincronizeaza contactele in contul tau si trimite campanii din Klaviyo.</p>
-        </div>
-      </div>
-
-      {/* Connection */}
-      {config.connected ? (
-        <div className="mt-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Conectat</p>
-              <p className="text-xs text-muted-foreground truncate">{config.account_name || "Cont Klaviyo"}</p>
-            </div>
+    <PaginaIntegrare
+      id="klaviyo"
+      titlu="Email marketing"
+      descriere="Contactele din magazin intră în lista ta Klaviyo, de unde trimiți campanii și flows."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Contul Klaviyo legat", facut: config.connected },
+          { text: "Lista aleasă", facut: config.connected && hasList },
+          { text: "Abonarea la comandă", facut: config.connected && !!config.sources.checkout },
+        ]} />
+        {config.connected && (
+          <CardCifre titlu="Contul legat" randuri={[
+            { eticheta: "Cont", valoare: config.account_name || "Klaviyo" },
+            { eticheta: "Lista", valoare: config.list_name || "nealeasă" },
+            ...(config.last_sync_at ? [{ eticheta: "Ultima sincronizare", valoare: new Date(config.last_sync_at).toLocaleString("ro-RO") }] : []),
+          ]} />
+        )}
+        <CumFunctioneaza id="klaviyo" puncte={[
+          { Icon: KeyRound, text: "Te conectezi cu o cheie API privată din Klaviyo (Settings, API keys), cu acces complet." },
+          { Icon: Users, text: "Alegi lista în care intră contactele magazinului, cu consimțământ de marketing." },
+          { Icon: MailCheck, text: "Confirmarea dublă (GDPR) o pornești pe listă, în contul Klaviyo; abonarea noastră o respectă." },
+          { Icon: ShoppingBag, text: "Cu sincronizarea e-commerce, comenzile și catalogul ajung în Klaviyo, pentru venit, segmente și flows." },
+        ]} />
+      </>}
+    >
+      {!config.connected ? (
+        <Sectiune pas={1} titlu="Contul Klaviyo" descriere="Te conectezi cu cheia API privată din contul tău Klaviyo.">
+          <Field label="Cheie API privată Klaviyo" htmlFor="klaviyo-cheie"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="Cheia API privată Klaviyo"
+              text="În Klaviyo: Settings, apoi API keys. Creezi o cheie privată, cu acces complet (începe cu pk_), și o copiezi aici." />}>
+            <Input id="klaviyo-cheie" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="ex: pk_..." />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={connect} disabled={connecting}>
+              {connecting ? <Loader2 className="animate-spin" /> : <Plug />}
+              Conectează contul
+            </Button>
+            <a href="https://www.klaviyo.com/settings/account/api-keys" target="_blank" rel="noopener noreferrer" className={legatura}>
+              Cheile API în Klaviyo <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
-          {/* ⚠ `cePierzi` e citit din `disconnectKlaviyo`: pune `klaviyo_config` pe null, deci
-              cheia privata SI setarile. La ei nu atinge nimic, nici macar un webhook. */}
-          <ButonDeconectare
-            nume="Klaviyo"
-            cePierzi="Cheia API privată și setările se șterg din Edinio. Contactele trimise deja rămân în contul tău Klaviyo, dar ca să te întorci ceri o cheie nouă de acolo."
-            pending={saving}
-            onConfirma={disconnect}
-            className="flex-shrink-0"
-          />
-        </div>
+        </Sectiune>
       ) : (
-        <div className="mt-6 space-y-3">
-          <div>
-            <label className="block text-xs font-semibold text-foreground mb-1.5">Cheie API privata Klaviyo</label>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ex: pk_..." className={inputCls} autoComplete="new-password" />
-            <p className="text-[11px] text-muted-foreground mt-1.5 inline-flex items-center gap-1">
-              O creezi in Klaviyo la Settings &gt; API keys (cheie privata, cu acces complet).
-              <a href="https://www.klaviyo.com/settings/account/api-keys" target="_blank" rel="noopener noreferrer"
-                className="text-primary font-medium inline-flex items-center gap-0.5">Deschide <ExternalLink className="h-3 w-3" /></a>
-            </p>
-          </div>
-          <button type="button" onClick={connect} disabled={connecting}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-60">
-            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-            Conecteaza contul
-          </button>
-        </div>
-      )}
-
-      {/* Settings (only when connected) */}
-      {config.connected && (
-        <div className="mt-6 space-y-5">
-          {/* List picker */}
-          <div className="p-4 rounded-xl border border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-foreground">Lista de contacte</label>
-              <button type="button" onClick={reloadLists} disabled={loadingLists}
-                className="text-xs font-medium text-primary inline-flex items-center gap-1 disabled:opacity-50">
-                {loadingLists ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                {listsLoaded ? "Reincarca" : "Incarca listele"}
-              </button>
-            </div>
+        <>
+          <Sectiune pas={1} titlu="Listă de contacte" descriere="Lista din Klaviyo în care intră contactele magazinului.">
             {listsLoaded && lists.length > 0 ? (
-              <select value={listId} onChange={(e) => setListId(e.target.value)} className={inputCls}>
-                <option value="">Alege o lista...</option>
+              <select aria-label="Lista de contacte" value={listId} onChange={(e) => setListId(e.target.value)} className={selectCls}>
+                <option value="">Alege o listă...</option>
                 {lists.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}
               </select>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {hasList
-                  ? `Lista curenta: ${config.list_name ?? ""}. Apasa Reincarca pentru a o schimba.`
-                  : "Apasa Incarca listele pentru a alege lista in care se adauga contactele."}
+                  ? `Lista curentă: ${config.list_name ?? ""}. Apasă „Reîncarcă” ca s-o schimbi.`
+                  : "Apasă „Încarcă listele” ca să alegi lista în care se adaugă contactele."}
               </p>
             )}
-          </div>
-
-          {/* Options */}
-          <div className="p-4 rounded-xl border border-border space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Abonare la finalizarea comenzii</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Cand clientul bifeaza casuta de abonare la checkout, emailul lui intra in lista cu acordul lui.</p>
-              </div>
-              <Toggle checked={checkoutSource} onChange={setCheckoutSource} />
+            <div>
+              <Button variant="outline" size="sm" onClick={reloadLists} disabled={loadingLists}>
+                {loadingLists ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                {listsLoaded ? "Reîncarcă" : "Încarcă listele"}
+              </Button>
             </div>
+          </Sectiune>
 
-            <div className="flex items-start justify-between gap-3 pt-3 border-t border-border">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Sincronizare e-commerce (comenzi + produse)</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Trimite comenzile (Placed Order si Ordered Product, pentru venit, segmentare si flows; plata cu cardul abia cand banii au intrat), anularile si rambursarile, si catalogul de produse in Klaviyo. Cosurile raman pe sistemul Edinio.</p>
-              </div>
-              <Toggle checked={ecommerceSync} onChange={setEcommerceSync} />
+          <Sectiune pas={2} titlu="Abonarea" descriere="Cine ajunge în listă.">
+            <RandComutator
+              titlu="Abonare la finalizarea comenzii"
+              text="Când clientul bifează căsuța de abonare la comandă, emailul lui intră în listă, cu acordul lui."
+              activ={checkoutSource}
+              onChange={setCheckoutSource}
+            />
+            <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
+              Contactele se adaugă cu consimțământ de marketing. Pentru <span className="font-medium text-foreground">confirmare dublă (double opt-in)</span> GDPR,
+              pornește-o pe listă, în contul tău Klaviyo (abonarea noastră o respectă). Adăugăm singuri proprietăți pentru segmentare:
+              sursa, județul și valoarea comenzii. Cine s-a dezabonat, a reclamat spam sau are adresa respinsă în Klaviyo nu mai e abonat din nou.
+            </p>
+          </Sectiune>
+
+          <Sectiune pas={3} titlu="Sincronizare e-commerce" descriere="Comenzile și catalogul, pentru venit, segmente după cumpărături și flows.">
+            <RandComutator
+              titlu="Sincronizare e-commerce (comenzi + produse)"
+              text="Trimite comenzile (Placed Order și Ordered Product; plata cu cardul abia când banii au intrat), anulările, rambursările și catalogul de produse în Klaviyo. Coșurile rămân pe sistemul Edinio."
+              activ={ecommerceSync}
+              onChange={setEcommerceSync}
+            />
+            {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
+            <SincronizareCatalogEmail furnizor="Klaviyo" pornita={config.ecommerce_sync} sincronizeaza={() => syncKlaviyoCatalog(businessId)} />
+          </Sectiune>
+
+          <Sectiune pas={4} titlu="Sincronizează clienții existenți"
+            descriere="Abonează în listă emailurile clienților care au comandat deja, deduplicate. Folosește-o doar dacă ai consimțământul lor de marketing.">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Comenzile din marketplace (Pepita, eMAG, Trendyol, About You) sunt sărite: cumpărătorii lor nu sunt clienții tăi.
+              {config.last_sync_at && <> Ultima sincronizare: {new Date(config.last_sync_at).toLocaleString("ro-RO")}.</>}
+            </p>
+            <div>
+              <Button variant="outline" onClick={syncCustomers} disabled={syncing || !hasList}>
+                {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                Sincronizează acum
+              </Button>
+              {!hasList && <p className="mt-1.5 text-xs text-warning">Alege și salvează o listă întâi.</p>}
             </div>
+          </Sectiune>
 
-            <div className="pt-3 border-t border-border">
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Contactele se adauga cu consimtamant de marketing. Pentru <span className="font-medium text-foreground">confirmare dubla (double opt-in)</span> GDPR,
-                activeaz-o pe lista in contul tau Klaviyo (abonarea noastra o respecta). Adaugam automat proprietati pentru segmentare: sursa, judet si valoarea comenzii.
-                Cine s-a dezabonat, a reclamat spam sau are adresa respinsa in Klaviyo nu mai e abonat din nou.
-              </p>
-            </div>
-          </div>
+          {/* ⚠ `cePierzi` e citit din `disconnectKlaviyo`: pune `klaviyo_config` pe null, deci
+              cheia privata SI setarile. La ei nu atinge nimic, nici macar un webhook. */}
+          <ZonaDeconectare descriere="Șterge cheia și setările din Edinio. Contactele trimise deja rămân în Klaviyo.">
+            <ButonDeconectare
+              nume="Klaviyo"
+              cePierzi="Cheia API privată și setările se șterg din Edinio. Contactele trimise deja rămân în contul tău Klaviyo, dar ca să te întorci ceri o cheie nouă de acolo."
+              pending={saving}
+              marime="default"
+              onConfirma={disconnect}
+            />
+          </ZonaDeconectare>
 
-          <div className="flex justify-end">
-            <button type="button" onClick={save} disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-60">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salveaza
-            </button>
-          </div>
-
-          {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
-          <SincronizareCatalogEmail furnizor="Klaviyo" pornita={config.ecommerce_sync} sincronizeaza={() => syncKlaviyoCatalog(businessId)} />
-
-          {/* Bulk sync */}
-          <div className="p-4 rounded-xl border border-border">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Users className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">Sincronizeaza clientii existenti</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Aboneaza in lista emailurile clientilor care au comandat deja (deduplicate). Comenzile din marketplace (Pepita, eMAG, Trendyol, About You) sunt sarite: cumparatorii lor nu sunt clientii tai. Foloseste doar daca ai consimtamantul lor de marketing.
-                </p>
-                {config.last_sync_at && (
-                  <p className="text-[11px] text-muted-foreground mt-1">Ultima sincronizare: {new Date(config.last_sync_at).toLocaleString("ro-RO")}</p>
-                )}
-                <button type="button" onClick={syncCustomers} disabled={syncing || !hasList}
-                  className="mt-2.5 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 disabled:opacity-50">
-                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Sincronizeaza acum
-                </button>
-                {!hasList && <p className="text-[11px] text-amber-600 mt-1.5">Alege si salveaza o lista intai.</p>}
-              </div>
-            </div>
-          </div>
-        </div>
+          <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+        </>
       )}
-    </div>
+    </PaginaIntegrare>
   );
 }

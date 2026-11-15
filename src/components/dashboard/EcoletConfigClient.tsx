@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, KeyRound, ListChecks, Loader2, MapPin } from "lucide-react";
 import {
   disconnectEcolet,
   saveEcoletConfig,
@@ -15,9 +15,12 @@ import { JUDETE } from "@/lib/ro/judete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -63,6 +66,16 @@ export function EcoletConfigClient({
   const [sambata, setSambata] = useState(initialConfig?.livrare_sambata ?? false);
   const [sms, setSms] = useState(initialConfig?.sms_notificare ?? false);
 
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = { token, nume, contact, telefon, email, oras, judet, strada, numar, codPostal, permise, deschidere, sambata, sms };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setToken(reper.token); setNume(reper.nume); setContact(reper.contact); setTelefon(reper.telefon); setEmail(reper.email);
+    setOras(reper.oras); setJudet(reper.judet); setStrada(reper.strada); setNumar(reper.numar); setCodPostal(reper.codPostal);
+    setPermise(reper.permise); setDeschidere(reper.deschidere); setSambata(reper.sambata); setSms(reper.sms);
+  }
+
   const areToken = token.trim() !== "" || secretulEsteSalvat(initialConfig, "api_token");
   /*
    * ⚠ ACEEASI regula ca in `ecoletGata` si ca in celelalte patru locuri:
@@ -101,7 +114,7 @@ export function EcoletConfigClient({
   }
 
   async function handleTest() {
-    if (!areToken) return toast.error("Completeaza tokenul din panel.ecolet.ro");
+    if (!areToken) return toast.error("Completează tokenul din panel.ecolet.ro.");
     setTesting(true);
     const r = await testEcoletConnectionAction(businessId, construieste());
     setTesting(false);
@@ -112,18 +125,18 @@ export function EcoletConfigClient({
       return;
     }
     setServicii(r.servicii);
-    toast.success(`Conexiune eColet reusita · ${r.servicii.length} servicii`);
+    toast.success(`Conexiune eColet reușită: ${r.servicii.length} servicii.`);
   }
 
   async function handleSave() {
-    if (!areToken) return toast.error("Completeaza tokenul");
+    if (!areToken) return toast.error("Completează tokenul.");
     /* ⚠ Aceeasi lista ca `lipsuriAdresa` de pe server. Codul postal lipsea de aici
        si era cerut acolo, deci configurarea se salva „activa" si nicio cotare nu
        mergea — iar in storefront cadea tacut pe tariful fix. */
     if (!nume.trim() || !strada.trim() || !oras.trim() || !judet || !codPostal.trim()) {
-      return toast.error("Completeaza adresa de ridicare: nume, strada, localitate, judet si cod postal");
+      return toast.error("Completează adresa de ridicare: nume, stradă, localitate, județ și cod poștal.");
     }
-    if (!telefon.trim()) return toast.error("Telefonul de la ridicare e obligatoriu");
+    if (!telefon.trim()) return toast.error("Telefonul de la ridicare e obligatoriu.");
 
     setSaving(true);
     const r = await saveEcoletConfig(businessId, construieste());
@@ -131,7 +144,8 @@ export function EcoletConfigClient({
 
     if ("error" in r) toast.error(r.error);
     else {
-      toast.success("Configuratie eColet salvata");
+      toast.success("Configurația eColet a fost salvată.");
+      setReper(valori);
       router.refresh();
     }
   }
@@ -142,7 +156,7 @@ export function EcoletConfigClient({
     setDisconnecting(false);
     if ("error" in r) toast.error(r.error);
     else {
-      toast.success("eColet deconectat");
+      toast.success("eColet a fost deconectat.");
       setServicii(null);
       router.refresh();
     }
@@ -152,73 +166,69 @@ export function EcoletConfigClient({
     setPermise((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : [...p, slug]));
   }
 
+  const adresaCompleta = !!(nume.trim() && strada.trim() && oras.trim() && judet && codPostal.trim() && telefon.trim());
+  const stari: StareAntet[] = !isActive
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [faraLocalitate ? { ton: "rau", text: "Localitate nerecunoscută" } : { ton: "bun", text: "Activ" }];
+
   return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="eColet activ"
-          action={
-            <ButonDeconectare
-              nume="eColet"
-              cePierzi="Se șterge toată configurarea eColet din Edinio: tokenul, adresa de ridicare și serviciile bifate. Tokenul nu se mai poate citi din Edinio, deci ca să te întorci pui din nou unul din panel.ecolet.ro; expedierile deja emise rămân pe comenzi."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          Ridicare din {initialConfig?.expeditor?.locality}
-          {initialConfig?.expeditor?.county ? `, ${initialConfig.expeditor.county}` : ""}
-        </Callout>
-      )}
-
+    <PaginaIntegrare
+      id="ecolet"
+      titlu="Livrare"
+      descriere="Platformă cu mai mulți curieri: cumpărătorul alege oferta la comandă, iar tu emiți dintr-un singur cont."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Tokenul eColet", facut: areToken },
+          { text: "Adresa de ridicare", facut: adresaCompleta },
+          { text: "eColet activ", facut: isActive && !faraLocalitate },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Ridicare din", valoare: [initialConfig?.expeditor?.locality, initialConfig?.expeditor?.county].filter(Boolean).join(", ") || "-" },
+            { eticheta: "Servicii alese", valoare: (initialConfig?.servicii_permise?.length ?? 0) > 0 ? String(initialConfig?.servicii_permise?.length) : "toate" },
+          ]} />
+        )}
+        <CumFunctioneaza id="ecolet" puncte={[
+          { Icon: KeyRound, text: "Tokenul îl generezi din contul tău de pe panel.ecolet.ro. E singura credențială." },
+          { Icon: ListChecks, text: "„Testează conexiunea” aduce serviciile contului; alegi ce vede cumpărătorul la comandă." },
+          { Icon: MapPin, text: "Adresa de ridicare se completează aici o singură dată: eColet cere localitatea din nomenclatorul lui." },
+        ]} />
+      </>}
+    >
       {faraLocalitate && (
-        <Callout variant="warning" icon={AlertTriangle} title="Localitatea de ridicare nu e recunoscuta">
-          eColet nu a gasit localitatea din adresa de ridicare, iar fara ea cotarea
-          din checkout nu porneste si nu se poate emite nicio expediere. Corecteaza
-          numele localitatii mai jos si salveaza din nou.
+        <Callout variant="warning" icon={AlertTriangle} title="Localitatea de ridicare nu e recunoscută">
+          eColet nu a găsit localitatea din adresa de ridicare, iar fără ea cotarea de la comandă nu pornește și nu se
+          poate emite nicio expediere. Corectează numele localității mai jos și salvează din nou.
         </Callout>
       )}
 
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            1
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Token de acces</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Se genereaza din contul tau de pe panel.ecolet.ro. E singura credentiala:
-          eColet nu foloseste utilizator si parola pentru API.
-        </p>
-
-        <Field label="Token" required>
+      <Sectiune pas={1} titlu="Token de acces"
+        descriere="Se generează din contul tău de pe panel.ecolet.ro. E singura credențială: eColet nu folosește utilizator și parolă pentru API.">
+        <Field label="Token" htmlFor="ecolet-token" required>
           <Input
+            id="ecolet-token"
             type="password"
             value={token}
             onChange={(ev) => { setToken(ev.target.value); setServicii(null); }}
-            placeholder={
-              secretulEsteSalvat(initialConfig, "api_token")
-                ? PLACEHOLDER_SECRET_SALVAT
-                : "Tokenul din panel.ecolet.ro"
-            }
+            placeholder={secretulEsteSalvat(initialConfig, "api_token") ? PLACEHOLDER_SECRET_SALVAT : "Tokenul din panel.ecolet.ro"}
           />
         </Field>
 
-        <Button onClick={handleTest} disabled={testing || !areToken}>
-          {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {testing ? "Se verifica..." : "Testeaza conexiunea"}
-        </Button>
+        <div>
+          <Button variant="outline" onClick={handleTest} disabled={testing || !areToken}>
+            {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {testing ? "Se verifică..." : "Testează conexiunea"}
+          </Button>
+        </div>
 
         {servicii !== null && (
-          <div className="space-y-2 rounded-lg border border-success/20 bg-success/5 p-3">
-            <p className="text-xs font-semibold text-success">Tokenul e valid.</p>
+          <div className="space-y-2 rounded-xl border border-success/25 bg-success/5 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-success"><CheckCircle className="h-3.5 w-3.5" /> Tokenul e valid.</p>
             {servicii.length > 0 ? (
               <>
                 <p className="text-xs text-muted-foreground">
-                  Serviciile contului tau. Bifeaza-le pe cele pe care vrei sa le vada
-                  cumparatorul in checkout; nebifat nimic inseamna toate.
+                  Serviciile contului tău. Bifează-le pe cele pe care vrei să le vadă cumpărătorul la comandă; nimic bifat înseamnă toate.
                 </p>
                 <div className="max-h-64 space-y-1 overflow-y-auto">
                   {servicii.map((s) => (
@@ -232,37 +242,25 @@ export function EcoletConfigClient({
                         {s.curier ? `${s.curier} · ` : ""}{s.nume}
                       </span>
                       {!s.activ && <span className="text-muted-foreground">oprit</span>}
-                      {!s.ramburs && <span className="text-muted-foreground">fara ramburs</span>}
+                      {!s.ramburs && <span className="text-muted-foreground">fără ramburs</span>}
                     </label>
                   ))}
                 </div>
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                Contul nu are niciun serviciu activ. Verifica in panel.ecolet.ro.
-              </p>
+              <p className="text-xs text-muted-foreground">Contul nu are niciun serviciu activ. Verifică în panel.ecolet.ro.</p>
             )}
           </div>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            2
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">De unde se ridica marfa</h3>
-        </div>
-        {/*
-          ⚠ Nu se ia din datele magazinului ca la ceilalti curieri: eColet cere un
-          `locality_id` din nomenclatorul lor, care se cauta la salvare. Fara el,
-          cotarea din checkout nici nu porneste.
-        */}
-        <p className="text-xs text-muted-foreground">
-          eColet are nevoie de localitatea din nomenclatorul lui, nu doar de numele
-          orasului, de aceea adresa de ridicare se completeaza aici, o singura data.
-        </p>
-
+      {/*
+        ⚠ Nu se ia din datele magazinului ca la ceilalti curieri: eColet cere un
+        `locality_id` din nomenclatorul lor, care se cauta la salvare. Fara el,
+        cotarea din checkout nici nu porneste.
+      */}
+      <Sectiune pas={2} titlu="De unde se ridică marfa"
+        descriere="eColet are nevoie de localitatea din nomenclatorul lui, nu doar de numele orașului, de aceea adresa de ridicare se completează aici, o singură dată.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nume expeditor" required>
             <Input value={nume} onChange={(ev) => setNume(ev.target.value)} placeholder="Magazinul Meu SRL" />
@@ -279,56 +277,50 @@ export function EcoletConfigClient({
           <Field label="Localitate" required>
             <Input value={oras} onChange={(ev) => setOras(ev.target.value)} placeholder="Cluj-Napoca" />
           </Field>
-          <Field label="Judet" required>
-            <select
-              value={judet}
-              onChange={(ev) => setJudet(ev.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Alege judetul</option>
+          <Field label="Județ" htmlFor="ecolet-judet" required>
+            <select id="ecolet-judet" value={judet} onChange={(ev) => setJudet(ev.target.value)} className={selectCls}>
+              <option value="">Alege județul</option>
               {JUDETE.map((j) => <option key={j} value={j}>{j}</option>)}
             </select>
           </Field>
           <Field label="Strada" required>
             <Input value={strada} onChange={(ev) => setStrada(ev.target.value)} placeholder="Bulevardul Eroilor" />
           </Field>
-          <Field label="Numar">
+          <Field label="Număr">
             <Input value={numar} onChange={(ev) => setNumar(ev.target.value)} placeholder="12" />
           </Field>
-          <Field label="Cod postal" required>
+          <Field label="Cod poștal" required>
             <Input value={codPostal} onChange={(ev) => setCodPostal(ev.target.value)} placeholder="400129" />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel className="space-y-3 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            3
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Servicii aditionale</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Se aplica la fiecare expediere si se tarifeaza separat de eColet. Nu toate
-          serviciile le accepta, cele care nu pot, le ignora.
-        </p>
+      <Sectiune pas={3} titlu="Servicii adiționale"
+        descriere="Se aplică la fiecare expediere și se tarifează separat de eColet. Serviciile care nu le acceptă, le ignoră.">
+        <RandComutator titlu="Deschidere la livrare" activ={deschidere} onChange={setDeschidere} />
+        <RandComutator separat titlu="Livrare sâmbătă" activ={sambata} onChange={setSambata} />
+        <RandComutator separat titlu="Notificare prin SMS" activ={sms} onChange={setSms} />
+      </Sectiune>
 
-        {([
-          ["Deschidere la livrare", deschidere, setDeschidere],
-          ["Livrare sambata", sambata, setSambata],
-          ["Notificare prin SMS", sms, setSms],
-        ] as const).map(([eticheta, valoare, seteaza]) => (
-          <div key={eticheta} className="flex items-center justify-between rounded-lg border border-border p-3">
-            <p className="text-sm font-medium text-foreground">{eticheta}</p>
-            <Switch checked={valoare} onCheckedChange={seteaza} />
-          </div>
-        ))}
-      </Panel>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge tokenul și setările eColet din Edinio. Expedierile deja emise rămân pe comenzi.">
+          <ButonDeconectare
+            nume="eColet"
+            cePierzi="Se șterge toată configurarea eColet din Edinio: tokenul, adresa de ridicare și serviciile bifate. Tokenul nu se mai poate citi din Edinio, deci ca să te întorci pui din nou unul din panel.ecolet.ro; expedierile deja emise rămân pe comenzi."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
 
-      <Button onClick={handleSave} disabled={saving || !areToken} className="w-full sm:w-auto">
-        {saving ? <Loader2 className="animate-spin" /> : null}
-        {saving ? "Se salveaza..." : "Salveaza configuratia"}
-      </Button>
-    </div>
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={saving}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

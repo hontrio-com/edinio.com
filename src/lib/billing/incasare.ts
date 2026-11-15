@@ -53,6 +53,8 @@ export function tipIncasareOblio(paymentMethod: string | null | undefined): stri
     netopia: "Card",
     klarna: "Alta incasare banca",
     revolut: "Card",
+    /* Finantare: banii vin de la tbi bank prin virament, nu de pe cardul clientului. */
+    tbi: "Alta incasare banca",
   };
   return map[paymentMethod ?? ""] ?? "Alta incasare banca";
 }

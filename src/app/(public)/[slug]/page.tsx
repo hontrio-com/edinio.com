@@ -598,7 +598,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   if (storeMode.mode === "one_product" && storeMode.productId) {
     const product = await getStoreProduct(business.id, storeMode.productId);
     if (product) {
-      const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
+      const { altMap, hasCardPayment, rateTbi, bundleComponents } = await enrichStoreProduct(business, product);
       // Ofertele produsului, exact ca pe ruta normala de produs. Fara ele,
       // magazinul cu un singur produs era singurul unde „Cumparate impreuna" si
       // „Merge bine cu" nu se randau nicaieri: ruta /product/<principal> face
@@ -692,6 +692,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
                 storeSettings={setariDeTrimis as never}
                 basePath={basePath}
                 hasCardPayment={hasCardPayment}
+                rateTbi={rateTbi}
                 bundleComponents={bundleComponents}
                 altMap={altMap}
                 productOffers={opsProductOffers}

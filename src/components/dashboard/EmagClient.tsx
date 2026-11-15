@@ -4,24 +4,28 @@ import { useState } from "react";
 import { useLucru } from "@/components/dashboard/useLucru";
 import {
   BLOC_PREGATIRE_PUBLICARE, BUTON_ADU_OFERTELE, BUTON_ADU_OFERTELE_SCURT,
-  COMUTATOR_PRET_EMAG, COMUTATOR_STOC_EMAG, COMUTATOR_SINCRONIZARE_EMAG,
+  COMUTATOR_PRET_EMAG, COMUTATOR_STOC_EMAG, COMUTATOR_SINCRONIZARE_EMAG, lipsesteDinSetari,
 } from "@/lib/emag/etichete";
 import { ceSeTrimite } from "@/lib/emag/politica-sincronizare";
 import {
-  AlertTriangle, Ban, Check, CheckCircle, ClipboardCheck, Clock, Copy, Download,
+  AlertTriangle, ArrowLeftRight, ArrowRight, Ban, Check, CheckCircle, ClipboardCheck, Clock, Copy, Download,
+  FileWarning, KeyRound,
   EyeOff, FilePen, HelpCircle, Hourglass, Layers, Link2, Loader2, PackagePlus, PackageX,
   PauseCircle, RefreshCw, ShieldAlert, ShoppingCart, Tag, XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
-import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout, GrupCallout } from "@/components/ui/callout";
+import { LegaturaDePanou } from "@/components/dashboard/LegaturaDePanou";
+import { cereFiltruOferte } from "@/lib/emag/filtru-oferte";
+import { cn } from "@/lib/utils/cn";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { ZonaDeconectare } from "@/components/dashboard/integrare/PaginaIntegrare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import { EmagPregatirePublicare } from "@/components/dashboard/EmagPregatirePublicare";
@@ -162,6 +166,31 @@ const CERINTE: { titlu: string; text: string }[] = [
   },
 ];
 
+/**
+ * Fila Oferte, deschisa direct pe filtrul „De reparat” (`probleme`): acolo stau ofertele despre care vorbesc
+ * avertismentele din „De făcut” (deriva, modificarile oprite). Vezi `lib/emag/filtru-oferte.ts`.
+ */
+function cereOferteCuProbleme() {
+  cereFiltruOferte({ filtru: "probleme" });
+}
+
+function LegaturaOferteCuProbleme() {
+  return (
+    <a href="#oferte" onClick={cereOferteCuProbleme} className="font-semibold text-foreground underline underline-offset-2">
+      Oferte
+    </a>
+  );
+}
+
+function ButonOferteCuProbleme() {
+  return (
+    <a href="#oferte" onClick={cereOferteCuProbleme} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+      Vezi ofertele
+      <ArrowRight data-icon="inline-end" />
+    </a>
+  );
+}
+
 /** `<select>`-urile raman native, dar poarta desenul campurilor casei. */
 const SELECT = "h-9 w-full rounded-lg border border-input bg-background px-3 text-sm";
 
@@ -170,7 +199,20 @@ const TEXTAREA =
   "min-h-[76px] w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none "
   + "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-export function EmagClient({ businessId, status }: { businessId: string; status: StareEmag | null }) {
+/**
+ * ⚠ `parte` (15.11.2026): pagina e acum pe file (`FileMarketplace`), iar ecranul asta umple doua dintre
+ * ele. „Prezentare” are avertismentele, cifrele si butoanele de zi cu zi (sincronizare, aducerea
+ * ofertelor si a comenzilor vechi); „Setări” are comutatoarele, datele cerute de eMAG, comenzile
+ * instant, adresa IP si deconectarea. Contul (utilizator, tara, moneda) a urcat in antetul paginii.
+ *
+ * Cat timp contul nu e conectat nu exista file: pagina randeaza o singura data, cu „prezentare”, si
+ * ecranul arata formularul de conectare oricare ar fi `parte`.
+ */
+export function EmagClient({ businessId, status, parte }: {
+  businessId: string;
+  status: StareEmag | null;
+  parte: "prezentare" | "setari";
+}) {
   const [username, setUsername] = useState(status?.username ?? "");
   const [password, setPassword] = useState("");
   const [tara, setTara] = useState<"ro" | "bg" | "hu">(status?.tara ?? "ro");
@@ -401,70 +443,195 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
   const ceTrimite = ceSeTrimite({ stoc: status.sincronizeazaStocul, pret: status.sincronizeazaPretul });
 
   /* ── Conectat ───────────────────────────────────────────────────────────── */
+  const prezentare = parte === "prezentare";
+  const setari = parte === "setari";
+
   return (
     <div className="space-y-4">
-      {status.needsReconnect && (
-        <Callout variant="danger" icon={AlertTriangle} title="eMAG a refuzat acreditările">
-          S-a schimbat parola, i s-a scos dreptul de API, sau adresa noastră IP nu mai e în
-          lista albă din contul tău. Verifică-le și reconectează.
-        </Callout>
-      )}
+      {prezentare && <>
+      {/*
+        ═══ „DE FĂCUT ÎN CONTUL eMAG” (15.11.2026) ═══
 
-      {status.lipsaPentruPublicare && !status.needsReconnect && (
-        <Callout variant="warning" icon={AlertTriangle} title={status.lipsaPentruPublicare}>
-          {/* ⚠ INDRUMARUL SE POTRIVESTE CU CE LIPSESTE, nu e unul singur pentru tot.
-              Mesajul trimitea odata „in setarile integrarii" la doua campuri care nu
-              existau nicaieri: un drum infundat, cu publicarea blocata si fara cale
-              de iesire. Scris tot asa acum, ar fi trimis in setari dupa butonul de
-              import, care nu e acolo. */}
-          {status.catalogCitit ? (
-            <p className="text-xs">
-              Le găsești mai jos, la <strong className="text-foreground">„{BLOC_PREGATIRE_PUBLICARE}”</strong>.
-            </p>
-          ) : (
-            /* ⚠ NUMELE DE PE BUTON, CUVANT CU CUVANT. Scris „Importa din eMAG”,
-               indrumarul trimitea la un buton care nu exista: a intrebat chiar
-               comerciantul, „nu exista buton cu «Importa din eMag», eu il vad doar
-               pe asta cu «Adu ofertele»”. Exact drumul infundat reparat pe 23.08,
-               facut din nou. */
-            <p className="text-xs">
-              Butonul e mai jos, la{" "}
-              <a href="#emag-import" className="font-semibold text-foreground underline underline-offset-2">
-                „{BUTON_ADU_OFERTELE}”
+        Avertismentele care cer o mână de la comerciant stau într-o singură carte, în capul
+        filei, fiecare cu titlul la imperativ și cu butonul chiar pe rând: forma aleasă de
+        proprietar dintre variante („Îmi place A”, după lista „De făcut” din Stripe și
+        Shopify). Înainte erau cinci cutii galbene una sub alta, amestecate cu cartonașele
+        de cifre. `GrupCallout` nu se arată deloc când nu e nimic de făcut.
+
+        ⚠ Ordinea e a gravității: acreditările refuzate opresc tot, apoi ce blochează
+        publicarea, apoi banii (deriva), apoi ce s-a oprit, apoi factura.
+      */}
+      <GrupCallout
+        titlu="De făcut în contul eMAG"
+        descriere="Lucrurile care așteaptă o mână de la tine."
+        numar={(n) => `${n} de rezolvat`}
+      >
+        {status.needsReconnect && (
+          <Callout variant="danger" icon={KeyRound} title="Reconectează contul eMAG">
+            eMAG a refuzat acreditările: s-a schimbat parola, i s-a scos dreptul de API, sau adresa
+            noastră IP nu mai e în lista albă din contul tău. Verifică-le și reconectează.
+          </Callout>
+        )}
+
+        {status.lipsaPentruPublicare && !status.needsReconnect && (
+          <Callout
+            variant="warning"
+            icon={PackagePlus}
+            title={status.lipsaPentruPublicare}
+            action={lipsesteDinSetari(status) ? (
+              <a href="#setari" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Deschide setările
+                <ArrowRight data-icon="inline-end" />
               </a>
-              . Doar citim și legăm, magazinul tău nu se schimbă.
-            </p>
-          )}
-        </Callout>
-      )}
+            ) : (
+              <a href="#emag-import" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                {BUTON_ADU_OFERTELE_SCURT}
+                <ArrowRight data-icon="inline-end" />
+              </a>
+            )}
+          >
+            {/* ⚠ INDRUMARUL SE POTRIVESTE CU CE LIPSESTE, nu e unul singur pentru tot.
+                Mesajul trimitea odata „in setarile integrarii" la doua campuri care nu
+                existau nicaieri: un drum infundat, cu publicarea blocata si fara cale
+                de iesire. Scris tot asa acum, ar fi trimis in setari dupa butonul de
+                import, care nu e acolo. */}
+            {/* ⚠ „mai jos” a devenit „în fila Setări” (15.11.2026): blocul a plecat in alta fila, iar
+                legatura `#setari` o deschide (`FileMarketplace` citeste fila din adresa).
+                ⚠ Si se alege dupa CE LIPSESTE, nu dupa `catalogCitit`: `ceLipsestePentruPublicare`
+                intreaba intai de TVA si de zilele de expediere, abia apoi de catalog. La un cont nou
+                (niciuna facuta), titlul cerea cota de TVA, iar randul de sub el trimitea la butonul
+                de legare a ofertelor. */}
+            {lipsesteDinSetari(status) ? (
+              <p>
+                Le găsești în fila{" "}
+                <a href="#setari" className="font-semibold text-foreground underline underline-offset-2">Setări</a>
+                , la <strong className="text-foreground">„{BLOC_PREGATIRE_PUBLICARE}”</strong>.
+              </p>
+            ) : (
+              /* ⚠ NUMELE DE PE BUTON, CUVANT CU CUVANT. Scris „Importa din eMAG”,
+                 indrumarul trimitea la un buton care nu exista: a intrebat chiar
+                 comerciantul, „nu exista buton cu «Importa din eMag», eu il vad doar
+                 pe asta cu «Adu ofertele»”. Exact drumul infundat reparat pe 23.08,
+                 facut din nou. */
+              <p>
+                Butonul e mai jos, la{" "}
+                <a href="#emag-import" className="font-semibold text-foreground underline underline-offset-2">
+                  „{BUTON_ADU_OFERTELE}”
+                </a>
+                . Doar citim și legăm, magazinul tău nu se schimbă.
+              </p>
+            )}
+          </Callout>
+        )}
 
-      <Panel className="p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <CheckCircle className="h-4 w-4 flex-shrink-0 text-success" />
-              <span className="text-sm font-semibold text-foreground">Cont conectat</span>
-              {/* ⚠ Ton NEUTRU: tara contului nu e o stare buna sau rea, e o identificare. */}
-              <EtichetaStare ton="neutru" marime="mic">{status.taraEticheta}</EtichetaStare>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              <span className="font-mono text-foreground">{status.username}</span>
-              {" · "}parolă <span className="font-mono text-foreground">{status.parolaMascata}</span>
-              {" · "}{status.moneda}
+        {/*
+          ═══ ⚠ DERIVA STĂ DEASUPRA CELORLALTE AVERTISMENTE DE OFERTE ═══
+
+          E singura problemă care nu se vede din nicio altă cifră: ofertele derivate
+          intră la „Se vând pe eMAG", publicate, aprobate, fără nicio eroare, și se
+          vând la alt preț decât crede comerciantul.
+
+          O linie ștearsă printre celelalte ar fi fost citită ca o informație
+          tehnică. E o pierdere de bani, în fiecare zi cât ține.
+        */}
+        {status.oferte.derivate > 0 && (
+          <Callout
+            variant="warning"
+            icon={ArrowLeftRight}
+            title={`Verifică ${status.oferte.derivate} ${status.oferte.derivate === 1
+              ? "ofertă cu alt preț sau stoc pe eMAG"
+              : "oferte cu alt preț sau stoc pe eMAG"}`}
+            action={<ButonOferteCuProbleme />}
+          >
+            {/* ⚠ „Se repară singure" numai dacă Edinio chiar conduce câmpul. Cu sursa pe
+                eMAG, nu se încearcă nimic niciodată, iar propoziția asta l-ar pune să
+                aștepte o reparație pe care chiar el a oprit-o. */}
+            <p>
+              Prețul sau stocul de acolo nu mai e cel din Edinio.{" "}
+              {status.derivaPret === "edinio" || status.derivaStoc === "edinio"
+                ? "Cele pe care le conduce Edinio se repară singure la următoarele treceri; "
+                : "Ai ales ca eMAG să conducă și prețul, și stocul, deci nu se trimite nimic de la noi. "}
+              le vezi una câte una în fila <LegaturaOferteCuProbleme />, la „De reparat”.
             </p>
-          </div>
-          {/* ⚠ `cePierzi` spune ce face CHIAR `disconnectEmag`: scrie o configurare goala
-              peste cea veche (deci pleaca si acreditarile, si setarile), sterge randurile
-              din `emag_sync_queue` si `emag_offers`, si uita nomenclatoarele tinute minte.
-              Ofertele de la ei NU se ating: eMAG n-are stergere de oferta. */}
-          <ButonDeconectare
-            nume="eMAG"
-            cePierzi="Se șterg utilizatorul și parola de API, împreună cu toate setările integrării: TVA, timpul de expediere, datele GPSR, rezerva de stoc. Se pierd și legăturile locale cu ofertele și coada de modificări neplecate. Ofertele rămân pe eMAG: le oprești din vânzare separat, din panoul lor."
-            pending={seLucreaza}
-            onConfirma={deconecteaza}
-          />
-        </div>
-      </Panel>
+          </Callout>
+        )}
+
+        {/*
+          ⚠ ABANDONURILE SE VĂD, ȘI SE POT RELUA.
+          Înainte se ștergeau: nimeni nu le mai putea număra, iar panoul arăta
+          „0 în așteptare" pentru un catalog întreg care nu plecase.
+        */}
+        {status.abandonate > 0 && (
+          <Callout
+            variant="warning"
+            icon={PauseCircle}
+            title={`Reia ${status.abandonate} ${status.abandonate === 1
+              ? "modificare oprită"
+              : "modificări oprite"} după cinci încercări`}
+            action={
+              <Button
+                size="sm"
+                disabled={seLucreaza}
+                onClick={() =>
+                  incepe(async () => {
+                    const r = await reiaAbandonateleEmag(businessId);
+                    if ("error" in r) {
+                      toast.error(r.error);
+                      return;
+                    }
+                    toast.success(
+                      r.reluate === 1 ? "O modificare a fost reluată." : `${r.reluate} modificări au fost reluate.`,
+                    );
+                  })
+                }
+              >
+                {seLucreaza ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                Reia-le
+              </Button>
+            }
+          >
+            Vezi motivul la fiecare produs în fila <LegaturaOferteCuProbleme />, repară-l, apoi reia.
+          </Callout>
+        )}
+
+        {/*
+          ═══ ⚠ eMAG CERE FACTURA DUPA LIVRARE, SI LIPSA N-AVEA UNDE SA SE VADA ═══
+
+          `invoice_uploaded_at` era scris si citit EXCLUSIV de filtrul cronului. Niciun
+          ecran nu spunea „comenzile astea livrate n-au factura la ei". Iar cronul se
+          putea bloca: fereastra lui era deterministica, deci zece comenzi nefacturate
+          opreau urcarea pentru TOATE cele mai noi, la nesfarsit.
+
+          Fereastra se roteste acum. Dar o comanda livrata fara factura ramane o lipsa
+          fiscala, si aceea se repara din facturare, nu de aici. Deci se spune.
+        */}
+        {/* ⚠ `> 0` peste `null` e fals, deci avertismentul dispare cand nu s-a putut citi,
+            si asta e corect: mai bine lipseste decat sa scrie „0 comenzi fara factura"
+            pentru un magazin care are. Vezi nota din `getEmagStatus`.
+            ⚠ Butonul duce la comenzile eMAG, nu la „cele fara factura”: lista de comenzi n-are
+            un asemenea filtru, iar un nume care promite mai mult decat face e un drum infundat. */}
+        {(status.comenziFaraFactura ?? 0) > 0 && (
+          <Callout
+            variant="warning"
+            icon={FileWarning}
+            title={`Emite factura pentru ${status.comenziFaraFactura} ${status.comenziFaraFactura === 1
+              ? "comandă expediată"
+              : "comenzi expediate"}`}
+            action={
+              <LegaturaDePanou href="/dashboard/orders?source=emag" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Vezi comenzile eMAG
+                <ArrowRight data-icon="inline-end" />
+              </LegaturaDePanou>
+            }
+          >
+            eMAG o cere după livrare și n-o are încă. Emite factura din pagina comenzii, iar urcarea
+            la eMAG se face singură, la trecerea următoare.
+          </Callout>
+        )}
+      </GrupCallout>
+
+      {/* ⚠ Cartonasul „Cont conectat” (utilizator, tara, moneda) a urcat in antetul paginii
+          (`AntetMarketplace`), iar butonul de deconectare a coborat la finalul filei „Setări”. */}
 
       {/*
         ═══ ⚠ CARTONAȘELE SE ADUNĂ LA TOTAL, ȘI ASTA E TOATĂ REPARAȚIA ═══
@@ -510,107 +677,19 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         </Callout>
       )}
 
-      {/*
-        ═══ ⚠ DERIVA STĂ DEASUPRA CELORLALTE, ȘI E COLORATĂ ═══
+      <PanouSincronizare businessId={businessId} stoc={status.sincronizeazaStocul} pret={status.sincronizeazaPretul} />
 
-        E singura problemă care nu se vede din nicio altă cifră: ofertele derivate
-        intră la „Se vând pe eMAG", publicate, aprobate, fără nicio eroare, și se
-        vând la alt preț decât crede comerciantul.
+      <PanouIstoric businessId={businessId} />
 
-        O linie ștearsă printre celelalte ar fi fost citită ca o informație
-        tehnică. E o pierdere de bani, în fiecare zi cât ține.
+      {/* ⚠ Ancora e ceruta de indrumarul de sus: fara ea, „butonul e mai jos" ar fi
+          fost tot un drum de cautat cu ochii intr-o pagina lunga. Sta in ACEEASI fila cu
+          indrumarul („Prezentare”), deci „mai jos” ramane adevarat. */}
+      <div id="emag-import" className="scroll-mt-28">
+        <PanouImport businessId={businessId} />
+      </div>
+      </>}
 
-        ⚠ IESE PE TOATA LATIMEA, ca toate avertismentele. Inghesuit in cartonasul
-        contului, arata ca o nota de subsol a contului; aici e ce e: bani pierduti.
-      */}
-      {status.oferte.derivate > 0 && (
-        <Callout
-          variant="warning"
-          icon={AlertTriangle}
-          title={`${status.oferte.derivate} ${status.oferte.derivate === 1
-            ? "ofertă are pe eMAG altceva decât trimitem noi"
-            : "oferte au pe eMAG altceva decât trimitem noi"}`}
-        >
-          {/* ⚠ „Se repară singure" numai dacă Edinio chiar conduce câmpul. Cu sursa pe
-              eMAG, nu se încearcă nimic niciodată, iar propoziția asta l-ar pune să
-              aștepte o reparație pe care chiar el a oprit-o. */}
-          <p className="text-xs leading-relaxed">
-            Prețul sau stocul de acolo nu mai e cel din Edinio.{" "}
-            {status.derivaPret === "edinio" || status.derivaStoc === "edinio"
-              ? "Cele pe care le conduce Edinio se repară singure la următoarele treceri; "
-              : "Ai ales ca eMAG să conducă și prețul, și stocul, deci nu se trimite nimic de la noi. "}
-            le vezi una câte una în lista de oferte, la „Doar cu probleme”.
-          </p>
-        </Callout>
-      )}
-
-      {/*
-        ⚠ ABANDONURILE SE VĂD, ȘI SE POT RELUA.
-        Înainte se ștergeau: nimeni nu le mai putea număra, iar panoul arăta
-        „0 în așteptare" pentru un catalog întreg care nu plecase.
-      */}
-      {status.abandonate > 0 && (
-        <Callout
-          variant="warning"
-          icon={AlertTriangle}
-          action={
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={seLucreaza}
-              onClick={() =>
-                incepe(async () => {
-                  const r = await reiaAbandonateleEmag(businessId);
-                  if ("error" in r) {
-                    toast.error(r.error);
-                    return;
-                  }
-                  toast.success(
-                    r.reluate === 1 ? "O modificare a fost reluată." : `${r.reluate} modificări au fost reluate.`,
-                  );
-                })
-              }
-            >
-              {seLucreaza ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              Reia-le
-            </Button>
-          }
-        >
-          <span className="text-xs leading-relaxed">
-            <strong className="text-foreground">{status.abandonate}</strong>{" "}
-            {status.abandonate === 1 ? "modificare s-a oprit" : "modificări s-au oprit"} după cinci
-            încercări. Vezi motivul la fiecare produs în lista de mai jos, repară-l, apoi reia.
-          </span>
-        </Callout>
-      )}
-
-      {/*
-        ═══ ⚠ eMAG CERE FACTURA DUPA LIVRARE, SI LIPSA N-AVEA UNDE SA SE VADA ═══
-
-        `invoice_uploaded_at` era scris si citit EXCLUSIV de filtrul cronului. Niciun
-        ecran nu spunea „comenzile astea livrate n-au factura la ei". Iar cronul se
-        putea bloca: fereastra lui era deterministica, deci zece comenzi nefacturate
-        opreau urcarea pentru TOATE cele mai noi, la nesfarsit.
-
-        Fereastra se roteste acum. Dar o comanda livrata fara factura ramane o lipsa
-        fiscala, si aceea se repara din facturare, nu de aici. Deci se spune.
-      */}
-      {/* ⚠ `> 0` peste `null` e fals, deci avertismentul dispare cand nu s-a putut citi,
-          si asta e corect: mai bine lipseste decat sa scrie „0 comenzi fara factura"
-          pentru un magazin care are. Vezi nota din `getEmagStatus`. */}
-      {(status.comenziFaraFactura ?? 0) > 0 && (
-        <Callout variant="warning" icon={AlertTriangle}>
-          <span className="text-xs leading-relaxed">
-            <strong className="text-foreground">{status.comenziFaraFactura}</strong>{" "}
-            {status.comenziFaraFactura === 1
-              ? "comandă expediată nu are factura urcată la eMAG"
-              : "comenzi expediate nu au factura urcată la eMAG"}
-            . eMAG o cere după livrare. Emite factura din pagina comenzii, iar urcarea se
-            face singură la trecerea următoare.
-          </span>
-        </Callout>
-      )}
-
+      {setari && <>
       {/*
         ═══ SETĂRILE ═══
 
@@ -718,7 +797,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
                   </>
                 )}
                 Dacă vrei ca Edinio să conducă {ceTrimite} și pentru ele, pornește-le de aici, sau
-                una câte una din lista de oferte.
+                una câte una din fila Oferte.
               </span>
             </Callout>
           )}
@@ -826,23 +905,31 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         <PanouGpsr businessId={businessId} status={status} />
       </Panel>
 
-      <PanouSincronizare businessId={businessId} stoc={status.sincronizeazaStocul} pret={status.sincronizeazaPretul} />
-
       <PanouNotificari
         url={status.webhookUrl}
         ultimulWebhook={status.ultimulWebhook}
         ultimaSincronizare={status.ultimaSincronizare}
       />
 
-      <PanouIstoric businessId={businessId} />
-
-      {/* ⚠ Ancora e ceruta de indrumarul de sus: fara ea, „butonul e mai jos" ar fi
-          fost tot un drum de cautat cu ochii intr-o pagina lunga. */}
-      <div id="emag-import" className="scroll-mt-24">
-        <PanouImport businessId={businessId} />
-      </div>
-
       <PanouIp ip={status.ipDeAlbit} restrans />
+
+      {/* ⚠ `cePierzi` spune ce face CHIAR `disconnectEmag`: scrie o configurare goala
+          peste cea veche (deci pleaca si acreditarile, si setarile), sterge randurile
+          din `emag_sync_queue` si `emag_offers`, si uita nomenclatoarele tinute minte.
+          Ofertele de la ei NU se ating: eMAG n-are stergere de oferta.
+          ⚠ La final, separat, ca la toate integrarile refacute (`ZonaDeconectare`): sta
+          departe de comutatoarele de zi cu zi, unde se apasa din greseala. */}
+      <ZonaDeconectare
+        descriere={`Contul ${status.username ?? ""} (${status.taraEticheta}). Ofertele de pe eMAG rămân acolo.`}
+      >
+        <ButonDeconectare
+          nume="eMAG"
+          cePierzi="Se șterg utilizatorul și parola de API, împreună cu toate setările integrării: TVA, timpul de expediere, datele GPSR, rezerva de stoc. Se pierd și legăturile locale cu ofertele și coada de modificări neplecate. Ofertele rămân pe eMAG: le oprești din vânzare separat, din panoul lor."
+          pending={seLucreaza}
+          onConfirma={deconecteaza}
+        />
+      </ZonaDeconectare>
+      </>}
     </div>
   );
 }
@@ -1256,11 +1343,11 @@ function PanouNotificari({
   const [copiat, setCopiat] = useState(false);
 
   return (
-    <Panel title="Comenzi instant (optional)" className="p-5">
+    <Panel title="Comenzi instant (opțional)" className="p-5">
       <p className="-mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
-        Comenzile intra oricum singure, la fiecare minut. Daca vrei sa vina{" "}
-        <strong className="text-foreground">in aceeasi clipa</strong>, cere-i eMAG-ului sa
-        trimita notificari la adresa de mai jos. Nu se poate pune din Edinio, numai ei o pot
+        Comenzile intră oricum singure, la fiecare minut. Dacă vrei să vină{" "}
+        <strong className="text-foreground">în aceeași clipă</strong>, cere-i eMAG-ului să
+        trimită notificări la adresa de mai jos. Nu se poate pune din Edinio, numai ei o pot
         configura.
       </p>
 
@@ -1272,11 +1359,11 @@ function PanouNotificari({
           onClick={() => {
             void navigator.clipboard.writeText(url);
             setCopiat(true);
-            toast.success("Adresa a fost copiata.");
+            toast.success("Adresa a fost copiată.");
             setTimeout(() => setCopiat(false), 2000);
           }}
-          title="Copiaza adresa"
-          aria-label="Copiaza adresa"
+          title="Copiază adresa"
+          aria-label="Copiază adresa"
         >
           {copiat ? <CheckCircle className="text-primary" /> : <Copy />}
         </Button>

@@ -1,18 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle, Loader2, PlugZap, RefreshCw } from "lucide-react";
+import { CheckCircle, KeyRound, Loader2, MapPin, RefreshCw, Truck, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { saveCOConfig, disconnectCO, testCOConnection } from "@/lib/actions/colete.actions";
 import type { COConfig, COSender } from "@/lib/colete";
-import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
-import { Panel } from "@/components/ui/panel";
+import { Callout } from "@/components/ui/callout";
+import {
+  AlegereCarduri, BaraSalvare, CardCifre, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 const DEFAULT_SENDER: COSender = {
@@ -47,6 +49,17 @@ export default function ColeteConfigClient({
   const [testing, startTestTransition] = useTransition();
   const [saving, startSaveTransition] = useTransition();
   const [disconnecting, startDisconnectTransition] = useTransition();
+  const router = useRouter();
+
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = { enabled, sandbox, clientId, clientSecret, sender, insuranceEnabled, repaymentType, repaymentIban, repaymentHolder };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setEnabled(reper.enabled); setSandbox(reper.sandbox); setClientId(reper.clientId); setClientSecret(reper.clientSecret);
+    setSender(reper.sender); setInsuranceEnabled(reper.insuranceEnabled); setRepaymentType(reper.repaymentType);
+    setRepaymentIban(reper.repaymentIban); setRepaymentHolder(reper.repaymentHolder);
+  }
 
   const isConnected = !!(initialConfig?.client_id && secretulEsteSalvat(initialConfig, "client_secret"));
 
@@ -55,7 +68,7 @@ export default function ColeteConfigClient({
   }
 
   function handleTest() {
-    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu Client ID si Client Secret"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu Client ID și Client Secret."); return; }
     startTestTransition(async () => {
       setTestResult(null);
       let result: Awaited<ReturnType<typeof testCOConnection>>;
@@ -76,19 +89,19 @@ export default function ColeteConfigClient({
         toast.error(result.error);
       } else {
         setTestResult({ balance: result.balance, bonus: result.bonus });
-        toast.success("Conexiune reusita!");
+        toast.success("Conexiune reușită.");
       }
     });
   }
 
   function handleSave() {
-    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Client ID si Client Secret sunt obligatorii"); return; }
-    if (!sender.name || !sender.phone) { toast.error("Numele si telefonul expeditorului sunt obligatorii"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Client ID și Client Secret sunt obligatorii."); return; }
+    if (!sender.name || !sender.phone) { toast.error("Numele și telefonul expeditorului sunt obligatorii."); return; }
     if (!sender.county || !sender.city || !sender.postal_code || !sender.street || !sender.street_number) {
-      toast.error("Adresa expeditorului este incompleta"); return;
+      toast.error("Adresa expeditorului este incompletă."); return;
     }
     if (repaymentType === "bank" && !repaymentIban.trim()) {
-      toast.error("Introdu IBAN-ul pentru rambursul in cont"); return;
+      toast.error("Introdu IBAN-ul pentru rambursul în cont."); return;
     }
     const config: COConfig = {
       enabled, sandbox, client_id: clientId, client_secret: clientSecret, sender,
@@ -111,7 +124,7 @@ export default function ColeteConfigClient({
         return;
       }
       if ("error" in result) toast.error(result.error);
-      else toast.success("Configuratie salvata");
+      else { toast.success("Configurația Colete Online a fost salvată."); setReper(valori); router.refresh(); }
     });
   }
 
@@ -133,201 +146,171 @@ export default function ColeteConfigClient({
       }
       if ("error" in result) toast.error(result.error);
       else {
-        toast.success("Colete Online deconectat");
+        toast.success("Colete Online a fost deconectat.");
         setClientId(""); setClientSecret("");
         setSender(DEFAULT_SENDER);
         setEnabled(false);
+        setReper({ ...valori, clientId: "", clientSecret: "", sender: DEFAULT_SENDER, enabled: false });
+        router.refresh();
       }
     });
   }
 
+  const secretSalvat = secretulEsteSalvat(initialConfig, "client_secret");
+  const areAcces = !!clientId && (!!clientSecret || secretSalvat);
+  const adresaCompleta = !!(sender.name && sender.phone && sender.county && sender.city && sender.postal_code && sender.street && sender.street_number);
+  const stari: StareAntet[] = !isConnected
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      initialConfig?.enabled ? { ton: "bun", text: "Activ" } : { ton: "neutru", text: "Oprit" },
+      ...(initialConfig?.sandbox ? [{ ton: "asteptare" as const, text: "Mod test" }] : []),
+    ];
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="colete" description="Genereaza AWB-uri Colete Online direct din comenzile magazinului tau." />
-
-      <div className="space-y-4">
-        {/* Main config */}
-        <Panel className="space-y-5 p-5">
-          <p className="text-sm font-semibold text-foreground">Configurare integrare</p>
-
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between border-b border-border py-2">
-            <div>
-              <p className="text-sm font-medium text-foreground">Activat</p>
-              <p className="text-xs text-muted-foreground">Permite crearea AWB-urilor prin Colete Online</p>
-            </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
-          </div>
-
-          {/* Sandbox toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">Mod test (Staging)</p>
-              <p className="text-xs text-muted-foreground">Foloseste serverul de test (comenzile nu sunt reale)</p>
-            </div>
-            <Switch checked={sandbox} onCheckedChange={setSandbox} className="data-checked:bg-warning" />
-          </div>
-
-          {/* Credentials */}
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Credentiale API</p>
-            <Field label="Client ID">
-              <Input
-                type="text"
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                placeholder="Client ID furnizat de Colete Online"
-              />
-            </Field>
-            <Field label="Client Secret">
-              <Input
-                type="password"
-                value={clientSecret}
-                onChange={e => setClientSecret(e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "client_secret") ? PLACEHOLDER_SECRET_SALVAT : "Client Secret furnizat de Colete Online"}
-              />
-            </Field>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={testing || !clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))}
-            >
-              {testing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              Testeaza conexiunea
-            </Button>
-            {testResult && (
-              <div className={cn(
-                "flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs",
-                testResult.error
-                  ? "border border-destructive/20 bg-destructive/5 text-destructive"
-                  : "border border-success/20 bg-success/5 text-success"
-              )}>
-                {testResult.error ? testResult.error : (
-                  <>
-                    <CheckCircle className="h-3.5 w-3.5" />
-                    Conexiune reusita · Sold: {testResult.balance?.toFixed(2)} RON
-                    {(testResult.bonus ?? 0) > 0 && ` + ${testResult.bonus?.toFixed(2)} RON bonus`}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </Panel>
-
-        {/* Sender address */}
-        <Panel className="space-y-4 p-5">
-          <p className="text-sm font-semibold text-foreground">Adresa expeditor (sender)</p>
-          <p className="text-xs text-muted-foreground">Aceasta adresa va fi folosita ca punct de ridicare pentru toate coletele.</p>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Nume contact" required>
-              <Input type="text" value={sender.name} onChange={e => updateSender("name", e.target.value)} placeholder="Ion Popescu" />
-            </Field>
-            <Field label="Telefon" required>
-              <Input type="text" value={sender.phone} onChange={e => updateSender("phone", e.target.value)} placeholder="+40722000000" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Email">
-              <Input type="email" value={sender.email ?? ""} onChange={e => updateSender("email", e.target.value)} placeholder="contact@firma.ro" />
-            </Field>
-            <Field label="Firma">
-              <Input type="text" value={sender.company ?? ""} onChange={e => updateSender("company", e.target.value)} placeholder="Firma SRL" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Judet" required>
-              <Input type="text" value={sender.county} onChange={e => updateSender("county", e.target.value)} placeholder="Cluj" />
-            </Field>
-            <Field label="Oras/Localitate" required>
-              <Input type="text" value={sender.city} onChange={e => updateSender("city", e.target.value)} placeholder="Cluj-Napoca" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Strada" required className="sm:col-span-2">
-              <Input type="text" value={sender.street} onChange={e => updateSender("street", e.target.value)} placeholder="Strada Eroilor" />
-            </Field>
-            <Field label="Numar" required>
-              <Input type="text" value={sender.street_number} onChange={e => updateSender("street_number", e.target.value)} placeholder="10A" />
-            </Field>
-          </div>
-
-          <Field label="Cod postal" required className="w-40">
-            <Input type="text" value={sender.postal_code} onChange={e => updateSender("postal_code", e.target.value)} placeholder="400001" />
+    <PaginaIntegrare
+      id="colete"
+      titlu="Livrare"
+      descriere="Generezi AWB-uri prin Colete Online, cu mai mulți curieri, direct din comenzile magazinului."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Colete Online" activ={enabled} onChange={setEnabled} ariaLabel="Activează Colete Online" textPornit="Pornit" textOprit="Oprit" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Datele de acces", facut: areAcces },
+          { text: "Adresa expeditorului", facut: adresaCompleta },
+          { text: "Colete Online activ", facut: isConnected && !!initialConfig?.enabled },
+        ]} />
+        {testResult && !testResult.error && (
+          <CardCifre titlu="Contul Colete Online" cifre={[
+            { eticheta: "sold (RON)", valoare: testResult.balance?.toFixed(2) ?? "-" },
+            { eticheta: "bonus (RON)", valoare: (testResult.bonus ?? 0).toFixed(2) },
+          ]} />
+        )}
+        <CumFunctioneaza id="colete" puncte={[
+          { Icon: KeyRound, text: "Client ID și Client Secret le primești de la Colete Online." },
+          { Icon: MapPin, text: "Adresa expeditorului e punctul de ridicare pentru toate coletele." },
+          { Icon: Wallet, text: "„Testează conexiunea” îți arată și soldul contului Colete Online." },
+          { Icon: Truck, text: "AWB-ul îl generezi din pagina comenzii." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Datele de acces" descriere="Credențialele API primite de la Colete Online.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Client ID" htmlFor="colete-id">
+            <Input id="colete-id" type="text" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="Client ID de la Colete Online" />
           </Field>
-        </Panel>
-
-        {/* Optiuni expediere */}
-        <Panel className="space-y-4 p-4">
-          <p className="text-sm font-medium text-foreground">Optiuni expediere</p>
-
-          <label className="flex cursor-pointer items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={insuranceEnabled}
-              onChange={e => setInsuranceEnabled(e.target.checked)}
-              className="mt-0.5 rounded border-border accent-primary"
+          <Field label="Client Secret" htmlFor="colete-secret">
+            <Input
+              id="colete-secret"
+              type="password"
+              value={clientSecret}
+              onChange={e => setClientSecret(e.target.value)}
+              placeholder={secretSalvat ? PLACEHOLDER_SECRET_SALVAT : "Client Secret de la Colete Online"}
             />
-            <span className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
-              Fiecare AWB se asigura pentru valoarea produselor din comanda. Prima de asigurare apare in pret.
-            </span>
-          </label>
-
-          <Field label="Incasare ramburs">
-            <div className="flex gap-2">
-              {([["cash", "Numerar la curier"], ["bank", "In cont bancar"]] as const).map(([kind, label]) => (
-                <button
-                  key={kind}
-                  type="button"
-                  onClick={() => setRepaymentType(kind)}
-                  className={cn(
-                    "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
-                    repaymentType === kind
-                      ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted-foreground hover:bg-muted"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
           </Field>
-
-          {repaymentType === "bank" && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label="IBAN" required>
-                <Input type="text" value={repaymentIban} onChange={e => setRepaymentIban(e.target.value)} placeholder="RO49AAAA1B31007593840000" />
-              </Field>
-              <Field label="Titular cont">
-                <Input type="text" value={repaymentHolder} onChange={e => setRepaymentHolder(e.target.value)} placeholder="Firma SRL" />
-              </Field>
-            </div>
-          )}
-        </Panel>
-
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="animate-spin" /> : <PlugZap />}
-            Salveaza
-          </Button>
-
-          {isConnected && (
-            <ButonDeconectare
-              nume="Colete Online"
-              cePierzi="Se șterge toată configurarea Colete Online din Edinio: Client ID, Client Secret, adresa expeditorului și opțiunile de expediere. La Colete Online nu se atinge nimic, iar AWB-urile deja emise rămân pe comenzi."
-              pending={disconnecting}
-              marime="default"
-              onConfirma={handleDisconnect}
-            />
-          )}
         </div>
-      </div>
-    </div>
+        <AlegereCarduri
+          eticheta="Mediul de lucru"
+          valoare={sandbox}
+          onChange={setSandbox}
+          optiuni={[
+            { valoare: true, titlu: "Test (Staging)", text: "Serverul de test: comenzile nu sunt reale.", avertizare: true },
+            { valoare: false, titlu: "Real", text: "AWB-uri adevărate, plătite din contul tău." },
+          ]}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={handleTest} disabled={testing || !areAcces}>
+            {testing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            Testează conexiunea
+          </Button>
+        </div>
+        {testResult && (testResult.error
+          ? <Callout variant="danger" title={testResult.error} />
+          : (
+            <Callout variant="success" icon={CheckCircle}
+              title={`Conexiune reușită. Sold: ${testResult.balance?.toFixed(2)} RON${(testResult.bonus ?? 0) > 0 ? ` + ${testResult.bonus?.toFixed(2)} RON bonus` : ""}`} />
+          ))}
+      </Sectiune>
+
+      <Sectiune pas={2} titlu="Adresa expeditorului" descriere="Punctul de ridicare pentru toate coletele.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Nume contact" required>
+            <Input type="text" value={sender.name} onChange={e => updateSender("name", e.target.value)} placeholder="Ion Popescu" />
+          </Field>
+          <Field label="Telefon" required>
+            <Input type="text" value={sender.phone} onChange={e => updateSender("phone", e.target.value)} placeholder="+40722000000" />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={sender.email ?? ""} onChange={e => updateSender("email", e.target.value)} placeholder="contact@firma.ro" />
+          </Field>
+          <Field label="Firmă">
+            <Input type="text" value={sender.company ?? ""} onChange={e => updateSender("company", e.target.value)} placeholder="Firma SRL" />
+          </Field>
+          <Field label="Județ" required>
+            <Input type="text" value={sender.county} onChange={e => updateSender("county", e.target.value)} placeholder="Cluj" />
+          </Field>
+          <Field label="Oraș / Localitate" required>
+            <Input type="text" value={sender.city} onChange={e => updateSender("city", e.target.value)} placeholder="Cluj-Napoca" />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Strada" required className="sm:col-span-2">
+            <Input type="text" value={sender.street} onChange={e => updateSender("street", e.target.value)} placeholder="Strada Eroilor" />
+          </Field>
+          <Field label="Număr" required>
+            <Input type="text" value={sender.street_number} onChange={e => updateSender("street_number", e.target.value)} placeholder="10A" />
+          </Field>
+        </div>
+
+        <Field label="Cod poștal" required className="w-40">
+          <Input type="text" value={sender.postal_code} onChange={e => updateSender("postal_code", e.target.value)} placeholder="400001" />
+        </Field>
+      </Sectiune>
+
+      <Sectiune pas={3} titlu="Opțiuni de expediere">
+        <RandComutator
+          titlu="Asigurare (valoare declarată)"
+          text="Fiecare AWB se asigură pentru valoarea produselor din comandă. Prima de asigurare apare în preț."
+          activ={insuranceEnabled}
+          onChange={setInsuranceEnabled}
+        />
+        <div className="space-y-2 border-t border-border pt-4">
+          <p className="text-sm font-medium text-foreground">Încasarea rambursului</p>
+          <AlegereCarduri
+            eticheta="Încasarea rambursului"
+            valoare={repaymentType}
+            onChange={setRepaymentType}
+            optiuni={[
+              { valoare: "cash", titlu: "Numerar la curier", text: "Curierul îți aduce banii încasați." },
+              { valoare: "bank", titlu: "În cont bancar", text: "Banii vin în contul tău, prin virament." },
+            ]}
+          />
+        </div>
+        {repaymentType === "bank" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="IBAN" required>
+              <Input type="text" value={repaymentIban} onChange={e => setRepaymentIban(e.target.value)} placeholder="RO49AAAA1B31007593840000" />
+            </Field>
+            <Field label="Titular cont">
+              <Input type="text" value={repaymentHolder} onChange={e => setRepaymentHolder(e.target.value)} placeholder="Firma SRL" />
+            </Field>
+          </div>
+        )}
+      </Sectiune>
+
+      {isConnected && (
+        <ZonaDeconectare descriere="Șterge configurarea din Edinio. La Colete Online nu se atinge nimic.">
+          <ButonDeconectare
+            nume="Colete Online"
+            cePierzi="Se șterge toată configurarea Colete Online din Edinio: Client ID, Client Secret, adresa expeditorului și opțiunile de expediere. La Colete Online nu se atinge nimic, iar AWB-urile deja emise rămân pe comenzi."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={handleSave} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

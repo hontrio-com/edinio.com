@@ -1,3 +1,4 @@
+import type { BannerTbiProdus } from "@/lib/tbi/config";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -63,6 +64,8 @@ export async function enrichStoreProduct(
 ): Promise<{
   altMap: Record<string, string>;
   hasCardPayment: boolean;
+  /** Mesajul tbi de pe pagina produsului (limitele + forma aleasa), cand magazinul il arata. */
+  rateTbi: BannerTbiProdus | null;
   bundleComponents: BundleComponent[];
 }> {
   const supabase = await createClient();
@@ -94,6 +97,9 @@ export async function enrichStoreProduct(
   // that is actually configured/usable). Drives the CTA label.
   const publicConfig = await getPublicStoreConfig(business.id);
   const hasCardPayment = !!publicConfig?.payment_methods?.some((m) => m.type !== "cash_on_delivery");
+  /* Numai daca tbi e si in lista metodelor (comerciantul o poate opri din Setari > Metode de plata);
+     `tbi_produs` vine deja `null` cand in panoul tbi a ales „Nimic" pe pagina produsului. */
+  const rateTbi = publicConfig?.payment_methods?.some((m) => m.type === "tbi") ? publicConfig.tbi_produs : null;
 
   // For bundles, load the component products so the page can list "what's inside".
   const bundleCfg = product.is_bundle ? readBundleConfig(product.page_sections) : null;
@@ -129,5 +135,5 @@ export async function enrichStoreProduct(
     });
   }
 
-  return { altMap, hasCardPayment, bundleComponents };
+  return { altMap, hasCardPayment, rateTbi, bundleComponents };
 }

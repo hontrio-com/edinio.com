@@ -29,7 +29,7 @@ Context: un merchant a raportat că TikTok Pixel nu apare în TikTok Pixel Helpe
 - `store_settings.marketing_config` (jsonb): `facebook_pixel_id`, `tiktok_pixel_id`, `google_tag_id`, `google_ads_conversion_label` — tip `MarketingConfig` în `src/lib/marketing.ts`.
 - `store_settings.google_analytics_config`: GA4 prin OAuth (`measurement_id`, `tracking_enabled`).
 - `store_settings.cookie_banner_config`: `{ enabled, position }` — `src/lib/cookie-consent.ts`.
-- UI configurare: `src/components/dashboard/{TikTokPixelConfigClient,FacebookPixelConfigClient,MarketingConfigClient,GoogleAdsConfigClient}.tsx` → server action `saveMarketingConfig` (`src/lib/actions/marketing.actions.ts`).
+- UI configurare: `src/components/dashboard/{TikTokPixelConfigClient,FacebookPixelConfigClient,GoogleAdsConfigClient}.tsx` → server action `saveMarketingConfig` (`src/lib/actions/marketing.actions.ts`).
 
 ### 2.2 Injecție pe storefront
 `src/app/(public)/[slug]/layout.tsx` (server) citește configurările cu admin client și randează:

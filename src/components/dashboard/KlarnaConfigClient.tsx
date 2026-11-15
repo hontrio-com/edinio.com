@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Key, User } from "lucide-react";
+import { BadgeCheck, CalendarClock, FlaskConical } from "lucide-react";
 import { saveKlarnaConfig, disconnectKlarna } from "@/lib/actions/klarna.actions";
 import type { KlarnaConfig } from "@/lib/klarna";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import {
+  AlegereCarduri, BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare, useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 const DEFAULT_CONFIG: KlarnaConfig = {
   enabled: false,
@@ -30,7 +31,7 @@ export default function KlarnaConfigClient({
   initialConfig: KlarnaConfig | null;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<KlarnaConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
+  const { cfg, setCfg, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<KlarnaConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
@@ -62,7 +63,8 @@ export default function KlarnaConfigClient({
         return;
       }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
-      toast.success("Configuratia Klarna a fost salvata.");
+      toast.success("Configurația Klarna a fost salvată.");
+      marcheazaSalvat();
       router.refresh();
     });
   }
@@ -91,110 +93,80 @@ export default function KlarnaConfigClient({
     });
   }
 
+  const parolaSalvata = secretulEsteSalvat(initialConfig, "password");
+  const stari: StareAntet[] = !isConfigured
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [
+      initialConfig?.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" },
+      initialConfig?.sandbox ? { ton: "asteptare", text: "Playground" } : { ton: "info", text: "Plăți reale" },
+    ];
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="klarna" description="Accepta plati Klarna: «Cumpara acum, plateste mai tarziu» si plata in rate." />
+    <PaginaIntegrare
+      id="klarna"
+      titlu="Cumpără acum, plătește mai târziu"
+      descriere="Clienții plătesc prin Klarna: mai târziu sau în rate, iar tu primești banii de la Klarna."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Klarna la comandă" activ={cfg.enabled} onChange={v => set("enabled", v)} ariaLabel="Activează Klarna" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Utilizatorul API", facut: !!cfg.username.trim() },
+          { text: "Parola API", facut: !!cfg.password.trim() || parolaSalvata },
+          { text: "Klarna activă", facut: isConfigured && !!initialConfig?.enabled },
+        ]} />
+        <CumFunctioneaza id="klarna" puncte={[
+          { Icon: CalendarClock, text: "Clientul alege Klarna la comandă și plătește mai târziu sau în rate, la Klarna." },
+          { Icon: BadgeCheck, text: "Când Klarna confirmă plata, comanda devine plătită și confirmată." },
+          { Icon: FlaskConical, text: "Pe Playground plățile nu sunt reale: simulezi clientul cu persoanele de test Klarna." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Datele de acces" descriere="Din Klarna Merchant Portal: Settings, API credentials, Generate new API credentials.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Utilizator API" htmlFor="klarna-user"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde îl iau" eticheta="Utilizator API"
+              text="În Klarna Merchant Portal: Settings, apoi API credentials, apoi Generate new API credentials. Primești o pereche utilizator și parolă." />}>
+            <Input id="klarna-user" type="text" value={cfg.username} onChange={(e) => set("username", e.target.value)}
+              placeholder="Utilizatorul API Klarna" autoComplete="off" />
+          </Field>
+          <Field label="Parola API" htmlFor="klarna-parola">
+            <Input id="klarna-parola" type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
+              placeholder={parolaSalvata ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
+          </Field>
+        </div>
+      </Sectiune>
 
-      <div className="space-y-5">
+      <Sectiune pas={2} titlu="La comandă" descriere="Cum apare metoda de plată în formularul de comandă. O poți schimba și din Setări, Metode de plată.">
+        <Field label="Titlul afișat" htmlFor="klarna-titlu">
+          <Input id="klarna-titlu" type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)} placeholder="Klarna" />
+        </Field>
+      </Sectiune>
 
-        {/* Ghid */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              { step: "1", title: "Cont Klarna si credentiale API", desc: "Creeaza-ti cont in Klarna Merchant Portal si genereaza o pereche utilizator - parola API din Settings -> API credentials (\"Generate new API credentials\")." },
-              { step: "2", title: "Testeaza pe Playground", desc: "Foloseste intai credentialele de Playground pe mediul de test. Platile nu sunt reale si poti simula un client cu personele de test Klarna." },
-              { step: "3", title: "Completeaza si activeaza", desc: "Introdu utilizatorul si parola API, alege mediul (Playground pentru testare, Live pentru productie), activeaza si salveaza." },
-              { step: "4", title: "Apare in Metode de plata", desc: 'Dupa activare, Klarna apare automat in Setari -> Metode de plata, unde poti schimba denumirea si ordinea afisarii la checkout.' },
-            ].map(({ step, title, desc }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
+      <Sectiune pas={3} titlu="Mediul de lucru" descriere="Începe pe Playground, cu datele de test Klarna, apoi treci pe real.">
+        <AlegereCarduri
+          eticheta="Mediul de lucru"
+          valoare={cfg.sandbox}
+          onChange={v => set("sandbox", v)}
+          optiuni={[
+            { valoare: true, titlu: "Test (Playground)", text: "Plățile nu sunt reale. Pentru probe.", avertizare: true },
+            { valoare: false, titlu: "Real (Live)", text: "Clienții plătesc cu adevărat." },
+          ]}
+        />
+      </Sectiune>
 
-        {/* Main config card */}
-        <Panel className="space-y-5 p-5">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza Klarna</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Afiseaza optiunea de plata Klarna la checkout</p>
-            </div>
-            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
-          </div>
+      {isConfigured && (
+        <ZonaDeconectare descriere="Șterge datele de acces Klarna. Plățile deja încasate rămân neatinse.">
+          <ButonDeconectare
+            nume="Klarna"
+            cePierzi="Cheile se șterg din Edinio și cumpărătorii nu mai pot plăti prin Klarna. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou utilizatorul și parola din contul tău Klarna."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={disconnect}
+          />
+        </ZonaDeconectare>
+      )}
 
-          <div className="space-y-4 border-t border-border pt-4">
-            {/* Playground toggle */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Mod Playground (testare)</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
-                </p>
-              </div>
-              <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                Titlu afisaj checkout
-              </label>
-              <Input type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)}
-                placeholder="Klarna" />
-              <p className="mt-1 text-xs text-muted-foreground">Cum apare optiunea de plata in formularul de comanda (o poti schimba si din Metode de plata)</p>
-            </div>
-
-            {/* Username */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-                Utilizator API
-              </label>
-              <Input type="text" value={cfg.username} onChange={(e) => set("username", e.target.value)}
-                placeholder="Utilizatorul API Klarna" autoComplete="off" />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Key className="h-3.5 w-3.5 text-muted-foreground" />
-                Parola API
-              </label>
-              <Input type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 border-t border-border pt-4">
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              Salveaza
-            </Button>
-            {isConfigured && (
-              <ButonDeconectare
-                nume="Klarna"
-                cePierzi="Cheile se șterg din Edinio și cumpărătorii nu mai pot plăti prin Klarna. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou utilizatorul și parola din contul tău Klarna."
-                pending={disconnecting}
-                marime="default"
-                onConfirma={disconnect}
-              />
-            )}
-          </div>
-        </Panel>
-      </div>
-    </div>
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

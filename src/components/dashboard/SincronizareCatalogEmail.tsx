@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { Loader2, Package, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type Rezultat = { active: number; inactive: number; loturi?: number } | { error: string };
 
@@ -40,33 +41,26 @@ export function SincronizareCatalogEmail({
       }
       if ("error" in res) { toast.error(res.error, { duration: 12000 }); return; }
       toast.success(
-        `Catalog trimis in ${furnizor}: ${res.active} produse active`
-        + (res.inactive ? `, ${res.inactive} scoase din vanzare` : "")
-        + ". Apar in contul lor dupa ce le prelucreaza.",
+        `Catalog trimis în ${furnizor}: ${res.active} produse active`
+        + (res.inactive ? `, ${res.inactive} scoase din vânzare` : "")
+        + ". Apar în contul lor după ce le prelucrează.",
       );
     });
   }
 
+  /* Sta in sectiunea de sincronizare e-commerce a paginii, sub comutator: de aceea linia de sus. */
   return (
-    <div className="p-4 rounded-xl border border-border">
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <Package className="h-4 w-4 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-foreground">Sincronizeaza catalogul</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Trimite in {furnizor} toate produsele magazinului, cu link, pret si imagine, pentru recomandarile de produs din emailuri.
-            Produsele scoase din vanzare nu mai apar in recomandari. Pleaca singur cand pornesti sincronizarea e-commerce; aici il retrimiti oricand.
-          </p>
-          <button type="button" onClick={trimite} disabled={lucreaza || !pornita}
-            className="mt-2.5 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 disabled:opacity-50">
-            {lucreaza ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Sincronizeaza catalogul
-          </button>
-          {!pornita && <p className="text-[11px] text-amber-600 mt-1.5">Porneste si salveaza sincronizarea e-commerce intai.</p>}
-        </div>
-      </div>
+    <div className="border-t border-border pt-4">
+      <p className="text-sm font-medium text-foreground">Catalogul de produse</p>
+      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+        Trimite în {furnizor} toate produsele magazinului, cu link, preț și imagine, pentru recomandările de produs din emailuri.
+        Produsele scoase din vânzare nu mai apar în recomandări. Pleacă singur când pornești sincronizarea e-commerce; aici îl retrimiți oricând.
+      </p>
+      <Button type="button" variant="outline" size="sm" className="mt-3" onClick={trimite} disabled={lucreaza || !pornita}>
+        {lucreaza ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+        Sincronizează catalogul
+      </Button>
+      {!pornita && <p className="mt-1.5 text-xs text-warning">Pornește și salvează întâi sincronizarea e-commerce.</p>}
     </div>
   );
 }

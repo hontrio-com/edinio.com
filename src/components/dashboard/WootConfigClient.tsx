@@ -3,11 +3,9 @@
 import { useState, useEffect, useTransition } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
-  Save, Loader2, Wifi, WifiOff,
-  Building2, User, Phone, Mail, MapPin, Home, CreditCard,
+  Building2, CreditCard, Home, Loader2, Mail, MapPin, Phone, Truck, User, UserPlus, Wifi, WifiOff,
 } from "lucide-react";
 import { saveWootConfig, disconnectWoot, testWootConnection } from "@/lib/actions/woot.actions";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
@@ -15,8 +13,11 @@ import type { WootConfig, WootCounty, WootCity } from "@/lib/woot";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { Callout } from "@/components/ui/callout";
+import {
+  BaraSalvare, CardCifre, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare, useFormularIntegrare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 import { selectCls } from "@/lib/ui";
 
 const DEFAULT_CONFIG: WootConfig = {
@@ -53,7 +54,7 @@ export default function WootConfigClient({
   initialConfig: WootConfig | null;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<WootConfig>({
+  const { cfg, setCfg, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<WootConfig>({
     ...DEFAULT_CONFIG,
     ...initialConfig,
     sender: { ...DEFAULT_CONFIG.sender, ...initialConfig?.sender },
@@ -96,7 +97,7 @@ export default function WootConfigClient({
 
   async function handleTest() {
     if ((!cfg.public_key.trim() && !secretulEsteSalvat(initialConfig, "public_key")) || (!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) {
-      toast.error("Introdu Public Key si Secret Key inainte de testare.");
+      toast.error("Introdu Public Key și Secret Key înainte de testare.");
       return;
     }
     /*
@@ -120,16 +121,16 @@ export default function WootConfigClient({
 
   function handleSave() {
     if ((!cfg.public_key.trim() && !secretulEsteSalvat(initialConfig, "public_key")) || (!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) {
-      toast.error("Public Key si Secret Key sunt obligatorii.");
+      toast.error("Public Key și Secret Key sunt obligatorii.");
       return;
     }
     if (cfg.enabled) {
       if (!cfg.sender.contact.trim() || !cfg.sender.phone.trim() || !cfg.sender.email.trim()) {
-        toast.error("Completeaza datele expeditorului (contact, telefon, email).");
+        toast.error("Completează datele expeditorului (contact, telefon, email).");
         return;
       }
       if (!cfg.sender.city_id || !cfg.sender.address.trim()) {
-        toast.error("Selecteaza orasul si introdu adresa expeditorului.");
+        toast.error("Alege orașul și introdu adresa expeditorului.");
         return;
       }
     }
@@ -147,7 +148,8 @@ export default function WootConfigClient({
         return;
       }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
-      toast.success("Configuratia Woot a fost salvata.");
+      toast.success("Configurația Woot a fost salvată.");
+      marcheazaSalvat();
       router.refresh();
     });
   }
@@ -170,272 +172,228 @@ export default function WootConfigClient({
         return;
       }
       if (!result.success) { toast.error(result.error ?? "Eroare"); return; }
-      toast.success("Woot deconectat.");
-      setCfg(DEFAULT_CONFIG);
+      toast.success("Woot a fost deconectat.");
+      marcheazaSalvat(DEFAULT_CONFIG);
       setTestResult(null);
       router.refresh();
     });
   }
 
+  const cheiSalvate = secretulEsteSalvat(initialConfig, "public_key") || !!initialConfig?.public_key;
+  const areChei = (!!cfg.public_key.trim() || secretulEsteSalvat(initialConfig, "public_key")) && (!!cfg.secret_key.trim() || secretulEsteSalvat(initialConfig, "secret_key"));
+  const expeditorGata = !!(cfg.sender.contact.trim() && cfg.sender.phone.trim() && cfg.sender.email.trim() && cfg.sender.city_id && cfg.sender.address.trim());
+  const stari: StareAntet[] = !cheiSalvate
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [isConnected ? { ton: "bun", text: "Activ" } : { ton: "neutru", text: "Oprit" }];
+  const eticheta = "mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground";
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="woot" description="Genereaza AWB-uri Woot direct din comenzile magazinului tau." />
-
-      <div className="space-y-5">
-
-        {/* Ghid */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum te conectezi?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              { step: "1", title: "Creeaza un cont Woot.ro", desc: "Mergi pe woot.ro si inregistreaza-te sau logheaza-te." },
-              { step: "2", title: "Obtine cheile API", desc: "In contul Woot, mergi la Setari → API → genereaza Public Key si Secret Key." },
-              { step: "3", title: "Introdu cheile si testeaza", desc: "Lipeste cheile mai jos si apasa Testeaza conexiunea pentru a verifica." },
-              { step: "4", title: "Configureaza adresa expeditor", desc: "Completeaza datele firmei tale (adresa de unde se ridica coletele)." },
-            ].map(({ step, title, desc }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        {/* API Keys card */}
-        <Panel className="space-y-5 p-5">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza Woot</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Afiseaza butonul &quot;Creeaza AWB&quot; in pagina comenzilor</p>
-            </div>
-            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
-          </div>
-
-          <div className="space-y-4 border-t border-border pt-4">
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Public Key
-              </label>
-              <Input type="text" value={cfg.public_key} onChange={e => set("public_key", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "public_key") ? PLACEHOLDER_SECRET_SALVAT : ""} />
-            </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Secret Key
-              </label>
-              <Input type="password" value={cfg.secret_key} onChange={e => set("secret_key", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "secret_key") ? PLACEHOLDER_SECRET_SALVAT : ""} />
-            </div>
-
-            {/* Test connection */}
-            <div>
-              <Button variant="outline" onClick={handleTest} disabled={testing || saving}>
-                {testing || saving
-                  ? <Loader2 className="animate-spin" />
-                  : testResult?.ok ? <Wifi className="text-success" /> : <WifiOff className="text-muted-foreground" />}
-                Testeaza conexiunea
-              </Button>
-
-              {testResult && (
-                <div className={cn(
-                  "mt-3 rounded-lg border p-3 text-xs",
-                  testResult.ok
-                    ? "border-success/20 bg-success/5 text-success"
-                    : "border-destructive/20 bg-destructive/5 text-destructive"
-                )}>
-                  {testResult.ok ? (
-                    <div className="space-y-0.5">
-                      <p className="font-semibold">Conexiune reusita!</p>
-                      <p>{testResult.name} · {testResult.email}</p>
-                      <p>Credit disponibil: <strong>{testResult.credit?.toFixed(2)} RON</strong></p>
-                    </div>
-                  ) : (
-                    <p>{testResult.message}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </Panel>
-
-        {/* Sender address card */}
-        <Panel className="space-y-4 p-5">
+    <PaginaIntegrare
+      id="woot"
+      titlu="Livrare"
+      descriere="Generezi AWB-uri Woot direct din comenzile magazinului."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Woot la comenzi" activ={cfg.enabled} onChange={v => set("enabled", v)} ariaLabel="Activează Woot" textPornit="Pornit" textOprit="Oprit" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheile API", facut: areChei },
+          { text: "Adresa expeditorului", facut: expeditorGata },
+          { text: "Woot activ", facut: isConnected },
+        ]} />
+        {testResult?.ok && (
+          <CardCifre titlu="Contul Woot" cifre={[{ eticheta: "credit disponibil (RON)", valoare: testResult.credit?.toFixed(2) ?? "-" }]}
+            randuri={[{ eticheta: "Cont", valoare: testResult.name ?? "-" }]} />
+        )}
+        <CumFunctioneaza id="woot" puncte={[
+          { Icon: UserPlus, text: "Îți faci cont pe woot.ro, apoi generezi Public Key și Secret Key din Setări, API." },
+          { Icon: Wifi, text: "„Testează conexiunea” verifică cheile și îți arată creditul disponibil." },
+          { Icon: MapPin, text: "Adresa expeditorului e cea de unde se ridică coletele." },
+          { Icon: Truck, text: "Cu Woot pornit, în pagina comenzii apare butonul „Creează AWB”." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Cheile API" descriere="Le generezi în contul Woot, la Setări, API.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <p className="text-sm font-semibold text-foreground">Adresa expeditor implicit</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Adresa de unde se ridica coletele (firma ta)</p>
-          </div>
-
-          {/* Company type */}
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setSender("company", 1)}
-              className={cn("flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
-                cfg.sender.company === 1 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground")}>
-              <Building2 className="h-4 w-4" />Firma
-            </button>
-            <button type="button" onClick={() => setSender("company", 0)}
-              className={cn("flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
-                cfg.sender.company === 0 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground")}>
-              <User className="h-4 w-4" />Persoana fizica
-            </button>
-          </div>
-
-          {cfg.sender.company === 1 && (
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />Nume firma
-              </label>
-              <Input type="text" value={cfg.sender.company_name ?? ""} onChange={e => setSender("company_name", e.target.value)}
-                placeholder="S.C. Firma S.R.L." />
-            </div>
-          )}
-
-          <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-              <User className="h-3.5 w-3.5 text-muted-foreground" />Persoana de contact
+            <label htmlFor="woot-public" className={eticheta}>
+              <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Public Key
             </label>
-            <Input type="text" value={cfg.sender.contact} onChange={e => setSender("contact", e.target.value)}
-              placeholder="Prenume Nume" />
+            <Input id="woot-public" type="text" value={cfg.public_key} onChange={e => set("public_key", e.target.value)}
+              placeholder={secretulEsteSalvat(initialConfig, "public_key") ? PLACEHOLDER_SECRET_SALVAT : ""} />
           </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />Telefon
-              </label>
-              <Input type="tel" value={cfg.sender.phone} onChange={e => setSender("phone", e.target.value)}
-                placeholder="+40721000000" />
-            </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Mail className="h-3.5 w-3.5 text-muted-foreground" />Email
-              </label>
-              <Input type="email" value={cfg.sender.email} onChange={e => setSender("email", e.target.value)}
-                placeholder="firma@email.ro" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Judet
-              </label>
-              <select
-                aria-label="Judet"
-                value={cfg.sender.county_id || ""}
-                onChange={e => {
-                  setSender("county_id", Number(e.target.value));
-                  setSender("city_id", 0);
-                }}
-                className={selectCls}
-              >
-                <option value="">Selecteaza judetul</option>
-                {counties.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Oras
-              </label>
-              <select
-                aria-label="Oras"
-                value={cfg.sender.city_id || ""}
-                onChange={e => setSender("city_id", Number(e.target.value))}
-                disabled={!cfg.sender.county_id || loadingCities}
-                className={selectCls}
-              >
-                <option value="">
-                  {loadingCities ? "Se incarca..." : "Selecteaza orasul"}
-                </option>
-                {cities.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-              <Home className="h-3.5 w-3.5 text-muted-foreground" />Adresa
+            <label htmlFor="woot-secret" className={eticheta}>
+              <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />Secret Key
             </label>
-            <Input type="text" value={cfg.sender.address} onChange={e => setSender("address", e.target.value)}
-              placeholder="Strada, nr., etc." />
+            <Input id="woot-secret" type="password" value={cfg.secret_key} onChange={e => set("secret_key", e.target.value)}
+              placeholder={secretulEsteSalvat(initialConfig, "secret_key") ? PLACEHOLDER_SECRET_SALVAT : ""} />
           </div>
+        </div>
 
+        <div>
+          <Button variant="outline" onClick={handleTest} disabled={testing || saving}>
+            {testing || saving
+              ? <Loader2 className="animate-spin" />
+              : testResult?.ok ? <Wifi className="text-success" /> : <WifiOff className="text-muted-foreground" />}
+            Testează conexiunea
+          </Button>
+        </div>
+
+        {testResult && (testResult.ok ? (
+          <Callout variant="success" icon={Wifi} title="Conexiune reușită">
+            {testResult.name} · {testResult.email}. Credit disponibil: <strong>{testResult.credit?.toFixed(2)} RON</strong>.
+          </Callout>
+        ) : (
+          <Callout variant="danger" title={testResult.message ?? "Conexiunea nu a mers."} />
+        ))}
+      </Sectiune>
+
+      <Sectiune pas={2} titlu="Adresa expeditorului" descriere="Adresa de unde se ridică coletele (firma ta).">
+        {/* Company type */}
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setSender("company", 1)}
+            className={cn("flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
+              cfg.sender.company === 1 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground")}>
+            <Building2 className="h-4 w-4" />Firmă
+          </button>
+          <button type="button" onClick={() => setSender("company", 0)}
+            className={cn("flex items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-sm font-medium transition-all",
+              cfg.sender.company === 0 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground")}>
+            <User className="h-4 w-4" />Persoană fizică
+          </button>
+        </div>
+
+        {cfg.sender.company === 1 && (
           <div>
-            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-              Cod postal (optional)
+            <label htmlFor="woot-firma" className={eticheta}>
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground" />Nume firmă
             </label>
-            <Input type="text" value={cfg.sender.zipcode ?? ""} onChange={e => setSender("zipcode", e.target.value)}
-              placeholder="000000" className="max-w-40" />
+            <Input id="woot-firma" type="text" value={cfg.sender.company_name ?? ""} onChange={e => setSender("company_name", e.target.value)}
+              placeholder="S.C. Firma S.R.L." />
           </div>
+        )}
 
-          <label className="flex cursor-pointer items-start gap-2.5 border-t border-border pt-4">
-            <input
-              type="checkbox"
-              checked={cfg.insurance_enabled ?? false}
-              onChange={e => setCfg(c => ({ ...c, insurance_enabled: e.target.checked }))}
-              className="mt-0.5 rounded border-border accent-primary"
-            />
-            <span className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
-              Fiecare AWB se asigura pentru valoarea produselor din comanda. Prima de asigurare apare in pretul Woot.
-            </span>
+        <div>
+          <label htmlFor="woot-contact" className={eticheta}>
+            <User className="h-3.5 w-3.5 text-muted-foreground" />Persoana de contact
           </label>
+          <Input id="woot-contact" type="text" value={cfg.sender.contact} onChange={e => setSender("contact", e.target.value)} placeholder="Prenume Nume" />
+        </div>
 
-          {/*
-            ⚠ Doua valori, nu trei. Woot accepta si `card`, dar acolo raspunsul lor NU poarta AWB,
-            ci un identificator de plata (documentat la POST /orders: `awb_number` e „for
-            credit/term payments", `payment_id` e „for card payments"). Oferit aici, comerciantul ar
-            fi ales o expediere fara eticheta si fara numar. Vezi nota din `WootConfig`.
-          */}
-          <div className="border-t border-border pt-4">
-            <label htmlFor="woot-plata" className="mb-1.5 block text-xs font-medium text-foreground">
-              Cum se plateste expedierea
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="woot-telefon" className={eticheta}>
+              <Phone className="h-3.5 w-3.5 text-muted-foreground" />Telefon
+            </label>
+            <Input id="woot-telefon" type="tel" value={cfg.sender.phone} onChange={e => setSender("phone", e.target.value)} placeholder="+40721000000" />
+          </div>
+          <div>
+            <label htmlFor="woot-email" className={eticheta}>
+              <Mail className="h-3.5 w-3.5 text-muted-foreground" />Email
+            </label>
+            <Input id="woot-email" type="email" value={cfg.sender.email} onChange={e => setSender("email", e.target.value)} placeholder="firma@email.ro" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="woot-judet" className={eticheta}>
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Județ
             </label>
             <select
-              id="woot-plata"
-              value={cfg.payment_method ?? "credit"}
-              onChange={e => setCfg(c => ({ ...c, payment_method: e.target.value as "credit" | "term" }))}
-              className="h-9 max-w-64 rounded-md border border-border bg-background px-2 text-sm"
+              id="woot-judet"
+              value={cfg.sender.county_id || ""}
+              onChange={e => {
+                setSender("county_id", Number(e.target.value));
+                setSender("city_id", 0);
+              }}
+              className={selectCls}
             >
-              <option value="credit">Din creditul contului</option>
-              <option value="term">La termen (pe factura)</option>
+              <option value="">Alege județul</option>
+              {counties.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
             </select>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Alege cum e configurat contul tau la Woot. Pe credit, emiterea se opreste cand contul
-              ramane fara sold, iar AWB-ul nu se creeaza.
-            </p>
           </div>
-
-        </Panel>
-
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            Salveaza
-          </Button>
-          {isConnected && (
-            <ButonDeconectare
-              nume="Woot"
-              cePierzi="Cheile se șterg din Edinio, împreună cu datele expeditorului. Ca să te întorci, le ceri din nou din contul tău Woot. La Woot nu se atinge nimic: AWB-urile deja emise rămân valabile."
-              pending={disconnecting}
-              marime="default"
-              onConfirma={handleDisconnect}
-            />
-          )}
+          <div>
+            <label htmlFor="woot-oras" className={eticheta}>
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Oraș
+            </label>
+            <select
+              id="woot-oras"
+              value={cfg.sender.city_id || ""}
+              onChange={e => setSender("city_id", Number(e.target.value))}
+              disabled={!cfg.sender.county_id || loadingCities}
+              className={selectCls}
+            >
+              <option value="">{loadingCities ? "Se încarcă..." : "Alege orașul"}</option>
+              {cities.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
-    </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="woot-adresa" className={eticheta}>
+              <Home className="h-3.5 w-3.5 text-muted-foreground" />Adresa
+            </label>
+            <Input id="woot-adresa" type="text" value={cfg.sender.address} onChange={e => setSender("address", e.target.value)} placeholder="Strada, nr., etc." />
+          </div>
+          <div>
+            <label htmlFor="woot-cod" className={eticheta}>Cod poștal (opțional)</label>
+            <Input id="woot-cod" type="text" value={cfg.sender.zipcode ?? ""} onChange={e => setSender("zipcode", e.target.value)} placeholder="000000" />
+          </div>
+        </div>
+      </Sectiune>
+
+      <Sectiune pas={3} titlu="Expedierea">
+        <RandComutator
+          titlu="Asigurare (valoare declarată)"
+          text="Fiecare AWB se asigură pentru valoarea produselor din comandă. Prima de asigurare apare în prețul Woot."
+          activ={cfg.insurance_enabled ?? false}
+          onChange={v => setCfg(c => ({ ...c, insurance_enabled: v }))}
+        />
+
+        {/*
+          ⚠ Doua valori, nu trei. Woot accepta si `card`, dar acolo raspunsul lor NU poarta AWB,
+          ci un identificator de plata (documentat la POST /orders: `awb_number` e „for
+          credit/term payments", `payment_id` e „for card payments"). Oferit aici, comerciantul ar
+          fi ales o expediere fara eticheta si fara numar. Vezi nota din `WootConfig`.
+        */}
+        <div className="border-t border-border pt-4">
+          <label htmlFor="woot-plata" className="mb-1.5 block text-sm font-medium text-foreground">
+            Cum se plătește expedierea
+          </label>
+          <select
+            id="woot-plata"
+            value={cfg.payment_method ?? "credit"}
+            onChange={e => setCfg(c => ({ ...c, payment_method: e.target.value as "credit" | "term" }))}
+            className={cn(selectCls, "max-w-64")}
+          >
+            <option value="credit">Din creditul contului</option>
+            <option value="term">La termen (pe factură)</option>
+          </select>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            Alege cum e configurat contul tău la Woot. Pe credit, emiterea se oprește când contul rămâne fără sold, iar AWB-ul nu se creează.
+          </p>
+        </div>
+      </Sectiune>
+
+      {isConnected && (
+        <ZonaDeconectare descriere="Șterge cheile și datele expeditorului din Edinio. La Woot nu se atinge nimic.">
+          <ButonDeconectare
+            nume="Woot"
+            cePierzi="Cheile se șterg din Edinio, împreună cu datele expeditorului. Ca să te întorci, le ceri din nou din contul tău Woot. La Woot nu se atinge nimic: AWB-urile deja emise rămân valabile."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={handleSave} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

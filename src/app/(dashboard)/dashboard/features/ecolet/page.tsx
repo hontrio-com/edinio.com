@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { EcoletConfigClient } from "@/components/dashboard/EcoletConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { EcoletConfig } from "@/lib/ecolet/client";
 
 export default async function EcoletPage() {
@@ -20,13 +19,5 @@ export default async function EcoletPage() {
    */
   const config = (mascheazaConfig("ecolet_config", settings?.ecolet_config) as EcoletConfig | null) ?? null;
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="ecolet"
-        description="Platforma cu mai multi curieri: cumparatorul alege oferta in checkout, tu emiti dintr-un singur cont."
-      />
-      <EcoletConfigClient businessId={business.id} initialConfig={config} />
-    </div>
-  );
+  return <EcoletConfigClient businessId={business.id} initialConfig={config} />;
 }

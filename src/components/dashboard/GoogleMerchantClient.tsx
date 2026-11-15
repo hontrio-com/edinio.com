@@ -60,7 +60,7 @@ export function GoogleMerchantClient({ businessId, status, produse, categories, 
   }, []);
 
   if (!status) {
-    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return <Callout variant="danger" title="Nu am putut încărca starea. Reîncarcă pagina." />;
   }
 
   // Not yet live for the public (OAuth verification pending), or platform

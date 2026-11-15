@@ -3,7 +3,6 @@ import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { CurieraConfigClient } from "@/components/dashboard/CurieraConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { CurieraConfig } from "@/lib/curiera/client";
 import { areExpeditorSalvat, expeditorDinMagazin, type ExpeditorPropus } from "@/lib/curiera/precompletare";
 
@@ -37,13 +36,5 @@ export default async function CurieraPage() {
     propunere = expeditorDinMagazin(firma);
   }
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="curiera"
-        description="Genereaza AWB-uri Curiera din comenzi, cu ramburs, livrare la adresa sau in lockere FANbox, si urmarirea coletului."
-      />
-      <CurieraConfigClient businessId={business.id} initialConfig={config} propunere={propunere} />
-    </div>
-  );
+  return <CurieraConfigClient businessId={business.id} initialConfig={config} propunere={propunere} />;
 }

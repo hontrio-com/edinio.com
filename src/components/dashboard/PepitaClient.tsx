@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Boxes, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Eye,
-  Info, Layers, Loader2, Mail, Package, PackageCheck, Plug, RefreshCw, ShoppingCart, XCircle,
+  AlertTriangle, ArrowRight, Boxes, CalendarClock, Check, CheckCircle2, ClipboardCheck, Copy, Eye, Info, Layers, Loader2, Mail, Package, PackageCheck, Plug, RefreshCw, Send, ShoppingCart, XCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout, GrupCallout } from "@/components/ui/callout";
+import { cn } from "@/lib/utils/cn";
 import { Panel } from "@/components/ui/panel";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
@@ -73,7 +73,15 @@ const INAINTE_DE_A_INCEPE: { titlu: string; text: string }[] = [
   },
 ];
 
-export function PepitaClient({ businessId, stare }: { businessId: string; stare: StarePepita }) {
+/** Ce bucata a paginii randeaza ecranul: fiecare fila a paginii Pepita are una. */
+export type PartePepita = "prezentare" | "produse" | "comenzi" | "feeduri" | "setari";
+
+/**
+ * ⚠ `parte` (15.11.2026): pagina e pe file (`FileMarketplace`), ca la celelalte marketplace-uri. Starea legaturii
+ * (feedul citit sau nu, adresele trimise) a urcat in antetul paginii. Integrarea oprita nu are file: ecranul
+ * arata cerintele si pornirea, oricare ar fi `parte`.
+ */
+export function PepitaClient({ businessId, stare, parte }: { businessId: string; stare: StarePepita; parte: PartePepita }) {
   const router = useRouter();
   const [lucrez, setLucrez] = useState<string | null>(null);
   const config = stare.config;
@@ -130,7 +138,7 @@ export function PepitaClient({ businessId, stare }: { businessId: string; stare:
     },
     {
       label: "Cu probleme", value: cifraSauNecunoscut(stare.comenziCarantina), icon: AlertTriangle,
-      explicatie: "Comenzile Pepita care nu au intrat întregi în Edinio și au nevoie de verificare înainte de expediere. Le vezi mai jos, la „Comenzi”.",
+      explicatie: "Comenzile Pepita care nu au intrat întregi în Edinio și au nevoie de verificare înainte de expediere. Le vezi în fila Comenzi.",
       gol: (stare.comenziCarantina ?? 0) === 0,
     },
     {
@@ -148,8 +156,14 @@ export function PepitaClient({ businessId, stare }: { businessId: string; stare:
   */
   const picateAici = stare.citiriPicate.filter((c) => c !== CITIRI_PANOU.feed);
 
-  return (
-    <div className="space-y-4">
+  /*
+    ═══ ÎNAINTE DE A ÎNCEPE ═══ (vezi comentariul de la panou)
+
+    ⚠ Cu integrarea oprita, cerintele stau sus, inaintea pornirii. Pornita, coboara in fila „Setări”:
+    raman de citit (activarea si confirmarea comenzilor se fac la ei), dar nu mai impart capul paginii.
+  */
+  const cerinte = (
+    <>
       {/*
         ═══ ÎNAINTE DE A ÎNCEPE ═══
 
@@ -186,70 +200,167 @@ export function PepitaClient({ businessId, stare }: { businessId: string; stare:
           ))}
         </ul>
       </Panel>
+    </>
+  );
+  const conexiune = (
+  <Conexiune
+          stare={stare}
+          lucrez={lucrez}
+          porneste={() => cu("porneste", () => activeazaPepita(businessId))}
+          opreste={() => cu("opreste", () => deconecteazaPepita(businessId))}
+        />
+  );
 
-      <Conexiune
-        stare={stare}
-        lucrez={lucrez}
-        porneste={() => cu("porneste", () => activeazaPepita(businessId))}
-        opreste={() => cu("opreste", () => deconecteazaPepita(businessId))}
-      />
+  /* Integrarea oprita: cerintele si pornirea, fara file. */
+  if (!config.activ) {
+    return (
+      <div className="space-y-4">
+        {cerinte}
+        {conexiune}
+      </div>
+    );
+  }
 
-      {config.activ && (
-        <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {cifre.map((c) => (
-              <CardStatistica
-                key={c.label}
-                marime={marimeCifre}
-                icon={c.icon}
-                label={c.label}
-                value={c.value}
-                explicatie={c.explicatie}
-                empty={c.gol}
+  if (parte === "produse") {
+    return (
+      <div className="space-y-4">
+        <Produse businessId={businessId} modImplicit={config.mod_includere} />
+        <Catalog businessId={businessId} />
+      </div>
+    );
+  }
+
+  if (parte === "comenzi") return <Comenzi businessId={businessId} stare={stare} />;
+
+  if (parte === "feeduri") {
+    /* ⚠ Tarile INAINTEA adreselor: ele hotarasc ce feeduri exista, iar adresele trimit la ele. */
+    return (
+      <div className="space-y-4">
+        {conexiune}
+            {/*
+              ⚠ TARILE STAU INAINTEA SETARILOR SI A PRODUSELOR, fiindca ele
+              hotarasc CE feeduri exista. Puse la urma, omul ar fi ales strategia
+              de pret si produsele fara sa stie catre cate tari pleaca.
+            */}
+            <Panel title="Țările către care trimiți">
+              <p className="text-xs text-muted-foreground">
+                Pepita cere un feed separat pentru fiecare țară. Prețurile tale sunt în{" "}
+                <span className="font-medium text-foreground">{stare.monedaMagazinului}</span>; pentru
+                o țară cu altă monedă scrii tu cursul, iar fără el feedul acelei țări nu pleacă deloc.
+              </p>
+              <PietelePepita
+                businessId={businessId}
+                piete={config.piete}
+                monedaMagazinului={stare.monedaMagazinului}
+                piataDeBaza={config.piata}
+                strategie={config.strategie_pret}
               />
-            ))}
-          </div>
-
-          {picateAici.length > 0 && (
-            <Callout variant="warning" icon={AlertTriangle}>
-              Nu am putut citi {picateAici.join(", ")}. Cifrele de mai sus pot fi incomplete.
-              Reîncarcă pagina peste câteva minute.
-            </Callout>
-          )}
-
-          <Adrese
-            businessId={businessId}
-            trimisLa={config.trimis_la}
-            lucrez={lucrez}
-            roteste={(fel) => cu(`rotire-${fel}`, () => rotestePepita(businessId, fel))}
-            marcheaza={(v) => cu("trimis", () => marcheazaTrimis(businessId, v))}
-          />
-          {/*
-            ⚠ TARILE STAU INAINTEA SETARILOR SI A PRODUSELOR, fiindca ele
-            hotarasc CE feeduri exista. Puse la urma, omul ar fi ales strategia
-            de pret si produsele fara sa stie catre cate tari pleaca.
-          */}
-          <Panel title="Țările către care trimiți">
-            <p className="text-xs text-muted-foreground">
-              Pepita cere un feed separat pentru fiecare țară. Prețurile tale sunt în{" "}
-              <span className="font-medium text-foreground">{stare.monedaMagazinului}</span>; pentru
-              o țară cu altă monedă scrii tu cursul, iar fără el feedul acelei țări nu pleacă deloc.
-            </p>
-            <PietelePepita
+            </Panel>
+            <Adrese
               businessId={businessId}
-              piete={config.piete}
-              monedaMagazinului={stare.monedaMagazinului}
-              piataDeBaza={config.piata}
-              strategie={config.strategie_pret}
+              trimisLa={config.trimis_la}
+              lucrez={lucrez}
+              roteste={(fel) => cu(`rotire-${fel}`, () => rotestePepita(businessId, fel))}
+              marcheaza={(v) => cu("trimis", () => marcheazaTrimis(businessId, v))}
             />
-          </Panel>
+      </div>
+    );
+  }
 
-          <Setari businessId={businessId} config={config} />
-          <Produse businessId={businessId} modImplicit={config.mod_includere} />
-          <Catalog businessId={businessId} />
-          <Comenzi businessId={businessId} stare={stare} />
-        </>
-      )}
+  if (parte === "setari") {
+    return (
+      <div className="space-y-4">
+        <Setari businessId={businessId} config={config} />
+        {cerinte}
+      </div>
+    );
+  }
+
+  /* ═══ FILA „PREZENTARE” ═══ */
+  const feedGolPrezentare = stare.produseAlese === 0;
+  return (
+    <div className="space-y-4">
+      {/*
+        ═══ „DE FĂCUT ÎN PEPITA” (15.11.2026) ═══
+
+        Aceeasi lista ca la celelalte marketplace-uri (forma aleasa de proprietar): ce cere o mana de la
+        comerciant, intr-o singura carte, cu titlul la imperativ si butonul pe rand. Nu se arata deloc
+        cand nu e nimic de facut.
+        ⚠ Feedul gol: `=== 0`, nu „fals”. `null` inseamna „n-am putut citi”, iar o pana a bazei ar fi
+        cerut alegerea produselor peste un feed plin.
+      */}
+      <GrupCallout
+        titlu="De făcut în Pepita"
+        descriere="Lucrurile care așteaptă o mână de la tine."
+        numar={(n) => `${n} de rezolvat`}
+      >
+        {config.areFeedToken && config.areOrderKey && feedGolPrezentare && (
+          <Callout
+            variant="warning"
+            icon={Package}
+            title="Alege produsele care pleacă pe Pepita"
+            action={
+              <a href="#produse" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Alege produsele
+                <ArrowRight data-icon="inline-end" />
+              </a>
+            }
+          >
+            Niciun produs nu pleacă spre Pepita, deci feedul răspunde cu un catalog gol.
+          </Callout>
+        )}
+        {config.areFeedToken && config.areOrderKey && !config.trimis_la && (
+          <Callout
+            variant="warning"
+            icon={Send}
+            title="Trimite adresele feedului la Pepita"
+            action={
+              <a href="#feeduri" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Vezi adresele
+                <ArrowRight data-icon="inline-end" />
+              </a>
+            }
+          >
+            Activarea o fac ei, după ce primesc adresele de la contactul tău din Pepita Seller Center.
+          </Callout>
+        )}
+        {(stare.comenziCarantina ?? 0) > 0 && (
+          <Callout
+            variant="danger"
+            icon={AlertTriangle}
+            title={`Verifică ${stare.comenziCarantina} ${stare.comenziCarantina === 1 ? "comandă cu probleme" : "comenzi cu probleme"}`}
+            action={
+              <a href="#comenzi" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Vezi comenzile
+                <ArrowRight data-icon="inline-end" />
+              </a>
+            }
+          >
+            N-au intrat întregi în Edinio și au nevoie de verificare înainte de expediere.
+          </Callout>
+        )}
+      </GrupCallout>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {cifre.map((c) => (
+                <CardStatistica
+                  key={c.label}
+                  marime={marimeCifre}
+                  icon={c.icon}
+                  label={c.label}
+                  value={c.value}
+                  explicatie={c.explicatie}
+                  empty={c.gol}
+                />
+              ))}
+            </div>
+
+            {picateAici.length > 0 && (
+              <Callout variant="warning" icon={AlertTriangle}>
+                Nu am putut citi {picateAici.join(", ")}. Cifrele de mai sus pot fi incomplete.
+                Reîncarcă pagina peste câteva minute.
+              </Callout>
+            )}
     </div>
   );
 }
@@ -320,7 +431,7 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
           <p className="text-xs text-muted-foreground">
             {gata && feedGol
               ? "Niciun produs nu pleacă spre Pepita, deci feedul răspunde cu un catalog gol. "
-                + "Alege ce trimiți în „Ce produse pleacă pe Pepita”, mai jos."
+                + "Alege ce trimiți în fila Produse, la „Ce produse pleacă pe Pepita”."
               : gata && aCitit
                 ? `Ultima citire: ${cand(stare.ultimaCitire)}. Frecvența o stabilește Pepita: de obicei stocul o dată pe oră, prețurile și descrierile o dată pe zi.`
                 : gata && stimDacaACitit

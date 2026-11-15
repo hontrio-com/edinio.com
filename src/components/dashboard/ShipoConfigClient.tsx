@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, KeyRound, Loader2, MapPin, Truck } from "lucide-react";
 import {
   disconnectShipo, getShipoServiciiAction, saveShipoConfig, testShipoConnectionAction,
 } from "@/lib/actions/shipo.actions";
@@ -13,9 +13,12 @@ import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare, useFormularIntegrare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -39,8 +42,8 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
-  { valoare: "A4", eticheta: "A4 (foaie intreaga)" },
-  { valoare: "A6", eticheta: "A6 (eticheta compacta, imprimante de etichete)" },
+  { valoare: "A4", eticheta: "A4 (foaie întreagă)" },
+  { valoare: "A6", eticheta: "A6 (etichetă compactă, imprimante de etichete)" },
 ];
 
 /**
@@ -87,7 +90,7 @@ export function ShipoConfigClient({
   activiDirect?: string[];
 }) {
   const router = useRouter();
-  const [config, setConfig] = useState<ShipoConfig>({
+  const { cfg: config, setCfg: setConfig, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<ShipoConfig>({
     enabled: initialConfig?.enabled ?? false,
     api_key: initialConfig?.api_key ?? "",
     sender_address_id: initialConfig?.sender_address_id,
@@ -140,7 +143,8 @@ export function ShipoConfigClient({
     const r = await saveShipoConfig(businessId, construieste());
     setSalveaza(false);
     if ("error" in r) { toast.error(r.error); return; }
-    toast.success("Configurarea Shipo a fost salvata.");
+    toast.success("Configurarea Shipo a fost salvată.");
+    marcheazaSalvat();
     router.refresh();
   };
 
@@ -156,7 +160,7 @@ export function ShipoConfigClient({
     setAdrese(r.adrese);
     setContInfo(`${r.cont.name || "cont Shipo"} · ${r.cont.billing_type || "-"} · ${r.cont.status || "-"}`);
     if (r.adrese.length === 0) {
-      toast.warning("Conexiunea merge, dar contul n-are nicio adresa de ridicare. Adauga una in contul Shipo.");
+      toast.warning("Conexiunea merge, dar contul n-are nicio adresă de ridicare. Adaugă una în contul Shipo.");
       return;
     }
     /* O singura adresa: se alege singura, ca omul sa n-aiba de facut un pas fara rost. */
@@ -167,7 +171,7 @@ export function ShipoConfigClient({
         sender_address_label: etichetaAdresa(r.adrese[0]),
       }));
     }
-    toast.success(`Conexiune reusita. ${r.adrese.length} adrese de ridicare gasite.`);
+    toast.success(`Conexiune reușită: ${r.adrese.length} adrese de ridicare găsite.`);
   };
 
   const incarcaServicii = async () => {
@@ -191,41 +195,64 @@ export function ShipoConfigClient({
     .filter(([slug, direct]) => activiDirect.includes(direct) && (permisi.length === 0 || permisi.includes(slug)))
     .map(([slug]) => curieriCont.find((c) => c.slug === slug)?.name ?? SLUGURI_DOCUMENTATE[slug] ?? slug);
 
+  const cheieSalvata = secretulEsteSalvat(initialConfig, "api_key");
+  const activSalvat = !!initialConfig?.enabled && cheieSalvata && Number(initialConfig?.sender_address_id) > 0;
+  const stari: StareAntet[] = !cheieSalvata
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [activSalvat ? { ton: "bun", text: "Activ" } : { ton: "neutru", text: "Oprit" }];
+
   return (
-    <div className="space-y-6">
-      <Panel step={1} title="Conectare">
-        <Field label="Cheia de API" hint="O generezi din contul Shipo, la Setari → API.">
+    <PaginaIntegrare
+      id="shipo"
+      titlu="Livrare"
+      descriere="Colete prin Shipo.ro: un cont, mai mulți curieri și tarife negociate de ei, la adresă, în lockere sau în puncte de ridicare."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Shipo la livrare" activ={!!config.enabled} onChange={(v) => setConfig({ ...config, enabled: v })} ariaLabel="Folosește Shipo pentru livrare" textPornit="Pornit" textOprit="Oprit" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia de API", facut: areCheie },
+          { text: "Adresa de ridicare", facut: areAdresa },
+          { text: "Shipo pornit", facut: esteActiv },
+        ]} />
+        {contInfo && <CardCifre titlu="Contul Shipo" randuri={[{ eticheta: "Cont", valoare: contInfo }]} />}
+        <CumFunctioneaza id="shipo" puncte={[
+          { Icon: KeyRound, text: "Cheia de API o generezi din contul Shipo, la Setări, API." },
+          { Icon: MapPin, text: "Adresa de ridicare se alege din cele salvate în contul Shipo: e un id, nu un oraș." },
+          { Icon: Truck, text: "După salvare, pornește și metoda „Shipo.ro” din Setări, Livrare, ca să apară la comandă." },
+          { Icon: AlertTriangle, text: "Shipo nu are mediu de probă: fiecare emitere e reală și facturată." },
+        ]} />
+      </>}
+    >
+      {config.enabled && !areAdresa && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Fără o adresă de ridicare aleasă, Shipo nu poate cota nimic, iar clienții vor vedea tariful fix.
+        </Callout>
+      )}
+
+      <Sectiune pas={1} titlu="Conectare">
+        <Field label="Cheia de API" htmlFor="shipo-cheie" hint="O generezi din contul Shipo, la Setări, API.">
           <Input
+            id="shipo-cheie"
             type="password"
             value={config.api_key}
-            placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : "cheia ta de API"}
+            placeholder={cheieSalvata ? PLACEHOLDER_SECRET_SALVAT : "cheia ta de API"}
             onChange={(e) => setConfig({ ...config, api_key: e.target.value })}
           />
         </Field>
-
-        <div className="flex flex-wrap gap-2">
+        <div>
           <Button type="button" variant="outline" onClick={proba} disabled={probeaza || !areCheie}>
-            {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            Testeaza conexiunea
+            {probeaza ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+            Testează conexiunea
           </Button>
-          {areCheie && (
-            <ButonDeconectare
-              nume="Shipo"
-              cePierzi="Cheia de API se șterge din Edinio, împreună cu adresa de ridicare și serviciile alese. Ca să te întorci, generezi din nou o cheie din contul Shipo. Expedierile deja emise rămân la ei."
-              marime="default"
-              onConfirma={deconecteaza}
-            />
-          )}
         </div>
+        {contInfo && <Callout variant="success" icon={CheckCircle} title={contInfo} />}
+      </Sectiune>
 
-        {contInfo && <Callout variant="success" icon={CheckCircle}>{contInfo}</Callout>}
-      </Panel>
-
-      <Panel step={2} title="Adresa de ridicare">
+      <Sectiune pas={2} titlu="Adresa de ridicare">
         <Callout variant="info" icon={Info}>
-          Shipo nu primeste un <strong>nume de oras</strong> pentru ridicare, ci id-ul unei adrese salvate in contul
-          tau, si tot el pleaca la cotare. De aceea se alege din lista, nu se scrie de mana: un id gresit ar cota si
-          ar expedia dintr-un alt depozit, fara nicio eroare.
+          Shipo nu primește un <strong>nume de oraș</strong> pentru ridicare, ci id-ul unei adrese salvate în contul tău, și tot
+          el pleacă la cotare. De aceea se alege din listă, nu se scrie de mână: un id greșit ar cota și ar expedia dintr-un
+          alt depozit, fără nicio eroare.
         </Callout>
         {/*
           ⚠ NU e un camp de text, si nu poate fi: valoarea e id-ul unei adrese din
@@ -235,7 +262,7 @@ export function ShipoConfigClient({
         {adrese.length > 0 ? (
           <div className="space-y-2">
             {adrese.map((a) => (
-              <label key={a.id} className="flex items-start gap-2 text-sm cursor-pointer">
+              <label key={a.id} className="flex cursor-pointer items-start gap-2 text-sm">
                 <input
                   type="radio"
                   name="shipo-adresa"
@@ -250,26 +277,23 @@ export function ShipoConfigClient({
         ) : (
           <p className="text-sm text-muted-foreground">
             {config.sender_address_label
-              ? `Aleasa: ${config.sender_address_label}`
-              : "Apasa „Testeaza conexiunea” ca sa aduci adresele din contul tau Shipo."}
+              ? `Aleasă: ${config.sender_address_label}`
+              : "Apasă „Testează conexiunea” ca să aduci adresele din contul tău Shipo."}
           </p>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={3} title="Ce se ofera in checkout">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Ofera si livrare in locker sau punct de ridicare</p>
-            <p className="text-xs text-muted-foreground">Shipo coteaza si serviciile la locker, cu pret real, spre deosebire de SmartShip, unde lockerul primeste tariful fix. Punctul se alege de client, dupa ce a ales oferta.</p>
-          </div>
-          <Switch checked={!!config.foloseste_lockere} onCheckedChange={(v) => setConfig({ ...config, foloseste_lockere: v })} />
-        </div>
+      <Sectiune pas={3} titlu="Ce se oferă la comandă">
+        <RandComutator
+          titlu="Oferă și livrare în locker sau punct de ridicare"
+          text="Shipo cotează și serviciile la locker, cu preț real (la SmartShip lockerul primește tariful fix). Punctul îl alege clientul, după ce a ales oferta."
+          activ={!!config.foloseste_lockere}
+          onChange={(v) => setConfig({ ...config, foloseste_lockere: v })}
+        />
 
-        <div>
-          <p className="text-xs font-semibold mb-2">Curierii pe care ii arati clientilor</p>
-          <p className="text-[11px] text-muted-foreground mb-2">
-            Nimic bifat = toti curierii pe care ii da contul tau.
-          </p>
+        <div className="border-t border-border pt-4">
+          <p className="mb-1 text-sm font-medium text-foreground">Curierii pe care îi arăți clienților</p>
+          <p className="mb-2 text-xs text-muted-foreground">Nimic bifat înseamnă toți curierii din contul tău.</p>
           <div className="flex flex-wrap gap-2">
             {(curieriCont.length > 0
               ? curieriCont.filter((c) => c.enabled).map((c) => [c.slug, c.name] as const)
@@ -280,12 +304,13 @@ export function ShipoConfigClient({
                 <button
                   key={slug}
                   type="button"
+                  aria-pressed={bifat}
                   onClick={() => setConfig({
                     ...config,
                     curieri_permisi: bifat ? permisi.filter((x) => x !== slug) : [...permisi, slug],
                   })}
-                  className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
-                    bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                  className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                    bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/40"
                   }`}
                 >
                   {nume}
@@ -297,61 +322,58 @@ export function ShipoConfigClient({
 
         {suprapuse.length > 0 && (
           <Callout variant="warning" icon={AlertTriangle}>
-            {suprapuse.join(", ")} {suprapuse.length === 1 ? "apare" : "apar"} si pe contractul tau direct, si prin
-            Shipo. Cumparatorul o sa vada ambele variante, la preturi diferite, poate fi exact ce vrei (alegi
-            contractul mai ieftin), dar poate parea si o dublura.
+            {suprapuse.join(", ")} {suprapuse.length === 1 ? "apare" : "apar"} și pe contractul tău direct, și prin Shipo.
+            Cumpărătorul vede ambele variante, la prețuri diferite: poate fi exact ce vrei (alegi contractul mai ieftin), dar
+            poate părea și o dublură.
           </Callout>
         )}
 
         {servicii.length > 0 && (
-          <p className="text-[11px] text-muted-foreground">
-            Contul tau are {servicii.length} servicii active, dintre care{" "}
-            {servicii.filter((s) => s.recipient_address_type !== "address").length} livreaza in locker sau punct PUDO.
+          <p className="text-xs text-muted-foreground">
+            Contul tău are {servicii.length} servicii active, dintre care{" "}
+            {servicii.filter((s) => s.recipient_address_type !== "address").length} livrează în locker sau punct PUDO.
           </p>
         )}
-        <Button type="button" variant="ghost" onClick={incarcaServicii} disabled={!esteActiv}>
-          Vezi serviciile contului
-        </Button>
-      </Panel>
+        <div>
+          <Button type="button" variant="ghost" size="sm" onClick={incarcaServicii} disabled={!esteActiv}>
+            Vezi serviciile contului
+          </Button>
+        </div>
+      </Sectiune>
 
-      <Panel step={4} title="Servicii care costa in plus">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Asigura coletul</p>
-            <p className="text-xs text-muted-foreground">
-              Se asigura la valoarea comenzii, plafonat la {VALOARE_DECLARATA.max} lei (limita Shipo). Comenzile sub
-              1 leu nu se asigura deloc: fara o valoare valida, cererea ar cadea la validarea lor.
-            </p>
-          </div>
-          <Switch checked={!!config.asigura_coletul} onCheckedChange={(v) => setConfig({ ...config, asigura_coletul: v })} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Deschidere la livrare</p>
-            <p className="text-xs text-muted-foreground">Clientul poate verifica coletul inainte de a plati. Unii curieri taxeaza separat.</p>
-          </div>
-          <Switch checked={!!config.deschidere_la_livrare} onCheckedChange={(v) => setConfig({ ...config, deschidere_la_livrare: v })} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">SMS catre destinatar la emiterea AWB-ului</p>
-            <p className="text-xs text-muted-foreground">Costa per mesaj, dupa tariful contului tau Shipo.</p>
-          </div>
-          <Switch checked={!!config.notifica_destinatarul} onCheckedChange={(v) => setConfig({ ...config, notifica_destinatarul: v })} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Ramburs Turbo</p>
-            <p className="text-xs text-muted-foreground">Banii din ramburs vin mai repede, contra cost. Se aplica doar comenzilor cu plata la livrare.</p>
-          </div>
-          <Switch checked={!!config.ramburs_turbo} onCheckedChange={(v) => setConfig({ ...config, ramburs_turbo: v })} />
-        </div>
-      </Panel>
+      <Sectiune pas={4} titlu="Servicii care costă în plus">
+        <RandComutator
+          titlu="Asigură coletul"
+          text={`Se asigură la valoarea comenzii, plafonat la ${VALOARE_DECLARATA.max} lei (limita Shipo). Comenzile sub 1 leu nu se asigură deloc: fără o valoare validă, cererea ar cădea la validarea lor.`}
+          activ={!!config.asigura_coletul}
+          onChange={(v) => setConfig({ ...config, asigura_coletul: v })}
+        />
+        <RandComutator
+          separat
+          titlu="Deschidere la livrare"
+          text="Clientul poate verifica coletul înainte de a plăti. Unii curieri taxează separat."
+          activ={!!config.deschidere_la_livrare}
+          onChange={(v) => setConfig({ ...config, deschidere_la_livrare: v })}
+        />
+        <RandComutator
+          separat
+          titlu="SMS către destinatar la emiterea AWB-ului"
+          text="Costă per mesaj, după tariful contului tău Shipo."
+          activ={!!config.notifica_destinatarul}
+          onChange={(v) => setConfig({ ...config, notifica_destinatarul: v })}
+        />
+        <RandComutator
+          separat
+          titlu="Ramburs Turbo"
+          text="Banii din ramburs vin mai repede, contra cost. Se aplică doar comenzilor cu plata la livrare."
+          activ={!!config.ramburs_turbo}
+          onChange={(v) => setConfig({ ...config, ramburs_turbo: v })}
+        />
+      </Sectiune>
 
-      <Panel step={5} title="Coletul implicit">
-        <p className="text-xs text-muted-foreground">Se folosesc cand comanda n-are dimensiuni proprii.</p>
+      <Sectiune pas={5} titlu="Coletul implicit" descriere="Se folosesc când comanda n-are dimensiuni proprii.">
         <div className="grid grid-cols-3 gap-3">
-          {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
+          {([["lungime_cm", "Lungime"], ["latime_cm", "Lățime"], ["inaltime_cm", "Înălțime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
                 type="number"
@@ -362,45 +384,37 @@ export function ShipoConfigClient({
             </Field>
           ))}
         </div>
-        <Field
-          label="Textul de pe AWB"
-          hint="Maxim 40 de caractere, doar litere si cifre, asa cere Shipo. Diacriticele si semnele se curata automat."
-        >
-          <Input
-            value={config.continut_implicit ?? ""}
-            placeholder="Colet"
-            onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })}
-          />
-        </Field>
-        <Field label="Formatul etichetei">
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.format_eticheta ?? "A4"}
-            onChange={(e) => setConfig({ ...config, format_eticheta: e.target.value as FormatEticheta })}
-          >
-            {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
-          </select>
-        </Field>
-      </Panel>
-
-      <Panel step={6} title="Pornire">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Foloseste Shipo pentru livrare</p>
-            <p className="text-xs text-muted-foreground">Dupa salvare, activeaza metoda „Shipo.ro” si din Setari → Livrare, ca sa apara in checkout.</p>
-          </div>
-          <Switch checked={!!config.enabled} onCheckedChange={(v) => setConfig({ ...config, enabled: v })} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Textul de pe AWB" htmlFor="shipo-continut"
+            hint="Maxim 40 de caractere, doar litere și cifre, așa cere Shipo. Diacriticele și semnele se curăță automat.">
+            <Input id="shipo-continut" value={config.continut_implicit ?? ""} placeholder="Colet" onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })} />
+          </Field>
+          <Field label="Formatul etichetei" htmlFor="shipo-format">
+            <select
+              id="shipo-format"
+              className={selectCls}
+              value={config.format_eticheta ?? "A4"}
+              onChange={(e) => setConfig({ ...config, format_eticheta: e.target.value as FormatEticheta })}
+            >
+              {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
+            </select>
+          </Field>
         </div>
-        {config.enabled && !areAdresa && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Fara o adresa de ridicare aleasa, Shipo nu poate cota nimic, clientii vor vedea tariful fix.
-          </Callout>
-        )}
-        <Button type="button" onClick={salvare} disabled={salveaza}>
-          {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
-        </Button>
-      </Panel>
-    </div>
+      </Sectiune>
+
+      {cheieSalvata && (
+        <ZonaDeconectare descriere="Șterge cheia și setările Shipo din Edinio. Expedierile deja emise rămân la Shipo.">
+          <ButonDeconectare
+            nume="Shipo"
+            cePierzi="Cheia de API se șterge din Edinio, împreună cu adresa de ridicare și serviciile alese. Ca să te întorci, generezi din nou o cheie din contul Shipo. Expedierile deja emise rămân la ei."
+            marime="default"
+            onConfirma={deconecteaza}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={salveaza} onSalveaza={salvare} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }
 

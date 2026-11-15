@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Info, Loader2, Search } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, ChevronRight, Info, KeyRound, Loader2, RefreshCw, Search, Wallet } from "lucide-react";
 import {
   cautaLocalitatiEpacketAction,
   codPostalRidicareEpacketAction,
@@ -33,9 +33,12 @@ import { JUDETE, codAutoAlJudetului } from "@/lib/ro/judete";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { aPropusCeva, type ExpeditorPropus } from "@/lib/curiera/precompletare";
@@ -54,8 +57,6 @@ import { aPropusCeva, type ExpeditorPropus } from "@/lib/curiera/precompletare";
 
 /** Judetele formularului, cu codul lor (B, CJ...), in ordinea listei casei. */
 const JUDETE_CU_COD = JUDETE.map((j) => ({ nume: j, cod: codAutoAlJudetului(j) ?? "" })).filter((j) => j.cod);
-
-const campClasa = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 
 function nr(v: string): number {
   const n = Number(v.replace(",", "."));
@@ -119,6 +120,23 @@ export function EpacketConfigClient({
   const [marime, setMarime] = useState<"A4" | "A6">(initialConfig?.dimensiune_eticheta === "A4" ? "A4" : "A6");
   const [continut, setContinut] = useState(initialConfig?.continut_implicit ?? "");
 
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = {
+    cheie, prenume, nume, firma, telefon, email, localitate, codPostal, strada, numar, bloc, scara, etaj, apartament,
+    titular, iban, banca, curierAdresa, lockere, curierPuncte, lungime, latime, inaltime, asigurare, deschidere, marime, continut,
+  };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setCheie(reper.cheie); setPrenume(reper.prenume); setNume(reper.nume); setFirma(reper.firma); setTelefon(reper.telefon);
+    setEmail(reper.email); setLocalitate(reper.localitate); setCodPostal(reper.codPostal); setStrada(reper.strada);
+    setNumar(reper.numar); setBloc(reper.bloc); setScara(reper.scara); setEtaj(reper.etaj); setApartament(reper.apartament);
+    setTitular(reper.titular); setIban(reper.iban); setBanca(reper.banca); setCurierAdresa(reper.curierAdresa);
+    setLockere(reper.lockere); setCurierPuncte(reper.curierPuncte); setLungime(reper.lungime); setLatime(reper.latime);
+    setInaltime(reper.inaltime); setAsigurare(reper.asigurare); setDeschidere(reper.deschidere); setMarime(reper.marime);
+    setContinut(reper.continut);
+  }
+
   const cheieSalvata = secretulEsteSalvat(initialConfig, "api_key");
   const areCheie = cheie.trim() !== "" || cheieSalvata;
   const isActive = !!(initialConfig?.enabled && cheieSalvata);
@@ -152,14 +170,14 @@ export function EpacketConfigClient({
   }
 
   async function handleTest() {
-    if (!areCheie) return toast.error("Completeaza cheia API primita de la e-packet");
+    if (!areCheie) return toast.error("Completează cheia API primită de la e-packet.");
     setTesting(true);
     let res: Awaited<ReturnType<typeof testEpacketConnectionAction>>;
     try {
       res = await testEpacketConnectionAction(businessId, cheie.trim());
     } catch (err) {
       setProba(null);
-      toast.error("e-packet nu a raspuns: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("e-packet nu a răspuns: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setTesting(false);
@@ -174,22 +192,22 @@ export function EpacketConfigClient({
   }
 
   async function handleCauta() {
-    if (cautare.trim().length < 2) return toast.error("Scrie cel putin doua litere din numele localitatii");
-    if (!judet) return toast.error("Alege judetul");
-    if (!areCheie) return toast.error("Completeaza intai cheia API");
+    if (cautare.trim().length < 2) return toast.error("Scrie cel puțin două litere din numele localității.");
+    if (!judet) return toast.error("Alege județul.");
+    if (!areCheie) return toast.error("Completează întâi cheia API.");
     setCaut(true);
     let res: Awaited<ReturnType<typeof cautaLocalitatiEpacketAction>>;
     try {
       res = await cautaLocalitatiEpacketAction(businessId, cautare.trim(), judet, cheie.trim());
     } catch (err) {
-      toast.error("Cautarea nu a mers: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("Căutarea nu a mers: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setCaut(false);
     }
     if (!res.ok) return toast.error(res.error);
     setRezultate(res.localitati);
-    if (res.localitati.length === 0) toast.error("e-packet nu are nicio localitate cu numele asta in judet");
+    if (res.localitati.length === 0) toast.error("e-packet nu are nicio localitate cu numele acesta în județ.");
   }
 
   async function alege(l: LocalitateEpacket) {
@@ -206,15 +224,15 @@ export function EpacketConfigClient({
   }
 
   async function handleSave() {
-    if (!areCheie) return toast.error("Completeaza cheia API");
+    if (!areCheie) return toast.error("Completează cheia API.");
     /* ⚠ Aceleasi campuri ca `epacketGata`: fara oricare, fiecare AWB ar fi refuzat (422). */
-    if (!numeBun(prenume) || !numeBun(nume)) return toast.error("Prenumele si numele de la ridicare au cate 3-25 de litere");
-    if (!telefon.trim() || !email.trim()) return toast.error("Telefonul si emailul de la ridicare sunt obligatorii");
-    if (!localitate) return toast.error("Alege localitatea de ridicare din lista e-packet");
-    if (!/^\d{6}$/.test(codPostal.trim())) return toast.error("Codul postal de ridicare are exact 6 cifre");
-    if (!strada.trim() || !numar.trim()) return toast.error("Strada si numarul de la ridicare sunt obligatorii (scrie FN daca nu are numar)");
+    if (!numeBun(prenume) || !numeBun(nume)) return toast.error("Prenumele și numele de la ridicare au câte 3-25 de litere.");
+    if (!telefon.trim() || !email.trim()) return toast.error("Telefonul și emailul de la ridicare sunt obligatorii.");
+    if (!localitate) return toast.error("Alege localitatea de ridicare din lista e-packet.");
+    if (!/^\d{6}$/.test(codPostal.trim())) return toast.error("Codul poștal de ridicare are exact 6 cifre.");
+    if (!strada.trim() || !numar.trim()) return toast.error("Strada și numărul de la ridicare sunt obligatorii (scrie FN dacă nu are număr).");
     if ([lungime, latime, inaltime].some((v) => !(nr(v) >= 1 && nr(v) <= 300))) {
-      return toast.error("Dimensiunile implicite ale coletului sunt intre 1 si 300 cm");
+      return toast.error("Dimensiunile implicite ale coletului sunt între 1 și 300 cm.");
     }
 
     setSaving(true);
@@ -222,14 +240,15 @@ export function EpacketConfigClient({
     try {
       res = await saveEpacketConfig(businessId, construieste());
     } catch (err) {
-      toast.error("Configurarea nu s-a putut salva: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("Configurarea nu s-a putut salva: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setSaving(false);
     }
     if ("error" in res) return toast.error(res.error);
-    toast.success("Configurarea e-packet a fost salvata");
+    toast.success("Configurarea e-packet a fost salvată.");
     setCheie("");
+    setReper({ ...valori, cheie: "" });
     router.refresh();
   }
 
@@ -239,95 +258,101 @@ export function EpacketConfigClient({
     try {
       res = await disconnectEpacket(businessId);
     } catch (err) {
-      toast.error("Deconectarea nu s-a putut face: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capat"));
+      toast.error("Deconectarea nu s-a putut face: " + (err instanceof Error ? err.message : "cererea nu a ajuns la capăt"));
       return;
     } finally {
       setDisconnecting(false);
     }
     if ("error" in res) return toast.error(res.error);
-    toast.success("e-packet a fost deconectat");
+    toast.success("e-packet a fost deconectat.");
     setProba(null);
     router.refresh();
   }
 
+  const stari: StareAntet[] = !isActive
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      adresaIncompleta ? { ton: "rau", text: "Adresă incompletă" } : { ton: "bun", text: "Activ" },
+      ...(deTest === true ? [{ ton: "asteptare" as const, text: "Cheie de test" }] : []),
+    ];
+
   return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="e-packet e activ"
-          action={
-            <ButonDeconectare
-              nume="e-packet"
-              cePierzi="Se sterge toata configurarea e-packet din Edinio: cheia API, adresa de ridicare, contul de ramburs si curierii alesi. AWB-urile deja emise raman pe comenzi si in aplicatia e-packet, dar urmarirea lor se opreste, iar etichetele le descarci de acum din aplicatia lor. Metoda e-packet se opreste si in Setari -> Livrare."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          Ridicare din {initialConfig?.expeditor?.localitate_nume || "localitatea necompletata"}. AWB-uri la adresa prin{" "}
-          {NUME_CURIER_EPACKET[initialConfig?.curier_adresa ?? "DPD"]}
-          {initialConfig?.lockere ? `, la locker prin ${NUME_CURIER_EPACKET[initialConfig?.curier_puncte ?? "SDY"]}` : ""}.
-        </Callout>
-      )}
-
+    <PaginaIntegrare
+      id="epacket"
+      titlu="Livrare"
+      descriere="Un singur cont și un singur credit pentru DPD, Sameday, Cargus, FAN Courier, Dragon Star și TCE: AWB-uri din comenzi, la adresă sau la locker, cu ramburs și tarife pe loc."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia API", facut: areCheie },
+          { text: "Localitatea de ridicare", facut: !!localitate },
+          { text: "Adresa de ridicare completă", facut: !!(numeBun(prenume) && numeBun(nume) && telefon.trim() && email.trim() && localitate && /^\d{6}$/.test(codPostal.trim()) && strada.trim() && numar.trim()) },
+          { text: "e-packet activ", facut: isActive && !adresaIncompleta },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Ridicare din", valoare: initialConfig?.expeditor?.localitate_nume || "necompletată" },
+            { eticheta: "La adresă prin", valoare: NUME_CURIER_EPACKET[initialConfig?.curier_adresa ?? "DPD"] },
+            { eticheta: "La locker prin", valoare: initialConfig?.lockere ? NUME_CURIER_EPACKET[initialConfig?.curier_puncte ?? "SDY"] : "fără lockere" },
+          ]} />
+        )}
+        <CumFunctioneaza id="epacket" puncte={[
+          { Icon: KeyRound, text: "Cheile le emite e-packet la cerere (contact@e-packet.ro). Cu o cheie de test merg doar DPD și Sameday, fără taxare." },
+          { Icon: Wallet, text: "Fiecare AWB se taxează din creditul e-packet; sub 20 de lei credit, emiterea e refuzată." },
+          { Icon: Ban, text: "AWB-urile nu se pot anula din Edinio: anularea se cere la e-packet." },
+          { Icon: RefreshCw, text: "Starea coletului se citește la două ore și mută comanda singură." },
+        ]} />
+      </>}
+    >
       {adresaIncompleta && (
-        <Callout variant="warning" icon={AlertTriangle} title="Adresa de ridicare e incompleta">
-          Fara prenume, nume, telefon, email, localitate, cod postal, strada si numar, e-packet refuza fiecare AWB.
-          Pana le completezi, e-packet nu apare in checkout si nu se pot emite AWB-uri.
+        <Callout variant="warning" icon={AlertTriangle} title="Adresa de ridicare e incompletă">
+          Fără prenume, nume, telefon, email, localitate, cod poștal, stradă și număr, e-packet refuză fiecare AWB. Până le
+          completezi, e-packet nu apare la comandă și nu se pot emite AWB-uri.
         </Callout>
       )}
 
-      <Panel step={1} title="Cheia API">
-        <p className="text-xs text-muted-foreground">
-          Cheile se emit la cerere de e-packet (contact@e-packet.ro). Cheia e singura credentiala: cine o are emite
-          AWB-uri platite din creditul tau. Cu o cheie de test (<code>epk_test_</code>) merg doar DPD si Sameday, in
-          mediul lor de test: AWB-urile nu pleaca la curier si nu se taxeaza.
-        </p>
-        <Field label="Cheia API" required>
+      <Sectiune pas={1} titlu="Cheia API"
+        descriere="Cheile se emit la cerere de e-packet (contact@e-packet.ro). E singura credențială: cine o are emite AWB-uri plătite din creditul tău.">
+        <Field label="Cheia API" htmlFor="epacket-cheie" required
+          hint="Cu o cheie de test (epk_test_) merg doar DPD și Sameday, în mediul lor de test: AWB-urile nu pleacă la curier și nu se taxează.">
           <Input
+            id="epacket-cheie"
             type="password"
             value={cheie}
             onChange={(ev) => { setCheie(ev.target.value); setProba(null); }}
             placeholder={cheieSalvata ? PLACEHOLDER_SECRET_SALVAT : "epk_live_… sau epk_test_…"}
           />
         </Field>
-        <Button onClick={handleTest} disabled={testing || !areCheie}>
-          {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {testing ? "Se verifica..." : "Testeaza conexiunea"}
-        </Button>
+        <div>
+          <Button variant="outline" onClick={handleTest} disabled={testing || !areCheie}>
+            {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {testing ? "Se verifică..." : "Testează conexiunea"}
+          </Button>
+        </div>
         {proba && (
-          <div className="space-y-1 rounded-lg border border-success/20 bg-success/5 p-3 text-xs">
-            <p className="font-semibold text-success">Conectat la e-packet</p>
-            <p className="text-muted-foreground">
-              {proba.test
-                ? "Cheie de TEST: AWB-urile se fac in mediul de test DPD si Sameday, nu pleaca la nimeni si nu se taxeaza."
-                : "Cheie LIVE: fiecare AWB e real si se taxeaza din credit (minim 20 lei in cont)."}
-            </p>
-          </div>
+          <Callout variant="success" icon={CheckCircle} title="Conectat la e-packet">
+            {proba.test
+              ? "Cheie de TEST: AWB-urile se fac în mediul de test DPD și Sameday, nu pleacă la nimeni și nu se taxează."
+              : "Cheie LIVE: fiecare AWB e real și se taxează din credit (minim 20 de lei în cont)."}
+          </Callout>
         )}
         {proba && !isActive && (
           <Callout variant="info" icon={Info}>
-            {"Cheia merge, dar nimic nu e salvat inca. Completeaza adresa de ridicare si apasa „Salveaza”, jos. Pana atunci e-packet nu apare la comenzi si nici in checkout."}
+            Cheia merge, dar nimic nu e salvat încă. Completează adresa de ridicare și apasă „Salvează”, jos. Până atunci e-packet
+            nu apare la comenzi și nici la comandă.
           </Callout>
         )}
         {proba && isActive && cheie.trim() !== "" && (
-          <Callout variant="info" icon={Info}>
-            {"Cheia noua merge, dar nu e salvata: pana apesi „Salveaza”, ramane cea veche."}
-          </Callout>
+          <Callout variant="info" icon={Info}>Cheia nouă merge, dar nu e salvată: până apeși „Salvează”, rămâne cea veche.</Callout>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={2} title="Adresa de ridicare">
-        <p className="text-xs text-muted-foreground">
-          De aici ridica curierul coletele. La DPD, FAN Courier si Dragon Star ridicarea se comanda automat dupa fiecare
-          AWB; la Sameday, Cargus si TCE se face dupa contractul tau cu e-packet. Diacriticele se scot la trimitere
-          (pe etichetele lor, in adresa, literele cu diacritice se pierd).
-        </p>
+      <Sectiune pas={2} titlu="Adresa de ridicare"
+        descriere="De aici ridică curierul coletele. La DPD, FAN Courier și Dragon Star ridicarea se comandă automat după fiecare AWB; la Sameday, Cargus și TCE se face după contractul tău cu e-packet. Diacriticele se scot la trimitere.">
         {aPropusCeva(propunere) && (
           <Callout variant="info" icon={Info}>
-            {"Am completat ce stiam din datele magazinului (Setari). Verifica-le, alege localitatea din lista e-packet si completeaza prenumele si numele persoanei de contact."}
+            Am completat ce știam din datele magazinului (Setări). Verifică-le, alege localitatea din lista e-packet și completează
+            prenumele și numele persoanei de contact.
           </Callout>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -337,7 +362,7 @@ export function EpacketConfigClient({
           <Field label="Nume" required hint="3-25 litere">
             <Input value={nume} onChange={(ev) => setNume(ev.target.value)} placeholder="Popescu" maxLength={25} />
           </Field>
-          <Field label="Firma" hint="Daca o completezi, pe eticheta DPD apare firma in locul numelui." className="sm:col-span-2">
+          <Field label="Firmă" hint="Dacă o completezi, pe eticheta DPD apare firma în locul numelui." className="sm:col-span-2">
             <Input value={firma} onChange={(ev) => setFirma(ev.target.value)} placeholder="Magazinul Meu SRL" />
           </Field>
           <Field label="Telefon" required>
@@ -348,54 +373,51 @@ export function EpacketConfigClient({
           </Field>
         </div>
 
-        <div className="space-y-2 rounded-lg border border-border p-3">
-          <p className="text-sm font-medium text-foreground">Localitatea de ridicare *</p>
+        <div className="space-y-2 rounded-xl border border-border p-3">
+          <p className="text-sm font-medium text-foreground">Localitatea de ridicare <span className="text-destructive">*</span></p>
           {localitate ? (
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-foreground">{localitate.nume}</p>
-              <Button variant="outline" size="sm" onClick={() => setLocalitate(null)}>Schimba</Button>
+              <Button variant="outline" size="sm" onClick={() => setLocalitate(null)}>Schimbă</Button>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                <select value={judet} onChange={(ev) => setJudet(ev.target.value)} className={campClasa} aria-label="Judetul">
-                  <option value="">Alege judetul</option>
+                <select value={judet} onChange={(ev) => setJudet(ev.target.value)} className={selectCls} aria-label="Județul">
+                  <option value="">Alege județul</option>
                   {JUDETE_CU_COD.map((j) => <option key={j.cod} value={j.cod}>{j.nume}</option>)}
                 </select>
-                <Input value={cautare} onChange={(ev) => setCautare(ev.target.value)} placeholder="Numele localitatii"
+                <Input value={cautare} onChange={(ev) => setCautare(ev.target.value)} placeholder="Numele localității" aria-label="Numele localității"
                   onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); void handleCauta(); } }} />
                 <Button variant="outline" onClick={handleCauta} disabled={caut}>
-                  {caut ? <Loader2 className="animate-spin" /> : <Search className="h-4 w-4" />}
-                  Cauta
+                  {caut ? <Loader2 className="animate-spin" /> : <Search />}
+                  Caută
                 </Button>
               </div>
               {rezultate && rezultate.length > 0 && (
                 <ul className="max-h-56 overflow-y-auto rounded-md border border-border">
                   {rezultate.map((l) => (
                     <li key={l.id}>
-                      <button type="button" onClick={() => void alege(l)}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-muted">
+                      <button type="button" onClick={() => void alege(l)} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">
                         {l.afisare}
                       </button>
                     </li>
                   ))}
                 </ul>
               )}
-              <p className="text-xs text-muted-foreground">
-                In Bucuresti alegi sectorul (e-packet are capitala pe sectoare: cauta „Sectorul”).
-              </p>
+              <p className="text-xs text-muted-foreground">În București alegi sectorul (e-packet are capitala pe sectoare: caută „Sectorul”).</p>
             </>
           )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Cod postal" required hint="Exact 6 cifre. Se propune din punctele localitatii; DPD refuza un cod care nu e al localitatii.">
+          <Field label="Cod poștal" required hint="Exact 6 cifre. Se propune din punctele localității; DPD refuză un cod care nu e al localității.">
             <Input value={codPostal} onChange={(ev) => setCodPostal(ev.target.value)} placeholder="400129" maxLength={6} inputMode="numeric" />
           </Field>
           <Field label="Strada" required hint="Cel mult 50 de caractere">
             <Input value={strada} onChange={(ev) => setStrada(ev.target.value)} placeholder="Strada Eroilor" maxLength={50} />
           </Field>
-          <Field label="Numar" required hint="Scrie FN daca nu are numar">
+          <Field label="Număr" required hint="Scrie FN dacă nu are număr">
             <Input value={numar} onChange={(ev) => setNumar(ev.target.value)} placeholder="12" maxLength={10} />
           </Field>
           <Field label="Bloc">
@@ -411,13 +433,10 @@ export function EpacketConfigClient({
             <Input value={apartament} onChange={(ev) => setApartament(ev.target.value)} maxLength={10} />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={3} title="Contul pentru ramburs">
-        <p className="text-xs text-muted-foreground">
-          Unde vin banii incasati la livrare. e-packet cere toate trei campurile la fiecare AWB cu ramburs; fara ele,
-          comenzile cu plata la livrare nu pot primi AWB. Titularul se trimite fara diacritice.
-        </p>
+      <Sectiune pas={3} titlu="Contul pentru ramburs"
+        descriere="Unde vin banii încasați la livrare. e-packet cere toate trei câmpurile la fiecare AWB cu ramburs; fără ele, comenzile cu plata la livrare nu pot primi AWB. Titularul se trimite fără diacritice.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Titularul contului">
             <Input value={titular} onChange={(ev) => setTitular(ev.target.value)} placeholder="Magazinul Meu SRL" />
@@ -429,97 +448,89 @@ export function EpacketConfigClient({
             <Input value={iban} onChange={(ev) => setIban(ev.target.value)} placeholder="RO49AAAA1B31007593840000" />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={4} title="Curierii">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Curierul pentru livrarea la adresa" hint="Il poti schimba la fiecare AWB, vazand tarifele tuturor.">
-            <select value={curierAdresa} onChange={(ev) => setCurierAdresa(ev.target.value as CurierEpacket)} className={campClasa}>
-              {CURIERI_EPACKET.map((c) => <option key={c} value={c}>{NUME_CURIER_EPACKET[c]}</option>)}
-            </select>
-          </Field>
-        </div>
+      <Sectiune pas={4} titlu="Curierii">
+        <Field label="Curierul pentru livrarea la adresă" htmlFor="epacket-curier" hint="Îl poți schimba la fiecare AWB, văzând tarifele tuturor." className="sm:max-w-sm">
+          <select id="epacket-curier" value={curierAdresa} onChange={(ev) => setCurierAdresa(ev.target.value as CurierEpacket)} className={selectCls}>
+            {CURIERI_EPACKET.map((c) => <option key={c} value={c}>{NUME_CURIER_EPACKET[c]}</option>)}
+          </select>
+        </Field>
         {deTest === true && !CURIERI_DE_TEST.includes(curierAdresa) && (
           <Callout variant="warning" icon={AlertTriangle}>
-            Cu o cheie de test merg doar DPD si Sameday: AWB-urile prin {NUME_CURIER_EPACKET[curierAdresa]} vor fi refuzate pana pui cheia live.
+            Cu o cheie de test merg doar DPD și Sameday: AWB-urile prin {NUME_CURIER_EPACKET[curierAdresa]} vor fi refuzate până pui cheia live.
           </Callout>
         )}
 
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Ofera in checkout livrarea la locker</p>
-            <p className="text-xs text-muted-foreground">
-              Cumparatorul isi alege punctul din reteaua de mai jos. Pretul e cel fix din „Setari -&gt; Livrare”.
-              Optiunea apare doar pentru cosurile sub limita lockerelor retelei.
-            </p>
-          </div>
-          <Switch checked={lockere} onCheckedChange={setLockere} />
-        </div>
+        <RandComutator
+          separat
+          titlu="Oferă la comandă livrarea la locker"
+          text="Cumpărătorul își alege punctul din rețeaua de mai jos. Prețul e cel fix din Setări, Livrare. Opțiunea apare doar pentru coșurile sub limita lockerelor rețelei."
+          activ={lockere}
+          onChange={setLockere}
+        />
         {lockere && (
           <Field
-            label="Reteaua de lockere"
-            hint={`Pana la ${KG_MAXIM_PUNCT[curierPuncte]} kg pe colet${curierPuncte === "FCR" ? " (doar FANbox; PayPoint-urile nu se ofera)" : ""}. Un singur colet la locker.`}
+            label="Rețeaua de lockere"
+            htmlFor="epacket-retea"
+            className="sm:max-w-sm"
+            hint={`Până la ${KG_MAXIM_PUNCT[curierPuncte]} kg pe colet${curierPuncte === "FCR" ? " (doar FANbox; PayPoint-urile nu se oferă)" : ""}. Un singur colet la locker.`}
           >
-            <select value={curierPuncte} onChange={(ev) => setCurierPuncte(ev.target.value as CurierCuPuncte)} className={campClasa}>
+            <select id="epacket-retea" value={curierPuncte} onChange={(ev) => setCurierPuncte(ev.target.value as CurierCuPuncte)} className={selectCls}>
               {CURIERI_CU_PUNCTE.map((c) => <option key={c} value={c}>{NUME_CURIER_EPACKET[c]}</option>)}
             </select>
           </Field>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={5} title="Coletul si eticheta">
-        <p className="text-xs text-muted-foreground">
-          La colet, e-packet cere obligatoriu dimensiunile. Cele de aici se pun cand comanda nu le are; le poti schimba la
-          fiecare AWB.
-        </p>
+      <Sectiune pas={5} titlu="Coletul și eticheta"
+        descriere="La colet, e-packet cere obligatoriu dimensiunile. Cele de aici se pun când comanda nu le are; le poți schimba la fiecare AWB.">
         <div className="grid grid-cols-3 gap-2">
           <Field label="Lungime (cm)">
             <Input inputMode="decimal" value={lungime} onChange={(ev) => setLungime(ev.target.value)} />
           </Field>
-          <Field label="Latime (cm)">
+          <Field label="Lățime (cm)">
             <Input inputMode="decimal" value={latime} onChange={(ev) => setLatime(ev.target.value)} />
           </Field>
-          <Field label="Inaltime (cm)">
+          <Field label="Înălțime (cm)">
             <Input inputMode="decimal" value={inaltime} onChange={(ev) => setInaltime(ev.target.value)} />
           </Field>
         </div>
 
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Declara valoarea comenzii ca asigurare</p>
-            <p className="text-xs text-muted-foreground">Fereastra de AWB precompleteaza asigurarea cu totalul comenzii; se plateste. Nu merge pe colete peste 32 kg.</p>
-          </div>
-          <Switch checked={asigurare} onCheckedChange={setAsigurare} />
-        </div>
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Deschiderea coletului la livrare</p>
-            <p className="text-xs text-muted-foreground">
-              Vine bifata pe AWB-urile la adresa. La DPD merge doar cu ramburs; FAN Courier, lockerele si plicurile nu o au.
-            </p>
-          </div>
-          <Switch checked={deschidere} onCheckedChange={setDeschidere} />
-        </div>
+        <RandComutator
+          separat
+          titlu="Declară valoarea comenzii ca asigurare"
+          text="Fereastra de AWB precompletează asigurarea cu totalul comenzii; se plătește. Nu merge pe colete peste 32 kg."
+          activ={asigurare}
+          onChange={setAsigurare}
+        />
+        <RandComutator
+          separat
+          titlu="Deschiderea coletului la livrare"
+          text="Vine bifată pe AWB-urile la adresă. La DPD merge doar cu ramburs; FAN Courier, lockerele și plicurile nu o au."
+          activ={deschidere}
+          onChange={setDeschidere}
+        />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Marimea etichetei" hint="A6 exista la DPD, Sameday si Cargus; FAN Courier tipareste A4, Dragon Star si TCE eticheta lor.">
-            <select value={marime} onChange={(ev) => setMarime(ev.target.value as "A4" | "A6")} className={campClasa}>
-              <option value="A6">A6 (eticheta compacta)</option>
-              <option value="A4">A4 (foaie intreaga)</option>
+        <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 sm:grid-cols-2">
+          <Field label="Mărimea etichetei" htmlFor="epacket-marime" hint="A6 există la DPD, Sameday și Cargus; FAN Courier tipărește A4, Dragon Star și TCE eticheta lor.">
+            <select id="epacket-marime" value={marime} onChange={(ev) => setMarime(ev.target.value as "A4" | "A6")} className={selectCls}>
+              <option value="A6">A6 (etichetă compactă)</option>
+              <option value="A4">A4 (foaie întreagă)</option>
             </select>
           </Field>
-          <Field label="Continut implicit" hint="Pe AWB cand comanda nu da unul mai bun (max. 50).">
-            <Input value={continut} onChange={(ev) => setContinut(ev.target.value)} placeholder="Produse" maxLength={50} />
+          <Field label="Conținut implicit" htmlFor="epacket-continut" hint="Pe AWB când comanda nu dă unul mai bun (max. 50).">
+            <Input id="epacket-continut" value={continut} onChange={(ev) => setContinut(ev.target.value)} placeholder="Produse" maxLength={50} />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={6} title="Ce trebuie sa stii">
-        <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-          <li>Fiecare AWB e taxat din creditul e-packet la pretul din clipa emiterii (tariful aratat e o estimare). Sub 20 lei credit, emiterea e refuzata.</li>
+      <Sectiune titlu="Ce trebuie să știi">
+        <ul className="list-disc space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
+          <li>Fiecare AWB e taxat din creditul e-packet la prețul din clipa emiterii (tariful arătat e o estimare). Sub 20 de lei credit, emiterea e refuzată.</li>
           <li>AWB-urile NU se pot anula din Edinio (API-ul lor n-are anulare): anularea se cere la e-packet, la contact@e-packet.ro sau 0371 236 562.</li>
-          <li>Daca raspunsul la emitere se pierde, Edinio nu emite din nou singur: verifici in aplicatia e-packet si legi AWB-ul de comanda din fereastra.</li>
-          <li>Starea coletului se citeste la doua ore si muta comanda singura:</li>
+          <li>Dacă răspunsul la emitere se pierde, Edinio nu emite din nou singur: verifici în aplicația e-packet și legi AWB-ul de comandă din fereastră.</li>
+          <li>Starea coletului se citește la două ore și mută comanda singură:</li>
         </ul>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -533,12 +544,27 @@ export function EpacketConfigClient({
             </tbody>
           </table>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Button onClick={handleSave} disabled={saving || !areCheie} className="w-full sm:w-auto">
-        {saving ? <Loader2 className="animate-spin" /> : null}
-        {saving ? "Se salveaza..." : "Salveaza"}
-      </Button>
-    </div>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge configurarea e-packet din Edinio. AWB-urile deja emise rămân pe comenzi.">
+          <ButonDeconectare
+            nume="e-packet"
+            cePierzi="Se șterge toată configurarea e-packet din Edinio: cheia API, adresa de ridicare, contul de ramburs și curierii aleși. AWB-urile deja emise rămân pe comenzi și în aplicația e-packet, dar urmărirea lor se oprește, iar etichetele le descarci de acum din aplicația lor. Metoda e-packet se oprește și în Setări, Livrare."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={saving}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

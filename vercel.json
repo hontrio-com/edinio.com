@@ -32,6 +32,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/tbi-reconciliere",
+      "schedule": "4,14,24,34,44,54 * * * *"
+    },
+    {
       "path": "/api/cron/reconcile-subscriptions",
       "schedule": "0 * * * *"
     },

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, ChevronRight, ClipboardCheck, KeyRound, Loader2 } from "lucide-react";
 import {
   disconnectPallex,
   savePallexConfig,
@@ -16,9 +16,12 @@ import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -62,6 +65,21 @@ export function PallexConfigClient({
   const [liftRidicare, setLiftRidicare] = useState(initialConfig?.servicii?.liftLaRidicare ?? false);
   const [accesRidicare, setAccesRidicare] = useState(initialConfig?.servicii?.accesRestrictionatLaRidicare ?? false);
 
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = {
+    username, password, codPostal, judet, contact, tip, oraDeschidere, oraInchidere, oraDeschidereLivrare,
+    oraInchidereLivrare, zileRidicare, zileLivrare, valideazaAutomat, liftRidicare, accesRidicare,
+  };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setUsername(reper.username); setPassword(reper.password); setCodPostal(reper.codPostal); setJudet(reper.judet);
+    setContact(reper.contact); setTip(reper.tip); setOraDeschidere(reper.oraDeschidere); setOraInchidere(reper.oraInchidere);
+    setOraDeschidereLivrare(reper.oraDeschidereLivrare); setOraInchidereLivrare(reper.oraInchidereLivrare);
+    setZileRidicare(reper.zileRidicare); setZileLivrare(reper.zileLivrare); setValideazaAutomat(reper.valideazaAutomat);
+    setLiftRidicare(reper.liftRidicare); setAccesRidicare(reper.accesRidicare);
+  }
+
   const areParola = password.trim() !== "" || secretulEsteSalvat(initialConfig, "password");
   const isActive = !!(initialConfig?.enabled && initialConfig?.username);
   const completat = username.trim() !== "" && areParola;
@@ -90,7 +108,7 @@ export function PallexConfigClient({
   }
 
   async function handleTest() {
-    if (!completat) return toast.error("Completeaza utilizatorul si parola ClientPlus");
+    if (!completat) return toast.error("Completează utilizatorul și parola ClientPlus.");
 
     setTesting(true);
     const r = await testPallexConnectionAction(businessId, construieste());
@@ -102,13 +120,13 @@ export function PallexConfigClient({
       return;
     }
     setStatusuri(r.statusuri);
-    toast.success("Conexiune Pall-Ex reusita");
+    toast.success("Conexiune Pall-Ex reușită.");
   }
 
   async function handleSave() {
-    if (!completat) return toast.error("Completeaza datele de acces");
+    if (!completat) return toast.error("Completează datele de acces.");
     if (!codPostal.trim() || !judet) {
-      return toast.error("Pall-Ex cere codul postal si judetul de ridicare la fiecare partida");
+      return toast.error("Pall-Ex cere codul poștal și județul de ridicare la fiecare partidă.");
     }
 
     setSaving(true);
@@ -117,7 +135,8 @@ export function PallexConfigClient({
 
     if ("error" in r) toast.error(r.error);
     else {
-      toast.success("Configuratie Pall-Ex salvata");
+      toast.success("Configurația Pall-Ex a fost salvată.");
+      setReper(valori);
       router.refresh();
     }
   }
@@ -128,104 +147,96 @@ export function PallexConfigClient({
     setDisconnecting(false);
     if ("error" in r) toast.error(r.error);
     else {
-      toast.success("Pall-Ex deconectat");
+      toast.success("Pall-Ex a fost deconectat.");
       setStatusuri(null);
       router.refresh();
     }
   }
 
-  return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="Pall-Ex activ"
-          action={
-            <ButonDeconectare
-              nume="Pall-Ex"
-              cePierzi="Cheile ClientPlus se șterg din Edinio, împreună cu județul de ridicare și tipul de partidă ales. Ca să te întorci, ceri din nou utilizatorul și parola de la Pall-Ex. Partidele deja trimise rămân la ei."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          {initialConfig?.username}
-          {initialConfig?.expeditor_judet ? ` · ridicare din ${initialConfig.expeditor_judet}` : ""}
-        </Callout>
-      )}
+  const stari: StareAntet[] = isActive ? [{ ton: "bun", text: "Activ" }] : [{ ton: "neutru", text: "Neconfigurat" }];
 
+  return (
+    <PaginaIntegrare
+      id="pallex"
+      titlu="Transport paletizat"
+      descriere="Creezi partide Pall-Ex pentru marfa paletizată, direct din comenzile magazinului."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Datele ClientPlus", facut: completat },
+          { text: "Codul poștal și județul de ridicare", facut: !!codPostal.trim() && !!judet },
+          { text: "Pall-Ex activ", facut: isActive },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Utilizator", valoare: initialConfig?.username || "-" },
+            { eticheta: "Ridicare din", valoare: initialConfig?.expeditor_judet || "-" },
+            { eticheta: "Validare borderou", valoare: initialConfig?.valideaza_automat ? "automată" : "manuală" },
+          ]} />
+        )}
+        <CumFunctioneaza id="pallex" puncte={[
+          { Icon: KeyRound, text: "Folosești datele ClientPlus; Pall-Ex recomandă un utilizator separat pentru integrări, cerut la it@pallex.ro." },
+          { Icon: Ban, text: "Pall-Ex nu încasează ramburs și nu are mediu de test: fiecare partidă e un transport real." },
+          { Icon: ClipboardCheck, text: "Marfa pleacă abia după validarea borderoului: automat sau din comandă, când ești gata." },
+        ]} />
+      </>}
+    >
       {/*
         ⚠ Doua lucruri pe care comerciantul TREBUIE sa le stie inainte de prima
         partida, si pe care nu le poate ghici din nicio alta integrare de curier:
         Pall-Ex nu incaseaza nimic la livrare, si nu are mediu de test.
       */}
-      <Callout variant="warning" icon={AlertTriangle} title="Pall-Ex NU incaseaza ramburs">
-        Reteaua Pall-Ex transporta marfa paletizata si nu are, in niciun fel, incasare
-        la livrare. Pe o comanda cu bani neincasati, marfa pleaca si nu mai exista
-        nicio cale de a-i lua. Emiterea iti va cere sa confirmi asta explicit.
-        <br />
-        Nu exista nici mediu de test: fiecare partida creata e un transport real,
-        care intra pe factura.
+      <Callout variant="warning" icon={AlertTriangle} title="Pall-Ex NU încasează ramburs">
+        Rețeaua Pall-Ex transportă marfă paletizată și nu are, în niciun fel, încasare la livrare. Pe o comandă cu bani
+        neîncasați, marfa pleacă și nu mai există nicio cale de a-i lua; emiterea îți va cere să confirmi asta explicit.
+        Nu există nici mediu de test: fiecare partidă creată e un transport real, care intră pe factură.
       </Callout>
 
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            1
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Date de acces ClientPlus</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Sunt datele cu care intri in ClientPlus. Pall-Ex recomanda un utilizator
-          separat pentru integrari, diferit de cel folosit in interfata web,
-          cere-l la <span className="font-medium">it@pallex.ro</span>.
-        </p>
-
+      <Sectiune pas={1} titlu="Date de acces ClientPlus"
+        descriere="Datele cu care intri în ClientPlus. Pall-Ex recomandă un utilizator separat pentru integrări, diferit de cel din interfața web: cere-l la it@pallex.ro.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Utilizator" required>
+          <Field label="Utilizator" htmlFor="pallex-user" required>
             <Input
+              id="pallex-user"
               type="text"
               value={username}
               onChange={(e) => { setUsername(e.target.value); setStatusuri(null); }}
               placeholder="api@firma.ro"
             />
           </Field>
-          <Field label="Parola" required>
+          <Field label="Parola" htmlFor="pallex-parola" required>
             <Input
+              id="pallex-parola"
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setStatusuri(null); }}
-              placeholder={
-                secretulEsteSalvat(initialConfig, "password")
-                  ? PLACEHOLDER_SECRET_SALVAT
-                  : "Parola contului ClientPlus"
-              }
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului ClientPlus"}
             />
           </Field>
         </div>
 
-        <Button onClick={handleTest} disabled={testing || !completat}>
-          {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {testing ? "Se verifica..." : "Testeaza conexiunea"}
-        </Button>
+        <div>
+          <Button variant="outline" onClick={handleTest} disabled={testing || !completat}>
+            {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {testing ? "Se verifică..." : "Testează conexiunea"}
+          </Button>
+        </div>
 
         {statusuri !== null && (
-          <div className="space-y-2 rounded-lg border border-success/20 bg-success/5 p-3">
-            <p className="text-xs font-semibold text-success">Datele de acces sunt valide.</p>
+          <div className="space-y-2 rounded-xl border border-success/25 bg-success/5 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-success"><CheckCircle className="h-3.5 w-3.5" /> Datele de acces sunt valide.</p>
             {statusuri.length > 0 ? (
               <>
                 {/*
                   ⚠ Nu e o lista decorativa. Pall-Ex nu publica nicaieri ce
                   statusuri foloseste, iar noi le interpretam dupa NUME. Aici se
                   vad numele reale ale contractului tau si ce facem noi cu
-                  fiecare — singurul mod de a verifica asta fara sa expediezi.
+                  fiecare: singurul mod de a verifica asta fara sa expediezi.
                 */}
                 <p className="text-xs text-muted-foreground">
-                  Asa intelegem statusurile contractului tau. Daca vreunul e tradus
-                  gresit, spune-ne: comenzile se misca dupa lista asta.
+                  Așa înțelegem statusurile contractului tău. Dacă vreunul e tradus greșit, spune-ne: comenzile se mișcă după lista asta.
                 </p>
-                <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+                <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-background">
                   <table className="w-full text-xs">
                     <tbody>
                       {statusuri.map((s) => (
@@ -233,7 +244,7 @@ export function PallexConfigClient({
                           <td className="px-2 py-1.5 font-medium text-foreground">{s.nume}</td>
                           <td className="px-2 py-1.5 text-muted-foreground">
                             {s.urmare}
-                            {s.semnalat ? " · te anuntam" : ""}
+                            {s.semnalat ? " · te anunțăm" : ""}
                           </td>
                         </tr>
                       ))}
@@ -243,30 +254,19 @@ export function PallexConfigClient({
               </>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Contul nu a intors nicio lista de statusuri. Urmarirea comenzilor va
-                merge doar dupa ce Pall-Ex o publica pe contractul tau.
+                Contul nu a întors nicio listă de statusuri. Urmărirea comenzilor va merge doar după ce Pall-Ex o publică pe contractul tău.
               </p>
             )}
           </div>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            2
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">De unde se ridica marfa</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Adresa si orasul se iau din setarile magazinului. Codul postal si judetul
-          se completeaza aici: Pall-Ex le cere obligatoriu la fiecare partida, iar in
-          datele magazinului nu exista camp de cod postal.
-        </p>
-
+      <Sectiune pas={2} titlu="De unde se ridică marfa"
+        descriere="Adresa și orașul vin din setările magazinului. Codul poștal și județul se completează aici: Pall-Ex le cere la fiecare partidă, iar în datele magazinului nu există cod poștal.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Cod postal ridicare" required>
+          <Field label="Cod poștal ridicare" htmlFor="pallex-cod" required>
             <Input
+              id="pallex-cod"
               type="text"
               inputMode="numeric"
               value={codPostal}
@@ -274,137 +274,99 @@ export function PallexConfigClient({
               placeholder="ex. 550321"
             />
           </Field>
-          <Field label="Judet ridicare" required>
-            <select
-              value={judet}
-              onChange={(e) => setJudet(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Alege judetul</option>
+          <Field label="Județ ridicare" htmlFor="pallex-judet" required>
+            <select id="pallex-judet" value={judet} onChange={(e) => setJudet(e.target.value)} className={selectCls}>
+              <option value="">Alege județul</option>
               {JUDETE.map((j) => (
                 <option key={j} value={j}>{j}</option>
               ))}
             </select>
           </Field>
-          <Field label="Persoana de contact la ridicare">
-            <Input
-              type="text"
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              placeholder="ex. Depozit / Andrei"
-            />
+          <Field label="Persoana de contact la ridicare" htmlFor="pallex-contact">
+            <Input id="pallex-contact" type="text" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="ex. Depozit / Andrei" />
           </Field>
-          <Field label="Tipul partidei">
-            <select
-              value={String(tip)}
-              onChange={(e) => setTip(Number(e.target.value) as TipPartida)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
+          <Field label="Tipul partidei" htmlFor="pallex-tip">
+            <select id="pallex-tip" value={String(tip)} onChange={(e) => setTip(Number(e.target.value) as TipPartida)} className={selectCls}>
               {TIPURI_PARTIDA.map((t) => (
                 <option key={t} value={String(t)}>{NUME_TIP_PARTIDA[t]}</option>
               ))}
             </select>
           </Field>
+          <Field label="Depozitul se deschide la" htmlFor="pallex-deschide">
+            <Input id="pallex-deschide" type="time" value={oraDeschidere} onChange={(e) => setOraDeschidere(e.target.value)} />
+          </Field>
+          <Field label="Depozitul se închide la" htmlFor="pallex-inchide">
+            <Input id="pallex-inchide" type="time" value={oraInchidere} onChange={(e) => setOraInchidere(e.target.value)} />
+          </Field>
         </div>
 
+        <RandComutator
+          separat
+          titlu="Mașină cu lift la ridicare"
+          text="Pornește-l dacă depozitul tău nu are rampă și șoferul are nevoie de lift."
+          activ={liftRidicare}
+          onChange={setLiftRidicare}
+        />
+        <RandComutator
+          separat
+          titlu="Acces restricționat la ridicare"
+          text="Stradă îngustă, centru cu program de aprovizionare, curte fără acces pentru TIR."
+          activ={accesRidicare}
+          onChange={setAccesRidicare}
+        />
+      </Sectiune>
+
+      <Sectiune pas={3} titlu="Termene și validare"
+        descriere="Valorile implicite din formularul de partidă; le poți schimba la fiecare comandă. Regimul (Premium 24h sau Economy 48h) îl stabilește Pall-Ex. Sărbătorile legale nu se iau în calcul, doar sâmbetele și duminicile.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Depozitul se deschide la">
-            <Input type="time" value={oraDeschidere} onChange={(e) => setOraDeschidere(e.target.value)} />
+          <Field label="Ridicarea, peste câte zile lucrătoare" htmlFor="pallex-zile-ridicare">
+            <Input id="pallex-zile-ridicare" type="number" min={0} max={30} value={zileRidicare} onChange={(e) => setZileRidicare(e.target.value)} />
           </Field>
-          <Field label="Depozitul se inchide la">
-            <Input type="time" value={oraInchidere} onChange={(e) => setOraInchidere(e.target.value)} />
+          <Field label="Livrarea, peste câte zile de la ridicare" htmlFor="pallex-zile-livrare">
+            <Input id="pallex-zile-livrare" type="number" min={0} max={30} value={zileLivrare} onChange={(e) => setZileLivrare(e.target.value)} />
           </Field>
-        </div>
-
-        <div className="flex items-center justify-between rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Masina cu lift la ridicare</p>
-            <p className="text-xs text-muted-foreground">
-              Bifeaza daca depozitul tau nu are rampa si soferul are nevoie de lift.
-            </p>
-          </div>
-          <Switch checked={liftRidicare} onCheckedChange={setLiftRidicare} />
-        </div>
-
-        <div className="flex items-center justify-between rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Acces restrictionat la ridicare</p>
-            <p className="text-xs text-muted-foreground">
-              Strada ingusta, centru cu program de aprovizionare, curte fara acces pentru TIR.
-            </p>
-          </div>
-          <Switch checked={accesRidicare} onCheckedChange={setAccesRidicare} />
-        </div>
-      </Panel>
-
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            3
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Termene si validare</h3>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Ridicarea, peste cate zile lucratoare">
-            <Input
-              type="number"
-              min={0}
-              max={30}
-              value={zileRidicare}
-              onChange={(e) => setZileRidicare(e.target.value)}
-            />
+          <Field label="Destinatarul primește de la" htmlFor="pallex-primeste-de">
+            <Input id="pallex-primeste-de" type="time" value={oraDeschidereLivrare} onChange={(e) => setOraDeschidereLivrare(e.target.value)} />
           </Field>
-          <Field label="Livrarea, peste cate zile de la ridicare">
-            <Input
-              type="number"
-              min={0}
-              max={30}
-              value={zileLivrare}
-              onChange={(e) => setZileLivrare(e.target.value)}
-            />
-          </Field>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Sunt doar valorile implicite din formularul de partida, le poti schimba la
-          fiecare comanda. Pall-Ex are Premium 24h si Economy 48h; regimul il
-          stabilesc ei din datele trimise. Sarbatorile legale nu sunt luate in calcul,
-          doar sambetele si duminicile.
-        </p>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Destinatarul primeste de la">
-            <Input type="time" value={oraDeschidereLivrare} onChange={(e) => setOraDeschidereLivrare(e.target.value)} />
-          </Field>
-          <Field label="Destinatarul primeste pana la">
-            <Input type="time" value={oraInchidereLivrare} onChange={(e) => setOraInchidereLivrare(e.target.value)} />
+          <Field label="Destinatarul primește până la" htmlFor="pallex-primeste-pana">
+            <Input id="pallex-primeste-pana" type="time" value={oraInchidereLivrare} onChange={(e) => setOraInchidereLivrare(e.target.value)} />
           </Field>
         </div>
 
-        <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Valideaza borderoul automat</p>
-            {/*
-              ⚠ Implicit OPRIT, si nu din prudenta decorativa. Un borderou strange
-              partidele mai multor comenzi; validat, pleaca TOT ce e in el si nimic
-              din el nu se mai poate anula.
-            */}
-            <p className="text-xs text-muted-foreground">
-              Marfa nu pleaca pana cand borderoul nu e validat. Cu comutatorul pornit,
-              validarea se face imediat dupa emitere, dar un borderou contine si
-              partidele altor comenzi facute in aceeasi zi, iar dupa validare
-              <span className="font-medium"> niciuna dintre ele nu se mai poate anula</span>.
-              Lasat oprit, validezi tu, din comanda, cand esti gata.
-            </p>
-          </div>
-          <Switch checked={valideazaAutomat} onCheckedChange={setValideazaAutomat} />
-        </div>
-      </Panel>
+        {/*
+          ⚠ Implicit OPRIT, si nu din prudenta decorativa. Un borderou strange
+          partidele mai multor comenzi; validat, pleaca TOT ce e in el si nimic
+          din el nu se mai poate anula.
+        */}
+        <RandComutator
+          separat
+          titlu="Validează borderoul automat"
+          text={<>Marfa nu pleacă până nu e validat borderoul. Pornit, validarea se face imediat după emitere, dar un borderou conține și partidele altor comenzi din aceeași zi, iar după validare <span className="font-medium text-foreground">niciuna nu se mai poate anula</span>. Oprit, validezi tu, din comandă, când ești gata.</>}
+          activ={valideazaAutomat}
+          onChange={setValideazaAutomat}
+          ariaLabel="Validează borderoul automat"
+        />
+      </Sectiune>
 
-      <Button onClick={handleSave} disabled={saving || !completat} className="w-full sm:w-auto">
-        {saving ? <Loader2 className="animate-spin" /> : null}
-        {saving ? "Se salveaza..." : "Salveaza configuratia"}
-      </Button>
-    </div>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge cheile ClientPlus din Edinio. Partidele deja trimise rămân la Pall-Ex.">
+          <ButonDeconectare
+            nume="Pall-Ex"
+            cePierzi="Cheile ClientPlus se șterg din Edinio, împreună cu județul de ridicare și tipul de partidă ales. Ca să te întorci, ceri din nou utilizatorul și parola de la Pall-Ex. Partidele deja trimise rămân la ei."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={saving}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

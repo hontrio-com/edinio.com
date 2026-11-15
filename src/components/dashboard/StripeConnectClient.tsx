@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, AlertCircle, Loader2, Link2, ExternalLink, RefreshCw } from "lucide-react";
+import { CheckCircle, AlertCircle, CreditCard, Landmark, Loader2, Link2, ExternalLink, Percent, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
-import { Panel } from "@/components/ui/panel";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import {
+  CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 export interface StripeConfig {
   account_id?: string;
@@ -77,142 +79,109 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
     }
   }
 
+  const stari: StareAntet[] = [
+    isConnected ? { ton: "bun", text: "Conectat" }
+      : isAwaiting ? { ton: "asteptare", text: "În verificare la Stripe" }
+        : isPending ? { ton: "asteptare", text: "Onboarding incomplet" }
+          : { ton: "neutru", text: "Neconectat" },
+  ];
+
+  const cePierzi = "Legătura cu contul tău Stripe se șterge din Edinio și cumpărătorii nu mai pot plăti cu cardul. Banii și plățile rămân în contul tău Stripe. Ca să te întorci, reiei conectarea de la capăt: Edinio deschide un cont Connect nou, iar Stripe îl verifică din nou.";
+
   return (
-    <div className="space-y-6">
-      {/* Status card */}
-      <div className={cn(
-        "flex items-start gap-4 rounded-2xl border p-5",
-        isConnected
-          ? "border-success/20 bg-success/5"
-          : isPending || isAwaiting
-            ? "border-warning/20 bg-warning/5"
-            : "border-border bg-muted/40"
-      )}>
+    <PaginaIntegrare
+      id="stripe"
+      titlu="Plăți cu cardul"
+      descriere="Îți conectezi contul Stripe: clienții plătesc cu cardul, iar banii ajung direct la tine."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cont Stripe legat", facut: !!config?.account_id },
+          { text: "Onboarding finalizat", facut: !!config?.onboarding_complete },
+          { text: "Plăți cu cardul active", facut: isConnected },
+        ]} />
+        <CumFunctioneaza id="stripe" puncte={[
+          { Icon: Link2, text: "Te conectezi cu contul Stripe, iar Edinio deschide un cont Connect legat de magazin." },
+          { Icon: CreditCard, text: "Clienții plătesc cu Visa, Mastercard și celelalte carduri mari." },
+          { Icon: Landmark, text: "Banii ajung direct în contul tău Stripe, fără intermediari." },
+          { Icon: ShieldCheck, text: "Stripe e certificat PCI DSS Level 1, cel mai înalt standard de securitate." },
+          { Icon: Percent, text: "Stripe își ia comisionul pe tranzacție (de obicei 1,4% + 0,25 EUR la cardurile europene). Edinio nu adaugă nimic." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Contul Stripe">
         <div className={cn(
-          "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl",
-          isConnected ? "bg-success/10" : isPending || isAwaiting ? "bg-warning/10" : "bg-muted"
+          "flex items-start gap-3 rounded-xl border p-4",
+          isConnected ? "border-success/25 bg-success/5" : isPending || isAwaiting ? "border-warning/25 bg-warning/5" : "border-border bg-muted/40",
         )}>
           {isConnected
-            ? <CheckCircle className="h-5 w-5 text-success" />
+            ? <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-success" />
             : isPending || isAwaiting
-              ? <AlertCircle className="h-5 w-5 text-warning" />
-              // eslint-disable-next-line @next/next/no-img-element
-              : <img src="/integrations/stripe.svg" alt="Stripe" className="h-5 w-auto" />
-          }
+              ? <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+              : <Link2 className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">
+              {isConnected ? "Stripe conectat" : isAwaiting ? "Cont conectat, în curs de verificare" : isPending ? "Onboarding incomplet" : "Stripe neconectat"}
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              {isConnected
+                ? "Contul tău Stripe e activ. Clienții pot plăti cu cardul."
+                : isAwaiting
+                  ? "Ai terminat conectarea. Stripe îți verifică acum contul, de la câteva minute până la 1-2 zile lucrătoare. Apasă „Verifică din nou” sau completează ce îți cere Stripe."
+                  : isPending
+                    ? "Continuă configurarea contului pe Stripe, ca să activezi plățile cu cardul."
+                    : "Conectează-ți contul Stripe ca să primești plăți cu cardul direct în magazin."}
+            </p>
+            {config?.account_id && (isConnected || isAwaiting) && (
+              <p className={cn("mt-1.5 font-mono text-[11px]", isConnected ? "text-success" : "text-warning")}>{config.account_id}</p>
+            )}
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="flex flex-wrap items-center gap-3">
           {isConnected ? (
-            <>
-              <p className="text-sm font-semibold text-foreground">Stripe conectat</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Contul tau Stripe este activ. Clientii pot plati cu cardul.
-              </p>
-              {config?.account_id && (
-                <p className="mt-1 font-mono text-[11px] text-success">{config.account_id}</p>
-              )}
-            </>
-          ) : isAwaiting ? (
-            <>
-              <p className="text-sm font-semibold text-foreground">Cont conectat, in curs de verificare</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Ai finalizat conectarea. Stripe iti verifica contul inainte de a activa platile cu cardul.
-                Poate dura de la cateva minute pana la 1-2 zile lucratoare. Apasa &laquo;Verifica din nou&raquo; sau
-                completeaza informatiile cerute pe Stripe.
-              </p>
-              {config?.account_id && (
-                <p className="mt-1 font-mono text-[11px] text-warning">{config.account_id}</p>
-              )}
-            </>
-          ) : isPending ? (
-            <>
-              <p className="text-sm font-semibold text-foreground">Onboarding incomplet</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Continua configurarea contului Stripe pentru a activa platile cu cardul.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-foreground">Stripe neconectat</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Conecteaza-ti contul Stripe pentru a accepta plati cu cardul direct in magazinul tau.
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Info boxes */}
-      {!isConnected && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[
-            { title: "Plati cu cardul", desc: "Accepta Visa, Mastercard si toate cardurile majore." },
-            { title: "Bani direct la tine", desc: "Fondurile ajung direct in contul tau Stripe, fara intermediari." },
-            { title: "Securitate maxima", desc: "Stripe este certificat PCI DSS Level 1, cel mai inalt standard." },
-          ].map(({ title, desc }) => (
-            <Panel key={title} className="p-4">
-              <p className="mb-1 text-xs font-semibold text-foreground">{title}</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">{desc}</p>
-            </Panel>
-          ))}
-        </div>
-      )}
-
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        {isConnected ? (
-          <>
             <Button variant="outline" onClick={handleConnect} disabled={loading}>
               {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-              Acceseaza dashboard Stripe
+              Deschide contul Stripe
             </Button>
-            <ButonDeconectare
-              nume="Stripe"
-              cePierzi="Legătura cu contul tău Stripe se șterge din Edinio și cumpărătorii nu mai pot plăti cu cardul. Banii și plățile rămân în contul tău Stripe. Ca să te întorci, reiei conectarea de la capăt: Edinio deschide un cont Connect nou, iar Stripe îl verifică din nou."
-              pending={loading}
-              marime="default"
-              onConfirma={handleDisconnect}
-            />
-          </>
-        ) : isAwaiting ? (
-          <>
-            <Button variant="outline" onClick={handleResync} disabled={loading}>
-              {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              Verifica din nou
-            </Button>
+          ) : isAwaiting ? (
+            <>
+              <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
+                {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
+                Continuă pe Stripe
+              </Button>
+              <Button variant="outline" onClick={handleResync} disabled={loading}>
+                {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                Verifică din nou
+              </Button>
+            </>
+          ) : isPending ? (
             <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
               {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-              Continua pe Stripe
+              Continuă onboarding-ul
             </Button>
-            <ButonDeconectare
-              nume="Stripe"
-              cePierzi="Legătura cu contul tău Stripe se șterge din Edinio și cumpărătorii nu mai pot plăti cu cardul. Banii și plățile rămân în contul tău Stripe. Ca să te întorci, reiei conectarea de la capăt: Edinio deschide un cont Connect nou, iar Stripe îl verifică din nou."
-              pending={loading}
-              marime="default"
-              onConfirma={handleDisconnect}
-            />
-          </>
-        ) : isPending ? (
-          <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
-            {loading ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-            Continua onboarding
-          </Button>
-        ) : (
-          <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
-            {loading ? <Loader2 className="animate-spin" /> : <Link2 />}
-            Conecteaza cu Stripe
-          </Button>
-        )}
-      </div>
+          ) : (
+            <Button onClick={handleConnect} disabled={loading} className={STRIPE_PURPLE}>
+              {loading ? <Loader2 className="animate-spin" /> : <Link2 />}
+              Conectează cu Stripe
+            </Button>
+          )}
+        </div>
+      </Sectiune>
 
-      {/* Note */}
-      <p className="text-xs text-muted-foreground">
-        Stripe percepe comisioane proprii per tranzactie (de obicei 1.4% + 0.25 EUR pentru carduri europene).
-        Edinio nu adauga comisioane suplimentare.
-      </p>
-    </div>
+      {(isConnected || isAwaiting) && (
+        <ZonaDeconectare descriere="Șterge legătura cu contul Stripe. Banii și plățile rămân în contul tău Stripe.">
+          <ButonDeconectare
+            nume="Stripe"
+            cePierzi={cePierzi}
+            pending={loading}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+    </PaginaIntegrare>
   );
 }

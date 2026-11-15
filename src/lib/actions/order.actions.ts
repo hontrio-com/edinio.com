@@ -89,6 +89,7 @@ import { raporteazaCumparareaMeta } from "@/lib/orders/meta-comanda";
 import { raporteazaCumparareaTikTok } from "@/lib/orders/tiktok-comanda";
 import { isIP } from "node:net";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
+import { refuzulSumeiTbi } from "@/lib/tbi/config";
 import { emailulContului, leagaComandaPlasata, poartaContuluiLaComanda } from "@/lib/cont/poarta-comenzii";
 import { adresaContului } from "@/lib/cont/origine";
 import { esteMagazinDemo, MESAJ_COMENZI_OPRITE } from "@/lib/teme/gazde-demo";
@@ -1213,7 +1214,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones, shipping_enabled, cont_client_config")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, tbi_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones, shipping_enabled, cont_client_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1835,6 +1836,19 @@ export async function placeOrder(data: {
   );
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
+
+  /*
+   * ⚠ PLATA IN RATE TBI: suma intre limitele magazinului si numai persoane fizice, INAINTEA oricarei
+   * scrieri (cupon, stoc, numar de comanda). Formularul ascunde deja metoda cand nu se poate; asta e
+   * paza pentru cererile care nu trec prin formular. Fara ea, comanda s-ar fi scris, iar abia
+   * `/api/tbi/start` ar fi refuzat-o, lasand o comanda neplatibila. Vezi `lib/tbi/config.ts`.
+   */
+  {
+    const refuzTbi = metodaPlata === "tbi" && billingCompany
+      ? "Plata in rate prin tbi bank este disponibila doar pentru persoane fizice. Alege alta metoda de plata."
+      : refuzulSumeiTbi(metodaPlata, cfgRow?.tbi_config, total);
+    if (refuzTbi) return { error: refuzTbi };
+  }
 
   /*
    * Cat de mult a subdeclarat clientul rambursul la cotare — masurat, nu blocat.
@@ -4487,7 +4501,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones, shipping_enabled, cont_client_config")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, tbi_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones, shipping_enabled, cont_client_config")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -4915,6 +4929,19 @@ export async function placeCartOrder(data: {
   );
 
   const total = Math.max(0, round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount + codFee + shipping + vatAddOn));
+
+  /*
+   * ⚠ PLATA IN RATE TBI: suma intre limitele magazinului si numai persoane fizice, INAINTEA oricarei
+   * scrieri (cupon, stoc, numar de comanda). Formularul ascunde deja metoda cand nu se poate; asta e
+   * paza pentru cererile care nu trec prin formular. Fara ea, comanda s-ar fi scris, iar abia
+   * `/api/tbi/start` ar fi refuzat-o, lasand o comanda neplatibila. Vezi `lib/tbi/config.ts`.
+   */
+  {
+    const refuzTbi = metodaPlata === "tbi" && billingCompany
+      ? "Plata in rate prin tbi bank este disponibila doar pentru persoane fizice. Alege alta metoda de plata."
+      : refuzulSumeiTbi(metodaPlata, cfgRow?.tbi_config, total);
+    if (refuzTbi) return { error: refuzTbi };
+  }
 
   /*
    * Cat de mult a subdeclarat clientul rambursul la cotare — masurat, nu blocat.

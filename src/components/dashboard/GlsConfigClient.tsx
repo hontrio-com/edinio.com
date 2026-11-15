@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, ChevronRight, FileSignature, Loader2, MapPin, Printer } from "lucide-react";
 import { saveGlsConfig, disconnectGls, testGlsConnectionAction } from "@/lib/actions/gls.actions";
 import {
   TARI_MYGLS,
@@ -15,19 +15,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  AlegereCarduri, BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 const NUME_TARA: Record<TaraMyGls, string> = {
-  RO: "Romania",
+  RO: "România",
   HU: "Ungaria",
   CZ: "Cehia",
   SK: "Slovacia",
   SI: "Slovenia",
-  HR: "Croatia",
+  HR: "Croația",
   RS: "Serbia",
 };
 
@@ -73,6 +76,16 @@ export function GlsConfigClient({
   );
   const [pozitie, setPozitie] = useState(String(initialConfig?.pozitie_tiparire ?? 1));
   const [codPostal, setCodPostal] = useState(initialConfig?.expeditor_cod_postal ?? "");
+
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = { username, password, clientNumber, tara, sandbox, tipImprimanta, pozitie, codPostal };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setUsername(reper.username); setPassword(reper.password); setClientNumber(reper.clientNumber); setTara(reper.tara);
+    setSandbox(reper.sandbox); setTipImprimanta(reper.tipImprimanta); setPozitie(reper.pozitie); setCodPostal(reper.codPostal);
+    setTestat(false);
+  }
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_number);
   const areParola = password.trim() !== "" || secretulEsteSalvat(initialConfig, "password");
@@ -121,10 +134,10 @@ export function GlsConfigClient({
 
   async function handleTest() {
     if (!completat) {
-      return toast.error("Completeaza utilizatorul, parola, Client Number-ul si codul postal de ridicare");
+      return toast.error("Completează utilizatorul, parola, Client Number-ul și codul poștal de ridicare.");
     }
     if (!Number.isFinite(Number(clientNumber.trim()))) {
-      return toast.error("Client Number trebuie sa fie un numar");
+      return toast.error("Client Number trebuie să fie un număr.");
     }
 
     setTesting(true);
@@ -137,11 +150,11 @@ export function GlsConfigClient({
       return;
     }
     setTestat(true);
-    toast.success(`Conexiune GLS reusita (${sandbox ? "mediu de test" : "PRODUCTIE"})`);
+    toast.success(`Conexiune GLS reușită (${sandbox ? "mediu de test" : "PRODUCȚIE"}).`);
   }
 
   async function handleSave() {
-    if (!completat) return toast.error("Completeaza datele de acces");
+    if (!completat) return toast.error("Completează datele de acces.");
 
     setSaving(true);
     const r = await saveGlsConfig(businessId, construieste());
@@ -149,7 +162,8 @@ export function GlsConfigClient({
 
     if ("error" in r) toast.error(r.error);
     else {
-      toast.success("Configuratie GLS salvata");
+      toast.success("Configurația GLS a fost salvată.");
+      setReper(valori);
       router.refresh();
     }
   }
@@ -160,59 +174,59 @@ export function GlsConfigClient({
     setDisconnecting(false);
     if ("error" in r) toast.error(r.error);
     else {
-      toast.success("GLS deconectat");
+      toast.success("GLS a fost deconectat.");
       setTestat(false);
       router.refresh();
     }
   }
 
-  return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="GLS activ"
-          action={
-            <ButonDeconectare
-              nume="GLS"
-              cePierzi="Datele de acces MyGLS se sterg din Edinio, cu tot cu Client Number, codul postal de ridicare si setarile de tiparire. Coletele deja create raman la GLS si raman pe factura lor."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          {initialConfig?.username} · Client {initialConfig?.client_number} ·{" "}
-          {NUME_TARA[initialConfig?.tara ?? "RO"]}
-          {initialConfig?.sandbox ? " · mediu de test" : ""}
-        </Callout>
-      )}
+  const stari: StareAntet[] = isActive
+    ? [{ ton: "bun", text: "Activ" }, initialConfig?.sandbox ? { ton: "asteptare", text: "Mediu de test" } : { ton: "info", text: "Producție" }]
+    : [{ ton: "neutru", text: "Neconfigurat" }];
 
+  return (
+    <PaginaIntegrare
+      id="gls"
+      titlu="Livrare"
+      descriere="Generezi AWB-uri GLS din comenzi, prin contul tău MyGLS."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Datele de acces MyGLS", facut: username.trim() !== "" && areParola && clientNumber.trim() !== "" },
+          { text: "Codul poștal de ridicare", facut: codPostal.trim() !== "" },
+          { text: "Conexiunea testată", facut: testat },
+          { text: "GLS activ", facut: isActive },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Utilizator", valoare: initialConfig?.username || "-" },
+            { eticheta: "Client Number", valoare: <span className="font-mono">{initialConfig?.client_number}</span> },
+            { eticheta: "Țara", valoare: NUME_TARA[initialConfig?.tara ?? "RO"] },
+            { eticheta: "Mediu", valoare: initialConfig?.sandbox ? "test" : "producție" },
+          ]} />
+        )}
+        <CumFunctioneaza id="gls" puncte={[
+          { Icon: FileSignature, text: "Datele MyGLS le primești la semnarea contractului; Client Number-ul apare în contract și pe facturile GLS." },
+          { Icon: MapPin, text: "GLS primește adresa întreagă la fiecare colet: restul adresei vine din setările magazinului." },
+          { Icon: Printer, text: "Alegi formatul etichetelor: A4 cu patru pe coală sau imprimantă de etichete." },
+          { Icon: AlertTriangle, text: "În producție, fiecare AWB emis e un colet facturat, chiar dacă nu-l predai curierului." },
+        ]} />
+      </>}
+    >
       {/*
         ⚠ Avertismentul pentru productie. Spre deosebire de alti curieri, la GLS
-        fiecare AWB emis e un colet facturat chiar daca nu-l predai niciodata —
+        fiecare AWB emis e un colet facturat chiar daca nu-l predai niciodata,
         de aia mediul se vede si aici, nu doar in comutator.
       */}
       {!sandbox && (
-        <Callout variant="warning" icon={AlertTriangle} title="Mediu de PRODUCTIE">
-          Fiecare AWB emis creeaza un colet real la GLS si intra pe factura, chiar
-          daca nu il predai curierului. Foloseste mediul de test cat timp verifici
-          configurarea.
+        <Callout variant="warning" icon={AlertTriangle} title="Mediu de PRODUCȚIE">
+          Fiecare AWB emis creează un colet real la GLS și intră pe factură, chiar dacă nu îl predai curierului.
+          Folosește mediul de test cât timp verifici configurarea.
         </Callout>
       )}
 
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            1
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Date de acces MyGLS</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Sunt datele cu care intri in MyGLS, primite la semnarea contractului cu GLS.
-          Client Number-ul apare in contract si pe facturile GLS.
-        </p>
-
+      <Sectiune pas={1} titlu="Date de acces MyGLS"
+        descriere="Datele cu care intri în MyGLS, primite la semnarea contractului. Client Number-ul apare în contract și pe facturile GLS.">
         {/*
           ⚠ ORDINEA CAMPURILOR E ALEASA, NU INTAMPLATOARE. Cinci campuri intr-o
           grila de doua coloane lasa mereu o celula goala. Cu „Cod postal
@@ -225,28 +239,27 @@ export function GlsConfigClient({
           si intinderea celulelor scunde pe inaltimea celei inalte.
         */}
         <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-          <Field label="Utilizator" required>
+          <Field label="Utilizator" htmlFor="gls-user" required>
             <Input
+              id="gls-user"
               type="text"
               value={username}
               onChange={(e) => { setUsername(e.target.value); setTestat(false); }}
               placeholder="user@firma.ro"
             />
           </Field>
-          <Field label="Parola" required>
+          <Field label="Parola" htmlFor="gls-parola" required>
             <Input
+              id="gls-parola"
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setTestat(false); }}
-              placeholder={
-                secretulEsteSalvat(initialConfig, "password")
-                  ? PLACEHOLDER_SECRET_SALVAT
-                  : "Parola contului MyGLS"
-              }
+              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului MyGLS"}
             />
           </Field>
-          <Field label="Client Number" required>
+          <Field label="Client Number" htmlFor="gls-client" required>
             <Input
+              id="gls-client"
               type="text"
               inputMode="numeric"
               value={clientNumber}
@@ -254,11 +267,12 @@ export function GlsConfigClient({
               placeholder="ex. 100123456"
             />
           </Field>
-          <Field label="Tara contractului" required>
+          <Field label="Țara contractului" htmlFor="gls-tara" required>
             <select
+              id="gls-tara"
               value={tara}
               onChange={(e) => { setTara(e.target.value as TaraMyGls); setTestat(false); }}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className={selectCls}
             >
               {TARI_MYGLS.map((t) => (
                 <option key={t} value={t}>{NUME_TARA[t]}</option>
@@ -267,17 +281,19 @@ export function GlsConfigClient({
           </Field>
           {/*
             * ⚠ Nu e un camp decorativ: GLS cere codul postal in adresa de
-            * ridicare, iar in `businesses` nu exista niciunul — nici pentru
+            * ridicare, iar in `businesses` nu exista niciunul, nici pentru
             * magazin, nici pentru firma. Ceilalti curieri nu-l cer fiindca
             * ridica de la un punct inregistrat la ei; GLS primeste adresa
             * intreaga la fiecare colet.
             */}
           <Field
-            label="Cod postal ridicare"
+            label="Cod poștal ridicare"
+            htmlFor="gls-cod"
             required
-            hint="Codul postal al adresei de unde ridica GLS coletele. Restul adresei se ia din setarile magazinului."
+            hint="Codul poștal al adresei de unde ridică GLS coletele. Restul adresei se ia din setările magazinului."
           >
             <Input
+              id="gls-cod"
               type="text"
               inputMode="numeric"
               value={codPostal}
@@ -287,72 +303,68 @@ export function GlsConfigClient({
           </Field>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-border p-3">
-          <div>
-            <p className="text-sm font-medium text-foreground">Mediu de test</p>
-            <p className="text-xs text-muted-foreground">
-              Trimite catre api.test.mygls.{tara.toLowerCase()}, coletele NU sunt reale si nu se factureaza.
-            </p>
-          </div>
-          <Switch checked={sandbox} onCheckedChange={(v) => { setSandbox(v); setTestat(false); }} />
+        <AlegereCarduri
+          eticheta="Mediul de lucru"
+          valoare={sandbox}
+          onChange={(v) => { setSandbox(v); setTestat(false); }}
+          optiuni={[
+            { valoare: true, titlu: "Mediu de test", text: <>Trimite către api.test.mygls.{tara.toLowerCase()}; coletele NU sunt reale și nu se facturează.</> },
+            { valoare: false, titlu: "Producție", text: "Fiecare AWB e un colet real, facturat de GLS.", avertizare: true },
+          ]}
+        />
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={handleTest} disabled={testing || !completat}>
+            {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {testing ? "Se verifică..." : "Testează conexiunea"}
+          </Button>
+          {testat && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-success">
+              <CheckCircle className="h-3.5 w-3.5" /> Datele de acces sunt valide.
+            </span>
+          )}
         </div>
+      </Sectiune>
 
-        <Button onClick={handleTest} disabled={testing || !completat}>
-          {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {testing ? "Se verifica..." : "Testeaza conexiunea"}
-        </Button>
-
-        {testat && (
-          <p className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-xs font-semibold text-success">
-            Datele de acces sunt valide.
-          </p>
-        )}
-      </Panel>
-
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-            2
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">Tiparirea etichetelor</h3>
-        </div>
-
+      <Sectiune pas={2} titlu="Tipărirea etichetelor"
+        descriere="A4_2x2 pune patru etichete pe o coală A4; poziția spune de la care sfert începe tipărirea, ca să poți folosi o coală începută. Thermo și Connect sunt pentru imprimante de etichete.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Format">
-            <select
-              value={tipImprimanta}
-              onChange={(e) => setTipImprimanta(e.target.value as TipImprimanta)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
+          <Field label="Format" htmlFor="gls-format">
+            <select id="gls-format" value={tipImprimanta} onChange={(e) => setTipImprimanta(e.target.value as TipImprimanta)} className={selectCls}>
               {formateDeAles.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
           </Field>
-          <Field label="Pozitia pe coala">
-            <select
-              value={pozitie}
-              onChange={(e) => setPozitie(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              disabled={tipImprimanta !== "A4_2x2"}
-            >
+          <Field label="Poziția pe coală" htmlFor="gls-pozitie">
+            <select id="gls-pozitie" value={pozitie} onChange={(e) => setPozitie(e.target.value)} className={selectCls} disabled={tipImprimanta !== "A4_2x2"}>
               {[1, 2, 3, 4].map((p) => (
                 <option key={p} value={String(p)}>{p}</option>
               ))}
             </select>
           </Field>
         </div>
-        <p className="text-xs text-muted-foreground">
-          A4_2x2 pune patru etichete pe o coala A4; pozitia spune de la care sfert
-          incepe tiparirea, ca sa poti folosi o coala inceputa. Thermo si Connect
-          sunt pentru imprimante de etichete.
-        </p>
-      </Panel>
+      </Sectiune>
 
-      <Button onClick={handleSave} disabled={saving || !completat} className="w-full sm:w-auto">
-        {saving ? <Loader2 className="animate-spin" /> : null}
-        {saving ? "Se salveaza..." : "Salveaza configuratia"}
-      </Button>
-    </div>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge datele de acces MyGLS din Edinio. Coletele deja create rămân la GLS.">
+          <ButonDeconectare
+            nume="GLS"
+            cePierzi="Datele de acces MyGLS se șterg din Edinio, cu tot cu Client Number, codul poștal de ridicare și setările de tipărire. Coletele deja create rămân la GLS și rămân pe factura lor."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={saving}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

@@ -274,7 +274,7 @@ export function ArboreSectiuni({
         <SelectorSablon design={design} sablon={sablon} onSablon={onSablon} onNou={onSablonNou} onSetari={onSetariSablon} />
       )}
       {eListaPaginii && paginaAcasa && (
-        <Callout variant="warning" className="mb-2 text-xs">
+        <Callout variant="warning" marime="mic" className="mb-2 text-xs">
           <p>
             Pagina principală este pagina „{paginaAcasa.titlu}”, făcută în Pagini. Ce secțiuni apar și în ce ordine alegi acolo;
             aici schimbi cum arată fiecare.

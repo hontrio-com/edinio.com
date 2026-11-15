@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, ChevronRight, ExternalLink } from "lucide-react";
+import { Building2, CheckCircle, ChevronRight, ExternalLink, KeyRound, Loader2, Truck } from "lucide-react";
 import {
   saveDpdConfig,
   disconnectDpd,
@@ -14,9 +14,12 @@ import type { DpdConfig, DpdObiect } from "@/lib/dpd";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -46,11 +49,21 @@ export function DpdConfigClient({
   const [obpd, setObpd] = useState<"" | "OPEN" | "TEST">(initialConfig?.open_before_delivery ?? "");
   const [obpdPayer, setObpdPayer] = useState<"SENDER" | "RECIPIENT">(initialConfig?.obpd_payer ?? "SENDER");
 
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = { username, password, clientId, international, iban, accountHolder, declaredValue, obpd, obpdPayer };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setUsername(reper.username); setPassword(reper.password); setClientId(reper.clientId);
+    setInternational(reper.international); setIban(reper.iban); setAccountHolder(reper.accountHolder);
+    setDeclaredValue(reper.declaredValue); setObpd(reper.obpd); setObpdPayer(reper.obpdPayer);
+  }
+
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
   async function handleConnect() {
-    if (!username.trim()) return toast.error("Completeaza username-ul DPD");
-    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completeaza parola DPD");
+    if (!username.trim()) return toast.error("Completează username-ul DPD.");
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) return toast.error("Completează parola DPD.");
 
     setLoading(true);
     const result = await loadDpdAccountAction(businessId, username.trim(), password.trim());
@@ -72,12 +85,12 @@ export function DpdConfigClient({
     setClientId(ales?.clientId ?? result.clientId);
     setClientName(ales ? numeObiect(ales) : result.name);
     toast.success(result.obiecte.length > 1
-      ? `Cont DPD conectat · ${result.obiecte.length} sedii in contract, alege-l pe al tau`
-      : `Cont DPD conectat · Client ID: ${result.clientId}`);
+      ? `Cont DPD conectat: ${result.obiecte.length} sedii în contract, alege-l pe al tău.`
+      : `Cont DPD conectat, Client ID: ${result.clientId}.`);
   }
 
   async function handleSave() {
-    if (!clientId) return toast.error("Conecteaza-te mai intai pentru a obtine Client ID");
+    if (!clientId) return toast.error("Conectează-te întâi, ca să obținem Client ID-ul.");
 
     const config: DpdConfig = {
       enabled: true,
@@ -99,7 +112,8 @@ export function DpdConfigClient({
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success("Configuratie DPD salvata");
+      toast.success("Configurația DPD a fost salvată.");
+      setReper(valori);
       router.refresh();
     }
   }
@@ -111,7 +125,7 @@ export function DpdConfigClient({
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success("DPD deconectat");
+      toast.success("DPD a fost deconectat.");
       setClientId(null);
       setClientName("");
       setObiecte([]);
@@ -119,77 +133,80 @@ export function DpdConfigClient({
     }
   }
 
+  const parolaSalvata = secretulEsteSalvat(initialConfig, "password");
+  const areContul = !!username.trim() && (!!password.trim() || parolaSalvata);
+  const stari: StareAntet[] = isActive
+    ? [{ ton: "bun", text: "Activ" }, ...(initialConfig?.international_enabled ? [{ ton: "info" as const, text: "Livrare în UE" }] : [])]
+    : [{ ton: "neutru", text: "Neconfigurat" }];
+
   return (
-    <div className="space-y-6">
-      {/* Status */}
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="DPD activ"
-          action={
-            <ButonDeconectare
-              nume="DPD"
-              cePierzi="Se șterge toată configurarea DPD din Edinio: username, parolă, Client ID-ul, contul bancar pentru ramburs și opțiunile de expediere. Ca să te întorci, le ceri din nou din contul tău DPD; AWB-urile deja emise rămân pe comenzi."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          {initialConfig?.username} · Client ID {initialConfig?.client_id}
-        </Callout>
-      )}
-
-      {/* Credentials */}
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
-          <h3 className="text-sm font-semibold text-foreground">Credentiale cont DPD</h3>
-        </div>
-
+    <PaginaIntegrare
+      id="dpd"
+      titlu="Livrare"
+      descriere="Generezi AWB-uri DPD din comenzi, cu sediul și contractul tău DPD."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Contul DPD", facut: areContul },
+          { text: "Sediul expeditor (Client ID)", facut: !!clientId },
+          { text: "DPD activ", facut: isActive },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Utilizator", valoare: initialConfig?.username || "-" },
+            { eticheta: "Client ID", valoare: <span className="font-mono">{initialConfig?.client_id}</span> },
+            { eticheta: "Livrare în UE", valoare: initialConfig?.international_enabled ? "da" : "nu" },
+          ]} />
+        )}
+        <CumFunctioneaza id="dpd" puncte={[
+          { Icon: KeyRound, text: "Accesul API (myDPD Business) îl ceri de la DPD România: primești un username și o parolă pentru API." },
+          { Icon: Building2, text: "Dacă contractul are mai multe sedii, alegi firma ta: pe ea se emit AWB-urile și în contul ei vine rambursul." },
+          { Icon: Truck, text: "AWB-ul îl generezi din pagina comenzii; costul livrării se calculează pe loc." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Contul DPD" descriere="Datele de acces la API primite de la DPD.">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Username" required>
-            <Input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="user@firma.ro"
-            />
+          <Field label="Username" htmlFor="dpd-user" required>
+            <Input id="dpd-user" type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="user@firma.ro" />
           </Field>
-          <Field label="Parola" required>
+          <Field label="Parola" htmlFor="dpd-parola" required>
             <Input
+              id="dpd-parola"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "Parola contului DPD"}
+              placeholder={parolaSalvata ? PLACEHOLDER_SECRET_SALVAT : "Parola contului DPD"}
             />
           </Field>
         </div>
 
-        <Button
-          onClick={handleConnect}
-          disabled={loading || !username.trim() || (!password.trim() && !secretulEsteSalvat(initialConfig, "password"))}
-        >
-          {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-          {loading ? "Se conecteaza..." : "Testeaza si conecteaza"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={handleConnect} disabled={loading || !areContul}>
+            {loading ? <Loader2 className="animate-spin" /> : <ChevronRight />}
+            {loading ? "Se conectează..." : "Testează și conectează"}
+          </Button>
+          <a href="https://api.dpd.ro/api/docs/" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+            Documentația API DPD <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
 
         {clientId && (
-          <p className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-xs font-semibold text-success">
-            Conectat ca: {clientName || "DPD Client"} (ID: {clientId})
-          </p>
+          <Callout variant="success" icon={CheckCircle} title={`Conectat ca: ${clientName || "DPD Client"} (ID: ${clientId})`} />
         )}
 
         {clientId && (
-          <div>
+          <div className="border-t border-border pt-4">
             <p className="mb-1.5 text-xs font-medium text-foreground">Ai primit de la DPD un Client ID pentru firma ta?</p>
             <p className="mb-2 text-[11px] text-muted-foreground">
-              Daca firma ta nu apare mai sus, scrie aici Client ID-ul dat de DPD. Il verificam la DPD inainte sa-l folosim.
+              Dacă firma ta nu apare mai sus, scrie aici Client ID-ul dat de DPD. Îl verificăm la DPD înainte să-l folosim.
             </p>
             <div className="flex gap-2">
               <Input
                 type="text"
                 inputMode="numeric"
+                aria-label="Client ID primit de la DPD"
                 value={clientIdManual}
                 onChange={e => setClientIdManual(e.target.value.replace(/\D/g, ""))}
                 placeholder="ex: 50929196001"
@@ -206,30 +223,27 @@ export function DpdConfigClient({
                   setClientId(r.obiect.clientId);
                   setClientName(numeObiect(r.obiect));
                   setClientIdManual("");
-                  toast.success(`Sediu verificat: ${numeObiect(r.obiect)}. Apasa „Salveaza configuratia".`);
+                  toast.success(`Sediu verificat: ${numeObiect(r.obiect)}. Apasă „Salvează”.`);
                 }}
               >
                 {verificSediu ? <Loader2 className="animate-spin" /> : null}
-                Foloseste
+                Folosește
               </Button>
             </div>
           </div>
         )}
 
         {obiecte.length > 1 && (
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-foreground">Sediul expeditor</p>
-            <p className="mb-2 text-[11px] text-muted-foreground">
-              Contul tau DPD vede mai multe sedii din acelasi contract. Alege firma ta: pe ea se emit AWB-urile, de acolo se ridica coletele si in contul ei se vireaza rambursul.
-            </p>
+          <Field label="Sediul expeditor" htmlFor="dpd-sediu"
+            hint="Contul tău DPD vede mai multe sedii din același contract. Alege firma ta: pe ea se emit AWB-urile, de acolo se ridică coletele și în contul ei se virează rambursul.">
             <select
-              aria-label="Sediul expeditor DPD"
+              id="dpd-sediu"
               value={clientId ?? ""}
               onChange={e => {
                 const o = obiecte.find((x) => x.clientId === Number(e.target.value));
                 if (o) { setClientId(o.clientId); setClientName(numeObiect(o)); }
               }}
-              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary"
+              className={selectCls}
             >
               {obiecte.map((o) => (
                 <option key={o.clientId} value={o.clientId}>
@@ -237,132 +251,89 @@ export function DpdConfigClient({
                 </option>
               ))}
             </select>
-          </div>
+          </Field>
         )}
-      </Panel>
+      </Sectiune>
 
-      {/* Cont bancar pentru ramburs */}
       {clientId && (
-        <Panel className="space-y-3 p-4">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Cont bancar (ramburs)</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Optional. Lasa gol daca IBAN-ul este deja in contractul tau DPD: rambursul ajunge acolo. Completeaza doar daca vrei banii incasati intr-un alt cont.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="IBAN">
-              <Input type="text" value={iban} onChange={e => setIban(e.target.value)}
-                placeholder="RO00 BANK 0000 0000 0000 0000" />
+        <Sectiune pas={2} titlu="Cont bancar (ramburs)"
+          descriere="Opțional. Lasă gol dacă IBAN-ul e deja în contractul tău DPD: rambursul ajunge acolo. Completează doar dacă vrei banii încasați în alt cont.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="IBAN" htmlFor="dpd-iban">
+              <Input id="dpd-iban" type="text" value={iban} onChange={e => setIban(e.target.value)} placeholder="RO00 BANK 0000 0000 0000 0000" />
             </Field>
-            <Field label="Titular cont">
-              <Input type="text" value={accountHolder} onChange={e => setAccountHolder(e.target.value)}
-                placeholder="Numele firmei" />
+            <Field label="Titular cont" htmlFor="dpd-titular">
+              <Input id="dpd-titular" type="text" value={accountHolder} onChange={e => setAccountHolder(e.target.value)} placeholder="Numele firmei" />
             </Field>
           </div>
-        </Panel>
+        </Sectiune>
       )}
 
-      {/* International (EU) */}
       {clientId && (
-        <Panel className="p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Livrare internationala (UE)</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Permite comenzi catre tarile UE. Clientul alege tara la checkout, iar pretul livrarii se calculeaza live prin DPD.</p>
-            </div>
-            <Switch checked={international} onCheckedChange={setInternational} />
-          </div>
+        <Sectiune pas={3} titlu="Opțiuni de expediere">
+          <RandComutator
+            titlu="Livrare internațională (UE)"
+            text="Permite comenzi către țările UE. Clientul alege țara la comandă, iar prețul livrării se calculează pe loc, prin DPD."
+            activ={international}
+            onChange={setInternational}
+          />
           {international && (
-            <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
-              Pretul livrarii se calculeaza din greutatea setata pe fiecare produs, inmultita cu
-              bucatile din cos. Produsele fara greutate completata intra cu o estimare de 1 kg pe colet.
+            <p className="text-xs text-muted-foreground">
+              Prețul livrării se calculează din greutatea setată pe fiecare produs, înmulțită cu bucățile din coș.
+              Produsele fără greutate completată intră cu o estimare de 1 kg pe colet.
             </p>
           )}
-        </Panel>
-      )}
-
-      {/* Optiuni expediere */}
-      {clientId && (
-        <Panel className="space-y-4 p-4">
-          <p className="text-sm font-semibold text-foreground">Optiuni expediere</p>
-
-          <label className="flex cursor-pointer items-start gap-2.5">
-            <input
-              type="checkbox"
-              checked={declaredValue}
-              onChange={e => setDeclaredValue(e.target.checked)}
-              className="mt-0.5 rounded border-border accent-primary"
-            />
-            <span className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Asigurare (valoare declarata).</span>{" "}
-              Fiecare AWB se asigura pentru valoarea produselor din comanda. DPD percepe o prima de asigurare conform contractului.
-            </span>
-          </label>
-
-          <div className="border-t border-border pt-3">
-            <p className="text-xs font-medium text-foreground mb-1.5">Deschidere / testare la livrare (OBPD)</p>
-            <p className="text-[11px] text-muted-foreground mb-2">
-              Destinatarul poate deschide sau testa coletul inainte de plata. Se aplica doar livrarilor la adresa (nu la punctele de ridicare).
+          <RandComutator
+            separat
+            titlu="Asigurare (valoare declarată)"
+            text="Fiecare AWB se asigură pentru valoarea produselor din comandă. DPD percepe o primă de asigurare, conform contractului."
+            activ={declaredValue}
+            onChange={setDeclaredValue}
+          />
+          <div className="border-t border-border pt-4">
+            <p className="mb-1.5 text-sm font-medium text-foreground">Deschidere sau testare la livrare (OBPD)</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              Destinatarul poate deschide sau testa coletul înainte de plată. Se aplică doar livrărilor la adresă, nu la punctele de ridicare.
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <select
-                aria-label="Optiune OBPD"
-                value={obpd}
-                onChange={e => setObpd(e.target.value as "" | "OPEN" | "TEST")}
-                className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary"
-              >
+              <select aria-label="Opțiune OBPD" value={obpd} onChange={e => setObpd(e.target.value as "" | "OPEN" | "TEST")} className={selectCls}>
                 <option value="">Dezactivat</option>
                 <option value="OPEN">Deschidere colet (OPEN)</option>
                 <option value="TEST">Testare produs (TEST)</option>
               </select>
               {obpd && (
-                <select
-                  aria-label="Platitor retur OBPD"
-                  value={obpdPayer}
-                  onChange={e => setObpdPayer(e.target.value as "SENDER" | "RECIPIENT")}
-                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary"
-                >
-                  <option value="SENDER">Retur platit de expeditor</option>
-                  <option value="RECIPIENT">Retur platit de destinatar</option>
+                <select aria-label="Plătitor retur OBPD" value={obpdPayer} onChange={e => setObpdPayer(e.target.value as "SENDER" | "RECIPIENT")} className={selectCls}>
+                  <option value="SENDER">Retur plătit de expeditor</option>
+                  <option value="RECIPIENT">Retur plătit de destinatar</option>
                 </select>
               )}
             </div>
           </div>
-        </Panel>
+        </Sectiune>
       )}
 
-      {/* Save */}
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge configurarea DPD din Edinio. AWB-urile deja emise rămân pe comenzi.">
+          <ButonDeconectare
+            nume="DPD"
+            cePierzi="Se șterge toată configurarea DPD din Edinio: username, parolă, Client ID-ul, contul bancar pentru ramburs și opțiunile de expediere. Ca să te întorci, le ceri din nou din contul tău DPD; AWB-urile deja emise rămân pe comenzi."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
       {clientId && (
-        <div className="flex justify-end">
-          <Button
-            size="lg"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving && <Loader2 className="animate-spin" />}
-            {saving ? "Se salveaza..." : "Salveaza configuratia"}
-          </Button>
-        </div>
+        <BaraSalvare
+          modificat={isActive ? modificat : undefined}
+          saving={saving}
+          onSalveaza={handleSave}
+          onRenunta={isActive ? renunta : undefined}
+          textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+        />
       )}
-
-      {/* Help */}
-      <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
-        <p className="mb-2 text-sm font-semibold text-foreground">Cum obtii credentialele DPD?</p>
-        <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
-          <li>Contacteaza DPD Romania pentru activarea accesului API (myDPD Business)</li>
-          <li>Vei primi un username si parola pentru API</li>
-          <li>Introdu credentialele si apasa &quot;Testeaza si conecteaza&quot;</li>
-        </ol>
-        <a
-          href="https://api.dpd.ro/api/docs/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Documentatie API DPD
-        </a>
-      </div>
-    </div>
+    </PaginaIntegrare>
   );
 }
 

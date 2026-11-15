@@ -5,10 +5,9 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Save, Loader2, MessageSquare, Phone, ExternalLink, CheckCircle, XCircle,
-  Plug, BarChart3, Wallet, MessageCircle, PhoneCall, Inbox, Webhook, Copy, ShoppingCart,
+  CheckCircle, Copy, ExternalLink, FileText, ListChecks, Loader2, MessageCircle, MessageSquare, Phone, PhoneCall,
+  Plug, ShoppingCart, UserPlus, Wallet, Webhook, XCircle,
 } from "lucide-react";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { NoticeWhatsappPanel } from "@/components/dashboard/NoticeWhatsappPanel";
 import {
   updateNoticeConfig, testNoticeConnection, listNoticeTemplates, sendNoticeTestSms,
@@ -20,37 +19,40 @@ import {
 } from "@/lib/notice";
 import { adresaPublica } from "@/lib/adresa-publica";
 import { stareaVocii, ETICHETA_VOCE } from "@/lib/notice-raspunsuri";
-import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { Field } from "@/components/ui/field";
+import { Callout } from "@/components/ui/callout";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { selectCls } from "@/lib/ui";
 
 const STATUS_TRIGGERS: { key: NoticeTriggerKey; label: string }[] = [
-  { key: "pending", label: "Procesare comanda (comanda noua)" },
-  { key: "confirmed", label: "Comanda confirmata" },
-  { key: "processing", label: "In procesare" },
-  { key: "shipped", label: "Comanda expediata" },
-  { key: "delivered", label: "Comanda livrata" },
-  { key: "cancelled", label: "Comanda anulata" },
-  { key: "refunded", label: "Comanda rambursata" },
+  { key: "pending", label: "Procesare comandă (comandă nouă)" },
+  { key: "confirmed", label: "Comandă confirmată" },
+  { key: "processing", label: "În procesare" },
+  { key: "shipped", label: "Comandă expediată" },
+  { key: "delivered", label: "Comandă livrată" },
+  { key: "cancelled", label: "Comandă anulată" },
+  { key: "refunded", label: "Comandă rambursată" },
 ];
 
 const PAYMENT_TRIGGERS: { key: NoticeTriggerKey; label: string }[] = [
-  { key: "payment_paid", label: "Status plata - Platita" },
-  { key: "payment_refunded", label: "Status plata - Rambursata" },
+  { key: "payment_paid", label: "Status plată: plătită" },
+  { key: "payment_refunded", label: "Status plată: rambursată" },
 ];
 
 const TRIGGER_LABELS: Record<string, string> = {
   ...Object.fromEntries([...STATUS_TRIGGERS, ...PAYMENT_TRIGGERS].map(t => [t.key, t.label])),
-  abandoned_cart: "Cos abandonat",
+  abandoned_cart: "Coș abandonat",
 };
-
-const selectCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
 
 export function NoticeConfigClient({ businessId, initialConfig }: { businessId: string; initialConfig: NoticeConfig }) {
   const router = useRouter();
-  const [config, setConfig] = useState<NoticeConfig>(initialConfig);
+  const { cfg: config, setCfg: setConfig, modificat, marcheazaSalvat, renunta, aliniaza } = useFormularIntegrare<NoticeConfig>(initialConfig);
   const [templates, setTemplates] = useState<NoticeTemplate[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
   const [tplError, setTplError] = useState<string | null>(null);
@@ -67,8 +69,8 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   const syncWhatsapp = useCallback(async () => {
     const res = await getNoticeConfig(businessId);
     if ("error" in res) return;
-    setConfig(c => ({ ...c, whatsapp: res.config.whatsapp, webhook_secret: res.config.webhook_secret ?? c.webhook_secret }));
-  }, [businessId]);
+    aliniaza(c => ({ ...c, whatsapp: res.config.whatsapp, webhook_secret: res.config.webhook_secret ?? c.webhook_secret }));
+  }, [businessId, aliniaza]);
 
   const loadTemplates = useCallback(async (token: string) => {
     if (!token.trim() && !secretulEsteSalvat(initialConfig, "api_token")) return;
@@ -128,7 +130,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
     const res = await testNoticeConnection(businessId, config.api_token);
     setTesting(false);
     if (res.ok) {
-      setTestResult({ ok: true, message: `Conexiune reusita. ${res.templateCount} sabloane gasite in contul tau.` });
+      setTestResult({ ok: true, message: `Conexiune reușită: ${res.templateCount} șabloane găsite în contul tău.` });
       void loadTemplates(config.api_token);
     } else {
       setTestResult({ ok: false, message: res.error });
@@ -136,7 +138,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   }
 
   async function sendTest(channel: "sms" | "whatsapp" | "voice") {
-    if (!testPhone.trim()) { toast.error("Introdu un numar de telefon."); return; }
+    if (!testPhone.trim()) { toast.error("Introdu un număr de telefon."); return; }
     setTestingChannel(channel);
     const res = channel === "whatsapp"
       ? await sendNoticeTestWhatsapp(businessId, config.api_token, testPhone)
@@ -147,7 +149,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
     if ("error" in res) toast.error(res.error);
     else {
       const labels = { sms: "SMS", whatsapp: "WhatsApp", voice: "Apel" } as const;
-      toast.success(`Test ${labels[channel]} trimis catre ${testPhone}.`);
+      toast.success(`Test ${labels[channel]} trimis către ${testPhone}.`);
       void loadStats();
     }
   }
@@ -168,7 +170,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
         return;
       }
       if ("error" in res) toast.error(res.error);
-      else { setConfig(res.config); toast.success("Integrarea notice.ro a fost salvata."); router.refresh(); }
+      else { marcheazaSalvat(res.config); toast.success("Integrarea notice.ro a fost salvată."); router.refresh(); }
     });
   }
 
@@ -216,17 +218,17 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
         </div>
         {anyOn && (
           <div className="mt-2.5">
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Sablon notice.ro</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Șablon notice.ro</label>
             {templates.length > 0 ? (
               <select value={tr.template_id ?? ""} onChange={e => pickTemplate(tk, e.target.value)} className={selectCls}>
-                <option value="">Mesaj standard (fara sablon)</option>
+                <option value="">Mesaj standard (fără șablon)</option>
                 {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             ) : (
               <p className="text-xs text-muted-foreground">
                 {tr.template_name
-                  ? `Sablon selectat: ${tr.template_name}. Testeaza conexiunea ca sa schimbi.`
-                  : "Conecteaza-te si testeaza conexiunea ca sa incarci sabloanele. Pana atunci se trimite un mesaj standard."}
+                  ? `Șablon ales: ${tr.template_name}. Testează conexiunea ca să-l schimbi.`
+                  : "Testează conexiunea ca să încarci șabloanele. Până atunci se trimite un mesaj standard."}
               </p>
             )}
           </div>
@@ -235,340 +237,299 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
     );
   }
 
+  const tokenSalvat = secretulEsteSalvat(initialConfig, "api_token");
+  const configurat = tokenSalvat || !!initialConfig.api_token;
+  const oNotificare = Object.values(config.triggers ?? {}).some(t => !!t && (!!t.enabled || !!t.whatsapp || !!t.voice));
+  const stari: StareAntet[] = !configurat
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [
+      initialConfig.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" },
+      ...(waEnabled ? [{ ton: "info" as const, text: "WhatsApp conectat" }] : []),
+    ];
+  const legatura = "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline";
+  const ora = (data: string) => new Date(data).toLocaleString("ro-RO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
   return (
-    <div className="p-4 sm:p-6 max-w-2xl">
-      <IntegrationHeader id="notice" description="Trimite notificari automate clientilor (SMS, WhatsApp si apel vocal) la fiecare schimbare de status, prin notice.ro." />
+    <PaginaIntegrare
+      id="notice"
+      titlu="Notificări pentru clienți"
+      descriere="SMS, WhatsApp și apel vocal la fiecare schimbare de status a comenzii, prin contul tău notice.ro."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Notificările notice.ro" activ={config.enabled}
+        onChange={v => setConfig(c => ({ ...c, enabled: v }))} ariaLabel="Activează notice.ro" disabled={!hasToken} />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Tokenul API", facut: hasToken },
+          { text: "Cel puțin o notificare aleasă", facut: oNotificare },
+          { text: "Notificările pornite", facut: configurat && !!initialConfig.enabled },
+        ]} />
+        {hasToken && (
+          <CardCifre
+            titlu="Statistici notificări"
+            cifre={[
+              { eticheta: "Trimise azi", valoare: stats?.today ?? 0 },
+              { eticheta: "Total trimise", valoare: stats?.total ?? 0 },
+              { eticheta: "Eșuate", valoare: stats?.failed ?? 0 },
+            ]}
+            randuri={[{
+              eticheta: <><Wallet className="h-3.5 w-3.5" /> Creditele rămase</>,
+              valoare: (
+                <a href="https://notice.ro" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                  în contul notice.ro <ExternalLink className="h-3 w-3" />
+                </a>
+              ),
+            }]}
+          />
+        )}
+        <CumFunctioneaza id="notice" puncte={[
+          { Icon: UserPlus, text: "Îți faci cont pe notice.ro, adaugi credit SMS și generezi tokenul API, la API / Dezvoltatori." },
+          { Icon: FileText, text: "Șabloanele de mesaj le creezi în notice.ro, câte unul pentru fiecare status. Un SMS are cam 130 de caractere." },
+          { Icon: ListChecks, text: "Aici alegi, pentru fiecare status, pe ce canal pleacă mesajul și cu ce șablon." },
+          { Icon: Webhook, text: "Rapoartele de livrare și răspunsurile clienților vin prin adresa de webhook, pe care o lipești în notice.ro." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Contul notice.ro" descriere="Tokenul API din contul tău. Cu el aducem și șabloanele de mesaj.">
+        <Field label="Token API notice.ro" htmlFor="notice-token"
+          ajutor={<ExplicatieCard marime="mic" intrebare="De unde îl iau" eticheta="Tokenul API notice.ro"
+            text="În contul notice.ro, la secțiunea API / Dezvoltatori, generezi un token API și îl lipești aici." />}>
+          <Input
+            id="notice-token"
+            type="password"
+            value={config.api_token}
+            onChange={e => setConfig(c => ({ ...c, api_token: e.target.value }))}
+            placeholder={tokenSalvat ? PLACEHOLDER_SECRET_SALVAT : ""}
+          />
+        </Field>
+        {testResult && (
+          <Callout variant={testResult.ok ? "success" : "danger"} icon={testResult.ok ? CheckCircle : XCircle} title={testResult.message} />
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={testConnection} disabled={testing || !hasToken}>
+            {testing ? <Loader2 className="animate-spin" /> : <Plug />}
+            {testing ? "Se testează..." : "Testează conexiunea"}
+          </Button>
+          <a href="https://notice.ro" target="_blank" rel="noopener noreferrer" className={legatura}>
+            Deschide notice.ro <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+      </Sectiune>
 
-      <div className="space-y-6">
-
-        {/* Step guide */}
-        <Panel className="overflow-hidden">
-          <PanelHeader><PanelTitle>Cum obtii tokenul API?</PanelTitle></PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              { step: "1", title: "Creeaza un cont notice.ro", desc: "Inregistreaza-te pe notice.ro si adauga credit SMS pentru a putea trimite mesaje.", link: "https://notice.ro" },
-              { step: "2", title: "Genereaza tokenul API", desc: "In contul notice.ro, mergi la sectiunea API / Dezvoltatori si genereaza un token API.", link: "https://notice.ro" },
-              { step: "3", title: "Creeaza sabloanele de SMS", desc: "Adauga in notice.ro sabloanele dorite pentru fiecare status. Variabile acceptate: {name}, {order_id}, {total}, {telephone}, {shipping_address}, {shipping_city}, {shipping_company}, {payment_method}, {store_url}, {date_added} (plus {awb} adaugat de noi). Un SMS = aproximativ 130 de caractere.", link: null },
-              { step: "4", title: "Conecteaza si testeaza", desc: "Lipeste tokenul mai jos, testeaza conexiunea, apoi alege ce SMS-uri se trimit si cu ce sablon.", link: null },
-            ].map(({ step, title, desc, link }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                  {link && (
-                    <a href={link} target="_blank" rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                      Deschide notice.ro <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        {/* Connection */}
-        <Panel className="space-y-4 p-5">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">Token API notice.ro</label>
-            <Input
-              type="password"
-              value={config.api_token}
-              onChange={e => setConfig(c => ({ ...c, api_token: e.target.value }))}
-              placeholder={secretulEsteSalvat(initialConfig, "api_token") ? PLACEHOLDER_SECRET_SALVAT : ""}
+      {hasToken && (
+        <Sectiune pas={2} titlu="Canale" descriere="Pe unde pleacă notificările: SMS, WhatsApp sau apel vocal.">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Elimină diacriticele (SMS)</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Recomandat: mesajele SMS rămân într-un singur segment. WhatsApp și apelul păstrează diacriticele.
+              </p>
+            </div>
+            <Switch
+              checked={config.strip_diacritics !== false}
+              onCheckedChange={v => setConfig(c => ({ ...c, strip_diacritics: v }))}
+              aria-label="Elimină diacriticele (SMS)"
             />
           </div>
 
-          {testResult && (
-            <div className={cn(
-              "flex items-center gap-2 rounded-lg border p-3 text-sm",
-              testResult.ok ? "border-success/20 bg-success/5 text-success" : "border-destructive/20 bg-destructive/5 text-destructive",
-            )}>
-              {testResult.ok ? <CheckCircle className="h-4 w-4 flex-shrink-0" /> : <XCircle className="h-4 w-4 flex-shrink-0" />}
-              <p className="font-medium">{testResult.message}</p>
-            </div>
+          {config.enabled ? (
+            <>
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <PhoneCall className="h-4 w-4 text-muted-foreground" /> Notificări vocale (apel)
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Sună automat clientul cu un mesaj vocal generat din text. Apoi bifezi „Apel” la fiecare scenariu.
+                  </p>
+                </div>
+                <Switch
+                  checked={voiceEnabled}
+                  onCheckedChange={v => setConfig(c => ({ ...c, voice: { ...c.voice, enabled: v } }))}
+                  aria-label="Notificări vocale (apel)"
+                />
+              </div>
+              {voiceEnabled && (
+                <Field label="Tip apel" htmlFor="notice-tip-apel">
+                  <select
+                    id="notice-tip-apel"
+                    value={config.voice?.type ?? "confirmation"}
+                    onChange={e => setConfig(c => ({ ...c, voice: { enabled: c.voice?.enabled ?? true, type: e.target.value as "confirmation" | "fulfilment" } }))}
+                    className={selectCls}
+                  >
+                    <option value="confirmation">Confirmare</option>
+                    <option value="fulfilment">Procesare / livrare</option>
+                  </select>
+                </Field>
+              )}
+
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+                <div>
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <ShoppingCart className="h-4 w-4 text-muted-foreground" /> SMS coș abandonat
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Folosește notice.ro pentru SMS-urile de recuperare a coșurilor abandonate (din pagina Coșuri abandonate).
+                  </p>
+                </div>
+                <Switch
+                  checked={!!config.abandoned?.enabled}
+                  onCheckedChange={v => setConfig(c => ({ ...c, abandoned: { enabled: v } }))}
+                  aria-label="SMS coș abandonat"
+                />
+              </div>
+            </>
+          ) : (
+            <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+              WhatsApp, apelul vocal și SMS-ul de coș abandonat apar după ce pornești comutatorul „Notificările notice.ro” de sus.
+            </p>
+          )}
+        </Sectiune>
+      )}
+
+      {/* WhatsApp: panoul lui, cu legarea numarului (felia `whatsapp` o scrie serverul, vezi `syncWhatsapp`). */}
+      {hasToken && config.enabled && (
+        <NoticeWhatsappPanel
+          businessId={businessId}
+          token={config.api_token}
+          whatsapp={config.whatsapp}
+          onChange={syncWhatsapp}
+        />
+      )}
+
+      {hasToken && (
+        <Sectiune pas={3} titlu="Când se trimit" descriere="La fiecare scenariu pornești canalele și alegi șablonul din notice.ro.">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Variabilele din șabloane
+            <ExplicatieCard marime="mic" intrebare="Ce variabile pot folosi" eticheta="Variabilele din șabloane"
+              text="{name}, {order_id}, {total}, {telephone}, {shipping_address}, {shipping_city}, {shipping_company}, {payment_method}, {store_url}, {date_added}, plus {awb}, adăugat de noi." />
+          </div>
+          {tplError && (
+            <Callout variant="warning" title={tplError}>Verifică tokenul și testează din nou conexiunea.</Callout>
+          )}
+          {tplLoading && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Se încarcă șabloanele din notice.ro...
+            </p>
           )}
 
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={testConnection} disabled={testing || !hasToken}>
-              {testing ? <Loader2 className="animate-spin" /> : <Plug />}
-              {testing ? "Se testeaza..." : "Testeaza conexiunea"}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notificări la status comandă</p>
+            {STATUS_TRIGGERS.map(t => renderTriggerRow(t.key, t.label))}
+          </div>
+
+          <div className="space-y-2 border-t border-border pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notificări la status plată</p>
+            {PAYMENT_TRIGGERS.map(t => renderTriggerRow(t.key, t.label))}
+          </div>
+        </Sectiune>
+      )}
+
+      {hasToken && (
+        <Sectiune pas={4} titlu="Trimite un test" descriere="Consumă 1 credit notice.ro pe canal.">
+          <div className="flex overflow-hidden rounded-lg border border-input transition-colors focus-within:border-ring">
+            <span className="flex w-10 shrink-0 items-center justify-center bg-muted/40">
+              <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+            </span>
+            <input
+              type="tel"
+              aria-label="Numărul de telefon pentru test"
+              value={testPhone}
+              onChange={e => setTestPhone(e.target.value)}
+              placeholder="07XXXXXXXX"
+              className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => sendTest("sms")} disabled={testingChannel !== null} className="whitespace-nowrap">
+              {testingChannel === "sms" ? <Loader2 className="animate-spin" /> : <MessageSquare />} Test SMS
+            </Button>
+            {waEnabled && (
+              <Button variant="outline" onClick={() => sendTest("whatsapp")} disabled={testingChannel !== null} className="whitespace-nowrap">
+                {testingChannel === "whatsapp" ? <Loader2 className="animate-spin" /> : <MessageCircle />} Test WhatsApp
+              </Button>
+            )}
+            {voiceEnabled && (
+              <Button variant="outline" onClick={() => sendTest("voice")} disabled={testingChannel !== null} className="whitespace-nowrap">
+                {testingChannel === "voice" ? <Loader2 className="animate-spin" /> : <PhoneCall />} Test apel
+              </Button>
+            )}
+          </div>
+        </Sectiune>
+      )}
+
+      {hasToken && config.enabled && webhookUrl && (
+        <Sectiune pas={5} titlu="Webhook (rapoarte livrare + răspunsuri)">
+          <p className="-mt-2 text-xs leading-relaxed text-muted-foreground">
+            Copiază adresa în notice.ro, la Integrare API, apoi Webhook URL, ca să primești rapoartele de livrare și
+            răspunsurile clienților. Dacă ai lipit cândva acolo o adresă diferită (de exemplu fără „www”), înlocuiește-o.
+            Rezultatul apelurilor vocale vine singur, fără nicio setare.
+          </p>
+          <div className="flex gap-2">
+            <input
+              readOnly
+              aria-label="Adresa de webhook"
+              value={webhookUrl}
+              className="min-w-0 flex-1 truncate rounded-lg border border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground focus:outline-none"
+            />
+            <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={() => { void navigator.clipboard.writeText(webhookUrl); toast.success("URL copiat."); }}>
+              <Copy /> Copiază
             </Button>
           </div>
-        </Panel>
+        </Sectiune>
+      )}
 
-        {/* Settings — shown once a token is present */}
-        {hasToken && (
-          <Panel className="space-y-5 p-5">
-            <div className="flex items-center justify-between">
-              <div className="pr-4">
-                <p className="text-sm font-semibold text-foreground">Activeaza notice.ro</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Cand e activ, trimitem notificari (SMS / WhatsApp / apel) pentru scenariile bifate mai jos.
-                </p>
-              </div>
-              <Switch checked={config.enabled} onCheckedChange={v => setConfig(c => ({ ...c, enabled: v }))} />
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border pt-4">
-              <div className="pr-4">
-                <p className="text-sm font-semibold text-foreground">Elimina diacriticele (SMS)</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Recomandat: mesajele SMS raman intr-un singur segment. WhatsApp si apelul pastreaza diacriticele.
-                </p>
-              </div>
-              <Switch
-                checked={config.strip_diacritics !== false}
-                onCheckedChange={v => setConfig(c => ({ ...c, strip_diacritics: v }))}
-              />
-            </div>
-          </Panel>
-        )}
-
-        {/* WhatsApp channel */}
-        {hasToken && config.enabled && (
-          <NoticeWhatsappPanel
-            businessId={businessId}
-            token={config.api_token}
-            whatsapp={config.whatsapp}
-            onChange={syncWhatsapp}
-          />
-        )}
-
-        {/* Voice + abandoned-cart channels */}
-        {hasToken && config.enabled && (
-          <Panel className="space-y-5 p-5">
-            <div className="flex items-center justify-between">
-              <div className="pr-4">
-                <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <PhoneCall className="h-4 w-4 text-primary" /> Notificari vocale (apel)
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Suna automat clientul cu un mesaj vocal generat din text. Apoi bifeaza &quot;Apel&quot; la fiecare scenariu.
-                </p>
-              </div>
-              <Switch
-                checked={voiceEnabled}
-                onCheckedChange={v => setConfig(c => ({ ...c, voice: { ...c.voice, enabled: v } }))}
-              />
-            </div>
-            {voiceEnabled && (
-              <div className="border-t border-border pt-4">
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Tip apel</label>
-                <select
-                  value={config.voice?.type ?? "confirmation"}
-                  onChange={e => setConfig(c => ({ ...c, voice: { enabled: c.voice?.enabled ?? true, type: e.target.value as "confirmation" | "fulfilment" } }))}
-                  className={selectCls}
-                >
-                  <option value="confirmation">Confirmare</option>
-                  <option value="fulfilment">Procesare / livrare</option>
-                </select>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between border-t border-border pt-4">
-              <div className="pr-4">
-                <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <ShoppingCart className="h-4 w-4 text-primary" /> SMS cos abandonat
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Foloseste notice.ro pentru SMS-urile de recuperare cos abandonat (din pagina Cosuri abandonate).
-                </p>
-              </div>
-              <Switch
-                checked={!!config.abandoned?.enabled}
-                onCheckedChange={v => setConfig(c => ({ ...c, abandoned: { enabled: v } }))}
-              />
-            </div>
-          </Panel>
-        )}
-
-        {/* Triggers + save */}
-        {hasToken && (
-          <Panel className="space-y-5 p-5">
-            {tplError && (
-              <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 text-xs text-warning">
-                {tplError} Verifica tokenul si testeaza din nou conexiunea.
-              </div>
-            )}
-            {tplLoading && (
-              <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Se incarca sabloanele din notice.ro...
-              </p>
-            )}
-
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notificari la status comanda</p>
-              {STATUS_TRIGGERS.map(t => renderTriggerRow(t.key, t.label))}
-            </div>
-
-            <div className="space-y-2 border-t border-border pt-4">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notificari la status plata</p>
-              {PAYMENT_TRIGGERS.map(t => renderTriggerRow(t.key, t.label))}
-            </div>
-
-            <div className="flex justify-end border-t border-border pt-4">
-              <Button size="lg" onClick={save} disabled={saving}>
-                {saving ? <Loader2 className="animate-spin" /> : <Save />}
-                {saving ? "Se salveaza..." : "Salveaza integrarea"}
-              </Button>
-            </div>
-          </Panel>
-        )}
-
-        {/* Webhook URL */}
-        {hasToken && config.enabled && webhookUrl && (
-          <Panel className="space-y-3 p-5">
-            <div className="flex items-center gap-2">
-              <Webhook className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Webhook (rapoarte livrare + raspunsuri)</p>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Copiaza acest URL in notice.ro &rarr; Integrare API &rarr; Webhook URL ca sa primesti rapoartele de livrare si raspunsurile clientilor.
-              Daca in notice.ro ai lipit candva o adresa diferita de cea de mai jos (de exemplu fara &bdquo;www&rdquo;), inlocuieste-o.
-              Rezultatul apelurilor vocale vine singur, fara nicio setare.
-            </p>
-            <div className="flex gap-2">
-              <input readOnly value={webhookUrl} className="min-w-0 flex-1 truncate rounded-lg border border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground focus:outline-none" />
-              <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={() => { void navigator.clipboard.writeText(webhookUrl); toast.success("URL copiat."); }}>
-                <Copy /> Copiaza
-              </Button>
-            </div>
-          </Panel>
-        )}
-
-        {/* Stats + credits */}
-        {hasToken && (
-          <Panel className="space-y-4 p-5">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Statistici notificari</p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "Trimise azi", value: stats?.today ?? 0 },
-                { label: "Total trimise", value: stats?.total ?? 0 },
-                { label: "Esuate", value: stats?.failed ?? 0 },
-              ].map(s => (
-                <div key={s.label} className="rounded-xl ring-1 ring-foreground/10 bg-card p-3 text-center">
-                  <p className="text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{s.label}</p>
-                </div>
-              ))}
-            </div>
-
-            <a href="https://notice.ro" target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-3 transition-colors hover:bg-muted/50">
-              <span className="flex items-center gap-2 text-sm text-foreground">
-                <Wallet className="h-4 w-4 text-muted-foreground" />
-                Vezi creditele ramase in contul notice.ro
-              </span>
-              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-            </a>
-
-            {stats && stats.recent.length > 0 && (
-              <div className="border-t border-border pt-3">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">Ultimele notificari</p>
-                <div className="space-y-1.5">
-                  {stats.recent.map((r, i) => (
-                    <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        {r.success
-                          ? <CheckCircle className="h-3 w-3 flex-shrink-0 text-success" />
-                          : <XCircle className="h-3 w-3 flex-shrink-0 text-destructive" />}
-                        {r.channel === "whatsapp"
-                          ? <MessageCircle className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                          : r.channel === "voice"
-                            ? <PhoneCall className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
-                            : <MessageSquare className="h-3 w-3 flex-shrink-0 text-muted-foreground" />}
-                        <span className="truncate text-foreground">{TRIGGER_LABELS[r.trigger_key] ?? r.trigger_key}</span>
-                        {r.phone && <span className="text-muted-foreground">· {r.phone}</span>}
-                        {r.delivery_status === "delivered" && <span className="text-success">· livrat</span>}
-                        {/* ⚠ La un apel se arata REZULTATUL: „clientul a anulat” e tocmai ce vrea sa afle comerciantul. */}
-                        {r.channel === "voice" && stareaVocii(r.delivery_status) && (
-                          <span className={stareaVocii(r.delivery_status) === "confirmed" ? "text-success" : "text-destructive"}>
-                            · {ETICHETA_VOCE[stareaVocii(r.delivery_status)!]}
-                          </span>
-                        )}
-                      </span>
-                      <span className="flex-shrink-0 text-muted-foreground">
-                        {new Date(r.created_at).toLocaleString("ro-RO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </Panel>
-        )}
-
-        {/* Raspunsurile clientilor: trase de cronul `notice-raspunsuri` si, daca vin, primite pe webhook. */}
-        {hasToken && inbox.length > 0 && (
-          <Panel className="space-y-3 p-5">
-            <div className="flex items-center gap-2">
-              <Inbox className="h-4 w-4 text-primary" />
-              <p className="text-sm font-semibold text-foreground">Raspunsuri primite</p>
-            </div>
-            <div className="space-y-2">
-              {inbox.map(m => (
-                <div key={m.id} className="rounded-lg border border-border p-2.5">
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span className="flex items-center gap-1.5 font-medium text-foreground">
-                      {m.channel === "whatsapp" ? <MessageCircle className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
-                      {m.from_number ?? "necunoscut"}
+      {hasToken && stats && stats.recent.length > 0 && (
+        <Sectiune titlu="Ultimele notificări">
+          <div className="space-y-1.5">
+            {stats.recent.map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {r.success
+                    ? <CheckCircle className="h-3 w-3 flex-shrink-0 text-success" />
+                    : <XCircle className="h-3 w-3 flex-shrink-0 text-destructive" />}
+                  {r.channel === "whatsapp"
+                    ? <MessageCircle className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                    : r.channel === "voice"
+                      ? <PhoneCall className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                      : <MessageSquare className="h-3 w-3 flex-shrink-0 text-muted-foreground" />}
+                  <span className="truncate text-foreground">{TRIGGER_LABELS[r.trigger_key] ?? r.trigger_key}</span>
+                  {r.phone && <span className="text-muted-foreground">· {r.phone}</span>}
+                  {r.delivery_status === "delivered" && <span className="text-success">· livrat</span>}
+                  {/* ⚠ La un apel se arata REZULTATUL: „clientul a anulat” e tocmai ce vrea sa afle comerciantul. */}
+                  {r.channel === "voice" && stareaVocii(r.delivery_status) && (
+                    <span className={stareaVocii(r.delivery_status) === "confirmed" ? "text-success" : "text-destructive"}>
+                      · {ETICHETA_VOCE[stareaVocii(r.delivery_status)!]}
                     </span>
-                    <span className="text-muted-foreground">
-                      {new Date(m.received_at).toLocaleString("ro-RO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                  {m.body && <p className="mt-1 text-xs text-muted-foreground">{m.body}</p>}
-                </div>
-              ))}
-            </div>
-          </Panel>
-        )}
+                  )}
+                </span>
+                <span className="flex-shrink-0 text-muted-foreground">{ora(r.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        </Sectiune>
+      )}
 
-        {/* Test channels */}
-        {hasToken && (
-          <Panel className="space-y-4 p-5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Trimite un test</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Consuma 1 credit notice.ro pe canal.</p>
-            </div>
-            <div className="flex overflow-hidden rounded-lg border border-input transition-colors focus-within:border-ring">
-              <span className="flex w-10 shrink-0 items-center justify-center bg-muted/40">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-              </span>
-              <input
-                type="tel"
-                value={testPhone}
-                onChange={e => setTestPhone(e.target.value)}
-                placeholder="07XXXXXXXX"
-                className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => sendTest("sms")} disabled={testingChannel !== null} className="whitespace-nowrap">
-                {testingChannel === "sms" ? <Loader2 className="animate-spin" /> : <MessageSquare />} Test SMS
-              </Button>
-              {waEnabled && (
-                <Button variant="outline" onClick={() => sendTest("whatsapp")} disabled={testingChannel !== null} className="whitespace-nowrap">
-                  {testingChannel === "whatsapp" ? <Loader2 className="animate-spin" /> : <MessageCircle />} Test WhatsApp
-                </Button>
-              )}
-              {voiceEnabled && (
-                <Button variant="outline" onClick={() => sendTest("voice")} disabled={testingChannel !== null} className="whitespace-nowrap">
-                  {testingChannel === "voice" ? <Loader2 className="animate-spin" /> : <PhoneCall />} Test apel
-                </Button>
-              )}
-            </div>
-          </Panel>
-        )}
-      </div>
-    </div>
+      {/* Raspunsurile clientilor: trase de cronul `notice-raspunsuri` si, daca vin, primite pe webhook. */}
+      {hasToken && inbox.length > 0 && (
+        <Sectiune titlu="Răspunsuri primite">
+          <div className="space-y-2">
+            {inbox.map(m => (
+              <div key={m.id} className="rounded-lg border border-border p-2.5">
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="flex items-center gap-1.5 font-medium text-foreground">
+                    {m.channel === "whatsapp" ? <MessageCircle className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
+                    {m.from_number ?? "necunoscut"}
+                  </span>
+                  <span className="text-muted-foreground">{ora(m.received_at)}</span>
+                </div>
+                {m.body && <p className="mt-1 text-xs text-muted-foreground">{m.body}</p>}
+              </div>
+            ))}
+          </div>
+        </Sectiune>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

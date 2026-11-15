@@ -11,6 +11,9 @@ import { toast } from "sonner";
 import {
   comutaSincronizareaOfertei, listaOferteEmag, retrageDePeEmag, trimiteAcumPeEmag,
   type RandOfertaEcran, trimiteSelectiaEmag} from "@/lib/actions/emag.actions";
+import {
+  FILTRU_OFERTE_CERUT, filtruOferteInAsteptare, uitaFiltrulOferte, type CerereFiltruOferte,
+} from "@/lib/emag/filtru-oferte";
 
 /**
  * Lista ofertelor de pe eMAG.
@@ -50,8 +53,11 @@ export function EmagListings({ businessId }: { businessId: string }) {
   const [ceTrimite, setCeTrimite] = useState<CeSeTrimite>("prețul și stocul");
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
-  const [filtru, setFiltru] = useState<string>("");
-  const [cautare, setCautare] = useState("");
+  /* O cerere venita din alta fila („Vezi ofertele” din „De făcut”), daca lista se monteaza abia acum.
+     Vezi `lib/emag/filtru-oferte.ts`. */
+  const [cerereaInitiala] = useState(() => filtruOferteInAsteptare());
+  const [filtru, setFiltru] = useState<string>(cerereaInitiala?.filtru ?? "");
+  const [cautare, setCautare] = useState(cerereaInitiala?.cautare ?? "");
   /* ⚠ Bifele se țin pe `product_id`, nu pe `emag_id`: coada lucrează pe produse, iar un
      produs cu variante are mai multe oferte. Ținute pe ofertă, același produs ar fi
      intrat de cinci ori în același lot. */
@@ -100,7 +106,22 @@ export function EmagListings({ businessId }: { businessId: string }) {
   }
 
   useEffect(() => {
-    incarca(1, "", "");
+    uitaFiltrulOferte();
+    incarca(1, cerereaInitiala?.filtru ?? "", cerereaInitiala?.cautare ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId]);
+
+  /* Lista deja montata (fila Oferte deschisa mai devreme) prinde cererea din eveniment. */
+  useEffect(() => {
+    function laCerere(e: Event) {
+      const c = (e as CustomEvent<CerereFiltruOferte>).detail;
+      uitaFiltrulOferte();
+      setFiltru(c.filtru ?? "");
+      setCautare(c.cautare ?? "");
+      incarca(1, c.filtru ?? "", c.cautare ?? "");
+    }
+    window.addEventListener(FILTRU_OFERTE_CERUT, laCerere);
+    return () => window.removeEventListener(FILTRU_OFERTE_CERUT, laCerere);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 

@@ -175,7 +175,9 @@ export function modulDePlata(metoda: string | null | undefined): 1 | 2 | 3 | nul
   const m = (metoda ?? "").trim().toLowerCase();
   if (m === "cash_on_delivery" || m === "ramburs") return 2;
   if (m === "bank_transfer") return 3;
-  if (m === "stripe" || m === "netopia" || m === "revolut" || m === "ipay" || m === "klarna") return 1;
+  /* tbi: comanda pleaca la easySales abia dupa aprobare (`asteapta_plata` pana atunci), deci curierul
+     n-are nimic de incasat: e platita online, prin finantare. */
+  if (m === "stripe" || m === "netopia" || m === "revolut" || m === "ipay" || m === "klarna" || m === "tbi") return 1;
   return null;
 }
 

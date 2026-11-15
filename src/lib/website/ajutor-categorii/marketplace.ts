@@ -39,11 +39,11 @@ export const MARKETPLACE: CategorieAjutor = {
           intro: "Conectarea are un pas pe care celelalte integrări nu-l au. Dacă îl sari, utilizatorul și parola corecte sunt tot refuzate, iar refuzul nu pomenește nimic despre adrese IP.",
           pasi: [
             "Intră în Integrări > Marketplace > eMAG.",
-            "Deschide blocul „Înainte de conectare: adaugă adresa noastră IP” din capul paginii și apasă „Copiaza adresa”.",
+            "În blocul „Înainte de a începe” de pe pagină apasă „Copiază”, lângă adresa noastră IP.",
             "În panoul eMAG mergi la „Contul meu → Setări API → adrese IP permise” și adaugă acolo adresa copiată.",
             "Întoarce-te în Edinio, la cardul „Conectează contul eMAG”, și alege țara: „eMAG România”, „eMAG Bulgaria” sau „eMAG Ungaria”.",
             "Completează „Utilizator API” și „Parolă API” cu datele de API din contul tău eMAG.",
-            "Salvează. La reușită apare mesajul „Cont eMAG conectat.” și cardul se schimbă în „Cont conectat”.",
+            "Apasă „Conectează și testează”. La reușită apare mesajul „Cont eMAG conectat.”, sub titlul paginii apare eticheta „Conectat”, iar pagina se împarte în file: Prezentare, Oferte, Categorii, Retururi, Campanii, Facturi, Setări și Jurnal.",
           ],
           detalii: [
             { titlu: "De ce adresa IP e primul pas, nu ultimul", text: "eMAG răspunde numai apelurilor venite de la adrese pe care le-ai declarat tu în contul lor. Cât timp adresa noastră nu e acolo, orice încercare de conectare pică, iar mesajul primit vorbește despre acreditări, nu despre adresa IP. E felul de greșeală în care se caută o zi întreagă într-un loc greșit." },
@@ -59,7 +59,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum completezi ce cere eMAG înainte de prima publicare",
           rezumat: "Cota de TVA și numărul de zile în care expediezi sunt cerute de eMAG pe fiecare ofertă, deci se completează o dată, înainte de primul produs trimis.",
           pasi: [
-            "În pagina eMAG, deschide blocul „Ce cere eMAG înainte de prima publicare”.",
+            "În pagina eMAG, deschide fila „Setări” și mergi la blocul „Ce cere eMAG înainte de prima publicare”.",
             "Alege „Cota de TVA” cu care pleacă ofertele tale.",
             "Completează „În câte zile expediezi”. Dacă expediezi în ziua comenzii, alegerea este „În aceeași zi”.",
             "Salvează. Apare mesajul „Salvat. Acum poți publica produse pe eMAG.”",
@@ -75,7 +75,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum completezi datele GPSR pentru ofertele de pe eMAG",
           rezumat: "Producătorul, reprezentantul din UE și avertismentele de siguranță sunt cerute de regulamentul european și pleacă la toate ofertele tale.",
           pasi: [
-            "În pagina eMAG, deschide blocul „Date GPSR”.",
+            "În pagina eMAG, deschide fila „Setări” și mergi la blocul „Date GPSR”.",
             "Completează „Producător” cu datele producătorului produselor tale.",
             "Completează „Reprezentant în UE”, dacă producătorul este din afara Uniunii Europene.",
             "Completează „Avertismente de siguranță”, dacă produsele tale cer așa ceva. Câmpul arată un exemplu de forma „Ex.: A nu se lăsa la îndemâna copiilor sub 3 ani.”",
@@ -93,7 +93,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum legi categoriile magazinului de categoriile eMAG",
           rezumat: "Fiecare categorie a ta primește o categorie eMAG, iar fără legătura asta produsele din ea nu se pot trimite.",
           pasi: [
-            "În pagina eMAG, deschide blocul „Leagă categoriile de eMAG”.",
+            "În pagina eMAG, deschide fila „Categorii”.",
             "Apasă „Sugestii”. Până nu o faci, listele sunt goale: ecranul spune „Apasă întâi «Sugestii», ca să aducem raftul de categorii al eMAG.”",
             "Când apare „Sugestii pregătite.”, verifică propunerea de pe fiecare rând.",
             "Unde propunerea nu e bună, folosește „Caută categoria eMAG după nume” sau scrie direct „Id categorie eMAG”.",
@@ -113,7 +113,7 @@ export const MARKETPLACE: CategorieAjutor = {
           rezumat: "Dacă vindeai pe eMAG înainte de Edinio, ofertele existente se leagă de produsele tale, ca să nu se creeze duplicate.",
           intro: "Pasul ăsta se face o singură dată, la început. Fără el, o publicare nouă ar crea a doua ofertă pe aceeași pagină de produs de pe eMAG.",
           pasi: [
-            "În pagina eMAG, deschide blocul „Leagă produsele cu ofertele tale de pe eMAG”.",
+            "În pagina eMAG, în fila „Prezentare”, mergi la blocul „Leagă produsele cu ofertele tale de pe eMAG”.",
             "Apasă butonul „Leagă produsele”. Ecranul arată pe rând „Se citește lista de pe eMAG…”, apoi „Se creează produsele…” și „Se leagă produsele…”.",
             "Urmărește cifrele de la final: câte oferte au fost „Legate de produse” și câte au rămas „De lămurit”.",
             "Ofertele pe care eMAG le are și magazinul tău nu, apar ca „Doar pe eMAG”.",
@@ -131,7 +131,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum trimiți produse noi pe eMAG",
           rezumat: "Alegi produsele din listă, completezi marca acolo unde lipsește, și pleacă la validare.",
           pasi: [
-            "În pagina eMAG, deschide lista produselor de publicat.",
+            "În pagina eMAG, deschide fila „Oferte”. Lista produselor de publicat stă deasupra listei de oferte.",
             "Restrânge lista cu „Caută după nume sau SKU” sau cu lista de categorii, unde „Toate categoriile” e valoarea de pornire.",
             "Bifează produsele. Butonul „Deselectează pagina” golește selecția de pe pagina curentă.",
             "Completează „Marca produsului” unde e goală. Fără ea, produsul nu pleacă: ecranul cere „Scrie marca produsului.”",
@@ -150,7 +150,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum citești starea ofertelor tale de pe eMAG",
           rezumat: "Cele nouă stări din „Ofertele tale pe eMAG” spun de ce un produs se vinde sau nu, iar ordinea lor e de la cel mai grav la cel mai bun.",
           pasi: [
-            "În pagina eMAG, deschide blocul „Ofertele tale pe eMAG”.",
+            "În pagina eMAG, deschide fila „Oferte” și mergi la blocul „Ofertele tale pe eMAG”.",
             {
               text: "Citește cartonașele de stare de deasupra listei. Sunt așezate în ordinea gravității, de la „Respins de eMAG” până la „Se vinde pe eMAG”.",
               captura: { alt: "Cartonașele de stare de deasupra listei de oferte eMAG, cu numărul de oferte pe fiecare.", raport: 16 / 10 },
@@ -188,13 +188,13 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum aduci comenzile din eMAG în panou",
           rezumat: "Comenzile vin singure, iar pentru cele dinaintea conectării există un buton separat.",
           pasi: [
-            "În pagina eMAG, apasă „Sincronizează acum” ca să ceri pe loc o citire, fără să aștepți rândul obișnuit.",
+            "În pagina eMAG, în fila „Prezentare”, apasă „Adu comenzile” din blocul „Sincronizează acum”, ca să ceri pe loc o citire, fără să aștepți rândul obișnuit.",
             "Pentru comenzile de dinaintea conectării, apasă „Adu comenzile vechi”.",
             "Dacă nu e nimic de adus, ecranul răspunde „Nicio comandă nouă.”",
             "Comenzile aduse apar în Comenzi, la fel ca cele din magazin.",
           ],
           detalii: [
-            { titlu: "Comenzi instant", text: "Comutatorul „Comenzi instant (optional)” face ca eMAG să ne anunțe imediat ce intră o comandă, în loc să așteptăm următoarea citire. Numele e scris fără diacritice chiar pe ecran." },
+            { titlu: "Comenzi instant", text: "Blocul „Comenzi instant (opțional)” din fila „Setări” îți dă adresa la care eMAG ne poate anunța pe loc fiecare comandă nouă, în loc să așteptăm următoarea citire. O pornesc ei, la cererea ta. Starea se vede și în capul paginii, la „Comenzi instant”." },
             { titlu: "Când eMAG are altceva decât Edinio", text: "Blocul cu numele ăsta stabilește cine are dreptate la o nepotrivire între cele două. Se citește înainte de prima sincronizare mare, fiindcă hotărăște ce se suprascrie." },
             { titlu: "Când nu e nimic de sincronizat", text: "La oferte, răspunsul este „Nicio ofertă de sincronizat.”, iar la o pornire fără lucrări în așteptare, „Nu era nimic de pornit.”" },
           ],
@@ -222,7 +222,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum rezolvi o cerere de retur venită de pe eMAG",
           rezumat: "Vezi cererea, contul în care se întorc banii, și poți chema curierul să ridice marfa de la client.",
           pasi: [
-            "În pagina eMAG, deschide lista de retururi.",
+            "În pagina eMAG, deschide fila „Retururi”.",
             "Citește rândul cererii. Sub el scrie „Banii se întorc în contul:” cu contul indicat de client.",
             "Ca să ridici marfa, cere chemarea curierului și confirmă întrebarea „Chem curierul să ridice marfa de la client?”.",
             "La reușită apare „Curierul a fost chemat.”",
@@ -326,7 +326,7 @@ export const MARKETPLACE: CategorieAjutor = {
           rezumat: "Localitatea, numele și telefonul de contact sunt obligatorii, altfel nu poți publica niciun anunț.",
           pasi: [
             "Intră în Integrări > Marketplace > OLX.",
-            "Apasă „Setări” în banda „Conectat la OLX”. Dacă setările nu sunt complete, secțiunea se deschide singură.",
+            "Deschide fila „Setări”. Dacă setările nu sunt complete, fila are un punct galben, iar în fila „Prezentare” lista „De făcut în contul OLX” are butonul „Deschide setările”.",
             "La „Tip vânzător” alege „Persoană fizică” sau „Firmă”.",
             "La „Localitate” scrie cel puțin două litere în câmpul „Caută orașul...” și alege orașul din listă. Sub fiecare oraș scrie județul.",
             "Dacă orașul are cartiere, alege unul la „Cartier (opțional)” sau lasă opțiunea goală din capul listei.",
@@ -337,7 +337,7 @@ export const MARKETPLACE: CategorieAjutor = {
           detalii: [
             { titlu: "Ce înseamnă câmpurile de contact", text: "„Nume de contact” este numele afișat pe anunț, iar „Telefon de contact” se scrie în formatul 07xxxxxxxx. Sunt datele pe care le vede cumpărătorul pe OLX." },
             { titlu: "Mesajele de validare", text: "Fără localitate primești „Alege localitatea.”, fără nume „Completează numele de contact.”, fără telefon „Completează telefonul de contact.” Salvarea nu trece până nu completezi." },
-            { titlu: "De ce e blocat butonul „Publică tot”", text: "Cât timp setările nu sunt complete, butonul „Publică tot” e dezactivat și deasupra apare motivul, urmat de îndemnul de a completa în Setări. Motivele posibile sunt: contul OLX neconectat, sesiunea OLX expirată, localitatea nesetată, numele de contact lipsă sau telefonul de contact lipsă." },
+            { titlu: "De ce e blocat butonul „Publică tot”", text: "Cât timp setările nu sunt complete, butonul „Publică tot” din fila „Anunțuri” e dezactivat, iar motivul apare în lista „De făcut în contul OLX”, cu butonul „Deschide setările”. Motivele posibile sunt: contul OLX neconectat, sesiunea OLX expirată, localitatea nesetată, numele de contact lipsă sau telefonul de contact lipsă." },
             { titlu: "Bifele de automatizare", text: "„Sincronizare automată” ține anunțurile aliniate cu produsele tale, „Reînnoire automată” se ocupă de reînnoirea anunțurilor, iar „Livrare prin OLX” marchează anunțurile ca fiind cu livrare prin OLX." },
           ],
           termeni: ["localitate anunt", "telefon contact olx", "tip vanzator", "reinnoire automata", "livrare prin olx"],
@@ -347,7 +347,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum mapezi categoriile magazinului la categoriile OLX",
           rezumat: "Fiecare categorie a ta trebuie legată de o categorie OLX, altfel produsele din ea nu se publică.",
           pasi: [
-            "Intră în Integrări > Marketplace > OLX și derulează la cardul „Mapare categorii”.",
+            "Intră în Integrări > Marketplace > OLX și deschide fila „Categorii”.",
             "Apasă „Mapează” în dreptul categoriei tale. Dacă are deja o mapare, butonul se numește „Editează”.",
             "În fereastra care se deschide alege tabul „Sugestii” sau tabul „Răsfoiește”.",
             "În „Sugestii” scrie cel puțin trei litere, de exemplu telefon sau rochie, apoi apasă sugestia potrivită.",
@@ -371,7 +371,7 @@ export const MARKETPLACE: CategorieAjutor = {
           rezumat: "Butonul „Publică tot” pune în coadă toate produsele active care au categoria mapată.",
           pasi: [
             "Intră în Integrări > Marketplace > OLX.",
-            "Verifică în banda de sus că butonul „Publică tot” nu e dezactivat.",
+            "Deschide fila „Anunțuri” și verifică că butonul „Publică tot” nu e dezactivat.",
             "Apasă „Publică tot”.",
             "Citește mesajul de confirmare. Vezi câte produse au fost adăugate la publicare sau, dacă nu e nimic eligibil, „Niciun produs mapat de publicat.”",
             "Rămâi pe pagină și urmărește caseta care arată câte produse se publică.",
@@ -398,7 +398,7 @@ export const MARKETPLACE: CategorieAjutor = {
             { titlu: "Ce stări poate avea un anunț", text: "Activ, În moderare, Neplătit, Limită atinsă, Dezactivat, Expirat, Respins, Blocat, Dezactivat de OLX, Șters de OLX, Eroare." },
             { titlu: "Acțiunile de pe rând", text: "Rândurile au iconițe fără text. Numele acțiunii apare la trecerea cu mouse-ul: Republică, Dezactivează, Activează, Cumpără pachet și activează, Șterge anunțul. „Dezactivează” apare doar la anunțurile active sau în moderare, „Activează” doar la cele dezactivate sau expirate, iar „Cumpără pachet și activează” doar la starea Limită atinsă." },
             { titlu: "Confirmările cerute", text: "La cumpărarea unui pachet ești întrebat dacă vrei să cumperi un pachet pentru acel anunț, plătit din creditul contului tău OLX, și să îl activezi. Confirmarea reușitei este „Pachet cumpărat, anunț activat.” La ștergere ești avertizat că acțiunea nu poate fi anulată, iar mesajul final este „Anunț șters de pe OLX.”" },
-            { titlu: "Anunțuri la limita gratuită", text: "Când ai anunțuri în starea Limită atinsă, apare un avertisment care îți spune câte sunt și de unde cumperi pachetul, din secțiunea „Cont OLX” de mai jos în pagină." },
+            { titlu: "Anunțuri la limita gratuită", text: "Când ai anunțuri în starea Limită atinsă, lista „De făcut în contul OLX” îți spune câte sunt, iar butonul „Vezi pachetele” deschide fila „Cont OLX”, de unde cumperi pachetul." },
             { titlu: "Dacă lista e goală", text: "Vezi „Încă niciun anunț publicat. Apasă „Publică tot” sau publică produse individual.” Dacă setările lipsesc, textul îți cere întâi să completezi setările și să mapezi categoriile." },
           ],
           nota: "Lista afișează cel mult 200 de anunțuri.",
@@ -409,7 +409,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum vezi soldul OLX, cumperi pachete și promovezi un anunț",
           rezumat: "Din secțiunea de cont OLX vezi creditul disponibil și cumperi pachete de anunțuri sau promovări.",
           pasi: [
-            "Intră în Integrări > Marketplace > OLX și apasă rândul „Cont OLX: sold, pachete și promovări”.",
+            "Intră în Integrări > Marketplace > OLX, deschide fila „Cont OLX” și apasă rândul „Cont OLX: sold, pachete și promovări”.",
             "Verifică cele trei casete: „Sold total”, „Portofel”, „Bonus”.",
             "La „Cumpără pachet de anunțuri” alege categoria, apoi pachetul din listă și, dacă ți se cere, metoda de plată.",
             "Apasă „Cumpără”. Confirmarea este „Pachet cumpărat.”",
@@ -432,7 +432,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum citești și răspunzi mesajelor de la cumpărători pe OLX",
           rezumat: "Conversațiile de pe anunțurile tale OLX se citesc și se continuă direct din panou.",
           pasi: [
-            "Intră în Integrări > Marketplace > OLX și derulează la cardul „Mesaje de la cumpărători”.",
+            "Intră în Integrări > Marketplace > OLX și deschide fila „Mesaje”.",
             "Apasă „Deschide”. În paranteză vezi numărul de conversații.",
             "Alege o conversație din lista din stânga.",
             "Citește mesajele din dreapta. Sus vezi numele cumpărătorului și cardul anunțului, cu titlu și preț, apasabil către OLX.",
@@ -460,7 +460,7 @@ export const MARKETPLACE: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Ce trebuie să ai înainte", text: "Contul About You Seller Center aprobat, cu contract și verificare, este al tău. Ai nevoie de produse fashion sau lifestyle cu brand aprobat pe About You și de cod EAN pentru fiecare mărime. Prețurile pe About You sunt în euro, iar conversia din lei o face Edinio." },
-            { titlu: "Ce vezi după conectare", text: "Cardul devine „Cont conectat”, cu eticheta „Sandbox” sau „Producție”, cheia mascată și patru contoare: „Listări”, „Publicate”, „Respinse”, „În coadă”." },
+            { titlu: "Ce vezi după conectare", text: "Sub titlul paginii apare eticheta „Conectat”, lângă „Producție” sau „Sandbox (testare)”. Banda de sub antet arată contul și cheia mascată, iar fila „Prezentare” are patru contoare: „Listări”, „Publicate”, „Respinse”, „În coadă”." },
             { titlu: "Dacă cheia nu e acceptată", text: "O cheie mai scurtă de 8 caractere e respinsă din start, cu mesajul care îți cere să introduci cheia din Seller Center. Dacă serverul o respinge, mesajul îți spune să o copiezi din Seller Center > Settings > API Keys. Când testarea eșuează din partea About You, în panou apare exact răspunsul primit de la ei." },
             { titlu: "Dacă integrarea e oprită", text: "Vezi doar „Integrarea About You este momentan indisponibilă. Revino în curând.” și nu ai ce configura." },
             { titlu: "Sesiune expirată", text: "Dacă apare „Sesiunea a expirat. Reconectează cheia API.”, generează o cheie nouă în Seller Center și repetă conectarea." },
@@ -472,7 +472,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum completezi setările de preț, brand și țări pentru About You",
           rezumat: "Cursul valutar, brandul și țările de listare trebuie completate înainte de a trimite produse.",
           pasi: [
-            "Intră în Integrări > Marketplace > About You și mergi la cardul „Setări”.",
+            "Intră în Integrări > Marketplace > About You și deschide fila „Setări”.",
             "Completează „Curs 1 EUR (în RON)”, de exemplu 4.97.",
             "Completează „Marjă preț (%)”, de exemplu 5.",
             "Completează „ID brand About You”.",
@@ -495,7 +495,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum pornești sau oprești notificările de stoc About You",
           rezumat: "Cu notificările active, stocul se sincronizează în ambele sensuri.",
           pasi: [
-            "Intră în Integrări > Marketplace > About You și mergi la cardul „Setări”.",
+            "Intră în Integrări > Marketplace > About You și deschide fila „Setări”.",
             "Derulează în josul cardului până la rândul „Notificări About You (stoc)”.",
             "Citește starea de sub titlu. Scrie fie „Active”, urmat de precizarea că stocul se sincronizează în ambele sensuri, fie „Inactive.”",
             "Apasă „Activează” sau „Dezactivează”. Confirmarea este „Notificări activate.” sau „Notificări dezactivate.”",
@@ -510,7 +510,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum mapezi categoriile magazinului la categoriile About You",
           rezumat: "Fiecare categorie din magazin se leagă de o categorie About You, iar produsele preiau automat maparea.",
           pasi: [
-            "Intră în Integrări > Marketplace > About You și derulează la cardul „Mapare categorii”.",
+            "Intră în Integrări > Marketplace > About You și deschide fila „Categorii”.",
             "Apasă „Mapează” în dreptul categoriei tale. Dacă are deja o legătură, butonul se numește „Schimbă”.",
             "Scrie cel puțin două litere în câmpul de căutare, de exemplu rochii sau tricouri.",
             "Apasă categoria dorită din rezultate. Confirmarea este „Categorie mapată.”",
@@ -528,7 +528,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum legi curierii tăi de carrierele About You",
           rezumat: "Fiecare curier Edinio primește un carrier About You, ca tracking-ul să plece corect la generarea AWB-ului.",
           pasi: [
-            "Intră în Integrări > Marketplace > About You și derulează la cardul „Mapare curieri”.",
+            "Intră în Integrări > Marketplace > About You, deschide fila „Setări” și mergi la cardul „Mapare curieri”, chiar sub setări.",
             "Găsește rândul curierului tău. Rândurile fixe sunt FAN Courier, DPD, Cargus, Sameday, Woot și Colete Online.",
             "Deschide lista derulantă de pe acel rând. Prima opțiune este „Nemapat”, iar restul opțiunilor vin direct de la About You.",
             "Alege carrier-ul potrivit. Confirmarea este „Curier mapat.”",
@@ -543,9 +543,9 @@ export const MARKETPLACE: CategorieAjutor = {
         {
           slug: "cum-completezi-listarea-unui-produs-about-you",
           titlu: "Cum completezi listarea unui produs pe About You",
-          rezumat: "Deschizi produsul din cardul Produse, completezi brandul, atributele și variantele, apoi îl trimiți.",
+          rezumat: "Deschizi produsul din fila Produse, completezi brandul, atributele și variantele, apoi îl trimiți.",
           pasi: [
-            "Intră în Integrări > Marketplace > About You și derulează la cardul „Produse”.",
+            "Intră în Integrări > Marketplace > About You și deschide fila „Produse”.",
             "Apasă numele produsului ca să deschizi editorul de listare.",
             "Alege „Brand” din listă. Este obligatoriu.",
             "Dacă acea categorie cere culoare, alege culoarea. Celelalte grupe de atribute apar ca liste separate.",
@@ -555,7 +555,7 @@ export const MARKETPLACE: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Categoria trebuie mapată întâi", text: "Dacă produsul are o categorie nemapată, editorul afișează „Categoria acestui produs nu este mapată. Mapeaz-o în secțiunea de mapare categorii, apoi revino.”, iar salvarea răspunde „Mapează categoria produsului mai întâi.”" },
-            { titlu: "Prețul variantei", text: "În modul automat vezi doar „Preț (auto)”, cu prețul calculat din cursul și marja setate în cardul „Setări”. În modul manual completezi tu prețul în euro." },
+            { titlu: "Prețul variantei", text: "În modul automat vezi doar „Preț (auto)”, cu prețul calculat din cursul și marja setate în fila „Setări”. În modul manual completezi tu prețul în euro." },
             { titlu: "Lista de mărimi", text: "Eticheta listei de mărimi vine de la About You și diferă în funcție de categoria aleasă. Blocul apare doar dacă acea categorie are o grupă de mărimi." },
             { titlu: "Mesajele de la salvare", text: "„Listare salvată.” după Salvează, „Trimis pe About You.” după Salvează și trimite, „Publicat pe About You.” după Publică. Fără brand primești „Alege brandul.” Dacă un SKU e folosit de alt produs, mesajul îți cere să folosești SKU-uri unice." },
             { titlu: "Ce produse apar în listă", text: "Cardul afișează cel mult 300 de produse active, ordonate după ultima modificare. Dacă nu ai produse, vezi „Nu ai produse de listat încă.”" },
@@ -565,9 +565,9 @@ export const MARKETPLACE: CategorieAjutor = {
         {
           slug: "cum-trimiti-listarile-about-you",
           titlu: "Cum trimiți sau publici toate listările About You",
-          rezumat: "Din cardul Produse poți retrimite tot, publica ciornele, reîncerca o listare cu eroare sau elimina una.",
+          rezumat: "Din fila Produse poți retrimite tot, publica ciornele, reîncerca o listare cu eroare sau elimina una.",
           pasi: [
-            "Intră în Integrări > Marketplace > About You și derulează la cardul „Produse”.",
+            "Intră în Integrări > Marketplace > About You și deschide fila „Produse”.",
             "Apasă „Trimite toate” ca să retrimiți toate listările. Vezi câte produse au intrat în coadă.",
             "Apasă „Publică toate” ca să publici ciornele. Vezi câte produse au fost programate pentru publicare.",
             "Pe rândul unei listări cu eroare apasă „Reîncearcă”. Confirmarea este „Retrimis pe About You.”",
@@ -601,7 +601,7 @@ export const MARKETPLACE: CategorieAjutor = {
             { titlu: "Dacă vitrina nu e în lei", text: "Apare un avertisment care îți spune că prețurile din Edinio sunt în lei, dar vitrina aleasă le citește în altă monedă, și că trebuie să setezi manual prețurile de vânzare pe fiecare listare înainte de a trimite produse." },
             { titlu: "Despre mediul Stage", text: "Textul din panou spune că stage-ul are chei separate și cere ca Trendyol să autorizeze IP-ul serverului nostru. Dacă nu ai cerut asta, folosește Producție." },
             { titlu: "Mesaje de validare", text: "Dacă lipsește ceva, în panou vezi „Completează Seller ID, API Key și API Secret.” API Secret trebuie să aibă cel puțin 8 caractere. Dacă sesiunea cade mai târziu, vezi „Sesiunea a expirat. Reconectează credențialele.”" },
-            { titlu: "Ce vezi după conectare", text: "Cardul „Cont conectat”, eticheta „Stage” sau „Producție”, rândul cu Seller, cheia mascată, vitrina și moneda, plus contoarele „Listări”, „Aprobate”, „Respinse”, „În coadă”." },
+            { titlu: "Ce vezi după conectare", text: "Sub titlul paginii apar eticheta „Conectat”, mediul („Producție” sau „Stage (testare)”) și vitrina. Banda de sub antet arată Seller-ul, vitrina și moneda, iar fila „Prezentare” are contoarele „Listări”, „Aprobate”, „Respinse”, „În coadă”." },
           ],
           termeni: ["seller id", "api secret", "detalii integrare", "vitrina", "stage"],
         },
@@ -610,7 +610,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum completezi setările de expediere pentru Trendyol",
           rezumat: "Alegi adresele de expediere și de retur și curierul implicit folosit la comenzile Trendyol.",
           pasi: [
-            "Intră în Integrări > Marketplace > Trendyol și mergi la cardul „Setări”.",
+            "Intră în Integrări > Marketplace > Trendyol și deschide fila „Setări”.",
             "Alege „Adresă expediere” din listă. Prima opțiune folosește adresa implicită din contul tău Trendyol.",
             "Alege „Adresă retur” în același fel.",
             "Alege „Curier implicit”. Prima opțiune înseamnă fără curier implicit.",
@@ -629,7 +629,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum pornești webhook-ul de comenzi Trendyol",
           rezumat: "Cu webhook-ul activ, comenzile de pe Trendyol intră imediat în Comenzi.",
           pasi: [
-            "Intră în Integrări > Marketplace > Trendyol și derulează la cardul „Comenzi Trendyol”.",
+            "Intră în Integrări > Marketplace > Trendyol, deschide fila „Setări” și mergi la cardul „Comenzi Trendyol”.",
             "Verifică eticheta din dreapta. Poate fi „Webhook activ” sau „Webhook inactiv”.",
             "Apasă „Activează webhook comenzi”. Confirmarea este „Webhook comenzi activat.”",
             "Dacă vrei să îl oprești, apasă „Dezactivează webhook”. Confirmarea este „Webhook dezactivat.”",
@@ -645,7 +645,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum mapezi automat categoriile la Trendyol",
           rezumat: "Edinio caută pentru fiecare categorie a ta o categorie Trendyol potrivită și îți arată rezultatele înainte de a salva ceva.",
           pasi: [
-            "Intră în Integrări > Marketplace > Trendyol și derulează la cardul „Mapare automată”.",
+            "Intră în Integrări > Marketplace > Trendyol, deschide fila „Categorii” și mergi la cardul „Mapare automată”.",
             "Apasă „Analizează categoriile”. Pe durata analizei butonul arată „Se analizează...”",
             "În fereastra „Potriviri găsite” verifică fiecare rând și eticheta lui de încredere: „Sigură”, „Probabilă” sau „Nesigură”.",
             "Dacă există mai multe variante pentru o categorie, alege varianta bună din listă. Fiecare arată procentul de potrivire.",
@@ -666,7 +666,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum mapezi manual o categorie la Trendyol",
           rezumat: "Cauți categoria Trendyol după nume și o legi de categoria ta.",
           pasi: [
-            "Intră în Integrări > Marketplace > Trendyol și derulează la cardul „Mapare categorii”.",
+            "Intră în Integrări > Marketplace > Trendyol, deschide fila „Categorii” și mergi la cardul „Mapare categorii”.",
             "Apasă „Mapează” pe rândul categoriei tale. Dacă are deja o legătură, butonul se numește „Schimbă”.",
             "Scrie cel puțin două litere în câmpul de căutare, de exemplu tricou sau rochie.",
             "Apasă rezultatul dorit. Confirmarea este „Categorie mapată.”",
@@ -681,9 +681,9 @@ export const MARKETPLACE: CategorieAjutor = {
         {
           slug: "cum-trimiti-produse-in-masa-pe-trendyol",
           titlu: "Cum cauți, filtrezi și trimiți produse în masă pe Trendyol",
-          rezumat: "Din cardul Produse selectezi produsele după filtre și le trimiți pe Trendyol dintr-o singură apăsare.",
+          rezumat: "Din fila Listări selectezi produsele după filtre și le trimiți pe Trendyol dintr-o singură apăsare.",
           pasi: [
-            "Intră în Integrări > Marketplace > Trendyol și derulează la cardul „Produse”.",
+            "Intră în Integrări > Marketplace > Trendyol și deschide fila „Listări”.",
             "Caută după numele produsului în câmpul de căutare.",
             "Filtrează după stare și după categorie.",
             "Bifează „Selectează pagina” pentru toate rândurile din pagină sau bifează rândurile una câte una.",
@@ -704,7 +704,7 @@ export const MARKETPLACE: CategorieAjutor = {
           titlu: "Cum completezi listarea unui produs pe Trendyol",
           rezumat: "Alegi brandul, completezi atributele categoriei și datele fiecărei variante, apoi trimiți produsul.",
           pasi: [
-            "Intră în Integrări > Marketplace > Trendyol, derulează la cardul „Produse” și apasă numele produsului.",
+            "Intră în Integrări > Marketplace > Trendyol, deschide fila „Listări” și apasă numele produsului.",
             "La „Brand” scrie cel puțin două litere și alege din listă. Dacă produsul are deja o marcă ce se potrivește exact, brandul se alege singur.",
             "Completează „Greutate (desi/kg, opțional)” dacă vrei altă valoare decât cea luată din greutatea produsului.",
             "Completează câmpurile din „Atribute produs”. Cele obligatorii sunt marcate cu asterisc.",
@@ -849,7 +849,7 @@ export const MARKETPLACE: CategorieAjutor = {
             { titlu: "Etichetele de stare", text: "Eticheta din dreptul comenzii poate fi: „Deschisă”, „Expediere în curs”, „Expediată”, „Expediere respinsă”, „Anulare în curs”, „Anulată”, „Anulare respinsă”, „Retur în curs”, „Returnată”, „Retur respins” sau „Mixtă”. „Mixtă” înseamnă că produsele din comandă nu sunt toate în aceeași stare. Dacă About You trimite o stare pe care Edinio nu o are în listă, pe rând apare codul brut al stării, așa cum vine de la ei." },
             { titlu: "Câte comenzi vezi", text: "Cardul afișează cel mult 100 de comenzi, cele mai noi primele, după data creării. Nu există paginare și nu există căutare, deci comenzile mai vechi de ultimele 100 nu se pot deschide din acest card. Ele rămân în lista ta de comenzi din Edinio." },
             { titlu: "Când lista e goală", text: "„Nicio comandă About You încă.” înseamnă că, pentru magazinul tău, nu a intrat încă nicio comandă din About You. „Nicio comandă cu probleme.” apare doar când ai pornit filtrul de probleme și nu mai există comenzi respinse." },
-            { titlu: "Ce trebuie să fie în regulă ca să ajungi aici", text: "Trebuie să fii autentificat și să ai un magazin de tip ministore pe cont, altfel ești dus înapoi în panou. Cardul „About You” din „Integrări” duce la pagina integrării doar cât timp integrarea e pornită la nivel de platformă; când e oprită, cardul apare cu lacăt și fără link. Pe pagina integrării, cardul „Comenzi About You” și celelalte secțiuni apar numai după ce contul About You e conectat." },
+            { titlu: "Ce trebuie să fie în regulă ca să ajungi aici", text: "Trebuie să fii autentificat și să ai un magazin de tip ministore pe cont, altfel ești dus înapoi în panou. Cardul „About You” din „Integrări” duce la pagina integrării doar cât timp integrarea e pornită la nivel de platformă; când e oprită, cardul apare cu lacăt și fără link. Pe pagina integrării, fila „Comenzi” și celelalte file cu date de la About You apar numai după ce contul e conectat și sesiunea e valabilă." },
             { titlu: "Ce ține de About You", text: "Edinio face integrarea, dar contul și contractul cu About You trebuie să fie ale tale. Stările pe care le vezi aici sunt cele raportate de ei." },
           ],
           termeni: ["comenzi About You", "Comenzi About You", "marketplace", "stare comandă", "expediată de About You", "Mixtă"],
@@ -860,7 +860,7 @@ export const MARKETPLACE: CategorieAjutor = {
           rezumat: "Comutatorul care lasă în listă doar comenzile respinse de About You, ce prinde el și de ce poate să dispară din pagină.",
           pasi: [
             "Intră în panoul de administrare > Integrări > About You.",
-            "Derulează la cardul „Comenzi About You”.",
+            "Deschide fila „Comenzi”.",
             "Apasă „Arată doar problemele (N)”, butonul din dreapta titlului.",
             "Apasă „Arată toate” ca să revii la lista completă.",
           ],
@@ -878,7 +878,7 @@ export const MARKETPLACE: CategorieAjutor = {
           rezumat: "Cele două butoane de pe rândul comenzii, ce PDF descarcă fiecare și ce înseamnă mesajele pe care le poți primi.",
           pasi: [
             "Intră în panoul de administrare > Integrări > About You.",
-            "Derulează la cardul „Comenzi About You” și găsește comanda.",
+            "Deschide fila „Comenzi” și găsește comanda.",
             "Apasă „Factură” pentru factura emisă de About You sau „Livrare” pentru documentul de livrare.",
             "Așteaptă descărcarea. Fișierul se salvează ca „factura-numărAboutYou.pdf”, respectiv „livrare-numărAboutYou.pdf”.",
           ],
@@ -898,14 +898,14 @@ export const MARKETPLACE: CategorieAjutor = {
           rezumat: "Butonul „Reia expedierea” pentru comenzile cu „Expediere respinsă”, ce face el și ce trebuie pregătit ca expedierea să plece a doua oară.",
           pasi: [
             "Intră în panoul de administrare > Integrări > About You.",
-            "La cardul „Comenzi About You”, găsește comanda cu eticheta roșie „Expediere respinsă”. Poți apăsa întâi „Arată doar problemele (N)”.",
+            "În fila „Comenzi”, găsește comanda cu eticheta roșie „Expediere respinsă”. Poți apăsa întâi „Arată doar problemele (N)”.",
             "Apasă „Reia expedierea”, butonul cu pictograma de camion.",
             "Verifică notificarea „Expedierea a fost repusă la coadă.” și eticheta comenzii, care trece pe „Expediere în curs”.",
           ],
           detalii: [
             { titlu: "Ce face butonul", text: "Pune comanda înapoi în coada de sincronizare cu About You, pe operația de expediere, cu numărul de încercări adus la zero, și trece starea locală pe „Expediere în curs”. Nu trimite nimic către About You în momentul apăsării. Trimiterea o face procesarea din fundal, iar starea finală, „Expediată” sau din nou „Expediere respinsă”, apare după răspunsul lor." },
             { titlu: "Butonul apare doar la „Expediere respinsă”", text: "Pentru „Anulare respinsă” și „Retur respins” nu există buton de reluare în card. Rândul trebuie să fie și legat de o comandă din Edinio, altfel pe el nu apare niciun buton." },
-            { titlu: "Ce trebuie să fie pregătit ca expedierea să plece", text: "Comanda trebuie să aibă AWB generat la curier. Fără AWB, elementul din coadă e sărit și nu se întâmplă nimic. Curierul trebuie să fie mapat la un carrier About You în cardul „Mapare curieri”, de pe aceeași pagină. Acolo, opțiunea implicită pentru fiecare curier este „Nemapat”. Verifică ambele înainte să reiei a doua oară." },
+            { titlu: "Ce trebuie să fie pregătit ca expedierea să plece", text: "Comanda trebuie să aibă AWB generat la curier. Fără AWB, elementul din coadă e sărit și nu se întâmplă nimic. Curierul trebuie să fie mapat la un carrier About You în cardul „Mapare curieri”, din fila „Setări”. Acolo, opțiunea implicită pentru fiecare curier este „Nemapat”. Verifică ambele înainte să reiei a doua oară." },
             { titlu: "De ce poate reveni pe „Expediere respinsă” fără explicație", text: "Când curierul nu e mapat, procesarea din fundal se oprește cu un motiv salvat intern, care nu se afișează în panou. Rândul revine pur și simplu pe „Expediere respinsă”. Dacă reluarea eșuează de fiecare dată, prima verificare este maparea curierului și existența AWB-ului, nu comanda în sine." },
             { titlu: "Comenzile expediate de About You", text: "Rândurile care au sub ele textul „expediată de About You” sunt sărite la expediere, pentru că marfa pleacă din depozitul lor. Reluarea nu are ce trimite pentru ele." },
             { titlu: "Câte încercări se fac", text: "Procesarea din fundal reia expedierea de cel mult 5 ori. După aceea scoate comanda din coadă și pune înapoi starea „Expediere respinsă”. Poți apăsa din nou „Reia expedierea”, ceea ce readuce contorul la zero, dar mai întâi rezolvă cauza, altfel se va opri iar." },

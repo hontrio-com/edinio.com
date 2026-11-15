@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, Banknote, CheckCircle, Info, KeyRound, Loader2, Tag, Truck } from "lucide-react";
 import {
   disconnectUps, getUpsServiciiAction, saveUpsConfig, testUpsConnectionAction,
 } from "@/lib/actions/ups.actions";
@@ -20,9 +20,12 @@ import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare, useFormularIntegrare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -49,15 +52,15 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const MEDII: { valoare: MediuUps; eticheta: string }[] = [
-  { valoare: "productie", eticheta: "Productie (onlinetools.ups.com) · expedieri reale" },
+  { valoare: "productie", eticheta: "Producție (onlinetools.ups.com) · expedieri reale" },
   { valoare: "test", eticheta: "Test / CIE (wwwcie.ups.com) · etichete cu filigran „Sample”" },
 ];
 
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
-  { valoare: "GIF", eticheta: "GIF (imprimanta obisnuita)" },
-  { valoare: "ZPL", eticheta: "ZPL (imprimanta termica de etichete)" },
-  { valoare: "EPL", eticheta: "EPL2 (imprimanta termica)" },
-  { valoare: "SPL", eticheta: "SPL (imprimanta termica)" },
+  { valoare: "GIF", eticheta: "GIF (imprimantă obișnuită)" },
+  { valoare: "ZPL", eticheta: "ZPL (imprimantă termică de etichete)" },
+  { valoare: "EPL", eticheta: "EPL2 (imprimantă termică)" },
+  { valoare: "SPL", eticheta: "SPL (imprimantă termică)" },
 ];
 
 type Proba = {
@@ -80,7 +83,7 @@ export function UpsConfigClient({
   initialConfig: UpsConfig | null;
 }) {
   const router = useRouter();
-  const [config, setConfig] = useState<UpsConfig>({
+  const { cfg: config, setCfg: setConfig, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<UpsConfig>({
     enabled: initialConfig?.enabled ?? false,
     client_id: initialConfig?.client_id ?? "",
     client_secret: initialConfig?.client_secret ?? "",
@@ -164,7 +167,8 @@ export function UpsConfigClient({
     const r = await saveUpsConfig(businessId, construieste());
     setSalveaza(false);
     if ("error" in r) { toast.error(r.error); return; }
-    toast.success("Configurarea UPS a fost salvata.");
+    toast.success("Configurarea UPS a fost salvată.");
+    marcheazaSalvat();
     const s = await getUpsServiciiAction(businessId);
     if (s.ok) setServicii(s.servicii);
     router.refresh();
@@ -201,170 +205,180 @@ export function UpsConfigClient({
 
   const permise = config.servicii_permise ?? [];
 
+  const secretSalvat = secretulEsteSalvat(initialConfig, "client_secret");
+  const activSalvat = !!initialConfig?.enabled && !!initialConfig?.client_id && secretSalvat && !!initialConfig?.account_number
+    && !!(initialConfig?.expeditor?.oras ?? "").trim() && !!(initialConfig?.expeditor?.cod_postal ?? "").trim();
+  const stari: StareAntet[] = !secretSalvat
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      activSalvat ? { ton: "bun", text: "Activ" } : { ton: "neutru", text: "Oprit" },
+      ...(initialConfig?.mediu === "test" ? [{ ton: "asteptare" as const, text: "Mediu de test" }] : []),
+    ];
+
   return (
-    <div className="space-y-6">
-      <Panel step={1} title="Conectare">
-        <Field
-          label="Client ID"
-          hint="Din aplicatia ta din portalul UPS pentru dezvoltatori. Nu e mascat: iti spune ce aplicatie ai legat."
-        >
-          <Input
-            value={config.client_id}
-            onChange={(e) => setConfig({ ...config, client_id: e.target.value })}
-          />
-        </Field>
+    <PaginaIntegrare
+      id="ups"
+      titlu="Livrare"
+      descriere="Colete prin UPS: livrări interne și către Uniunea Europeană, cu tarifele contractului tău, plată la livrare și puncte UPS Access Point."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="UPS la livrare" activ={!!config.enabled} onChange={(v) => setConfig({ ...config, enabled: v })} ariaLabel="Folosește UPS pentru livrare" textPornit="Pornit" textOprit="Oprit" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheile și numărul de cont (6 caractere)", facut: areChei },
+          { text: "Orașul și codul poștal de expediție", facut: areExpeditor },
+          { text: "UPS pornit", facut: esteActiv },
+        ]} />
+        <CumFunctioneaza id="ups" puncte={[
+          { Icon: KeyRound, text: "Client ID și Client Secret vin din aplicația ta din portalul UPS pentru dezvoltatori." },
+          { Icon: Banknote, text: "Rambursul merge doar pe conturi „Daily Pickup” sau „Drop Shipping”; proba de conexiune îl verifică." },
+          { Icon: Tag, text: "Cerem tarifele contractului: fără ele, UPS întoarce prețurile de listă." },
+          { Icon: Truck, text: "După salvare, pornește și metoda „UPS” din Setări, Livrare." },
+        ]} />
+      </>}
+    >
+      {config.enabled && !areExpeditor && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Fără oraș și cod poștal de expediție, UPS nu poate cota nimic, iar clienții vor vedea tariful fix.
+        </Callout>
+      )}
+      {config.mediu === "test" && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Ești pe mediul de test al UPS. Etichetele emise poartă filigran „Sample” și nu sunt valabile, iar tarifele negociate
+          sunt simulate. Treci pe producție înainte de prima comandă adevărată.
+        </Callout>
+      )}
+      {esteActiv && config.mediu !== "test" && (
+        <Callout variant="info" icon={Info}>
+          Fiecare AWB emis e real și facturat, iar UPS nu are protecție contra dublurilor: dacă emiterea pare că a eșuat,
+          folosește „Verifică la UPS” din pagina comenzii, în loc să încerci din nou.
+        </Callout>
+      )}
 
-        <Field label="Client Secret" hint="Din aceeasi aplicatie. Se cripteaza in baza si nu se mai afiseaza.">
-          <Input
-            type="password"
-            value={config.client_secret}
-            placeholder={secretulEsteSalvat(initialConfig, "client_secret") ? PLACEHOLDER_SECRET_SALVAT : "secretul tau"}
-            onChange={(e) => setConfig({ ...config, client_secret: e.target.value })}
-          />
-        </Field>
-
-        <Field
-          label="Numar de cont UPS (Shipper Number)"
-          hint="⚠ EXACT sase caractere alfanumerice, asa il cere UPS („six digit alphanumeric account number”). Il gasesti pe factura UPS."
-        >
-          <Input
-            value={config.account_number}
-            placeholder="A1B2C3"
-            maxLength={6}
-            onChange={(e) => setConfig({ ...config, account_number: e.target.value })}
-          />
-        </Field>
-        {config.account_number.trim().length > 0 && !contBun && (
-          <p className="text-[11px] text-warning">
-            Numarul are {config.account_number.trim().length} caractere. UPS cere exact 6.
-          </p>
-        )}
-
-        <Field
-          label="Mediu"
-          hint="⚠ In CIE etichetele au filigran „Sample”, iar tarifele negociate sunt simulate (in jur de 1% sub cele de lista)."
-        >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.mediu ?? "productie"}
-            onChange={(e) => setConfig({ ...config, mediu: e.target.value as MediuUps })}
-          >
-            {MEDII.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
-          </select>
-        </Field>
-
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
-            {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            Testeaza conexiunea
-          </Button>
-          {areChei && (
-            <ButonDeconectare
-              nume="UPS"
-              cePierzi="Client ID-ul, secretul, numărul de cont și adresa de expediere se șterg din Edinio. Ca să te întorci, le iei din nou din aplicația ta din portalul UPS. Expedierile deja emise rămân la ei."
-              marime="default"
-              onConfirma={deconecteaza}
+      <Sectiune pas={1} titlu="Conectare">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Client ID" htmlFor="ups-id"
+            hint="Din aplicația ta din portalul UPS pentru dezvoltatori. Nu e mascat: îți spune ce aplicație ai legat.">
+            <Input id="ups-id" value={config.client_id} onChange={(e) => setConfig({ ...config, client_id: e.target.value })} />
+          </Field>
+          <Field label="Client Secret" htmlFor="ups-secret" hint="Din aceeași aplicație. Se criptează și nu se mai afișează.">
+            <Input
+              id="ups-secret"
+              type="password"
+              value={config.client_secret}
+              placeholder={secretSalvat ? PLACEHOLDER_SECRET_SALVAT : "secretul tău"}
+              onChange={(e) => setConfig({ ...config, client_secret: e.target.value })}
             />
+          </Field>
+          <Field
+            label="Număr de cont UPS (Shipper Number)"
+            htmlFor="ups-cont"
+            hint="EXACT șase caractere alfanumerice, așa îl cere UPS. Îl găsești pe factura UPS."
+            error={config.account_number.trim().length > 0 && !contBun ? `Numărul are ${config.account_number.trim().length} caractere. UPS cere exact 6.` : undefined}
+          >
+            <Input id="ups-cont" value={config.account_number} placeholder="A1B2C3" maxLength={6} onChange={(e) => setConfig({ ...config, account_number: e.target.value })} />
+          </Field>
+          <Field label="Mediu" htmlFor="ups-mediu"
+            hint="În CIE etichetele au filigran „Sample”, iar tarifele negociate sunt simulate (în jur de 1% sub cele de listă).">
+            <select id="ups-mediu" className={selectCls} value={config.mediu ?? "productie"} onChange={(e) => setConfig({ ...config, mediu: e.target.value as MediuUps })}>
+              {MEDII.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
+            {probeaza ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+            Testează conexiunea
+          </Button>
+          {!areExpeditor && (
+            <p className="text-xs text-muted-foreground">
+              Completează întâi orașul și codul poștal de expediție: proba chiar cere două cotări, nu doar un token.
+            </p>
           )}
         </div>
-        {!areExpeditor && (
-          <p className="text-[11px] text-muted-foreground">
-            Completeaza intai orasul si codul postal de expeditie: proba chiar cere doua cotari, nu doar un token.
-          </p>
-        )}
 
         {proba && (
           <Callout variant={proba.ok ? "success" : "warning"} icon={proba.ok ? CheckCircle : AlertTriangle}>
             <span className="block">{proba.mesaj}</span>
             {proba.servicii.length > 0 && (
-              <span className="block mt-1 text-xs">
-                Servicii intoarse: {proba.servicii.map((s) => `${s.cod}${s.nume ? ` (${s.nume})` : ""}`).join(", ")}
+              <span className="mt-1 block text-xs">
+                Servicii întoarse: {proba.servicii.map((s) => `${s.cod}${s.nume ? ` (${s.nume})` : ""}`).join(", ")}
               </span>
             )}
             {proba.valuta && (
-              <span className="block mt-1 text-xs">
-                Valuta cotarii: <strong>{proba.valuta}</strong>
+              <span className="mt-1 block text-xs">
+                Valuta cotării: <strong>{proba.valuta}</strong>
                 {proba.valuta.includes("RON")
                   ? ""
-                  : ". ⚠ Magazinul lucreaza in lei. UPS nu are niciun camp prin care sa ceri valuta raspunsului, iar noi nu convertim sumele, deci UPS va aparea in checkout la tariful fix. Cere-i reprezentantului UPS tarife in RON."}
+                  : ". Magazinul lucrează în lei. UPS nu are niciun câmp prin care să ceri valuta răspunsului, iar noi nu convertim sumele, deci UPS va apărea la comandă la tariful fix. Cere-i reprezentantului UPS tarife în RON."}
               </span>
             )}
             {proba.ok && (
-              <span className="block mt-1 text-xs">
+              <span className="mt-1 block text-xs">
                 {proba.negociat
-                  ? "Contul primeste tarifele CONTRACTULUI, nu preturile de lista."
-                  : "⚠ Contul a intors doar preturi de LISTA. Verifica in portalul UPS ca aplicatia si numarul de cont sunt legate de acelasi contract."}
+                  ? "Contul primește tarifele CONTRACTULUI, nu prețurile de listă."
+                  : "Contul a întors doar prețuri de LISTĂ. Verifică în portalul UPS că aplicația și numărul de cont sunt legate de același contract."}
               </span>
             )}
             {/*
               ⚠ Raspunsul la intrebarea „merge rambursul pe contul meu?".
-              Nu se poate citi din niciun camp — se afla dintr-o cotare cu ramburs.
+              Nu se poate citi din niciun camp: se afla dintr-o cotare cu ramburs.
             */}
-            <span className={`block mt-1 text-xs ${proba.rambursOk ? "" : "text-warning"}`}>
-              {proba.rambursMesaj}
-            </span>
+            <span className={`mt-1 block text-xs ${proba.rambursOk ? "" : "text-warning"}`}>{proba.rambursMesaj}</span>
             {proba.alerte.length > 0 && (
-              <span className="block mt-1 text-xs">UPS a raspuns cu: {proba.alerte.join(" | ")}</span>
+              <span className="mt-1 block text-xs">UPS a răspuns cu: {proba.alerte.join(" | ")}</span>
             )}
             {proba.mediu === "test" && (
-              <span className="block mt-1 text-xs">
-                ⚠ Raspuns din mediul lor de test: etichetele poarta filigran „Sample”, iar tarifele negociate
-                nu sunt cele reale.
+              <span className="mt-1 block text-xs">
+                Răspuns din mediul lor de test: etichetele poartă filigran „Sample”, iar tarifele negociate nu sunt cele reale.
               </span>
             )}
           </Callout>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={2} title="Adresa de expeditie">
+      <Sectiune pas={2} titlu="Adresa de expediție">
         <Callout variant="info" icon={Info}>
-          De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal e obligatoriu in
-          practica: UPS nu are nomenclator de judete romanesti, iar cotarea lor cere un cod de judet de exact
-          doua caractere, deci codul postal ramane singurul semnal dupa care pot zona ruta.
+          De aici pleacă fiecare colet, și tot de aici se calculează tariful. Codul poștal e obligatoriu în practică: UPS nu are
+          nomenclator de județe românești, iar cotarea lor cere un cod de județ de exact două caractere, deci codul poștal rămâne
+          singurul semnal după care pot zona ruta.
         </Callout>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Nume persoana de contact">
+          <Field label="Nume persoană de contact">
             <Input value={expeditor.nume ?? ""} onChange={(e) => setExpeditor({ nume: e.target.value })} />
           </Field>
-          <Field label="Firma">
+          <Field label="Firmă">
             <Input value={expeditor.companie ?? ""} onChange={(e) => setExpeditor({ companie: e.target.value })} />
           </Field>
-          <Field label="Telefon" hint="Numai cifre la UPS, maxim 15. Se trimite cu prefixul tarii.">
+          <Field label="Telefon" hint="Numai cifre la UPS, maxim 15. Se trimite cu prefixul țării.">
             <Input value={expeditor.telefon ?? ""} onChange={(e) => setExpeditor({ telefon: e.target.value })} />
           </Field>
           <Field label="Email">
             <Input value={expeditor.email ?? ""} onChange={(e) => setExpeditor({ email: e.target.value })} />
           </Field>
         </div>
-        <Field label="Strada si numarul" hint="Se imparte automat pe trei linii de cate 35 de caractere, cum cere UPS.">
+        <Field label="Strada și numărul" hint="Se împarte automat pe trei linii de câte 35 de caractere, cum cere UPS.">
           <Input value={expeditor.strada ?? ""} onChange={(e) => setExpeditor({ strada: e.target.value })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Oras">
+          <Field label="Oraș">
             <Input value={expeditor.oras ?? ""} onChange={(e) => setExpeditor({ oras: e.target.value })} />
           </Field>
           <Field
-            label="Judet"
-            hint="⚠ Se trimite DOAR daca are exact doua caractere. UPS cere un cod de judet pentru tarifele negociate, dar nu publica niciunul pentru Romania, pune-l doar daca ti l-au dat ei."
+            label="Județ"
+            hint="Se trimite DOAR dacă are exact două caractere. UPS cere un cod de județ pentru tarifele negociate, dar nu publică niciunul pentru România: pune-l doar dacă ți l-au dat ei."
           >
             <Input maxLength={2} value={expeditor.judet ?? ""} onChange={(e) => setExpeditor({ judet: e.target.value })} />
           </Field>
-          <Field label="Cod postal">
+          <Field label="Cod poștal">
             <Input value={expeditor.cod_postal ?? ""} onChange={(e) => setExpeditor({ cod_postal: e.target.value })} />
           </Field>
         </div>
-        <Callout variant="warning" icon={AlertTriangle}>
-          {AVERTISMENT_ACEEASI_LOCALITATE}
-        </Callout>
-      </Panel>
+        <Callout variant="warning" icon={AlertTriangle}>{AVERTISMENT_ACEEASI_LOCALITATE}</Callout>
+      </Sectiune>
 
-      <Panel step={3} title="Ce se ofera in checkout">
-        <p className="text-xs font-semibold">Serviciile pe care le arati clientilor</p>
-        <p className="text-[11px] text-muted-foreground">
-          Nimic bifat = toate serviciile pe care le intoarce cotarea. „Intern” arata care dintre ele se pot
-          folosi si pentru livrari in Romania, dupa ghidul comercial al UPS, dar filtrul real e al lor: ce
-          intoarce cotarea, aia se poate expedia.
-        </p>
+      <Sectiune pas={3} titlu="Ce se oferă la comandă"
+        descriere="Serviciile pe care le arăți clienților. Nimic bifat înseamnă toate serviciile întoarse de cotare. „Extern” înseamnă că serviciul merge numai către alte țări, după ghidul comercial UPS; filtrul real e cotarea lor.">
         <div className="flex flex-wrap gap-2">
           {servicii.map((s) => {
             const bifat = permise.includes(s.cod);
@@ -372,127 +386,82 @@ export function UpsConfigClient({
               <button
                 key={s.cod}
                 type="button"
+                aria-pressed={bifat}
                 onClick={() => setConfig({
                   ...config,
                   servicii_permise: bifat ? permise.filter((x) => x !== s.cod) : [...permise, s.cod],
                 })}
-                className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
-                  bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                  bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/40"
                 }`}
-                title={s.intern ? "Se poate folosi si intern" : "Numai catre alte tari"}
+                title={s.intern ? "Se poate folosi și intern" : "Numai către alte țări"}
               >
                 {s.nume}{s.intern ? "" : " · extern"}
               </button>
             );
           })}
         </div>
+        <RandComutator
+          separat
+          titlu="Cere tarifele contractului"
+          text="Fără asta, UPS întoarce prețurile de LISTĂ, care sunt mai mari decât ce plătești tu."
+          activ={config.tarife_negociate !== false}
+          onChange={(v) => setConfig({ ...config, tarife_negociate: v })}
+        />
+        <RandComutator
+          separat
+          titlu="Oferă livrare în puncte UPS Access Point"
+          text={`Cel mult ${GREUTATE_MAXIMA_PUNCT_KG} kg și ${LUNGIME_MAXIMA_PUNCT_CM} cm lungime, după regulile lor din România. Punctele se oferă la tariful fix: UPS nu poate cota un punct anume înainte să fie ales.`}
+          activ={!!config.puncte_activate}
+          onChange={(v) => setConfig({ ...config, puncte_activate: v })}
+        />
+      </Sectiune>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Cere tarifele contractului</p>
-            <p className="text-xs text-muted-foreground">
-              Fara asta UPS intoarce preturile de LISTA, care sunt mai mari decat ce platesti tu.
-            </p>
-          </div>
-          <Switch
-            checked={config.tarife_negociate !== false}
-            onCheckedChange={(v) => setConfig({ ...config, tarife_negociate: v })}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Ofera livrare in puncte UPS Access Point</p>
-            <p className="text-xs text-muted-foreground">
-              Cel mult {GREUTATE_MAXIMA_PUNCT_KG} kg si {LUNGIME_MAXIMA_PUNCT_CM} cm lungime, dupa regulile lor
-              din Romania. Punctele se ofera la tariful fix, UPS nu poate cota un punct anume inainte ca el sa
-              fie ales.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.puncte_activate}
-            onCheckedChange={(v) => setConfig({ ...config, puncte_activate: v })}
-          />
-        </div>
-      </Panel>
-
-      <Panel step={4} title="Plata la livrare (ramburs)">
+      <Sectiune pas={4} titlu="Plata la livrare (ramburs)">
         <Callout variant="info" icon={Info}>
-          <span className="block">
-            UPS <strong>ofera</strong> ramburs pentru expedierile care pleaca din Uniunea Europeana, spre
-            deosebire de FedEx, care l-a retras.
-          </span>
-          <span className="block mt-1 text-xs">
-            ⚠ Dar numai pe conturi de tip <strong>„Daily Pickup”</strong> sau <strong>„Drop Shipping”</strong>.
-            Tipul contului nu se poate citi prin API, deci „Testeaza conexiunea” il probeaza printr-o cotare cu
-            ramburs. Daca proba spune ca nu merge, stinge comutatorul: altfel comenzile cu plata la livrare vor
-            primi tacut tariful fix.
-          </span>
+          UPS <strong>oferă</strong> ramburs pentru expedierile care pleacă din Uniunea Europeană (FedEx l-a retras). Dar numai pe
+          conturi de tip <strong>„Daily Pickup”</strong> sau <strong>„Drop Shipping”</strong>. Tipul contului nu se poate citi prin
+          API, deci „Testează conexiunea” îl probează printr-o cotare cu ramburs. Dacă proba spune că nu merge, oprește
+          comutatorul: altfel comenzile cu plata la livrare primesc tăcut tariful fix.
         </Callout>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Accepta comenzi cu plata la livrare</p>
-            <p className="text-xs text-muted-foreground">
-              Stins, UPS dispare din checkout la comenzile cu ramburs, nu apare la tarif fix.
-            </p>
-          </div>
-          <Switch
-            checked={config.ramburs_activ !== false}
-            onCheckedChange={(v) => setConfig({ ...config, ramburs_activ: v })}
-          />
-        </div>
-
+        <RandComutator
+          titlu="Acceptă comenzi cu plata la livrare"
+          text="Oprit, UPS dispare de la comandă la comenzile cu ramburs; nu apare la tarif fix."
+          activ={config.ramburs_activ !== false}
+          onChange={(v) => setConfig({ ...config, ramburs_activ: v })}
+        />
         {config.ramburs_activ !== false && (
-          <Field
-            label="Cum se incaseaza rambursul"
-            hint="Din tabelul UPS de tari cu ramburs. Pentru Uniunea Europeana exista doua valori, la nivel de expediere."
-          >
-            <select
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-              value={config.cod_funds_code ?? FONDURI_RAMBURS_IMPLICIT}
-              onChange={(e) => setConfig({ ...config, cod_funds_code: e.target.value })}
-            >
+          <Field label="Cum se încasează rambursul" htmlFor="ups-fonduri"
+            hint="Din tabelul UPS de țări cu ramburs. Pentru Uniunea Europeană există două valori, la nivel de expediere.">
+            <select id="ups-fonduri" className={selectCls} value={config.cod_funds_code ?? FONDURI_RAMBURS_IMPLICIT} onChange={(e) => setConfig({ ...config, cod_funds_code: e.target.value })}>
               {FONDURI_RAMBURS.map((f) => <option key={f.cod} value={f.cod}>{f.eticheta}</option>)}
             </select>
           </Field>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={5} title="Eticheta">
+      <Sectiune pas={5} titlu="Eticheta">
         <Field
           label="Formatul etichetei"
-          hint="⚠ UPS NU da PDF la emitere, enumerarea lor e GIF, ZPL, EPL si SPL. PDF-ul exista doar la reimprimare, si il cerem de acolo cand copia noastra lipseste."
+          htmlFor="ups-format"
+          hint="UPS NU dă PDF la emitere: enumerarea lor e GIF, ZPL, EPL și SPL. PDF-ul există doar la retipărire, și îl cerem de acolo când copia noastră lipsește."
         >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.format_eticheta ?? FORMAT_IMPLICIT}
-            onChange={(e) => setConfig({ ...config, format_eticheta: e.target.value as FormatEticheta })}
-          >
+          <select id="ups-format" className={selectCls} value={config.format_eticheta ?? FORMAT_IMPLICIT} onChange={(e) => setConfig({ ...config, format_eticheta: e.target.value as FormatEticheta })}>
             {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
           </select>
         </Field>
-
-        <Callout variant="info" icon={Info}>
-          <span className="block">
-            La fiecare AWB se descarca si <strong>caseta de semnatura</strong>, UPS o intoarce la toate
-            expedierile din afara Statelor Unite, si trebuie tiparita odata cu eticheta.
-          </span>
-          <span className="block mt-1 text-xs">
-            La comenzile cu ramburs mai vine si <strong>documentul de ramburs</strong> („COD Turn In Page”), pe
-            care soferul il ia odata cu banii. Se descarca automat, in HTML.
-          </span>
-        </Callout>
-      </Panel>
-
-      <Panel step={6} title="Coletul implicit">
-        <p className="text-xs text-muted-foreground">
-          Se folosesc cand comanda n-are dimensiuni proprii. UPS factureaza pe maximul dintre greutatea fizica
-          si cea volumetrica, deci dimensiuni prea mari scumpesc fiecare colet. Limita lor e {GREUTATE_MAXIMA_KG} kg
-          pe colet; peste {PRAG_COLET_GREU_KG} kg intra-comunitar, coletul cere eticheta lor speciala de „colet greu”.
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          La fiecare AWB se descarcă și <strong className="text-foreground">caseta de semnătură</strong> (UPS o întoarce la toate
+          expedierile din afara Statelor Unite) și trebuie tipărită odată cu eticheta. La comenzile cu ramburs mai vine și
+          <strong className="text-foreground"> documentul de ramburs</strong> („COD Turn In Page”), pe care șoferul îl ia odată cu
+          banii. Se descarcă automat, în HTML.
         </p>
+      </Sectiune>
+
+      <Sectiune pas={6} titlu="Coletul implicit"
+        descriere={`Se folosesc când comanda n-are dimensiuni proprii. UPS facturează maximul dintre greutatea fizică și cea volumetrică. Limita lor e ${GREUTATE_MAXIMA_KG} kg pe colet; peste ${PRAG_COLET_GREU_KG} kg intra-comunitar, coletul cere eticheta lor de „colet greu”.`}>
         <div className="grid grid-cols-3 gap-3">
-          {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
+          {([["lungime_cm", "Lungime"], ["latime_cm", "Lățime"], ["inaltime_cm", "Înălțime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
                 type="number"
@@ -504,61 +473,30 @@ export function UpsConfigClient({
             </Field>
           ))}
         </div>
-        <Field
-          label="Descrierea marfii"
-          hint="Se trimite la expedierile in alta tara. La cele interne nu pleaca nicaieri."
-        >
-          <Input
-            value={config.continut_implicit ?? ""}
-            placeholder="Bunuri de consum"
-            onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })}
-          />
+        <Field label="Descrierea mărfii" htmlFor="ups-continut" hint="Se trimite la expedierile în altă țară. La cele interne nu pleacă nicăieri.">
+          <Input id="ups-continut" value={config.continut_implicit ?? ""} placeholder="Bunuri de consum" onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })} />
         </Field>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Declara valoarea comenzii la transport</p>
-            <p className="text-xs text-muted-foreground">
-              UPS taxeaza separat valoarea declarata. Stins, coletul merge cu despagubirea standard.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.valoare_declarata}
-            onCheckedChange={(v) => setConfig({ ...config, valoare_declarata: v })}
-          />
-        </div>
-      </Panel>
+        <RandComutator
+          separat
+          titlu="Declară valoarea comenzii la transport"
+          text="UPS taxează separat valoarea declarată. Oprită, coletul merge cu despăgubirea standard."
+          activ={!!config.valoare_declarata}
+          onChange={(v) => setConfig({ ...config, valoare_declarata: v })}
+        />
+      </Sectiune>
 
-      <Panel step={7} title="Pornire">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Foloseste UPS pentru livrare</p>
-            <p className="text-xs text-muted-foreground">
-              Dupa salvare, activeaza metoda „UPS” si din Setari → Livrare, ca sa apara in checkout.
-            </p>
-          </div>
-          <Switch checked={!!config.enabled} onCheckedChange={(v) => setConfig({ ...config, enabled: v })} />
-        </div>
-        {config.enabled && !areExpeditor && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Fara oras si cod postal de expeditie, UPS nu poate cota nimic, clientii vor vedea tariful fix.
-          </Callout>
-        )}
-        {config.mediu === "test" && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Esti pe mediul de test al UPS. Etichetele emise poarta filigran „Sample” si nu sunt valabile, iar
-            tarifele negociate sunt simulate. Treci pe productie inainte de prima comanda adevarata.
-          </Callout>
-        )}
-        {esteActiv && config.mediu !== "test" && (
-          <Callout variant="info" icon={Info}>
-            Fiecare AWB emis e real si facturat, UPS nu are protectie contra dublurilor, deci daca emiterea pare
-            ca a esuat foloseste „Verifica la UPS” din pagina comenzii in loc sa incerci din nou.
-          </Callout>
-        )}
-        <Button type="button" onClick={salvare} disabled={salveaza}>
-          {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
-        </Button>
-      </Panel>
-    </div>
+      {secretSalvat && (
+        <ZonaDeconectare descriere="Șterge cheile și adresa UPS din Edinio. Expedierile deja emise rămân la UPS.">
+          <ButonDeconectare
+            nume="UPS"
+            cePierzi="Client ID-ul, secretul, numărul de cont și adresa de expediere se șterg din Edinio. Ca să te întorci, le iei din nou din aplicația ta din portalul UPS. Expedierile deja emise rămân la ei."
+            marime="default"
+            onConfirma={deconecteaza}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={salveaza} onSalveaza={salvare} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

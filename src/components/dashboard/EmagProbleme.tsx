@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useLucru } from "@/components/dashboard/useLucru";
-import { EtichetaStare } from "@/components/ui/eticheta-stare";
-import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { centrulProblemelorEmag, type CentruProblemeEcran } from "@/lib/actions/emag.actions";
+import type { SursaProblemei } from "@/lib/emag/probleme";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Ce e stricat, adunat pe feluri (§64).
@@ -51,66 +53,71 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
   if (centru === null || centru.grupuri.length === 0) return null;
 
   const total = centru.grupuri.reduce((s, g) => s + g.cate, 0);
+  /* ⚠ Bara se masoara fata de grupul CEL MAI DES, nu fata de total: „Cel mai des e primul” trebuie
+     sa se vada dintr-o privire, iar fata de total, la 14 lucruri, toate barele ar fi fost firave. */
+  const maxim = Math.max(1, ...centru.grupuri.map((g) => g.cate));
 
+  /*
+   * ═══ FORMA ALEASA DE PROPRIETAR (15.11.2026, „C la ce te tine pe loc”) ═══
+   *
+   * Dupa lista de erori din Sentry: o linie colorata pe marginea fiecarui rand spune UNDE se repara
+   * (la tine, la eMAG, legatura), iar bara din dreapta spune cat de des apare. Inainte, eticheta mica
+   * „La tine” / „La eMAG” statea in fata textului si toate randurile aratau la fel de importante.
+   */
   return (
-    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <AlertTriangle className="h-4 w-4" /> Ce te ține pe loc
-          </h3>
-          <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+      <header className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Ce te ține pe loc</h3>
+          <p className="mt-0.5 max-w-prose text-xs text-muted-foreground">
             {total} {total === 1 ? "lucru" : "lucruri"} de reparat, adunate pe feluri.
             Cel mai des e primul.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={incarca}
-          disabled={seIncarca}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
-        >
-          {seIncarca ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        <Button variant="outline" size="sm" onClick={incarca} disabled={seIncarca}>
+          {seIncarca ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           Reîmprospătează
-        </button>
+        </Button>
+      </header>
+
+      <div className="hidden grid-cols-[minmax(0,1fr)_9rem] gap-6 border-y border-border bg-muted px-5 py-2 text-xs font-medium text-muted-foreground sm:grid">
+        <span>Problema</span>
+        <span>Cât de des</span>
       </div>
 
-      <ul className="mt-4 divide-y divide-border">
-        {centru.grupuri.map((g) => (
-          <li key={g.cheie} className="py-3">
-            <div className="flex flex-wrap items-start gap-2">
-              {/* ⚠ Se spune UNDE se repară, nu doar că e stricat. „eMAG a refuzat" și
-                  „n-am putut trimite" se repară în locuri complet diferite; fără
-                  eticheta asta, omul ar fi căutat în panoul greșit. */}
-              <EtichetaStare
-                ton={g.sursa === "emag" ? "asteptare" : g.sursa === "edinio" ? "rau" : "neutru"}
-                marime="mic"
-                className="shrink-0"
-              >
-                {g.sursa === "emag" ? "La eMAG" : g.sursa === "edinio" ? "La tine" : "Legătura"}
-              </EtichetaStare>
-              <span className="min-w-0 flex-1 text-sm">{g.titlu}</span>
-              <span className="shrink-0 text-sm font-semibold tabular-nums">
-                {g.cate}
-              </span>
-            </div>
-
-            {/* ⚠ Un exemplu ÎNTREG. Gruparea șterge numerele și valorile ca să poată
-                aduna; fără exemplu, „lipsește o caracteristică" n-ar fi spus CARE. */}
-            {g.exemplu && g.exemplu !== g.titlu && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                De exemplu: {g.exemplu}
-              </p>
-            )}
-
-            {g.oferte.length > 0 && (
-              <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                Oferte: {g.oferte.join(", ")}
-                {g.cate > g.oferte.length ? ` și încă ${g.cate - g.oferte.length}` : ""}
-              </p>
-            )}
-          </li>
-        ))}
+      <ul className="divide-y divide-border max-sm:border-t max-sm:border-border">
+        {centru.grupuri.map((g) => {
+          /* ⚠ Se spune UNDE se repară, nu doar că e stricat. „eMAG a refuzat" și „n-am putut
+             trimite" se repară în locuri complet diferite; fără asta, omul ar fi căutat în
+             panoul greșit. Acum o spun și culoarea liniei, și primul cuvânt de sub titlu. */
+          const sursa = SURSA[g.sursa];
+          return (
+            <li key={g.cheie} className="relative grid gap-x-6 gap-y-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center">
+              <span aria-hidden="true" className={cn("absolute inset-y-2.5 left-0 w-[3px] rounded-r", sursa.linie)} />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">{g.titlu}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {sursa.unde}
+                  {/* ⚠ Un exemplu ÎNTREG. Gruparea șterge numerele și valorile ca să poată
+                      aduna; fără exemplu, „lipsește o caracteristică" n-ar fi spus CARE. */}
+                  {g.exemplu && g.exemplu !== g.titlu && <> · de exemplu {g.exemplu}</>}
+                </p>
+                {g.oferte.length > 0 && (
+                  <p className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                    Oferte {g.oferte.join(", ")}
+                    {g.cate > g.oferte.length ? ` și încă ${g.cate - g.oferte.length}` : ""}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2.5" title={`${g.cate} din ${total}`}>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full bg-foreground/70" style={{ width: `${(g.cate / maxim) * 100}%` }} />
+                </div>
+                <span className="w-7 text-right text-sm font-semibold tabular-nums text-foreground">{g.cate}</span>
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       {/*
@@ -120,11 +127,21 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
         lată — omul ar fi reparat trei lucruri și ar fi crezut că a terminat.
       */}
       {centru.taiat && (
-        <p className="mt-3 rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
+        <p className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
           Grupele sunt făcute din cele mai recente {centru.citite} de oferte cu probleme.
           Dacă ai mai multe, repară-le pe astea întâi și revino. Lista se recalculează.
         </p>
       )}
-    </div>
+    </section>
   );
 }
+
+/**
+ * Unde se repara fiecare fel de problema (vezi `SursaProblemei`): culoarea liniei din stanga randului
+ * si primul cuvant de sub titlu.
+ */
+const SURSA: Record<SursaProblemei, { linie: string; unde: string }> = {
+  edinio: { linie: "bg-destructive", unde: "La tine: lipsește ceva în Edinio" },
+  emag: { linie: "bg-warning", unde: "La eMAG: se repară în fișa produsului" },
+  legatura: { linie: "bg-muted-foreground/40", unde: "Legătura: se reia singur" },
+};

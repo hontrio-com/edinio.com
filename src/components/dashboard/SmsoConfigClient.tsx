@@ -3,19 +3,21 @@
 import { useState, useTransition } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
-  Save, Loader2, MessageSquare, Phone,
-  ExternalLink, CheckCircle, XCircle, Copy, BellOff,
+  BellOff, CheckCircle, Copy, ExternalLink, KeyRound, Loader2, Megaphone, MessageSquare, Phone, UserPlus, XCircle,
 } from "lucide-react";
 import { updateSmsoConfig } from "@/lib/actions/store.actions";
 import type { SmsoConfig } from "@/lib/smso";
-import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { Field } from "@/components/ui/field";
+import { Callout } from "@/components/ui/callout";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 
 export function SmsoConfigClient({
   businessId, initialConfig, webhookUrl, dezabonati, dezabonatiTotal,
@@ -30,7 +32,7 @@ export function SmsoConfigClient({
   dezabonatiTotal: number;
 }) {
   const router = useRouter();
-  const [smso, setSmso] = useState<SmsoConfig>(initialConfig);
+  const { cfg: smso, setCfg: setSmso, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<SmsoConfig>(initialConfig);
   const [saving, startSave] = useTransition();
   const [testLoading, setTestLoading] = useState(false);
   const [testPhone, setTestPhone] = useState("");
@@ -55,14 +57,15 @@ export function SmsoConfigClient({
       if ("error" in result) {
         toast.error(result.error);
       } else {
-        toast.success("Integrarea SMSO a fost salvata.");
+        toast.success("Integrarea SMSO a fost salvată.");
+        marcheazaSalvat();
         router.refresh();
       }
     });
   }
 
   async function sendTest() {
-    if (!testPhone.trim()) { toast.error("Introdu un numar de telefon."); return; }
+    if (!testPhone.trim()) { toast.error("Introdu un număr de telefon."); return; }
     setTestLoading(true);
     setTestResult(null);
     try {
@@ -73,260 +76,196 @@ export function SmsoConfigClient({
       });
       const data = await res.json() as { success?: boolean; responseToken?: string; transaction_cost?: number; to?: string; error?: string };
       if (data.success) {
-        setTestResult({ ok: true, message: `SMS trimis cu succes catre ${data.to}`, details: `Cost: ${data.transaction_cost ?? "-"} | Token: ${data.responseToken}` });
+        setTestResult({ ok: true, message: `SMS trimis cu succes către ${data.to}`, details: `Cost: ${data.transaction_cost ?? "-"} | Token: ${data.responseToken}` });
       } else {
-        setTestResult({ ok: false, message: data.error ?? "Eroare necunoscuta" });
+        setTestResult({ ok: false, message: data.error ?? "Eroare necunoscută" });
       }
     } catch (err) {
-      setTestResult({ ok: false, message: `Eroare retea: ${String(err)}` });
+      setTestResult({ ok: false, message: `Eroare de rețea: ${String(err)}` });
     } finally {
       setTestLoading(false);
     }
   }
 
+  const cheieSalvata = secretulEsteSalvat(initialConfig, "api_key");
+  const configurat = !!((initialConfig.api_key || cheieSalvata) && initialConfig.sender_id);
+  const arataTestul = !!((smso.api_key || cheieSalvata) && smso.sender_id);
+  const stari: StareAntet[] = !configurat
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [initialConfig.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" }];
+  const copiazaAdresa = (adresa: string) => {
+    navigator.clipboard.writeText(adresa)
+      .then(() => toast.success("Adresa a fost copiată."))
+      .catch(() => toast.error("Nu am putut copia adresa. Selecteaz-o și copiaz-o manual."));
+  };
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="smso" description="Trimite SMS-uri tranzactionale si de marketing prin Smso.ro." />
-
-      <div className="space-y-6">
-
-        {/* Ghid pas cu pas */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum obtii Cheia API si Sender ID?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              {
-                step: "1",
-                title: "Creeaza un cont SMSO",
-                desc: "Mergi pe smso.ro si inregistreaza-te. Primesti credit de test pentru a putea testa integrarea.",
-                link: null,
-              },
-              {
-                step: "2",
-                title: "Obtine Cheia API",
-                desc: "Dupa logare, mergi la Setari > Dezvoltatori > API. Copiaza cheia API generata.",
-                link: "https://app.smso.ro/developers/api",
-              },
-              {
-                step: "3",
-                title: "Adauga un Sender",
-                desc: "Mergi la Sendere in contul SMSO. Adauga un sender (poate fi un numar de telefon sau un nume scurt). Noteaza ID-ul numeric afisat in lista.",
-                link: "https://app.smso.ro/senders",
-              },
-              {
-                step: "4",
-                title: "Completeaza si salveaza",
-                desc: "Introdu Cheia API si Sender ID mai jos, salveaza, apoi trimite un SMS de test.",
-                link: null,
-              },
-            ].map(({ step, title, desc, link }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                  {link && (
-                    <a
-                      href={link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    >
-                      Deschide in SMSO <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        {/* Configurare */}
-        <Panel className="space-y-5 p-5">
-          {/* Toggle activare */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza SMSO</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Activeaza pentru a putea trimite campanii SMS Marketing din dashboard
-              </p>
-            </div>
-            <Switch checked={smso.enabled} onCheckedChange={v => setSmso(s => ({ ...s, enabled: v }))} />
-          </div>
-
-          {/* Campuri */}
-          <div className="space-y-4 border-t border-border pt-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">Cheie API SMSO</label>
-              <Input
-                type="password"
-                value={smso.api_key}
-                onChange={e => setSmso(s => ({ ...s, api_key: e.target.value }))}
-                placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : ""}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">Sender ID</label>
-              <Input
-                type="text"
-                value={smso.sender_id}
-                onChange={e => setSmso(s => ({ ...s, sender_id: e.target.value }))}
-                placeholder="ID-ul numeric al senderului (ex: 4)"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                ID-ul numeric afisat in sectiunea Sendere a contului tau SMSO.
-              </p>
-            </div>
-          </div>
-
-          {/* SMS automat la schimbarea statusului comenzii */}
-          <div className="flex items-center justify-between border-t border-border pt-4">
-            <div className="pr-4">
-              <p className="text-sm font-semibold text-foreground">SMS automat la schimbarea statusului</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Trimite automat un SMS clientului cand schimbi statusul comenzii (ex. Expediat). Consuma credite SMSO la fiecare schimbare.
-              </p>
-            </div>
-            <Switch
-              checked={smso.notify_status_change && smso.enabled}
-              onCheckedChange={v => setSmso(s => ({ ...s, notify_status_change: v }))}
-              disabled={!smso.enabled}
+    <PaginaIntegrare
+      id="smso"
+      titlu="SMS"
+      descriere="Trimiți SMS-uri despre comenzi și campanii de marketing, prin contul tău SMSO."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="SMS prin SMSO" activ={smso.enabled} onChange={v => setSmso(s => ({ ...s, enabled: v }))} ariaLabel="Activează SMSO" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia API", facut: !!smso.api_key.trim() || cheieSalvata },
+          { text: "Sender ID", facut: !!smso.sender_id.trim() },
+          { text: "SMSO activ", facut: configurat && !!initialConfig.enabled },
+        ]} />
+        <CardCifre titlu="Dezabonați de la marketing" cifre={[{ eticheta: "numere care nu mai primesc campanii", valoare: dezabonatiTotal }]} />
+        <CumFunctioneaza id="smso" puncte={[
+          { Icon: UserPlus, text: "Îți faci cont pe smso.ro. La înregistrare primești credit de test, ca să probezi integrarea." },
+          { Icon: KeyRound, text: "Cheia API o iei din SMSO: Setări, Dezvoltatori, API. Sender ID e numărul din dreptul senderului, la Sendere." },
+          { Icon: Megaphone, text: "Cu SMSO pornit apare SMS Marketing în meniu, de unde trimiți campanii." },
+          { Icon: MessageSquare, text: "Fiecare SMS consumă credit din contul tău SMSO." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Contul SMSO" descriere="Cheia API și senderul de pe care pleacă mesajele.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Cheie API SMSO" htmlFor="smso-cheie"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="Cheia API SMSO"
+              text="În contul SMSO: Setări, apoi Dezvoltatori, apoi API. Copiezi cheia generată." />}>
+            <Input
+              id="smso-cheie"
+              type="password"
+              value={smso.api_key}
+              onChange={e => setSmso(s => ({ ...s, api_key: e.target.value }))}
+              placeholder={cheieSalvata ? PLACEHOLDER_SECRET_SALVAT : "Cheia ta API de la app.smso.ro"}
             />
-          </div>
+          </Field>
+          <Field label="Sender ID" htmlFor="smso-sender" hint="ID-ul numeric afișat în secțiunea Sendere a contului tău SMSO.">
+            <Input
+              id="smso-sender"
+              type="text"
+              value={smso.sender_id}
+              onChange={e => setSmso(s => ({ ...s, sender_id: e.target.value }))}
+              placeholder="ex: 4"
+            />
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          <a href="https://app.smso.ro/developers/api" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+            Cheia API în SMSO <ExternalLink className="h-3 w-3" />
+          </a>
+          <a href="https://app.smso.ro/senders" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+            Senderele în SMSO <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
+      </Sectiune>
 
-          <div className="flex justify-end pt-1">
-            <Button size="lg" onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              {saving ? "Se salveaza..." : "Salveaza integrarea"}
+      <Sectiune pas={2} titlu="Mesaje automate" descriere="SMS-uri care pleacă singure, fără să apeși nimic.">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">SMS automat la schimbarea statusului</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Clientul primește un SMS când îi schimbi statusul comenzii (de exemplu Expediat). Consumă credit SMSO la fiecare schimbare.
+            </p>
+          </div>
+          <Switch
+            checked={smso.notify_status_change && smso.enabled}
+            onCheckedChange={v => setSmso(s => ({ ...s, notify_status_change: v }))}
+            disabled={!smso.enabled}
+            aria-label="SMS automat la schimbarea statusului"
+          />
+        </div>
+        {!smso.enabled && (
+          <p className="text-xs text-muted-foreground">Se poate porni după ce pornești comutatorul „SMS prin SMSO” de sus.</p>
+        )}
+      </Sectiune>
+
+      {arataTestul && (
+        <Sectiune pas={3} titlu="Testează integrarea" descriere="Trimite un SMS de test, ca să verifici că cheia API și Sender ID sunt corecte. Consumă credit SMSO.">
+          {testResult && (
+            <Callout variant={testResult.ok ? "success" : "danger"} icon={testResult.ok ? CheckCircle : XCircle} title={testResult.message}>
+              {testResult.details && <span className="font-mono text-xs">{testResult.details}</span>}
+            </Callout>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-1 overflow-hidden rounded-lg border border-input transition-colors focus-within:border-ring">
+              <span className="flex w-10 shrink-0 items-center justify-center bg-muted/40">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+              </span>
+              <input
+                type="tel"
+                aria-label="Numărul de telefon pentru test"
+                value={testPhone}
+                onChange={e => setTestPhone(e.target.value)}
+                placeholder="07XXXXXXXX sau +407XXXXXXXX"
+                className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+            </div>
+            <Button variant="outline" onClick={sendTest} disabled={testLoading} className="whitespace-nowrap">
+              {testLoading ? <Loader2 className="animate-spin" /> : <MessageSquare />}
+              {testLoading ? "Se trimite..." : "Trimite test"}
             </Button>
           </div>
-        </Panel>
+        </Sectiune>
+      )}
 
-        {/* Test SMS */}
-        {(smso.api_key || secretulEsteSalvat(initialConfig, "api_key")) && smso.sender_id && (
-          <Panel className="space-y-4 p-5">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Testeaza integrarea</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Trimite un SMS de test ca sa verifici ca Cheia API si Sender ID sunt corecte
-              </p>
-            </div>
-
-            {testResult && (
-              <div className={cn(
-                "space-y-1 rounded-lg border p-3 text-sm",
-                testResult.ok
-                  ? "border-success/20 bg-success/5 text-success"
-                  : "border-destructive/20 bg-destructive/5 text-destructive"
-              )}>
-                <div className="flex items-center gap-2">
-                  {testResult.ok
-                    ? <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                    : <XCircle className="h-4 w-4 flex-shrink-0" />}
-                  <p className="font-semibold">{testResult.message}</p>
-                </div>
-                {testResult.details && <p className="pl-6 font-mono text-xs opacity-80">{testResult.details}</p>}
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <div className="flex flex-1 overflow-hidden rounded-lg border border-input transition-colors focus-within:border-ring">
-                <span className="flex w-10 shrink-0 items-center justify-center bg-muted/40">
-                  <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                </span>
-                <input
-                  type="tel"
-                  value={testPhone}
-                  onChange={e => setTestPhone(e.target.value)}
-                  placeholder="07XXXXXXXX sau +407XXXXXXXX"
-                  className="flex-1 bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-                />
-              </div>
-              <Button variant="outline" onClick={sendTest} disabled={testLoading} className="whitespace-nowrap">
-                {testLoading ? <Loader2 className="animate-spin" /> : <MessageSquare />}
-                {testLoading ? "Se trimite..." : "Trimite test"}
-              </Button>
-            </div>
-          </Panel>
+      <Sectiune pas={arataTestul ? 4 : 3} titlu="Rapoarte de livrare și răspunsuri"
+        descriere="Nu ai nimic de configurat: adresa de mai jos pleacă automat cu fiecare SMS.">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          SMSO ne răspunde pe ea când mesajul ajunge la telefon sau când cineva răspunde{" "}
+          <span className="font-semibold">STOP</span>. O poți lipi și în contul SMSO, la setările de webhook,
+          dacă vrei rapoarte și pentru mesajele trimise de acolo.
+        </p>
+        {webhookUrl ? (
+          <div className="flex gap-2">
+            <code className="flex-1 truncate rounded-lg border border-input bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
+              {webhookUrl}
+            </code>
+            <Button variant="outline" onClick={() => copiazaAdresa(webhookUrl)}>
+              <Copy /> Copiază
+            </Button>
+          </div>
+        ) : (
+          <Callout variant="danger" title="Adresa nu poate fi compusă acum">
+            Rapoartele de livrare nu vor ajunge la noi, dar SMS-urile pleacă în continuare. Scrie-ne ca să ne uităm.
+          </Callout>
         )}
 
-        {/* Rapoarte de livrare si raspunsuri */}
-        <Panel className="space-y-4 p-5">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Rapoarte de livrare si raspunsuri</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Nu ai nimic de configurat: adresa de mai jos pleaca automat cu fiecare SMS, iar SMSO ne
-              raspunde pe ea cand mesajul ajunge la telefon sau cand cineva raspunde{" "}
-              <span className="font-semibold">STOP</span>. O poti lipsi si in contul tau SMSO, la
-              setarile de webhook, daca vrei sa primim rapoarte si pentru mesajele trimise de acolo.
+        <div className="border-t border-border pt-4">
+          <div className="flex items-center gap-2">
+            <BellOff className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-foreground">
+              Dezabonați de la marketing ({dezabonatiTotal})
             </p>
           </div>
-
-          {webhookUrl ? (
-            <div className="flex gap-2">
-              <code className="flex-1 truncate rounded-lg border border-input bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
-                {webhookUrl}
-              </code>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(webhookUrl)
-                    .then(() => toast.success("Adresa a fost copiata."))
-                    .catch(() => toast.error("Nu am putut copia adresa. Selecteaz-o si copiaz-o manual."));
-                }}
-              >
-                <Copy /> Copiaza
-              </Button>
-            </div>
-          ) : (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
-              Adresa nu poate fi compusa acum. Rapoartele de livrare nu vor ajunge la noi, dar
-              SMS-urile pleaca in continuare. Scrie-ne ca sa ne uitam.
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            Numerele care au răspuns STOP sau pe care SMSO le-a marcat ca dezabonate nu mai primesc campanii și nici
+            mesaje de coș abandonat. Mesajele despre comenzile lor pleacă în continuare: le-au plătit, au dreptul să le
+            afle starea.
+          </p>
+          {dezabonatiTotal > dezabonati.length && (
+            /* ⚠ Cifra din antet e a tuturor; lista de dedesubt e doar inceputul ei. Spus
+               pe fata, fiindca o lista scurtata in tacere il face pe comerciant sa creada
+               ca i-a numarat pe toti. */
+            <p className="mt-2 text-xs text-muted-foreground">
+              Mai jos sunt cele mai noi {dezabonati.length} numere din {dezabonatiTotal}.
             </p>
           )}
+          {dezabonati.length > 0 && (
+            <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto">
+              {dezabonati.map(d => (
+                <li
+                  key={d.phone}
+                  className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5 text-xs"
+                >
+                  <span className="font-mono text-foreground">{d.phone}</span>
+                  <span className="text-muted-foreground">
+                    {d.sursa === "raspuns_stop" ? "a răspuns STOP" : "marcat de SMSO"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Sectiune>
 
-          <div className="border-t border-border pt-4">
-            <div className="flex items-center gap-2">
-              <BellOff className="h-4 w-4 text-muted-foreground" />
-              <p className="text-sm font-semibold text-foreground">
-                Dezabonati de la marketing ({dezabonatiTotal})
-              </p>
-            </div>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-              Numerele care au raspuns STOP sau pe care SMSO le-a marcat ca dezabonate. Nu mai
-              primesc campanii si nici mesaje de cos abandonat. Mesajele despre comenzile lor pleaca
-              in continuare: le-au platit, au dreptul sa le afle starea.
-            </p>
-            {dezabonatiTotal > dezabonati.length && (
-              /* ⚠ Cifra din antet e a tuturor; lista de dedesubt e doar inceputul ei. Spus
-                 pe fata, fiindca o lista scurtata in tacere il face pe comerciant sa creada
-                 ca i-a numarat pe toti. */
-              <p className="mt-2 text-xs text-muted-foreground">
-                Mai jos sunt cele mai noi {dezabonati.length} numere din {dezabonatiTotal}.
-              </p>
-            )}
-            {dezabonati.length > 0 && (
-              <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto">
-                {dezabonati.map(d => (
-                  <li
-                    key={d.phone}
-                    className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5 text-xs"
-                  >
-                    <span className="font-mono text-foreground">{d.phone}</span>
-                    <span className="text-muted-foreground">
-                      {d.sursa === "raspuns_stop" ? "a raspuns STOP" : "marcat de SMSO"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </Panel>
-      </div>
-    </div>
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

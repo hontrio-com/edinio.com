@@ -214,8 +214,10 @@ export function EmagDePublicat({ businessId }: { businessId: string }) {
                     explicație l-ar fi pus pe om să creadă că e un defect. */}
                 {!p.categorieMapata && (
                   <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                    {/* ⚠ „mai sus” a devenit fila Categorii (15.11.2026): maparea sta acum in fila ei. */}
                     Categoria „{p.categorie ?? "fără categorie"}” nu e legată de nicio categorie eMAG.
-                    Leag-o mai sus, la maparea categoriilor.
+                    Leag-o în fila{" "}
+                    <a href="#categorii" className="font-medium underline underline-offset-2">Categorii</a>.
                   </p>
                 )}
                 {/*

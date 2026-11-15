@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { checkoutPaymentMethods, computeCodFee, codFeeInStoreMode, normalizePaymentMethod, parseCodFeeConfig, processorReadiness, sanitizeCodFeeConfig, verificaMetodaPlata, METODA_NEOFERITA, type CodFeeConfig } from "./payment-methods";
+import { readFileSync } from "node:fs";
+import { checkoutPaymentMethods, computeCodFee, codFeeInStoreMode, metodeLaComanda, normalizePaymentMethod, parseCodFeeConfig, processorReadiness, PAYMENT_PROCESSOR_TYPES, RUTA_PORNIRE_PLATA, sanitizeCodFeeConfig, verificaMetodaPlata, METODA_NEOFERITA, type CodFeeConfig } from "./payment-methods";
 import { computeVat } from "./utils/vat";
 
 /**
@@ -169,7 +170,7 @@ const DOAR_RAMBURS = { payment_methods: [{ type: "cash_on_delivery", enabled: tr
 
 test("procesatorul gata se decide dupa aceleasi campuri peste tot", () => {
   assert.deepEqual(processorReadiness(null),
-    { netopia: false, stripe: false, ipay: false, klarna: false, revolut: false });
+    { netopia: false, stripe: false, ipay: false, klarna: false, revolut: false, tbi: false });
   assert.equal(processorReadiness(NETOPIA_GATA).netopia, true);
   assert.equal(processorReadiness(STRIPE_GATA).stripe, true);
   // Stripe cere in plus contul activat pentru incasari: fara el, magazinul nu-l arata.
@@ -179,6 +180,11 @@ test("procesatorul gata se decide dupa aceleasi campuri peste tot", () => {
   assert.equal(processorReadiness({ ipay_config: { enabled: false, username: "u", password: "p" } }).ipay, false);
   assert.equal(processorReadiness({ klarna_config: { enabled: true, username: "u", password: "p" } }).klarna, true);
   assert.equal(processorReadiness({ revolut_config: { enabled: true, secret_key: "sk" } }).revolut, true);
+  /* tbi: fara cheia privata o aprobare n-ar ajunge niciodata la comanda, deci nu e gata. */
+  const TBI = { enabled: true, store_id: "magazin_ro", username: "u", password: "p", cheie_publica_tbi: "-----BEGIN PUBLIC KEY-----", cheie_privata: "-----BEGIN PRIVATE KEY-----" };
+  assert.equal(processorReadiness({ tbi_config: TBI }).tbi, true);
+  assert.equal(processorReadiness({ tbi_config: { ...TBI, cheie_privata: "" } }).tbi, false);
+  assert.equal(processorReadiness({ tbi_config: { ...TBI, enabled: false } }).tbi, false);
 });
 
 test("procesatorul gata dar netrecut in lista ramane ACCEPTAT", () => {
@@ -223,4 +229,41 @@ test("singurul refuz de ramburs e cel voit de comerciant", () => {
   assert.deepEqual(checkoutPaymentMethods(cfg.payment_methods, processorReadiness(cfg)).map((m) => m.type), ["netopia"]);
   assert.ok("error" in verificaMetodaPlata("cash_on_delivery", cfg));
   assert.deepEqual(verificaMetodaPlata("netopia", cfg), { metoda: "netopia" });
+});
+
+test("⚠ fiecare procesator are ruta lui de pornire, si niciunul nu cade pe iPay", () => {
+  /*
+   * Pana la tbi, ambele formulare aveau un lant de ternare cu iPay pe ramura „altfel": un procesator
+   * nou, uitat din lant, pleca TACUT la `/api/ipay/start`. Harta comuna face uitarea o eroare de tsc.
+   */
+  for (const tip of PAYMENT_PROCESSOR_TYPES) {
+    assert.match(RUTA_PORNIRE_PLATA[tip], /^\/api\//, `${tip} n-are ruta de pornire`);
+  }
+  assert.equal(RUTA_PORNIRE_PLATA.tbi, "/api/tbi/start");
+  for (const f of ["src/components/storefront/sections/checkout/checkout-core.ts", "src/components/ministore/OrderModal.tsx"]) {
+    const cod = readFileSync(f, "utf8");
+    assert.match(cod, /RUTA_PORNIRE_PLATA\[paymentMethod as PaymentProcessorType\]/, `${f} nu mai foloseste harta comuna`);
+    assert.ok(!cod.includes(': "/api/ipay/start";'), `${f} are iar iPay pe ramura „altfel"`);
+  }
+});
+
+test("⚠ plata in rate tbi: numai in Romania, numai persoane fizice, numai intre limite", () => {
+  const metode = [
+    { type: "cash_on_delivery" as const, label: "Ramburs" },
+    { type: "tbi" as const, label: "Rate" },
+    { type: "klarna" as const, label: "Klarna" },
+  ];
+  const ctx: Parameters<typeof metodeLaComanda>[1] = { faraRamburs: false, international: false, firma: false, totalTbi: 500, tbi: { min: 300, max: 30000 } };
+  const tipuri = (c: typeof ctx) => metodeLaComanda(metode, c).map((m) => m.type);
+
+  assert.deepEqual(tipuri(ctx), ["cash_on_delivery", "tbi", "klarna"]);
+  assert.deepEqual(tipuri({ ...ctx, totalTbi: 299.99 }), ["cash_on_delivery", "klarna"], "sub limita minima");
+  assert.deepEqual(tipuri({ ...ctx, totalTbi: 300 }), ["cash_on_delivery", "tbi", "klarna"], "limita e inclusa");
+  assert.deepEqual(tipuri({ ...ctx, totalTbi: 30000.01 }), ["cash_on_delivery", "klarna"], "peste limita maxima");
+  assert.deepEqual(tipuri({ ...ctx, firma: true }), ["cash_on_delivery", "klarna"], "comanda pe firma");
+  assert.deepEqual(tipuri({ ...ctx, tbi: null }), ["cash_on_delivery", "klarna"], "tbi neconfigurat");
+  /* International: fara ramburs, fara Klarna (moneda), fara tbi (CNP). Regula veche ramane neatinsa. */
+  assert.deepEqual(tipuri({ ...ctx, international: true, faraRamburs: true }), []);
+  /* Pall-Ex: fara ramburs, dar restul ramane. */
+  assert.deepEqual(tipuri({ ...ctx, faraRamburs: true }), ["tbi", "klarna"]);
 });

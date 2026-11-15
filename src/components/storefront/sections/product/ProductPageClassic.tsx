@@ -36,8 +36,9 @@ import type {
 } from "./_shared/product-page.types";
 import {
   abonareMiscareRedusa, citesteMiscareRedusa,
-  SocialProof, FAQItem, CTAButton,
+  SocialProof, FAQItem, CTAButton, RateTbi,
 } from "./_shared/pieces";
+import type { BannerTbiProdus } from "@/lib/tbi/config";
 import { fereastraContorului, numarulContorului } from "@/lib/storefront/contor-vizitatori";
 import type { Privitori } from "@/lib/analitice/privitori";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
@@ -166,12 +167,14 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, idPagina: idPaginaSablon, demo = false, permisIncarcare = null, privitori = null }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, rateTbi = null, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, blocuri, idPagina: idPaginaSablon, demo = false, permisIncarcare = null, privitori = null }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
+  /** Limitele platii in rate tbi, cand magazinul o ofera: randul „Plateste in rate" de sub butoane. */
+  rateTbi?: BannerTbiProdus | null;
   bundleComponents?: BundleComponent[];
   altMap?: Record<string, string>;
   /** When this product page IS the store homepage (One Product Store mode):
@@ -1063,6 +1066,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
               {editare.activ ? "Salveaza modificarile" : adaugatInCos ? "Adaugat in cos" : "Adauga in cos"}
             </button>
           )}
+
+          {!editare.activ && <RateTbi limite={rateTbi} pret={pers.pretPeBucata(displayPrice)} />}
 
           {/* Notificarea armonizata privind garantia legala (OUG 18/2026): o linie langa comanda, notificarea intreaga la clic. */}
           {!editare.activ && (

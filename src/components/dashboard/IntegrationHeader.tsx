@@ -51,6 +51,10 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   ipay: { src: "/integrations/ipay.webp", alt: "BT iPay" },
   klarna: { src: "/integrations/klarna.svg", alt: "Klarna" },
   revolut: { src: "/integrations/revolut.svg", alt: "Revolut" },
+  tbi: { src: "/integrations/tbi.svg", alt: "tbi bank" },
+  mailchimp: { src: "/integrations/mailchimp.svg", alt: "Mailchimp" },
+  brevo: { src: "/integrations/brevo.svg", alt: "Brevo" },
+  klaviyo: { src: "/integrations/klaviyo.svg", alt: "Klaviyo" },
   "facebook-pixel": { src: "/integrations/facebook-pixel.svg", alt: "Facebook Pixel" },
   "facebook-catalog": { src: "/integrations/facebook-pixel.svg", alt: "Facebook Catalog" },
   "tiktok-pixel": { src: "/integrations/tiktok-pixel.svg", alt: "TikTok Pixel" },
@@ -63,8 +67,12 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   emag: { src: "/integrations/emag.webp", alt: "eMAG Marketplace" },
   pepita: { src: "/integrations/pepita.svg", alt: "Pepita.com" },
   easysales: { src: "/integrations/easysales.webp", alt: "easySales" },
-  marketing: { src: "/integrations/facebook-pixel.svg", alt: "Marketing" },
 };
+
+/** Sigla unei integrari, pentru antetul nou (`PaginaIntegrare`). Aceeasi lista ca antetul vechi. */
+export function logoIntegrare(id: string): { src: string; alt: string; filter?: string } | null {
+  return LOGOS[id] ?? null;
+}
 
 export function IntegrationHeader({ id, description }: { id: string; description?: string }) {
   const logo = LOGOS[id];

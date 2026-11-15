@@ -5,7 +5,7 @@ import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useState, useEffect, useId, useRef, useTransition } from "react";
 import Image from "next/image";
 import {
-  X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard,
+  X, User, Phone, MapPin, Home, Loader2, Banknote, CreditCard, CalendarClock,
   Minus, Plus, Check, Tag, Truck, BadgePercent, ChevronRight, Package, Mail,
   Upload, Palette, Lock,
 } from "lucide-react";
@@ -29,7 +29,8 @@ import { rambursulDeCotat } from "@/lib/shipping/recotarea";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
 import { JUDETE } from "@/lib/ro/judete";
 import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
-import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, metodeLaComanda, RUTA_PORNIRE_PLATA, type PaymentMethodType, type PaymentProcessorType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { mesajLimiteTbi, type LimiteTbi } from "@/lib/tbi/config";
 import { OferteDinFormular, type OfertaDeAratat } from "./OrderBump";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import { fbtInCos } from "@/lib/offers/fbt-in-cos";
@@ -209,6 +210,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [newsletterOptIn, setNewsletterOptIn] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("cash_on_delivery");
+  /* Limitele platii in rate tbi, din configurarea publica; `null` = tbi nu e oferit. */
+  const [limiteTbi, setLimiteTbi] = useState<LimiteTbi | null>(null);
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>({ enabled: false, type: "percent", value: 0 });
   const [codFeeConfig, setCodFeeConfig] = useState<CodFeeConfig>(DEFAULT_COD_FEE);
@@ -346,16 +349,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
    * trimite marfa fara nicio cale de a lua banii. Clientului i se promisese ceva
    * imposibil.
    */
-  const faraRamburs = isIntl || courierSelection?.courier === "pallex";
-  const availablePaymentMethods = faraRamburs
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && (!isIntl || m.type !== "klarna"))
-    : paymentMethods;
-  useEffect(() => {
-    if (faraRamburs && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
-      setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntl, faraRamburs]);
+  /* ⚠ Lista metodelor se socoteste MAI JOS, dupa total: plata in rate tbi depinde de suma, iar
+     `total` e declarat acolo (citit aici, ar fi fost in zona moarta a lui `const`). */
 
   // Customization state
 
@@ -607,6 +602,36 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const { vatAmount, vatAddOn } = computeVat(bazaTva, vatConfig);
   // Round to 2 decimals (cents): float math would otherwise show e.g. 179.35999999999999.
   const total = Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping - cardDiscountAmount - codDiscountAmount + codFeeAmount + vatAddOn) * 100) / 100);
+  /*
+   * Totalul DACA s-ar plati in rate prin tbi: fara reducerea de card si fara taxa sau reducerea de
+   * ramburs. Aceeasi formula ca serverul pentru metoda `tbi`.
+   */
+  const totalTbi = (() => {
+    const { vatAddOn: adaos } = computeVat(
+      vatBase({ goods: subtotal, extras: extrasTotal, shipping, discount: discountAmount, cardDiscount: 0, codDiscount: 0, codFee: 0 }),
+      vatConfig,
+    );
+    return Math.max(0, Math.round((discountedSubtotal + extrasTotal + shipping + adaos) * 100) / 100);
+  })();
+  const faraRamburs = isIntl || courierSelection?.courier === "pallex";
+  /* Regula intreaga, comuna cu finalizarea cosului: `metodeLaComanda`. */
+  const availablePaymentMethods = metodeLaComanda(paymentMethods, {
+    faraRamburs, international: isIntl, firma: companyBilling.ePj, totalTbi, tbi: limiteTbi,
+  });
+  const tbiPermis = availablePaymentMethods.some((m) => m.type === "tbi");
+  const motivTbi = !tbiPermis && limiteTbi && paymentMethods.some((m) => m.type === "tbi") && !isIntl
+    ? (companyBilling.ePj
+      ? "Plata in rate prin tbi bank este disponibila doar pentru persoane fizice."
+      : mesajLimiteTbi(limiteTbi))
+    : null;
+  /* Metoda care nu mai e oferita se muta pe prima oferita: fara ramburs, sau plata in rate tbi
+     iesita din limite. Un singur efect, aceeasi regula ca in `checkout-core.ts`. */
+  useEffect(() => {
+    if ((faraRamburs || paymentMethod === "tbi") && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
+      setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIntl, faraRamburs, tbiPermis]);
 
   // Minimum order value is checked against the pre-discount subtotal (mirrors the server guard).
   const belowMinOrder = minOrderAmount != null && subtotal < minOrderAmount;
@@ -808,6 +833,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       });
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
+      setLimiteTbi(data.tbi ?? null);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
@@ -1235,11 +1261,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       }
 
       if (paymentMethod !== "cash_on_delivery") {
-        const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
-          : paymentMethod === "netopia" ? "/api/netopia/start"
-          : paymentMethod === "klarna" ? "/api/klarna/start"
-          : paymentMethod === "revolut" ? "/api/revolut/start"
-          : "/api/ipay/start";
+        /* Harta comuna (`RUTA_PORNIRE_PLATA`): un procesator nou nu mai poate cadea tacut pe iPay. */
+        const endpoint = RUTA_PORNIRE_PLATA[paymentMethod as PaymentProcessorType];
         /* ⚠ Aceeasi prindere, dar cu ALT mesaj, fiindca omul stie alt lucru in clipa asta:
            comanda EXISTA deja, iar `placedRef` e pus, deci o reincercare NU creeaza a doua
            comanda. Vezi si nota de mai jos, de la golirea cosului, care amana anume stergerea
@@ -1981,13 +2004,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                         style={paymentMethod === m.type
                           ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--color-foreground)" }
                           : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-muted-foreground)" }}>
-                        {m.type === "cash_on_delivery" ? <Banknote size={16} /> : <CreditCard size={16} />}
+                        {m.type === "cash_on_delivery" ? <Banknote size={16} /> : m.type === "tbi" ? <CalendarClock size={16} /> : <CreditCard size={16} />}
                         {m.label}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
+              {motivTbi && <p className="text-xs text-muted-foreground">{motivTbi}</p>}
 
               {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
 
@@ -2033,7 +2057,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     ? <>Comanda minima {formatPrice(minOrderAmount!)}</>
                     : paymentMethod === "cash_on_delivery"
                       ? <><Banknote size={20} />Plata la livrare - {formatPrice(total)}</>
-                      : <><CreditCard size={20} />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(total)}</>
+                      : <>{paymentMethod === "tbi" ? <CalendarClock size={20} /> : <CreditCard size={20} />}{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(total)}</>
                 }
               </button>
 
@@ -2041,7 +2065,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 <Lock size={12} className="shrink-0" />
                 {paymentMethod === "cash_on_delivery"
                   ? "Platesti cash curierului la primire - fara card necesar"
-                  : "Plata securizata - vei fi redirectionat catre procesatorul de plati"}
+                  : paymentMethod === "tbi"
+                    ? "Completezi cererea de finantare pe site-ul tbi bank. Comanda se confirma dupa aprobare."
+                    : "Plata securizata - vei fi redirectionat catre procesatorul de plati"}
               </p>
               {/* Notificarea armonizata privind garantia legala, inainte de plasarea comenzii (OUG 18/2026). */}
               <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />

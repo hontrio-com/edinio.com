@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
+import { bannerTbiPePaginaProdusului, limiteleTbi, type BannerTbiProdus, type LimiteTbi } from "@/lib/tbi/config";
 import { checkoutPaymentMethods, processorReadiness, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules, parseShippingZones, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
@@ -31,6 +32,13 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   shipping_zones: Json | null;
   min_order_amount: number | null;
   payment_methods: { type: PaymentMethodType; label: string }[];
+  /** Limitele platii in rate tbi (doua numere), `null` cand tbi nu e gata. Nimic secret. */
+  tbi: LimiteTbi | null;
+  /**
+   * Mesajul „plateste in rate" de pe pagina produsului (forma aleasa in panoul tbi), `null` cand e
+   * ascuns sau tbi nu e gata. ⚠ Numai pentru pagina produsului; formularul de comanda se uita la `tbi`.
+   */
+  tbi_produs: BannerTbiProdus | null;
   card_discount: CardDiscountConfig;
   cod_discount: CardDiscountConfig;
   cod_fee: CodFeeConfig;
@@ -42,7 +50,7 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
   const admin = createAdminClient();
   const { data } = await admin
     .from("store_settings")
-    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, show_vat_label, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, cod_fee_config, mailchimp_config, brevo_config, klaviyo_config")
+    .select("page_content, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, show_vat_label, shipping_zones, min_order_amount, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, tbi_config, dpd_config, payment_methods, card_discount_config, cod_discount_config, cod_fee_config, mailchimp_config, brevo_config, klaviyo_config")
     .eq("business_id", businessId)
     .single();
   if (!data) return null;
@@ -76,6 +84,8 @@ export async function getPublicStoreConfig(businessId: string): Promise<{
     shipping_zones: (data.shipping_zones as Json) ?? null,
     min_order_amount: data.min_order_amount != null ? Number(data.min_order_amount) : null,
     payment_methods: checkoutPaymentMethods(data.payment_methods, ready),
+    tbi: limiteleTbi(data.tbi_config),
+    tbi_produs: bannerTbiPePaginaProdusului(data.tbi_config),
     card_discount: parseCardDiscountConfig(data.card_discount_config),
     cod_discount: parseCardDiscountConfig(data.cod_discount_config),
     cod_fee: parseCodFeeConfig(data.cod_fee_config),

@@ -31,6 +31,7 @@ const ETICHETE: Record<string, string> = {
   card: "Card online",
   revolut: "Revolut Pay",
   klarna: "Klarna",
+  tbi: "Rate prin tbi bank",
   bank_transfer: "Transfer bancar",
 };
 
@@ -63,5 +64,7 @@ export function stareaPlatii(p: {
   if (ramburs) return { text: "Plata la livrare", ton: "asteptare" };
   /* Vederea redusa nu stie metoda; nu spune mai mult decat stie. */
   if (p.metoda === null) return { text: "Neplatita", ton: "asteptare" };
+  /* La plata in rate nu „n-a terminat de platit": asteapta raspunsul bancii la cererea de credit. */
+  if (p.metoda === "tbi") return { text: "In asteptarea aprobarii finantarii", ton: "asteptare" };
   return { text: "Plata nu a fost finalizata", ton: "asteptare" };
 }

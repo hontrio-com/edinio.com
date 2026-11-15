@@ -1,20 +1,21 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Info, Key } from "lucide-react";
+import { BadgeCheck, CreditCard, FlaskConical, Info } from "lucide-react";
 import { saveNetopiaConfig, disconnectNetopia } from "@/lib/actions/netopia.actions";
 import type { NetopiaConfig } from "@/lib/netopia";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Callout } from "@/components/ui/callout";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import {
+  AlegereCarduri, BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare,
+  useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 const DEFAULT_CONFIG: NetopiaConfig = {
   enabled: false,
@@ -33,7 +34,7 @@ export default function NetopiaConfigClient({
   initialConfig: NetopiaConfig | null;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<NetopiaConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
+  const { cfg, setCfg, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<NetopiaConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
@@ -66,7 +67,8 @@ export default function NetopiaConfigClient({
         return;
       }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
-      toast.success("Configuratia Netopia a fost salvata.");
+      toast.success("Configurația Netopia a fost salvată.");
+      marcheazaSalvat();
       router.refresh();
     });
   }
@@ -95,175 +97,96 @@ export default function NetopiaConfigClient({
     });
   }
 
+  const posSalvat = secretulEsteSalvat(initialConfig, "pos_signature");
+  const cheieSalvata = secretulEsteSalvat(initialConfig, "api_key");
+  const stari: StareAntet[] = !isConfigured
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [
+      initialConfig?.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" },
+      initialConfig?.sandbox ? { ton: "asteptare", text: "Mod test" } : { ton: "info", text: "Plăți reale" },
+    ];
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="netopia" description="Accepta plati cu cardul prin Netopia Payments." />
+    <PaginaIntegrare
+      id="netopia"
+      titlu="Plăți cu cardul"
+      descriere="Clienții plătesc online cu cardul, pe pagina securizată Netopia Payments."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Plata cu cardul la comandă" activ={cfg.enabled} onChange={(v) => set("enabled", v)} ariaLabel="Activează Netopia Payments" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "POS Signature", facut: !!cfg.pos_signature.trim() || posSalvat },
+          { text: "API Key", facut: !!cfg.api_key.trim() || cheieSalvata },
+          { text: "Plata cu cardul activă", facut: isConfigured && !!initialConfig?.enabled },
+        ]} />
+        <CumFunctioneaza id="netopia" puncte={[
+          { Icon: CreditCard, text: "Clientul alege plata cu cardul și plătește pe pagina securizată Netopia." },
+          { Icon: BadgeCheck, text: "Când Netopia confirmă plata, comanda devine plătită și confirmată." },
+          { Icon: FlaskConical, text: "În modul de test plățile nu sunt reale: îl folosești doar pentru probe." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Datele de acces" descriere="Din contul tău de comerciant, pe admin.netopia-payments.com.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="POS Signature" htmlFor="netopia-pos"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="POS Signature"
+              text="Puncte de vânzare, alegi punctul de vânzare, apoi Setări tehnice: câmpul Signature, de forma XXXX-XXXX-XXXX-XXXX." />}>
+            <Input id="netopia-pos" type="text" value={cfg.pos_signature} onChange={e => set("pos_signature", e.target.value)}
+              placeholder={posSalvat ? PLACEHOLDER_SECRET_SALVAT : "XXXX-XXXX-XXXX-XXXX"} />
+          </Field>
+          <Field label="API Key" htmlFor="netopia-key"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="API Key"
+              text="Apasă pe numele contului (sus), apoi Profil, apoi Securitate, și generează un API Key. Nu e în Setări tehnice." />}>
+            <Input id="netopia-key" type="password" value={cfg.api_key} onChange={e => set("api_key", e.target.value)}
+              placeholder={cheieSalvata ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
+          </Field>
+        </div>
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+          <span>Cheia publică și cheia privată din Setări tehnice sunt pentru vechea integrare Netopia și nu sunt necesare aici.</span>
+        </p>
+      </Sectiune>
 
-      <div className="space-y-5">
+      <Sectiune pas={2} titlu="La comandă" descriere="Cum apare metoda de plată în formularul de comandă.">
+        <Field label="Titlul afișat" htmlFor="netopia-titlu">
+          <Input id="netopia-titlu" type="text" value={cfg.title} onChange={e => set("title", e.target.value)} placeholder="Card online (Netopia)" />
+        </Field>
+      </Sectiune>
 
-        {/* Ghid */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              {
-                step: "1",
-                title: "Logheaza-te in contul Netopia",
-                desc: "Mergi pe admin.netopia-payments.com si autentifica-te cu contul tau de comerciant.",
-              },
-              {
-                step: "2",
-                title: "Copiaza POS Signature",
-                desc: 'Mergi la "Puncte de vanzare" → alege punctul de vanzare → "Setari tehnice" si copiaza valoarea din campul "Signature" (format XXXX-XXXX-XXXX-XXXX). Lipeste-o mai jos.',
-              },
-              {
-                step: "3",
-                title: "Genereaza API Key din Profil → Securitate",
-                desc: 'API Key-ul NU se afla in "Setari tehnice". Apasa pe numele contului (sus) → "Profil" → "Securitate" si genereaza un API Key. Copiaza-l si lipeste-l mai jos.',
-              },
-              {
-                step: "4",
-                title: "Salveaza si activeaza",
-                desc: "Completeaza toate campurile, alege modul (Sandbox pentru testare, Live pentru productie), activeaza si salveaza.",
-              },
-            ].map(({ step, title, desc }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
+      <Sectiune pas={3} titlu="Sigla Netopia în subsolul magazinului" descriere="Obligatorie când accepți plata cu cardul. După ce lipești codul, sigla apare singură în subsolul magazinului.">
+        <Field label="Codul HTML/IFRAME de la Netopia" htmlFor="netopia-sigla"
+          ajutor={<ExplicatieCard marime="mic" intrebare="De unde îl iau" eticheta="Codul siglei Netopia"
+            text="În contul Netopia: Identitate Vizuală, alegi platforma HTML/IFRAME, apoi punctul de vânzare, și copiezi codul generat. Alte formate (Script, React, Angular) nu se afișează." />}>
+          <Textarea id="netopia-sigla" value={cfg.badge_html ?? ""} onChange={e => set("badge_html", e.target.value)}
+            placeholder={'<iframe src="https://netopia-payments.com/..."></iframe>'} rows={3} className="resize-y font-mono text-xs" />
+        </Field>
+      </Sectiune>
 
-        {/* Atentie: chei RSA vechi */}
-        <Callout variant="warning" icon={Info}>
-          <span className="font-medium text-foreground">Nu confunda API Key-ul cu cheile de criptare.</span> In &quot;Setari tehnice&quot; vei vedea si o &quot;Cheie publica&quot; si o &quot;Cheie privata&quot;: acestea sunt pentru vechea integrare (Netopia API v1) si <span className="font-medium text-foreground">nu sunt necesare aici</span>. Edinio foloseste API v2, care are nevoie doar de <span className="font-medium text-foreground">POS Signature</span> (din Setari tehnice) si de <span className="font-medium text-foreground">API Key</span> (din Profil → Securitate).
-        </Callout>
+      <Sectiune pas={4} titlu="Mediul de lucru">
+        <AlegereCarduri
+          eticheta="Mediul de lucru"
+          valoare={cfg.sandbox}
+          onChange={(v) => set("sandbox", v)}
+          optiuni={[
+            { valoare: true, titlu: "Test (Sandbox)", text: "Plățile nu sunt reale. Pentru probe.", avertizare: true },
+            { valoare: false, titlu: "Real (Live)", text: "Clienții plătesc cu adevărat." },
+          ]}
+        />
+      </Sectiune>
 
-        {/* Main config card */}
-        <Panel className="space-y-5 p-5">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza Netopia Payments</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Afiseaza optiunea de plata cu cardul la checkout
-              </p>
-            </div>
-            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
-          </div>
+      {isConfigured && (
+        <ZonaDeconectare descriere="Șterge datele de acces Netopia. Plățile deja încasate rămân neatinse.">
+          <ButonDeconectare
+            nume="Netopia"
+            cePierzi="Semnătura POS și cheia API se șterg din Edinio, iar cumpărătorii nu mai pot plăti cu cardul prin Netopia. Plățile deja încasate rămân neatinse. Ca să te întorci, le ceri din nou din contul tău Netopia."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={disconnect}
+          />
+        </ZonaDeconectare>
+      )}
 
-          <div className="space-y-4 border-t border-border pt-4">
-            {/* Sandbox toggle */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
-                </p>
-              </div>
-              <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                Titlu afisaj checkout
-              </label>
-              <Input
-                type="text"
-                value={cfg.title}
-                onChange={e => set("title", e.target.value)}
-                placeholder="Card online (Netopia)"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">Cum apare optiunea de plata in formularul de comanda</p>
-            </div>
-
-            {/* POS Signature */}
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">POS Signature</label>
-              <Input
-                type="text"
-                value={cfg.pos_signature}
-                onChange={e => set("pos_signature", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "pos_signature") ? PLACEHOLDER_SECRET_SALVAT : ""}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Gasesti Signature-ul in Netopia → Puncte de vanzare → Setari tehnice
-              </p>
-            </div>
-
-            {/* API Key */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Key className="h-3.5 w-3.5 text-muted-foreground" />
-                API Key
-              </label>
-              <Input
-                type="password"
-                value={cfg.api_key}
-                onChange={e => set("api_key", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : ""}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Genereaza un API Key din Netopia → Profil → Securitate (nu din Setari tehnice)
-              </p>
-            </div>
-
-            {/* Logo Netopia pentru footer (Identitate Vizuala) */}
-            <div className="border-t border-border pt-4">
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Logo Netopia pentru footer (Identitate Vizuala)
-              </label>
-              <p className="mb-2.5 text-xs leading-relaxed text-muted-foreground">
-                Afisarea logo-ului Netopia este obligatorie cand accepti plata cu cardul. Dupa ce lipesti codul mai jos, logo-ul apare automat in footer-ul magazinului.
-              </p>
-              <div className="mb-2.5 space-y-1 rounded-lg border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
-                <p className="font-medium text-foreground">Cum obtii codul:</p>
-                <p>1. In contul Netopia, mergi la <span className="font-medium text-foreground">Identitate Vizuala</span>.</p>
-                <p>2. La tipul de platforma, alege <span className="font-medium text-foreground">HTML/IFRAME</span> (recomandat).</p>
-                <p>3. Selecteaza <span className="font-medium text-foreground">Punctul de vanzare</span> potrivit.</p>
-                <p>4. Copiaza codul generat si lipeste-l mai jos.</p>
-              </div>
-              <Textarea
-                value={cfg.badge_html ?? ""}
-                onChange={e => set("badge_html", e.target.value)}
-                placeholder={'<iframe src="https://netopia-payments.com/..."></iframe>'}
-                rows={4}
-                className="resize-y font-mono text-xs"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Accepta doar codul de tip <span className="font-medium">HTML/IFRAME</span> de la Netopia. Alte formate (Script, React, Angular) nu vor fi afisate.
-              </p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 border-t border-border pt-4">
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              Salveaza
-            </Button>
-            {isConfigured && (
-              <ButonDeconectare
-                nume="Netopia"
-                cePierzi="Semnătura POS și cheia API se șterg din Edinio, iar cumpărătorii nu mai pot plăti cu cardul prin Netopia. Plățile deja încasate rămân neatinse. Ca să te întorci, le ceri din nou din contul tău Netopia."
-                pending={disconnecting}
-                marime="default"
-                onConfirma={disconnect}
-              />
-            )}
-          </div>
-        </Panel>
-      </div>
-    </div>
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

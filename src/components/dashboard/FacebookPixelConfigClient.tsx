@@ -3,14 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, ExternalLink, CheckCircle, Search, Server, AlertTriangle, Send } from "lucide-react";
+import { AlertTriangle, Boxes, CheckCircle, Cookie, ExternalLink, Fingerprint, Loader2, Send, Server } from "lucide-react";
 import { saveMarketingConfig } from "@/lib/actions/marketing.actions";
 import { saveMetaCapi, removeMetaCapi, trimiteEvenimentDeTestMeta, type StareMetaCapi } from "@/lib/actions/meta-capi.actions";
 import { type MarketingConfig, parseMetaPixelId } from "@/lib/marketing-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 function cand(iso: string | null): string {
   if (!iso) return "";
@@ -43,7 +48,7 @@ export function FacebookPixelConfigClient({
     if (raw) {
       const parsed = parseMetaPixelId(raw);
       if (!parsed) {
-        toast.error("Facebook Pixel ID invalid. Copiaza doar ID-ul numeric (15-16 cifre) din Events Manager.");
+        toast.error("Pixel ID invalid. Copiază doar ID-ul numeric (15-16 cifre) din Events Manager.");
         return;
       }
       if (parsed !== raw) setPixelId(parsed); // snippet pasted → show clean ID
@@ -59,7 +64,7 @@ export function FacebookPixelConfigClient({
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success(raw ? "Facebook Pixel salvat" : "Facebook Pixel eliminat");
+      toast.success(raw ? "Pixelul Meta a fost salvat." : "Pixelul Meta a fost eliminat.");
       router.refresh();
     }
   }
@@ -84,7 +89,7 @@ export function FacebookPixelConfigClient({
     try {
       const r = await removeMetaCapi(businessId);
       if ("error" in r) { toast.error(r.error); return; }
-      toast.success("Conversions API oprit. Pixelul din browser ramane activ.");
+      toast.success("Conversions API oprit. Pixelul din browser rămâne activ.");
       router.refresh();
     } catch {
       toast.error("Nu am primit raspuns de la server. Reimprospateaza pagina ca sa vezi starea.", { duration: 12000 });
@@ -98,7 +103,7 @@ export function FacebookPixelConfigClient({
     try {
       const r = await trimiteEvenimentDeTestMeta(businessId);
       if ("error" in r) { toast.error(r.error, { duration: 12000 }); return; }
-      toast.success("Meta a primit evenimentul de test. Il vezi in Events Manager -> Test events.");
+      toast.success("Meta a primit evenimentul de test. Îl vezi în Events Manager, la Test events.");
     } catch {
       toast.error("Nu am primit raspuns de la server. Incearca din nou.", { duration: 12000 });
     } finally {
@@ -106,169 +111,141 @@ export function FacebookPixelConfigClient({
     }
   }
 
-  return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout variant="success" icon={CheckCircle} title="Facebook Pixel activ">
-          <span className="font-mono">{initialConfig?.facebook_pixel_id}</span>
-        </Callout>
-      )}
+  const salvat = (initialConfig?.facebook_pixel_id ?? "").trim();
+  const modificat = pixelId.trim() !== salvat;
+  const stari: StareAntet[] = !isActive
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      { ton: "bun", text: "Pixel activ" },
+      capi?.activ
+        ? (capi.ultimaEroare ? { ton: "rau", text: "Conversions API: eroare" } : { ton: "bun", text: "Conversions API activ" })
+        : { ton: "neutru", text: "Fără Conversions API" },
+    ];
+  const legatura = "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline";
 
-      <Panel className="space-y-4 p-4">
-        <h3 className="text-sm font-semibold text-foreground">Pixel ID</h3>
-        <div>
-          <Input
-            type="text"
-            value={pixelId}
-            onChange={e => setPixelId(e.target.value)}
-            placeholder="ex: 1234567890123456"
-            className="font-mono"
-          />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Gaseste Pixel ID-ul in Facebook Business Manager &gt; Events Manager.
-          </p>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <a
-            href="https://business.facebook.com/events_manager"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Deschide Events Manager
-          </a>
-          <Button size="lg" onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />}
-            {saving ? "Se salveaza..." : "Salveaza"}
-          </Button>
-        </div>
-      </Panel>
+  return (
+    <PaginaIntegrare
+      id="facebook-pixel"
+      titlu="Pixel Meta"
+      descriere="Urmărește vizitele și vânzările, ca să optimizezi reclamele pe Facebook și Instagram."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Pixel ID salvat", facut: isActive },
+          { text: "Conversions API activ", facut: !!capi?.activ },
+          { text: "Fără cod de test rămas", facut: !!capi?.activ && !capi.testEventCode },
+        ]} />
+        <CardCifre titlu="Evenimente trimise automat" randuri={EVENIMENTE_META.map(([nume, cand]) => ({
+          eticheta: <span className="font-mono text-foreground">{nume}</span>,
+          valoare: <span className="text-muted-foreground">{cand}</span>,
+        }))} />
+        <CumFunctioneaza id="facebook-pixel" puncte={[
+          { Icon: Fingerprint, text: "Pixel ID-ul îl iei din Events Manager: alegi pixelul și copiezi ID-ul numeric (15-16 cifre)." },
+          { Icon: Server, text: "Conversions API trimite aceleași evenimente și de pe server, iar Meta păstrează unul din fiecare pereche." },
+          { Icon: Boxes, text: "Produsele au aceleași ID-uri ca în feedul Facebook Catalog, deci reclamele dinamice le recunosc." },
+          { Icon: Cookie, text: "Pixelii se încarcă doar după acordul de cookie-uri al vizitatorului (GDPR)." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Pixel ID" descriere="Identificatorul pixelului tău din Meta Events Manager.">
+        <Field label="Pixel ID" htmlFor="meta-pixel" hint="Poți lipi și tot codul pixelului: păstrăm doar ID-ul.">
+          <Input id="meta-pixel" type="text" value={pixelId} onChange={e => setPixelId(e.target.value)} placeholder="ex: 1234567890123456" className="font-mono" />
+        </Field>
+        <a href="https://business.facebook.com/events_manager" target="_blank" rel="noopener noreferrer" className={legatura}>
+          Deschide Events Manager <ExternalLink className="h-3 w-3" />
+        </a>
+      </Sectiune>
 
       {/*
         ⚠ CONVERSIONS API: evenimentele pleaca si de pe server, cu acelasi ID ca din browser, deci Meta le numara
         o data. Ce pierde browserul (iOS, blocante de reclame, browserul din aplicatia Facebook) ajunge oricum.
       */}
-      <Panel className="space-y-4 p-4">
-        <div className="flex items-start gap-2">
-          <Server className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Conversions API (recomandat)</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Trimite evenimentele si de pe server, nu doar din browser. Achizitiile blocate de iOS, de blocantele de
-              reclame sau de browserul din aplicatia Facebook ajung totusi la Meta, iar Meta pastreaza un singur
-              eveniment din fiecare pereche.
-            </p>
-          </div>
-        </div>
-
+      <Sectiune pas={2} titlu="Conversions API (recomandat)"
+        descriere="Trimite evenimentele și de pe server: achizițiile blocate de iOS, de blocantele de reclame sau de browserul din aplicația Facebook ajung totuși la Meta.">
         {!isActive ? (
-          <p className="text-xs text-muted-foreground">Salveaza intai Pixel ID-ul de mai sus.</p>
+          <p className="text-sm text-muted-foreground">Salvează întâi Pixel ID-ul de mai sus.</p>
         ) : (
           <>
             {capi?.tokenSalvat && !capi.activ && (
               <Callout variant="warning" icon={AlertTriangle} title="Conversions API oprit: Pixel ID-ul s-a schimbat">
-                Tokenul salvat a fost verificat pe pixelul de dinainte, deci nu mai trimitem nimic de pe server. Apasa
-                „Verifica si salveaza” ca sa-l verificam pe pixelul nou, sau lipeste tokenul generat din setarile lui.
+                Tokenul salvat a fost verificat pe pixelul de dinainte, deci nu mai trimitem nimic de pe server. Apasă
+                „Verifică și salvează” ca să-l verificăm pe pixelul nou, sau lipește tokenul generat din setările lui.
               </Callout>
             )}
             {capi?.activ && !capi.ultimaEroare && (
               <Callout variant="success" icon={CheckCircle} title="Conversions API activ">
-                {capi.ultimaTrimitereLa ? `Ultima achizitie trimisa: ${cand(capi.ultimaTrimitereLa)}.` : "Inca nicio achizitie trimisa de la salvare."}
+                {capi.ultimaTrimitereLa ? `Ultima achiziție trimisă: ${cand(capi.ultimaTrimitereLa)}.` : "Încă nicio achiziție trimisă de la salvare."}
               </Callout>
             )}
             {capi?.activ && capi.ultimaEroare && (
               <Callout variant="danger" icon={AlertTriangle} title="Meta a refuzat ultima trimitere">
-                {capi.ultimaEroare}{capi.ultimaEroareLa ? ` (${cand(capi.ultimaEroareLa)})` : ""}. Daca tokenul a expirat sau a fost
-                sters, genereaza altul si salveaza-l aici.
+                {capi.ultimaEroare}{capi.ultimaEroareLa ? ` (${cand(capi.ultimaEroareLa)})` : ""}. Dacă tokenul a expirat sau a fost
+                șters, generează altul și salvează-l aici.
               </Callout>
             )}
 
-            <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-              <li>Deschide <span className="font-medium text-foreground">Events Manager</span> si alege pixelul de mai sus.</li>
-              <li>Mergi la <span className="font-medium text-foreground">Setari</span> si cauta sectiunea <span className="font-medium text-foreground">Conversions API</span>.</li>
-              <li>Apasa <span className="font-medium text-foreground">Genereaza tokenul de acces</span>, copiaza-l si lipeste-l aici.</li>
-            </ol>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-foreground">Token de acces</label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Token de acces" htmlFor="meta-token"
+                ajutor={<ExplicatieCard marime="mic" intrebare="De unde îl iau" eticheta="Tokenul Conversions API"
+                  text="În Events Manager alegi pixelul, intri la Setări, cauți secțiunea Conversions API și apeși Generează tokenul de acces. Îl copiezi și îl lipești aici." />}>
                 <Input
+                  id="meta-token"
                   type="password"
-                  autoComplete="off"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder={capi?.tokenSalvat ? "•••••••• (salvat, completeaza doar ca sa-l schimbi)" : "EAA..."}
+                  placeholder={capi?.tokenSalvat ? PLACEHOLDER_SECRET_SALVAT : "EAA..."}
                   className="font-mono"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-foreground">Cod de test (optional)</label>
-                <Input
-                  type="text"
-                  value={testCode}
-                  onChange={(e) => setTestCode(e.target.value)}
-                  placeholder="TEST12345"
-                  className="font-mono"
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Din Events Manager &gt; Test events. Cat timp e completat, evenimentele de pe server apar acolo si NU intra
-                  in rapoarte. Sterge-l dupa verificare.
-                </p>
-              </div>
+              </Field>
+              <Field label="Cod de test (opțional)" htmlFor="meta-test"
+                hint="Din Events Manager, Test events. Cât timp e completat, evenimentele de pe server NU intră în rapoarte: șterge-l după verificare.">
+                <Input id="meta-test" type="text" value={testCode} onChange={(e) => setTestCode(e.target.value)} placeholder="TEST12345" className="font-mono" />
+              </Field>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {capi?.tokenSalvat && (
-                <Button variant="outline" onClick={stergeCapi} disabled={capiBusy !== ""}>
-                  {capiBusy === "stergere" && <Loader2 className="animate-spin" />} Opreste Conversions API
-                </Button>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={salveazaCapi} disabled={capiBusy !== "" || (!token.trim() && !capi?.tokenSalvat)}>
+                {capiBusy === "salvare" && <Loader2 className="animate-spin" />} {capi?.activ ? "Salvează modificările" : "Verifică și salvează"}
+              </Button>
               {capi?.tokenSalvat && (
                 <Button variant="outline" onClick={testeazaCapi} disabled={capiBusy !== "" || !capi.testEventCode}
-                  title={capi.testEventCode ? undefined : "Salveaza intai un cod de test"}>
+                  title={capi.testEventCode ? undefined : "Salvează întâi un cod de test"}>
                   {capiBusy === "test" ? <Loader2 className="animate-spin" /> : <Send />} Trimite un eveniment de test
                 </Button>
               )}
-              <Button onClick={salveazaCapi} disabled={capiBusy !== "" || (!token.trim() && !capi?.tokenSalvat)}>
-                {capiBusy === "salvare" && <Loader2 className="animate-spin" />} {capi?.activ ? "Salveaza modificarile" : "Verifica si salveaza"}
-              </Button>
+              {capi?.tokenSalvat && (
+                <Button variant="ghost" onClick={stergeCapi} disabled={capiBusy !== ""}>
+                  {capiBusy === "stergere" && <Loader2 className="animate-spin" />} Oprește Conversions API
+                </Button>
+              )}
             </div>
           </>
         )}
-      </Panel>
+      </Sectiune>
 
-      <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
-        <p className="mb-2 text-sm font-semibold text-foreground">Evenimente urmarite automat</p>
-        <ul className="space-y-1 text-xs text-muted-foreground">
-          <li><span className="font-mono text-foreground">PageView</span>: la fiecare pagina a magazinului</li>
-          <li><span className="font-mono text-foreground">ViewContent</span>: la vizualizarea unui produs</li>
-          <li><span className="font-mono text-foreground">Search</span>: la cautarea in magazin</li>
-          <li><span className="font-mono text-foreground">AddToCart</span>: cand un produs e adaugat in cos</li>
-          <li><span className="font-mono text-foreground">InitiateCheckout</span>: la inceputul comenzii</li>
-          <li><span className="font-mono text-foreground">AddPaymentInfo</span>: la trimiterea comenzii, cu metoda de plata aleasa</li>
-          <li><span className="font-mono text-foreground">Purchase</span>: la vanzarea confirmata (ramburs la plasare, card la incasare), cu valoare si potrivire avansata</li>
-        </ul>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Produsele se trimit cu aceleasi ID-uri ca in feedul Facebook Catalog (inclusiv variantele), deci reclamele
-          dinamice recunosc ce a vazut si ce a cumparat fiecare vizitator.
-        </p>
-      </div>
-
-      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
-        <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
-          <Search className="h-4 w-4 text-primary" /> Cum verifici ca pixelul functioneaza
-        </p>
-        <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-          <li>Instaleaza extensia <span className="font-medium text-foreground">Meta Pixel Helper</span> in Chrome.</li>
-          <li>Deschide magazinul intr-o fereastra <span className="font-medium text-foreground">incognito</span>.</li>
-          <li>Daca ai bannerul de cookie-uri activ, apasa <span className="font-medium text-foreground">Accepta</span>: pixelii se incarca doar dupa consimtamant (GDPR). Fara acest pas, Pixel Helper nu vede nimic.</li>
-          <li>Pixel Helper ar trebui sa arate pixelul si evenimentul <span className="font-mono text-foreground">PageView</span>.</li>
+      <Sectiune titlu="Cum verifici că pixelul funcționează">
+        <ol className="list-decimal space-y-1.5 pl-4 text-xs leading-relaxed text-muted-foreground">
+          <li>Instalează extensia <span className="font-medium text-foreground">Meta Pixel Helper</span> în Chrome.</li>
+          <li>Deschide magazinul într-o fereastră <span className="font-medium text-foreground">incognito</span>.</li>
+          <li>Dacă ai bannerul de cookie-uri activ, apasă <span className="font-medium text-foreground">Accepta</span>: pixelii se încarcă doar după consimțământ (GDPR). Fără acest pas, Pixel Helper nu vede nimic.</li>
+          <li>Pixel Helper ar trebui să arate pixelul și evenimentul <span className="font-mono text-foreground">PageView</span>.</li>
         </ol>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Poti dezactiva bannerul din <span className="font-medium text-foreground">Setari &gt; Banner Cookies</span> (pixelii se vor incarca fara consimtamant; raspunderea GDPR iti apartine).
+        <p className="text-xs text-muted-foreground">
+          Poți dezactiva bannerul din <span className="font-medium text-foreground">Setări, Banner Cookies</span>: pixelii se vor încărca fără consimțământ, iar răspunderea GDPR îți aparține.
         </p>
-      </div>
-    </div>
+      </Sectiune>
+
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={handleSave} onRenunta={() => setPixelId(salvat)} />
+    </PaginaIntegrare>
   );
 }
+
+const EVENIMENTE_META: [string, string][] = [
+  ["PageView", "fiecare pagină"],
+  ["ViewContent", "pagina unui produs"],
+  ["Search", "căutarea în magazin"],
+  ["AddToCart", "adăugarea în coș"],
+  ["InitiateCheckout", "începutul comenzii"],
+  ["AddPaymentInfo", "trimiterea comenzii"],
+  ["Purchase", "vânzarea: ramburs la plasare, card la încasare"],
+];

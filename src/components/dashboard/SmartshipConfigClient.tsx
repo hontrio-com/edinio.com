@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, Info, Loader2, Wallet } from "lucide-react";
+import { AlertTriangle, Banknote, Info, KeyRound, Loader2, MapPin, Wallet } from "lucide-react";
 import {
   diagnosticSmartshipAction, disconnectSmartship, getSmartshipCurieriAction,
   getSmartshipDeconturiAction, getSmartshipFacturiAction, saveSmartshipConfig,
@@ -16,9 +16,12 @@ import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -45,8 +48,8 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
-  { valoare: "A4", eticheta: "A4 (foaie intreaga)" },
-  { valoare: "A6", eticheta: "A6 (eticheta compacta, imprimante de etichete)" },
+  { valoare: "A4", eticheta: "A4 (foaie întreagă)" },
+  { valoare: "A6", eticheta: "A6 (etichetă compactă, imprimante de etichete)" },
 ];
 
 export function SmartshipConfigClient({
@@ -78,6 +81,21 @@ export function SmartshipConfigClient({
   const [continut, setContinut] = useState(initialConfig?.continut_implicit ?? "Produse");
   const [format, setFormat] = useState<FormatEticheta>(initialConfig?.format_eticheta ?? "A4");
   const [curieriPermisi, setCurieriPermisi] = useState<number[]>(initialConfig?.curieri_permisi ?? []);
+
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = {
+    apiKey, iban, expeditor, contractPropriu, arataContractPropriu, folosesteEasybox, folosesteFanbox, deschidere,
+    asigura, faraRidicare, lungime, latime, inaltime, continut, format, curieriPermisi,
+  };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setApiKey(reper.apiKey); setIban(reper.iban); setExpeditor(reper.expeditor); setContractPropriu(reper.contractPropriu);
+    setArataContractPropriu(reper.arataContractPropriu); setFolosesteEasybox(reper.folosesteEasybox);
+    setFolosesteFanbox(reper.folosesteFanbox); setDeschidere(reper.deschidere); setAsigura(reper.asigura);
+    setFaraRidicare(reper.faraRidicare); setLungime(reper.lungime); setLatime(reper.latime); setInaltime(reper.inaltime);
+    setContinut(reper.continut); setFormat(reper.format); setCurieriPermisi(reper.curieriPermisi);
+  }
 
   const [expeditori, setExpeditori] = useState<ExpeditorSalvat[]>([]);
   const [sold, setSold] = useState<SoldSmartship | null>(null);
@@ -126,17 +144,18 @@ export function SmartshipConfigClient({
   }
 
   async function handleSave() {
-    if (!areCheie) return toast.error("Completeaza cheia de API");
+    if (!areCheie) return toast.error("Completează cheia de API.");
     if (!expeditorGata) {
-      return toast.error("Alege adresa de ridicare, apasa „Verifica si incarca expeditorii”");
+      return toast.error("Alege adresa de ridicare: apasă „Verifică și încarcă expeditorii”.");
     }
-    if (ibanGresit) return toast.error("IBAN-ul nu e valid. Verifica cifrele de control.");
+    if (ibanGresit) return toast.error("IBAN-ul nu e valid. Verifică cifrele de control.");
 
     setSalveaza(true);
     const r = await saveSmartshipConfig(businessId, construieste());
     setSalveaza(false);
     if ("error" in r) return toast.error(r.error);
-    toast.success("Configurarea SmartShip a fost salvata");
+    toast.success("Configurarea SmartShip a fost salvată.");
+    setReper(valori);
     router.refresh();
   }
 
@@ -149,11 +168,11 @@ export function SmartshipConfigClient({
     setExpeditori(r.expeditori);
     setSold(r.sold);
     if (r.expeditori.length === 0) {
-      return toast.warning("Cheia e buna, dar contul n-are nicio adresa de ridicare salvata. Adauga una in SmartShip.");
+      return toast.warning("Cheia e bună, dar contul n-are nicio adresă de ridicare salvată. Adaugă una în SmartShip.");
     }
     /* Un singur expeditor: il alegem noi, ca omul sa nu mai apese inca o data. */
     if (r.expeditori.length === 1 && !expeditorGata) alegeExpeditorul(r.expeditori[0]);
-    toast.success(`Conexiune reusita · ${r.expeditori.length} adrese de ridicare`);
+    toast.success(`Conexiune reușită: ${r.expeditori.length} adrese de ridicare.`);
   }
 
   function alegeExpeditorul(e: ExpeditorSalvat) {
@@ -174,7 +193,7 @@ export function SmartshipConfigClient({
     setIncarcCurieri(false);
     if (!r.ok) return toast.error(r.error, { duration: 10000 });
     setCurieri(r.curieri);
-    if (r.curieri.length === 0) toast.info("Niciun curier nu a intors pret pentru ruta de proba.");
+    if (r.curieri.length === 0) toast.info("Niciun curier nu a întors preț pentru ruta de probă.");
   }
 
   async function incarcaDeconturi() {
@@ -183,7 +202,7 @@ export function SmartshipConfigClient({
     setIncarcDeconturi(false);
     if (!r.ok) return toast.error(r.error);
     setDeconturi(r.deconturi);
-    if (r.deconturi.length === 0) toast.info("Nu exista deconturi de ramburs.");
+    if (r.deconturi.length === 0) toast.info("Nu există deconturi de ramburs.");
   }
 
   async function incarcaFacturi() {
@@ -192,7 +211,7 @@ export function SmartshipConfigClient({
     setIncarcFacturi(false);
     if (!r.ok) return toast.error(r.error);
     setFacturi(r.facturi);
-    if (r.facturi.length === 0) toast.info("Nu exista facturi emise catre contul tau.");
+    if (r.facturi.length === 0) toast.info("Nu există facturi emise către contul tău.");
   }
 
   async function ruleazaDiagnostic() {
@@ -214,7 +233,7 @@ export function SmartshipConfigClient({
   async function handleDisconnect() {
     const r = await disconnectSmartship(businessId);
     if ("error" in r) return toast.error(r.error);
-    toast.success("SmartShip a fost deconectat");
+    toast.success("SmartShip a fost deconectat.");
     router.refresh();
   }
 
@@ -222,54 +241,70 @@ export function SmartshipConfigClient({
     suprapuneri(curieri.map((c) => ({ id: c.id, nume: c.nume })), activiDirect, curieriPermisi),
   );
 
+  const stari: StareAntet[] = isActive ? [{ ton: "bun", text: "Conectat" }] : [{ ton: "neutru", text: "Neconfigurat" }];
+
   return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout variant="success" icon={CheckCircle}>
-          SmartShip e conectat. Expedierile se emit din pagina comenzii.
-        </Callout>
-      )}
-
-      <Panel step={1} title="Cheia de API">
+    <PaginaIntegrare
+      id="smartship"
+      titlu="Livrare"
+      descriere="Colete prin SmartShip.ro: un cont, mai mulți curieri și un tarif negociat de ei. Poți emite și pe contractele tale de curierat, dacă le ai legate acolo."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia de API", facut: areCheie },
+          { text: "Adresa de ridicare", facut: expeditorGata },
+          { text: "IBAN-ul pentru ramburs", facut: ibanCurat.length > 0 && !ibanGresit },
+          { text: "SmartShip activ", facut: isActive },
+        ]} />
+        {sold && (
+          <CardCifre titlu="Contul SmartShip" cifre={[
+            { eticheta: `disponibil (${sold.currency ?? "RON"})`, valoare: sold.available_for_shipping ?? 0 },
+          ]} randuri={sold.payment_on_terms ? [{ eticheta: "Plata", valoare: "la termen" }] : []} />
+        )}
+        <CumFunctioneaza id="smartship" puncte={[
+          { Icon: KeyRound, text: "Cheia o găsești în SmartShip, la Contul meu, Setări, API." },
+          { Icon: MapPin, text: "Adresa de ridicare se alege din cele salvate în contul tău: localitatea e un id numeric, nu un nume." },
+          { Icon: Banknote, text: "IBAN-ul e obligatoriu la orice comandă cu ramburs; greșit, comenzile cu ramburs rămân fără preț real." },
+          { Icon: AlertTriangle, text: "SmartShip nu are mediu de probă: fiecare emitere e reală și facturată din prima." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Cheia de API">
         <Callout variant="info" icon={Info}>
-          O gasesti in platforma SmartShip, la <strong>Contul meu {"->"} Setari {"->"} API</strong>.
+          O găsești în platforma SmartShip, la <strong>Contul meu, Setări, API</strong>.
         </Callout>
-
-        <Field label="Cheia API" hint="Se trimite la fiecare cerere. Nu o publica nicaieri.">
+        <Field label="Cheia API" htmlFor="smartship-cheie" hint="Se trimite la fiecare cerere. Nu o publica nicăieri.">
           <Input
+            id="smartship-cheie"
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : "Cheia API"}
           />
         </Field>
-
-        <div className="flex gap-2">
-          <Button onClick={handleSave} disabled={salveaza}>
-            {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salveaza"}
-          </Button>
+        <div className="flex flex-wrap items-center gap-3">
           <Button variant="outline" onClick={handleProba} disabled={proba || !areCheie}>
-            {proba ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verifica si incarca expeditorii"}
+            {proba && <Loader2 className="animate-spin" />}
+            Verifică și încarcă expeditorii
           </Button>
+          {sold && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Wallet className="h-3.5 w-3.5" />
+              Disponibil pentru expediere: <strong className="text-foreground">{sold.available_for_shipping ?? 0} {sold.currency ?? "RON"}</strong>
+              {sold.payment_on_terms ? " (plata la termen)" : ""}
+            </span>
+          )}
         </div>
+      </Sectiune>
 
-        {sold && (
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Wallet className="h-3.5 w-3.5" />
-            Disponibil pentru expediere: <strong>{sold.available_for_shipping ?? 0} {sold.currency ?? "RON"}</strong>
-            {sold.payment_on_terms ? " (plata la termen)" : ""}
-          </p>
-        )}
-      </Panel>
-
-      <Panel step={2} title="Adresa de ridicare">
+      <Sectiune pas={2} titlu="Adresa de ridicare">
         {/*
           * ⚠ Aici sta cel mai usor de gresit camp din toata configurarea.
           * `sender.city` e un ID numeric din nomenclatorul lor.
           */}
         <Callout variant="info" icon={Info}>
-          SmartShip identifica localitatile prin <strong>id numeric</strong>, nu prin nume. De
-          aceea adresa de ridicare se alege din cele salvate in contul tau, nu se scrie de mana.
+          SmartShip identifică localitățile prin <strong>id numeric</strong>, nu prin nume. De aceea adresa de ridicare se
+          alege din cele salvate în contul tău, nu se scrie de mână.
         </Callout>
 
         {expeditori.length > 0 && (
@@ -279,8 +314,8 @@ export function SmartshipConfigClient({
                 key={e.id ?? e.nume}
                 type="button"
                 onClick={() => alegeExpeditorul(e)}
-                className={`flex w-full flex-col rounded-lg border px-3 py-2 text-left text-xs ${
-                  expeditor?.city === Number(e.localitate_id) ? "border-primary bg-primary/5" : "border-border"
+                className={`flex w-full flex-col rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                  expeditor?.city === Number(e.localitate_id) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
                 }`}
               >
                 <span className="font-medium text-foreground">{e.nume}</span>
@@ -295,26 +330,26 @@ export function SmartshipConfigClient({
 
         {expeditorGata ? (
           <p className="text-xs text-muted-foreground">
-            Ales: <strong>{expeditor!.name}</strong> · {expeditor!.address}
+            Ales: <strong className="text-foreground">{expeditor!.name}</strong> · {expeditor!.address}
             {expeditor!.sector ? `, sector ${expeditor!.sector}` : ""} (id localitate {expeditor!.city})
           </p>
         ) : (
-          <p className="text-xs text-warning">
-            Nicio adresa de ridicare aleasa. Apasa „Verifica si incarca expeditorii”.
-          </p>
+          <p className="text-xs text-warning">Nicio adresă de ridicare aleasă. Apasă „Verifică și încarcă expeditorii”.</p>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={3} title="Ramburs">
+      <Sectiune pas={3} titlu="Ramburs">
         {/*
           * ⚠ Cel mai scump camp gresit din toata configurarea: un IBAN invalid
           * face ca TOATE comenzile cu ramburs sa cada tacut pe tariful fix.
           */}
         <Field
           label="IBAN pentru virarea rambursului"
-          hint="Obligatoriu la orice comanda cu plata la livrare. SmartShip il verifica la fiecare cerere. Gresit, comenzile cu ramburs raman fara pret real."
+          htmlFor="smartship-iban"
+          hint="Obligatoriu la orice comandă cu plata la livrare. SmartShip îl verifică la fiecare cerere. Greșit, comenzile cu ramburs rămân fără preț real."
         >
           <Input
+            id="smartship-iban"
             value={iban}
             onChange={(e) => setIban(e.target.value)}
             placeholder="RO49AAAA1B31007593840000"
@@ -322,54 +357,44 @@ export function SmartshipConfigClient({
           />
         </Field>
         {ibanGresit && (
-          <p className="text-xs text-destructive">
-            IBAN-ul nu trece verificarea cifrelor de control. Verifica-l inainte de salvare.
-          </p>
+          <p className="text-xs text-destructive">IBAN-ul nu trece verificarea cifrelor de control. Verifică-l înainte de salvare.</p>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={4} title="Ce se ofera in checkout">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Lockere Sameday Easybox</p>
-            <p className="text-xs text-muted-foreground">
-              Clientul isi alege lockerul in checkout. Pretul e cel fix din „Setari {"->"} Livrare”:
-              SmartShip nu poate cota un locker inainte sa stie CARE locker.
-            </p>
-          </div>
-          <Switch checked={folosesteEasybox} onCheckedChange={setFolosesteEasybox} />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Lockere FAN Courier FANbox</p>
-            <p className="text-xs text-muted-foreground">
-              {/* ⚠ Documentat de ei: FANbox merge doar cu `use_own_contract: 1`. */}
-              Merge <strong>numai pe contractul tau de FAN Courier</strong>. Fara contract
-              propriu, optiunea nu apare in checkout.
-            </p>
-          </div>
-          <Switch checked={folosesteFanbox} onCheckedChange={setFolosesteFanbox} />
-        </div>
+      <Sectiune pas={4} titlu="Ce se oferă la comandă">
+        <RandComutator
+          titlu="Lockere Sameday Easybox"
+          text="Clientul își alege lockerul la comandă. Prețul e cel fix din Setări, Livrare: SmartShip nu poate cota un locker înainte să știe CARE locker."
+          activ={folosesteEasybox}
+          onChange={setFolosesteEasybox}
+        />
+        <RandComutator
+          separat
+          titlu="Lockere FAN Courier FANbox"
+          text={<>Merge <strong className="text-foreground">numai pe contractul tău de FAN Courier</strong>. Fără contract propriu, opțiunea nu apare la comandă.</>}
+          activ={folosesteFanbox}
+          onChange={setFolosesteFanbox}
+          ariaLabel="Lockere FAN Courier FANbox"
+        />
+        {/* ⚠ Documentat de ei: FANbox merge doar cu `use_own_contract: 1`. */}
         {folosesteFanbox && !contractPropriu && (
           <Callout variant="warning" icon={AlertTriangle}>
-            Ai pornit FANbox fara contract propriu. Optiunea nu va aparea in checkout pana cand
-            nu activezi „Emite pe contractele tale”.
+            Ai pornit FANbox fără contract propriu. Opțiunea nu va apărea la comandă până nu pornești „Emite pe contractele tale”.
           </Callout>
         )}
 
-        <div className="space-y-2 pt-2 border-t border-border">
-          <div className="flex items-center justify-between">
+        <div className="space-y-2 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium">Curierii oferiti</p>
-              <p className="text-xs text-muted-foreground">
-                Fara niciunul bifat, apar toti curierii pe care ii da contul. SmartShip n-are
-                lista de curieri in API, deci se afla dintr-o cotare de proba
-                (Bucuresti {"->"} Cluj-Napoca, 1 kg). Pe alte rute pot aparea si altii.
+              <p className="text-sm font-medium text-foreground">Curierii oferiți</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Fără niciunul bifat, apar toți curierii din cont. SmartShip n-are listă de curieri în API, deci se află dintr-o
+                cotare de probă (București, Cluj-Napoca, 1 kg). Pe alte rute pot apărea și alții.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={incarcaCurieri} disabled={incarcCurieri || !isActive}>
-              {incarcCurieri ? <Loader2 className="h-4 w-4 animate-spin" /> : "Incarca curierii"}
+              {incarcCurieri && <Loader2 className="animate-spin" />}
+              Încarcă curierii
             </Button>
           </div>
 
@@ -386,9 +411,7 @@ export function SmartshipConfigClient({
                     }
                   />
                   <span>{c.nume}</span>
-                  {c.siContractPropriu && (
-                    <span className="text-[10px] text-muted-foreground">(exista si pe contractul tau)</span>
-                  )}
+                  {c.siContractPropriu && <span className="text-[10px] text-muted-foreground">(există și pe contractul tău)</span>}
                 </label>
               ))}
             </div>
@@ -400,153 +423,133 @@ export function SmartshipConfigClient({
             */}
           {suprapunerea && <Callout variant="warning" icon={AlertTriangle}>{suprapunerea}</Callout>}
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={5} title="Contract propriu (BYOC)">
+      <Sectiune pas={5} titlu="Contract propriu (BYOC)">
         <Callout variant="info" icon={Info}>
-          Daca ai conturi proprii de curier legate in SmartShip („Curieri Proprii”) si abonament
-          BYOC activ, expedierile pot pleca pe contractele tale, la tarifele tale.
+          Dacă ai conturi proprii de curier legate în SmartShip („Curieri Proprii”) și abonament BYOC activ, expedierile pot
+          pleca pe contractele tale, la tarifele tale.
         </Callout>
+        <RandComutator
+          titlu="Emite pe contractele tale"
+          text="Fără asta, AWB-ul pleacă pe contractul SmartShip, la tariful standard."
+          activ={contractPropriu}
+          onChange={setContractPropriu}
+        />
+        {/*
+          * ⚠ Acelasi curier apare atunci de DOUA ori, cu doua preturi. Nu e un
+          * defect, dar cumparatorul trebuie sa le poata deosebi; de aia
+          * eticheta ofertei spune „(contractul tau)".
+          */}
+        <RandComutator
+          separat
+          titlu="Arată și prețurile contractelor tale la comandă"
+          text="Același curier poate apărea de două ori, o dată pe contractul tău, o dată pe cel SmartShip. În listă se vede care e care."
+          activ={arataContractPropriu}
+          onChange={setArataContractPropriu}
+        />
+      </Sectiune>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Emite pe contractele tale</p>
-            <p className="text-xs text-muted-foreground">Fara asta, AWB-ul pleaca pe contractul SmartShip, la tariful standard.</p>
-          </div>
-          <Switch checked={contractPropriu} onCheckedChange={setContractPropriu} />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Arata si preturile contractelor tale in checkout</p>
-            {/*
-              * ⚠ Acelasi curier apare atunci de DOUA ori, cu doua preturi. Nu e un
-              * defect, dar cumparatorul trebuie sa le poata deosebi — de aia
-              * eticheta ofertei spune „(contractul tau)".
-              */}
-            <p className="text-xs text-muted-foreground">
-              Acelasi curier poate aparea de doua ori, o data pe contractul tau, o data pe cel
-              SmartShip. In lista se vede care e care.
-            </p>
-          </div>
-          <Switch checked={arataContractPropriu} onCheckedChange={setArataContractPropriu} />
-        </div>
-      </Panel>
-
-      <Panel step={6} title="Coletul">
+      <Sectiune pas={6} titlu="Coletul">
         {/*
           * ⚠ Dimensiunile nu sunt decor: se factureaza MAXIMUL dintre greutatea
           * fizica si cea volumetrica (L×l×h / 6000).
           */}
         <Callout variant="info" icon={Info}>
-          SmartShip factureaza <strong>maximul</strong> dintre greutatea reala si cea volumetrica
-          (L × l × h / 6000). Dimensiuni prea mari scumpesc fiecare colet.
+          SmartShip facturează <strong>maximul</strong> dintre greutatea reală și cea volumetrică (L × l × h / 6000).
+          Dimensiuni prea mari scumpesc fiecare colet.
         </Callout>
 
         <div className="grid grid-cols-3 gap-3">
           <Field label="Lungime (cm)">
             <Input type="number" min={1} value={lungime} onChange={(e) => setLungime(e.target.value)} />
           </Field>
-          <Field label="Latime (cm)">
+          <Field label="Lățime (cm)">
             <Input type="number" min={1} value={latime} onChange={(e) => setLatime(e.target.value)} />
           </Field>
-          <Field label="Inaltime (cm)">
+          <Field label="Înălțime (cm)">
             <Input type="number" min={1} value={inaltime} onChange={(e) => setInaltime(e.target.value)} />
           </Field>
         </div>
         <p className="text-xs text-muted-foreground">
-          Greutate volumetrica la dimensiunile astea:{" "}
-          <strong>{((Number(lungime) * Number(latime) * Number(inaltime)) / 6000 || 0).toFixed(2)} kg</strong>
+          Greutate volumetrică la dimensiunile astea:{" "}
+          <strong className="text-foreground">{((Number(lungime) * Number(latime) * Number(inaltime)) / 6000 || 0).toFixed(2)} kg</strong>
         </p>
 
-        <Field label="Descrierea implicita a continutului" hint="Apare pe AWB cand comanda n-are alta.">
-          <Input value={continut} onChange={(e) => setContinut(e.target.value)} maxLength={255} />
-        </Field>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Deschidere la livrare</p>
-            <p className="text-xs text-muted-foreground">
-              Unde curierul o suporta. La locker nu se aplica, nu e nimeni acolo care sa deschida coletul.
-            </p>
-          </div>
-          <Switch checked={deschidere} onCheckedChange={setDeschidere} />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Descrierea implicită a conținutului" htmlFor="smartship-continut" hint="Apare pe AWB când comanda n-are alta.">
+            <Input id="smartship-continut" value={continut} onChange={(e) => setContinut(e.target.value)} maxLength={255} />
+          </Field>
+          <Field label="Formatul etichetei" htmlFor="smartship-format">
+            <select id="smartship-format" value={format} onChange={(e) => setFormat(e.target.value as FormatEticheta)} className={selectCls}>
+              {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
+            </select>
+          </Field>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Asigura coletul la valoarea comenzii</p>
-            <p className="text-xs text-muted-foreground">Asigurarea se factureaza separat de curier.</p>
-          </div>
-          <Switch checked={asigura} onCheckedChange={setAsigura} />
-        </div>
+        <RandComutator
+          separat
+          titlu="Deschidere la livrare"
+          text="Unde curierul o suportă. La locker nu se aplică: nu e nimeni acolo care să deschidă coletul."
+          activ={deschidere}
+          onChange={setDeschidere}
+        />
+        <RandComutator
+          separat
+          titlu="Asigură coletul la valoarea comenzii"
+          text="Asigurarea se facturează separat de curier."
+          activ={asigura}
+          onChange={setAsigura}
+        />
+        <RandComutator
+          separat
+          titlu="Nu comanda automat ridicarea"
+          text="Util dacă ai deja o ridicare zilnică programată. Se aplică la curierii unde SmartShip comandă ridicarea singur (FanCourier, DragonStar, PTT Express)."
+          activ={faraRidicare}
+          onChange={setFaraRidicare}
+        />
+      </Sectiune>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Nu comanda automat ridicarea</p>
-            <p className="text-xs text-muted-foreground">
-              Util daca ai deja o ridicare zilnica programata. Se aplica la curierii unde
-              SmartShip comanda ridicarea singur (FanCourier, DragonStar, PTT Express).
-            </p>
-          </div>
-          <Switch checked={faraRidicare} onCheckedChange={setFaraRidicare} />
-        </div>
-
-        <Field label="Formatul etichetei">
-          <select
-            value={format}
-            onChange={(e) => setFormat(e.target.value as FormatEticheta)}
-            className="w-full px-3 py-2 text-sm ring-1 ring-foreground/10 rounded-lg bg-card text-foreground"
-          >
-            {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
-          </select>
-        </Field>
-      </Panel>
-
-      <Panel title="Facturi de la SmartShip">
-        <div className="flex items-center justify-between">
+      <Sectiune titlu="Facturi de la SmartShip">
+        <div className="flex items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            Facturile emise catre contul tau, cu link public catre PDF. Se citesc doar; nu intra
-            nicaieri in contabilitatea magazinului.
+            Facturile emise către contul tău, cu link public către PDF. Se citesc doar; nu intră în contabilitatea magazinului.
           </p>
           <Button variant="outline" size="sm" onClick={incarcaFacturi} disabled={incarcFacturi || !isActive}>
-            {incarcFacturi ? <Loader2 className="h-4 w-4 animate-spin" /> : "Incarca"}
+            {incarcFacturi && <Loader2 className="animate-spin" />}
+            Încarcă
           </Button>
         </div>
-
         {facturi && facturi.length > 0 && (
           <ul className="space-y-1">
             {facturi.slice(0, 10).map((f) => (
               <li key={f.number} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-xs">
                 <span>
                   {f.number} · {f.date}
-                  {f.due_date ? ` · scadenta ${f.due_date}` : ""}
+                  {f.due_date ? ` · scadență ${f.due_date}` : ""}
                 </span>
                 <span className="flex items-center gap-2">
                   <strong>{f.total} {f.currency ?? "RON"}</strong>
                   {f.pdf_link && (
-                    <a href={f.pdf_link} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                      PDF
-                    </a>
+                    <a href={f.pdf_link} target="_blank" rel="noopener noreferrer" className="text-primary underline">PDF</a>
                   )}
                 </span>
               </li>
             ))}
           </ul>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel title="Deconturi de ramburs">
-        <div className="flex items-center justify-between">
+      <Sectiune titlu="Deconturi de ramburs">
+        <div className="flex items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            Banii din ramburs, asa cum ii vede SmartShip. Informativ: statusul platii comenzilor
-            nu se schimba singur dupa ele.
+            Banii din ramburs, așa cum îi vede SmartShip. Informativ: statusul plății comenzilor nu se schimbă singur după ele.
           </p>
           <Button variant="outline" size="sm" onClick={incarcaDeconturi} disabled={incarcDeconturi || !isActive}>
-            {incarcDeconturi ? <Loader2 className="h-4 w-4 animate-spin" /> : "Incarca"}
+            {incarcDeconturi && <Loader2 className="animate-spin" />}
+            Încarcă
           </Button>
         </div>
-
         {deconturi && deconturi.length > 0 && (
           <ul className="space-y-1">
             {deconturi.slice(0, 10).map((d) => (
@@ -557,40 +560,48 @@ export function SmartshipConfigClient({
             ))}
           </ul>
         )}
-      </Panel>
+      </Sectiune>
 
       {isActive && (
-        <Panel title="Diagnostic">
+        <Sectiune titlu="Diagnostic">
           {/*
             * ⚠ Masoara SINGURA necunoscuta din tot contractul lor: forma randului
             * din cele doua endpointuri de lockere, care n-au exemplu de raspuns.
             */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <p className="text-xs text-muted-foreground">
-              Verifica listele de lockere si arata cum se numesc campurile in raspunsul lor,
-              singurele doua endpointuri fara exemplu in documentatie.
+              Verifică listele de lockere și arată cum se numesc câmpurile în răspunsul lor, singurele două adrese fără exemplu în documentație.
             </p>
             <Button variant="outline" size="sm" onClick={ruleazaDiagnostic} disabled={rulezDiagnostic}>
-              {rulezDiagnostic ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ruleaza"}
+              {rulezDiagnostic && <Loader2 className="animate-spin" />}
+              Rulează
             </Button>
           </div>
           {diagnostic && (
-            <pre className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-foreground">
-              {diagnostic}
-            </pre>
+            <pre className="whitespace-pre-wrap rounded-lg border border-border bg-muted/40 p-3 text-[11px] text-foreground">{diagnostic}</pre>
           )}
-        </Panel>
+        </Sectiune>
       )}
 
       {isActive && (
-        <ButonDeconectare
-          nume="SmartShip"
-          cePierzi="Cheia de API se șterge din Edinio, împreună cu expeditorul, curierii permiși și IBAN-ul de ramburs. Ca să te întorci, ceri din nou cheia din contul tău SmartShip. Expedierile deja emise rămân la ei."
-          eticheta="Deconectează SmartShip"
-          marime="default"
-          onConfirma={handleDisconnect}
-        />
+        <ZonaDeconectare descriere="Șterge cheia și setările SmartShip din Edinio. Expedierile deja emise rămân la SmartShip.">
+          <ButonDeconectare
+            nume="SmartShip"
+            cePierzi="Cheia de API se șterge din Edinio, împreună cu expeditorul, curierii permiși și IBAN-ul de ramburs. Ca să te întorci, ceri din nou cheia din contul tău SmartShip. Expedierile deja emise rămân la ei."
+            eticheta="Deconectează SmartShip"
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
       )}
-    </div>
+
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={salveaza}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

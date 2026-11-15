@@ -146,6 +146,9 @@ export const PRODUS_MOBIL = {
    * promisiune că platforma o poate face — deci dacă la lansare integrarea încă
    * lipsește, rândul se scoate. E o singură proprietate, aici și în
    * `PROBLEM_PRODUCT.installments`.
+   *
+   * ✅ 15.11.2026: integrarea tbi bank e livrată (`docs/plati/TBI.md`), iar paginile de produs ale
+   * magazinelor arată chiar rândul ăsta sub butonul de comandă. Promisiunea e acum adevărată.
    */
   installments: {
     label: "Plătește în rate cu",

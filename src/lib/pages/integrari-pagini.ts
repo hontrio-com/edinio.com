@@ -44,6 +44,7 @@ const LOGO_PLATA: Partial<Record<PaymentMethodType, string>> = {
   ipay: "/integrations/ipay.webp",
   klarna: "/integrations/klarna.svg",
   revolut: "/integrations/revolut.svg",
+  tbi: "/integrations/tbi.svg",
 };
 
 /** Curierii propriu-zisi (nu agregatorii), cu sigla lor si cheia din `shipping_zones`. */
@@ -72,7 +73,7 @@ export async function integrariPentruPagini(businessId: string): Promise<Integra
     .from("store_settings")
     .select([
       "payment_methods", "shipping_zones",
-      "stripe_config", "netopia_config", "ipay_config", "klarna_config", "revolut_config",
+      "stripe_config", "netopia_config", "ipay_config", "klarna_config", "revolut_config", "tbi_config",
       "mc_on:mailchimp_config->enabled", "mc_lista:mailchimp_config->audience_id", "mc_surse:mailchimp_config->sources",
       "bv_on:brevo_config->enabled", "bv_lista:brevo_config->list_id", "bv_surse:brevo_config->sources",
       "kv_on:klaviyo_config->enabled", "kv_lista:klaviyo_config->list_id", "kv_surse:klaviyo_config->sources",

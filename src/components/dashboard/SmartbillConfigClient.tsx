@@ -3,22 +3,21 @@
 import { useState, useTransition, useEffect, useCallback } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import {
-  Save, Loader2, ExternalLink,
-  CheckCircle, RefreshCw, Mail, Building2, Key, Layers,
-  ReceiptText, Zap, ChevronDown, ChevronUp, AlertTriangle,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle, ExternalLink, Layers, Loader2, Mail, ReceiptText, RefreshCw } from "lucide-react";
 import { updateSmartbillConfig } from "@/lib/actions/store.actions";
 import { testSmartbillConnection, getSmartbillTaxes } from "@/lib/actions/smartbill.actions";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { Callout } from "@/components/ui/callout";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 import { selectCls } from "@/lib/ui";
+import {
+  BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 const AUTO_TRIGGERS = [
   { value: "confirmed",  label: "Comanda Confirmata" },
@@ -53,12 +52,9 @@ export function SmartbillConfigClient({
   initialConfig: SmartbillConfig;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<SmartbillConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
+  const { cfg, setCfg, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<SmartbillConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
   const [saving, startSave] = useTransition();
   const [testing, setTesting] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(
-    !!(initialConfig.estimate_series_name || initialConfig.auto_invoice)
-  );
   const [testResult, setTestResult] = useState<{
     ok: boolean;
     series?: SeriesInfo[];
@@ -115,7 +111,8 @@ export function SmartbillConfigClient({
         return;
       }
       if ("error" in result) { toast.error(result.error); return; }
-      toast.success("Integrarea SmartBill a fost salvata.");
+      toast.success("Integrarea SmartBill a fost salvată.");
+      marcheazaSalvat();
       router.refresh();
     });
   }
@@ -152,334 +149,215 @@ export function SmartbillConfigClient({
 
   const canTest = !!(cfg.email.trim() && (cfg.token.trim() || secretulEsteSalvat(initialConfig, "token")) && cfg.company_vat_code.trim());
 
+  const tokenSalvat = secretulEsteSalvat(initialConfig, "token");
+  const configurat = !!(initialConfig.email && (initialConfig.token || tokenSalvat) && initialConfig.company_vat_code);
+  const stari: StareAntet[] = !configurat
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [initialConfig.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" }];
+
   return (
-    <div className="p-6 max-w-2xl">
-      {/* Header */}
-      <IntegrationHeader id="smartbill" description="Genereaza automat facturi SmartBill pentru comenzile din magazinul tau." />
+    <PaginaIntegrare
+      id="smartbill"
+      titlu="Facturare"
+      descriere="Emiți facturi și proforme SmartBill din comenzi, manual sau automat."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Facturarea SmartBill" activ={cfg.enabled} onChange={v => set("enabled", v)} ariaLabel="Activează SmartBill" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Contul SmartBill", facut: canTest },
+          { text: "Seria facturilor", facut: !!cfg.series_name.trim() },
+          { text: "Facturarea activă", facut: configurat && !!initialConfig.enabled },
+        ]} />
+        <CumFunctioneaza id="smartbill" puncte={[
+          { Icon: ReceiptText, text: "Emiți factura din pagina comenzii sau automat, când comanda ajunge la statusul ales." },
+          { Icon: Layers, text: "Seriile și cotele TVA vin din contul tău SmartBill: le aduci cu „Testează conexiunea”." },
+          { Icon: Mail, text: "SmartBill poate trimite factura pe email clientului, dacă ai serverul de email configurat la ei." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Contul SmartBill" descriere="Emailul contului, tokenul API și CUI-ul firmei care emite facturile.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Email cont SmartBill" htmlFor="sb-email">
+            <Input id="sb-email" type="email" value={cfg.email} onChange={e => set("email", e.target.value)} placeholder="email@firma.ro" />
+          </Field>
+          <Field label="Token API" htmlFor="sb-token"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde îl iau" eticheta="Token API SmartBill"
+              text="În contul SmartBill: Contul meu, apoi Integrări, apoi API. Copiezi tokenul generat." />}>
+            <Input id="sb-token" type="password" value={cfg.token} onChange={e => set("token", e.target.value)}
+              placeholder={tokenSalvat ? PLACEHOLDER_SECRET_SALVAT : ""} />
+          </Field>
+          <Field label="CUI firmă" htmlFor="sb-cui" hint="Cu sau fără prefixul RO.">
+            <Input id="sb-cui" type="text" value={cfg.company_vat_code} onChange={e => set("company_vat_code", e.target.value)} placeholder="RO12345678" />
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={testConnection} disabled={testing || !canTest}>
+            {testing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            {testing ? "Se testează..." : "Testează conexiunea"}
+          </Button>
+          <a href="https://cloud.smartbill.ro/core/settings/" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline">
+            Deschide setările SmartBill <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
 
-      <div className="space-y-5">
-
-        {/* Ghid */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              {
-                step: "1",
-                title: "Creeaza un cont SmartBill",
-                desc: "Mergi pe smartbill.ro si inregistreaza-te.",
-                link: null,
-              },
-              {
-                step: "2",
-                title: "Obtine Tokenul API",
-                desc: "In contul SmartBill, mergi la Contul meu > Integrari > API. Copiaza tokenul generat.",
-                link: "https://cloud.smartbill.ro/core/settings/",
-              },
-              {
-                step: "3",
-                title: "Configureaza serii de documente",
-                desc: "In SmartBill > Nomenclatoare > Serii, creeaza o serie pentru facturi (ex: FACT) si optional una pentru proforma (ex: PFACT).",
-                link: null,
-              },
-              {
-                step: "4",
-                title: "Testeaza si salveaza",
-                desc: "Completeaza campurile, apasa Testeaza conexiunea, seriile si TVA-ul disponibil vor aparea automat, apoi salveaza.",
-                link: null,
-              },
-            ].map(({ step, title, desc, link }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                  {link && (
-                    <a href={link} target="_blank" rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                      Deschide SmartBill <ExternalLink className="h-3 w-3" />
-                    </a>
+        {testResult && (
+          <Callout
+            variant={testResult.ok ? "success" : "danger"}
+            icon={testResult.ok ? CheckCircle : undefined}
+            title={testResult.message}
+          >
+            {testResult.ok && testResult.series && testResult.series.length > 0 && (() => {
+              const invoiceSeries = testResult.series.filter(s => s.type === "f");
+              const estimateSeries = testResult.series.filter(s => s.type === "p");
+              const chipLabel = (s: SeriesInfo) => s.nextNumber ? `${s.name} (urm. ${s.nextNumber})` : s.name;
+              return (
+                <div className="mt-2 space-y-3">
+                  {invoiceSeries.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-foreground">Serii de facturi (apasă ca s-o alegi):</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {invoiceSeries.map(s => (
+                          <Button key={s.name} type="button" variant="outline" size="xs" className="font-mono"
+                            onClick={() => { set("series_name", s.name); toast.success(`Seria „${s.name}” aleasă pentru facturi.`); }}>
+                            {chipLabel(s)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {estimateSeries.length > 0 && (
+                    <div>
+                      <p className="mb-1.5 text-xs font-semibold text-foreground">Serii de proforme (apasă ca s-o alegi):</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {estimateSeries.map(s => (
+                          <Button key={s.name} type="button" variant="outline" size="xs" className="font-mono"
+                            onClick={() => { set("estimate_series_name", s.name); toast.success(`Seria „${s.name}” aleasă pentru proforme.`); }}>
+                            {chipLabel(s)}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {invoiceSeries.length === 0 && (
+                    <p className="text-xs text-warning">Nu există serii de facturi în cont. Creează una în SmartBill, la Nomenclatoare, Serii.</p>
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
+              );
+            })()}
+          </Callout>
+        )}
+      </Sectiune>
 
-        {/* Main config card */}
-        <Panel className="space-y-5 p-5">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza SmartBill</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Activeaza pentru a genera facturi din pagina comenzilor
-              </p>
-            </div>
-            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
-          </div>
+      <Sectiune pas={2} titlu="Documentele" descriere="Seria și cota TVA cu care se emit facturile.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Seria facturilor" htmlFor="sb-serie" hint="„Testează conexiunea” îți arată seriile din cont.">
+            <Input id="sb-serie" type="text" value={cfg.series_name} onChange={e => set("series_name", e.target.value)} placeholder="FACT" />
+          </Field>
+          <Field label="Seria proformelor (opțional)" htmlFor="sb-serie-proforma" hint="Completată, poți emite proforme din comandă.">
+            <Input id="sb-serie-proforma" type="text" value={cfg.estimate_series_name} onChange={e => set("estimate_series_name", e.target.value)} placeholder="PFACT" />
+          </Field>
+        </div>
 
-          <div className="space-y-4 border-t border-border pt-4">
-            {/* Email */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Mail className="h-3.5 w-3.5 text-muted-foreground" />Email cont SmartBill
-              </label>
-              <Input type="email" value={cfg.email}
-                onChange={e => set("email", e.target.value)}
-                placeholder="email@firma.ro" />
-            </div>
-
-            {/* Token */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Key className="h-3.5 w-3.5 text-muted-foreground" />Token API SmartBill
-              </label>
-              <Input type="password" value={cfg.token}
-                onChange={e => set("token", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "token") ? PLACEHOLDER_SECRET_SALVAT : ""} />
-            </div>
-
-            {/* CUI */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground" />CUI firma
-              </label>
-              <Input type="text" value={cfg.company_vat_code}
-                onChange={e => set("company_vat_code", e.target.value)}
-                placeholder="ex: RO12345678 sau 12345678" />
-              <p className="mt-1 text-xs text-muted-foreground">Cu sau fara prefix RO.</p>
-            </div>
-
-            {/* Invoice series */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Layers className="h-3.5 w-3.5 text-muted-foreground" />Seria facturilor
-              </label>
-              <Input type="text" value={cfg.series_name}
-                onChange={e => set("series_name", e.target.value)}
-                placeholder="ex: FACT" />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Testeaza conexiunea pentru a vedea seriile disponibile.
-              </p>
-            </div>
-
-            {/* Cota TVA — must be a tax NAME from SmartBill (not a percentage), so it's a dropdown */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <ReceiptText className="h-3.5 w-3.5 text-muted-foreground" />Cota TVA
-              </label>
-              {(() => {
-                const known = taxes.some(t => t.name === cfg.tax_name);
-                const showCustom = !!cfg.tax_name && !known;
-                const isUnknownAfterLoad = showCustom && taxes.length > 0;
-                return (
-                  <>
-                    <div className="flex gap-2">
-                      <select
-                        aria-label="Cota TVA"
-                        value={cfg.tax_name}
-                        onChange={e => set("tax_name", e.target.value)}
-                        className={selectCls}
-                      >
-                        <option value="">Nu sunt platitor de TVA (fara TVA)</option>
-                        {taxes.map(t => (
-                          <option key={t.name} value={t.name}>{t.name} ({t.percentage}%)</option>
-                        ))}
-                        {showCustom && (
-                          <option value={cfg.tax_name}>
-                            {cfg.tax_name}{isUnknownAfterLoad ? " (necunoscut in SmartBill)" : ""}
-                          </option>
-                        )}
-                      </select>
-                      <Button type="button" variant="outline" size="icon" aria-label="Reincarca cotele din SmartBill"
-                        onClick={() => void loadTaxes()} disabled={taxesLoading || !canTest}>
-                        {taxesLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                      </Button>
-                    </div>
-                    {isUnknownAfterLoad && (
-                      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-warning">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                        <span>Cota „{cfg.tax_name}” nu exista in contul tau SmartBill. Alege una din lista, fiindca SmartBill cere <strong>numele</strong> cotei (ex. „Normala”), nu procentul.</span>
-                      </div>
+        <Field label="Cota TVA"
+          ajutor={<ExplicatieCard marime="mic" intrebare="Ce aleg aici" eticheta="Cota TVA"
+            text="SmartBill cere NUMELE cotei din contul tău (de exemplu „Normală”), nu procentul. Alege cota care se potrivește cu TVA-ul din Setări. Lasă gol dacă nu ești plătitor de TVA." />}>
+          {(() => {
+            const known = taxes.some(t => t.name === cfg.tax_name);
+            const showCustom = !!cfg.tax_name && !known;
+            const isUnknownAfterLoad = showCustom && taxes.length > 0;
+            return (
+              <>
+                <div className="flex gap-2">
+                  <select
+                    aria-label="Cota TVA"
+                    value={cfg.tax_name}
+                    onChange={e => set("tax_name", e.target.value)}
+                    className={selectCls}
+                  >
+                    <option value="">Nu sunt plătitor de TVA (fără TVA)</option>
+                    {taxes.map(t => (
+                      <option key={t.name} value={t.name}>{t.name} ({t.percentage}%)</option>
+                    ))}
+                    {showCustom && (
+                      <option value={cfg.tax_name}>
+                        {cfg.tax_name}{isUnknownAfterLoad ? " (necunoscută în SmartBill)" : ""}
+                      </option>
                     )}
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {taxes.length > 0
-                        ? "Alege cota care corespunde TVA-ului din Setari. SmartBill foloseste numele cotei, nu procentul."
-                        : "Testeaza conexiunea (sau apasa reincarca) ca sa aduci cotele din SmartBill. Lasa gol daca nu esti platitor de TVA."}
-                    </p>
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* Send email toggle */}
-            <div className="pt-1">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Trimite documentul pe email clientului</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    SmartBill va trimite factura/proforma automat daca clientul are email
-                  </p>
+                  </select>
+                  <Button type="button" variant="outline" size="icon" aria-label="Reîncarcă cotele din SmartBill"
+                    onClick={() => void loadTaxes()} disabled={taxesLoading || !canTest}>
+                    {taxesLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  </Button>
                 </div>
-                <Switch checked={cfg.send_email} onCheckedChange={v => set("send_email", v)} />
-              </div>
-              {cfg.send_email && (
-                <div className="mt-2 flex items-start gap-1.5 rounded-lg border border-warning/20 bg-warning/5 p-2.5 text-xs text-warning">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                  <span>
-                    Ca emailul sa fie trimis, contul tau SmartBill trebuie sa aiba un server de email configurat (in SmartBill: Setari &rarr; Configurare email). Daca nu e configurat, factura se genereaza oricum, dar emailul catre client nu pleaca.
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Advanced section: auto-invoice + proforma series */}
-          <div className="border-t border-border pt-4">
-            <button type="button" onClick={() => setAdvancedOpen(o => !o)}
-              className="flex w-full items-center gap-2 text-left text-sm font-medium text-foreground transition-colors hover:text-primary">
-              <Zap className="h-4 w-4 text-primary" />
-              Setari avansate
-              {advancedOpen ? <ChevronUp className="ml-auto h-4 w-4" /> : <ChevronDown className="ml-auto h-4 w-4" />}
-            </button>
-
-            {advancedOpen && (
-              <div className="mt-4 space-y-5">
-                {/* Proforma series */}
-                <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                    <Layers className="h-3.5 w-3.5 text-muted-foreground" />Seria proformelor (optional)
-                  </label>
-                  <Input type="text" value={cfg.estimate_series_name}
-                    onChange={e => set("estimate_series_name", e.target.value)}
-                    placeholder="ex: PFACT, lasa gol daca nu emiti proforma" />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Daca este completata, vei putea genera proforma din detaliul comenzii.
-                  </p>
-                </div>
-
-                {/* Mark paid at issue (online card payments) */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Marcheaza factura incasata la plata online</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Cand comanda e platita cu cardul, factura iese direct incasata (Card online)
-                    </p>
-                  </div>
-                  <Switch checked={!!cfg.mark_paid_online} onCheckedChange={v => set("mark_paid_online", v)} />
-                </div>
-
-                {/* Due days */}
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-foreground">
-                    Scadenta facturii (zile)
-                  </label>
-                  <Input type="number" min={0} max={120} value={cfg.due_days || ""}
-                    onChange={e => set("due_days", Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                    placeholder="0 = fara scadenta" />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Numarul de zile de la emitere pana la scadenta. Lasa gol pentru data emiterii.
-                  </p>
-                </div>
-
-                {/* Auto-invoice toggle */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Generare automata factura</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Factura se genereaza automat cand comanda atinge statusul selectat
-                    </p>
-                  </div>
-                  <Switch checked={cfg.auto_invoice} onCheckedChange={v => set("auto_invoice", v)} />
-                </div>
-
-                {cfg.auto_invoice && (
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-foreground">
-                      Declanseaza generarea cand comanda devine
-                    </label>
-                    <select
-                      aria-label="Declanseaza generarea cand comanda devine"
-                      value={cfg.auto_invoice_trigger}
-                      onChange={e => set("auto_invoice_trigger", e.target.value as SmartbillConfig["auto_invoice_trigger"])}
-                      className={selectCls}
-                    >
-                      {AUTO_TRIGGERS.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
+                {isUnknownAfterLoad && (
+                  <div className="mt-1.5 flex items-start gap-1.5 text-xs text-warning">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                    <span>Cota „{cfg.tax_name}” nu există în contul tău SmartBill. Alege una din listă.</span>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+                {taxes.length === 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">Testează conexiunea (sau apasă reîncarcă) ca să aduci cotele din SmartBill.</p>
+                )}
+              </>
+            );
+          })()}
+        </Field>
 
-          {/* Actions */}
-          <div className="flex items-center justify-between border-t border-border pt-2">
-            <Button variant="outline" onClick={testConnection} disabled={testing || !canTest}>
-              {testing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              {testing ? "Se testeaza..." : "Testeaza conexiunea"}
-            </Button>
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              {saving ? "Se salveaza..." : "Salveaza"}
-            </Button>
+        <div className="border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Trimite documentul pe email clientului</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">SmartBill trimite factura sau proforma, dacă clientul are email.</p>
+            </div>
+            <Switch checked={cfg.send_email} onCheckedChange={v => set("send_email", v)} aria-label="Trimite documentul pe email clientului" />
           </div>
-
-          {/* Test result */}
-          {testResult && (
-            <Callout
-              variant={testResult.ok ? "success" : "danger"}
-              icon={testResult.ok ? CheckCircle : undefined}
-              title={testResult.message}
-            >
-              {testResult.ok && testResult.series && testResult.series.length > 0 && (() => {
-                const invoiceSeries = testResult.series.filter(s => s.type === "f");
-                const estimateSeries = testResult.series.filter(s => s.type === "p");
-                const chipLabel = (s: SeriesInfo) => s.nextNumber ? `${s.name} (urm. ${s.nextNumber})` : s.name;
-                return (
-                  <div className="mt-2 space-y-3">
-                    {invoiceSeries.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 text-xs font-semibold text-foreground">Serii de facturi (click pentru selectare):</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {invoiceSeries.map(s => (
-                            <Button key={s.name} type="button" variant="outline" size="xs" className="font-mono"
-                              onClick={() => { set("series_name", s.name); toast.success(`Seria "${s.name}" selectata ca serie facturi.`); }}>
-                              {chipLabel(s)}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {estimateSeries.length > 0 && (
-                      <div>
-                        <p className="mb-1.5 text-xs font-semibold text-foreground">Serii de proforme (click pentru selectare):</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {estimateSeries.map(s => (
-                            <Button key={s.name} type="button" variant="outline" size="xs" className="font-mono"
-                              onClick={() => { set("estimate_series_name", s.name); toast.success(`Seria "${s.name}" selectata ca serie proforme.`); }}>
-                              {chipLabel(s)}
-                            </Button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {invoiceSeries.length === 0 && (
-                      <p className="text-xs text-warning">Nu exista serii de facturi in cont. Creeaza una in SmartBill &gt; Nomenclatoare &gt; Serii.</p>
-                    )}
-                  </div>
-                );
-              })()}
-            </Callout>
+          {cfg.send_email && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-warning">
+              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+              <span>Emailul pleacă doar dacă ai un server de email configurat în SmartBill (Setări, Configurare email). Altfel factura se emite, dar emailul nu pleacă.</span>
+            </p>
           )}
-        </Panel>
-      </div>
-    </div>
+        </div>
+      </Sectiune>
+
+      <Sectiune pas={3} titlu="Automat" descriere="Factura se poate emite singură, iar plata online se poate trece direct pe ea.">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Generare automată factură</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Când comanda ajunge la statusul ales mai jos.</p>
+          </div>
+          <Switch checked={cfg.auto_invoice} onCheckedChange={v => set("auto_invoice", v)} aria-label="Generare automată factură" />
+        </div>
+        {cfg.auto_invoice && (
+          <Field label="Declanșează generarea când comanda devine">
+            <select
+              aria-label="Declanșează generarea când comanda devine"
+              value={cfg.auto_invoice_trigger}
+              onChange={e => set("auto_invoice_trigger", e.target.value as SmartbillConfig["auto_invoice_trigger"])}
+              className={selectCls}
+            >
+              {AUTO_TRIGGERS.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </Field>
+        )}
+        <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Factura încasată la plata online</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Comanda plătită cu cardul primește factura direct încasată (Card online).</p>
+          </div>
+          <Switch checked={!!cfg.mark_paid_online} onCheckedChange={v => set("mark_paid_online", v)} aria-label="Marchează factura încasată la plata online" />
+        </div>
+        <Field label="Scadența facturii (zile)" htmlFor="sb-scadenta" hint="Zile de la emitere până la scadență. Gol = data emiterii.">
+          <Input id="sb-scadenta" type="number" min={0} max={120} value={cfg.due_days || ""}
+            onChange={e => set("due_days", Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            placeholder="0 = fără scadență" className="max-w-[180px]" />
+        </Field>
+      </Sectiune>
+
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

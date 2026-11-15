@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { FedexConfigClient } from "@/components/dashboard/FedexConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { FedexConfig } from "@/lib/fedex/client";
 
 export default async function FedexPage() {
@@ -24,13 +23,5 @@ export default async function FedexPage() {
    */
   const config = (mascheazaConfig("fedex_config", settings?.fedex_config) as FedexConfig | null) ?? null;
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="fedex"
-        description="Colete prin FedEx: livrari interne in Romania (FedEx First, Priority Express, Priority) si international, cu tarifele contului tau. FedEx nu ofera plata la livrare: serviciul a fost retras de ei in 2023."
-      />
-      <FedexConfigClient businessId={business.id} initialConfig={config} />
-    </div>
-  );
+  return <FedexConfigClient businessId={business.id} initialConfig={config} />;
 }

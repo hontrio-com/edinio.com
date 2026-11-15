@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Copy, Info, Layers, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Sectiune } from "@/components/dashboard/integrare/PaginaIntegrare";
 import { salveazaFeeduriFacebook, numaraProduseFeed } from "@/lib/actions/facebook-feeds.actions";
 import type { RegulaFeed } from "@/lib/facebook/feeduri";
 import { SelectorProduseFeed } from "@/components/dashboard/SelectorProduseFeed";
@@ -46,7 +47,7 @@ export function FacebookFeeduriClient({
   const [selector, setSelector] = useState<string | null>(null);
   const [salveaza, startSalvare] = useTransition();
 
-  const copiaza = (v: string) => { navigator.clipboard?.writeText(v); toast.success("Adresa copiata."); };
+  const copiaza = (v: string) => { navigator.clipboard?.writeText(v); toast.success("Adresa a fost copiată."); };
   const adresa = (f: RegulaFeed) => `${bazaFeed}?feed=${encodeURIComponent(f.cheie)}`;
 
   function schimba(i: number, patch: Partial<RegulaFeed>) {
@@ -86,7 +87,7 @@ export function FacebookFeeduriClient({
       if ("error" in r) { toast.error(r.error); return; }
       /* Cheile vin inapoi de la server: acolo se genereaza si se dezambiguizeaza. */
       setFeeduri(r.feeduri);
-      toast.success("Feeduri salvate.");
+      toast.success("Feedurile au fost salvate.");
     });
   }
 
@@ -95,87 +96,86 @@ export function FacebookFeeduriClient({
     if ("error" in r) { toast.error(r.error); return; }
     setNumarate((v) => ({ ...v, [String(i)]: r.total }));
     if (r.total === 0) {
-      toast.warning("Feedul asta n-ar avea niciun produs. Verifica regulile inainte sa-l folosesti.");
+      toast.warning("Feedul acesta n-ar avea niciun produs. Verifică regulile înainte să-l folosești.");
     }
   }
 
   return (
-    <div className="space-y-6">
+    <Sectiune pas={3} titlu="Feeduri segmentate" descriere="Cataloage separate, pe categorii, pe o selecție de produse sau pe condiții.">
       <Callout variant="info" icon={Info} title="Pentru reclame nu ai nevoie de un feed nou">
-        Daca vrei doar sa faci reclama la o parte din produse, creeaza in Commerce Manager un{" "}
-        <strong>Product Set</strong> si filtreaza dupa <code className="rounded bg-muted px-1">product_type</code>:
-        trimitem deja categoria fiecarui produs. Se actualizeaza singur si nu ai nimic de intretinut.
-        Feedurile de mai jos sunt pentru cand ai nevoie de un <strong>catalog separat</strong>: alta agentie,
-        alt brand, sau o selectie de campanie.
+        Dacă vrei doar să faci reclamă la o parte din produse, creează în Commerce Manager un{" "}
+        <strong>Product Set</strong> și filtrează după <code className="rounded bg-muted px-1">product_type</code>:
+        trimitem deja categoria fiecărui produs. Feedurile de mai jos sunt pentru un <strong>catalog separat</strong>:
+        altă agenție, alt brand sau o selecție de campanie.
       </Callout>
 
-      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-muted-foreground" />
-            <p className="text-sm font-semibold text-foreground">Feeduri segmentate</p>
-          </div>
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-2.5">
+          <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Layers className="h-4 w-4 text-muted-foreground" /> Feedurile tale
+          </p>
           <Button type="button" size="sm" variant="outline" onClick={adauga}>
-            <Plus className="h-3.5 w-3.5" /> Feed nou
+            <Plus /> Feed nou
           </Button>
         </div>
 
         {/* Feedul implicit: exista mereu, nu se poate sterge. */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
           <span className="text-sm text-foreground">Toate produsele</span>
-          <span className="text-xs text-muted-foreground">{totalProduse}</span>
-          <input readOnly value={bazaFeed} onFocus={(e) => e.target.select()}
+          <span className="text-xs tabular-nums text-muted-foreground">{totalProduse}</span>
+          <input readOnly aria-label="Adresa feedului cu toate produsele" value={bazaFeed} onFocus={(e) => e.target.select()}
             className="min-w-0 flex-1 rounded-lg border border-input bg-transparent px-3 py-1.5 font-mono text-[11px]" />
-          <Button type="button" variant="outline" size="sm" onClick={() => copiaza(bazaFeed)}>
-            <Copy className="h-3.5 w-3.5" />
+          <Button type="button" variant="outline" size="icon-sm" aria-label="Copiază adresa" onClick={() => copiaza(bazaFeed)}>
+            <Copy />
           </Button>
         </div>
 
         {feeduri.length === 0 && (
-          <p className="px-5 py-6 text-center text-xs text-muted-foreground">
+          <p className="px-4 py-6 text-center text-xs text-muted-foreground">
             Niciun feed segmentat. Cel de mai sus trimite tot catalogul.
           </p>
         )}
 
         {feeduri.map((f, i) => (
           <div key={i} className="border-b border-border last:border-b-0">
-            <div className="flex flex-wrap items-center gap-2 px-5 py-3">
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3">
               <input
                 value={f.nume}
+                aria-label="Numele feedului"
                 onChange={(e) => schimba(i, { nume: e.target.value })}
                 placeholder="Numele feedului"
                 className="h-8 w-48 rounded-lg border border-input bg-background px-2 text-sm"
               />
               {f.cheie ? (
                 <>
-                  <input readOnly value={adresa(f)} onFocus={(e) => e.target.select()}
+                  <input readOnly aria-label={`Adresa feedului ${f.nume}`} value={adresa(f)} onFocus={(e) => e.target.select()}
                     className="min-w-0 flex-1 rounded-lg border border-input bg-transparent px-3 py-1.5 font-mono text-[11px]" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => copiaza(adresa(f))}>
-                    <Copy className="h-3.5 w-3.5" />
+                  <Button type="button" variant="outline" size="icon-sm" aria-label="Copiază adresa" onClick={() => copiaza(adresa(f))}>
+                    <Copy />
                   </Button>
                 </>
               ) : (
-                <span className="flex-1 text-xs text-muted-foreground">Adresa se genereaza la salvare.</span>
+                <span className="flex-1 text-xs text-muted-foreground">Adresa apare după salvare.</span>
               )}
               <Button type="button" variant="ghost" size="sm" onClick={() => setDeschis(deschis === i ? null : i)}>
                 {deschis === i ? "Ascunde" : "Reguli"}
               </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => sterge(i)}>
-                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Șterge feedul" onClick={() => sterge(i)}>
+                <Trash2 className="text-destructive" />
               </Button>
             </div>
 
             {deschis === i && (
-              <div className="space-y-4 bg-muted/30 px-5 py-4">
+              <div className="space-y-4 bg-muted/30 px-4 py-4">
                 <div>
                   <p className="mb-1.5 text-xs font-medium text-foreground">Categorii</p>
                   <p className="mb-2 text-[11px] text-muted-foreground">
-                    O categorie aleasa aduce si subcategoriile ei.
+                    O categorie aleasă aduce și subcategoriile ei.
                   </p>
                   <div className="max-h-52 overflow-y-auto rounded-lg border border-border bg-background p-2">
                     {categorii.length === 0 && (
                       <p className="p-2 text-[11px] text-muted-foreground">
-                        Magazinul n-are categorii. Foloseste selectia de produse.
+                        Magazinul n-are categorii. Folosește selecția de produse.
                       </p>
                     )}
                     {categorii.map((c) => (
@@ -212,7 +212,7 @@ export function FacebookFeeduriClient({
                   {selector === `${i}:produse` && (
                     <SelectorProduseFeed
                       titlu="Produse incluse"
-                      descriere="Se ADUNA cu ce vine din categorii. Fara categorii si fara produse, feedul trimite tot catalogul."
+                      descriere="Se ADUNĂ cu ce vine din categorii. Fără categorii și fără produse, feedul trimite tot catalogul."
                       alese={f.produse ?? []}
                       onSchimba={(ids) => schimba(i, { produse: ids })}
                       onInchide={() => setSelector(null)}
@@ -221,7 +221,7 @@ export function FacebookFeeduriClient({
                   {selector === `${i}:excluse` && (
                     <SelectorProduseFeed
                       titlu="Produse excluse"
-                      descriere="Exclusul bate tot: e singurul mod de a scoate un produs din reclame fara sa-l dezactivezi in magazin."
+                      descriere="Excluderea bate tot: e singurul mod de a scoate un produs din reclame fără să-l dezactivezi în magazin."
                       alese={f.excluse ?? []}
                       onSchimba={(ids) => schimba(i, { excluse: ids })}
                       onInchide={() => setSelector(null)}
@@ -233,16 +233,16 @@ export function FacebookFeeduriClient({
                   <label className="flex items-center gap-2 text-xs">
                     <input type="checkbox" checked={!!f.doarInStoc}
                       onChange={(e) => schimba(i, { doarInStoc: e.target.checked })} />
-                    Doar produse in stoc
+                    Doar produse în stoc
                   </label>
                   <label className="text-xs">
-                    <span className="mb-1 block text-muted-foreground">Pret minim</span>
+                    <span className="mb-1 block text-muted-foreground">Preț minim</span>
                     <input type="number" min={0} value={f.pretMin ?? ""}
                       onChange={(e) => schimba(i, { pretMin: e.target.value === "" ? null : Number(e.target.value) })}
                       className="h-8 w-full rounded-lg border border-input bg-background px-2" />
                   </label>
                   <label className="text-xs">
-                    <span className="mb-1 block text-muted-foreground">Pret maxim</span>
+                    <span className="mb-1 block text-muted-foreground">Preț maxim</span>
                     <input type="number" min={0} value={f.pretMax ?? ""}
                       onChange={(e) => schimba(i, { pretMax: e.target.value === "" ? null : Number(e.target.value) })}
                       className="h-8 w-full rounded-lg border border-input bg-background px-2" />
@@ -251,7 +251,7 @@ export function FacebookFeeduriClient({
 
                 <div className="flex items-center gap-3">
                   <Button type="button" variant="outline" size="sm" onClick={() => numara(i)}>
-                    Cate produse intra?
+                    Câte produse intră?
                   </Button>
                   {numarate[String(i)] !== undefined && (
                     <span className={`text-xs ${numarate[String(i)] === 0 ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
@@ -261,7 +261,7 @@ export function FacebookFeeduriClient({
                 </div>
 
                 <p className="text-[11px] text-muted-foreground">
-                  Fara nicio regula, feedul trimite tot catalogul.
+                  Fără nicio regulă, feedul trimite tot catalogul.
                 </p>
               </div>
             )}
@@ -269,21 +269,21 @@ export function FacebookFeeduriClient({
         ))}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button type="button" onClick={salveaza_} disabled={salveaza}>
-          {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-          {salveaza ? "Se salveaza..." : "Salveaza feedurile"}
+          {salveaza && <Loader2 className="animate-spin" />}
+          Salvează feedurile
         </Button>
-        <p className="text-[11px] text-muted-foreground">
-          Dupa salvare, schimbarile ajung la Meta la urmatoarea citire programata. Nu trebuie sa reintri in Commerce Manager.
+        <p className="text-xs text-muted-foreground">
+          Schimbările ajung la Meta la următoarea citire programată. Nu trebuie să reintri în Commerce Manager.
         </p>
       </div>
 
       <Callout variant="warning" title="Un feed, un catalog">
-        Nu pune doua feeduri care au produse comune ca surse in <strong>acelasi</strong> catalog Meta:
-        acelasi produs ar veni din doua parti si Meta intra in conflict. Fie cate un catalog pentru
+        Nu pune două feeduri care au produse comune ca surse în <strong>același</strong> catalog Meta:
+        același produs ar veni din două părți și Meta intră în conflict. Fie câte un catalog pentru
         fiecare feed, fie feeduri care nu se suprapun.
       </Callout>
-    </div>
+    </Sectiune>
   );
 }

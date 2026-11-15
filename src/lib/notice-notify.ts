@@ -71,6 +71,7 @@ const NOTICE_PAYMENT_LABELS: Record<string, string> = {
   ipay: "Card bancar (BT iPay)",
   klarna: "Klarna",
   revolut: "Card online (Revolut)",
+  tbi: "Rate prin tbi bank",
   bank_transfer: "Transfer bancar",
 };
 

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { PacketaConfigClient } from "@/components/dashboard/PacketaConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { PacketaConfig } from "@/lib/packeta/client";
 
 export default async function PacketaPage() {
@@ -38,13 +37,5 @@ export default async function PacketaPage() {
     activ(settings?.posta_config, "username", "cod_trimitere") ? "posta" : "",
   ].filter(Boolean);
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="packeta"
-        description="Colete prin Packeta: ridicare din punctele si automatele lor, sau livrare la adresa prin curierii locali cu care lucreaza. Emiti coletul si eticheta din panou."
-      />
-      <PacketaConfigClient businessId={business.id} initialConfig={config} activiDirect={activiDirect} />
-    </div>
-  );
+  return <PacketaConfigClient businessId={business.id} initialConfig={config} activiDirect={activiDirect} />;
 }

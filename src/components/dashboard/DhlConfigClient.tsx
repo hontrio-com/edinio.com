@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Ban, CheckCircle, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, Globe, Info, KeyRound, Loader2, Truck } from "lucide-react";
 import {
   disconnectDhl, getDhlProduseAction, saveDhlConfig, testDhlConnectionAction,
 } from "@/lib/actions/dhl.actions";
@@ -22,9 +22,12 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare, useFormularIntegrare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
 /**
@@ -59,8 +62,8 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const MEDII: { valoare: MediuDhl; eticheta: string }[] = [
-  { valoare: "productie", eticheta: "Productie (express.api.dhl.com/mydhlapi): expedieri reale, facturate" },
-  { valoare: "test", eticheta: "Test (.../mydhlapi/test): expedieri simulate, care nu se pot urmari" },
+  { valoare: "productie", eticheta: "Producție (express.api.dhl.com/mydhlapi): expedieri reale, facturate" },
+  { valoare: "test", eticheta: "Test (.../mydhlapi/test): expedieri simulate, care nu se pot urmări" },
 ];
 
 /**
@@ -70,10 +73,10 @@ const MEDII: { valoare: MediuDhl; eticheta: string }[] = [
  * `dhl_etichete.format`, unde comparatia cu ce intorc ei ar fi picat tacut.
  */
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
-  { valoare: "PDF", eticheta: "PDF (orice imprimanta, inclusiv una obisnuita de birou)" },
-  { valoare: "ZPL", eticheta: "ZPL (imprimanta termica de etichete)" },
-  { valoare: "EPL2", eticheta: "EPL2 (imprimanta termica)" },
-  { valoare: "LP2", eticheta: "LP2 (imprimanta termica)" },
+  { valoare: "PDF", eticheta: "PDF (orice imprimantă, inclusiv una obișnuită de birou)" },
+  { valoare: "ZPL", eticheta: "ZPL (imprimantă termică de etichete)" },
+  { valoare: "EPL2", eticheta: "EPL2 (imprimantă termică)" },
+  { valoare: "LP2", eticheta: "LP2 (imprimantă termică)" },
 ];
 
 /**
@@ -101,7 +104,7 @@ type Produs = { cod: string; nume: string; intern: boolean; extern: boolean; doc
 
 /** „intern si extern · colete", pentru pastila din checkout. */
 function insemneProdus(p: Produs): string {
-  const unde = p.intern && p.extern ? "intern si extern" : p.intern ? "intern" : "extern";
+  const unde = p.intern && p.extern ? "intern și extern" : p.intern ? "intern" : "extern";
   return `${unde}, ${p.document ? "documente" : "colete"}`;
 }
 
@@ -113,7 +116,7 @@ export function DhlConfigClient({
   initialConfig: DhlConfig | null;
 }) {
   const router = useRouter();
-  const [config, setConfig] = useState<DhlConfig>({
+  const { cfg: config, setCfg: setConfig, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<DhlConfig>({
     enabled: initialConfig?.enabled ?? false,
     username: initialConfig?.username ?? "",
     password: initialConfig?.password ?? "",
@@ -232,7 +235,8 @@ export function DhlConfigClient({
     const r = await saveDhlConfig(businessId, construieste());
     setSalveaza(false);
     if ("error" in r) { toast.error(r.error); return; }
-    toast.success("Configurarea DHL a fost salvata.");
+    toast.success("Configurarea DHL a fost salvată.");
+    marcheazaSalvat();
     const p = await getDhlProduseAction(businessId);
     if (p.ok) setProduse(p.produse);
     router.refresh();
@@ -269,133 +273,177 @@ export function DhlConfigClient({
 
   const permise = config.produse_permise ?? [];
 
+  const parolaSalvata = secretulEsteSalvat(initialConfig, "password");
+  const activSalvat = !!initialConfig?.enabled && !!initialConfig?.username && parolaSalvata && !!initialConfig?.account_number
+    && !!(initialConfig?.expeditor?.oras ?? "").trim() && !!(initialConfig?.expeditor?.cod_postal ?? "").trim();
+  const stari: StareAntet[] = !parolaSalvata
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      activSalvat ? { ton: "bun", text: "Activ" } : { ton: "neutru", text: "Oprit" },
+      ...(initialConfig?.mediu === "test" ? [{ ton: "asteptare" as const, text: "Mediu de test" }] : []),
+    ];
+
   return (
-    <div className="space-y-6">
-      <Panel step={1} title="Conectare">
-        <Field
-          label="Utilizator MyDHL API"
-          ajutor={
-            <ExplicatieCard
-              marime="mic"
-              intrebare="Ce se scrie aici"
-              eticheta="Utilizator MyDHL API"
-              text={`Nu e „API Key” din aplicatia de pe developer.dhl.com.
+    <PaginaIntegrare
+      id="dhl"
+      titlu="Livrare"
+      descriere="Colete prin DHL Express: livrări interne și în toată lumea, cu tarifele contractului tău și eticheta în PDF."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="DHL la livrare" activ={!!config.enabled} onChange={(v) => setConfig({ ...config, enabled: v })} ariaLabel="Folosește DHL pentru livrare" textPornit="Pornit" textOprit="Oprit" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Utilizatorul, parola și contul", facut: areChei },
+          { text: "Orașul și codul poștal de expediție", facut: areExpeditor && codPostalBun },
+          { text: "DHL pornit", facut: esteActiv },
+        ]} />
+        <CumFunctioneaza id="dhl" puncte={[
+          { Icon: KeyRound, text: "Utilizatorul și parola MyDHL API le primești de la consultantul tău DHL Express, nu de pe portalul pentru dezvoltatori." },
+          { Icon: Ban, text: "DHL Express nu oferă plata la livrare: la comenzile cu ramburs nu apare deloc la comandă." },
+          { Icon: Globe, text: "În afara Uniunii Europene se descarcă și factura comercială; fără ea, marfa se oprește în vamă." },
+          { Icon: Truck, text: "După salvare, pornește și metoda „DHL” din Setări, Livrare." },
+        ]} />
+      </>}
+    >
+      {config.enabled && !areExpeditor && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Fără oraș și cod poștal de expediție, DHL nu poate cota nimic, iar clienții vor vedea tariful fix în loc de prețul real.
+        </Callout>
+      )}
+      {config.enabled && !codPostalBun && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Codul poștal de expediție nu are formatul cerut de DHL, deci fiecare cotare va fi respinsă. Repară-l înainte de salvare.
+        </Callout>
+      )}
+      {config.mediu === "test" && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Ești pe mediul de test al DHL. Expedierile emise acolo nu intră în rețeaua lor, nu se pot urmări și nu le ridică
+          nimeni. Treci pe producție înainte de prima comandă adevărată, și verifică atunci că utilizatorul și parola sunt cele
+          de producție: DHL dă de obicei alte credențiale pentru fiecare mediu.
+        </Callout>
+      )}
+      {esteActiv && config.mediu !== "test" && (
+        <Callout variant="info" icon={Info}>
+          <span className="block">
+            Fiecare AWB emis e real și facturat, iar DHL nu are protecție contra dublurilor: dacă emiterea pare că a eșuat,
+            folosește „Verifică la DHL” din pagina comenzii, în loc să încerci din nou. Butonul caută expedierea după
+            referința comenzii și o adoptă dacă ea există deja.
+          </span>
+          <span className="mt-1 block text-xs">
+            DHL nu are nici anulare de expediere: „Dezleagă AWB-ul” din editarea comenzii scoate numerele de pe comandă și
+            anulează ridicarea, dacă a fost cerută, dar eticheta rămâne emisă. Dacă a fost deja facturată, se rezolvă doar cu
+            reprezentantul DHL.
+          </span>
+        </Callout>
+      )}
 
-E utilizatorul MyDHL API, primit de la consultantul tau DHL Express, de obicei dupa certificarea integrarii.
+      <Sectiune pas={1} titlu="Conectare">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Utilizator MyDHL API"
+            ajutor={
+              <ExplicatieCard
+                marime="mic"
+                intrebare="Ce se scrie aici"
+                eticheta="Utilizator MyDHL API"
+                text={`Nu e „API Key” din aplicația de pe developer.dhl.com.
 
-Nu se ascunde: iti arata ce cont ai legat.`}
-            />
-          }
-        >
-          <Input
-            value={config.username}
-            onChange={(e) => setConfig({ ...config, username: e.target.value })}
-          />
-        </Field>
+E utilizatorul MyDHL API, primit de la consultantul tău DHL Express, de obicei după certificarea integrării.
 
-        <Field
-          label="Parola MyDHL API"
-          ajutor={
-            <ExplicatieCard
-              marime="mic"
-              intrebare="Ce se scrie aici"
-              eticheta="Parola MyDHL API"
-              text={`Perechea utilizatorului de mai sus, tot de la consultantul DHL Express.
-
-Nu e „API Secret” de pe portalul lor pentru dezvoltatori: cheia de portal e respinsa cu 401, fara nicio explicatie.
-
-Se cripteaza in baza si nu se mai afiseaza.`}
-            />
-          }
-        >
-          <Input
-            type="password"
-            value={config.password}
-            placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : "parola ta"}
-            onChange={(e) => setConfig({ ...config, password: e.target.value })}
-          />
-        </Field>
-
-        <Field
-          label="Numar de cont DHL Express"
-          ajutor={
-            <ExplicatieCard
-              marime="mic"
-              intrebare="Ce se scrie aici"
-              eticheta="Numar de cont DHL Express"
-              text={`Cel de pe factura DHL, noua cifre in Romania.
-
-Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de ale tale. Pretul iese gresit, si nu apare nicio eroare.`}
-            />
-          }
-        >
-          <Input
-            value={config.account_number}
-            placeholder="123456789"
-            onChange={(e) => setConfig({ ...config, account_number: e.target.value })}
-          />
-        </Field>
-        {contScris.length > 12 && (
-          <p className="text-[11px] text-warning">
-            Numarul are {contScris.length} caractere, iar DHL accepta cel mult 12. Daca ai lipit aici cheia de
-            API, ea nu se pune in acest camp.
-          </p>
-        )}
-
-        <Field
-          label="Mediu"
-          hint="⚠ Credentialele de test si cele de productie sunt de obicei DIFERITE la DHL: cheia de productie se emite dupa certificarea integrarii. Si, mai grav, adresa de productie e prefixul celei de test, deci o nepotrivire nu da 404, ci o expediere REALA, facturata, care nu se poate anula."
-        >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.mediu ?? "productie"}
-            onChange={(e) => setConfig({ ...config, mediu: e.target.value as MediuDhl })}
+Nu se ascunde: îți arată ce cont ai legat.`}
+              />
+            }
           >
-            {MEDII.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
-          </select>
-        </Field>
+            <Input value={config.username} onChange={(e) => setConfig({ ...config, username: e.target.value })} />
+          </Field>
 
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
-            {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            Testeaza conexiunea
-          </Button>
-          {areChei && (
-            <ButonDeconectare
-              nume="DHL Express"
-              cePierzi="Se șterge toată configurarea DHL din Edinio: utilizatorul MyDHL API, parola, numărul de cont, adresa de expediție și setările de etichetă. Ca să te întorci, le ceri din nou de la consultantul tău DHL Express. Expedierile deja emise rămân emise la DHL: ei nu au anulare de expediere."
-              marime="default"
-              onConfirma={deconecteaza}
+          <Field
+            label="Parola MyDHL API"
+            ajutor={
+              <ExplicatieCard
+                marime="mic"
+                intrebare="Ce se scrie aici"
+                eticheta="Parola MyDHL API"
+                text={`Perechea utilizatorului de mai sus, tot de la consultantul DHL Express.
+
+Nu e „API Secret” de pe portalul lor pentru dezvoltatori: cheia de portal e respinsă cu 401, fără nicio explicație.
+
+Se criptează și nu se mai afișează.`}
+              />
+            }
+          >
+            <Input
+              type="password"
+              value={config.password}
+              placeholder={parolaSalvata ? PLACEHOLDER_SECRET_SALVAT : "parola ta"}
+              onChange={(e) => setConfig({ ...config, password: e.target.value })}
             />
+          </Field>
+
+          <Field
+            label="Număr de cont DHL Express"
+            error={contScris.length > 12 ? `Numărul are ${contScris.length} caractere, iar DHL acceptă cel mult 12. Dacă ai lipit aici cheia de API, ea nu se pune în acest câmp.` : undefined}
+            ajutor={
+              <ExplicatieCard
+                marime="mic"
+                intrebare="Ce se scrie aici"
+                eticheta="Număr de cont DHL Express"
+                text={`Cel de pe factura DHL, nouă cifre în România.
+
+Nu e o credențială, dar fără el cotarea întoarce tarifele publicate în loc de ale tale. Prețul iese greșit, și nu apare nicio eroare.`}
+              />
+            }
+          >
+            <Input value={config.account_number} placeholder="123456789" onChange={(e) => setConfig({ ...config, account_number: e.target.value })} />
+          </Field>
+
+          <Field
+            label="Mediu"
+            htmlFor="dhl-mediu"
+            ajutor={
+              <ExplicatieCard
+                marime="mic"
+                intrebare="La ce să fiu atent"
+                eticheta="Mediul DHL"
+                text="Credențialele de test și cele de producție sunt de obicei DIFERITE la DHL: cheia de producție se emite după certificarea integrării. Și, mai grav, adresa de producție e prefixul celei de test, deci o nepotrivire nu dă 404, ci o expediere REALĂ, facturată, care nu se poate anula."
+              />
+            }
+          >
+            <select id="dhl-mediu" className={selectCls} value={config.mediu ?? "productie"} onChange={(e) => setConfig({ ...config, mediu: e.target.value as MediuDhl })}>
+              {MEDII.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
+            {probeaza ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+            Testează conexiunea
+          </Button>
+          {!areExpeditor && (
+            <p className="text-xs text-muted-foreground">
+              Completează întâi orașul și codul poștal de expediție: proba chiar cere o cotare reală, nu doar un răspuns de autentificare.
+            </p>
           )}
         </div>
-        {!areExpeditor && (
-          <p className="text-[11px] text-muted-foreground">
-            Completeaza intai orasul si codul postal de expeditie: proba chiar cere o cotare reala, nu doar un
-            raspuns de autentificare.
-          </p>
-        )}
 
         {proba && (
           <Callout variant={proba.ok ? "success" : "warning"} icon={proba.ok ? CheckCircle : AlertTriangle}>
             <span className="block">{proba.mesaj}</span>
             {proba.produse.length > 0 && (
-              <span className="block mt-1 text-xs">
-                Produse intoarse: {proba.produse.map((p) => `${p.cod} (${p.nume})`).join(", ")}
-              </span>
+              <span className="mt-1 block text-xs">Produse întoarse: {proba.produse.map((p) => `${p.cod} (${p.nume})`).join(", ")}</span>
             )}
             {proba.valuta && (
-              <span className="block mt-1 text-xs">
-                Valuta cotarii: <strong>{proba.valuta}</strong>
+              <span className="mt-1 block text-xs">
+                Valuta cotării: <strong>{proba.valuta}</strong>
                 {proba.valuta.includes("RON")
                   ? ""
-                  : ". ⚠ Magazinul lucreaza in lei, iar noi nu convertim sumele, deci DHL va aparea in checkout la tariful fix. Cere-i reprezentantului DHL tarifele in RON pe contul tau."}
+                  : ". Magazinul lucrează în lei, iar noi nu convertim sumele, deci DHL va apărea la comandă la tariful fix. Cere-i reprezentantului DHL tarifele în RON pe contul tău."}
               </span>
             )}
             {proba.cerContract.length > 0 && (
-              <span className="block mt-1 text-xs">
-                ⚠ Produse pe care DHL le marcheaza ca avand nevoie de un acord separat: {proba.cerContract.join(", ")}.
-                Ele apar in cotare, dar emiterea poate fi refuzata pana cand contractul le cuprinde.
+              <span className="mt-1 block text-xs">
+                Produse pe care DHL le marchează ca având nevoie de un acord separat: {proba.cerContract.join(", ")}. Ele apar în
+                cotare, dar emiterea poate fi refuzată până când contractul le cuprinde.
               </span>
             )}
             {/*
@@ -403,36 +451,32 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
               Polaritatea e INVERSA fata de UPS: aici „a intors KB" e vestea neasteptata, nu cea
               buna. Vezi nota de pe tipul `Proba`.
             */}
-            <span className={`block mt-1 text-xs ${proba.rambursOferit ? "text-warning" : ""}`}>
-              {proba.rambursMesaj}
-            </span>
+            <span className={`mt-1 block text-xs ${proba.rambursOferit ? "text-warning" : ""}`}>{proba.rambursMesaj}</span>
             {proba.alerte.length > 0 && (
-              <span className="block mt-1 text-xs">DHL a raspuns si cu: {proba.alerte.join(" | ")}</span>
+              <span className="mt-1 block text-xs">DHL a răspuns și cu: {proba.alerte.join(" | ")}</span>
             )}
             {proba.mediu === "test" && (
-              <span className="block mt-1 text-xs">
-                ⚠ Raspuns din mediul lor de test. Expedierile create acolo nu intra in reteaua DHL, nu se pot
-                urmari si nu le ridica nimeni.
+              <span className="mt-1 block text-xs">
+                Răspuns din mediul lor de test. Expedierile create acolo nu intră în rețeaua DHL, nu se pot urmări și nu le ridică nimeni.
               </span>
             )}
           </Callout>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={2} title="Adresa de expeditie">
+      <Sectiune pas={2} titlu="Adresa de expediție">
         <Callout variant="info" icon={Info}>
-          De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal si telefonul sunt
-          amandoua obligatorii la DHL, si la expedierile interne, nu doar la cele externe: fara ele nu se face
-          nicio cotare si niciun AWB.
+          De aici pleacă fiecare colet, și tot de aici se calculează tariful. Codul poștal și telefonul sunt amândouă
+          obligatorii la DHL, și la expedierile interne, nu doar la cele externe: fără ele nu se face nicio cotare și niciun AWB.
         </Callout>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Nume persoana de contact">
+          <Field label="Nume persoană de contact">
             <Input value={expeditor.nume ?? ""} onChange={(e) => setExpeditor({ nume: e.target.value })} />
           </Field>
-          <Field label="Firma">
+          <Field label="Firmă">
             <Input value={expeditor.companie ?? ""} onChange={(e) => setExpeditor({ companie: e.target.value })} />
           </Field>
-          <Field label="Telefon" hint="⚠ Obligatoriu la DHL pe orice expediere. Se trimite cu prefixul tarii.">
+          <Field label="Telefon" hint="Obligatoriu la DHL pe orice expediere. Se trimite cu prefixul țării.">
             <Input value={expeditor.telefon ?? ""} onChange={(e) => setExpeditor({ telefon: e.target.value })} />
           </Field>
           <Field label="Email">
@@ -440,31 +484,28 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
           </Field>
         </div>
         <Field
-          label="Strada si numarul"
-          hint="Se imparte automat in cel mult trei linii de cate 45 de caractere, cum cere DHL. Ce nu incape se pierde, deci scrie adresa scurt."
+          label="Strada și numărul"
+          hint="Se împarte automat în cel mult trei linii de câte 45 de caractere, cum cere DHL. Ce nu încape se pierde, deci scrie adresa scurt."
         >
           <Input value={expeditor.strada ?? ""} onChange={(e) => setExpeditor({ strada: e.target.value })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Oras">
+          <Field label="Oraș">
             <Input value={expeditor.oras ?? ""} onChange={(e) => setExpeditor({ oras: e.target.value })} />
           </Field>
-          <Field
-            label="Judet"
-            hint="Optional. La DHL campul inseamna „cartier sau judet” si nu e nomenclator: nu inlocuieste codul postal."
-          >
+          <Field label="Județ" hint="Opțional. La DHL câmpul înseamnă „cartier sau județ” și nu e nomenclator: nu înlocuiește codul poștal.">
             <Input value={expeditor.judet ?? ""} onChange={(e) => setExpeditor({ judet: e.target.value })} />
           </Field>
           <Field
-            label="Cod postal"
-            hint={taraExpeditor === "RO" ? "Sase cifre, formatul cerut de DHL pentru Romania." : undefined}
+            label="Cod poștal"
+            hint={taraExpeditor === "RO" ? "Șase cifre, formatul cerut de DHL pentru România." : undefined}
             /* ⚠ Validare VIZIBILA, nu doar pe server: un cod cu cinci cifre nu e ignorat de DHL,
                ci taie cotarea cu `420506 Postcode not found`, iar mesajul lor nu spune daca e
                vinovat codul expeditorului sau al destinatarului. */
             error={!codPostalBun
               ? (taraExpeditor === "RO"
-                ? "Codul postal romanesc are exact sase cifre. Asa cum e scris acum, DHL respinge cotarea."
-                : "Codul postal nu are un format pe care DHL sa-l accepte.")
+                ? "Codul poștal românesc are exact șase cifre. Așa cum e scris acum, DHL respinge cotarea."
+                : "Codul poștal nu are un format pe care DHL să-l accepte.")
               : undefined}
           >
             <Input
@@ -474,15 +515,10 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
             />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={3} title="Ce se ofera in checkout">
-        <p className="text-xs font-semibold">Produsele DHL pe care le arati clientilor</p>
-        <p className="text-[11px] text-muted-foreground">
-          Nimic bifat = toate produsele pe care le intoarce cotarea. Filtrul adevarat e al lor: cotarea se face
-          cu numarul tau de cont, deci DHL raspunde deja cu ce iti vinde pe ruta ceruta. Bifele de aici doar
-          restrang lista, nu o largesc.
-        </p>
+      <Sectiune pas={3} titlu="Ce se oferă la comandă"
+        descriere="Produsele DHL pe care le arăți clienților. Nimic bifat înseamnă tot ce întoarce cotarea. Filtrul adevărat e al lor: cotarea se face cu numărul tău de cont, deci DHL răspunde deja cu ce îți vinde pe ruta cerută. Bifele doar restrâng lista.">
         <div className="flex flex-wrap gap-2">
           {produse.map((p) => {
             const bifat = permise.includes(p.cod);
@@ -490,12 +526,13 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
               <button
                 key={p.cod}
                 type="button"
+                aria-pressed={bifat}
                 onClick={() => setConfig({
                   ...config,
                   produse_permise: bifat ? permise.filter((x) => x !== p.cod) : [...permise, p.cod],
                 })}
-                className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
-                  bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                  bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/40"
                 }`}
                 title={`Cod DHL ${p.cod}`}
               >
@@ -506,83 +543,64 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
           })}
         </div>
         {produse.length === 0 && (
-          <p className="text-[11px] text-muted-foreground">
-            Nu propunem o lista pentru tara de expeditie aleasa. Se ofera tot ce intoarce cotarea.
-          </p>
+          <p className="text-xs text-muted-foreground">Nu propunem o listă pentru țara de expediție aleasă. Se oferă tot ce întoarce cotarea.</p>
         )}
 
         {/*
           ⚠ Se spune limpede ca livrarea in punct NU exista, ca omul sa nu caute comutatorul.
           Ceilalti curieri au unul, deci absenta lui arata ca o scapare a noastra.
         */}
-        <Callout variant="info" icon={Info}>
-          <span className="block">
-            <strong>DHL livreaza doar la adresa, nu si in puncte de ridicare.</strong>
-          </span>
-          <span className="block mt-1 text-xs">
-            Punctele lor exista in API, dar livrarea catre un punct trece prin serviciul „on demand delivery”,
-            care cere un identificator de punct pe care DHL il da doar prin managerul tau de cont, iar acoperirea
-            pentru Romania nu se poate verifica din documentatia lor publica. Am preferat sa nu oferim in checkout
-            ceva ce s-ar putea rupe la emitere, dupa ce cumparatorul a platit.
-          </span>
+        <Callout variant="info" icon={Info} title="DHL livrează doar la adresă, nu și în puncte de ridicare">
+          Punctele lor există în API, dar livrarea către un punct trece prin serviciul „on demand delivery”, care cere un
+          identificator de punct pe care DHL îl dă doar prin managerul tău de cont, iar acoperirea pentru România nu se poate
+          verifica din documentația lor publică. Am preferat să nu oferim la comandă ceva ce s-ar putea rupe la emitere, după
+          ce cumpărătorul a plătit.
         </Callout>
-      </Panel>
 
-      <Panel title="Plata la livrare (ramburs)">
         {/*
           ⚠ SECTIUNE DE INFORMARE, FARA COMUTATOR, si asta e o hotarare, nu o scapare.
           Un comutator la tarif fix ar fi fost ales de cumparator, iar comerciantul ar fi
           aflat abia la emitere ca AWB-ul nu se poate face: comanda blocata, banii neincasati.
           Aceeasi asezare ca la FedEx.
         */}
-        <Callout variant="warning" icon={Ban}>
-          <span className="block">
-            <strong>DHL Express nu ofera plata la livrare.</strong> {AVERTISMENT_RAMBURS}
-          </span>
-          <span className="block mt-1 text-xs">
-            Nu exista comutator fiindca nu exista ce comuta. Pe comenzile cu plata la livrare, DHL nu apare deloc
-            in checkout, iar celelalte metode de livrare raman neatinse: cumparatorul alege dintre ele si nu vede
-            nimic lipsa.
-          </span>
-          <span className="block mt-1 text-xs">
-            „Testeaza conexiunea” verifica de fiecare data, pe contul TAU, daca DHL a inceput totusi sa ofere
-            serviciul. Daca vreodata apare, ti-o spune in rezultatul probei.
+        <Callout variant="warning" icon={Ban} title="DHL Express nu oferă plata la livrare">
+          <span className="block">{AVERTISMENT_RAMBURS}</span>
+          <span className="mt-1 block text-xs">
+            Nu există comutator fiindcă nu există ce comuta. Pe comenzile cu plata la livrare, DHL nu apare deloc la comandă,
+            iar celelalte metode de livrare rămân neatinse. „Testează conexiunea” verifică de fiecare dată, pe contul TĂU, dacă
+            DHL a început totuși să ofere serviciul; dacă vreodată apare, îți spune în rezultatul probei.
           </span>
         </Callout>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={4} title="Eticheta">
-        <Field
-          label="Formatul etichetei"
-          hint="PDF-ul e implicit fiindca se tipareste la orice imprimanta, inclusiv una obisnuita de birou. Celelalte trei sunt limbaje de imprimanta termica de etichete."
-        >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={format}
-            onChange={(e) => {
-              const nou = e.target.value as FormatEticheta;
-              /* ⚠ Sablonul se reaseaza ODATA cu formatul. Lasat pe loc, un sablon PDF cerut cu
-                 `zpl` nu da o eticheta stricata, da o eroare la emitere, si abia atunci ar fi
-                 aflat comerciantul care si-a schimbat imprimanta ca mai avea o setare de mutat. */
-              setConfig({ ...config, format_eticheta: nou, sablon_eticheta: sablonPotrivit(nou, config.sablon_eticheta) });
-            }}
+      <Sectiune pas={4} titlu="Eticheta">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Formatul etichetei"
+            htmlFor="dhl-format"
+            hint="PDF-ul e implicit fiindcă se tipărește la orice imprimantă. Celelalte trei sunt limbaje de imprimantă termică."
           >
-            {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
-          </select>
-        </Field>
-
-        <Field
-          label="Sablonul etichetei"
-          hint="Lista arata doar sabloanele care merg cu formatul ales mai sus. Schimbi formatul, se schimba si ea."
-        >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={sablonPotrivit(format, config.sablon_eticheta)}
-            onChange={(e) => setConfig({ ...config, sablon_eticheta: e.target.value })}
-          >
-            {sabloanePotrivite.map((s) => <option key={s.valoare} value={s.valoare}>{s.eticheta}</option>)}
-          </select>
-        </Field>
+            <select
+              id="dhl-format"
+              className={selectCls}
+              value={format}
+              onChange={(e) => {
+                const nou = e.target.value as FormatEticheta;
+                /* ⚠ Sablonul se reaseaza ODATA cu formatul. Lasat pe loc, un sablon PDF cerut cu
+                   `zpl` nu da o eticheta stricata, da o eroare la emitere, si abia atunci ar fi
+                   aflat comerciantul care si-a schimbat imprimanta ca mai avea o setare de mutat. */
+                setConfig({ ...config, format_eticheta: nou, sablon_eticheta: sablonPotrivit(nou, config.sablon_eticheta) });
+              }}
+            >
+              {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
+            </select>
+          </Field>
+          <Field label="Șablonul etichetei" htmlFor="dhl-sablon" hint="Lista arată doar șabloanele care merg cu formatul ales. Schimbi formatul, se schimbă și ea.">
+            <select id="dhl-sablon" className={selectCls} value={sablonPotrivit(format, config.sablon_eticheta)} onChange={(e) => setConfig({ ...config, sablon_eticheta: e.target.value })}>
+              {sabloanePotrivite.map((s) => <option key={s.valoare} value={s.valoare}>{s.eticheta}</option>)}
+            </select>
+          </Field>
+        </div>
 
         {/*
           ⚠ AICI SCRIA SI CA „odata cu eticheta se descarca si documentul de transport,
@@ -590,32 +608,28 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
           emitere, dar schema raspunsului lor enumera doar `invoice, proforma, label or
           receipt`, deci documentul nu venea, coloana `document_transport` ramanea goala si
           butonul „Descarca eticheta" n-avea ce sa scoata. Mai rau, ceruta, a doua hartie
-          vine tot etichetata `label`, deci putea fi luata drept eticheta de lipit pe colet
-          — la un curier fara reimprimare si fara anulare de expediere. Cererea nu mai cere
+          vine tot etichetata `label`, deci putea fi luata drept eticheta de lipit pe colet,
+          la un curier fara reimprimare si fara anulare de expediere. Cererea nu mai cere
           `waybillDoc`, deci pagina nu-l mai promite: o fagaduiala pe care descarcarea n-o
           tine il pune pe comerciant sa caute un fisier inexistent si il invata sa nu mai
           creada nici restul notelor de aici.
         */}
-        <Callout variant="info" icon={Info}>
-          <span className="block">
-            La expedierile in afara Uniunii Europene se descarca, odata cu eticheta, si <strong>factura
-            comerciala</strong>, mereu in PDF, orice format ai alege aici. Fara ea tiparita si atasata la
-            colet, marfa se opreste in vama.
-          </span>
-        </Callout>
-      </Panel>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          La expedierile în afara Uniunii Europene se descarcă, odată cu eticheta, și <strong className="text-foreground">factura
+          comercială</strong>, mereu în PDF, oricare ar fi formatul ales. Fără ea tipărită și atașată la colet, marfa se oprește în vamă.
+        </p>
+      </Sectiune>
 
-      <Panel step={5} title="Coletul implicit si vama">
-        <p className="text-xs text-muted-foreground">
-          Dimensiunile se folosesc cand comanda n-are unele proprii. DHL factureaza pe maximul dintre greutatea
-          fizica si cea volumetrica, iar volumetricul lor se imparte la {DIVIZOR_VOLUMETRIC}, nu la 6000 ca la
-          alti curieri: o cutie prea mare scumpeste fiecare colet. Limita pe colet e {GREUTATE_MAXIMA_KG} kg;
-          peste {PRAG_SUPRATAXA_GREUTATE_KG} kg (reali sau volumetrici) sau peste {PRAG_SUPRATAXA_DIMENSIUNE_CM} cm
-          pe o latura se adauga suprataxele lor fixe, iar intre {PRAG_NECONVENABIL_KG} si {GREUTATE_MAXIMA_KG} kg
-          reali se adauga taxa de colet nemanevrabil.
+      <Sectiune pas={5} titlu="Coletul implicit și vama">
+        <p className="-mt-2 text-xs leading-relaxed text-muted-foreground">
+          Dimensiunile se folosesc când comanda n-are unele proprii. DHL facturează maximul dintre greutatea fizică și cea
+          volumetrică, iar volumetricul lor se împarte la {DIVIZOR_VOLUMETRIC}, nu la 6000 ca la alți curieri: o cutie prea
+          mare scumpește fiecare colet. Limita pe colet e {GREUTATE_MAXIMA_KG} kg; peste {PRAG_SUPRATAXA_GREUTATE_KG} kg (reali
+          sau volumetrici) sau peste {PRAG_SUPRATAXA_DIMENSIUNE_CM} cm pe o latură se adaugă suprataxele lor fixe, iar între
+          {" "}{PRAG_NECONVENABIL_KG} și {GREUTATE_MAXIMA_KG} kg reali se adaugă taxa de colet nemanevrabil.
         </p>
         <div className="grid grid-cols-3 gap-3">
-          {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
+          {([["lungime_cm", "Lungime"], ["latime_cm", "Lățime"], ["inaltime_cm", "Înălțime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
                 type="number"
@@ -628,148 +642,73 @@ Nu e o credentiala, dar fara el cotarea intoarce tarifele publicate in loc de al
           ))}
         </div>
 
-        <Field
-          label="Descrierea marfii"
-          hint="⚠ Cel putin trei caractere reale: DHL respinge descrierile mai scurte cu codul 7143. Apare pe documentele vamale ale expedierilor din afara Uniunii Europene."
-        >
-          <Input
-            value={config.continut_implicit ?? ""}
-            placeholder="Bunuri de consum"
-            onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })}
-          />
-        </Field>
-
-        <Field
-          label="Incoterm"
-          hint="Cine plateste taxele vamale la destinatie. DHL il cere pe fiecare expediere, chiar si pe una interna."
-        >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.incoterm ?? INCOTERM_IMPLICIT}
-            onChange={(e) => setConfig({ ...config, incoterm: e.target.value })}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            label="Descrierea mărfii"
+            htmlFor="dhl-continut"
+            hint="Cel puțin trei caractere reale: DHL respinge descrierile mai scurte cu codul 7143. Apare pe documentele vamale ale expedierilor din afara Uniunii Europene."
           >
-            {INCOTERMURI.map((i) => <option key={i.cod} value={i.cod}>{i.eticheta}</option>)}
-          </select>
-        </Field>
+            <Input id="dhl-continut" value={config.continut_implicit ?? ""} placeholder="Bunuri de consum" onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })} />
+          </Field>
+          <Field label="Incoterm" htmlFor="dhl-incoterm" hint="Cine plătește taxele vamale la destinație. DHL îl cere pe fiecare expediere, chiar și pe una internă.">
+            <select id="dhl-incoterm" className={selectCls} value={config.incoterm ?? INCOTERM_IMPLICIT} onChange={(e) => setConfig({ ...config, incoterm: e.target.value })}>
+              {INCOTERMURI.map((i) => <option key={i.cod} value={i.cod}>{i.eticheta}</option>)}
+            </select>
+          </Field>
+        </div>
         {(config.incoterm ?? INCOTERM_IMPLICIT) === "DDP" && (
           <Callout variant="warning" icon={AlertTriangle}>
             {/* ⚠ „Ca sa fie sigur" e exact motivul pentru care se alege gresit DDP. */}
-            Cu <strong>DDP</strong> platesti TU taxele vamale si TVA-ul de la destinatie, pe TOATE expedierile in
-            afara Uniunii Europene, iar DHL ti le refactureaza dupa livrare, cu un comision de vamuire deasupra.
-            Pe un colet de 300 de lei catre o tara terta, factura poate depasi valoarea comenzii. {""}
-            <strong>DAP</strong> lasa taxele in seama cumparatorului si e asezarea obisnuita a unui magazin
-            romanesc.
+            Cu <strong>DDP</strong> plătești TU taxele vamale și TVA-ul de la destinație, pe TOATE expedierile în afara Uniunii
+            Europene, iar DHL ți le refacturează după livrare, cu un comision de vămuire deasupra. Pe un colet de 300 de lei
+            către o țară terță, factura poate depăși valoarea comenzii. <strong>DAP</strong> lasă taxele în seama cumpărătorului
+            și e așezarea obișnuită a unui magazin românesc.
           </Callout>
         )}
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Asigura expedierea</p>
-            <p className="text-xs text-muted-foreground">
-              Costa la fiecare colet: 55 lei sau 1% din valoarea asigurata, care e mai mare. Stins, coletul merge
-              cu despagubirea standard din conditiile lor de transport.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.asigurare_activa}
-            onCheckedChange={(v) => setConfig({ ...config, asigurare_activa: v })}
+        <RandComutator
+          separat
+          titlu="Asigură expedierea"
+          text="Costă la fiecare colet: 55 de lei sau 1% din valoarea asigurată, care e mai mare. Oprită, coletul merge cu despăgubirea standard din condițiile lor de transport."
+          activ={!!config.asigurare_activa}
+          onChange={(v) => setConfig({ ...config, asigurare_activa: v })}
+        />
+        <RandComutator
+          separat
+          titlu="Declară valoarea comenzii la transport"
+          text="Trimite valoarea mărfii pe expediere. La destinațiile vamale ea se declară oricum; aici e vorba de expedierile în care DHL o folosește pentru răspundere și formalități."
+          activ={!!config.valoare_declarata}
+          onChange={(v) => setConfig({ ...config, valoare_declarata: v })}
+        />
+        {/* ⚠ Documentatia lor nu spune nicaieri cum ajunge coletul la ei fara asta. */}
+        <RandComutator
+          separat
+          titlu="Cere ridicare de la DHL"
+          text="Pornit, la emiterea AWB-ului DHL programează și venirea curierului după colet. Oprit, nu vine nimeni: coletul se duce la un punct DHL sau se predă la ridicarea zilnică din contractul tău. Se poate cere și mai târziu, separat."
+          activ={!!config.cere_ridicare}
+          onChange={(v) => setConfig({ ...config, cere_ridicare: v })}
+        />
+        <RandComutator
+          separat
+          titlu="Anunță destinatarul pe email"
+          text="DHL trimite înștiințarea în engleză: româna nu e printre limbile pe care le acceptă pentru înștiințări. De aceea e opțiune, nu implicit."
+          activ={!!config.notifica_destinatarul}
+          onChange={(v) => setConfig({ ...config, notifica_destinatarul: v })}
+        />
+      </Sectiune>
+
+      {parolaSalvata && (
+        <ZonaDeconectare descriere="Șterge configurarea DHL din Edinio. Expedierile deja emise rămân emise la DHL.">
+          <ButonDeconectare
+            nume="DHL Express"
+            cePierzi="Se șterge toată configurarea DHL din Edinio: utilizatorul MyDHL API, parola, numărul de cont, adresa de expediție și setările de etichetă. Ca să te întorci, le ceri din nou de la consultantul tău DHL Express. Expedierile deja emise rămân emise la DHL: ei nu au anulare de expediere."
+            marime="default"
+            onConfirma={deconecteaza}
           />
-        </div>
+        </ZonaDeconectare>
+      )}
 
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Declara valoarea comenzii la transport</p>
-            <p className="text-xs text-muted-foreground">
-              Trimite valoarea marfii pe expediere. La destinatiile vamale ea se declara oricum; aici e vorba de
-              expedierile in care DHL o foloseste pentru raspundere si pentru formalitati.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.valoare_declarata}
-            onCheckedChange={(v) => setConfig({ ...config, valoare_declarata: v })}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Cere ridicare de la DHL</p>
-            <p className="text-xs text-muted-foreground">
-              {/* ⚠ Documentatia lor nu spune nicaieri cum ajunge coletul la ei fara asta. */}
-              Pornit, la emiterea AWB-ului DHL programeaza si venirea curierului dupa colet. Stins, nu vine nimeni:
-              coletul trebuie dus la un punct DHL sau predat la ridicarea zilnica din contractul tau. Se poate cere
-              si mai tarziu, separat.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.cere_ridicare}
-            onCheckedChange={(v) => setConfig({ ...config, cere_ridicare: v })}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Anunta destinatarul pe email</p>
-            <p className="text-xs text-muted-foreground">
-              ⚠ DHL trimite instiintarea in engleza: romana nu e printre limbile pe care le accepta pentru
-              instiintari. De aceea e optiune, nu implicit.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.notifica_destinatarul}
-            onCheckedChange={(v) => setConfig({ ...config, notifica_destinatarul: v })}
-          />
-        </div>
-      </Panel>
-
-      <Panel step={6} title="Pornire">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Foloseste DHL pentru livrare</p>
-            <p className="text-xs text-muted-foreground">
-              Dupa salvare, activeaza metoda „DHL” si din Setari → Livrare, ca sa apara in checkout.
-            </p>
-          </div>
-          <Switch checked={!!config.enabled} onCheckedChange={(v) => setConfig({ ...config, enabled: v })} />
-        </div>
-
-        {config.enabled && !areExpeditor && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Fara oras si cod postal de expeditie, DHL nu poate cota nimic, iar clientii vor vedea tariful fix in
-            loc de pretul real.
-          </Callout>
-        )}
-        {config.enabled && !codPostalBun && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Codul postal de expeditie nu are formatul cerut de DHL, deci fiecare cotare va fi respinsa. Repara-l
-            inainte de salvare.
-          </Callout>
-        )}
-        {config.mediu === "test" && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Esti pe mediul de test al DHL. Expedierile emise acolo nu intra in reteaua lor, nu se pot urmari si nu
-            le ridica nimeni. Treci pe productie inainte de prima comanda adevarata, si verifica atunci ca
-            utilizatorul si parola sunt cele de productie: DHL da de obicei alte credentiale pentru fiecare mediu.
-          </Callout>
-        )}
-        {esteActiv && config.mediu !== "test" && (
-          <Callout variant="info" icon={Info}>
-            <span className="block">
-              Fiecare AWB emis e real si facturat, iar DHL nu are protectie contra dublurilor: daca emiterea pare
-              ca a esuat, foloseste „Verifica la DHL” din pagina comenzii in loc sa incerci din nou. Butonul cauta
-              expedierea dupa referinta comenzii si o adopta daca ea exista deja.
-            </span>
-            <span className="block mt-1 text-xs">
-              ⚠ Si DHL nu are anulare de expediere: „Dezleaga AWB-ul” din editarea comenzii scoate numerele de pe
-              comanda si anuleaza ridicarea, daca a fost ceruta, dar eticheta ramane emisa. Daca a fost deja
-              facturata, se rezolva doar cu reprezentantul DHL.
-            </span>
-          </Callout>
-        )}
-
-        <Button type="button" onClick={salvare} disabled={salveaza}>
-          {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
-        </Button>
-      </Panel>
-    </div>
+      <BaraSalvare modificat={modificat} saving={salveaza} onSalveaza={salvare} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

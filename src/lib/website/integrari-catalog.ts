@@ -243,6 +243,14 @@ export const INTEGRARI: Integrare[] = [
     stare: "activa",
     descriere: "Conectezi Revolut Business pentru procesarea plăților online ale comenzilor.",
   },
+  /* ⚠ 15.11.2026: tbi bank livrată, deci „activa" și mutată lângă celelalte plăți livrate.
+     Textul e al clientului, neatins; cuvântul „rate", care îi lipsea, stă în `SINONIME`. */
+  {
+    cheie: "tbi",
+    categorie: "plati",
+    stare: "activa",
+    descriere: "Le permiți clienților să aleagă finanțarea tbi direct la cumpărare.",
+  },
   {
     cheie: "ingWebPay",
     categorie: "plati",
@@ -260,12 +268,6 @@ export const INTEGRARI: Integrare[] = [
     categorie: "plati",
     stare: "in-curand",
     descriere: "Le oferi clienților plata online prin procesatorul românesc EuPlătesc.",
-  },
-  {
-    cheie: "tbi",
-    categorie: "plati",
-    stare: "in-curand",
-    descriere: "Le permiți clienților să aleagă finanțarea tbi direct la cumpărare.",
   },
   {
     cheie: "unicredit",
@@ -647,7 +649,7 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
   epacket: ["ramburs", "awb", "urmarire", "tracking", "locker", "punct", "ridicare"],
 
   /* ── Plăți online ──────────────────────────────────────────────────────────
-     Doar cele CINCI livrate. `card` lipsește la Stripe (e deja în descriere) și
+     Cele CINCI de card și tbi (livrată 15.11.2026). `card` lipsește la Stripe (e deja în descriere) și
      la Klarna, care nu e card: e cumpără-acum-plătește-mai-târziu, singura
      dintre cele cinci fără „Card" în eticheta din `payment-methods.ts`.
      `rate` NU e la niciuna: Stripe închide lista pe `["card"]`, iar Netopia
@@ -657,6 +659,10 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
   ipay: ["card", "cardul", "procesator", "checkout", "banca"],
   klarna: ["procesator", "checkout"],
   revolut: ["card", "cardul", "procesator", "checkout"],
+  /* tbi: cumpărarea în rate e chiar rostul ei, iar textul clientului nu mai conține „rate"
+     (vezi proba „se potrivesc CUVINTELE"). `credit`: așa caută un comerciant; „finanțare" e deja
+     în descriere. */
+  tbi: ["rate", "credit", "checkout"],
 
   /* ── Facturare ─────────────────────────────────────────────────────────────
      Numai cele trei livrate, și numai documentele care chiar se emit.

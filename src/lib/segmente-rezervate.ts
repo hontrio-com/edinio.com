@@ -105,8 +105,12 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
  * de slug, deci trebuie sa fie rezervat aici (vezi `sitemap.xml`,
  * `site.webmanifest`). Sta aici, nu in proxy, ca proba sa o poata importa fara
  * `next/server`.
+ *
+ * ⚠ `mp4`/`webm` (15.11.2026, bannerul video tbi de pe pagina produsului): fara ele, pe un DOMENIU
+ * PROPRIU proxy-ul rescria `/plati/tbi/rate-tbi.mp4` spre `/<slug>/plati/...`, adica 404, deci clipul
+ * lipsea tocmai pe magazinele reale.
  */
-export const EXTENSII_STATICE = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js)$/i;
+export const EXTENSII_STATICE = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js|mp4|webm)$/i;
 
 /**
  * Primul segment al unei cai („/floraria-mea/product/x" → „floraria-mea";

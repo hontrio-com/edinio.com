@@ -3,13 +3,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, ExternalLink, CheckCircle, Info } from "lucide-react";
+import { Boxes, ExternalLink, Info, Tag, Target } from "lucide-react";
 import { saveMarketingConfig } from "@/lib/actions/marketing.actions";
 import type { MarketingConfig } from "@/lib/marketing-config";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 export function GoogleAdsConfigClient({
   businessId,
@@ -32,6 +35,12 @@ export function GoogleAdsConfigClient({
   );
   const [conversionLabel, setConversionLabel] = useState(initialConfig?.google_ads_conversion_label ?? "");
 
+  /* Bara de salvare: apare doar cand cele trei campuri s-au departat de ultima salvare. */
+  const valori = { tagId, adsId, conversionLabel };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() { setTagId(reper.tagId); setAdsId(reper.adsId); setConversionLabel(reper.conversionLabel); }
+
   const isActive = !!initialConfig?.google_tag_id?.trim() || !!initialConfig?.google_ads_conversion_id?.trim();
   const isGoogleAds = adsId.trim().toUpperCase().startsWith("AW-");
 
@@ -48,120 +57,93 @@ export function GoogleAdsConfigClient({
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success(tagId.trim() ? "Google Tag salvat" : "Google Tag eliminat");
+      toast.success(tagId.trim() ? "Tagul Google a fost salvat." : "Tagul Google a fost eliminat.");
+      setReper(valori);
       router.refresh();
     }
   }
 
+  const faraEticheta = !!initialConfig?.google_ads_conversion_id && !initialConfig?.google_ads_conversion_label;
+  const stari: StareAntet[] = !isActive
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      { ton: "bun", text: "Tag activ" },
+      ...(faraEticheta ? [{ ton: "asteptare" as const, text: "Fără etichetă de conversie" }] : []),
+    ];
+  const legatura = "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline";
+
   return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout variant="success" icon={CheckCircle} title="Google Tag activ">
-          <span className="font-mono">{initialConfig?.google_ads_conversion_id || initialConfig?.google_tag_id}</span>
-        </Callout>
-      )}
-      {!!initialConfig?.google_ads_conversion_id && !initialConfig?.google_ads_conversion_label && (
-        <Callout variant="warning" icon={Info} title="Mai lipseste eticheta de conversie">
-          Fara ea, comanda incheiata nu se raporteaza ca vanzare in Google Ads. O gasesti la actiunea ta de
-          conversie, in Google Ads &gt; Obiective &gt; Conversii &gt; Tag setup.
-        </Callout>
-      )}
+    <PaginaIntegrare
+      id="google-ads"
+      titlu="Conversii Google Ads"
+      descriere="Vânzările din magazin ajung ca și conversii în Google Ads, pentru licitare și remarketing."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Tag ID", facut: !!initialConfig?.google_tag_id?.trim() },
+          { text: "ID de conversie (AW-)", facut: !!initialConfig?.google_ads_conversion_id?.trim() },
+          { text: "Eticheta de conversie", facut: !!initialConfig?.google_ads_conversion_label?.trim() },
+        ]} />
+        <CardCifre titlu="Evenimente trimise automat" randuri={EVENIMENTE_GOOGLE.map(([nume, cand]) => ({
+          eticheta: <span className="font-mono text-foreground">{nume}</span>,
+          valoare: <span className="text-muted-foreground">{cand}</span>,
+        }))} />
+        <CumFunctioneaza id="google-ads" puncte={[
+          { Icon: Tag, text: "Tagul Google se încarcă pe fiecare pagină a magazinului, după acordul de cookie-uri." },
+          { Icon: Target, text: "La comanda încheiată pleacă o conversie cu ID-ul AW- și eticheta ei, cu valoarea în RON." },
+          { Icon: Boxes, text: "Articolele pleacă și cu ID-ul din Merchant Center, deci remarketingul dinamic arată chiar produsele văzute." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Tagul Google" descriere="Tagul care se încarcă pe paginile magazinului.">
+        <Field label="Tag ID" htmlFor="google-tag" required hint={<>Google Ads: <span className="font-mono">AW-XXXXXXXXX</span>, GA4: <span className="font-mono">G-XXXXXXXXXX</span></>}>
+          <Input id="google-tag" type="text" value={tagId} onChange={e => setTagId(e.target.value)} placeholder="ex: AW-123456789 sau G-XXXXXXXXXX" className="font-mono" />
+        </Field>
+        <a href="https://ads.google.com" target="_blank" rel="noopener noreferrer" className={legatura}>
+          Deschide Google Ads <ExternalLink className="h-3 w-3" />
+        </a>
+      </Sectiune>
 
-      <Panel className="space-y-4 p-4">
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tag ID *</label>
-          <Input
-            type="text"
-            value={tagId}
-            onChange={e => setTagId(e.target.value)}
-            placeholder="ex: AW-123456789 sau G-XXXXXXXXXX"
-            className="font-mono"
-          />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
-            Google Ads: <span className="font-mono">AW-XXXXXXXXX</span> &nbsp;|&nbsp; GA4: <span className="font-mono">G-XXXXXXXXXX</span>
-          </p>
+      <Sectiune pas={2} titlu="Conversia de vânzare" descriere="Cu ele, fiecare comandă încheiată se raportează ca vânzare în Google Ads.">
+        {faraEticheta && (
+          <Callout variant="warning" icon={Info} title="Mai lipsește eticheta de conversie">
+            Fără ea, comanda încheiată nu se raportează ca vânzare în Google Ads. O găsești la acțiunea ta de
+            conversie, în Google Ads, Obiective, Conversii, Tag setup.
+          </Callout>
+        )}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="ID conversie Google Ads" htmlFor="google-conversie"
+            ajutor={<ExplicatieCard marime="mic" intrebare="Ce scriu aici" eticheta="ID-ul de conversie"
+              text="ID-ul contului de conversii, cel care începe cu AW-. Un ID de Analytics (G-) nu primește conversii: pus aici, conversiile nu ajung nicăieri." />}>
+            <Input id="google-conversie" type="text" value={adsId} onChange={e => setAdsId(e.target.value)} placeholder="ex: AW-123456789" className="font-mono" />
+          </Field>
+          <Field
+            label={<>Conversion Label (Purchase){isGoogleAds && <span className="ml-1 font-semibold text-warning">recomandat</span>}</>}
+            htmlFor="google-eticheta"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="Eticheta de conversie"
+              text="În Google Ads: Goals, Conversions, acțiunea de conversie Purchase, apoi Tag setup. Fără ea, comenzile nu se raportează ca vânzări." />}>
+            <Input id="google-eticheta" type="text" value={conversionLabel} onChange={e => setConversionLabel(e.target.value)} placeholder="ex: abc123XYZ_def456" className="font-mono" />
+          </Field>
         </div>
+      </Sectiune>
 
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">ID conversie Google Ads</label>
-          <Input
-            type="text"
-            value={adsId}
-            onChange={e => setAdsId(e.target.value)}
-            placeholder="ex: AW-123456789"
-            className="font-mono"
-          />
-          <div className="mt-1.5 flex items-start gap-1.5">
-            <Info className="mt-0.5 h-3 w-3 flex-shrink-0 text-muted-foreground" />
-            <p className="text-[11px] text-muted-foreground">
-              Aici merge ID-ul contului de conversii, cel care incepe cu <span className="font-mono">AW-</span>.
-              Un ID de Analytics (<span className="font-mono">G-</span>) nu primeste conversii: pana acum, pus aici,
-              conversiile nu ajungeau nicaieri.
-            </p>
-          </div>
-        </div>
-
-        {/* Conversion Label — relevant only for Google Ads (AW-) */}
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Conversion Label (Purchase)
-            {isGoogleAds && <span className="ml-1 font-semibold text-warning">recomandat</span>}
-          </label>
-          <Input
-            type="text"
-            value={conversionLabel}
-            onChange={e => setConversionLabel(e.target.value)}
-            placeholder="ex: abc123XYZ_def456"
-            className="font-mono"
-          />
-          <div className="mt-1.5 flex items-start gap-1.5">
-            <Info className="mt-0.5 h-3 w-3 flex-shrink-0 text-muted-foreground" />
-            <p className="text-[11px] text-muted-foreground">
-              Necesar pentru a raporta comenzile ca &quot;conversii&quot; in Google Ads. Gaseste-l in Google Ads &gt; Goals &gt; Conversions &gt; actiunea de conversie Purchase &gt; Tag setup.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <a
-            href="https://ads.google.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Deschide Google Ads
-          </a>
-          <Button size="lg" onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="animate-spin" />}
-            {saving ? "Se salveaza..." : "Salveaza"}
-          </Button>
-        </div>
-      </Panel>
-
-      <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
-        <p className="mb-2 text-sm font-semibold text-foreground">Evenimente urmarite automat</p>
-        <ul className="space-y-1 text-xs text-muted-foreground">
-          <li><span className="font-mono text-foreground">page_view</span>: la fiecare vizita (configurat automat)</li>
-          <li><span className="font-mono text-foreground">add_to_cart</span>: cand un produs este adaugat in cos</li>
-          <li><span className="font-mono text-foreground">begin_checkout</span>: la deschiderea formularului de comanda</li>
-          <li><span className="font-mono text-foreground">purchase</span>: la confirmarea comenzii (valoare + RON)</li>
-          <li><span className="font-mono text-foreground">conversion</span>: conversia din Google Ads, cu ID-ul si eticheta de mai sus</li>
-        </ul>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          Articolele pleaca si cu ID-ul din Merchant Center si cu <span className="font-mono">google_business_vertical</span>,
-          deci reclamele de remarketing dinamic arata chiar produsele vazute.
+      <Sectiune titlu="Enhanced conversions">
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          La comanda încheiată trimitem emailul și telefonul clientului <span className="font-medium text-foreground">hash-uite
+          SHA-256 pe serverul nostru</span>, ca să se potrivească mai bine conversiile. Pornește-le o dată din Google Ads:
+          Obiective, Conversii, acțiunea ta, „Enhanced conversions”, cu metoda „Google tag”.
         </p>
-      </div>
+      </Sectiune>
 
-      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
-        <p className="mb-2 text-sm font-semibold text-foreground">Enhanced conversions</p>
-        <p className="text-xs text-muted-foreground">
-          La comanda incheiata trimitem emailul si telefonul clientului <span className="font-medium text-foreground">hash-uite
-          SHA-256 pe serverul nostru</span>, ca sa se potriveasca mai bine conversiile. Porneste-le o data din Google Ads:
-          Obiective &gt; Conversii &gt; actiunea ta &gt; „Enhanced conversions”, cu metoda „Google tag”.
-        </p>
-      </div>
-    </div>
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={handleSave} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }
+
+const EVENIMENTE_GOOGLE: [string, string][] = [
+  ["page_view", "fiecare vizită"],
+  ["add_to_cart", "adăugarea în coș"],
+  ["begin_checkout", "formularul de comandă"],
+  ["purchase", "comanda confirmată, cu valoarea"],
+  ["conversion", "conversia Google Ads"],
+];

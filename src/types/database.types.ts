@@ -6479,6 +6479,7 @@ export type Database = {
           storefront_design_draft: Json | null
           storefront_design_pub_at: string | null
           stripe_config: Json | null
+          tbi_config: Json | null
           trendyol_config: Json
           updated_at: string
           ups_config: Json | null
@@ -6561,6 +6562,7 @@ export type Database = {
           storefront_design_draft?: Json | null
           storefront_design_pub_at?: string | null
           stripe_config?: Json | null
+          tbi_config?: Json | null
           trendyol_config?: Json
           updated_at?: string
           ups_config?: Json | null
@@ -6643,6 +6645,7 @@ export type Database = {
           storefront_design_draft?: Json | null
           storefront_design_pub_at?: string | null
           stripe_config?: Json | null
+          tbi_config?: Json | null
           trendyol_config?: Json
           updated_at?: string
           ups_config?: Json | null
@@ -6794,6 +6797,75 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tbi_cereri: {
+        Row: {
+          adresa_cerere: string | null
+          anulare_ceruta_la: string | null
+          business_id: string
+          created_at: string
+          id: number
+          istoric: Json
+          jeton_hash: string
+          mediu: string
+          motiv: string | null
+          order_id: string | null
+          order_number: string
+          stare: string
+          suma: number
+          ultima_veste_la: string | null
+          updated_at: string
+        }
+        Insert: {
+          adresa_cerere?: string | null
+          anulare_ceruta_la?: string | null
+          business_id: string
+          created_at?: string
+          id?: never
+          istoric?: Json
+          jeton_hash: string
+          mediu: string
+          motiv?: string | null
+          order_id?: string | null
+          order_number: string
+          stare?: string
+          suma: number
+          ultima_veste_la?: string | null
+          updated_at?: string
+        }
+        Update: {
+          adresa_cerere?: string | null
+          anulare_ceruta_la?: string | null
+          business_id?: string
+          created_at?: string
+          id?: never
+          istoric?: Json
+          jeton_hash?: string
+          mediu?: string
+          motiv?: string | null
+          order_id?: string | null
+          order_number?: string
+          stare?: string
+          suma?: number
+          ultima_veste_la?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tbi_cereri_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tbi_cereri_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]

@@ -4,6 +4,10 @@ import type { ReactNode } from "react";
 import { ShoppingBag, Plus, Minus, Eye } from "lucide-react";
 import type { FaqItem } from "./product-page.types";
 import { textulContorului, type FereastraContor } from "@/lib/storefront/contor-vizitatori";
+import { sumaInLimite, type BannerTbiProdus } from "@/lib/tbi/config";
+import { RandRateTbi } from "@/components/storefront/RandRateTbi";
+import { BannerRateTbi } from "@/components/storefront/BannerRateTbi";
+import { VideoRateTbi } from "@/components/storefront/VideoRateTbi";
 
 /**
  * Piese folosite de mai multe variante de pagina de produs.
@@ -167,4 +171,24 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
       {label}
     </button>
   );
+}
+
+/**
+ * „Plateste in rate cu tbi bank", sub butoanele de comanda, cand magazinul ofera plata in rate si
+ * pretul intra in limitele lui. Acelasi rand il pune si modulul oficial tbi pentru WooCommerce (dupa
+ * butonul de cos), si tot el apare in ilustratia paginii de produs de pe site-ul de prezentare Edinio.
+ *
+ * ⚠ FARA RATA LUNARA. Dobanda, comisionul si asigurarea le stabileste tbi pentru fiecare client, iar
+ * DAE-ul nu se poate socoti aici; o rata inventata pe o pagina comerciala ar fi o oferta de credit
+ * falsa. Randul spune doar ca se poate, iar omul alege plata in rate la finalizarea comenzii.
+ *
+ * Forma o alege comerciantul in panoul tbi: randul discret, bannerul sau bannerul video; `limite`
+ * vine `null` cand a ales „Nimic" (vezi `bannerTbiPePaginaProdusului`). Marcajul fiecarei forme e in
+ * `components/storefront/`, comun cu previzualizarea din panou.
+ */
+export function RateTbi({ limite, pret }: { limite: BannerTbiProdus | null | undefined; pret: number }) {
+  if (!limite || !sumaInLimite(limite, pret)) return null;
+  if (limite.forma === "banner") return <BannerRateTbi />;
+  if (limite.forma === "video") return <VideoRateTbi />;
+  return <RandRateTbi />;
 }

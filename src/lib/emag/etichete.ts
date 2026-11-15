@@ -56,3 +56,21 @@ export const COMUTATOR_SINCRONIZARE_EMAG = "Sincronizează automat schimbările 
 /** Ce pleacă la ofertele care se sincronizează (12.11.2026). Vezi `politica-sincronizare.ts`. */
 export const COMUTATOR_STOC_EMAG = "Trimite stocul la eMAG";
 export const COMUTATOR_PRET_EMAG = "Trimite prețul la eMAG";
+
+/**
+ * Ce lipseste ca sa se poata publica sta in fila „Setări” (cota de TVA, zilele de expediere, adica
+ * blocul `BLOC_PREGATIRE_PUBLICARE`), nu in „Prezentare” (butonul `BUTON_ADU_OFERTELE`)?
+ *
+ * ⚠ ACEEASI ORDINE ca `ceLipsestePentruPublicare` (`sync.ts`): intai setarile, abia apoi catalogul.
+ * Ecranul alegea indrumarul dupa `catalogCitit`, iar la un cont nou (niciuna facuta) titlul cerea cota
+ * de TVA, in timp ce randul de sub el trimitea la butonul de legare. Aici, si nu in ecran, fiindca o
+ * cer amandoua: avertismentul din „Prezentare” si punctul de atentie de pe fila „Setări” (pagina, pe
+ * server; un ecran "use client" nu-si poate imparti functiile cu serverul).
+ */
+export function lipsesteDinSetari(stare: {
+  lipsaPentruPublicare: string | null;
+  vatId: number | null;
+  handlingTime: number | null;
+}): boolean {
+  return !!stare.lipsaPentruPublicare && (!stare.vatId || stare.handlingTime == null);
+}

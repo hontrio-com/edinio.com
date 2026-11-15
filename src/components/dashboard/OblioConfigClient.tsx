@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2, PlugZap, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, CheckCircle, Landmark, Layers, Loader2, ReceiptText, RefreshCw, Warehouse } from "lucide-react";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
 import type { OblioConfig } from "@/lib/oblio";
 import { AUTO_INVOICE_TRIGGERS, type AutoInvoiceTrigger } from "@/lib/invoicing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Panel } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { Callout } from "@/components/ui/callout";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import {
+  BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { alegeGestiunea, gestiuneaECeruta, stareOblio, type ListaGestiuni } from "@/lib/oblio-stare";
@@ -60,6 +64,7 @@ export default function OblioConfigClient({
   const [loadingCif, startLoadCifTransition] = useTransition();
   const [saving, startSaveTransition] = useTransition();
   const [disconnecting, startDisconnectTransition] = useTransition();
+  const router = useRouter();
 
   const isConnected = !!(initialConfig?.client_id && initialConfig?.cif);
   const invoiceSeries = accountData?.series.filter(s => s.type === "Factura") ?? [];
@@ -92,6 +97,18 @@ export default function OblioConfigClient({
   const { complet, activ, lipsesteGestiunea, poateSalva } = stareOblio({
     clientId, cif, seriesInvoice, enabled, management, gestiuni,
   });
+
+  /*
+    Bara de salvare apare doar cand formularul s-a departat de ultima salvare. Fara „Renunta":
+    listele (serii, cote, gestiuni) vin din Oblio pentru firma aleasa, deci intoarcerea doar a
+    valorilor ar lasa firma veche langa seriile celei noi.
+  */
+  const valori = {
+    enabled, clientId, clientSecret, cif, companyName, seriesInvoice, seriesProforma, management, vatName,
+    vatPercentage, autoInvoice, autoInvoiceTrigger, productType, dueDays, sendToSpv, noStock, sendEmail,
+  };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
 
   /*
     ═══ ⚠ NOMENCLATORUL SE CERE LA DESCHIDEREA PAGINII ═══
@@ -145,7 +162,7 @@ export default function OblioConfigClient({
   }, [businessId, isConnected, initialConfig]);
 
   function handleLoad() {
-    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu email-ul si secretul contului Oblio"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu emailul și tokenul contului Oblio."); return; }
     setLoadError("");
     setAccountData(null);
     startLoadTransition(async () => {
@@ -183,7 +200,7 @@ export default function OblioConfigClient({
       const defVat = result.vatRates.find(v => v.default);
       if (defVat) { setVatName(defVat.name); setVatPercentage(defVat.percent); }
       setManagement(m => alegeGestiunea(result.management, m));
-      toast.success(`Conexiune reusita! ${result.companies.length} ${result.companies.length === 1 ? "firma" : "firme"} gasite.`);
+      toast.success(`Conexiune reușită: ${result.companies.length} ${result.companies.length === 1 ? "firmă găsită" : "firme găsite"}.`);
     });
   }
 
@@ -230,9 +247,9 @@ export default function OblioConfigClient({
   }
 
   function handleSave() {
-    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu credentialele Oblio"); return; }
-    if (!cif) { toast.error("Selecteaza firma"); return; }
-    if (!seriesInvoice) { toast.error("Selecteaza seria pentru factura"); return; }
+    if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu emailul și tokenul contului Oblio."); return; }
+    if (!cif) { toast.error("Alege firma: apasă întâi „Testează și încarcă date”."); return; }
+    if (!seriesInvoice) { toast.error("Alege seria facturilor."); return; }
     /*
       ⚠ PAZA CARE LIPSEA, SI CARE A COSTAT TREI SAPTAMANI. Un cont Oblio cu stocuri
       refuza ORICE factura fara gestiune. Pana acum formularul se salva multumit,
@@ -251,11 +268,11 @@ export default function OblioConfigClient({
     */
     if (!enabled) {
       toast.warning(
-        "Datele se salveaza, dar integrarea ramane OPRITA. Porneste comutatorul Activat ca sa poti emite facturi.",
+        "Datele se salvează, dar integrarea rămâne OPRITĂ. Pornește comutatorul „Facturarea Oblio” de sus, ca să poți emite facturi.",
       );
     }
     if (!poateSalva) {
-      toast.error("Contul tau Oblio are gestiuni. Alege din care iese marfa, altfel facturile vor fi refuzate.");
+      toast.error("Contul tău Oblio are gestiuni. Alege din care iese marfa, altfel facturile vor fi refuzate.");
       return;
     }
 
@@ -293,7 +310,11 @@ export default function OblioConfigClient({
         return;
       }
       if ("error" in result) toast.error(result.error);
-      else toast.success("Configuratie Oblio salvata");
+      else {
+        toast.success("Configurația Oblio a fost salvată.");
+        setReper(valori);
+        router.refresh();
+      }
     });
   }
 
@@ -315,246 +336,231 @@ export default function OblioConfigClient({
       }
       if ("error" in result) toast.error(result.error);
       else {
-        toast.success("Oblio deconectat");
+        toast.success("Oblio a fost deconectat.");
         setClientId(""); setClientSecret(""); setCif(""); setCompanyName("");
         setSeriesInvoice(""); setSeriesProforma("");
         setAccountData(null); setEnabled(false);
+        setReper({ ...valori, enabled: false, clientId: "", clientSecret: "", cif: "", companyName: "", seriesInvoice: "", seriesProforma: "" });
+        router.refresh();
       }
     });
   }
 
+  const secretSalvat = secretulEsteSalvat(initialConfig, "client_secret");
+  const areAcces = !!clientId && (!!clientSecret || secretSalvat);
+  const arataDocumentele = !!(accountData || isConnected);
+  const stari: StareAntet[] = !isConnected
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [initialConfig?.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" }];
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="oblio" description="Genereaza automat facturi Oblio pentru comenzile din magazinul tau." />
+    <PaginaIntegrare
+      id="oblio"
+      titlu="Facturare"
+      descriere="Emiți facturi și proforme Oblio din comenzi, manual sau automat."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Facturarea Oblio" activ={enabled} onChange={setEnabled} ariaLabel="Activează Oblio" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Contul Oblio", facut: areAcces },
+          { text: "Firma și seria facturilor", facut: !!cif && !!seriesInvoice },
+          ...(gestiuneaECeruta(gestiuni) ? [{ text: "Gestiunea", facut: !!management }] : []),
+          { text: "Facturarea activă", facut: isConnected && !!initialConfig?.enabled },
+        ]} />
+        <CumFunctioneaza id="oblio" puncte={[
+          { Icon: ReceiptText, text: "Emiți factura din pagina comenzii sau automat, când comanda ajunge la statusul ales." },
+          { Icon: Layers, text: "Firma, seriile și cotele TVA vin din contul tău Oblio: le aduci cu „Testează și încarcă date”." },
+          { Icon: Warehouse, text: "Dacă ții stocul în Oblio, alegi gestiunea din care iese marfa. Fără ea, Oblio refuză factura." },
+          { Icon: Landmark, text: "Factura poate pleca singură în SPV (e-Factura), dacă trimiterea automată e pornită și în Oblio." },
+        ]} />
+      </>}
+    >
+      {/* Starea, primul lucru de pe pagina. Vezi nota de la `activ`. */}
+      {activ ? (
+        <Callout variant="success" icon={CheckCircle} title="Oblio activ">
+          Facturile se pot emite din pagina Comenzi.
+        </Callout>
+      ) : lipsesteGestiunea ? (
+        /*
+          ⚠ CAZUL CARE MINTEA. `complet` nu numara gestiunea, asa ca pentru un
+          cont cu stocuri si fara gestiune aleasa se aprindea caseta VERDE
+          „Facturile se pot emite", pentru un cont caruia Oblio ii refuza
+          fiecare factura. Masurat pe VetDepo: patru refuzuri, caseta verde.
+        */
+        <Callout variant="warning" icon={AlertTriangle} title="Mai lipsește gestiunea">
+          Contul tău Oblio are stocuri, deci fiecare factură trebuie să spună din ce gestiune iese marfa.
+          Alege <strong>Gestiune</strong> mai jos și salvează: până atunci Oblio refuză documentele,
+          chiar dacă restul e configurat.
+        </Callout>
+      ) : complet ? (
+        <Callout variant="warning" icon={AlertTriangle} title="Oblio configurat, dar OPRIT">
+          Datele contului sunt salvate, dar comutatorul <strong>Facturarea Oblio</strong> de sus e stins. De aceea
+          integrarea apare neconectată la Integrări și nu apare butonul de factură în Comenzi.
+        </Callout>
+      ) : null}
 
-      <div className="space-y-4">
-        {/* Starea, primul lucru de pe pagina. Vezi nota de la `activ`. */}
-        {activ ? (
-          <Callout variant="success" icon={CheckCircle} title="Oblio activ">
-            Facturile se pot emite din pagina Comenzi.
-          </Callout>
-        ) : lipsesteGestiunea ? (
-          /*
-            ⚠ CAZUL CARE MINTEA. `complet` nu numara gestiunea, asa ca pentru un
-            cont cu stocuri si fara gestiune aleasa se aprindea caseta VERDE
-            „Facturile se pot emite" — pentru un cont caruia Oblio ii refuza
-            fiecare factura. Masurat pe VetDepo: patru refuzuri, caseta verde.
-          */
-          <Callout variant="warning" icon={AlertTriangle} title="Mai lipseste gestiunea">
-            Contul tau Oblio are stocuri, deci fiecare factura trebuie sa spuna din ce gestiune iese
-            marfa. Alege <strong>Gestiune</strong> mai jos si salveaza, fiindca pana atunci Oblio refuza
-            documentele, chiar daca restul e configurat.
-          </Callout>
-        ) : complet ? (
-          <Callout variant="warning" icon={AlertTriangle} title="Oblio configurat, dar OPRIT">
-            Datele contului sunt salvate, dar comutatorul <strong>Activat</strong> de mai jos e stins, de aceea
-            integrarea apare neconectata la Integrari si nu apare butonul de factura in Comenzi.
-          </Callout>
-        ) : null}
-
-        {/* Enable toggle */}
-        <Panel className="flex items-center justify-between p-4">
-          <div>
-            <p className="text-sm font-medium text-foreground">Activat</p>
-            <p className="text-xs text-muted-foreground">Permite generarea documentelor Oblio din comenzi</p>
-          </div>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-        </Panel>
-
-        {/* Credentials */}
-        <Panel className="space-y-4 p-5">
-          <p className="text-sm font-semibold text-foreground">Credentiale API</p>
-
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Email cont Oblio (client_id) *</label>
-              <Input
-                type="email"
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                placeholder="email@exemplu.ro"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Token secret (client_secret) *</label>
-              <Input
-                type="password"
-                value={clientSecret}
-                onChange={e => setClientSecret(e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "client_secret") ? PLACEHOLDER_SECRET_SALVAT : "Token din Setari > Date Cont"}
-              />
-            </div>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLoad}
-            disabled={loading || !clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))}
-          >
+      <Sectiune pas={1} titlu="Contul Oblio" descriere="Emailul contului și tokenul API. Cu ele aducem din Oblio firma, seriile și cotele TVA.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Email cont Oblio" htmlFor="oblio-email" required>
+            <Input id="oblio-email" type="email" value={clientId} onChange={e => setClientId(e.target.value)} placeholder="email@exemplu.ro" />
+          </Field>
+          <Field label="Token secret" htmlFor="oblio-token" required
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde îl iau" eticheta="Tokenul API Oblio"
+              text="Emailul e chiar cel cu care intri în Oblio (client_id). Tokenul (client_secret) îl găsești în contul Oblio, la Setări, apoi Date cont." />}>
+            <Input id="oblio-token" type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)}
+              placeholder={secretSalvat ? PLACEHOLDER_SECRET_SALVAT : "Din Setări, Date cont"} />
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" onClick={handleLoad} disabled={loading || !areAcces}>
             {loading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-            Testeaza si incarca date
+            Testează și încarcă date
           </Button>
-
-          {loadError && (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">{loadError}</p>
+          {loadingCif && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Aduc seriile din Oblio...
+            </span>
           )}
-        </Panel>
+        </div>
+        {loadError && <Callout variant="danger" title={loadError} />}
+      </Sectiune>
 
-        {/* Company + Series + VAT — shown after data loaded or if already configured */}
-        {(accountData || isConnected) && (
-          <Panel className="space-y-4 p-5">
-            <p className="text-sm font-semibold text-foreground">Configurare firma si documente</p>
-
-            {/* Company selector */}
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Firma *</label>
-              {accountData && accountData.companies.length > 1 ? (
-                <select
-                  aria-label="Firma"
-                  value={cif}
-                  onChange={e => handleCifChange(e.target.value)}
-                  className={selectCls}
-                  disabled={loadingCif}
-                >
-                  {accountData.companies.map(c => (
-                    <option key={c.cif} value={c.cif}>{c.name} ({c.cif})</option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  type="text"
-                  value={cif ? `${companyName} (${cif})` : cif}
-                  readOnly
-                  className="bg-muted/40"
-                  placeholder="CIF firma"
-                />
-              )}
-            </div>
-
-            {/* Invoice series */}
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Serie factura *</label>
-              {accountData && invoiceSeries.length > 0 ? (
-                <select aria-label="Serie factura" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} className={selectCls}>
-                  <option value="">-- Selecteaza --</option>
-                  {invoiceSeries.map(s => (
-                    <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicita)" : ""}</option>
-                  ))}
-                </select>
-              ) : (
-                <Input type="text" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} placeholder="ex: FCT" />
-              )}
-            </div>
-
-            {/*
-              Gestiunea. ⚠ SE ARATA DOAR CAND CONTUL ARE STOCURI — nomenclatorul
-              intoarce lista goala altfel, si atunci campul n-ar avea niciun
-              inteles pentru om. Un camp gol pe care nu-l poate completa nimeni e
-              mai rau decat niciun camp.
-            */}
-            {gestiuneaECeruta(gestiuni) && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Gestiune *</label>
-                <select
-                  aria-label="Gestiune"
-                  value={management}
-                  onChange={e => setManagement(e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="">-- Selecteaza --</option>
-                  {gestiuni.map(gest => (
-                    <option key={gest.name} value={gest.name}>
-                      {gest.name}{gest.tip ? ` (${gest.tip})` : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Contul tau Oblio are stocuri, deci fiecare factura trebuie sa spuna din ce
-                  gestiune iese marfa. Fara ea, Oblio refuza documentul.
-                </p>
-              </div>
-            )}
-
-            {/* Proforma series */}
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Serie proforma</label>
-              {accountData && proformaSeries.length > 0 ? (
-                <select aria-label="Serie proforma" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} className={selectCls}>
-                  <option value="">-- Fara proforma --</option>
-                  {proformaSeries.map(s => (
-                    <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicita)" : ""}</option>
-                  ))}
-                </select>
-              ) : (
-                <Input type="text" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} placeholder="ex: PR (optional)" />
-              )}
-            </div>
-
-            {/* VAT rate */}
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Cota TVA implicita</label>
-              {accountData && accountData.vatRates.length > 0 ? (
-                <select
-                  aria-label="Cota TVA implicita"
-                  value={vatName}
-                  onChange={e => {
-                    const selected = accountData.vatRates.find(v => v.name === e.target.value);
-                    setVatName(e.target.value);
-                    if (selected) setVatPercentage(selected.percent);
-                  }}
-                  className={selectCls}
-                >
-                  {accountData.vatRates.map(v => (
-                    <option key={v.name} value={v.name}>{v.name} ({v.percent}%){v.default ? ", implicita" : ""}</option>
-                  ))}
-                </select>
-              ) : (
-                <div className="flex gap-2">
-                  <Input type="text" value={vatName} onChange={e => setVatName(e.target.value)} placeholder="Normala" />
-                  <Input type="number" value={vatPercentage} onChange={e => setVatPercentage(Number(e.target.value))} placeholder="19" className="max-w-20" />
-                </div>
-              )}
-              <p className="mt-1 text-xs text-muted-foreground">
-                Folosita la generarea facturilor daca nu este specificata per produs. Cota va fi aplicata conform setarilor de TVA ale magazinului.
-              </p>
-            </div>
-          </Panel>
-        )}
-
-        {/* Optiuni document */}
-        {(accountData || isConnected) && (
-          <Panel className="space-y-4 p-5">
-            <p className="text-sm font-semibold text-foreground">Optiuni document</p>
-
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Tip produse</label>
-              <select aria-label="Tip produse" value={productType} onChange={e => setProductType(e.target.value)} className={selectCls}>
-                {["Marfa", "Serviciu", "Produs finit", "Semifabricate", "Materii prime", "Materiale consumabile", "Ambalaje", "Obiecte de inventar"].map(t => (
-                  <option key={t} value={t}>{t}</option>
+      {arataDocumentele && (
+        <Sectiune pas={2} titlu="Firmă și documente" descriere="Firma care emite, seriile și cota TVA, așa cum sunt în contul tău Oblio.">
+          <Field label="Firmă" htmlFor="oblio-firma" required>
+            {accountData && accountData.companies.length > 1 ? (
+              <select
+                id="oblio-firma"
+                value={cif}
+                onChange={e => handleCifChange(e.target.value)}
+                className={selectCls}
+                disabled={loadingCif}
+              >
+                {accountData.companies.map(c => (
+                  <option key={c.cif} value={c.cif}>{c.name} ({c.cif})</option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Tipul liniilor de produs pe factura. Pentru magazine cu produse fizice, alege „Marfa&quot;. Transportul ramane „Serviciu&quot;.
-              </p>
-            </div>
+            ) : (
+              <Input
+                id="oblio-firma"
+                type="text"
+                value={cif ? `${companyName} (${cif})` : cif}
+                readOnly
+                className="bg-muted/40"
+                placeholder="Apare după „Testează și încarcă date”"
+              />
+            )}
+          </Field>
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Scadenta factura (zile)</label>
-              <Input type="number" min={0} max={120} value={dueDays || ""}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Serie factură" htmlFor="oblio-serie" required>
+              {accountData && invoiceSeries.length > 0 ? (
+                <select id="oblio-serie" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} className={selectCls}>
+                  <option value="">Alege seria</option>
+                  {invoiceSeries.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicită)" : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input id="oblio-serie" type="text" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} placeholder="ex: FCT" />
+              )}
+            </Field>
+            <Field label="Serie proformă (opțional)" htmlFor="oblio-proforma">
+              {accountData && proformaSeries.length > 0 ? (
+                <select id="oblio-proforma" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} className={selectCls}>
+                  <option value="">Fără proformă</option>
+                  {proformaSeries.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}{s.default ? " (implicită)" : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input id="oblio-proforma" type="text" value={seriesProforma} onChange={e => setSeriesProforma(e.target.value)} placeholder="ex: PR" />
+              )}
+            </Field>
+          </div>
+
+          {/*
+            Gestiunea. ⚠ SE ARATA DOAR CAND CONTUL ARE STOCURI: nomenclatorul
+            intoarce lista goala altfel, si atunci campul n-ar avea niciun
+            inteles pentru om. Un camp gol pe care nu-l poate completa nimeni e
+            mai rau decat niciun camp.
+          */}
+          {gestiuneaECeruta(gestiuni) && (
+            <Field label="Gestiune" htmlFor="oblio-gestiune" required
+              hint="Contul tău Oblio are stocuri, deci fiecare factură spune din ce gestiune iese marfa. Fără ea, Oblio refuză documentul.">
+              <select
+                id="oblio-gestiune"
+                value={management}
+                onChange={e => setManagement(e.target.value)}
+                className={selectCls}
+              >
+                <option value="">Alege gestiunea</option>
+                {gestiuni.map(gest => (
+                  <option key={gest.name} value={gest.name}>
+                    {gest.name}{gest.tip ? ` (${gest.tip})` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          <Field label="Cotă TVA implicită" htmlFor="oblio-tva"
+            ajutor={<ExplicatieCard marime="mic" intrebare="Când se folosește" eticheta="Cota TVA implicită"
+              text="Se folosește când produsul nu are o cotă proprie. Cota se aplică după setările de TVA ale magazinului." />}>
+            {accountData && accountData.vatRates.length > 0 ? (
+              <select
+                id="oblio-tva"
+                value={vatName}
+                onChange={e => {
+                  const selected = accountData.vatRates.find(v => v.name === e.target.value);
+                  setVatName(e.target.value);
+                  if (selected) setVatPercentage(selected.percent);
+                }}
+                className={selectCls}
+              >
+                {accountData.vatRates.map(v => (
+                  <option key={v.name} value={v.name}>{v.name} ({v.percent}%){v.default ? ", implicită" : ""}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex gap-2">
+                <Input id="oblio-tva" type="text" value={vatName} onChange={e => setVatName(e.target.value)} placeholder="Normala" />
+                <Input type="number" aria-label="Procentul cotei TVA" value={vatPercentage} onChange={e => setVatPercentage(Number(e.target.value))} placeholder="19" className="max-w-20" />
+              </div>
+            )}
+          </Field>
+        </Sectiune>
+      )}
+
+      {arataDocumentele && (
+        <Sectiune pas={3} titlu="Opțiuni document" descriere="Cum arată liniile facturii și ce se întâmplă după ce o emiți.">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Tip produse" htmlFor="oblio-tip"
+              ajutor={<ExplicatieCard marime="mic" intrebare="Ce aleg aici" eticheta="Tip produse"
+                text="Tipul liniilor de produs pe factură. Pentru produse fizice alegi „Marfă”. Transportul rămâne „Serviciu”." />}>
+              <select id="oblio-tip" value={productType} onChange={e => setProductType(e.target.value)} className={selectCls}>
+                {["Marfa", "Serviciu", "Produs finit", "Semifabricate", "Materii prime", "Materiale consumabile", "Ambalaje", "Obiecte de inventar"].map(t => (
+                  <option key={t} value={t}>{t === "Marfa" ? "Marfă" : t}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Scadență factură (zile)" htmlFor="oblio-scadenta" hint="Gol = scadența e chiar data emiterii.">
+              <Input id="oblio-scadenta" type="number" min={0} max={120} value={dueDays || ""}
                 onChange={e => setDueDays(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                placeholder="0 = fara scadenta" />
-              <p className="mt-1 text-xs text-muted-foreground">Numarul de zile de la emitere pana la scadenta. Lasa gol pentru data emiterii.</p>
-            </div>
+                placeholder="0 = fără scadență" />
+            </Field>
+          </div>
 
-            <div className="flex items-center justify-between">
+          <div className="space-y-4 border-t border-border pt-4">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-foreground">Trimite in SPV (e-Factura)</p>
+                <p className="text-sm font-medium text-foreground">Trimite în SPV (e-Factura)</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Trimite automat factura in SPV daca trimiterea automata e activata in contul tau Oblio
+                  Factura pleacă singură în SPV, dacă trimiterea automată e pornită și în contul tău Oblio.
                 </p>
               </div>
-              <Switch checked={sendToSpv} onCheckedChange={setSendToSpv} />
+              <Switch checked={sendToSpv} onCheckedChange={setSendToSpv} aria-label="Trimite în SPV (e-Factura)" />
             </div>
 
             {/*
@@ -566,16 +572,16 @@ export default function OblioConfigClient({
               `/document/send` cu `status.code`. Fara randul asta am repeta exact situatia de la
               SmartBill: 187 de trimiteri incercate si zero dovezi ca vreuna a ajuns.
             */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-medium text-foreground">Trimite factura pe email</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Oblio trimite folosind sablonul din contul tau (Setari &gt; E-mail-uri alarma &gt;
-                  Document prin email). Daca nu e configurat acolo, nu se trimite nimic, iar Oblio nu
-                  ne spune, deci nici noi nu-ti putem confirma. Verifica primul email tu.
+                  Oblio trimite cu șablonul din contul tău (Setări, E-mail-uri alarmă, Document prin email).
+                  Dacă nu e configurat acolo, nu se trimite nimic, iar Oblio nu ne spune, deci nici noi nu-ți
+                  putem confirma. Verifică primul email tu.
                 </p>
               </div>
-              <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
+              <Switch checked={sendEmail} onCheckedChange={setSendEmail} aria-label="Trimite factura pe email" />
             </div>
 
             {/*
@@ -584,66 +590,54 @@ export default function OblioConfigClient({
               deja lung inseamna doar o intrebare la care omul n-are cum sa raspunda.
             */}
             {gestiuneaECeruta(gestiuni) && (
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Nu descarca stocul din Oblio</p>
+                  <p className="text-sm font-medium text-foreground">Nu descărca stocul din Oblio</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Porneste-l doar daca <strong>NU</strong> tii stocul in Oblio. Facturile nu vor
-                    mai scadea cantitatile din gestiune. Poate rezolva refuzul{" "}
-                    <em>produsul nu are stoc suficient</em>, dar schimba felul in care Oblio
-                    iti tine stocul, deci nu-l porni daca il folosesti acolo.
+                    Doar dacă <strong>NU</strong> ții stocul în Oblio: facturile nu mai scad cantitățile din gestiune.
+                    Rezolvă refuzul <em>produsul nu are stoc suficient</em>, dar schimbă felul în care Oblio îți ține stocul.
                   </p>
                 </div>
-                <Switch checked={noStock} onCheckedChange={setNoStock} />
-              </div>
-            )}
-          </Panel>
-        )}
-
-        {/* Auto-invoice */}
-        {(accountData || isConnected) && (
-          <div className="space-y-3 border-t border-border pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Generare automata factura</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Factura Oblio se genereaza automat cand comanda atinge statusul selectat
-                </p>
-              </div>
-              <Switch checked={autoInvoice} onCheckedChange={setAutoInvoice} />
-            </div>
-            {autoInvoice && (
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">Declanseaza generarea cand comanda devine</label>
-                <select aria-label="Declanseaza generarea cand comanda devine" value={autoInvoiceTrigger} onChange={e => setAutoInvoiceTrigger(e.target.value as AutoInvoiceTrigger)} className={selectCls}>
-                  {AUTO_INVOICE_TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Daca ai mai multe softuri de facturare cu generare automata, se emite o singura factura (prioritate: SmartBill, apoi Oblio, apoi fGO).
-                </p>
+                <Switch checked={noStock} onCheckedChange={setNoStock} aria-label="Nu descărca stocul din Oblio" />
               </div>
             )}
           </div>
-        )}
+        </Sectiune>
+      )}
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="animate-spin" /> : <PlugZap />}
-            Salveaza
-          </Button>
-
-          {isConnected && (
-            <ButonDeconectare
-              nume="Oblio"
-              cePierzi="Cheile se șterg din Edinio și facturile nu se mai emit automat. Facturile deja emise rămân în contul tău Oblio. Ca să te întorci, ceri din nou Client ID și Client Secret din contul tău Oblio."
-              pending={disconnecting}
-              marime="default"
-              onConfirma={handleDisconnect}
-            />
+      {arataDocumentele && (
+        <Sectiune pas={4} titlu="Generare automată" descriere="Factura se poate emite singură, când comanda ajunge la statusul ales.">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Generare automată factură</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Fără să mai apeși nimic în pagina comenzii.</p>
+            </div>
+            <Switch checked={autoInvoice} onCheckedChange={setAutoInvoice} aria-label="Generare automată factură" />
+          </div>
+          {autoInvoice && (
+            <Field label="Declanșează generarea când comanda devine" htmlFor="oblio-declansator"
+              hint="Cu mai multe programe de facturare pe automat, se emite o singură factură: întâi SmartBill, apoi Oblio, apoi fGO.">
+              <select id="oblio-declansator" value={autoInvoiceTrigger} onChange={e => setAutoInvoiceTrigger(e.target.value as AutoInvoiceTrigger)} className={selectCls}>
+                {AUTO_INVOICE_TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </Field>
           )}
-        </div>
-      </div>
-    </div>
+        </Sectiune>
+      )}
+
+      {isConnected && (
+        <ZonaDeconectare descriere="Șterge cheile din Edinio. Facturile deja emise rămân în contul tău Oblio.">
+          <ButonDeconectare
+            nume="Oblio"
+            cePierzi="Cheile se șterg din Edinio și facturile nu se mai emit automat. Facturile deja emise rămân în contul tău Oblio. Ca să te întorci, ceri din nou Client ID și Client Secret din contul tău Oblio."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={handleSave} />
+    </PaginaIntegrare>
   );
 }

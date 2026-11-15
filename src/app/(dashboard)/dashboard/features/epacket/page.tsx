@@ -3,7 +3,6 @@ import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { EpacketConfigClient } from "@/components/dashboard/EpacketConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { EpacketConfig } from "@/lib/epacket/client";
 import { expeditorDinMagazin, type ExpeditorPropus } from "@/lib/curiera/precompletare";
 
@@ -37,13 +36,5 @@ export default async function EpacketPage() {
     propunere = expeditorDinMagazin(firma);
   }
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="epacket"
-        description="Un singur cont si un singur credit pentru DPD, Sameday, Cargus, FAN Courier, Dragon Star si TCE: AWB-uri din comenzi, la adresa sau la locker, cu ramburs, tarife pe loc si urmarirea coletului."
-      />
-      <EpacketConfigClient businessId={business.id} initialConfig={config} propunere={propunere} />
-    </div>
-  );
+  return <EpacketConfigClient businessId={business.id} initialConfig={config} propunere={propunere} />;
 }

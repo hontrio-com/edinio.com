@@ -223,7 +223,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
 
   // Shared enrichment (Media Library alt text, card-payment flag, bundle
   // components) + server-side rich-text sanitization of the product, in place.
-  const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
+  const { altMap, hasCardPayment, rateTbi, bundleComponents } = await enrichStoreProduct(business, product);
 
   // Cross-sell / FBT offers for this product. `offers` is owner-only (not anon-readable),
   // so it's resolved server-side with the service role — exactly like storeSettings above.
@@ -406,6 +406,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             storeSettings={faraDesignulBrut(storeSettings && { ...storeSettings, page_content: pageContent as Json }) as never}
             basePath={basePath}
             hasCardPayment={hasCardPayment}
+            rateTbi={rateTbi}
             bundleComponents={bundleComponents}
             altMap={altMap}
             productOffers={productOffers}

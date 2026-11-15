@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle, ChevronRight, Copy, Info, Loader2, Stethoscope } from "lucide-react";
+import { AlertTriangle, ChevronRight, Copy, Info, KeyRound, ListFilter, Loader2, Radio, Stethoscope } from "lucide-react";
 import {
   diagnosticInnoshipAction,
   disconnectInnoship,
@@ -15,9 +15,12 @@ import { suprapuneri, textSuprapunere } from "@/lib/innoship/suprapunere";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -71,6 +74,15 @@ export function InnoshipConfigClient({
   const [saturday, setSaturday] = useState(!!s.saturdayDelivery);
   const [returDocumente, setReturDocumente] = useState(!!s.returnOfDocuments);
 
+  /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
+  const valori = { apiKey, depozit, permisi, format, tip, observatii, openPackage, saturday, returDocumente };
+  const [reper, setReper] = useState(valori);
+  const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setApiKey(reper.apiKey); setDepozit(reper.depozit); setPermisi(reper.permisi); setFormat(reper.format); setTip(reper.tip);
+    setObservatii(reper.observatii); setOpenPackage(reper.openPackage); setSaturday(reper.saturday); setReturDocumente(reper.returDocumente);
+  }
+
   const areCheie = apiKey.trim() !== "" || secretulEsteSalvat(initialConfig, "api_key");
   const isActive = !!(initialConfig?.enabled && initialConfig.external_client_location && secretulEsteSalvat(initialConfig, "api_key"));
 
@@ -118,13 +130,13 @@ export function InnoshipConfigClient({
   }
 
   async function handleTest() {
-    if (!areCheie) return toast.error("Completeaza cheia de API");
+    if (!areCheie) return toast.error("Completează cheia de API.");
     setTesting(true);
     const r = await testInnoshipConnectionAction(businessId, construieste());
     setTesting(false);
     if (!r.ok) { setCurieri(null); return toast.error(`Innoship: ${r.error}`); }
     setCurieri(r.curieri);
-    toast.success(`Conexiune reusita · ${r.curieri.length} curieri disponibili`);
+    toast.success(`Conexiune reușită: ${r.curieri.length} curieri disponibili.`);
   }
 
   async function handleDiagnostic() {
@@ -136,16 +148,17 @@ export function InnoshipConfigClient({
   }
 
   async function handleSave() {
-    if (!areCheie) return toast.error("Completeaza cheia de API");
+    if (!areCheie) return toast.error("Completează cheia de API.");
     if (!depozit.trim()) {
-      return toast.error("Completeaza id-ul depozitului („External Client Location” din portalul Innoship)");
+      return toast.error("Completează id-ul depozitului („External Client Location” din portalul Innoship).");
     }
     setSaving(true);
     const r = await saveInnoshipConfig(businessId, construieste());
     setSaving(false);
     if ("error" in r) return toast.error(r.error);
-    toast.success("Configurare salvata");
+    toast.success("Configurarea Innoship a fost salvată.");
     setApiKey("");
+    setReper({ ...valori, apiKey: "" });
     router.refresh();
   }
 
@@ -154,7 +167,7 @@ export function InnoshipConfigClient({
     const r = await disconnectInnoship(businessId);
     setDisconnecting(false);
     if ("error" in r) return toast.error(r.error);
-    toast.success("Innoship deconectat");
+    toast.success("Innoship a fost deconectat.");
     router.refresh();
   }
 
@@ -162,66 +175,61 @@ export function InnoshipConfigClient({
     setPermisi((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   }
 
-  return (
-    <div className="space-y-6">
-      {isActive && (
-        <Callout
-          variant="success"
-          icon={CheckCircle}
-          title="Innoship activ"
-          action={
-            /*
-              ⚠ Adresa de urmarire se naste din `webhook_secret`, care traieste chiar in
-              configul sters aici: la reconectare se genereaza alta, deci cea lipita in
-              portalul Innoship ramane moarta pana o inlocuieste omul.
-            */
-            <ButonDeconectare
-              nume="Innoship"
-              cePierzi="Cheia de API si adresa de urmarire se sterg din Edinio: la reconectare se face alta adresa, pe care o lipesti din nou in portalul Innoship. Comenzile cu AWB emis isi pastreaza numarul."
-              pending={disconnecting}
-              onConfirma={handleDisconnect}
-            />
-          }
-        >
-          Depozit {initialConfig?.external_client_location}
-          {permisi.length > 0 ? ` · ${permisi.length} curieri alesi` : " · toti curierii contului"}
-        </Callout>
-      )}
+  const stari: StareAntet[] = isActive ? [{ ton: "bun", text: "Activ" }] : [{ ton: "neutru", text: "Neconfigurat" }];
 
+  return (
+    <PaginaIntegrare
+      id="innoship"
+      titlu="Livrare"
+      descriere="Un singur cont, zeci de curieri: cumpărătorul alege oferta la comandă, iar tu emiți dintr-un singur loc."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia de API", facut: areCheie },
+          { text: "Depozitul (External Client Location)", facut: !!depozit.trim() },
+          { text: "Adresa de urmărire în portal", facut: !!urlWebhook },
+          { text: "Innoship activ", facut: isActive },
+        ]} />
+        {isActive && (
+          <CardCifre titlu="Configurarea salvată" randuri={[
+            { eticheta: "Depozit", valoare: initialConfig?.external_client_location || "-" },
+            { eticheta: "Curieri", valoare: permisi.length > 0 ? `${permisi.length} aleși` : "toți ai contului" },
+          ]} />
+        )}
+        <CumFunctioneaza id="innoship" puncte={[
+          { Icon: KeyRound, text: "Cheia de API și id-ul depozitului le primești de la Innoship; depozitul e cel din „Locations”." },
+          { Icon: ListFilter, text: "Innoship are sute de curieri: alegi doar pe cei pe care vrei să-i vadă cumpărătorul." },
+          { Icon: Radio, text: "Cu adresa de urmărire pusă la „Track push”, comenzile se mișcă singure, pe loc." },
+        ]} />
+      </>}
+    >
       {avertismentSuprapunere && (
-        <Callout variant="warning" icon={AlertTriangle} title="Acelasi curier, pe doua contracte">
+        <Callout variant="warning" icon={AlertTriangle} title="Același curier, pe două contracte">
           {avertismentSuprapunere}
         </Callout>
       )}
 
-      {/* ── 1. Contul ────────────────────────────────────────────────────── */}
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
-          <h3 className="text-sm font-semibold text-foreground">Contul Innoship</h3>
+      <Sectiune pas={1} titlu="Contul Innoship"
+        descriere="Cheia de API și id-ul depozitului le primești de la Innoship. Depozitul e cel configurat la ei în „Locations” și declanșează fiecare expediere.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Cheie de API" htmlFor="innoship-cheie" required>
+            <Input
+              id="innoship-cheie"
+              type="password"
+              value={apiKey}
+              onChange={(e) => { setApiKey(e.target.value); setCurieri(null); }}
+              placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : "Cheia primită de la Innoship"}
+            />
+          </Field>
+          <Field label="Id depozit (External Client Location)" htmlFor="innoship-depozit" required hint="Din portalul Innoship, secțiunea Locations.">
+            <Input id="innoship-depozit" value={depozit} onChange={(e) => setDepozit(e.target.value)} placeholder="DEPOZIT-1" />
+          </Field>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Cheia de API si id-ul depozitului le primesti de la Innoship. Depozitul e cel
-          configurat la ei in „Locations”, iar el declanseaza fiecare expediere.
-        </p>
-
-        <Field label="Cheie de API" required>
-          <Input
-            type="password"
-            value={apiKey}
-            onChange={(e) => { setApiKey(e.target.value); setCurieri(null); }}
-            placeholder={secretulEsteSalvat(initialConfig, "api_key") ? PLACEHOLDER_SECRET_SALVAT : "Cheia primita de la Innoship"}
-          />
-        </Field>
-
-        <Field label="Id depozit (External Client Location)" required hint="Din portalul Innoship, sectiunea Locations.">
-          <Input value={depozit} onChange={(e) => setDepozit(e.target.value)} placeholder="DEPOZIT-1" />
-        </Field>
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={handleTest} disabled={testing || !areCheie}>
+          <Button variant="outline" onClick={handleTest} disabled={testing || !areCheie}>
             {testing ? <Loader2 className="animate-spin" /> : <ChevronRight />}
-            {testing ? "Se verifica..." : "Testeaza conexiunea"}
+            {testing ? "Se verifică..." : "Testează conexiunea"}
           </Button>
           {isActive && (
             <Button variant="outline" onClick={handleDiagnostic} disabled={diagnosticand}>
@@ -233,26 +241,24 @@ export function InnoshipConfigClient({
 
         {diagnostic?.ok && (
           <div className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-            <p className="font-semibold text-foreground">Ce a raspuns Innoship</p>
-            <p>{diagnostic.curieri} curieri · {diagnostic.puncte} puncte de ridicare in Romania
-              {diagnostic.puncteFaraNume > 0 ? `, dintre care ${diagnostic.puncteFaraNume} fara denumire recunoscuta` : ""}.</p>
+            <p className="font-semibold text-foreground">Ce a răspuns Innoship</p>
+            <p>{diagnostic.curieri} curieri · {diagnostic.puncte} puncte de ridicare în România
+              {diagnostic.puncteFaraNume > 0 ? `, dintre care ${diagnostic.puncteFaraNume} fără denumire recunoscută` : ""}.</p>
             {diagnostic.puncteFaraNume > 0 && (
               <p className="text-warning">
-                Punctele fara denumire apar in checkout doar cu localitatea. Trimite-ne lista
-                de campuri de mai jos si o reparam.
+                Punctele fără denumire apar la comandă doar cu localitatea. Trimite-ne lista de câmpuri de mai jos și o reparăm.
               </p>
             )}
             {diagnostic.puncteDoarCurier > 0 && (
               <p className="text-warning">
-                {diagnostic.puncteDoarCurier} puncte au doar id-ul de la curier, nu si pe cel
-                Innoship, deci nu apar in checkout. Sunt doua campuri diferite in API-ul lor, iar
-                trimis in locul celuilalt, id-ul de curier ar duce coletul in alt punct decat cel
-                ales de client. Trimite-ne lista de campuri de mai jos.
+                {diagnostic.puncteDoarCurier} puncte au doar id-ul de la curier, nu și pe cel Innoship, deci nu apar la comandă.
+                Sunt două câmpuri diferite în API-ul lor, iar trimis în locul celuilalt, id-ul de curier ar duce coletul în alt
+                punct decât cel ales de client. Trimite-ne lista de câmpuri de mai jos.
               </p>
             )}
             {diagnostic.cheiPuncte.length > 0 && (
               <details>
-                <summary className="cursor-pointer">Campurile nomenclatorului de puncte</summary>
+                <summary className="cursor-pointer">Câmpurile nomenclatorului de puncte</summary>
                 <ul className="mt-1 space-y-0.5">
                   {diagnostic.cheiPuncte.map((c) => <li key={c.cheie}><code>{c.cheie}</code>: {c.exemplu}</li>)}
                 </ul>
@@ -260,28 +266,19 @@ export function InnoshipConfigClient({
             )}
           </div>
         )}
-      </Panel>
+      </Sectiune>
 
-      {/* ── 2. Curierii ──────────────────────────────────────────────────── */}
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
-          <h3 className="text-sm font-semibold text-foreground">Ce curieri vede cumparatorul</h3>
-        </div>
-        {/*
-          ⚠ Nu e o inlesnire: Innoship agrega ~230 de curieri. Nefiltrat, un cont
-          larg poate intoarce zeci de oferte pentru aceeasi comanda, iar un checkout
-          cu douazeci de randuri aproape identice nu se citeste.
-        */}
-        <p className="text-xs text-muted-foreground">
-          Bifeaza curierii pe care vrei sa-i vada cumparatorul. Nimic bifat inseamna toti
-          cei pe care ii da contul tau, ceea ce, la un cont larg, poate umple checkout-ul.
-        </p>
-
+      {/*
+        ⚠ Nu e o inlesnire: Innoship agrega ~230 de curieri. Nefiltrat, un cont
+        larg poate intoarce zeci de oferte pentru aceeasi comanda, iar un checkout
+        cu douazeci de randuri aproape identice nu se citeste.
+      */}
+      <Sectiune pas={2} titlu="Ce curieri vede cumpărătorul"
+        descriere="Bifează curierii pe care vrei să-i vadă cumpărătorul. Nimic bifat înseamnă toți cei din contul tău, ceea ce, la un cont larg, poate umple pagina de comandă.">
         {curieri === null ? (
-          <p className="text-xs text-muted-foreground">Apasa „Testeaza conexiunea” ca sa se incarce lista.</p>
+          <p className="text-sm text-muted-foreground">Apasă „Testează conexiunea” ca să se încarce lista.</p>
         ) : curieri.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Contul nu are niciun curier activ.</p>
+          <p className="text-sm text-muted-foreground">Contul nu are niciun curier activ.</p>
         ) : (
           <div className="max-h-72 space-y-1 overflow-y-auto">
             {curieri.map((c) => {
@@ -291,26 +288,18 @@ export function InnoshipConfigClient({
                 <label key={id} className="flex items-center gap-2 text-xs">
                   <input type="checkbox" checked={permisi.includes(id)} onChange={() => comutaCurier(id)} />
                   <span className="flex-1">{c.courierDisplayName || c.courier}</span>
-                  {seSuprapune && (
-                    <span className="text-warning">il ai si direct</span>
-                  )}
+                  {seSuprapune && <span className="text-warning">îl ai și direct</span>}
                 </label>
               );
             })}
           </div>
         )}
-      </Panel>
+      </Sectiune>
 
-      {/* ── 3. Urmarirea ─────────────────────────────────────────────────── */}
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">3</span>
-          <h3 className="text-sm font-semibold text-foreground">Urmarirea coletelor</h3>
-        </div>
-        <Callout variant="info" icon={Info} title="Pune adresa asta in portalul Innoship">
-          La „Track push”. Innoship o sa trimita acolo fiecare schimbare de status, iar
-          comenzile se misca singure. Fara ea, urmarirea merge tot, dar dintr-o
-          verificare periodica, deci mai rar.
+      <Sectiune pas={3} titlu="Urmărirea coletelor">
+        <Callout variant="info" icon={Info} title="Pune adresa asta în portalul Innoship">
+          La „Track push”. Innoship trimite acolo fiecare schimbare de status, iar comenzile se mișcă singure. Fără ea,
+          urmărirea merge tot, dar dintr-o verificare periodică, deci mai rar.
         </Callout>
 
         {urlWebhook ? (
@@ -319,70 +308,64 @@ export function InnoshipConfigClient({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { void navigator.clipboard.writeText(urlWebhook); toast.success("Adresa copiata"); }}
+              onClick={() => { void navigator.clipboard.writeText(urlWebhook); toast.success("Adresa a fost copiată."); }}
             >
-              <Copy className="h-3.5 w-3.5" />
-              Copiaza
+              <Copy />
+              Copiază
             </Button>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Adresa se genereaza la prima salvare a configurarii.
-          </p>
+          <p className="text-xs text-muted-foreground">Adresa apare după prima salvare a configurării.</p>
         )}
-      </Panel>
+      </Sectiune>
 
-      {/* ── 4. Eticheta si serviciile ────────────────────────────────────── */}
-      <Panel className="space-y-4 p-4">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">4</span>
-          <h3 className="text-sm font-semibold text-foreground">Eticheta si serviciile</h3>
-        </div>
-
+      <Sectiune pas={4} titlu="Eticheta și serviciile">
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Format eticheta">
-            <select
-              value={format}
-              onChange={(e) => setFormat(e.target.value as FormatEticheta)}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-            >
+          <Field label="Format etichetă" htmlFor="innoship-format">
+            <select id="innoship-format" value={format} onChange={(e) => setFormat(e.target.value as FormatEticheta)} className={selectCls}>
               {FORMATE.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </Field>
-          <Field label="Tip fisier" hint="Zpl si Epl sunt pentru imprimante de etichete.">
-            <select
-              value={tip}
-              onChange={(e) => setTip(e.target.value as TipEticheta)}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-            >
+          <Field label="Tip fișier" htmlFor="innoship-tip" hint="Zpl și Epl sunt pentru imprimante de etichete.">
+            <select id="innoship-tip" value={tip} onChange={(e) => setTip(e.target.value as TipEticheta)} className={selectCls}>
               {TIPURI.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </Field>
         </div>
 
-        <Field label="Observatii pe eticheta" hint="Cel mult 500 de caractere.">
-          <Input value={observatii} onChange={(e) => setObservatii(e.target.value)} maxLength={500} />
+        <Field label="Observații pe etichetă" htmlFor="innoship-observatii" hint="Cel mult 500 de caractere.">
+          <Input id="innoship-observatii" value={observatii} onChange={(e) => setObservatii(e.target.value)} maxLength={500} />
         </Field>
 
-        {[
-          { v: openPackage, set: setOpenPackage, eticheta: "Deschidere colet la livrare", explicatie: "Destinatarul poate verifica marfa inainte sa plateasca." },
-          { v: saturday, set: setSaturday, eticheta: "Livrare sambata", explicatie: "Doar la curierii care o ofera in contractul tau." },
-          { v: returDocumente, set: setReturDocumente, eticheta: "Retur de documente", explicatie: "Curierul aduce inapoi documentele semnate." },
-        ].map((b) => (
-          <div key={b.eticheta} className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-foreground">{b.eticheta}</p>
-              <p className="text-xs text-muted-foreground">{b.explicatie}</p>
-            </div>
-            <Switch checked={b.v} onCheckedChange={b.set} />
-          </div>
-        ))}
-      </Panel>
+        <RandComutator separat titlu="Deschidere colet la livrare" text="Destinatarul poate verifica marfa înainte să plătească." activ={openPackage} onChange={setOpenPackage} />
+        <RandComutator separat titlu="Livrare sâmbătă" text="Doar la curierii care o oferă în contractul tău." activ={saturday} onChange={setSaturday} />
+        <RandComutator separat titlu="Retur de documente" text="Curierul aduce înapoi documentele semnate." activ={returDocumente} onChange={setReturDocumente} />
+      </Sectiune>
 
-      <Button onClick={handleSave} disabled={saving} className="w-full">
-        {saving ? <Loader2 className="animate-spin" /> : null}
-        {saving ? "Se salveaza..." : "Salveaza configurarea"}
-      </Button>
-    </div>
+      {isActive && (
+        <ZonaDeconectare descriere="Șterge cheia și adresa de urmărire din Edinio. Comenzile cu AWB emis își păstrează numărul.">
+          {/*
+            ⚠ Adresa de urmarire se naste din `webhook_secret`, care traieste chiar in
+            configul sters aici: la reconectare se genereaza alta, deci cea lipita in
+            portalul Innoship ramane moarta pana o inlocuieste omul.
+          */}
+          <ButonDeconectare
+            nume="Innoship"
+            cePierzi="Cheia de API și adresa de urmărire se șterg din Edinio: la reconectare se face altă adresă, pe care o lipești din nou în portalul Innoship. Comenzile cu AWB emis își păstrează numărul."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={handleDisconnect}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare
+        modificat={isActive ? modificat : undefined}
+        saving={saving}
+        onSalveaza={handleSave}
+        onRenunta={isActive ? renunta : undefined}
+        textSalveaza={isActive ? "Salvează" : "Salvează și activează"}
+      />
+    </PaginaIntegrare>
   );
 }

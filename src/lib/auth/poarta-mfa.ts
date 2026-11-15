@@ -260,6 +260,9 @@ const API_FARA_POARTA = [
   "/api/revolut/start",
   "/api/revolut/return",
   "/api/revolut/webhook",
+  "/api/tbi/start",
+  /* Vestile tbi, cu jetonul in cale: `/api/tbi/notificare/<jeton>`. */
+  "/api/tbi/notificare/",
   // webhook-uri de integrari
   "/api/notice/webhook",
   "/api/brevo/webhook",

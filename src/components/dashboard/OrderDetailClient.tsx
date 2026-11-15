@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace, procesataInEasySales, MESAJ_STAREA_IN_EASYSALES } from "@/lib/orders/origin";
 import { EasySalesComandaPanel } from "@/components/dashboard/easysales/EasySalesComandaPanel";
+import { TbiComandaPanel } from "@/components/dashboard/tbi/TbiComandaPanel";
+import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/payment-methods";
 import { awburiDinRand, deCeNuSePoateAwbPropriu, numarDeUrmarire } from "@/lib/orders/awb-propriu";
 import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { readBillingCompany } from "@/lib/billing/company";
@@ -1696,7 +1698,10 @@ export function OrderDetailClient({
               <div className="flex items-center gap-2.5 text-sm">
                 <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="text-muted-foreground">
-                  {order.payment_method === "cash_on_delivery" ? "Plata la livrare" : order.payment_method}
+                  {/* Eticheta metodei, nu codul ei („tbi", „revolut"): omul citeste un cuvant, nu un identificator. */}
+                  {order.payment_method === "cash_on_delivery"
+                    ? "Plata la livrare"
+                    : PAYMENT_METHOD_DEFAULT_LABELS[order.payment_method as PaymentMethodType] ?? order.payment_method}
                 </span>
               </div>
               {/*
@@ -2124,6 +2129,9 @@ export function OrderDetailClient({
         {/* RAIL: operational actions (sticky on desktop) */}
         <div className="lg:w-[360px] lg:shrink-0 lg:sticky lg:top-6 space-y-4">
           {areStampilaEasySales && <EasySalesComandaPanel businessId={businessId} orderId={order.id} />}
+          {order.payment_method === "tbi" && (
+            <TbiComandaPanel businessId={businessId} orderId={order.id} comandaAnulata={order.status === "cancelled"} />
+          )}
           {/* Status & plata */}
           <div className={`${CARD} p-5 space-y-4`}>
             <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>

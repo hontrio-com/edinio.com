@@ -13,7 +13,8 @@ import { gtagEvent, fbTrack, ttqTrack } from "@/lib/marketing";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
-import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, metodeLaComanda, RUTA_PORNIRE_PLATA, type PaymentMethodType, type PaymentProcessorType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { mesajLimiteTbi, type LimiteTbi } from "@/lib/tbi/config";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import {
   cheileScoase, liniileAcceptate, linieDeSchimbat, ofertePeCareLePoateArata, subtotalulOfertelor,
@@ -105,6 +106,8 @@ export function useCheckoutOrder({
   const [vatConfig, setVatConfig] = useState<VatConfig>(preview?.vatConfig ?? { vat_enabled: false, vat_rate: 19, prices_include_vat: true, show_vat_breakdown: true });
   const [paymentMethods, setPaymentMethods] = useState<{ type: PaymentMethodType; label: string }[]>(preview?.paymentMethods ?? []);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>(preview?.paymentMethods[0]?.type ?? "cash_on_delivery");
+  /* Limitele platii in rate tbi, din configurarea publica; `null` = tbi nu e oferit. */
+  const [limiteTbi, setLimiteTbi] = useState<LimiteTbi | null>(null);
   const [cardDiscountConfig, setCardDiscountConfig] = useState<CardDiscountConfig>(preview?.cardDiscount ?? { enabled: false, type: "percent", value: 0 });
   const [codDiscountConfig, setCodDiscountConfig] = useState<CardDiscountConfig>(preview?.codDiscount ?? { enabled: false, type: "percent", value: 0 });
   const [codFeeConfig, setCodFeeConfig] = useState<CodFeeConfig>(preview?.codFee ?? DEFAULT_COD_FEE);
@@ -288,6 +291,18 @@ export function useCheckoutOrder({
   // Round to 2 decimals (cents): float subtraction like 199.29 - 19.93 would
   // otherwise surface as 179.35999999999999 in the total/button/confirm URL.
   const grandTotal = Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount - cardDiscountAmount - codDiscountAmount + codFeeAmount + shipping + vatAddOn) * 100) / 100);
+  /*
+   * Totalul comenzii DACA s-ar plati in rate prin tbi: fara reducerea de card (tbi nu e card) si fara
+   * taxa sau reducerea de ramburs. Aceeasi formula ca serverul pentru metoda `tbi`, deci limitele se
+   * judeca pe suma pe care o va finanta banca, nu pe cea a metodei alese acum.
+   */
+  const totalTbi = (() => {
+    const { vatAddOn: adaos } = computeVat(
+      vatBase({ goods: goodsTotal, extras: extrasTotal, shipping, discount: discountAmount, cardDiscount: 0, codDiscount: 0, codFee: 0 }),
+      vatConfig,
+    );
+    return Math.max(0, Math.round((goodsTotal + extrasTotal - discountAmount + shipping + adaos) * 100) / 100);
+  })();
 
   const [form, setForm] = useState(preview?.form ?? { name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -360,19 +375,32 @@ export function useCheckoutOrder({
    * imposibil.
    */
   const faraRamburs = isIntl || courierSelection?.courier === "pallex";
-  const availablePaymentMethods = faraRamburs
-    ? paymentMethods.filter((m) => m.type !== "cash_on_delivery" && (!isIntl || m.type !== "klarna"))
-    : paymentMethods;
+  /* Regula intreaga, comuna cu formularul „cumpara acum": `metodeLaComanda`. */
+  const availablePaymentMethods = metodeLaComanda(paymentMethods, {
+    faraRamburs, international: isIntl, firma: companyBilling.ePj, totalTbi, tbi: limiteTbi,
+  });
+  const tbiPermis = availablePaymentMethods.some((m) => m.type === "tbi");
+  /* De ce lipseste plata in rate, cand magazinul o ofera: spus sub metode, nu ghicit de om. */
+  const motivTbi = !tbiPermis && limiteTbi && paymentMethods.some((m) => m.type === "tbi") && !isIntl
+    ? (companyBilling.ePj
+      ? "Plata in rate prin tbi bank este disponibila doar pentru persoane fizice."
+      : mesajLimiteTbi(limiteTbi))
+    : null;
   // Fiecare efect de mai jos incepe cu garda de preview, INAINTE de orice
   // ascultator sau scriere pe `document`: pusa mai jos, functia de curatare n-ar
   // mai rula si magazinul real ar ramane cu scroll-ul blocat.
+  /*
+   * Metoda aleasa care nu mai e oferita se muta pe prima oferita: la comanda internationala sau
+   * Pall-Ex (fara ramburs), si la plata in rate tbi iesita din limite (cosul s-a schimbat, s-a ales
+   * firma). Un singur efect, nu doua: cel de plata in rate e aceeasi regula, cu inca o cauza.
+   */
   useEffect(() => {
     if (preview) return;
-    if (faraRamburs && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
+    if ((faraRamburs || paymentMethod === "tbi") && !availablePaymentMethods.some((m) => m.type === paymentMethod)) {
       setPaymentMethod(availablePaymentMethods[0]?.type ?? "cash_on_delivery");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntl, faraRamburs]);
+  }, [isIntl, faraRamburs, tbiPermis]);
 
   // Auto-apply a recovery discount code passed via the restore link (?code=).
   //
@@ -494,6 +522,7 @@ export function useCheckoutOrder({
       });
       const methods = data.payment_methods ?? [];
       setPaymentMethods(methods);
+      setLimiteTbi(data.tbi ?? null);
       setPaymentMethod((prev) => (methods.some((m) => m.type === prev) ? prev : methods[0]?.type ?? "cash_on_delivery"));
       setCardDiscountConfig(data.card_discount);
       setCodDiscountConfig(data.cod_discount);
@@ -955,11 +984,8 @@ export function useCheckoutOrder({
       }
 
       if (paymentMethod !== "cash_on_delivery") {
-        const endpoint = paymentMethod === "stripe" ? "/api/stripe/order-checkout"
-          : paymentMethod === "netopia" ? "/api/netopia/start"
-          : paymentMethod === "klarna" ? "/api/klarna/start"
-          : paymentMethod === "revolut" ? "/api/revolut/start"
-          : "/api/ipay/start";
+        /* Harta comuna (`RUTA_PORNIRE_PLATA`): un procesator nou nu mai poate cadea tacut pe iPay. */
+        const endpoint = RUTA_PORNIRE_PLATA[paymentMethod as PaymentProcessorType];
         /* ⚠ Aceeasi prindere, cu ALT mesaj: comanda EXISTA deja si `placedRef` e pus, deci o reincercare nu creeaza
            a doua comanda (ca in `OrderModal`). */
         let res: Response;
@@ -999,6 +1025,7 @@ export function useCheckoutOrder({
     acceptedBumps,
     appliedDiscount,
     availablePaymentMethods,
+    motivTbi,
     belowMinOrder,
     liniiDeRevizuit,
     liniiNevalidate,

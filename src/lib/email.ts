@@ -247,7 +247,9 @@ export async function sendOrderConfirmationToCustomer(
           ? "Klarna"
           : order.payment_method === "revolut"
             ? "Card online (Revolut)"
-            : "ramburs la livrare";
+            : order.payment_method === "tbi"
+              ? "Plata in rate prin tbi bank"
+              : "ramburs la livrare";
 
   const { subject, intro, heading } = renderTemplate(sender, "order_confirmation", {
     subject: `Comanda ta ${order.order_number} a fost primita`,
@@ -284,6 +286,9 @@ export async function sendOrderConfirmationToCustomer(
 
     <div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:20px;">
       <p style="margin:0;font-size:13px;color:#71717a;">Metoda de plata: <strong>${paymentLabel}</strong></p>
+      ${order.payment_method === "tbi"
+        ? `<p style="margin:8px 0 0 0;font-size:13px;color:#71717a;line-height:1.6;">Comanda se confirma dupa ce tbi bank aproba cererea ta de finantare. Daca nu ai terminat cererea pe site-ul tbi bank, scrie-ne si te ajutam.</p>`
+        : ""}
     </div>
     ${order.cont_url ? `<div style="border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;">
       <p style="margin:0;font-size:13px;color:#3f3f46;line-height:1.6;">Urmaresti comanda, livrarea si factura din <a href="${escapeUrl(order.cont_url)}" style="color:#18181b;font-weight:600;text-decoration:underline;">contul tau</a>. Intri cu adresa asta de email, iar daca nu ai inca un cont, il creezi in cateva secunde.</p>
@@ -1271,6 +1276,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   ipay: "Card bancar (BT iPay)",
   klarna: "Klarna",
   revolut: "Card online (Revolut)",
+  tbi: "Plata in rate (tbi bank)",
 };
 
 export async function sendNewOrderEmail(
@@ -1350,7 +1356,9 @@ export async function sendNewOrderEmail(
     : "-";
   const pmStatus = order.payment_method === "cash_on_delivery"
     ? "Se incaseaza la livrare"
-    : "In asteptarea confirmarii platii";
+    : order.payment_method === "tbi"
+      ? "In asteptarea aprobarii finantarii tbi bank"
+      : "In asteptarea confirmarii platii";
 
   // Comanda pe firma: comerciantul trebuie sa vada datele de facturare inca din
   // notificare, ca sa nu deschida panoul doar ca sa afle daca emite pe persoana

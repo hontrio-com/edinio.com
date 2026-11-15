@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
+import { PaginaIntegrare } from "@/components/dashboard/integrare/PaginaIntegrare";
 import { EasySalesConfigClient } from "@/components/dashboard/EasySalesConfigClient";
 import { getEasySalesStatus } from "@/lib/actions/easysales.actions";
 
@@ -23,13 +23,20 @@ export default async function EasySalesPage() {
     .from("businesses").select("id").eq("user_id", user.id).eq("type", "ministore").limit(1).single();
   if (!biz) redirect("/dashboard");
 
+  /*
+   * Cadrul comun (`PaginaIntegrare`) sta AICI, pe server, ca la Google Merchant: antetul pleaca imediat,
+   * iar starea contului easySales curge dupa el, prin `Suspense`.
+   */
   return (
-    <div className="p-6">
-      <IntegrationHeader id="easysales" description="Comenzile magazinului se procesează în easySales, iar statusul și AWB-ul se întorc în Edinio." />
+    <PaginaIntegrare
+      id="easysales"
+      titlu="Gestiune comenzi"
+      descriere="Comenzile magazinului se procesează în easySales, iar statusul și AWB-ul se întorc în Edinio."
+    >
       <Suspense fallback={<Schelet />}>
         <Continut businessId={biz.id} />
       </Suspense>
-    </div>
+    </PaginaIntegrare>
   );
 }
 

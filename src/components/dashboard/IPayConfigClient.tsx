@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Key, User } from "lucide-react";
+import { BadgeCheck, CreditCard, FlaskConical } from "lucide-react";
 import { saveIpayConfig, disconnectIpay } from "@/lib/actions/ipay.actions";
 import type { IPayConfig } from "@/lib/ipay";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import {
+  AlegereCarduri, BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare, useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 const DEFAULT_CONFIG: IPayConfig = {
   enabled: false,
@@ -30,7 +31,7 @@ export default function IPayConfigClient({
   initialConfig: IPayConfig | null;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<IPayConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
+  const { cfg, setCfg, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<IPayConfig>({ ...DEFAULT_CONFIG, ...initialConfig });
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
@@ -57,7 +58,8 @@ export default function IPayConfigClient({
         return;
       }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
-      toast.success("Configuratia BT iPay a fost salvata.");
+      toast.success("Configurația BT iPay a fost salvată.");
+      marcheazaSalvat();
       router.refresh();
     });
   }
@@ -86,110 +88,80 @@ export default function IPayConfigClient({
     });
   }
 
+  const parolaSalvata = secretulEsteSalvat(initialConfig, "password");
+  const stari: StareAntet[] = !isConfigured
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [
+      initialConfig?.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" },
+      initialConfig?.sandbox ? { ton: "asteptare", text: "Mod test" } : { ton: "info", text: "Plăți reale" },
+    ];
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="ipay" description="Accepta plati cu cardul prin BT iPay (Banca Transilvania)." />
+    <PaginaIntegrare
+      id="ipay"
+      titlu="Plăți cu cardul"
+      descriere="Clienții plătesc online cu cardul, prin BT iPay de la Banca Transilvania."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Plata cu cardul la comandă" activ={cfg.enabled} onChange={v => set("enabled", v)} ariaLabel="Activează BT iPay" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Utilizatorul API", facut: !!cfg.username.trim() },
+          { text: "Parola API", facut: !!cfg.password.trim() || parolaSalvata },
+          { text: "Plata cu cardul activă", facut: isConfigured && !!initialConfig?.enabled },
+        ]} />
+        <CumFunctioneaza id="ipay" puncte={[
+          { Icon: CreditCard, text: "Clientul alege plata cu cardul și plătește pe pagina securizată BT iPay." },
+          { Icon: BadgeCheck, text: "Când banca confirmă plata, comanda devine plătită și confirmată." },
+          { Icon: FlaskConical, text: "Pe Sandbox plățile nu sunt reale: folosești cardurile de test date de bancă." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Datele de acces" descriere="Utilizatorul și parola API primite de la Banca Transilvania la crearea comerciantului iPay.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Utilizator API" htmlFor="ipay-user"
+            ajutor={<ExplicatieCard marime="mic" intrebare="Ce se scrie aici" eticheta="Utilizator API"
+              text="Perechea utilizator și parolă API vine de la bancă și e diferită de datele cu care intri în consola iPay." />}>
+            <Input id="ipay-user" type="text" value={cfg.username} onChange={(e) => set("username", e.target.value)}
+              placeholder="Utilizatorul API iPay" autoComplete="off" />
+          </Field>
+          <Field label="Parola API" htmlFor="ipay-parola">
+            <Input id="ipay-parola" type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
+              placeholder={parolaSalvata ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
+          </Field>
+        </div>
+      </Sectiune>
 
-      <div className="space-y-5">
+      <Sectiune pas={2} titlu="La comandă" descriere="Cum apare metoda de plată în formularul de comandă. O poți schimba și din Setări, Metode de plată.">
+        <Field label="Titlul afișat" htmlFor="ipay-titlu">
+          <Input id="ipay-titlu" type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)} placeholder="Card bancar (BT iPay)" />
+        </Field>
+      </Sectiune>
 
-        {/* Ghid */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              { step: "1", title: "Obtine credentialele API", desc: "Banca Transilvania iti furnizeaza o pereche utilizator - parola API la crearea comerciantului pe platforma iPay. Sunt diferite de credentialele consolei." },
-              { step: "2", title: "Testeaza pe Sandbox", desc: "Foloseste intai credentialele de test pe mediul Sandbox. Platile nu sunt reale si poti folosi cardurile de test furnizate de banca." },
-              { step: "3", title: "Completeaza si activeaza", desc: "Introdu utilizatorul si parola, alege modul (Sandbox pentru testare, Live pentru productie), activeaza si salveaza." },
-              { step: "4", title: "Apare in Metode de plata", desc: 'Dupa activare, BT iPay apare automat in Setari -> Metode de plata, unde poti schimba denumirea si ordinea afisarii la checkout.' },
-            ].map(({ step, title, desc }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
+      <Sectiune pas={3} titlu="Mediul de lucru" descriere="Începe pe Sandbox, cu datele de test de la bancă, apoi treci pe real.">
+        <AlegereCarduri
+          eticheta="Mediul de lucru"
+          valoare={cfg.sandbox}
+          onChange={v => set("sandbox", v)}
+          optiuni={[
+            { valoare: true, titlu: "Test (Sandbox)", text: "Plățile nu sunt reale. Pentru probe.", avertizare: true },
+            { valoare: false, titlu: "Real (Live)", text: "Clienții plătesc cu adevărat." },
+          ]}
+        />
+      </Sectiune>
 
-        {/* Main config card */}
-        <Panel className="space-y-5 p-5">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza BT iPay</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Afiseaza optiunea de plata cu cardul la checkout</p>
-            </div>
-            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
-          </div>
+      {isConfigured && (
+        <ZonaDeconectare descriere="Șterge datele de acces BT iPay. Plățile deja încasate rămân neatinse.">
+          <ButonDeconectare
+            nume="BT iPay"
+            cePierzi="Cheile se șterg din Edinio și cumpărătorii nu mai pot plăti cu cardul prin BT iPay. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou utilizatorul și parola din contul tău BT iPay."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={disconnect}
+          />
+        </ZonaDeconectare>
+      )}
 
-          <div className="space-y-4 border-t border-border pt-4">
-            {/* Sandbox toggle */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
-                </p>
-              </div>
-              <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                Titlu afisaj checkout
-              </label>
-              <Input type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)}
-                placeholder="Card bancar (BT iPay)" />
-              <p className="mt-1 text-xs text-muted-foreground">Cum apare optiunea de plata in formularul de comanda (o poti schimba si din Metode de plata)</p>
-            </div>
-
-            {/* Username */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-                Utilizator API
-              </label>
-              <Input type="text" value={cfg.username} onChange={(e) => set("username", e.target.value)}
-                placeholder="Utilizatorul API iPay" autoComplete="off" />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Key className="h-3.5 w-3.5 text-muted-foreground" />
-                Parola API
-              </label>
-              <Input type="password" value={cfg.password} onChange={(e) => set("password", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "password") ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 border-t border-border pt-4">
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              Salveaza
-            </Button>
-            {isConfigured && (
-              <ButonDeconectare
-                nume="BT iPay"
-                cePierzi="Cheile se șterg din Edinio și cumpărătorii nu mai pot plăti cu cardul prin BT iPay. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou utilizatorul și parola din contul tău BT iPay."
-                pending={disconnecting}
-                marime="default"
-                onConfirma={disconnect}
-              />
-            )}
-          </div>
-        </Panel>
-      </div>
-    </div>
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

@@ -196,6 +196,8 @@ export const PROBLEM_PRODUCT = {
    * în rate cu tbi bank" se citește ca o promisiune că platforma o poate face.
    * Dacă la momentul unirii cu `main` integrarea încă nu e gata, rândul se scoate
    * până atunci; e o singură proprietate.
+   *
+   * ✅ 15.11.2026: tbi bank e integrat (`docs/plati/TBI.md`); rândul are acoperire.
    */
   installments: {
     label: "Plătește în rate cu",

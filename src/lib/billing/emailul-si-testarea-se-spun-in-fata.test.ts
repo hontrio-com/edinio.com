@@ -78,7 +78,7 @@ describe("Oblio: emailul e un buton, si e oprit", () => {
     assert.match(panou, /Trimite factura pe email/);
     assert.match(panou, /nu se trimite nimic/, "nu se spune ce se intampla fara sablon");
     assert.match(panou, /nu ne spune/, "nu se spune ca noi nu putem confirma");
-    assert.match(panou, /Verifica primul email tu/, "nu i se spune omului ce sa faca");
+    assert.match(panou, /Verific[aă] primul email tu/, "nu i se spune omului ce sa faca");
   });
 });
 
@@ -92,7 +92,7 @@ describe("fGO: modul de testare se vede, dar nu blocheaza", () => {
 
   test("⚠ si comutatorul insusi spune ce inseamna, nu doar ce server", () => {
     const panou = viu("src/components/dashboard/FgoConfigClient.tsx");
-    assert.match(panou, /Documentele emise asa NU sunt fiscale/);
+    assert.match(panou, /Documentele emise a[sș]a NU sunt fiscale/);
   });
 
   test("⚠⚠ iar pe COMANDA se vede si dupa ce toastul a disparut", () => {

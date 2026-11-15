@@ -137,7 +137,7 @@ function CorpEditor({
 
       <div className="flex-1 space-y-4 p-4">
         {avertismente.map((a) => (
-          <Callout key={a.tip} variant="warning" className="p-3 text-xs leading-relaxed">
+          <Callout key={a.tip} variant="warning" marime="mic" className="text-xs leading-relaxed">
             {a.text}
           </Callout>
         ))}

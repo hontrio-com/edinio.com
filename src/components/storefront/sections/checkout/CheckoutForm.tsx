@@ -4,7 +4,7 @@ import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
 import { useId } from "react";
 import {
   X, Phone,
-  MapPin, Mail, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard,
+  MapPin, Mail, ChevronRight, Package, User, Home, Loader2, Banknote, CreditCard, CalendarClock,
   Truck, Tag, BadgePercent,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
@@ -64,6 +64,7 @@ export function CheckoutForm({
     acceptedBumps,
     appliedDiscount,
     availablePaymentMethods,
+    motivTbi,
     belowMinOrder,
     liniiDeRevizuit,
     liniiNevalidate,
@@ -504,13 +505,15 @@ export function CheckoutForm({
                     style={paymentMethod === m.type
                       ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--color-foreground)" }
                       : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-muted-foreground)" }}>
-                    {m.type === "cash_on_delivery" ? <Banknote className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
+                    {m.type === "cash_on_delivery" ? <Banknote className="h-4 w-4" /> : m.type === "tbi" ? <CalendarClock className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />}
                     {m.label}
                   </button>
                 ))}
               </div>
             </div>
           )}
+          {/* De ce lipseste plata in rate, cand magazinul o ofera (suma in afara limitelor, firma). */}
+          {motivTbi && <p className="text-xs text-muted-foreground">{motivTbi}</p>}
 
           {/* Pragul comerciantului, cu cat mai lipseste, in aceiasi termeni ca
               in sertar. Fara el, clientul completa tot formularul si afla de
@@ -565,13 +568,15 @@ export function CheckoutForm({
                 ? <>Se verifica preturile...</>
                 : paymentMethod === "cash_on_delivery"
                   ? <><Banknote className="h-5 w-5" />Plata la livrare - {formatPrice(grandTotal)}</>
-                  : <><CreditCard className="h-5 w-5" />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(grandTotal)}</>
+                  : <>{paymentMethod === "tbi" ? <CalendarClock className="h-5 w-5" /> : <CreditCard className="h-5 w-5" />}{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(grandTotal)}</>
             }
           </button>
           <p className="text-center text-xs text-muted-foreground">
             {paymentMethod === "cash_on_delivery"
               ? "Platesti cash curierului - Fara card necesar"
-              : "Vei fi redirectionat pentru plata securizata"}
+              : paymentMethod === "tbi"
+                ? "Completezi cererea de finantare pe site-ul tbi bank. Comanda se confirma dupa aprobare."
+                : "Vei fi redirectionat pentru plata securizata"}
           </p>
           {/* Notificarea armonizata privind garantia legala, inainte de plasarea comenzii (OUG 18/2026). */}
           <ButonGarantieLegala cuIconita className="mx-auto flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" />

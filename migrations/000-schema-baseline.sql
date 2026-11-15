@@ -31,6 +31,7 @@ create sequence if not exists public.emag_offers_emag_id_seq;
 create sequence if not exists public.email_marketing_coada_id_seq;
 create sequence if not exists public.order_number_seq;
 create sequence if not exists public.sms_campaign_destinatari_id_seq;
+create sequence if not exists public.tbi_cereri_id_seq;
 
 -- ── FUNCTII ───────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION privat.cheie_integrari()
@@ -503,7 +504,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -11788,7 +11789,188 @@ create table if not exists privat.store_settings (
   cont_client_config jsonb default '{}'::jsonb not null,
   curiera_config jsonb,
   epacket_config jsonb,
-  easysales_config jsonb default '{}'::jsonb not null);
+  easysales_config jsonb default '{}'::jsonb not null,
+  tbi_config jsonb);
+
+create table if not exists privat.vetdepo_20261114_emag_offers (
+  id uuid,
+  business_id uuid,
+  product_id uuid,
+  emag_id bigint,
+  variant_title text,
+  family_id bigint,
+  family_type_id integer,
+  part_number text,
+  part_number_key text,
+  ean text,
+  category_id integer,
+  brand text,
+  status text,
+  validation_status integer,
+  offer_validation_status integer,
+  translation_validation_status integer,
+  doc_errors jsonb,
+  issues jsonb,
+  error text,
+  ownership integer,
+  number_of_offers integer,
+  buy_button_rank integer,
+  best_offer_sale_price numeric(12,4),
+  auto_sync boolean,
+  creat_de_edinio boolean,
+  last_synced_at timestamp with time zone,
+  last_status_at timestamp with time zone,
+  created_at timestamp with time zone,
+  updated_at timestamp with time zone,
+  deriva jsonb,
+  nume_emag text,
+  raspuns_brut jsonb,
+  imagini_la_ei integer,
+  status_la_ei integer,
+  stoc_la_ei integer,
+  amprenta_continut text);
+
+create table if not exists privat.vetdepo_20261114_emag_sync_queue (
+  id uuid,
+  business_id uuid,
+  product_id uuid,
+  offer_id text,
+  op text,
+  attempts integer,
+  last_error text,
+  created_at timestamp with time zone,
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint,
+  pauze integer,
+  generation bigint);
+
+create table if not exists privat.vetdepo_20261114_trendyol_listings (
+  id uuid,
+  business_id uuid,
+  product_id uuid,
+  product_main_id text,
+  status text,
+  brand_id integer,
+  category_id integer,
+  attributes jsonb,
+  dimensional_weight numeric(10,2),
+  cargo_company_id integer,
+  rejection_reasons jsonb,
+  issues jsonb,
+  error text,
+  last_synced_at timestamp with time zone,
+  last_status_at timestamp with time zone,
+  created_at timestamp with time zone,
+  updated_at timestamp with time zone,
+  inventory_retries integer,
+  auto_inventory boolean,
+  ty_content_id bigint,
+  creat_de_edinio boolean,
+  sgr_units integer,
+  country_of_origin text,
+  arhivat_la timestamp with time zone,
+  sters_cerut_la timestamp with time zone,
+  sters_eroare text);
+
+create table if not exists privat.vetdepo_20261114_trendyol_sync_queue (
+  id uuid,
+  business_id uuid,
+  product_id uuid,
+  offer_id text,
+  op text,
+  attempts integer,
+  last_error text,
+  created_at timestamp with time zone,
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint,
+  generation bigint);
+
+create table if not exists privat.vetdepo_20261114_trendyol_variants (
+  id uuid,
+  listing_id uuid,
+  business_id uuid,
+  product_id uuid,
+  barcode text,
+  stock_code text,
+  attributes jsonb,
+  quantity integer,
+  list_price numeric(12,2),
+  sale_price numeric(12,2),
+  vat_rate numeric(5,2),
+  ty_status text,
+  enabled boolean,
+  created_at timestamp with time zone,
+  updated_at timestamp with time zone,
+  variant_title text,
+  exista_la_ei boolean);
+
+create table if not exists privat.vetdepo_20261115_emag_offers (
+  id uuid,
+  business_id uuid,
+  product_id uuid,
+  emag_id bigint,
+  variant_title text,
+  family_id bigint,
+  family_type_id integer,
+  part_number text,
+  part_number_key text,
+  ean text,
+  category_id integer,
+  brand text,
+  status text,
+  validation_status integer,
+  offer_validation_status integer,
+  translation_validation_status integer,
+  doc_errors jsonb,
+  issues jsonb,
+  error text,
+  ownership integer,
+  number_of_offers integer,
+  buy_button_rank integer,
+  best_offer_sale_price numeric(12,4),
+  auto_sync boolean,
+  creat_de_edinio boolean,
+  last_synced_at timestamp with time zone,
+  last_status_at timestamp with time zone,
+  created_at timestamp with time zone,
+  updated_at timestamp with time zone,
+  deriva jsonb,
+  nume_emag text,
+  raspuns_brut jsonb,
+  imagini_la_ei integer,
+  status_la_ei integer,
+  stoc_la_ei integer,
+  amprenta_continut text);
+
+create table if not exists privat.vetdepo_20261115_emag_sync_queue (
+  id uuid,
+  business_id uuid,
+  product_id uuid,
+  offer_id text,
+  op text,
+  attempts integer,
+  last_error text,
+  created_at timestamp with time zone,
+  revendicat_pana timestamp with time zone,
+  next_retry_at timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  prioritate smallint,
+  pauze integer,
+  generation bigint);
+
+create table if not exists privat.vetdepo_20261115_produse_inainte (
+  id uuid,
+  sku text,
+  slug text,
+  price numeric(10,2),
+  compare_at_price numeric(10,2),
+  description text,
+  updated_at timestamp with time zone,
+  copiat_la timestamp with time zone);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -13558,6 +13740,23 @@ create table if not exists public.support_tickets (
   status text default 'open'::text not null,
   has_unread_reply boolean default false not null);
 
+create table if not exists public.tbi_cereri (
+  id bigint generated always as identity not null,
+  business_id uuid not null,
+  order_id uuid,
+  order_number text not null,
+  jeton_hash text not null,
+  mediu text not null,
+  suma numeric(12,2) not null,
+  stare text default 'creata'::text not null,
+  motiv text,
+  adresa_cerere text,
+  ultima_veste_la timestamp with time zone,
+  anulare_ceruta_la timestamp with time zone,
+  istoric jsonb default '[]'::jsonb not null,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null);
+
 create table if not exists public.tiktok_comenzi_raportate (
   order_id uuid not null,
   business_id uuid not null,
@@ -13966,6 +14165,7 @@ alter table public.storefront_design_versions add constraint storefront_design_v
 alter table public.stripe_events add constraint stripe_events_pkey PRIMARY KEY (event_id);
 alter table public.support_messages add constraint support_messages_pkey PRIMARY KEY (id);
 alter table public.support_tickets add constraint support_tickets_pkey PRIMARY KEY (id);
+alter table public.tbi_cereri add constraint tbi_cereri_pkey PRIMARY KEY (id);
 alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_pkey PRIMARY KEY (order_id);
 alter table public.trendyol_batches add constraint trendyol_batches_pkey PRIMARY KEY (id);
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_pkey PRIMARY KEY (id);
@@ -14027,6 +14227,7 @@ alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_exte
 alter table public.pepita_listari add constraint pepita_listari_business_id_product_id_key UNIQUE (business_id, product_id);
 alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_campaign_id_telefon_key UNIQUE (campaign_id, telefon);
 alter table public.sms_optout add constraint sms_optout_business_id_phone_key UNIQUE (business_id, phone);
+alter table public.tbi_cereri add constraint tbi_cereri_jeton_unic UNIQUE (jeton_hash);
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_business_id_claim_item_id_key UNIQUE (business_id, claim_item_id);
 alter table public.trendyol_claims add constraint trendyol_claims_business_id_claim_id_key UNIQUE (business_id, claim_id);
@@ -14125,6 +14326,10 @@ alter table public.support_messages add constraint support_messages_sender_type_
 alter table public.support_tickets add constraint support_tickets_category_check CHECK ((category = ANY (ARRAY['store_design'::text, 'products'::text, 'orders'::text, 'customers'::text, 'payments'::text, 'integrations'::text, 'account'::text, 'technical'::text, 'billing'::text, 'feature'::text, 'other'::text])));
 alter table public.support_tickets add constraint support_tickets_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'normal'::text, 'high'::text, 'urgent'::text])));
 alter table public.support_tickets add constraint support_tickets_status_check CHECK ((status = ANY (ARRAY['open'::text, 'in_progress'::text, 'resolved'::text, 'closed'::text])));
+alter table public.tbi_cereri add constraint tbi_cereri_istoric_check CHECK ((jsonb_typeof(istoric) = 'array'::text));
+alter table public.tbi_cereri add constraint tbi_cereri_mediu_check CHECK ((mediu = ANY (ARRAY['test'::text, 'live'::text])));
+alter table public.tbi_cereri add constraint tbi_cereri_stare_check CHECK ((stare = ANY (ARRAY['creata'::text, 'trimisa'::text, 'in_analiza'::text, 'aprobata'::text, 'respinsa'::text, 'anulata'::text, 'eroare'::text])));
+alter table public.tbi_cereri add constraint tbi_cereri_suma_check CHECK ((suma > (0)::numeric));
 alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text, 'update'::text, 'delete'::text, 'dezarhivare'::text, 'livrare'::text])));
 alter table public.trendyol_listings add constraint trendyol_listings_origin_chk CHECK (((country_of_origin IS NULL) OR (country_of_origin ~ '^[A-Z]{2}$'::text)));
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'inventory'::text, 'livrare'::text])));
@@ -14304,6 +14509,8 @@ alter table public.storefront_design_versions add constraint storefront_design_v
 alter table public.support_messages add constraint support_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE;
 alter table public.support_tickets add constraint support_tickets_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE SET NULL;
 alter table public.support_tickets add constraint support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.tbi_cereri add constraint tbi_cereri_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.tbi_cereri add constraint tbi_cereri_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -14384,6 +14591,8 @@ insert into privat.campuri_secrete (coloana, cale) values ('shipo_config', 'api_
 insert into privat.campuri_secrete (coloana, cale) values ('smartbill_config', 'token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smartship_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smso_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'cheie_privata') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tiktok_capi_config', 'access_token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_secret') on conflict do nothing;
@@ -14719,6 +14928,9 @@ CREATE INDEX support_messages_ticket_id_idx ON public.support_messages USING btr
 CREATE INDEX support_tickets_business_id_idx ON public.support_tickets USING btree (business_id);
 CREATE INDEX support_tickets_status_idx ON public.support_tickets USING btree (status);
 CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (user_id);
+CREATE INDEX tbi_cereri_business_idx ON public.tbi_cereri USING btree (business_id, created_at DESC);
+CREATE INDEX tbi_cereri_deschise_idx ON public.tbi_cereri USING btree (updated_at) WHERE (stare = ANY (ARRAY['creata'::text, 'trimisa'::text, 'in_analiza'::text]));
+CREATE INDEX tbi_cereri_order_idx ON public.tbi_cereri USING btree (order_id);
 CREATE INDEX tiktok_comenzi_raportate_business_idx ON public.tiktok_comenzi_raportate USING btree (business_id);
 CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
@@ -14816,7 +15028,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     cont_client_config,
     privat.decripteaza_config(curiera_config, '{api_key}'::text[]) AS curiera_config,
     privat.decripteaza_config(epacket_config, '{api_key}'::text[]) AS epacket_config,
-    privat.decripteaza_config(easysales_config, '{client_secret,website_token,access_token,refresh_token,webhook_secret,pat}'::text[]) AS easysales_config
+    privat.decripteaza_config(easysales_config, '{client_secret,website_token,access_token,refresh_token,webhook_secret,pat}'::text[]) AS easysales_config,
+    privat.decripteaza_config(tbi_config, '{password,cheie_privata}'::text[]) AS tbi_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -14866,6 +15079,7 @@ CREATE TRIGGER store_settings_ins INSTEAD OF INSERT ON public.store_settings FOR
 CREATE TRIGGER store_settings_upd INSTEAD OF UPDATE ON public.store_settings FOR EACH ROW EXECUTE FUNCTION privat.store_settings_upd();
 CREATE TRIGGER support_messages_after_insert AFTER INSERT ON public.support_messages FOR EACH ROW EXECUTE FUNCTION handle_support_message_insert();
 CREATE TRIGGER support_tickets_updated_at BEFORE UPDATE ON public.support_tickets FOR EACH ROW EXECUTE FUNCTION update_support_ticket_updated_at();
+CREATE TRIGGER set_tbi_cereri_updated_at BEFORE UPDATE ON public.tbi_cereri FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.trendyol_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER set_users_profile_updated_at BEFORE UPDATE ON public.users_profile FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER users_profile_blocheaza_escaladare BEFORE UPDATE ON public.users_profile FOR EACH ROW EXECUTE FUNCTION blocheaza_escaladare_users_profile();
@@ -14987,6 +15201,7 @@ alter table public.storefront_design_versions enable row level security;
 alter table public.stripe_events enable row level security;
 alter table public.support_messages enable row level security;
 alter table public.support_tickets enable row level security;
+alter table public.tbi_cereri enable row level security;
 alter table public.tiktok_comenzi_raportate enable row level security;
 alter table public.trendyol_batches enable row level security;
 alter table public.trendyol_claim_items enable row level security;
@@ -15345,6 +15560,9 @@ create policy admins_delete_tickets on public.support_tickets as PERMISSIVE for 
 create policy users_insert_tickets on public.support_tickets as PERMISSIVE for INSERT to public with check ((auth.uid() = user_id));
 create policy users_select_own_tickets on public.support_tickets as PERMISSIVE for SELECT to public using ((auth.uid() = user_id));
 create policy users_update_own_tickets on public.support_tickets as PERMISSIVE for UPDATE to public using ((auth.uid() = user_id));
+create policy owner_select_tbi_cereri on public.tbi_cereri as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_trendyol_batches on public.trendyol_batches as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
@@ -17438,6 +17656,15 @@ grant SELECT on table public.support_tickets to service_role;
 grant TRIGGER on table public.support_tickets to service_role;
 grant TRUNCATE on table public.support_tickets to service_role;
 grant UPDATE on table public.support_tickets to service_role;
+grant SELECT on table public.tbi_cereri to anon;
+grant SELECT on table public.tbi_cereri to authenticated;
+grant DELETE on table public.tbi_cereri to service_role;
+grant INSERT on table public.tbi_cereri to service_role;
+grant REFERENCES on table public.tbi_cereri to service_role;
+grant SELECT on table public.tbi_cereri to service_role;
+grant TRIGGER on table public.tbi_cereri to service_role;
+grant TRUNCATE on table public.tbi_cereri to service_role;
+grant UPDATE on table public.tbi_cereri to service_role;
 grant DELETE on table public.tiktok_comenzi_raportate to anon;
 grant INSERT on table public.tiktok_comenzi_raportate to anon;
 grant REFERENCES on table public.tiktok_comenzi_raportate to anon;

@@ -39,8 +39,14 @@ import { Paginatie } from "./Paginatie";
  * comenzile, deci lista are acum numere de pagină și un total numărat în bază.
  */
 
-export function EmagReturns({ businessId }: { businessId: string }) {
+/**
+ * ⚠ `cuGol` (15.11.2026): pe pagina cu file, retururile au fila lor. Acolo o carte care dispare cand nu
+ * e niciun retur ar lasa o fila goala, care arata ca un ecran stricat, deci se spune limpede „niciun
+ * retur”. Si se spune ALTFEL cand citirea a cazut: „n-am putut citi” nu e „zero”.
+ */
+export function EmagReturns({ businessId, cuGol = false }: { businessId: string; cuGol?: boolean }) {
   const [randuri, setRanduri] = useState<RandReturEcran[] | null>(null);
+  const [citireCazuta, setCitireCazuta] = useState(false);
   const [total, setTotal] = useState(0);
   const [pagina, setPagina] = useState(1);
   const [pePagina, setPePagina] = useState(50);
@@ -51,9 +57,11 @@ export function EmagReturns({ businessId }: { businessId: string }) {
       const r = await listaRetururiEmag(businessId, { pagina: p });
       if ("error" in r) {
         toast.error(r.error);
+        setCitireCazuta(true);
         setRanduri([]);
         return;
       }
+      setCitireCazuta(false);
       setRanduri(r.randuri);
       setTotal(r.total);
       /* ⚠ Pagina vine de la server, nu din ce am cerut: el o strânge la ultima care
@@ -80,7 +88,34 @@ export function EmagReturns({ businessId }: { businessId: string }) {
   }
 
   /* Un magazin fără retururi n-are nevoie de o carte goală pe ecran. */
-  if (total === 0) return null;
+  if (total === 0 && !cuGol) return null;
+  if (total === 0) {
+    return (
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <PackageOpen className="h-4 w-4" /> Retururi eMAG
+            </h3>
+            <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+              {citireCazuta
+                ? "Retururile nu s-au putut citi acum de la eMAG. Încearcă din nou peste un minut."
+                : "Niciun retur deocamdată. Când un cumpărător cere unul pe eMAG, îl vezi aici, cu produsele și motivul."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => incarca()}
+            disabled={seIncarca}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
+          >
+            {seIncarca ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Reîmprospătează
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">

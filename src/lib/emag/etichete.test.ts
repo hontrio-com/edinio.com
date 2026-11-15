@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { BLOC_PREGATIRE_PUBLICARE, BUTON_ADU_OFERTELE, BUTON_ADU_OFERTELE_SCURT } from "./etichete";
+import { BLOC_PREGATIRE_PUBLICARE, BUTON_ADU_OFERTELE, BUTON_ADU_OFERTELE_SCURT, lipsesteDinSetari } from "./etichete";
 import { ceLipsestePentruPublicare } from "./sync";
 import { rutaDeTrimitere } from "./rute";
 import { mesajOmenesc } from "./errors";
@@ -82,4 +82,41 @@ test("eMAG etichete: ecranele NU rescriu numele de mână", () => {
       );
     }
   }
+});
+
+/*
+ * ═══ ÎNDRUMARUL DE SUB AVERTISMENT ARATĂ SPRE CE LIPSEȘTE CU ADEVĂRAT (15.11.2026) ═══
+ *
+ * Avertismentul „publicarea nu e pregătită” are titlul din `ceLipsestePentruPublicare`, iar sub el
+ * un rând care spune unde se repară: fila „Setări” (TVA, zilele de expediere) sau butonul de legare a
+ * ofertelor. Rândul se alegea după `catalogCitit`, deci la un cont NOU (nimic făcut) titlul cerea cota
+ * de TVA, iar rândul trimitea la butonul de legare. Proba leagă rândul de titlu: oricare ar fi starea,
+ * „se repară din Setări” e adevărat exact când titlul vorbește despre setări.
+ */
+test("eMAG etichete: îndrumarul de publicare trimite unde cere titlul", () => {
+  const stari = [
+    { vat_id: undefined, handling_time: undefined, catalog_citit_la: undefined },
+    { vat_id: 1, handling_time: undefined, catalog_citit_la: undefined },
+    { vat_id: undefined, handling_time: 1, catalog_citit_la: "2026-11-15T10:00:00Z" },
+    { vat_id: 1, handling_time: 1, catalog_citit_la: undefined },
+    { vat_id: 1, handling_time: 0, catalog_citit_la: undefined },
+    { vat_id: 1, handling_time: 1, catalog_citit_la: "2026-11-15T10:00:00Z" },
+  ];
+  for (const s of stari) {
+    const config = { connected: true, username: "u", password: "p", ...s };
+    const titlu = ceLipsestePentruPublicare(config);
+    const dinSetari = lipsesteDinSetari({
+      lipsaPentruPublicare: titlu,
+      vatId: config.vat_id ?? null,
+      handlingTime: config.handling_time ?? null,
+    });
+    const titluDespreSetari = titlu != null && titlu.includes("setările integrării");
+    assert.equal(dinSetari, titluDespreSetari, `${JSON.stringify(s)}: titlul „${titlu}”`);
+    if (titlu != null && !dinSetari) assert.ok(titlu.includes(BUTON_ADU_OFERTELE), titlu);
+  }
+
+  /* ⚠ Si ecranul chiar o cheama: o regula buna pe care n-o foloseste nimeni nu repara nimic. */
+  const ecran = readFileSync("src/components/dashboard/EmagClient.tsx", "utf8");
+  assert.match(ecran, /\{lipsesteDinSetari\(status\) \? \(/, "avertismentul nu-și alege rândul după ce lipsește");
+  assert.doesNotMatch(ecran, /\{status\.catalogCitit \? \(/, "forma veche, după `catalogCitit`, s-a întors");
 });

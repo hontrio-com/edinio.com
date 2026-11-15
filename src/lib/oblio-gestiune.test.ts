@@ -199,5 +199,5 @@ test("martor: proba chiar citeste fisierele adevarate", () => {
   */
   assert.match(CLIENT, /oblio\.eu/, "`oblio.ts` nu pare fisierul clientului Oblio");
   assert.match(ACTIUNI, /buildProducts/, "`oblio.actions.ts` nu pare fisierul cu actiunile");
-  assert.match(FORMULAR, /Serie factura/, "`OblioConfigClient.tsx` nu pare formularul");
+  assert.match(FORMULAR, /Serie factur[aă]/, "`OblioConfigClient.tsx` nu pare formularul");
 });

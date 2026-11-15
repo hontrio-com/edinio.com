@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
+import { PaginaIntegrare } from "@/components/dashboard/integrare/PaginaIntegrare";
 import { GoogleMerchantClient } from "@/components/dashboard/GoogleMerchantClient";
 import { getMerchantStatus, getMerchantProducts } from "@/lib/actions/google-merchant.actions";
 import { GOOGLE_MERCHANT_LIVE } from "@/lib/google-merchant/types";
@@ -10,6 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Antetul integrarii pleaca imediat; starea contului Merchant curge dupa el.
+ *
+ * ⚠ De aceea cadrul comun (`PaginaIntegrare`) se pune AICI, pe server, si nu in client ca la
+ * celelalte pagini: pus in client, antetul ar fi asteptat dupa Google. Fara etichete de stare in
+ * antet, dinadins: starea e tocmai ce inca se incarca.
  *
  * `getMerchantStatus` si `getMerchantProducts` sunt drumuri pana la Google, puse
  * cap la cap, iar dupa ele mai vine si citirea categoriilor din 1000 in 1000.
@@ -25,12 +29,15 @@ export default async function GoogleMerchantPage() {
   if (!biz) redirect("/dashboard");
 
   return (
-    <div className="p-6 max-w-3xl">
-      <IntegrationHeader id="google-merchant" description="Sincronizează produsele în Google Merchant Center (Shopping + Google Ads)." />
+    <PaginaIntegrare
+      id="google-merchant"
+      titlu="Google Shopping"
+      descriere="Produsele, stocul și prețurile tale în Google Merchant Center: Shopping, listări gratuite și Google Ads."
+    >
       <Suspense fallback={<ScheletMerchant />}>
         <ContinutMerchant businessId={biz.id} userId={user.id} />
       </Suspense>
-    </div>
+    </PaginaIntegrare>
   );
 }
 

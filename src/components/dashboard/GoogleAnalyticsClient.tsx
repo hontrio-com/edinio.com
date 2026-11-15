@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
 import { Switch } from "@/components/ui/switch";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { CardCifre, CumFunctioneaza, PaginaIntegrare, type StareAntet } from "@/components/dashboard/integrare/PaginaIntegrare";
 
 /* ─── Romanian labels for GA-reported values ──────────────────────────────── */
 
@@ -116,33 +117,76 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
     window.history.replaceState({}, "", "/dashboard/features/google-analytics");
   }, []);
 
+  const cadru = (continut: ReactNode, stari: StareAntet[] = [], aside?: ReactNode) => (
+    <PaginaIntegrare
+      id="google-analytics"
+      titlu="Statistici magazin"
+      descriere="Traficul, sursele și vânzările magazinului, măsurate în contul tău Google Analytics."
+      stari={stari}
+      aside={aside}
+    >
+      {continut}
+    </PaginaIntegrare>
+  );
+
   if (!status) {
-    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return cadru(<Callout variant="danger" title="Nu am putut încărca starea. Reîncarcă pagina." />);
   }
 
   // OAuth (account connect + in-app reports) is gated while Google verifies the
   // app; the manual Measurement ID path below works for everyone regardless.
   const oauthAvailable = available && status.configured;
 
+  const stari: StareAntet[] = status.needsProperty
+    ? [{ ton: "asteptare", text: "Alege proprietatea" }]
+    : !status.connected
+      ? [{ ton: "neutru", text: "Neconectat" }]
+      : [
+        { ton: "bun", text: status.manual ? "Conectat manual" : "Conectat" },
+        ...(status.trackingEnabled ? [] : [{ ton: "asteptare" as const, text: "Măsurare oprită" }]),
+        ...(status.hasApiSecret ? [{ ton: "info" as const, text: "Server-side activ" }] : []),
+      ];
+  const cumFunctioneaza = (
+    <CumFunctioneaza id="google-analytics" puncte={[
+      { Icon: Zap, text: "Tagul GA4 se încarcă singur pe magazin, după acordul de cookie-uri. Nu pui niciun cod." },
+      { Icon: ShoppingCart, text: "Evenimente e-commerce: vizualizări de produs, coș, checkout și achiziții." },
+      { Icon: Radio, text: "Opțional, achizițiile și rambursările pleacă și de pe server, prin Measurement Protocol." },
+      { Icon: BarChart3, text: "Cu contul Google conectat, vezi statisticile și vizitatorii în timp real chiar aici." },
+    ]} />
+  );
+
   if (status.needsProperty) {
-    return <PropertyPicker businessId={businessId} />;
+    return cadru(<PropertyPicker businessId={businessId} />, stari, cumFunctioneaza);
   }
 
   if (status.connected && status.manual) {
-    return <ManualConnected businessId={businessId} status={status} oauthAvailable={oauthAvailable} />;
+    return cadru(
+      <ManualConnected businessId={businessId} status={status} oauthAvailable={oauthAvailable} />,
+      stari,
+      <>
+        <CardCifre titlu="Conexiunea" randuri={[
+          { eticheta: "ID de măsurare", valoare: <span className="font-mono">{status.measurementId}</span> },
+          { eticheta: "Măsurare pe magazin", valoare: status.trackingEnabled ? "activă" : "oprită" },
+          { eticheta: "Server-side", valoare: status.hasApiSecret ? (status.apiSecretVerificat ? "verificat" : "neverificat") : "oprit" },
+        ]} />
+        {cumFunctioneaza}
+      </>,
+    );
   }
 
   if (!status.connected) {
-    return <ConnectCard businessId={businessId} oauthAvailable={oauthAvailable} />;
+    return cadru(<ConnectCard businessId={businessId} oauthAvailable={oauthAvailable} />, stari, cumFunctioneaza);
   }
 
-  return (
+  /* Tabloul de statistici are nevoie de toata latimea: fara coloana din dreapta. */
+  return cadru(
     <ConnectedDashboard
       businessId={businessId}
       status={status}
       initialDashboard={initialDashboard}
       initialRealtime={initialRealtime}
-    />
+    />,
+    stari,
   );
 }
 

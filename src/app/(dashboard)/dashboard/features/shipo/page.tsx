@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { ShipoConfigClient } from "@/components/dashboard/ShipoConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { ShipoConfig } from "@/lib/shipo/client";
 
 export default async function ShipoPage() {
@@ -44,13 +43,5 @@ export default async function ShipoPage() {
     activ(settings?.fedex_config, "client_id", "client_secret", "account_number") ? "fedex" : "",
   ].filter(Boolean);
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="shipo"
-        description="Colete prin Shipo.ro: un cont, mai multi curieri (FAN Courier, Cargus, DPD, GLS, Sameday, Posta Romana, FedEx) si tarife negociate de ei. Livreaza si la adresa, si in lockere sau puncte de ridicare."
-      />
-      <ShipoConfigClient businessId={business.id} initialConfig={config} activiDirect={activiDirect} />
-    </div>
-  );
+  return <ShipoConfigClient businessId={business.id} initialConfig={config} activiDirect={activiDirect} />;
 }

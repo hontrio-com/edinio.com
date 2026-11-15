@@ -12,7 +12,7 @@ import {
   Truck, Percent, Globe, Bell, Lock, Clock, Eye, EyeOff,
   Check, Sparkles, Crown, Rocket, Search, MessageSquare, ExternalLink, Phone,
   ShieldCheck, ShieldOff, Mail, CreditCard, Wallet, ArrowUp, ArrowDown, Cookie, BarChart2, Package, UserRound, Link2,
-  AlertTriangle, Infinity as InfinityIcon,
+  AlertTriangle, Infinity as InfinityIcon, CalendarClock,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
@@ -23,7 +23,7 @@ import { PermalinkuriSetari } from "@/components/dashboard/setari/PermalinkuriSe
 import { adresaSetarii } from "@/lib/editor-magazin/setari";
 import type { Permalinkuri } from "@/lib/storefront/permalinkuri";
 import type { StareaConturilor } from "@/lib/actions/cont-client.actions";
-import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
+import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type PaymentProcessorType, type ProcessorReadiness, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { formatPrice } from "@/lib/utils/format";
 import { ShippingRulesEditor } from "@/components/dashboard/ShippingRulesEditor";
 import type { ShippingClass, ShippingRule } from "@/lib/shipping/rules";
@@ -99,6 +99,7 @@ const PAYMENT_TYPE_NAMES: Record<PaymentMethodType, string> = {
   ipay: "BT iPay",
   klarna: "Klarna",
   revolut: "Revolut",
+  tbi: "tbi bank (rate)",
 };
 
 // PLAN_LABELS, PLAN_PRICES imported from @/lib/plans
@@ -361,7 +362,8 @@ interface Props {
   shippingConfig: ShippingConfig;
   activeCourierIds: string[];
   paymentMethods: PaymentMethodEntry[];
-  paymentReadiness: { netopia: boolean; stripe: boolean; ipay: boolean; klarna: boolean; revolut: boolean };
+  /* Tipul comun, nu o lista scrisa de mana: un procesator nou intra aici singur. */
+  paymentReadiness: ProcessorReadiness;
   cardDiscount: CardDiscountConfig;
   codDiscount: CardDiscountConfig;
   codFee: CodFeeConfig;
@@ -1968,13 +1970,13 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <p className="text-sm font-semibold text-foreground">Metode de plata</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Activeaza, reordoneaza si redenumeste metodele afisate clientilor in formularul de comanda.
-                    Ramburs la curier este activ implicit. Cand integrezi Netopia, Stripe sau BT iPay din Integrari, apar automat si aici.
+                    Ramburs la curier este activ implicit. Cand integrezi Netopia, Stripe, BT iPay, Klarna, Revolut sau tbi bank din Integrari, apar automat si aici.
                   </p>
                 </div>
                 <div className="px-5 py-5 space-y-3">
                   {methods.map((m, i) => {
                     const isCod = m.type === "cash_on_delivery";
-                    const ready = isCod || paymentReadiness[m.type as "netopia" | "stripe" | "ipay" | "klarna" | "revolut"];
+                    const ready = isCod || paymentReadiness[m.type as PaymentProcessorType];
                     return (
                       <div key={m.type} className="border border-border rounded-xl p-3 flex items-start gap-3">
                         <div className="flex flex-col gap-1 pt-1 flex-shrink-0">
@@ -1989,7 +1991,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1.5">
-                            {isCod ? <Wallet className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <CreditCard className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                            {isCod ? <Wallet className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : m.type === "tbi" ? <CalendarClock className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <CreditCard className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
                             <span className="text-xs font-semibold text-muted-foreground">{PAYMENT_TYPE_NAMES[m.type]}</span>
                           </div>
                           <input type="text" value={m.label} maxLength={40}

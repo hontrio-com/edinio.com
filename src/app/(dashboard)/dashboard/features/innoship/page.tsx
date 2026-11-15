@@ -3,7 +3,6 @@ import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { InnoshipConfigClient } from "@/components/dashboard/InnoshipConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { InnoshipConfig } from "@/lib/innoship/client";
 import { adresaPublica } from "@/lib/adresa-publica";
 
@@ -38,23 +37,17 @@ export default async function InnoshipPage() {
     .map(([id]) => id);
 
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="innoship"
-        description="Un singur cont, zeci de curieri: cumparatorul alege oferta in checkout, tu emiti dintr-un singur loc."
-      />
-      <InnoshipConfigClient
-        businessId={business.id}
-        initialConfig={config}
-        curieriActiviDirect={curieriActiviDirect}
-        /*
-         * ⚠ Scria `NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"`, adica APEXUL in productie, care
-         * raspunde 308 catre `www` (masurat 17.09.2026, la trecerea notice.ro). Adresa de aici o lipeste
-         * comerciantul in Innoship, iar serverul lor ar fi trebuit sa urmeze redirectarea ca sa ne
-         * gaseasca. Expunere la reparare: zero magazine.
-         */
-        baseUrl={adresaPublica()}
-      />
-    </div>
+    <InnoshipConfigClient
+      businessId={business.id}
+      initialConfig={config}
+      curieriActiviDirect={curieriActiviDirect}
+      /*
+       * ⚠ Scria `NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"`, adica APEXUL in productie, care
+       * raspunde 308 catre `www` (masurat 17.09.2026, la trecerea notice.ro). Adresa de aici o lipeste
+       * comerciantul in Innoship, iar serverul lor ar fi trebuit sa urmeze redirectarea ca sa ne
+       * gaseasca. Expunere la reparare: zero magazine.
+       */
+      baseUrl={adresaPublica()}
+    />
   );
 }

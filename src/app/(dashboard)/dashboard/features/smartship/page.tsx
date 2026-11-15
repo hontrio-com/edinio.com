@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { SmartshipConfigClient } from "@/components/dashboard/SmartshipConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { SmartshipConfig } from "@/lib/smartship/client";
 
 export default async function SmartshipPage() {
@@ -53,13 +52,5 @@ export default async function SmartshipPage() {
     activ(settings?.dhl_config, "username", "password", "account_number") ? "dhl" : "",
   ].filter(Boolean);
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="smartship"
-        description="Colete prin SmartShip.ro: un cont, mai multi curieri (Cargus, SameDay, DPD, FedEx, PTT Express) si un tarif negociat de ei. Poti emite si pe contractele tale de curierat, daca le ai legate acolo."
-      />
-      <SmartshipConfigClient businessId={business.id} initialConfig={config} activiDirect={activiDirect} />
-    </div>
-  );
+  return <SmartshipConfigClient businessId={business.id} initialConfig={config} activiDirect={activiDirect} />;
 }

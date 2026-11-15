@@ -133,7 +133,7 @@ describe("fiecare ruta de nivel intai a aplicatiei e rezervata", () => {
   test("extensiile statice sunt cele pe care le foloseste si proxy-ul", () => {
     /* Proxy-ul importa acelasi regex; aici doar se fixeaza ca el chiar spune
        „fisier", nu „pagina": o pagina .html sau un feed .xml NU sunt statice. */
-    for (const f of ["logo.svg", "og-image.png", "x.woff2", "a.css", "b.js"]) assert.ok(EXTENSII_STATICE.test(f), `${f} ar trebui sa fie static`);
+    for (const f of ["logo.svg", "og-image.png", "x.woff2", "a.css", "b.js", "plati/tbi/rate-tbi.mp4", "clip.webm"]) assert.ok(EXTENSII_STATICE.test(f), `${f} ar trebui sa fie static`);
     for (const f of ["robots.txt", "sitemap.xml", "site.webmanifest", "ads.txt", "pagina.html", "date.json"]) assert.ok(!EXTENSII_STATICE.test(f), `${f} NU e static`);
   });
 

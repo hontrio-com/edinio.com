@@ -1,28 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, CheckCircle, Plug, RefreshCw, Users, ExternalLink } from "lucide-react";
+import { ExternalLink, KeyRound, Loader2, MailCheck, Plug, RefreshCw, ShoppingBag, Users } from "lucide-react";
 import {
   connectMailchimp, disconnectMailchimp, getMailchimpAudiences,
   saveMailchimpSettings, syncExistingCustomers, syncMailchimpCatalog,
 } from "@/lib/actions/mailchimp.actions";
 import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { selectCls } from "@/lib/ui";
+import {
+  BaraSalvare, CardCifre, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 import type { MailchimpPublicConfig, MailchimpAudience } from "@/lib/mailchimp";
-
-const inputCls =
-  "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button type="button" onClick={() => onChange(!checked)}
-      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}>
-      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0"}`} />
-    </button>
-  );
-}
 
 export function MailchimpClient({ businessId, initialConfig }: { businessId: string; initialConfig: MailchimpPublicConfig }) {
   const [config, setConfig] = useState<MailchimpPublicConfig>(initialConfig);
@@ -36,6 +32,15 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
   const [tagsInput, setTagsInput] = useState((initialConfig.default_tags ?? []).join(", "));
   const [checkoutSource, setCheckoutSource] = useState(initialConfig.sources.checkout);
   const [ecommerceSync, setEcommerceSync] = useState(initialConfig.ecommerce_sync);
+
+  /* Bara de salvare: apare doar cand setarile s-au departat de ultima salvare. */
+  const valori = { audienceId, doubleOptin, tagsInput, checkoutSource, ecommerceSync };
+  const [reper, setReper] = useState(valori);
+  const modificat = config.connected && JSON.stringify(valori) !== JSON.stringify(reper);
+  function renunta() {
+    setAudienceId(reper.audienceId); setDoubleOptin(reper.doubleOptin); setTagsInput(reper.tagsInput);
+    setCheckoutSource(reper.checkoutSource); setEcommerceSync(reper.ecommerceSync);
+  }
 
   const [connecting, startConnect] = useTransition();
   const [saving, startSave] = useTransition();
@@ -84,7 +89,7 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
       if ("error" in res) { toast.error(res.error); return; }
       setAudiences(res.audiences);
       setAudiencesLoaded(true);
-      if (res.audiences.length === 0) toast.info("Contul nu are nicio audienta. Creeaza una in Mailchimp.");
+      if (res.audiences.length === 0) toast.info("Contul nu are nicio audiență. Creează una în Mailchimp.");
     });
   }
 
@@ -113,7 +118,8 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
       }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
-      toast.success("Setari salvate.");
+      setReper(valori);
+      toast.success("Setări salvate.");
     });
   }
 
@@ -137,6 +143,7 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
       setAudiences([]);
       setAudiencesLoaded(false);
       setAudienceId("");
+      setReper({ ...valori, audienceId: "" });
       toast.success("Cont Mailchimp deconectat.");
     });
   }
@@ -161,169 +168,151 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      if (res.total === 0) { toast.info("Nu exista clienti cu email de sincronizat."); return; }
-      toast.success(`Sincronizat: ${res.created} adaugati, ${res.updated} actualizati${res.errors ? `, ${res.errors} esuate` : ""} (din ${res.total}).`);
+      if (res.total === 0) { toast.info("Nu există clienți cu email de sincronizat."); return; }
+      toast.success(`Sincronizat: ${res.created} adăugați, ${res.updated} actualizați${res.errors ? `, ${res.errors} eșuate` : ""} (din ${res.total}).`);
       setConfig({ ...config, last_sync_at: new Date().toISOString() });
     });
   }
 
   const hasAudience = !!config.audience_id;
 
+  const stari: StareAntet[] = config.connected
+    ? [{ ton: "bun", text: "Conectat" }]
+    : [{ ton: "neutru", text: "Neconectat" }];
+  const legatura = "inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline";
+
   return (
-    <div className="p-6 max-w-2xl">
-      <Link href="/dashboard/features" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-6">
-        <ArrowLeft className="h-4 w-4" /> Inapoi la integrari
-      </Link>
-
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-11 h-11 rounded-xl ring-1 ring-foreground/10 bg-card flex items-center justify-center p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/integrations/mailchimp.svg" alt="Mailchimp" className="w-full h-full object-contain" />
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Mailchimp</h1>
-          <p className="text-sm text-muted-foreground">Sincronizeaza abonatii in contul tau si trimite campanii din Mailchimp.</p>
-        </div>
-      </div>
-
-      {/* Connection */}
-      {config.connected ? (
-        <div className="mt-6 flex items-center justify-between gap-3 p-4 rounded-xl border border-green-200 bg-green-50">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Conectat</p>
-              <p className="text-xs text-muted-foreground truncate">{config.account_name || "Cont Mailchimp"}</p>
-            </div>
+    <PaginaIntegrare
+      id="mailchimp"
+      titlu="Email marketing"
+      descriere="Abonații din magazin intră în audiența ta Mailchimp, de unde trimiți campanii."
+      stari={stari}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Contul Mailchimp legat", facut: config.connected },
+          { text: "Audiența aleasă", facut: config.connected && hasAudience },
+          { text: "Abonarea la comandă", facut: config.connected && !!config.sources.checkout },
+        ]} />
+        {config.connected && (
+          <CardCifre titlu="Contul legat" randuri={[
+            { eticheta: "Cont", valoare: config.account_name || "Mailchimp" },
+            { eticheta: "Audiența", valoare: config.audience_name || "nealeasă" },
+            ...(config.last_sync_at ? [{ eticheta: "Ultima sincronizare", valoare: new Date(config.last_sync_at).toLocaleString("ro-RO") }] : []),
+          ]} />
+        )}
+        <CumFunctioneaza id="mailchimp" puncte={[
+          { Icon: KeyRound, text: "Te conectezi cu o cheie API din Mailchimp: Account, Extras, API keys." },
+          { Icon: Users, text: "Alegi audiența în care intră abonații magazinului." },
+          { Icon: MailCheck, text: "Cine bifează abonarea la comandă intră în audiență; cu confirmarea dublă primește întâi un email." },
+          { Icon: ShoppingBag, text: "Cu sincronizarea e-commerce, produsele și comenzile ajung în Mailchimp, pentru venit atribuit și segmente." },
+        ]} />
+      </>}
+    >
+      {!config.connected ? (
+        <Sectiune pas={1} titlu="Contul Mailchimp" descriere="Te conectezi cu o cheie API din contul tău Mailchimp.">
+          <Field label="Cheie API Mailchimp" htmlFor="mailchimp-cheie"
+            ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="Cheia API Mailchimp"
+              text="În Mailchimp: Account, apoi Extras, apoi API keys. Generezi o cheie și o copiezi aici." />}>
+            <Input id="mailchimp-cheie" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="ex: 0123abcd...-us21" />
+          </Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={connect} disabled={connecting}>
+              {connecting ? <Loader2 className="animate-spin" /> : <Plug />}
+              Conectează contul
+            </Button>
+            <a href="https://us1.admin.mailchimp.com/account/api/" target="_blank" rel="noopener noreferrer" className={legatura}>
+              Cheile API în Mailchimp <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
-          {/* ⚠ `cePierzi` e citit din `disconnectMailchimp`: scoate webhookurile noastre de pe
-              audienta, apoi pune `mailchimp_config` pe null, adica cheia SI toate setarile. */}
-          <ButonDeconectare
-            nume="Mailchimp"
-            cePierzi="Cheia API și setările se șterg din Edinio, iar webhookurile puse de noi pe audiență se scot din Mailchimp. Abonații trimiși deja rămân acolo, dar ca să te întorci ceri o cheie nouă de acolo."
-            pending={saving}
-            onConfirma={disconnect}
-            className="flex-shrink-0"
-          />
-        </div>
+        </Sectiune>
       ) : (
-        <div className="mt-6 space-y-3">
-          <div>
-            <label className="block text-xs font-semibold text-foreground mb-1.5">Cheie API Mailchimp</label>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-              placeholder="ex: 0123abcd...-us21" className={inputCls} autoComplete="new-password" />
-            <p className="text-[11px] text-muted-foreground mt-1.5 inline-flex items-center gap-1">
-              O gasesti in Mailchimp la Account &gt; Extras &gt; API keys.
-              <a href="https://us1.admin.mailchimp.com/account/api/" target="_blank" rel="noopener noreferrer"
-                className="text-primary font-medium inline-flex items-center gap-0.5">Deschide <ExternalLink className="h-3 w-3" /></a>
-            </p>
-          </div>
-          <button type="button" onClick={connect} disabled={connecting}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-60">
-            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-            Conecteaza contul
-          </button>
-        </div>
-      )}
-
-      {/* Settings (only when connected) */}
-      {config.connected && (
-        <div className="mt-6 space-y-5">
-          {/* Audience picker */}
-          <div className="p-4 rounded-xl border border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold text-foreground">Audienta (lista)</label>
-              <button type="button" onClick={reloadAudiences} disabled={loadingAudiences}
-                className="text-xs font-medium text-primary inline-flex items-center gap-1 disabled:opacity-50">
-                {loadingAudiences ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                {audiencesLoaded ? "Reincarca" : "Incarca audientele"}
-              </button>
-            </div>
+        <>
+          <Sectiune pas={1} titlu="Audiența (listă)" descriere="Lista din Mailchimp în care intră abonații magazinului.">
             {audiencesLoaded && audiences.length > 0 ? (
-              <select value={audienceId} onChange={(e) => setAudienceId(e.target.value)} className={inputCls}>
-                <option value="">Alege o audienta...</option>
+              <select aria-label="Audiența" value={audienceId} onChange={(e) => setAudienceId(e.target.value)} className={selectCls}>
+                <option value="">Alege o audiență...</option>
                 {audiences.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.member_count} abonati)</option>
+                  <option key={a.id} value={a.id}>{a.name} ({a.member_count} abonați)</option>
                 ))}
               </select>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {hasAudience
-                  ? `Audienta curenta: ${config.audience_name ?? ""}. Apasa Reincarca pentru a o schimba.`
-                  : "Apasa Incarca audientele pentru a alege lista in care se adauga abonatii."}
+                  ? `Audiența curentă: ${config.audience_name ?? ""}. Apasă „Reîncarcă” ca s-o schimbi.`
+                  : "Apasă „Încarcă audiențele” ca să alegi lista în care se adaugă abonații."}
               </p>
             )}
-          </div>
-
-          {/* Options */}
-          <div className="p-4 rounded-xl border border-border space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Confirmare dubla (double opt-in)</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Mailchimp trimite un email de confirmare inainte de abonare. Recomandat pentru conformitate GDPR.</p>
-              </div>
-              <Toggle checked={doubleOptin} onChange={setDoubleOptin} />
+            <div>
+              <Button variant="outline" size="sm" onClick={reloadAudiences} disabled={loadingAudiences}>
+                {loadingAudiences ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                {audiencesLoaded ? "Reîncarcă" : "Încarcă audiențele"}
+              </Button>
             </div>
+          </Sectiune>
 
-            <div className="flex items-start justify-between gap-3 pt-3 border-t border-border">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Abonare la finalizarea comenzii</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Cand clientul bifeaza casuta de abonare la checkout, emailul lui intra in audienta.</p>
-              </div>
-              <Toggle checked={checkoutSource} onChange={setCheckoutSource} />
+          <Sectiune pas={2} titlu="Abonarea" descriere="Cine ajunge în audiență și cu ce etichete.">
+            <RandComutator
+              titlu="Abonare la finalizarea comenzii"
+              text="Când clientul bifează căsuța de abonare la comandă, emailul lui intră în audiență."
+              activ={checkoutSource}
+              onChange={setCheckoutSource}
+            />
+            <RandComutator
+              separat
+              titlu="Confirmare dublă (double opt-in)"
+              text="Mailchimp trimite un email de confirmare înainte de abonare. Recomandat pentru conformitatea cu GDPR."
+              activ={doubleOptin}
+              onChange={setDoubleOptin}
+            />
+            <div className="border-t border-border pt-4">
+              <Field label="Etichete implicite (opțional)" htmlFor="mailchimp-etichete"
+                hint="Se aplică tuturor abonaților trimiși, separate prin virgulă. Sursa (Checkout sau Clienți) se adaugă singură ca etichetă.">
+                <Input id="mailchimp-etichete" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="ex: Edinio, Newsletter" />
+              </Field>
             </div>
+          </Sectiune>
 
-            <div className="flex items-start justify-between gap-3 pt-3 border-t border-border">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Sincronizare e-commerce (produse + comenzi)</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Trimite produsele si comenzile in Mailchimp pentru venit atribuit, segmentare dupa cumparaturi si retargeting de produs. Cosurile raman pe sistemul Edinio.</p>
-              </div>
-              <Toggle checked={ecommerceSync} onChange={setEcommerceSync} />
+          <Sectiune pas={3} titlu="Sincronizare e-commerce" descriere="Produsele și comenzile, pentru venit atribuit, segmente după cumpărături și recomandări.">
+            <RandComutator
+              titlu="Sincronizare e-commerce (produse + comenzi)"
+              text="Trimite produsele și comenzile în Mailchimp. Coșurile rămân pe sistemul Edinio."
+              activ={ecommerceSync}
+              onChange={setEcommerceSync}
+            />
+            {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
+            <SincronizareCatalogEmail furnizor="Mailchimp" pornita={config.ecommerce_sync} sincronizeaza={() => syncMailchimpCatalog(businessId)} />
+          </Sectiune>
+
+          <Sectiune pas={4} titlu="Sincronizează clienții existenți"
+            descriere="Trimite în audiență emailurile clienților care au comandat deja, deduplicate. Folosește-o doar dacă ai consimțământul lor de marketing.">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Comenzile din marketplace (Pepita, eMAG, Trendyol, About You) sunt sărite: cumpărătorii lor nu sunt clienții tăi.
+              {config.last_sync_at && <> Ultima sincronizare: {new Date(config.last_sync_at).toLocaleString("ro-RO")}.</>}
+            </p>
+            <div>
+              <Button variant="outline" onClick={syncCustomers} disabled={syncing || !hasAudience}>
+                {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                Sincronizează acum
+              </Button>
+              {!hasAudience && <p className="mt-1.5 text-xs text-warning">Alege și salvează o audiență întâi.</p>}
             </div>
+          </Sectiune>
 
-            <div className="pt-3 border-t border-border">
-              <label className="block text-xs font-semibold text-foreground mb-1.5">Etichete implicite (optional)</label>
-              <input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="ex: Edinio, Newsletter" className={inputCls} />
-              <p className="text-[11px] text-muted-foreground mt-1">Se aplica tuturor abonatilor trimisi (separate prin virgula). Sursa (Checkout/Clienti) se adauga automat ca eticheta.</p>
-            </div>
-          </div>
+          {/* ⚠ `cePierzi` e citit din `disconnectMailchimp`: scoate webhookurile noastre de pe
+              audienta, apoi pune `mailchimp_config` pe null, adica cheia SI toate setarile. */}
+          <ZonaDeconectare descriere="Șterge cheia și setările din Edinio. Abonații trimiși deja rămân în Mailchimp.">
+            <ButonDeconectare
+              nume="Mailchimp"
+              cePierzi="Cheia API și setările se șterg din Edinio, iar webhookurile puse de noi pe audiență se scot din Mailchimp. Abonații trimiși deja rămân acolo, dar ca să te întorci ceri o cheie nouă de acolo."
+              pending={saving}
+              marime="default"
+              onConfirma={disconnect}
+            />
+          </ZonaDeconectare>
 
-          <div className="flex justify-end">
-            <button type="button" onClick={save} disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 disabled:opacity-60">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salveaza
-            </button>
-          </div>
-
-          {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
-          <SincronizareCatalogEmail furnizor="Mailchimp" pornita={config.ecommerce_sync} sincronizeaza={() => syncMailchimpCatalog(businessId)} />
-
-          {/* Bulk sync */}
-          <div className="p-4 rounded-xl border border-border">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <Users className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-foreground">Sincronizeaza clientii existenti</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Trimite in audienta emailurile clientilor care au comandat deja (deduplicate). Comenzile din marketplace (Pepita, eMAG, Trendyol, About You) sunt sarite: cumparatorii lor nu sunt clientii tai. Foloseste doar daca ai consimtamantul lor de marketing.
-                </p>
-                {config.last_sync_at && (
-                  <p className="text-[11px] text-muted-foreground mt-1">Ultima sincronizare: {new Date(config.last_sync_at).toLocaleString("ro-RO")}</p>
-                )}
-                <button type="button" onClick={syncCustomers} disabled={syncing || !hasAudience}
-                  className="mt-2.5 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 disabled:opacity-50">
-                  {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Sincronizeaza acum
-                </button>
-                {!hasAudience && <p className="text-[11px] text-amber-600 mt-1.5">Alege si salveaza o audienta intai.</p>}
-              </div>
-            </div>
-          </div>
-        </div>
+          <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+        </>
       )}
-    </div>
+    </PaginaIntegrare>
   );
 }

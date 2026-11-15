@@ -1,20 +1,21 @@
 "use client";
 
-import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  AlertTriangle, Check, CheckCircle, ClipboardCheck, Clock, Info, Layers,
-  Loader2, ThumbsUp, XCircle,
+  AlertTriangle, ArrowRight, Check, CheckCircle, ClipboardCheck, Clock, Info, KeyRound, Layers, Loader2, ThumbsUp, XCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils/cn";
+import { Callout, GrupCallout } from "@/components/ui/callout";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { ZonaDeconectare } from "@/components/dashboard/integrare/PaginaIntegrare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
@@ -60,7 +61,19 @@ const PREREQUISITES: { titlu: string; text: string }[] = [
 /** Care buton a pornit tranzitia. Vezi `ruleaza` mai jos. */
 type Actiune = null | "conectare" | "deconectare" | "setari" | "notificari" | "verificare";
 
-export function AboutYouClient({ businessId, status }: { businessId: string; status: AboutYouStatus | null }) {
+/**
+ * ⚠ `parte` (15.11.2026): pagina e pe file (`FileMarketplace`), ca la eMAG si Trendyol. „Prezentare” are lista
+ * „De făcut” si cifrele; „Setări” are setarile, notificarile, cerintele About You si deconectarea. Contul
+ * (cheia, vanzatorul, mediul) a urcat in antetul paginii. Neconectat, nu exista file: ecranul arata cerintele
+ * si formularul, oricare ar fi `parte`.
+ */
+export function AboutYouClient({ businessId, status, parte, dupaSetari }: {
+  businessId: string;
+  status: AboutYouStatus | null;
+  parte: "prezentare" | "setari";
+  /** Fila „Setări”: ce sta imediat sub panoul de setari (maparea curierilor, din pagina). */
+  dupaSetari?: ReactNode;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -328,7 +341,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
     },
     {
       label: "Respinse", value: status.counts.rejected, icon: XCircle,
-      explicatie: "Listările pe care About You le-a refuzat. Motivul lor se vede pe fiecare rând, în lista de mai jos.",
+      explicatie: "Listările pe care About You le-a refuzat. Motivul lor se vede pe fiecare rând, în fila Produse.",
     },
     {
       label: "În coadă", value: status.counts.queued, icon: Clock,
@@ -337,118 +350,158 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   ];
   const marimeCifre = marimeaRandului(cifre.map((c) => c.value));
 
+  /*
+    ═══ ÎNAINTE DE A ÎNCEPE ═══ (vezi comentariul de la panou)
+
+    ⚠ Neconectat, cerintele stau sus, inaintea formularului. Conectat, coboara la finalul filei
+    „Setări”: raman de citit, dar nu mai impart capul paginii cu lucrurile de zi cu zi.
+  */
+  const cerinte = (
+      <>
+        {/*
+          ═══ ÎNAINTE DE A ÎNCEPE ═══
+
+          ⚠ NU MAI E UN BLOC GALBEN. Galbenul din panou înseamnă „uită-te aici,
+          ceva e în neregulă”, iar aici nu e nimic în neregulă: sunt patru lucruri
+          de știut o singură dată. Pe o pagină pe care comerciantul intră zilnic,
+          avertismentul care nu avertizează nimic se învață și apoi nu se mai
+          vede, inclusiv atunci când chiar apare unul adevărat dedesubt.
+        */}
+        <Panel className="p-5">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Înainte de a începe</h2>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Patru lucruri de lămurit înainte de prima listare: trei sunt cerute de About You, iar al
+            patrulea spune în ce monedă îți sunt citite prețurile acolo.
+          </p>
+          <ul className="mt-4 grid gap-x-10 gap-y-3.5 sm:grid-cols-2">
+            {PREREQUISITES.map((p) => (
+              <li key={p.titlu} className="flex gap-2.5">
+                {/*
+                  ⚠ CHIAR BIFA DE PE CARDURILE DE PRET ale site-ului de prezentare,
+                  cerută de el pe 22.09.2026: `h-4 w-4`, `strokeWidth={2.5}`, verde.
+                  Vezi `PricingSection.tsx`. Verdele e acelasi simbol in amandoua
+                  locurile: site-ul scrie `VERDE_CITIBIL`, care e `var(--primary)`,
+                  adica exact ce da `text-primary` aici.
+                */}
+                <Check className="mt-[3px] h-4 w-4 flex-shrink-0 text-primary" strokeWidth={2.5} />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium text-foreground">{p.titlu}</span>
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{p.text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </>
+  );
+
   return (
     <div className="space-y-4">
-      {/*
-        ═══ ÎNAINTE DE A ÎNCEPE ═══
-
-        ⚠ NU MAI E UN BLOC GALBEN. Galbenul din panou înseamnă „uită-te aici,
-        ceva e în neregulă”, iar aici nu e nimic în neregulă: sunt patru lucruri
-        de știut o singură dată. Pe o pagină pe care comerciantul intră zilnic,
-        avertismentul care nu avertizează nimic se învață și apoi nu se mai
-        vede, inclusiv atunci când chiar apare unul adevărat dedesubt.
-      */}
-      <Panel className="p-5">
-        <div className="flex items-center gap-2">
-          <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground">Înainte de a începe</h2>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Patru lucruri de lămurit înainte de prima listare: trei sunt cerute de About You, iar al
-          patrulea spune în ce monedă îți sunt citite prețurile acolo.
-        </p>
-        <ul className="mt-4 grid gap-x-10 gap-y-3.5 sm:grid-cols-2">
-          {PREREQUISITES.map((p) => (
-            <li key={p.titlu} className="flex gap-2.5">
-              {/*
-                ⚠ CHIAR BIFA DE PE CARDURILE DE PRET ale site-ului de prezentare,
-                cerută de el pe 22.09.2026: `h-4 w-4`, `strokeWidth={2.5}`, verde.
-                Vezi `PricingSection.tsx`. Verdele e acelasi simbol in amandoua
-                locurile: site-ul scrie `VERDE_CITIBIL`, care e `var(--primary)`,
-                adica exact ce da `text-primary` aici.
-              */}
-              <Check className="mt-[3px] h-4 w-4 flex-shrink-0 text-primary" strokeWidth={2.5} />
-              <span className="min-w-0">
-                <span className="block text-[13px] font-medium text-foreground">{p.titlu}</span>
-                <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{p.text}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
-
       {!status.connected ? (
-        /*
-          ── Formularul de conectare ──
+        <>
+          {cerinte}
+          {/*
+            ── Formularul de conectare ──
 
-          ⚠ MARGINIT LA `max-w-3xl`, desi pagina e pe tot ecranul. Restul paginii
-          are nevoie de latime (lista de listari si cea de comenzi sunt late), dar
-          doua campuri intinse pe 1900px sunt mai greu de citit, nu mai usor.
-        */
-        <Panel step={1} title="Conectează contul About You" className="max-w-3xl">
-          <p className="text-sm text-muted-foreground">
-            Generează o cheie API în Seller Center: <span className="font-medium text-foreground">Settings &gt; API Keys &gt; + Add</span>.
-            Copiaz-o aici imediat, fiindcă se afișează o singură dată.
-          </p>
-          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
-            <Field label="Mediu" required>
-              <select
-                value={environment}
-                onChange={(e) => setEnvironment(e.target.value as "sandbox" | "production")}
-                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-              >
-                <option value="production">Producție (date reale)</option>
-                <option value="sandbox">Sandbox (testare)</option>
-              </select>
-            </Field>
-            {/* `Input` pune singur `autoComplete="new-password"` pe campurile de parola. */}
-            <Field label="Cheie API" required>
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Lipește cheia API About You"
-                className="font-mono"
-              />
-            </Field>
-          </div>
-          <Button onClick={handleConnect} disabled={pending}>
-            {ruleaza("conectare") ? <Loader2 className="animate-spin" /> : <CheckCircle />}
-            {ruleaza("conectare") ? "Se verifică..." : "Conectează și testează"}
-          </Button>
-        </Panel>
+            ⚠ MARGINIT LA `max-w-3xl`, desi pagina e pe tot ecranul. Restul paginii
+            are nevoie de latime (lista de listari si cea de comenzi sunt late), dar
+            doua campuri intinse pe 1900px sunt mai greu de citit, nu mai usor.
+          */}
+          <Panel step={1} title="Conectează contul About You" className="max-w-3xl">
+            <p className="text-sm text-muted-foreground">
+              Generează o cheie API în Seller Center: <span className="font-medium text-foreground">Settings &gt; API Keys &gt; + Add</span>.
+              Copiaz-o aici imediat, fiindcă se afișează o singură dată.
+            </p>
+            <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
+              <Field label="Mediu" required>
+                <select
+                  value={environment}
+                  onChange={(e) => setEnvironment(e.target.value as "sandbox" | "production")}
+                  className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="production">Producție (date reale)</option>
+                  <option value="sandbox">Sandbox (testare)</option>
+                </select>
+              </Field>
+              {/* `Input` pune singur `autoComplete="new-password"` pe campurile de parola. */}
+              <Field label="Cheie API" required>
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Lipește cheia API About You"
+                  className="font-mono"
+                />
+              </Field>
+            </div>
+            <Button onClick={handleConnect} disabled={pending}>
+              {ruleaza("conectare") ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+              {ruleaza("conectare") ? "Se verifică..." : "Conectează și testează"}
+            </Button>
+          </Panel>
+        </>
       ) : (
         /* ── Conectat ── */
         <>
-          <Panel className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CheckCircle className="h-4 w-4 flex-shrink-0 text-success" />
-                  <span className="text-sm font-semibold text-foreground">Cont conectat</span>
-                  {/* Sandbox nu e o stare buna, e una de proba: galben, nu verde. */}
-                  <EtichetaStare ton={status.environment === "sandbox" ? "asteptare" : "bun"} marime="mic">
-                    {status.environment === "sandbox" ? "Sandbox (testare)" : "Producție"}
-                  </EtichetaStare>
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Cheie <span className="font-mono text-foreground">{status.apiKeyMasked}</span>
-                  {status.sellerName ? ` · ${status.sellerName}` : ""}
-                </p>
-              </div>
-              {/*
-                ⚠ `cePierzi` e citit din `disconnectAboutYou`: ea goleste configul
-                (deci si cheia API) si sterge coada, variantele, loturile si
-                listarile. La ei nu sterge produse, doar abonamentul de notificari.
-              */}
-              <ButonDeconectare
-                nume="About You"
-                cePierzi="Cheia API se șterge din Edinio, iar listările, variantele, loturile și coada de sincronizare se pierd. Produsele rămân pe About You, dar Edinio nu le mai poate trimite prețul și stocul."
-                pending={ruleaza("deconectare")}
-                onConfirma={handleDisconnect}
-              />
-            </div>
-          </Panel>
+          {parte === "prezentare" && <>
+          {/*
+            ═══ „DE FĂCUT ÎN CONTUL ABOUT YOU” (15.11.2026) ═══
+
+            Aceeasi lista ca la eMAG si Trendyol (forma aleasa de proprietar): ce cere o mana de la
+            comerciant, intr-o singura carte, cu titlul la imperativ si butonul pe rand. Nu se arata
+            deloc cand nu e nimic de facut.
+
+            ⚠ AVERTISMENTELE IES DIN CARTONASUL CONTULUI, pe toata latimea: inghesuite sub randul cu
+            cheia, aratau ca o nota de subsol a contului; aici sunt ce sunt, lucruri care opresc vanzarea.
+          */}
+          <GrupCallout
+            titlu="De făcut în contul About You"
+            descriere="Lucrurile care așteaptă o mână de la tine."
+            numar={(n) => `${n} de rezolvat`}
+          >
+            {status.needsReconnect && (
+              <Callout variant="danger" icon={KeyRound} title="Reconectează contul About You">
+                Sesiunea a expirat. Reconectează cheia API About You ca să reia trimiterile.
+              </Callout>
+            )}
+            {/* ⚠ Cu sesiunea expirata, `readinessError` spune exact randul de deasupra: nu de doua ori. */}
+            {status.readinessError && !status.needsReconnect && (
+              <Callout
+                variant="warning"
+                icon={Info}
+                title={status.readinessError}
+                action={
+                  <a href="#setari" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                    Deschide setările
+                    <ArrowRight data-icon="inline-end" />
+                  </a>
+                }
+              >
+                Până atunci nu pleacă niciun produs pe About You.
+              </Callout>
+            )}
+          </GrupCallout>
+
+          {status.ready && (
+            /* ⚠ Nu „vin in pasul urmator”: sunt chiar in filele de alaturi. Un om care citea asta
+               inchidea pagina si astepta. Butonul duce direct la fila Categorii. */
+            <Callout
+              variant="success"
+              icon={CheckCircle}
+              title="Configurarea de bază este completă"
+              action={
+                <a href="#categorii" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                  Leagă categoriile
+                  <ArrowRight data-icon="inline-end" />
+                </a>
+              }
+            >
+              Continuă cu maparea categoriilor, în fila Categorii, apoi cu listarea fiecărui produs, în fila Produse.
+            </Callout>
+          )}
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {cifre.map((c) => (
@@ -463,28 +516,9 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
               />
             ))}
           </div>
+          </>}
 
-          {/*
-            ⚠ AVERTISMENTELE IES DIN CARTONASUL CONTULUI, pe toata latimea. Inghesuite
-            inauntru, sub randul cu cheia, aratau ca o nota de subsol a contului; aici
-            sunt ce sunt: lucruri care opresc vanzarea.
-          */}
-          {status.needsReconnect && (
-            <Callout variant="danger" icon={AlertTriangle} title="Sesiunea a expirat">
-              Reconectează cheia API About You ca să reia trimiterile.
-            </Callout>
-          )}
-          {status.readinessError && (
-            <Callout variant="warning" icon={Info}>{status.readinessError}</Callout>
-          )}
-          {status.ready && (
-            <Callout variant="success" icon={CheckCircle} title="Configurarea de bază este completă">
-              {/* Nu „vin in pasul urmator": sunt chiar mai jos, pe aceeasi
-                  pagina. Un om care citea asta inchidea pagina si aștepta. */}
-              Continuă mai jos, pe aceeași pagină: maparea categoriilor, apoi listarea fiecărui produs.
-            </Callout>
-          )}
-
+          {parte === "setari" && <>
           {/* Setări */}
           <Panel title="Setări" className="p-5">
             <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2">
@@ -620,6 +654,8 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
             </p>
           </Panel>
 
+          {dupaSetari}
+
           {/*
             ⚠ NOTIFICARILE AU PANOUL LOR, nu un rand la coada Setarilor. Ele nu se
             salveaza cu butonul de acolo: se aprind si se sting pe loc, cu un drum
@@ -668,6 +704,25 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
               </Callout>
             )}
           </Panel>
+
+          {cerinte}
+
+          {/* ⚠ Cartonasul „Cont conectat” (cheia, vanzatorul, mediul) a urcat in antetul paginii
+              (`AntetMarketplace`); deconectarea sta aici, la final, departe de comutatoarele de zi cu zi.
+              ⚠ `cePierzi` e citit din `disconnectAboutYou`: ea goleste configul (deci si cheia API) si
+              sterge coada, variantele, loturile si listarile. La ei nu sterge produse, doar abonamentul
+              de notificari. */}
+          <ZonaDeconectare
+            descriere={`Cheia ${status.apiKeyMasked ?? ""}${status.sellerName ? ` (${status.sellerName})` : ""}. Produsele rămân pe About You.`}
+          >
+            <ButonDeconectare
+              nume="About You"
+              cePierzi="Cheia API se șterge din Edinio, iar listările, variantele, loturile și coada de sincronizare se pierd. Produsele rămân pe About You, dar Edinio nu le mai poate trimite prețul și stocul."
+              pending={ruleaza("deconectare")}
+              onConfirma={handleDisconnect}
+            />
+          </ZonaDeconectare>
+          </>}
         </>
       )}
     </div>

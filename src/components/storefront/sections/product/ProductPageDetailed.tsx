@@ -51,8 +51,9 @@ import type {
 } from "./_shared/product-page.types";
 import {
   abonareMiscareRedusa, citesteMiscareRedusa,
-  SocialProof, FAQItem, CTAButton,
+  SocialProof, FAQItem, CTAButton, RateTbi,
 } from "./_shared/pieces";
+import type { BannerTbiProdus } from "@/lib/tbi/config";
 import { fereastraContorului, numarulContorului } from "@/lib/storefront/contor-vizitatori";
 import type { Privitori } from "@/lib/analitice/privitori";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
@@ -256,6 +257,7 @@ export function ProductPageDetailed({
   storeSettings,
   basePath: basePathProp,
   hasCardPayment = false,
+  rateTbi = null,
   bundleComponents = [],
   altMap = {},
   isHome = false,
@@ -272,6 +274,8 @@ export function ProductPageDetailed({
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
+  /** Limitele platii in rate tbi, cand magazinul o ofera: randul „Plateste in rate" de sub butoane. */
+  rateTbi?: BannerTbiProdus | null;
   bundleComponents?: BundleComponent[];
   altMap?: Record<string, string>;
   isHome?: boolean;
@@ -1090,6 +1094,7 @@ export function ProductPageDetailed({
               laAlegere={(cantitateCeruta) => setCantitate(cantitateCeruta)}
             />
           )}
+          {!editare.activ && <RateTbi limite={rateTbi} pret={pers.pretPeBucata(displayPrice)} />}
           {/* ⚠ Anularea, la fel de la indemana ca salvarea — vezi nota din `ProductPageClassic`. */}
           {editare.activ && (
             <a href={inapoiLaCos} onClick={() => editare.incheieEditarea()}

@@ -128,6 +128,10 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      marfa. Acelasi caz cu `smartship_config.iban`. */
   shipo_config: ["api_key"],
   smartbill_config: ["token"],
+  /* tbi bank: parola merge CRIPTATA in fiecare cerere, iar cheia privata descifreaza vestile bancii.
+     `username`, `store_id` si cheia PUBLICA tbi nu sunt secrete: omul trebuie sa le poata reciti.
+     ⚠ Numele sunt IDENTICE in `TbiConfig` (lib/tbi/config.ts) si in `privat.campuri_secrete`. */
+  tbi_config: ["password", "cheie_privata"],
   /* SmartShip: o singura credentiala, trimisa ca `X-API-KEY` la fiecare cerere.
      ⚠ `iban` NU intra aici, desi arata a date bancare: e IBAN-ul PROPRIU al
      comerciantului, pe care SmartShip vireaza rambursul, si el trebuie sa-l poata
@@ -250,4 +254,5 @@ export function secretulEsteSalvat(config: unknown, camp: string): boolean {
 }
 
 /** Text pentru campul de formular: arata ca exista o valoare, fara sa o dezvaluie. */
-export const PLACEHOLDER_SECRET_SALVAT = "••••••••  (salvat, completeaza doar ca sa schimbi)";
+/* Scurt, ca sa incapa si in campurile puse pe doua coloane (paginile de integrari refacute, 15.11.2026). */
+export const PLACEHOLDER_SECRET_SALVAT = "••••••••  (salvat)";

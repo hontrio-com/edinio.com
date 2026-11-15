@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { UpsConfigClient } from "@/components/dashboard/UpsConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { UpsConfig } from "@/lib/ups/client";
 
 export default async function UpsPage() {
@@ -24,13 +23,5 @@ export default async function UpsPage() {
    */
   const config = (mascheazaConfig("ups_config", settings?.ups_config) as UpsConfig | null) ?? null;
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="ups"
-        description="Colete prin UPS: livrari interne in Romania (UPS Express, UPS Express Saver) si catre Uniunea Europeana (UPS Standard, Express Plus), cu tarifele contractului tau. Accepta plata la livrare si livrare in puncte UPS Access Point."
-      />
-      <UpsConfigClient businessId={business.id} initialConfig={config} />
-    </div>
-  );
+  return <UpsConfigClient businessId={business.id} initialConfig={config} />;
 }

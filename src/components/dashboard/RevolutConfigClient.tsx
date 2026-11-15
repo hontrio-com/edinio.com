@@ -1,18 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { toast } from "sonner";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
-import { Save, Loader2, CreditCard, Key } from "lucide-react";
+import { BadgeCheck, CreditCard, FlaskConical } from "lucide-react";
 import { saveRevolutConfig, disconnectRevolut } from "@/lib/actions/revolut.actions";
 import type { RevolutConfigInput } from "@/lib/revolut";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
+import { Field } from "@/components/ui/field";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import {
+  AlegereCarduri, BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, Sectiune, ZonaDeconectare, useFormularIntegrare, type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
 
 const DEFAULT_CONFIG: RevolutConfigInput = {
   enabled: false,
@@ -29,7 +30,7 @@ export default function RevolutConfigClient({
   initialConfig: RevolutConfigInput | null;
 }) {
   const router = useRouter();
-  const [cfg, setCfg] = useState<RevolutConfigInput>({ ...DEFAULT_CONFIG, ...initialConfig });
+  const { cfg, setCfg, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<RevolutConfigInput>({ ...DEFAULT_CONFIG, ...initialConfig });
   const [saving, startSave] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
 
@@ -40,7 +41,7 @@ export default function RevolutConfigClient({
   }
 
   function save() {
-    if ((!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) { toast.error("Cheia secreta API este obligatorie."); return; }
+    if ((!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) { toast.error("Cheia secretă API este obligatorie."); return; }
     startSave(async () => {
       let result: Awaited<ReturnType<typeof saveRevolutConfig>>;
       try {
@@ -60,7 +61,8 @@ export default function RevolutConfigClient({
       }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
       if (result.warning) toast.warning(result.warning);
-      else toast.success("Configuratia Revolut a fost salvata.");
+      else toast.success("Configurația Revolut a fost salvată.");
+      marcheazaSalvat();
       router.refresh();
     });
   }
@@ -91,101 +93,73 @@ export default function RevolutConfigClient({
     });
   }
 
+  const cheieSalvata = secretulEsteSalvat(initialConfig, "secret_key");
+  const stari: StareAntet[] = !isConfigured
+    ? [{ ton: "neutru", text: "Neconfigurată" }]
+    : [
+      initialConfig?.enabled ? { ton: "bun", text: "Activă" } : { ton: "neutru", text: "Oprită" },
+      initialConfig?.sandbox ? { ton: "asteptare", text: "Mod test" } : { ton: "info", text: "Plăți reale" },
+    ];
+
   return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader id="revolut" description="Accepta plati cu cardul prin Revolut: pagina de plata securizata, incasare imediata." />
+    <PaginaIntegrare
+      id="revolut"
+      titlu="Plăți cu cardul"
+      descriere="Clienții plătesc pe pagina securizată Revolut, cu cardul, Apple Pay sau Google Pay."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="Revolut la comandă" activ={cfg.enabled} onChange={v => set("enabled", v)} ariaLabel="Activează Revolut" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheia secretă API", facut: !!cfg.secret_key.trim() || cheieSalvata },
+          { text: "Revolut activ", facut: isConfigured && !!initialConfig?.enabled },
+        ]} />
+        <CumFunctioneaza id="revolut" puncte={[
+          { Icon: CreditCard, text: "Clientul plătește pe pagina Revolut, cu cardul, Apple Pay, Google Pay sau Revolut Pay." },
+          { Icon: BadgeCheck, text: "Când Revolut confirmă plata, comanda devine plătită și confirmată." },
+          { Icon: FlaskConical, text: "Pe Sandbox plățile nu sunt reale. Treci pe Live când totul merge." },
+        ]} />
+      </>}
+    >
+      <Sectiune pas={1} titlu="Cheia secretă" descriere="Ai nevoie de un cont Revolut Business cu un cont Merchant activ.">
+        <Field label="Cheie secretă API (Merchant)" htmlFor="revolut-cheie"
+          ajutor={<ExplicatieCard marime="mic" intrebare="De unde o iau" eticheta="Cheia secretă API"
+            text="În Revolut Business: Merchant, apoi APIs, și generezi cheia secretă (Secret key). O folosim doar pe server, niciodată pe site-ul public." />}>
+          <Input id="revolut-cheie" type="password" value={cfg.secret_key} onChange={(e) => set("secret_key", e.target.value)}
+            placeholder={cheieSalvata ? PLACEHOLDER_SECRET_SALVAT : "sk_..."} autoComplete="new-password" />
+        </Field>
+      </Sectiune>
 
-      <div className="space-y-5">
+      <Sectiune pas={2} titlu="La comandă" descriere="Cum apare metoda de plată în formularul de comandă. O poți schimba și din Setări, Metode de plată.">
+        <Field label="Titlul afișat" htmlFor="revolut-titlu">
+          <Input id="revolut-titlu" type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)} placeholder="Revolut" />
+        </Field>
+      </Sectiune>
 
-        {/* Ghid */}
-        <Panel className="overflow-hidden">
-          <PanelHeader>
-            <PanelTitle>Cum configurezi integrarea?</PanelTitle>
-          </PanelHeader>
-          <div className="space-y-4 px-5 py-4">
-            {[
-              { step: "1", title: "Cont Revolut Business + Merchant", desc: "Ai nevoie de un cont Revolut Business si un cont Merchant (sub-cont pentru acceptarea platilor). Activeaza contul Merchant din aplicatia/dashboard-ul Revolut Business." },
-              { step: "2", title: "Genereaza cheia secreta API", desc: "In Revolut Business, mergi la Merchant -> APIs si genereaza cheia secreta (Secret key). O folosim doar pe server, niciodata pe site-ul public." },
-              { step: "3", title: "Testeaza pe Sandbox", desc: "Foloseste intai o cheie din mediul Sandbox pentru testare (platile nu sunt reale). Treci pe Live abia cand totul functioneaza." },
-              { step: "4", title: "Completeaza si activeaza", desc: "Introdu cheia secreta, alege mediul (Sandbox pentru testare, Live pentru productie), activeaza si salveaza. Dupa activare, Revolut apare automat in Setari -> Metode de plata." },
-            ].map(({ step, title, desc }) => (
-              <div key={step} className="flex gap-3">
-                <div className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <span className="text-xs font-bold text-primary">{step}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{title}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
+      <Sectiune pas={3} titlu="Mediul de lucru" descriere="Folosește întâi o cheie din Sandbox, apoi treci pe Live.">
+        <AlegereCarduri
+          eticheta="Mediul de lucru"
+          valoare={cfg.sandbox}
+          onChange={v => set("sandbox", v)}
+          optiuni={[
+            { valoare: true, titlu: "Test (Sandbox)", text: "Plățile nu sunt reale. Pentru probe.", avertizare: true },
+            { valoare: false, titlu: "Real (Live)", text: "Clienții plătesc cu adevărat." },
+          ]}
+        />
+      </Sectiune>
 
-        {/* Main config card */}
-        <Panel className="space-y-5 p-5">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Activeaza Revolut</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Afiseaza optiunea de plata cu cardul prin Revolut la checkout</p>
-            </div>
-            <Switch checked={cfg.enabled} onCheckedChange={v => set("enabled", v)} />
-          </div>
+      {isConfigured && (
+        <ZonaDeconectare descriere="Șterge cheia și webhook-ul de la Revolut. Plățile deja încasate rămân neatinse.">
+          <ButonDeconectare
+            nume="Revolut"
+            cePierzi="Cheia se șterge din Edinio, iar webhook-ul înregistrat la Revolut se șterge și el, deci cumpărătorii nu mai pot plăti prin Revolut. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou cheia secretă din contul tău Revolut."
+            pending={disconnecting}
+            marime="default"
+            onConfirma={disconnect}
+          />
+        </ZonaDeconectare>
+      )}
 
-          <div className="space-y-4 border-t border-border pt-4">
-            {/* Sandbox toggle */}
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-3">
-              <div>
-                <p className="text-sm font-medium text-foreground">Mod Sandbox (testare)</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {cfg.sandbox ? "Platile nu sunt reale, foloseste pentru testare" : "Mod Live: platile sunt reale"}
-                </p>
-              </div>
-              <Switch checked={cfg.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                Titlu afisaj checkout
-              </label>
-              <Input type="text" value={cfg.title} onChange={(e) => set("title", e.target.value)}
-                placeholder="Revolut" />
-              <p className="mt-1 text-xs text-muted-foreground">Cum apare optiunea de plata in formularul de comanda (o poti schimba si din Metode de plata)</p>
-            </div>
-
-            {/* Secret key */}
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Key className="h-3.5 w-3.5 text-muted-foreground" />
-                Cheie secreta API (Merchant)
-              </label>
-              <Input type="password" value={cfg.secret_key} onChange={(e) => set("secret_key", e.target.value)}
-                placeholder={secretulEsteSalvat(initialConfig, "secret_key") ? PLACEHOLDER_SECRET_SALVAT : ""} autoComplete="new-password" />
-              <p className="mt-1 text-xs text-muted-foreground">Din Revolut Business &rarr; Merchant &rarr; APIs. Se pastreaza doar pe server.</p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 border-t border-border pt-4">
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="animate-spin" /> : <Save />}
-              Salveaza
-            </Button>
-            {isConfigured && (
-              <ButonDeconectare
-                nume="Revolut"
-                cePierzi="Cheia se șterge din Edinio, iar webhook-ul înregistrat la Revolut se șterge și el, deci cumpărătorii nu mai pot plăti prin Revolut. Plățile deja încasate rămân neatinse. Ca să te întorci, ceri din nou cheia secretă din contul tău Revolut."
-                pending={disconnecting}
-                marime="default"
-                onConfirma={disconnect}
-              />
-            )}
-          </div>
-        </Panel>
-      </div>
-    </div>
+      <BaraSalvare modificat={modificat} saving={saving} onSalveaza={save} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

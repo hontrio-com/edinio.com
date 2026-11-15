@@ -4,11 +4,7 @@ import { useCallback, useEffect, useState, useTransition, useRef } from "react";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Archive,
-  Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Settings as SettingsIcon,
-  Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart,
-  MapPin, Image as ImageIcon,
-} from "lucide-react";
+import { Archive, Loader2, RefreshCw, Check, X, CircleCheck, Clock, CircleX, Plug, Tag, ExternalLink, AlertTriangle, Search, Ban, Play, Trash2, ShoppingBag, ShoppingCart, MapPin, Image as ImageIcon, ArrowRight, KeyRound } from "lucide-react";
 import { suggestOlxCityFromShop, suggestOlxLocationByCoords, reincearcaOlxOprite,
   startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx, getOlxAdverts,
   publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert, finishOlxAdvert,
@@ -24,13 +20,14 @@ import {
 } from "@/lib/actions/olx-cont.actions";
 import { cn } from "@/lib/utils/cn";
 import { cePachetAnunt, incheieIntentia, intentiaPentru } from "@/lib/olx/intentie-de-cumparare";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Callout } from "@/components/ui/callout";
+import { Callout, GrupCallout } from "@/components/ui/callout";
 import { Field } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
+import { ZonaDeconectare } from "@/components/dashboard/integrare/PaginaIntegrare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { Paginatie } from "@/components/dashboard/Paginatie";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
@@ -65,11 +62,20 @@ const CE_PRIMESTI: { titlu: string; text: string }[] = [
   },
 ];
 
+/** Ce bucata a paginii randeaza ecranul: fiecare fila a paginii OLX are una. */
+export type ParteOlx = "prezentare" | "anunturi" | "categorii" | "mesaje" | "cont" | "setari";
+
+/**
+ * ⚠ `parte` (15.11.2026): pagina e pe file (`FileMarketplace`), ca la eMAG, Trendyol si About You. Fiecare
+ * fila cere din ecranul asta bucata ei; contul (numele, felul de vanzator) a urcat in antetul paginii.
+ * Neconectat, nu exista file: ecranul arata conectarea, oricare ar fi `parte`.
+ */
 export function OlxClient({
-  businessId, status, adverts, advertsTotal, advertsPagini, advertsDeLa, advertsError, categories,
+  businessId, status, adverts, advertsTotal, advertsPagini, advertsDeLa, advertsError, categories, parte,
 }: {
   businessId: string;
   status: OlxStatus | null;
+  parte: ParteOlx;
   /** PRIMA pagină a tabelului, randată pe server. Restul le cere `AdvertTable`. */
   adverts: OlxAdvertRow[];
   /** Câte anunțuri are magazinul în total, numărate în bază. */
@@ -84,6 +90,8 @@ export function OlxClient({
   const [busy, startBusy] = useTransition();
 
   useEffect(() => {
+    /* ⚠ O singura data: fiecare fila montata are ecranul ei, iar mesajul ar fi iesit de cateva ori. */
+    if (parte !== "prezentare") return;
     const p = new URLSearchParams(window.location.search).get("olx");
     if (!p) return;
     if (p === "connected") toast.success("Cont OLX conectat.");
@@ -105,7 +113,7 @@ export function OlxClient({
       toast.error("Autorizarea la OLX a mers, dar nu am putut salva conexiunea. Apasă din nou pe conectare.");
     }
     window.history.replaceState({}, "", "/dashboard/features/olx");
-  }, []);
+  }, [parte]);
 
   if (!status) {
     return (
@@ -185,8 +193,7 @@ export function OlxClient({
     <ConnectedDashboard
       businessId={businessId} status={status} adverts={adverts}
       advertsTotal={advertsTotal} advertsPagini={advertsPagini} advertsDeLa={advertsDeLa}
-      advertsError={advertsError} categories={categories}
-    />
+      advertsError={advertsError} categories={categories} parte={parte} />
   );
 }
 
@@ -201,26 +208,27 @@ function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; 
 }
 
 function ConnectedDashboard({
-  businessId, status, adverts, advertsTotal, advertsPagini, advertsDeLa, advertsError, categories,
+  businessId, status, adverts, advertsTotal, advertsPagini, advertsDeLa, advertsError, categories, parte,
 }: {
-  businessId: string; status: OlxStatus; adverts: OlxAdvertRow[];
+  businessId: string; status: OlxStatus; adverts: OlxAdvertRow[]; parte: ParteOlx;
   advertsTotal: number; advertsPagini: number; advertsDeLa: number;
   advertsError?: string | null; categories: string[];
 }) {
   const router = useRouter();
   const [syncing, startSync] = useTransition();
   const [disconnecting, startDisconnect] = useTransition();
-  const [showSettings, setShowSettings] = useState(!status.ready);
   const [showConflicte, setShowConflicte] = useState(false);
 
   const c = status.counts;
 
   // Poll while the queue drains so counts + statuses refresh without a reload.
   useEffect(() => {
+    /* ⚠ Doar fila „Prezentare”: fiecare fila montata ar fi pornit ceasul ei, adica reincarcari inmultite. */
+    if (parte !== "prezentare") return;
     if (c.queued <= 0) return;
     const t = setInterval(() => router.refresh(), 5000);
     return () => clearInterval(t);
-  }, [c.queued, router]);
+  }, [c.queued, router, parte]);
 
   /*
     ═══ CIFRELE ═══
@@ -251,7 +259,7 @@ function ConnectedDashboard({
     },
     {
       label: "Respinse", value: c.rejected, icon: CircleX,
-      explicatie: "Anunțurile refuzate, blocate sau șterse de OLX, plus cele la care trimiterea a dat eroare. Motivul se vede pe fiecare rând, în lista de mai jos.",
+      explicatie: "Anunțurile refuzate, blocate sau șterse de OLX, plus cele la care trimiterea a dat eroare. Motivul se vede pe fiecare rând, în fila Anunțuri.",
     },
   ];
   const marimeCifre = marimeaRandului(cifre.map((x) => x.value));
@@ -288,12 +296,8 @@ function ConnectedDashboard({
     router.refresh();
   });
 
-  return (
-    /* ⚠ `space-y-4`, ca la Trendyol: acelasi ritm pe toate ecranele de marketplace. */
-    <div className="space-y-4">
-      {status.needsReconnect && (
-        <Callout variant="warning" icon={AlertTriangle}>
-          Sesiunea OLX a expirat. <button className="font-medium underline" onClick={() => startSync(async () => {
+  /* Reconectarea, din randul „Reconectează contul OLX” al listei „De făcut”. */
+  const reconecteaza = () => startSync(async () => {
             let res: Awaited<ReturnType<typeof startOlxOAuth>>;
             try {
               res = await startOlxOAuth(businessId);
@@ -308,205 +312,73 @@ function ConnectedDashboard({
             }
             if ("error" in res) { toast.error(res.error); return; }
             window.location.href = res.url;
-          })}>Reconectează contul OLX</button> pentru a relua sincronizarea.
-        </Callout>
-      )}
+  });
 
-      {/* Connection banner */}
-      <Panel className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">Conectat la OLX</p>
-            <p className="truncate text-xs text-muted-foreground">{status.olxUserName ?? "Cont OLX"} · {status.advertiserType === "business" ? "Firmă" : "Persoană fizică"}</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {/*
-            ⚠ DECONECTAREA STA IN CARTONASUL CONTULUI, nu intr-un rand marunt la
-            capatul paginii — iar acum intreaba inainte. Vezi `ButonDeconectare`.
-          */}
-          <ButonDeconectare
-            nume="OLX"
-            cePierzi="Legătura cu contul tău OLX se șterge din Edinio, împreună cu rândurile locale ale anunțurilor și cu tot ce aștepta în coada de sincronizare. Anunțurile rămân pe OLX, neatinse, dar Edinio nu le mai poate trimite prețul și stocul."
-            pending={disconnecting}
-            onConfirma={deconecteaza}
-          />
-          <Button variant="outline" size="sm" onClick={() => setShowSettings((s) => !s)}>
-            <SettingsIcon /> Setări
-          </Button>
-          <Button
-            onClick={() => startSync(async () => {
-              let res: Awaited<ReturnType<typeof publishAllOlx>>;
-              try {
-                res = await publishAllOlx(businessId);
-              } catch {
-                /* ⚠ Baga produsele mapate in coada de publicare spre OLX. Nu stim cate au apucat sa intre. */
-                toast.error(
-                  "Nu am primit raspuns de la server, deci nu stim cate produse au intrat la publicare. "
-                  + "Pagina se reincarca: uita-te la coada inainte sa apesi din nou.",
-                  { duration: 12000 },
-                );
-                router.refresh();
-                return;
-              }
-              if ("error" in res) { toast.error(res.error); return; }
-              /*
-               * ⚠ CE S-A SARIT SE SPUNE, nu se tace. „Publică tot" nu invie anunturile pe care
-               * omul le-a sters dinadins — dar daca numarul ar tace despre ele, el ar crede ca
-               * pleaca si alea si s-ar mira mai tarziu ca nu apar.
-               */
-              const coada = res.queued > 0
-                ? `${res.queued} produse adăugate la publicare.`
-                : "Niciun produs mapat de publicat.";
-              const sarite = res.sarite > 0
-                ? ` ${res.sarite} ${res.sarite === 1 ? "anunț a fost șters" : "anunțuri au fost șterse"} de tine și nu se republică`
-                  + " automat: publică-le individual dacă le vrei înapoi."
-                : "";
-              toast.success(coada + sarite);
+  /* „Publică tot”, din fila Anunturi. */
+  const publicaTot = () => startSync(async () => {
+            let res: Awaited<ReturnType<typeof publishAllOlx>>;
+            try {
+              res = await publishAllOlx(businessId);
+            } catch {
+              /* ⚠ Baga produsele mapate in coada de publicare spre OLX. Nu stim cate au apucat sa intre. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim cate produse au intrat la publicare. "
+                + "Pagina se reincarca: uita-te la coada inainte sa apesi din nou.",
+                { duration: 12000 },
+              );
               router.refresh();
-            })}
-            disabled={syncing || !status.ready}>
-            {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Publică tot
-          </Button>
-        </div>
-      </Panel>
+              return;
+            }
+            if ("error" in res) { toast.error(res.error); return; }
+            /*
+             * ⚠ CE S-A SARIT SE SPUNE, nu se tace. „Publică tot" nu invie anunturile pe care
+             * omul le-a sters dinadins — dar daca numarul ar tace despre ele, el ar crede ca
+             * pleaca si alea si s-ar mira mai tarziu ca nu apar.
+             */
+            const coada = res.queued > 0
+              ? `${res.queued} produse adăugate la publicare.`
+              : "Niciun produs mapat de publicat.";
+            const sarite = res.sarite > 0
+              ? ` ${res.sarite} ${res.sarite === 1 ? "anunț a fost șters" : "anunțuri au fost șterse"} de tine și nu se republică`
+                + " automat: publică-le individual dacă le vrei înapoi."
+              : "";
+            toast.success(coada + sarite);
+            router.refresh();
+  });
 
-      {!status.ready && status.readinessError && (
-        <Callout variant="warning" icon={AlertTriangle}>{status.readinessError} Completează în „Setări”.</Callout>
-      )}
-
-      {/*
-        ⚠ Sănătatea stă SUS, deasupra numerelor de anunțuri. Alea spun cum arată catalogul; asta
-        spune dacă mașinăria care îl duce acolo mai merge — și numai a doua e o veste.
-      */}
-      <OlxSanatatePanel businessId={businessId} />
-
-      {/*
-        ⚠ `marimeaRandului` se socoteste O DATA, din toate cifrele randului. Lasata
-        pe seama fiecarui card, „3" ar fi iesit la 44px langa „1300" la 30px, adica
-        patru cutii care nu mai arata ca un set.
-      */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cifre.map((x) => (
-          <CardStatistica
-            key={x.label}
-            marime={marimeCifre}
-            icon={x.icon}
-            label={x.label}
-            value={x.value}
-            explicatie={x.explicatie}
-            empty={x.value === 0}
-          />
-        ))}
-      </div>
-      {c.limited > 0 && (
-        <Callout variant="warning" icon={ShoppingBag}>
-          {c.limited} {c.limited === 1 ? "anunț a atins" : "anunțuri au atins"} limita de anunțuri gratuite în categoria lor.
-          Cumpără un pachet din secțiunea „Cont OLX” de mai jos ca să le activezi, sau închide-le
-          din lista de mai jos, dacă nu vrei să plătești acum. {/*
-            ⚠ „Limited" era un fund de sac: îi spuneam doar să cumpere. Dacă nu voia, anunțul rămânea
-            acolo, numărat, pentru totdeauna. `finish` îl mută în „încheiate" la ei — nu e o ștergere,
-            istoricul rămâne, și îl poate reactiva mai târziu cumpărând un pachet.
-          */}
-        </Callout>
-      )}
-      {c.queued > 0 && (
-        /*
-          ⚠ ROTITA RAMANE ROTITA. `Callout` isi deseneaza iconita cu clase fixe, deci
-          nu o poate invarti; pusa aici, in corp, spune mai departe ca lucrarea chiar
-          se misca — singurul lucru pe care blocul asta il are de spus.
-        */
-        <Callout variant="info">
-          <div className="flex items-start gap-3">
-            <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-info" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Se publică {c.queued} {c.queued === 1 ? "produs" : "produse"} pe OLX…</p>
-              <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină: statusul se actualizează singur.</p>
-            </div>
-          </div>
-        </Callout>
-      )}
-      {/*
-        ⚠ „ÎN COADĂ" ȘI „OPRITĂ" NU SUNT ACELAȘI LUCRU (31.08.2026).
-
-        Numărul de mai sus le lua pe toate, iar peste lucrări oprite rotița se învârtea la
-        nesfârșit deasupra unei cozi în care nu se mai mișca nimic. Ecranul mințea, cu cea mai
-        liniștitoare față cu putință — iar omul aștepta zile în șir ceva ce nu avea să se întâmple.
-
-        ⚠ Cauza cea mai obișnuită e sesiunea expirată, iar aceea se repară singură la reconectare.
-        Butonul e pentru celelalte: o pană lungă la ei, o limitare de o zi.
-      */}
-      {/*
-        ⚠ DOUĂ ANUNȚURI PENTRU ACELAȘI PRODUS: ALEGE OMUL (01.09.2026).
-
-        `external_id` n-are constrângere de unicitate la OLX, iar Edinio chiar a avut o fereastră
-        în care un `POST` reușit urmat de o interogare anti-duplicat picată ducea la un al doilea.
-        Când produsul e vandabil, „care dintre ele e cel bun?" n-are răspuns tehnic: unul poate
-        purta istoricul, mesajele și o promovare plătită. Publicarea stă până alege el.
-      */}
-      {c.conflicte > 0 && (
-        <Callout variant="danger" icon={AlertTriangle}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              {c.conflicte === 1
-                ? "Un produs are două anunțuri pe OLX."
-                : `${c.conflicte} produse au câte două anunțuri pe OLX.`}{" "}
-              Publicarea lor e oprită până alegi pe care îl păstrezi; celălalt se retrage.
-            </span>
-            <Button variant="outline" size="sm" onClick={() => setShowConflicte((v) => !v)}>
-              {showConflicte ? "Ascunde" : "Alege"}
-            </Button>
-          </div>
-          {showConflicte && (
-            <OlxConflicte businessId={businessId} total={c.conflicte} onRezolvat={() => router.refresh()} />
-          )}
-        </Callout>
-      )}
-      {c.oprite > 0 && (
-        <Callout variant="warning" icon={AlertTriangle}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              {c.oprite} {c.oprite === 1 ? "lucrare s-a oprit" : "lucrări s-au oprit"} după mai multe încercări eșuate.
-              Modificările de preț și stoc din ele nu au ajuns la OLX.
-            </span>
-            <Button variant="outline" size="sm" disabled={syncing} onClick={() => startSync(async () => {
-              let res: Awaited<ReturnType<typeof reincearcaOlxOprite>>;
-              try {
-                res = await reincearcaOlxOprite(businessId);
-              } catch {
-                /* ⚠ Repune la lucru ce s-a oprit. Nu stim cate s-au reluat. */
-                toast.error(
-                  "Nu am primit raspuns de la server, deci nu stim daca lucrarile oprite s-au reluat. "
-                  + "Pagina se reincarca: uita-te la panoul de sanatate inainte sa apesi din nou.",
-                  { duration: 12000 },
-                );
-                router.refresh();
-                return;
-              }
-              if ("error" in res) { toast.error(res.error); return; }
-              toast.success(res.reluate > 0
-                ? `${res.reluate} ${res.reluate === 1 ? "lucrare reluată" : "lucrări reluate"}. Se procesează în câteva minute.`
-                : "Nu mai era nimic oprit.");
+  /* Lucrarile oprite, din randul lor al listei „De făcut”. */
+  const reiaOprite = () => startSync(async () => {
+            let res: Awaited<ReturnType<typeof reincearcaOlxOprite>>;
+            try {
+              res = await reincearcaOlxOprite(businessId);
+            } catch {
+              /* ⚠ Repune la lucru ce s-a oprit. Nu stim cate s-au reluat. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim daca lucrarile oprite s-au reluat. "
+                + "Pagina se reincarca: uita-te la panoul de sanatate inainte sa apesi din nou.",
+                { duration: 12000 },
+              );
               router.refresh();
-            })}>
-              {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Reîncearcă
-            </Button>
-          </div>
-        </Callout>
-      )}
+              return;
+            }
+            if ("error" in res) { toast.error(res.error); return; }
+            toast.success(res.reluate > 0
+              ? `${res.reluate} ${res.reluate === 1 ? "lucrare reluată" : "lucrări reluate"}. Se procesează în câteva minute.`
+              : "Nu mai era nimic oprit.");
+            router.refresh();
+  });
 
-      {showSettings && <OlxSettings businessId={businessId} status={status} onSaved={() => router.refresh()} />}
-      {/*
-        ⚠ Sub setările OLX, dar NU o setare de OLX: aceleași date le cer și eMAG, și About You.
-        Se arată aici fiindcă aici e comerciantul când conectează primul marketplace — iar textul
-        panoului spune limpede că valorile se folosesc pe toate canalele.
-      */}
-      {showSettings && <GpsrSettings businessId={businessId} />}
-
-      {/* Category mapping */}
-      <OlxCategoryMapper businessId={businessId} categories={categories} initialMap={status.categoryMap} />
-
+  /* ═══ FILELE CU O SINGURA BUCATA ═══ */
+  if (parte === "categorii") {
+    return <OlxCategoryMapper businessId={businessId} categories={categories} initialMap={status.categoryMap} />;
+  }
+  if (parte === "mesaje") {
+    /* Buyer messages (OLX-style messenger) */
+    return <OlxMessenger businessId={businessId} />;
+  }
+  if (parte === "cont") {
+    return (
+      <div className="space-y-4">
       {/*
         Account / monetization.
 
@@ -516,9 +388,28 @@ function ConnectedDashboard({
         `getOlxAnunturiVii`.
       */}
       <OlxAccountPanel businessId={businessId} />
+      </div>
+    );
+  }
 
-      {/* Buyer messages (OLX-style messenger) */}
-      <OlxMessenger businessId={businessId} />
+  if (parte === "anunturi") {
+    return (
+      <div className="space-y-4">
+        {/*
+          ⚠ „PUBLICĂ TOT” STA CHIAR DEASUPRA ANUNȚURILOR (15.11.2026). Statea in cartonasul contului, sus pe
+          pagina; cu pagina pe file, locul lui e langa lista pe care o umple.
+        */}
+        <Panel className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Publică pe OLX</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Toate produsele din categoriile legate pleacă la publicare. Cele șterse de tine pe OLX nu se republică singure.
+            </p>
+          </div>
+          <Button onClick={publicaTot} disabled={syncing || !status.ready}>
+            {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Publică tot
+          </Button>
+        </Panel>
 
       {/*
         ⚠ ANUNȚURILE DE DINAINTE DE EDINIO (etapa 16).
@@ -544,6 +435,198 @@ function ConnectedDashboard({
         paginiInitiale={advertsPagini} deLaInitial={advertsDeLa} inCoada={c.queued}
         ready={status.ready}
       />
+      </div>
+    );
+  }
+
+  if (parte === "setari") {
+    return (
+      <div className="space-y-4">
+        <OlxSettings businessId={businessId} status={status} onSaved={() => router.refresh()} />
+      {/*
+        ⚠ Sub setările OLX, dar NU o setare de OLX: aceleași date le cer și eMAG, și About You.
+        Se arată aici fiindcă aici e comerciantul când conectează primul marketplace — iar textul
+        panoului spune limpede că valorile se folosesc pe toate canalele.
+      */}
+        <GpsrSettings businessId={businessId} />
+
+        {/* ⚠ Cartonasul „Conectat la OLX” (numele, felul de vanzator) a urcat in antetul paginii; deconectarea
+            sta aici, la final, departe de lucrurile de zi cu zi. Intrebarea o pune `ButonDeconectare`. */}
+        <ZonaDeconectare
+          descriere={`Contul ${status.olxUserName ?? "OLX"} (${status.advertiserType === "business" ? "firmă" : "persoană fizică"}). Anunțurile rămân pe OLX.`}
+        >
+          <ButonDeconectare
+            nume="OLX"
+            cePierzi="Legătura cu contul tău OLX se șterge din Edinio, împreună cu rândurile locale ale anunțurilor și cu tot ce aștepta în coada de sincronizare. Anunțurile rămân pe OLX, neatinse, dar Edinio nu le mai poate trimite prețul și stocul."
+            pending={disconnecting}
+            onConfirma={deconecteaza}
+          />
+        </ZonaDeconectare>
+      </div>
+    );
+  }
+
+  /* ═══ FILA „PREZENTARE” ═══ */
+  return (
+    /* ⚠ `space-y-4`, ca la Trendyol: acelasi ritm pe toate ecranele de marketplace. */
+    <div className="space-y-4">
+      {c.queued > 0 && (
+        /*
+          ⚠ ROTITA RAMANE ROTITA. `Callout` isi deseneaza iconita cu clase fixe, deci
+          nu o poate invarti; pusa aici, in corp, spune mai departe ca lucrarea chiar
+          se misca — singurul lucru pe care blocul asta il are de spus.
+        */
+        <Callout variant="info">
+          <div className="flex items-start gap-3">
+            <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-info" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">Se publică {c.queued} {c.queued === 1 ? "produs" : "produse"} pe OLX…</p>
+              <p className="text-xs text-muted-foreground">Se procesează automat, câteva pe minut. Poți rămâne pe pagină: statusul se actualizează singur.</p>
+            </div>
+          </div>
+        </Callout>
+      )}
+
+      {/*
+        ═══ „DE FĂCUT ÎN CONTUL OLX” (15.11.2026) ═══
+
+        Aceeasi lista ca la eMAG (forma aleasa de proprietar): ce cere o mana de la comerciant, intr-o
+        singura carte, cu titlul la imperativ si butonul pe rand. Nu se arata deloc cand nu e nimic.
+        ⚠ Banda „Se publică…” (rotita) sta INAINTEA ei si in afara ei: e o stare care se misca singura,
+        nu un lucru de facut.
+      */}
+      {/*
+        ⚠ „ÎN COADĂ" ȘI „OPRITĂ" NU SUNT ACELAȘI LUCRU (31.08.2026).
+
+        Numărul de mai sus le lua pe toate, iar peste lucrări oprite rotița se învârtea la
+        nesfârșit deasupra unei cozi în care nu se mai mișca nimic. Ecranul mințea, cu cea mai
+        liniștitoare față cu putință — iar omul aștepta zile în șir ceva ce nu avea să se întâmple.
+
+        ⚠ Cauza cea mai obișnuită e sesiunea expirată, iar aceea se repară singură la reconectare.
+        Butonul e pentru celelalte: o pană lungă la ei, o limitare de o zi.
+      */}
+      {/*
+        ⚠ DOUĂ ANUNȚURI PENTRU ACELAȘI PRODUS: ALEGE OMUL (01.09.2026).
+
+        `external_id` n-are constrângere de unicitate la OLX, iar Edinio chiar a avut o fereastră
+        în care un `POST` reușit urmat de o interogare anti-duplicat picată ducea la un al doilea.
+        Când produsul e vandabil, „care dintre ele e cel bun?" n-are răspuns tehnic: unul poate
+        purta istoricul, mesajele și o promovare plătită. Publicarea stă până alege el.
+      */}
+      <GrupCallout
+        titlu="De făcut în contul OLX"
+        descriere="Lucrurile care așteaptă o mână de la tine."
+        numar={(n) => `${n} de rezolvat`}
+      >
+        {status.needsReconnect && (
+          <Callout
+            variant="danger"
+            icon={KeyRound}
+            title="Reconectează contul OLX"
+            action={
+              <Button size="sm" onClick={reconecteaza} disabled={syncing}>
+                Reconectează
+              </Button>
+            }
+          >
+            Sesiunea OLX a expirat. Până reconectezi, anunțurile nu se mai sincronizează.
+          </Callout>
+        )}
+        {!status.ready && status.readinessError && !status.needsReconnect && (
+          <Callout
+            variant="warning"
+            icon={AlertTriangle}
+            title={status.readinessError}
+            action={
+              <a href="#setari" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Deschide setările
+                <ArrowRight data-icon="inline-end" />
+              </a>
+            }
+          >
+            Până atunci nu se publică nimic pe OLX.
+          </Callout>
+        )}
+        {c.conflicte > 0 && (
+          <Callout
+            variant="danger"
+            icon={AlertTriangle}
+            title={c.conflicte === 1
+              ? "Alege anunțul bun pentru un produs"
+              : `Alege anunțul bun pentru ${c.conflicte} produse`}
+            action={
+              <Button variant="outline" size="sm" onClick={() => setShowConflicte((v) => !v)}>
+                {showConflicte ? "Ascunde" : "Alege"}
+              </Button>
+            }
+          >
+            {c.conflicte === 1 ? "Are două anunțuri pe OLX." : "Au câte două anunțuri pe OLX."}{" "}
+            Publicarea lor e oprită până alegi pe care îl păstrezi; celălalt se retrage.
+            {showConflicte && (
+              <div className="mt-3">
+                <OlxConflicte businessId={businessId} total={c.conflicte} onRezolvat={() => router.refresh()} />
+              </div>
+            )}
+          </Callout>
+        )}
+        {c.oprite > 0 && (
+          <Callout
+            variant="warning"
+            icon={AlertTriangle}
+            title={`Reia ${c.oprite} ${c.oprite === 1 ? "lucrare oprită" : "lucrări oprite"}`}
+            action={
+              <Button size="sm" disabled={syncing} onClick={reiaOprite}>
+                {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Reîncearcă
+              </Button>
+            }
+          >
+            S-au oprit după mai multe încercări eșuate. Modificările de preț și stoc din ele nu au ajuns la OLX.
+          </Callout>
+        )}
+        {/*
+          ⚠ „Limited" era un fund de sac: îi spuneam doar să cumpere. Dacă nu voia, anunțul rămânea
+          acolo, numărat, pentru totdeauna. `finish` îl mută în „încheiate" la ei — nu e o ștergere,
+          istoricul rămâne, și îl poate reactiva mai târziu cumpărând un pachet.
+        */}
+        {c.limited > 0 && (
+          <Callout
+            variant="warning"
+            icon={ShoppingBag}
+            title={c.limited === 1
+              ? "Activează un anunț ajuns la limita gratuită"
+              : `Activează ${c.limited} anunțuri ajunse la limita gratuită`}
+            action={
+              <a href="#cont" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                Vezi pachetele
+                <ArrowRight data-icon="inline-end" />
+              </a>
+            }
+          >
+            Au atins limita de anunțuri gratuite în categoria lor. Cumpără un pachet din fila „Cont OLX”, sau
+            închide-le din fila Anunțuri, dacă nu vrei să plătești acum.
+          </Callout>
+        )}
+      </GrupCallout>
+
+      {/*
+        ⚠ Sănătatea stă SUS, deasupra numerelor de anunțuri. Alea spun cum arată catalogul; asta
+        spune dacă mașinăria care îl duce acolo mai merge — și numai a doua e o veste.
+      */}
+      <OlxSanatatePanel businessId={businessId} />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {cifre.map((x) => (
+          <CardStatistica
+            key={x.label}
+            marime={marimeCifre}
+            icon={x.icon}
+            label={x.label}
+            value={x.value}
+            explicatie={x.explicatie}
+            empty={x.value === 0}
+          />
+        ))}
+      </div>
     </div>
   );
 }

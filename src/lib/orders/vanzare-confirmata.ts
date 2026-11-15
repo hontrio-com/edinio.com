@@ -48,7 +48,8 @@
  * o metoda noua se adauga odata cu ruta ei si cu proba de mai jos, pe cand o lista
  * negativa ar fi taiat tacut rambursul la prima greseala de scriere.
  */
-export const PLATI_ONLINE = ["netopia", "stripe", "revolut", "klarna", "ipay"] as const;
+/* tbi (15.11.2026): vanzarea e APROBAREA finantarii; pana atunci cererea poate fi respinsa. */
+export const PLATI_ONLINE = ["netopia", "stripe", "revolut", "klarna", "ipay", "tbi"] as const;
 
 /** Metoda asta asteapta o incasare online inainte sa fie o vanzare? */
 export function asteaptaIncasareOnline(metoda: string | null | undefined): boolean {

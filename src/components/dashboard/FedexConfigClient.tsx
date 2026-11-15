@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Ban, CheckCircle, Info, Loader2 } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle, Info, KeyRound, Loader2, Tag, Truck } from "lucide-react";
 import {
   disconnectFedex, getFedexServiciiAction, saveFedexConfig, testFedexConnectionAction,
 } from "@/lib/actions/fedex.actions";
@@ -16,9 +16,12 @@ import { GREUTATE_MAXIMA_EXPRESS_KG } from "@/lib/fedex/expediere";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
 import { Callout } from "@/components/ui/callout";
-import { Panel } from "@/components/ui/panel";
+import {
+  BaraSalvare, ComutatorPrincipal, CumFunctioneaza, ListaConfigurare, PaginaIntegrare, RandComutator, Sectiune, ZonaDeconectare, useFormularIntegrare,
+  type StareAntet,
+} from "@/components/dashboard/integrare/PaginaIntegrare";
+import { selectCls } from "@/lib/ui";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -46,18 +49,18 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const MEDII: { valoare: MediuFedex; eticheta: string }[] = [
-  { valoare: "productie", eticheta: "Productie (apis.fedex.com) · expedieri reale" },
-  { valoare: "test", eticheta: "Test / sandbox (apis-sandbox.fedex.com) · raspunsuri simulate" },
+  { valoare: "productie", eticheta: "Producție (apis.fedex.com) · expedieri reale" },
+  { valoare: "test", eticheta: "Test / sandbox (apis-sandbox.fedex.com) · răspunsuri simulate" },
 ];
 
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
-  { valoare: "PDF", eticheta: "PDF (imprimanta obisnuita)" },
+  { valoare: "PDF", eticheta: "PDF (imprimantă obișnuită)" },
   { valoare: "PNG", eticheta: "PNG (imagine)" },
-  { valoare: "ZPLII", eticheta: "ZPL II (imprimanta termica de etichete)" },
+  { valoare: "ZPLII", eticheta: "ZPL II (imprimantă termică de etichete)" },
 ];
 
 const RIDICARI: { valoare: TipRidicare; eticheta: string }[] = [
-  { valoare: "USE_SCHEDULED_PICKUP", eticheta: "Ridicare programata (ai deja o ridicare zilnica la FedEx)" },
+  { valoare: "USE_SCHEDULED_PICKUP", eticheta: "Ridicare programată (ai deja o ridicare zilnică la FedEx)" },
   { valoare: "CONTACT_FEDEX_TO_SCHEDULE", eticheta: "Suni la FedEx pentru fiecare ridicare" },
   { valoare: "DROPOFF_AT_FEDEX_LOCATION", eticheta: "Duci coletul la un punct FedEx" },
 ];
@@ -81,7 +84,7 @@ export function FedexConfigClient({
   initialConfig: FedexConfig | null;
 }) {
   const router = useRouter();
-  const [config, setConfig] = useState<FedexConfig>({
+  const { cfg: config, setCfg: setConfig, modificat, marcheazaSalvat, renunta } = useFormularIntegrare<FedexConfig>({
     enabled: initialConfig?.enabled ?? false,
     client_id: initialConfig?.client_id ?? "",
     client_secret: initialConfig?.client_secret ?? "",
@@ -163,7 +166,8 @@ export function FedexConfigClient({
     const r = await saveFedexConfig(businessId, construieste());
     setSalveaza(false);
     if ("error" in r) { toast.error(r.error); return; }
-    toast.success("Configurarea FedEx a fost salvata.");
+    toast.success("Configurarea FedEx a fost salvată.");
+    marcheazaSalvat();
     const s = await getFedexServiciiAction(businessId);
     if (s.ok) setServicii(s.servicii);
     router.refresh();
@@ -198,120 +202,138 @@ export function FedexConfigClient({
 
   const permise = config.servicii_permise ?? [];
 
+  const secretSalvat = secretulEsteSalvat(initialConfig, "client_secret");
+  const activSalvat = !!initialConfig?.enabled && !!initialConfig?.client_id && secretSalvat && !!initialConfig?.account_number
+    && !!(initialConfig?.expeditor?.oras ?? "").trim() && !!(initialConfig?.expeditor?.cod_postal ?? "").trim();
+  const stari: StareAntet[] = !secretSalvat
+    ? [{ ton: "neutru", text: "Neconfigurat" }]
+    : [
+      activSalvat ? { ton: "bun", text: "Activ" } : { ton: "neutru", text: "Oprit" },
+      ...(initialConfig?.mediu === "test" ? [{ ton: "asteptare" as const, text: "Sandbox" }] : []),
+    ];
+
   return (
-    <div className="space-y-6">
+    <PaginaIntegrare
+      id="fedex"
+      titlu="Livrare"
+      descriere="Colete prin FedEx: livrări interne și internaționale, cu tarifele contului tău."
+      stari={stari}
+      actiune={<ComutatorPrincipal eticheta="FedEx la livrare" activ={!!config.enabled} onChange={(v) => setConfig({ ...config, enabled: v })} ariaLabel="Folosește FedEx pentru livrare" textPornit="Pornit" textOprit="Oprit" />}
+      aside={<>
+        <ListaConfigurare pasi={[
+          { text: "Cheile și numărul de cont", facut: areChei },
+          { text: "Orașul și codul poștal de expediție", facut: areExpeditor },
+          { text: "FedEx pornit", facut: esteActiv },
+        ]} />
+        <CumFunctioneaza id="fedex" puncte={[
+          { Icon: KeyRound, text: "Cheile le iei din portalul FedEx pentru dezvoltatori; cheile de test nu merg în producție și invers." },
+          { Icon: Ban, text: "FedEx nu oferă plata la livrare: la comenzile cu ramburs nu apare deloc la comandă." },
+          { Icon: Tag, text: "La comandă, FedEx apare la tariful fix din Setări, Livrare; prețul real îl vezi la emiterea AWB-ului." },
+          { Icon: Truck, text: "După salvare, pornește și metoda „FedEx” din Setări, Livrare." },
+        ]} />
+      </>}
+    >
       {/*
         ⚠ SUS DE TOT, nu la subsol. Pentru un magazin romanesc rambursul e prima
         intrebare, iar raspunsul nu se poate schimba din nicio setare.
       */}
       <Callout variant="warning" icon={Ban}>
-        <strong>FedEx nu ofera plata la livrare.</strong> {RAMBURS_INDISPONIBIL} In checkout, FedEx nu apare
-        deloc la comenzile cu ramburs, restul curierilor raman.
+        <strong>FedEx nu oferă plata la livrare.</strong> {RAMBURS_INDISPONIBIL} La comandă, FedEx nu apare deloc la comenzile
+        cu ramburs; restul curierilor rămân.
       </Callout>
+      {config.enabled && !areExpeditor && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Fără oraș și cod poștal de expediție, FedEx nu poate cota nimic, iar clienții vor vedea tariful fix.
+        </Callout>
+      )}
+      {config.mediu === "test" && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Ești pe sandbox-ul FedEx. Răspunsurile sunt simulate: prețurile nu depind de adresă, iar AWB-urile emise nu există în
+          realitate. Treci pe producție înainte de prima comandă adevărată.
+        </Callout>
+      )}
+      {esteActiv && config.mediu !== "test" && (
+        <Callout variant="info" icon={Info}>
+          Fiecare AWB emis e real și facturat, iar FedEx nu are protecție contra dublurilor: dacă emiterea pare că a eșuat,
+          folosește „Verifică la FedEx” din pagina comenzii, în loc să încerci din nou.
+        </Callout>
+      )}
 
-      <Panel step={1} title="Conectare">
-        <Field
-          label="API Key (client_id)"
-          hint="Din portalul FedEx pentru dezvoltatori, la proiectul tau. Nu e mascat: iti spune ce proiect ai legat."
-        >
-          <Input
-            value={config.client_id}
-            placeholder="l7xx..."
-            onChange={(e) => setConfig({ ...config, client_id: e.target.value })}
-          />
-        </Field>
-
-        <Field label="Secret Key (client_secret)" hint="Din acelasi proiect. Se cripteaza in baza si nu se mai afiseaza.">
-          <Input
-            type="password"
-            value={config.client_secret}
-            placeholder={secretulEsteSalvat(initialConfig, "client_secret") ? PLACEHOLDER_SECRET_SALVAT : "secretul tau"}
-            onChange={(e) => setConfig({ ...config, client_secret: e.target.value })}
-          />
-        </Field>
-
-        <Field label="Numar de cont FedEx" hint="Noua cifre. Il gasesti pe factura FedEx.">
-          <Input
-            value={config.account_number}
-            placeholder="123456789"
-            maxLength={9}
-            onChange={(e) => setConfig({ ...config, account_number: e.target.value })}
-          />
-        </Field>
-
-        <Field
-          label="Mediu"
-          hint="⚠ Cheile de test NU merg in productie, si invers. O nepotrivire iese ca „credentiale respinse”."
-        >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.mediu ?? "productie"}
-            onChange={(e) => setConfig({ ...config, mediu: e.target.value as MediuFedex })}
-          >
-            {MEDII.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
-          </select>
-        </Field>
-
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
-            {probeaza ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            Testeaza conexiunea
-          </Button>
-          {areChei && (
-            <ButonDeconectare
-              nume="FedEx"
-              cePierzi="Cheile FedEx, numarul de cont si adresa de expeditie se sterg din Edinio. Ca sa te intorci, le iei din nou din portalul FedEx pentru dezvoltatori, iar expedierile deja emise raman la FedEx."
-              marime="default"
-              onConfirma={deconecteaza}
+      <Sectiune pas={1} titlu="Conectare">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="API Key (client_id)" htmlFor="fedex-id"
+            hint="Din portalul FedEx pentru dezvoltatori, la proiectul tău. Nu e mascat: îți spune ce proiect ai legat.">
+            <Input id="fedex-id" value={config.client_id} placeholder="l7xx..." onChange={(e) => setConfig({ ...config, client_id: e.target.value })} />
+          </Field>
+          <Field label="Secret Key (client_secret)" htmlFor="fedex-secret" hint="Din același proiect. Se criptează și nu se mai afișează.">
+            <Input
+              id="fedex-secret"
+              type="password"
+              value={config.client_secret}
+              placeholder={secretSalvat ? PLACEHOLDER_SECRET_SALVAT : "secretul tău"}
+              onChange={(e) => setConfig({ ...config, client_secret: e.target.value })}
             />
+          </Field>
+          <Field label="Număr de cont FedEx" htmlFor="fedex-cont" hint="Nouă cifre. Îl găsești pe factura FedEx.">
+            <Input id="fedex-cont" value={config.account_number} placeholder="123456789" maxLength={9} onChange={(e) => setConfig({ ...config, account_number: e.target.value })} />
+          </Field>
+          <Field label="Mediu" htmlFor="fedex-mediu" hint="Cheile de test NU merg în producție, și invers. O nepotrivire iese ca „credențiale respinse”.">
+            <select id="fedex-mediu" className={selectCls} value={config.mediu ?? "productie"} onChange={(e) => setConfig({ ...config, mediu: e.target.value as MediuFedex })}>
+              {MEDII.map((m) => <option key={m.valoare} value={m.valoare}>{m.eticheta}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={testeaza} disabled={probeaza || !areChei || !areExpeditor}>
+            {probeaza ? <Loader2 className="animate-spin" /> : <CheckCircle />}
+            Testează conexiunea
+          </Button>
+          {!areExpeditor && (
+            <p className="text-xs text-muted-foreground">
+              Completează întâi orașul și codul poștal de expediție: proba chiar cere o cotare, nu doar un token.
+            </p>
           )}
         </div>
-        {!areExpeditor && (
-          <p className="text-[11px] text-muted-foreground">
-            Completeaza intai orasul si codul postal de expeditie: proba chiar cere o cotare, nu doar un token.
-          </p>
-        )}
 
         {proba && (
           <Callout variant={proba.ok ? "success" : "warning"} icon={proba.ok ? CheckCircle : AlertTriangle}>
             <span className="block">{proba.mesaj}</span>
             {proba.servicii.length > 0 && (
-              <span className="block mt-1 text-xs">Servicii intoarse: {proba.servicii.join(", ")}</span>
+              <span className="mt-1 block text-xs">Servicii întoarse: {proba.servicii.join(", ")}</span>
             )}
             {proba.valuta && (
-              <span className="block mt-1 text-xs">
-                Valuta cotarii: <strong>{proba.valuta}</strong>
+              <span className="mt-1 block text-xs">
+                Valuta cotării: <strong>{proba.valuta}</strong>
                 {proba.valuta.includes("RON")
                   ? ""
-                  : ". ⚠ Magazinul lucreaza in lei. Nu convertim noi sumele, deci FedEx va aparea in checkout la tariful fix. Cere-i reprezentantului FedEx tarife in RON."}
+                  : ". Magazinul lucrează în lei. Nu convertim noi sumele, deci FedEx va apărea la comandă la tariful fix. Cere-i reprezentantului FedEx tarife în RON."}
               </span>
             )}
             {/*
               ⚠ Raspunsul la intrebarea „preturile FedEx sunt cu sau fara TVA?".
               Documentatia lor nu o spune pentru Romania, dar raspunsul de cotare
-              aduce toate cele trei numere, deci se DEDUCE aici — o data pe cont,
+              aduce toate cele trei numere, deci se DEDUCE aici, o data pe cont,
               in loc sa fie masurat de om la prima expediere.
             */}
-            {proba.ok && <span className="block mt-1 text-xs">{proba.tva}</span>}
+            {proba.ok && <span className="mt-1 block text-xs">{proba.tva}</span>}
             {proba.virtual && (
-              <span className="block mt-1 text-xs">
-                ⚠ Raspuns din sandbox-ul FedEx: preturile sunt simulate si nu depind de adresa reala.
-              </span>
+              <span className="mt-1 block text-xs">Răspuns din sandbox-ul FedEx: prețurile sunt simulate și nu depind de adresa reală.</span>
             )}
           </Callout>
         )}
-      </Panel>
+      </Sectiune>
 
-      <Panel step={2} title="Adresa de expeditie">
+      <Sectiune pas={2} titlu="Adresa de expediție">
         <Callout variant="info" icon={Info}>
-          De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal e obligatoriu:
-          Romania e tara „postal-aware” la FedEx (sase cifre), iar fara el cotarea nu se poate face deloc.
+          De aici pleacă fiecare colet, și tot de aici se calculează tariful. Codul poștal e obligatoriu: România e țară
+          „postal-aware” la FedEx (șase cifre), iar fără el cotarea nu se poate face deloc.
         </Callout>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Nume persoana de contact">
+          <Field label="Nume persoană de contact">
             <Input value={expeditor.nume ?? ""} onChange={(e) => setExpeditor({ nume: e.target.value })} />
           </Field>
-          <Field label="Firma">
+          <Field label="Firmă">
             <Input value={expeditor.companie ?? ""} onChange={(e) => setExpeditor({ companie: e.target.value })} />
           </Field>
           <Field label="Telefon" hint="Maxim 15 caractere la FedEx.">
@@ -321,29 +343,24 @@ export function FedexConfigClient({
             <Input value={expeditor.email ?? ""} onChange={(e) => setExpeditor({ email: e.target.value })} />
           </Field>
         </div>
-        <Field label="Strada si numarul" hint="Se imparte automat pe trei linii de cate 35 de caractere, cum cere FedEx.">
+        <Field label="Strada și numărul" hint="Se împarte automat pe trei linii de câte 35 de caractere, cum cere FedEx.">
           <Input value={expeditor.strada ?? ""} onChange={(e) => setExpeditor({ strada: e.target.value })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Oras">
+          <Field label="Oraș">
             <Input value={expeditor.oras ?? ""} onChange={(e) => setExpeditor({ oras: e.target.value })} />
           </Field>
-          <Field label="Judet" hint="Optional: FedEx cere judetul doar pentru SUA, Canada si Puerto Rico.">
+          <Field label="Județ" hint="Opțional: FedEx cere județul doar pentru SUA, Canada și Puerto Rico.">
             <Input value={expeditor.judet ?? ""} onChange={(e) => setExpeditor({ judet: e.target.value })} />
           </Field>
-          <Field label="Cod postal">
+          <Field label="Cod poștal">
             <Input value={expeditor.cod_postal ?? ""} onChange={(e) => setExpeditor({ cod_postal: e.target.value })} />
           </Field>
         </div>
-      </Panel>
+      </Sectiune>
 
-      <Panel step={3} title="Ce se ofera in checkout">
-        <p className="text-xs font-semibold">Serviciile pe care le arati clientilor</p>
-        <p className="text-[11px] text-muted-foreground">
-          Nimic bifat = toate serviciile pe care le intoarce cotarea. Serviciile de marfa grea nu se ofera
-          cumparatorilor cu colete sub {GREUTATE_MAXIMA_EXPRESS_KG} kg, oricum ar fi bifate, raman disponibile la
-          emiterea din pagina comenzii.
-        </p>
+      <Sectiune pas={3} titlu="Ce se oferă la comandă"
+        descriere={`Serviciile pe care le arăți clienților. Nimic bifat înseamnă toate serviciile întoarse de cotare. Serviciile de marfă grea nu se oferă la colete sub ${GREUTATE_MAXIMA_EXPRESS_KG} kg, oricum ar fi bifate; rămân la emiterea din pagina comenzii.`}>
         <div className="flex flex-wrap gap-2">
           {servicii.map((s) => {
             const bifat = permise.includes(s.cod);
@@ -351,93 +368,68 @@ export function FedexConfigClient({
               <button
                 key={s.cod}
                 type="button"
+                aria-pressed={bifat}
                 onClick={() => setConfig({
                   ...config,
                   servicii_permise: bifat ? permise.filter((x) => x !== s.cod) : [...permise, s.cod],
                 })}
-                className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
-                  bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                className={`rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                  bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/40"
                 }`}
-                title={s.marfaGrea ? "Marfa grea, nu se ofera in checkout la colete usoare" : undefined}
+                title={s.marfaGrea ? "Marfă grea: nu se oferă la comandă pentru colete ușoare" : undefined}
               >
                 {s.nume}
               </button>
             );
           })}
         </div>
-      </Panel>
+        {/*
+          ⚠ Se spune PE FATA, nu se lasa comerciantul sa descopere singur.
+          FedEx cere codul postal al destinatarului ca sa coteze (Romania e tara
+          „postal-aware" la ei), iar checkout-ul nu il colecteaza la livrarile interne.
+          Fara randurile astea, omul ar vedea „conexiunea merge" aici si un pret fix in
+          magazin, si ar cauta o zi ce a stricat.
+        */}
+        <Callout variant="info" icon={Info} title="Cum apare prețul în magazin">
+          La comandă, FedEx apare la <strong>tariful fix</strong> din Setări, Livrare: FedEx cere codul poștal al destinatarului ca
+          să calculeze un preț, iar formularul de comandă îl cere doar la livrările în străinătate. Prețul real îl vezi când emiți
+          AWB-ul din pagina comenzii, unde poți completa codul poștal. Pune deci un tarif fix realist: cel mai ieftin serviciu
+          intern FedEx pornește mult peste tarifele curierilor locali.
+        </Callout>
+      </Sectiune>
 
-      <Panel step={4} title="Ridicare si eticheta">
-        <Field label="Cum ajunge coletul la FedEx">
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.pickup_type ?? "USE_SCHEDULED_PICKUP"}
-            onChange={(e) => setConfig({ ...config, pickup_type: e.target.value as TipRidicare })}
-          >
-            {RIDICARI.map((r) => <option key={r.valoare} value={r.valoare}>{r.eticheta}</option>)}
-          </select>
-        </Field>
-
-        <Field label="Formatul etichetei">
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.format_eticheta ?? "PDF"}
-            onChange={(e) => setConfig({ ...config, format_eticheta: e.target.value as FormatEticheta })}
-          >
-            {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
-          </select>
-        </Field>
-
+      <Sectiune pas={4} titlu="Ridicare și etichetă">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Cum ajunge coletul la FedEx" htmlFor="fedex-ridicare">
+            <select id="fedex-ridicare" className={selectCls} value={config.pickup_type ?? "USE_SCHEDULED_PICKUP"} onChange={(e) => setConfig({ ...config, pickup_type: e.target.value as TipRidicare })}>
+              {RIDICARI.map((r) => <option key={r.valoare} value={r.valoare}>{r.eticheta}</option>)}
+            </select>
+          </Field>
+          <Field label="Formatul etichetei" htmlFor="fedex-format">
+            <select id="fedex-format" className={selectCls} value={config.format_eticheta ?? "PDF"} onChange={(e) => setConfig({ ...config, format_eticheta: e.target.value as FormatEticheta })}>
+              {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
+            </select>
+          </Field>
+        </div>
         <Field
-          label="Dimensiunea hartiei"
-          hint="Numele contine dimensiunea in inch: 4X6 = 4×6&quot;, 85X11 = jumatate de coala A4-ish. PAPER = coala, STOCK = rola termica."
+          label="Dimensiunea hârtiei"
+          htmlFor="fedex-hartie"
+          hint="Numele conține dimensiunea în inch: 4X6 = 4×6&quot;, 85X11 = jumătate de coală. PAPER = coală, STOCK = rolă termică."
         >
-          <select
-            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            value={config.stoc_eticheta ?? STOC_IMPLICIT}
-            onChange={(e) => setConfig({ ...config, stoc_eticheta: e.target.value })}
-          >
+          <select id="fedex-hartie" className={selectCls} value={config.stoc_eticheta ?? STOC_IMPLICIT} onChange={(e) => setConfig({ ...config, stoc_eticheta: e.target.value })}>
             {STOCURI_ETICHETA.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
-
-        <Callout variant="info" icon={Info}>
-          FedEx nu permite reimprimarea etichetei prin API, iar linkul din raspunsul lor expira in cateva ore.
-          De aceea o pastram noi, la emitere, si o poti descarca oricand din pagina comenzii.
-        </Callout>
-      </Panel>
-
-      {/*
-        ⚠ Se spune PE FATA, nu se lasa comerciantul sa descopere singur.
-        FedEx cere codul postal al destinatarului ca sa coteze (Romania e tara
-        „postal-aware" la ei), iar checkout-ul nu il colecteaza la livrarile interne.
-        Fara randurile astea, omul ar vedea „conexiunea merge" aici si un pret fix in
-        magazin, si ar cauta o zi ce a stricat.
-      */}
-      <Panel title="Cum apare pretul in magazin">
-        <Callout variant="info" icon={Info}>
-          <span className="block">
-            In checkout, FedEx apare la <strong>tariful fix</strong> pe care il pui in Setari → Livrare.
-          </span>
-          <span className="block mt-1 text-xs">
-            Motivul: FedEx cere codul postal al destinatarului ca sa calculeze un pret, iar formularul de
-            comanda il cere doar la livrarile in strainatate. Pretul real, cu toate serviciile si termenele,
-            il vezi cand emiti AWB-ul din pagina comenzii, unde poti completa codul postal.
-          </span>
-          <span className="block mt-1 text-xs">
-            Pune deci un tarif fix realist: cel mai ieftin serviciu intern FedEx porneste mult peste tarifele
-            curierilor locali.
-          </span>
-        </Callout>
-      </Panel>
-
-      <Panel step={5} title="Coletul implicit">
         <p className="text-xs text-muted-foreground">
-          Se folosesc cand comanda n-are dimensiuni proprii. FedEx factureaza pe maximul dintre greutatea fizica si
-          cea volumetrica, deci dimensiuni prea mari scumpesc fiecare colet.
+          FedEx nu permite retipărirea etichetei prin API, iar linkul din răspunsul lor expiră în câteva ore. De aceea o păstrăm
+          noi, la emitere, și o poți descărca oricând din pagina comenzii.
         </p>
+      </Sectiune>
+
+      <Sectiune pas={5} titlu="Coletul implicit"
+        descriere="Se folosesc când comanda n-are dimensiuni proprii. FedEx facturează maximul dintre greutatea fizică și cea volumetrică, deci dimensiuni prea mari scumpesc fiecare colet.">
         <div className="grid grid-cols-3 gap-3">
-          {([["lungime_cm", "Lungime"], ["latime_cm", "Latime"], ["inaltime_cm", "Inaltime"]] as const).map(([cheie, eticheta]) => (
+          {([["lungime_cm", "Lungime"], ["latime_cm", "Lățime"], ["inaltime_cm", "Înălțime"]] as const).map(([cheie, eticheta]) => (
             <Field key={cheie} label={`${eticheta} (cm)`}>
               <Input
                 type="number"
@@ -449,61 +441,31 @@ export function FedexConfigClient({
             </Field>
           ))}
         </div>
-        <Field
-          label="Descrierea marfii"
-          hint="Se tipareste pe factura comerciala, la expedierile internationale. La cele interne nu pleaca nicaieri."
-        >
-          <Input
-            value={config.continut_implicit ?? ""}
-            placeholder="Bunuri de consum"
-            onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })}
-          />
+        <Field label="Descrierea mărfii" htmlFor="fedex-continut"
+          hint="Se tipărește pe factura comercială, la expedierile internaționale. La cele interne nu pleacă nicăieri.">
+          <Input id="fedex-continut" value={config.continut_implicit ?? ""} placeholder="Bunuri de consum" onChange={(e) => setConfig({ ...config, continut_implicit: e.target.value })} />
         </Field>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Declara valoarea comenzii la transport</p>
-            <p className="text-xs text-muted-foreground">
-              FedEx taxeaza separat valoarea declarata. Stins, coletul merge cu despagubirea standard.
-            </p>
-          </div>
-          <Switch
-            checked={!!config.valoare_declarata}
-            onCheckedChange={(v) => setConfig({ ...config, valoare_declarata: v })}
-          />
-        </div>
-      </Panel>
+        <RandComutator
+          separat
+          titlu="Declară valoarea comenzii la transport"
+          text="FedEx taxează separat valoarea declarată. Oprită, coletul merge cu despăgubirea standard."
+          activ={!!config.valoare_declarata}
+          onChange={(v) => setConfig({ ...config, valoare_declarata: v })}
+        />
+      </Sectiune>
 
-      <Panel step={6} title="Pornire">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">Foloseste FedEx pentru livrare</p>
-            <p className="text-xs text-muted-foreground">
-              Dupa salvare, activeaza metoda „FedEx” si din Setari → Livrare, ca sa apara in checkout.
-            </p>
-          </div>
-          <Switch checked={!!config.enabled} onCheckedChange={(v) => setConfig({ ...config, enabled: v })} />
-        </div>
-        {config.enabled && !areExpeditor && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Fara oras si cod postal de expeditie, FedEx nu poate cota nimic, clientii vor vedea tariful fix.
-          </Callout>
-        )}
-        {config.mediu === "test" && (
-          <Callout variant="warning" icon={AlertTriangle}>
-            Esti pe sandbox-ul FedEx. Raspunsurile sunt simulate: preturile nu depind de adresa, iar AWB-urile emise
-            nu exista in realitate. Treci pe productie inainte de prima comanda adevarata.
-          </Callout>
-        )}
-        {esteActiv && config.mediu !== "test" && (
-          <Callout variant="info" icon={Info}>
-            Fiecare AWB emis e real si facturat, FedEx nu are protectie contra dublurilor, deci daca emiterea pare
-            ca a esuat foloseste „Verifica la FedEx” din pagina comenzii in loc sa incerci din nou.
-          </Callout>
-        )}
-        <Button type="button" onClick={salvare} disabled={salveaza}>
-          {salveaza ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Salveaza
-        </Button>
-      </Panel>
-    </div>
+      {secretSalvat && (
+        <ZonaDeconectare descriere="Șterge cheile și adresa FedEx din Edinio. Expedierile deja emise rămân la FedEx.">
+          <ButonDeconectare
+            nume="FedEx"
+            cePierzi="Cheile FedEx, numărul de cont și adresa de expediție se șterg din Edinio. Ca să te întorci, le iei din nou din portalul FedEx pentru dezvoltatori, iar expedierile deja emise rămân la FedEx."
+            marime="default"
+            onConfirma={deconecteaza}
+          />
+        </ZonaDeconectare>
+      )}
+
+      <BaraSalvare modificat={modificat} saving={salveaza} onSalveaza={salvare} onRenunta={renunta} />
+    </PaginaIntegrare>
   );
 }

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { mascheazaConfig } from "@/lib/integrari/secrete";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { PostaConfigClient } from "@/components/dashboard/PostaConfigClient";
-import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { getPostaPlajaAction } from "@/lib/actions/posta.actions";
 import type { PostaConfig } from "@/lib/posta/client";
 
@@ -24,13 +23,5 @@ export default async function PostaPage() {
   const rPlaja = await getPostaPlajaAction(business.id);
   const plaja = rPlaja.ok ? rPlaja.plaja : null;
 
-  return (
-    <div className="p-6 max-w-2xl">
-      <IntegrationHeader
-        id="posta"
-        description="Emiti AWB-uri Poșta Română din panou si le duci la oficiu. Cumparatorul poate alege livrarea acasa sau ridicarea de la un oficiu postal."
-      />
-      <PostaConfigClient businessId={business.id} initialConfig={config} initialPlaja={plaja} />
-    </div>
-  );
+  return <PostaConfigClient businessId={business.id} initialConfig={config} initialPlaja={plaja} />;
 }

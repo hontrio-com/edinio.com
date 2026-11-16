@@ -13011,6 +13011,27 @@ create table if not exists public.gmc_sync_queue (
   prioritate smallint default 5 not null,
   generation bigint default 1 not null);
 
+create table if not exists public.hontrio_coduri (
+  amprenta text not null,
+  business_id uuid not null,
+  aprobat_de uuid,
+  redirect_uri text not null,
+  code_challenge text not null,
+  creat_la timestamp with time zone default now() not null,
+  expira_la timestamp with time zone not null,
+  folosit_la timestamp with time zone,
+  conexiune_id uuid);
+
+create table if not exists public.hontrio_conexiuni (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  amprenta text not null,
+  aprobat_de uuid,
+  creat_la timestamp with time zone default now() not null,
+  revocat_la timestamp with time zone,
+  motiv_revocare text,
+  ultima_folosire timestamp with time zone);
+
 create table if not exists public.indexnow_trimise (
   url text not null,
   lastmod timestamp with time zone,
@@ -14131,6 +14152,8 @@ alter table public.forms add constraint forms_pkey PRIMARY KEY (id);
 alter table public.ga4_comenzi_raportate add constraint ga4_comenzi_raportate_pkey PRIMARY KEY (order_id);
 alter table public.gmc_products add constraint gmc_products_pkey PRIMARY KEY (id);
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_pkey PRIMARY KEY (id);
+alter table public.hontrio_coduri add constraint hontrio_coduri_pkey PRIMARY KEY (amprenta);
+alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_pkey PRIMARY KEY (id);
 alter table public.indexnow_trimise add constraint indexnow_trimise_pkey PRIMARY KEY (url);
 alter table public.intentii_publicare add constraint intentii_publicare_pkey PRIMARY KEY (id);
 alter table public.invoices add constraint invoices_pkey PRIMARY KEY (id);
@@ -14300,6 +14323,8 @@ alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK
 alter table public.email_marketing_coada add constraint email_marketing_coada_fel_check CHECK ((fel = ANY (ARRAY['creata'::text, 'platita'::text, 'expediata'::text, 'livrata'::text, 'anulata'::text, 'rambursata'::text])));
 alter table public.email_marketing_coada add constraint email_marketing_coada_furnizor_check CHECK ((furnizor = ANY (ARRAY['mailchimp'::text, 'brevo'::text, 'klaviyo'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
+alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_motiv_revocare_check CHECK ((motiv_revocare = ANY (ARRAY['comerciant'::text, 'hontrio'::text, 'inlocuita'::text, 'cod_refolosit'::text])));
+alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_revocare_cu_motiv CHECK (((revocat_la IS NULL) = (motiv_revocare IS NULL)));
 alter table public.intentii_publicare add constraint intentii_publicare_marketplace_check CHECK ((marketplace = ANY (ARRAY['trendyol'::text, 'emag'::text, 'aboutyou'::text])));
 alter table public.intentii_publicare add constraint intentii_publicare_sursa_check CHECK ((sursa = ANY (ARRAY['auto_publish'::text, 'import'::text, 'manual'::text])));
 alter table public.olx_adverts add constraint olx_adverts_dezactivat_de_check CHECK (((dezactivat_de IS NULL) OR (dezactivat_de = ANY (ARRAY['om'::text, 'stoc'::text, 'produs-inactiv'::text, 'inainte-de-stergere'::text]))));
@@ -14451,6 +14476,11 @@ alter table public.gmc_products add constraint gmc_products_business_id_fkey FOR
 alter table public.gmc_products add constraint gmc_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.hontrio_coduri add constraint hontrio_coduri_aprobat_de_fkey FOREIGN KEY (aprobat_de) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.hontrio_coduri add constraint hontrio_coduri_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.hontrio_coduri add constraint hontrio_coduri_conexiune_id_fkey FOREIGN KEY (conexiune_id) REFERENCES hontrio_conexiuni(id) ON DELETE SET NULL;
+alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_aprobat_de_fkey FOREIGN KEY (aprobat_de) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.intentii_publicare add constraint intentii_publicare_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.intentii_publicare add constraint intentii_publicare_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.invoices add constraint invoices_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -14762,6 +14792,9 @@ CREATE INDEX gmc_sync_queue_created_idx ON public.gmc_sync_queue USING btree (cr
 CREATE UNIQUE INDEX gmc_sync_queue_dedupe_uidx ON public.gmc_sync_queue USING btree (business_id, offer_id, op);
 CREATE INDEX gmc_sync_queue_ordine_idx ON public.gmc_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX gmc_sync_queue_product_id_idx ON public.gmc_sync_queue USING btree (product_id) WHERE (product_id IS NOT NULL);
+CREATE INDEX hontrio_coduri_expira_idx ON public.hontrio_coduri USING btree (expira_la);
+CREATE INDEX hontrio_conexiuni_active_idx ON public.hontrio_conexiuni USING btree (business_id) WHERE (revocat_la IS NULL);
+CREATE UNIQUE INDEX hontrio_conexiuni_amprenta_idx ON public.hontrio_conexiuni USING btree (amprenta);
 CREATE INDEX idx_aboutyou_batches_open ON public.aboutyou_batches USING btree (status, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX idx_aboutyou_listings_business_status ON public.aboutyou_listings USING btree (business_id, status);
 CREATE INDEX idx_aboutyou_listings_product ON public.aboutyou_listings USING btree (product_id);
@@ -15168,6 +15201,8 @@ alter table public.forms enable row level security;
 alter table public.ga4_comenzi_raportate enable row level security;
 alter table public.gmc_products enable row level security;
 alter table public.gmc_sync_queue enable row level security;
+alter table public.hontrio_coduri enable row level security;
+alter table public.hontrio_conexiuni enable row level security;
 alter table public.indexnow_trimise enable row level security;
 alter table public.intentii_publicare enable row level security;
 alter table public.invoices enable row level security;
@@ -16922,6 +16957,48 @@ grant SELECT on table public.gmc_sync_queue to service_role;
 grant TRIGGER on table public.gmc_sync_queue to service_role;
 grant TRUNCATE on table public.gmc_sync_queue to service_role;
 grant UPDATE on table public.gmc_sync_queue to service_role;
+grant DELETE on table public.hontrio_coduri to anon;
+grant INSERT on table public.hontrio_coduri to anon;
+grant REFERENCES on table public.hontrio_coduri to anon;
+grant SELECT on table public.hontrio_coduri to anon;
+grant TRIGGER on table public.hontrio_coduri to anon;
+grant TRUNCATE on table public.hontrio_coduri to anon;
+grant UPDATE on table public.hontrio_coduri to anon;
+grant DELETE on table public.hontrio_coduri to authenticated;
+grant INSERT on table public.hontrio_coduri to authenticated;
+grant REFERENCES on table public.hontrio_coduri to authenticated;
+grant SELECT on table public.hontrio_coduri to authenticated;
+grant TRIGGER on table public.hontrio_coduri to authenticated;
+grant TRUNCATE on table public.hontrio_coduri to authenticated;
+grant UPDATE on table public.hontrio_coduri to authenticated;
+grant DELETE on table public.hontrio_coduri to service_role;
+grant INSERT on table public.hontrio_coduri to service_role;
+grant REFERENCES on table public.hontrio_coduri to service_role;
+grant SELECT on table public.hontrio_coduri to service_role;
+grant TRIGGER on table public.hontrio_coduri to service_role;
+grant TRUNCATE on table public.hontrio_coduri to service_role;
+grant UPDATE on table public.hontrio_coduri to service_role;
+grant DELETE on table public.hontrio_conexiuni to anon;
+grant INSERT on table public.hontrio_conexiuni to anon;
+grant REFERENCES on table public.hontrio_conexiuni to anon;
+grant SELECT on table public.hontrio_conexiuni to anon;
+grant TRIGGER on table public.hontrio_conexiuni to anon;
+grant TRUNCATE on table public.hontrio_conexiuni to anon;
+grant UPDATE on table public.hontrio_conexiuni to anon;
+grant DELETE on table public.hontrio_conexiuni to authenticated;
+grant INSERT on table public.hontrio_conexiuni to authenticated;
+grant REFERENCES on table public.hontrio_conexiuni to authenticated;
+grant SELECT on table public.hontrio_conexiuni to authenticated;
+grant TRIGGER on table public.hontrio_conexiuni to authenticated;
+grant TRUNCATE on table public.hontrio_conexiuni to authenticated;
+grant UPDATE on table public.hontrio_conexiuni to authenticated;
+grant DELETE on table public.hontrio_conexiuni to service_role;
+grant INSERT on table public.hontrio_conexiuni to service_role;
+grant REFERENCES on table public.hontrio_conexiuni to service_role;
+grant SELECT on table public.hontrio_conexiuni to service_role;
+grant TRIGGER on table public.hontrio_conexiuni to service_role;
+grant TRUNCATE on table public.hontrio_conexiuni to service_role;
+grant UPDATE on table public.hontrio_conexiuni to service_role;
 grant DELETE on table public.indexnow_trimise to service_role;
 grant INSERT on table public.indexnow_trimise to service_role;
 grant REFERENCES on table public.indexnow_trimise to service_role;

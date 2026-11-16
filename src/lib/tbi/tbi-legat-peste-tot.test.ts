@@ -141,12 +141,19 @@ describe("panoul si vitrina", () => {
     assert.match(caseta, /anuleazaCerereaTbiDinPanou\(/);
     assert.match(caseta, /ramburseazaTbiDinPanou\(/);
   });
-  test("pagina produsului arata randul de rate in ambele machete", () => {
+  test("pagina produsului arata randul de rate in ambele machete, pe ORICE produs", () => {
     for (const f of [
       "src/components/storefront/sections/product/ProductPageClassic.tsx",
       "src/components/storefront/sections/product/ProductPageDetailed.tsx",
     ]) {
       assert.match(viu(f), /<RateTbi limite=\{rateTbi\}/, f);
+    }
+    /* Pretul nu mai ascunde mesajul: decide `tbiPePaginaProdusului` (cerut de proprietar, 16.11.2026). */
+    const piese = viu("src/components/storefront/sections/product/_shared/pieces.tsx");
+    assert.match(piese, /const ce = tbiPePaginaProdusului\(limite, pret\);/);
+    assert.ok(!/sumaInLimite\(limite, pret\)\) return null/.test(piese), "mesajul se ascunde iar dupa pret");
+    for (const forma of ["BannerRateTbi", "VideoRateTbi", "RandRateTbi"]) {
+      assert.match(piese, new RegExp(`<${forma} nota=\\{ce\\.nota\\} />`), `${forma} nu primeste nota cu limitele`);
     }
   });
   test("⚠ forma aleasa pentru pagina produsului schimba DOAR pagina produsului, nu si comanda", () => {
@@ -164,8 +171,8 @@ describe("panoul si vitrina", () => {
       assert.ok(!v.includes("banner_produs") && !v.includes("tbi_produs"), `${f}: comanda asculta de forma de pe pagina produsului`);
     }
     const piese = viu("src/components/storefront/sections/product/_shared/pieces.tsx");
-    assert.match(piese, /forma === "banner"\) return <BannerRateTbi \/>/);
-    assert.match(piese, /forma === "video"\) return <VideoRateTbi \/>/);
+    assert.match(piese, /forma === "banner"\) return <BannerRateTbi nota=\{ce\.nota\} \/>/);
+    assert.match(piese, /forma === "video"\) return <VideoRateTbi nota=\{ce\.nota\} \/>/);
     const panou = viu("src/components/dashboard/TbiConfigClient.tsx");
     for (const forma of FORME_BANNER_TBI) assert.ok(panou.includes(`forma: "${forma}"`), `panoul nu ofera forma „${forma}”`);
     assert.match(panou, /set\("banner_produs", f\.forma\)/);

@@ -26,7 +26,7 @@ export const VIDEO_RATE_TBI = {
  * ceruta de sistem nu porneste deloc. Pe pagina produsului conteaza fiecare kilobyte.
  * Fara cifre de credit (vezi `FORME_BANNER_TBI`). Fara diacritice: e text de vitrina.
  */
-export function VideoRateTbi() {
+export function VideoRateTbi({ nota }: { nota?: string | null } = {}) {
   const ref = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -64,6 +64,8 @@ export function VideoRateTbi() {
           <div>
             <p className="text-balance text-[15px] font-semibold leading-snug text-neutral-900 sm:text-base">Cumpara acum, plateste in rate</p>
             <p className="mt-1 text-[12.5px] leading-snug text-neutral-500">Alegi tbi bank la finalizarea comenzii si completezi cererea online.</p>
+            {/* Intre ce sume, la produsele cu pretul in afara limitelor (`tbiPePaginaProdusului`). */}
+            {nota && <p className="mt-1 text-[12px] font-medium leading-snug text-neutral-700">{nota}</p>}
           </div>
         </div>
         <div className="relative m-1.5 min-h-[140px] w-[44%] shrink-0 self-stretch overflow-hidden rounded-[12px] bg-[#FF6600]">

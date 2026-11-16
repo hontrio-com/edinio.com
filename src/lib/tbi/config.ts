@@ -40,8 +40,8 @@ export type TbiConfig = {
    */
   categorie: string;
   /**
-   * Ce apare pe pagina produsului, sub butoanele de comanda, la produsele cu pretul intre limite
-   * (vezi `FORME_BANNER_TBI`). Alegerea comerciantului din panou; implicit randul discret. Nu schimba
+   * Ce apare pe pagina produsului, sub butoanele de comanda, pe ORICE produs (vezi `FORME_BANNER_TBI`
+   * si `tbiPePaginaProdusului`). Alegerea comerciantului din panou; implicit randul discret. Nu schimba
    * nimic la comanda: metoda de plata apare in formular oricum, cand totalul intra in limite.
    */
   banner_produs: FormaBannerTbi;
@@ -185,6 +185,27 @@ export function bannerTbiPePaginaProdusului(raw: unknown): BannerTbiProdus | nul
   if (!limite) return null;
   const forma = citesteConfigTbi(raw).banner_produs;
   return forma === "ascuns" ? null : { ...limite, forma };
+}
+
+/**
+ * Ce arata pagina UNUI produs: forma aleasa, pe ORICE produs, plus o nota cu limitele comenzii cand
+ * pretul produsului e in afara lor.
+ *
+ * ⚠ Pana pe 16.11.2026 mesajul aparea doar la produsele cu pretul intre limite. La VetDepo (limitele
+ * 300 - 30.000 lei, pretul median 83,90) asta insemna 348 de produse din 1.977, iar proprietarul l-a
+ * cerut pe toate („ar trebui sa apara mereu bannerul”). Doua produse de 150 de lei fac o comanda de
+ * 300. Nota e ca omul sa nu caute plata in rate la un cos sub minim: formularul de comanda o explica
+ * la fel (`mesajLimiteTbi`). Fara diacritice: e text de vitrina.
+ */
+export function tbiPePaginaProdusului(
+  banner: BannerTbiProdus | null | undefined,
+  pret: number,
+): { forma: BannerTbiProdus["forma"]; nota: string | null } | null {
+  if (!banner) return null;
+  return {
+    forma: banner.forma,
+    nota: sumaInLimite(banner, pret) ? null : `Pentru comenzi intre ${lei(banner.min)} si ${lei(banner.max)}.`,
+  };
 }
 
 /** Totalul intra in limitele magazinului? Comparat in bani, ca 299,995 sa nu treaca drept 300. */

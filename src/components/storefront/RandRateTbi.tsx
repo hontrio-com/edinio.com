@@ -19,12 +19,20 @@ export function SiglaTbi({ mare = false, className }: { mare?: boolean; classNam
   );
 }
 
-export function RandRateTbi({ className }: { className?: string }) {
-  return (
-    <p className={`flex items-center justify-center gap-1.5 text-xs text-muted-foreground${className ? ` ${className}` : ""}`}>
+/** `nota`: intre ce sume se poate plati in rate, la produsele cu pretul in afara limitelor (`tbiPePaginaProdusului`). */
+export function RandRateTbi({ className, nota }: { className?: string; nota?: string | null }) {
+  const rand = (
+    <p className={`flex items-center justify-center gap-1.5 text-xs text-muted-foreground${!nota && className ? ` ${className}` : ""}`}>
       <span>Plateste in rate cu</span>
       <SiglaTbi />
       <span className="sr-only">: alegi plata in rate la finalizarea comenzii.</span>
     </p>
+  );
+  if (!nota) return rand;
+  return (
+    <div className={`space-y-0.5${className ? ` ${className}` : ""}`}>
+      {rand}
+      <p className="text-center text-[11px] text-muted-foreground">{nota}</p>
+    </div>
   );
 }

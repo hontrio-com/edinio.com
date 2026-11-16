@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ShoppingBag, Plus, Minus, Eye } from "lucide-react";
 import type { FaqItem } from "./product-page.types";
 import { textulContorului, type FereastraContor } from "@/lib/storefront/contor-vizitatori";
-import { sumaInLimite, type BannerTbiProdus } from "@/lib/tbi/config";
+import { tbiPePaginaProdusului, type BannerTbiProdus } from "@/lib/tbi/config";
 import { RandRateTbi } from "@/components/storefront/RandRateTbi";
 import { BannerRateTbi } from "@/components/storefront/BannerRateTbi";
 import { VideoRateTbi } from "@/components/storefront/VideoRateTbi";
@@ -174,8 +174,9 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
 }
 
 /**
- * „Plateste in rate cu tbi bank", sub butoanele de comanda, cand magazinul ofera plata in rate si
- * pretul intra in limitele lui. Acelasi rand il pune si modulul oficial tbi pentru WooCommerce (dupa
+ * „Plateste in rate cu tbi bank", sub butoanele de comanda, pe ORICE produs, cand magazinul ofera plata
+ * in rate. La produsele cu pretul in afara limitelor se adauga intre ce sume se poate plati in rate
+ * (vezi `tbiPePaginaProdusului`). Acelasi rand il pune si modulul oficial tbi pentru WooCommerce (dupa
  * butonul de cos), si tot el apare in ilustratia paginii de produs de pe site-ul de prezentare Edinio.
  *
  * ⚠ FARA RATA LUNARA. Dobanda, comisionul si asigurarea le stabileste tbi pentru fiecare client, iar
@@ -187,8 +188,9 @@ export function CTAButton({ color, isOutOfStock, isPreorder, needsVariant, hasCa
  * `components/storefront/`, comun cu previzualizarea din panou.
  */
 export function RateTbi({ limite, pret }: { limite: BannerTbiProdus | null | undefined; pret: number }) {
-  if (!limite || !sumaInLimite(limite, pret)) return null;
-  if (limite.forma === "banner") return <BannerRateTbi />;
-  if (limite.forma === "video") return <VideoRateTbi />;
-  return <RandRateTbi />;
+  const ce = tbiPePaginaProdusului(limite, pret);
+  if (!ce) return null;
+  if (ce.forma === "banner") return <BannerRateTbi nota={ce.nota} />;
+  if (ce.forma === "video") return <VideoRateTbi nota={ce.nota} />;
+  return <RandRateTbi nota={ce.nota} />;
 }

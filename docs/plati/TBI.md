@@ -148,7 +148,10 @@ cazuta. Documentatia nu spune daca tbi repeta vestile; plasa e cronul care intre
   documentatia lor cere atunci dobanda, totalul de plata, rata si perioada langa ea. DAE-ul nu vine din
   API. De hotarat cu proprietarul, separat.
 * **Mesajul de pe pagina produsului are patru forme** (`banner_produs`): `rand` (implicit), `banner`,
-  `video`, `ascuns`. Alegerea schimba DOAR pagina produsului; formularul si plasarea citesc `limiteleTbi`.
+  `video`, `ascuns`. Apare pe ORICE produs (cerut de proprietar pe 16.11.2026; la VetDepo, limitele
+  300 - 30.000 lei il lasau pe 348 de produse din 1.977). La pretul in afara limitelor adauga „Pentru comenzi
+  intre X si Y.” (`tbiPePaginaProdusului`). Alegerea schimba DOAR pagina produsului; formularul si plasarea
+  citesc `limiteleTbi`.
   Componentele: `RandRateTbi.tsx`, `CardTbi.tsx` (chenar din „Texture Card", Cult UI, MIT),
   `BannerRateTbi.tsx`, `VideoRateTbi.tsx` (clip ElevenLabs, `public/plati/tbi/`).
 * **Numai persoane fizice si numai Romania.**

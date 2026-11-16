@@ -474,7 +474,8 @@ export default function TbiConfigClient({
             )}
           </Sectiune>
 
-          <Sectiune pas={4} titlu="Pe pagina produsului" descriere={<>Sub butonul de comandă, la produsele cu prețul {intreLimite}.</>}>
+          <Sectiune pas={4} titlu="Pe pagina produsului"
+            descriere={<>Sub butonul de comandă, pe pagina fiecărui produs. La produsele cu prețul în afara limitelor, mesajul spune și că plata în rate e pentru comenzi {intreLimite}.</>}>
             <fieldset>
               <legend className="sr-only">Ce apare pe pagina produsului</legend>
               <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">

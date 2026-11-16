@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   adresaApiTbi, bannerTbiPePaginaProdusului, citesteConfigTbi, FORME_BANNER_TBI, intervalulProduselor, limiteleTbi,
-  refuzulSumeiTbi, sumaInLimite, TBI_BANNER_IMPLICIT, tbiGata,
+  refuzulSumeiTbi, sumaInLimite, TBI_BANNER_IMPLICIT, tbiGata, tbiPePaginaProdusului,
 } from "./config";
 
 const PLIN = { enabled: true, reseller_code: "magazin_ro", reseller_key: "cheie", cheie_criptare: "secret" };
@@ -60,6 +60,19 @@ test("⚠ forma de pe pagina produsului: randul implicit, patru alegeri, si NICI
   assert.equal(bannerTbiPePaginaProdusului({ ...PLIN, banner_produs: "video" })?.forma, "video");
   /* „Ascuns” scoate reclama, nu metoda de plata. */
   assert.notEqual(limiteleTbi({ ...PLIN, banner_produs: "ascuns" }), null);
+});
+
+test("⚠⚠ mesajul de pe pagina produsului apare pe ORICE produs; in afara limitelor spune intre ce sume", () => {
+  const b = { min: 300, max: 30000, forma: "video" as const };
+  assert.deepEqual(tbiPePaginaProdusului(b, 417.9), { forma: "video", nota: null });
+  /* VetDepo, 16.11.2026: pretul median 83,90 lei, iar cu limitele 300 - 30.000 mesajul lipsea de pe 1.629 de produse. */
+  const ieftin = tbiPePaginaProdusului(b, 83.9);
+  assert.ok(ieftin, "un produs sub minim a ramas fara mesaj");
+  assert.equal(ieftin.forma, "video");
+  assert.equal(ieftin.nota, "Pentru comenzi intre 300 lei si 30.000 lei.");
+  assert.doesNotMatch(ieftin.nota ?? "", /[ăâîșțĂÂÎȘȚ]/, "diacritice in vitrina");
+  assert.ok(tbiPePaginaProdusului(b, 45000)?.nota, "peste maxim trebuie spus si el");
+  assert.equal(tbiPePaginaProdusului(null, 100), null, "„Nimic” ales sau tbi neconfigurat: nimic");
 });
 
 test("⚠ refuzul de la plasare: numai pentru tbi, cu mesaj de vitrina (fara diacritice)", () => {

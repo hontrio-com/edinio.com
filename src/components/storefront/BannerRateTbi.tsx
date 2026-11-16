@@ -17,7 +17,7 @@ const PASI = [
  *
  * ⚠ Fara nicio cifra de credit (rata, dobanda, DAE, luni): vezi `FORME_BANNER_TBI`. Fara diacritice.
  */
-export function BannerRateTbi() {
+export function BannerRateTbi({ nota }: { nota?: string | null } = {}) {
   return (
     <CardTbi>
       <div className="flex items-center gap-3.5 px-4 py-3.5">
@@ -26,6 +26,8 @@ export function BannerRateTbi() {
         <div className="min-w-0">
           <p className="text-balance text-[15px] font-semibold leading-snug text-neutral-900">Cumpara acum, plateste in rate</p>
           <p className="mt-0.5 text-[12.5px] leading-snug text-neutral-500">Alegi tbi bank la finalizarea comenzii.</p>
+          {/* Intre ce sume, la produsele cu pretul in afara limitelor (`tbiPePaginaProdusului`). */}
+          {nota && <p className="mt-0.5 text-[12px] font-medium leading-snug text-neutral-700">{nota}</p>}
         </div>
       </div>
       <ol className="grid grid-cols-3 divide-x divide-neutral-950/10 border-t border-neutral-950/10 bg-stone-100/80">

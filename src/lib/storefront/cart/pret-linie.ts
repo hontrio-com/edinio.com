@@ -45,6 +45,26 @@ export interface RegulaPretCos {
    * stie, iar `undefined` inseamna „nu spun", nu „nu are". Vezi `cereRevizuire`.
    */
   areVariante?: boolean;
+  /** Prima poza de ACUM a produsului. Optionala din acelasi motiv ca `areVariante`. Vezi `pozaLiniei`. */
+  imagine?: string | null;
+}
+
+/**
+ * Miniatura unei linii de cos: poza salvata la adaugare, iar cand lipseste, prima poza de ACUM a
+ * produsului, venita de la server.
+ *
+ * ⚠ Unele linii intra in cos FARA poza: cosul refacut din linkul de recuperare poarta doar ce s-a
+ * salvat la abandon (`abandoned_carts.items`), iar un produs fara poze la adaugare ramane fara ea si
+ * dupa ce comerciantul i-a pus. Vazut pe 16.11.2026 la finalizarea comenzii: trei produse din patru
+ * fara miniatura, desi toate trei aveau poze in catalog.
+ *
+ * ⚠ Poza SALVATA are intaietate: e cea pe care omul a vazut-o cand a pus produsul in cos (poza
+ * variantei alese, de exemplu), iar prima poza a produsului poate fi alta.
+ */
+export function pozaLiniei(item: Pick<CartItem, "imageUrl">, regula: RegulaPretCos | undefined): string | null {
+  if (typeof item.imageUrl === "string" && item.imageUrl.trim()) return item.imageUrl;
+  const deLaServer = regula?.imagine;
+  return typeof deLaServer === "string" && deLaServer.trim() ? deLaServer : null;
 }
 
 /** Aceeasi rotunjire la ban ca pe server, ca cele doua numere sa fie chiar acelasi numar. */

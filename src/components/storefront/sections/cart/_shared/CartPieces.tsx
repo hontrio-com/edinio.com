@@ -184,10 +184,12 @@ export function CartLine({
     vecin?.querySelector<HTMLElement>("[data-sterge-linie]")?.focus();
   }
 
+  /* ⚠ Din cos, nu din linie: linia poate sa nu-si fi salvat poza. Vezi `lineImage`. */
+  const sursaPozei = cos.lineImage(item);
   const poza = (
     <span className={`relative ${latime} shrink-0 rounded-xl overflow-hidden bg-muted border border-border block`}>
-      {item.imageUrl ? (
-        <Image src={item.imageUrl} alt={item.name} fill sizes={marimi} className="object-cover" />
+      {sursaPozei ? (
+        <Image src={sursaPozei} alt={item.name} fill sizes={marimi} className="object-cover" />
       ) : (
         <span className="w-full h-full flex items-center justify-center">
           <Package className="h-5 w-5 text-muted-foreground" />

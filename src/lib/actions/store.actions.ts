@@ -753,6 +753,8 @@ export async function getCartPricing(
   tiers: Json | null;
   customization: Json | null;
   areVariante: boolean;
+  /** Prima poza de ACUM a produsului. Vezi `lineImage` din `CartProvider`. */
+  imagine: string | null;
 }>> {
   const ids = [...new Set((productIds ?? []).filter((id) => typeof id === "string" && id))].slice(0, 200);
   if (!businessId || ids.length === 0) return {};
@@ -760,7 +762,7 @@ export async function getCartPricing(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("products")
-    .select("id, price, page_sections")
+    .select("id, price, page_sections, images")
     .eq("business_id", businessId)
     .eq("is_active", true)
     .in("id", ids);
@@ -799,10 +801,22 @@ export async function getCartPricing(
     tiers: Json | null;
     customization: Json | null;
     areVariante: boolean;
+    imagine: string | null;
   }> = {};
   for (const p of data ?? []) {
     const base = Math.round((Number(p.price) || 0) * 100) / 100;
+    /*
+     * ⚠ POZA DE REZERVA A LINIEI, nu un pret. Linia din localStorage isi tine poza de la adaugare,
+     * dar unele intra in cos fara ea: cosul refacut din linkul de recuperare (`getRecoverableCart`)
+     * poarta doar ce s-a salvat in `abandoned_carts.items`, iar un produs fara poze la adaugare
+     * ramane fara ea si dupa ce comerciantul i-a pus. Rezumatul de la finalizare le arata atunci
+     * fara nicio miniatura, langa altele cu miniatura.
+     */
+    const primaPoza = Array.isArray(p.images)
+      ? p.images.find((x): x is string => typeof x === "string" && x.trim() !== "")
+      : undefined;
     out[p.id] = {
+      imagine: primaPoza ?? null,
       price: base,
       combos: Object.fromEntries(enabledComboPriceMap(p.page_sections, base)),
       /*

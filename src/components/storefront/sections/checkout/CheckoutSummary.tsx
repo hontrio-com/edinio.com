@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { Package } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import type { CheckoutEngine } from "./checkout-core";
@@ -22,14 +23,26 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
   const { items } = motor;
   // Totalul liniei vine tot de la cos, ca sa fie acelasi numar aici, in sertar,
   // pe pagina de cos si la server.
-  const { lineTotal, lineSavings, lineUnit, lineNeedsReview, linePretNevalidat, linePretNesigur, lineSummary } = useCart();
+  const { lineTotal, lineSavings, lineUnit, lineNeedsReview, linePretNevalidat, linePretNesigur, lineSummary, lineImage } = useCart();
   return (
       <div className="space-y-2">
-        {items.map((item) => (
+        {items.map((item) => {
+          const poza = lineImage(item);
+          return (
           <div key={lineKey(item)} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-muted/40">
-            {item.imageUrl && (
-              <Image src={item.imageUrl} alt={item.name} width={48} height={48} className="rounded-lg object-cover border border-border shrink-0" />
-            )}
+            {/*
+              ⚠ Caseta ramane si fara poza, cu iconita, ca in sertar si pe pagina de cos: fara ea,
+              randurile fara poza incepeau mai la stanga decat celelalte.
+            */}
+            <span className="relative w-12 h-12 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+              {poza ? (
+                <Image src={poza} alt={item.name} fill sizes="48px" className="object-cover" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </span>
+              )}
+            </span>
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
               {item.variantTitle && <p className="text-xs text-muted-foreground truncate">{item.variantTitle}</p>}
@@ -87,7 +100,8 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
               )}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
   );
 }

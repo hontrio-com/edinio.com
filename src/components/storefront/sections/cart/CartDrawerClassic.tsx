@@ -44,7 +44,7 @@ export function CartDrawerClassic({
   const { produs: prefixProdus } = usePermalinkuri();
   const {
     items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview,
-    linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile, lineSummary, total, count,
+    linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile, lineSummary, lineImage, total, count,
   } = useCart();
   /* Cate linii personalizate asteapta inca validarea pretului. Vezi `pretulNevalidat`. */
   const liniiNevalidate = items.filter(linePretNesigur).length;
@@ -211,8 +211,10 @@ export function CartDrawerClassic({
               {items.map((item) => {
                 const href = item.slug ? hrefProdus(basePath, item.slug, prefixProdus) : null;
                 const thumbCls = "relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-muted border border-border";
-                const thumb = item.imageUrl ? (
-                  <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
+                /* ⚠ Din cos, nu din linie: linia poate sa nu-si fi salvat poza. Vezi `lineImage`. */
+                const sursaPozei = lineImage(item);
+                const thumb = sursaPozei ? (
+                  <Image src={sursaPozei} alt={item.name} fill sizes="64px" className="object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <Package className="h-5 w-5 text-muted-foreground" />

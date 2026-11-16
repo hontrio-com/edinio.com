@@ -8,7 +8,7 @@ import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { inlocuiesteLinia } from "@/lib/storefront/cart/editare";
-import { cereRevizuire, pretulNevalidat, pretulNesigur, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
+import { cereRevizuire, pozaLiniei, pretulNevalidat, pretulNesigur, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
 import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 /**
@@ -96,6 +96,16 @@ export interface CartContextValue {
    * brute si scria id-uri de optiuni in loc de nume.
    */
   lineSummary: (item: CartItem) => string;
+  /**
+   * Miniatura liniei: poza salvata la adaugare, iar cand lipseste, prima poza de ACUM a produsului
+   * (`getCartPricing`).
+   *
+   * ⚠ Unele linii intra in cos fara poza: cosul refacut din linkul de recuperare poarta doar ce s-a
+   * salvat la abandon, iar un produs fara poze la adaugare ramane fara ea si dupa ce i se pun.
+   * Rezumatul de la finalizare le arata fara miniatura, langa altele cu miniatura. TOATE suprafetele
+   * cosului citesc poza de aici, ca sa nu ramana una care arata altceva.
+   */
+  lineImage: (item: CartItem) => string | null;
   /**
    * Cat costa O BUCATA din linie, inainte de treptele de cantitate.
    *
@@ -356,13 +366,15 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    * comutatoarele pornite, deci „Protectie: Da" nu aparea niciodata.
    */
   const lineSummary = (item: CartItem) => rezumatulLiniei(item, preturi[item.productId]);
+  /* Poza salvata la adaugare, altfel prima poza de acum a produsului. Regula: `pozaLiniei`. */
+  const lineImage = (item: CartItem) => pozaLiniei(item, preturi[item.productId]);
 
   const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile: () => setIncercare((n) => n + 1), lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile: () => setIncercare((n) => n + 1), lineSummary, lineImage, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -431,6 +443,8 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
         reincearcaPreturile: () => {},
         /* Fara `CartProvider` nu exista definitii, deci se cade pe rezumatul din valorile brute. */
         lineSummary: (item) => rezumatPersonalizare(item.customization as Record<string, unknown> | undefined),
+        /* Nici poze de la server: miniatura arata ce poarta linia. */
+        lineImage: (item) => pozaLiniei(item, undefined),
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

@@ -74,7 +74,7 @@ export function useCheckoutOrder({
   const {
     items: toateLiniileCosului, total: totalIntregAlCosului, clear, sessionId, hydrated,
     lineTotal, lineUnit, lineNeedsReview,
-    linePretNesigur, pricingStare, reincearcaPreturile,
+    linePretNesigur, pricingStare, reincearcaPreturile, lineImage,
   } = useCart();
   /*
     ⚠⚠ LINIILE PE CARE UN UPGRADE LE-A SCOS DIN COMANDĂ.
@@ -651,7 +651,8 @@ export function useCheckoutOrder({
            */
           price: i.quantity > 0 ? Math.round((lineTotal(i) / i.quantity) * 100) / 100 : lineUnit(i),
           quantity: i.quantity,
-          image_url: i.imageUrl,
+          /* ⚠ Poza de rezerva pleaca si in cosul abandonat: din el se reface cosul la recuperare. */
+          image_url: lineImage(i),
           ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
           ...(i.customization ? { customization: i.customization } : {}),
         })),

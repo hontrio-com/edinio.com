@@ -42,6 +42,7 @@ import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { ESEC_CUPON } from "@/lib/discounts/mesaj";
 import { useContulLaComanda } from "@/components/storefront/cont/contul-la-comanda";
 import { IntrareLaComanda } from "@/components/storefront/sections/checkout/IntrareLaComanda";
+import { AlegereMetodaPlata } from "@/components/storefront/sections/checkout/AlegereMetodaPlata";
 import { MESAJ_CONT_NECESAR } from "@/lib/cont/config";
 
 
@@ -695,7 +696,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
             name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name,
             price: i.quantity > 0 ? Math.round((totalLinieCos(i) / i.quantity) * 100) / 100 : pretBucataCos(i),
             quantity: i.quantity,
-            image_url: i.imageUrl ?? null,
+            /* ⚠ Poza de rezerva pleaca si in cosul abandonat: din el se reface cosul la recuperare. */
+            image_url: (cosMagazin?.lineImage(i) ?? i.imageUrl) ?? null,
             ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
             ...(i.customization ? { customization: i.customization } : {}),
           })),
@@ -1446,11 +1448,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   {cart.map((ci, idx) => {
                     const key = cartLineKey(ci);
                     const economieSet = economiaFbtPeLinie(idx);
+                    /* ⚠ Din cos, nu din linie: linia poate sa nu-si fi salvat poza. Vezi `lineImage`. */
+                    const pozaLinie = cosMagazin?.lineImage(ci) ?? ci.imageUrl;
                     return (
                     <div key={key} className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-border bg-muted/40">
                       <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border shrink-0 bg-surface flex-shrink-0">
-                        {ci.imageUrl ? (
-                          <Image src={ci.imageUrl} alt={ci.name} fill sizes="48px" className="object-contain p-1" />
+                        {pozaLinie ? (
+                          <Image src={pozaLinie} alt={ci.name} fill sizes="48px" className="object-contain p-1" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"><Package size={16} className="text-muted-foreground/40" /></div>
                         )}
@@ -1993,23 +1997,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               </div>
 
-              {/* Payment method */}
+              {/* Metoda de plata: aceeasi componenta ca pe pagina de finalizare. */}
               {availablePaymentMethods.length > 1 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-foreground">Metoda de plata</p>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(availablePaymentMethods.length, 3)}, minmax(0, 1fr))` }}>
-                    {availablePaymentMethods.map((m) => (
-                      <button key={m.type} type="button" onClick={() => setPaymentMethod(m.type)}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
-                        style={paymentMethod === m.type
-                          ? { borderColor: color, backgroundColor: `${color}12`, color: "var(--color-foreground)" }
-                          : { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-muted-foreground)" }}>
-                        {m.type === "cash_on_delivery" ? <Banknote size={16} /> : m.type === "tbi" ? <CalendarClock size={16} /> : <CreditCard size={16} />}
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <AlegereMetodaPlata metode={availablePaymentMethods} aleasa={paymentMethod} onAlege={setPaymentMethod} color={color} />
               )}
               {motivTbi && <p className="text-xs text-muted-foreground">{motivTbi}</p>}
 

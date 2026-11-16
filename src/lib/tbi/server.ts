@@ -9,13 +9,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database.types";
 import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { proprietariiMagazinelor, semnaleazaExpedierea } from "@/lib/orders/semnalarea-ajunge-la-om";
+import { baniiSAuIntors } from "@/lib/plati/banii-s-au-intors";
 import { logError } from "@/lib/error-logger";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { citesteConfigTbi, mesajLimiteTbi, sumaInLimite, tbiGata } from "./config";
-import { citesteCheiaPublicaTbi, type CheieCitita } from "./cripto";
 import { construiesteCererea, inBani, sumaArticolelor, type ProdusPentruTbi } from "./cerere";
-import { anuleazaCererea, trimiteCererea } from "./client";
-import { STARI_DESCHISE, treceLa, type EfectVeste, type StareTbi, type VesteTbi } from "./stari";
+import { anuleazaCererea, ramburseaza, stareaCererii, trimiteCererea } from "./client";
+import { STARI_DESCHISE, codulDinTextTbi, treceLa, type EfectVeste, type StareTbi, type VesteTbi } from "./stari";
 
 type Admin = SupabaseClient<Database>;
 export type RandCerere = Database["public"]["Tables"]["tbi_cereri"]["Row"];
@@ -33,9 +33,19 @@ function adresaAplicatiei(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com").replace(/\/+$/, "");
 }
 
-/** `back_ref`: unde ne trimite tbi fiecare schimbare de stare a cererii. */
+/** `statusURL` / `refundLink`: unde ne trimite tbi fiecare schimbare de stare a cererii. */
 export function adresaNotificarii(jeton: string): string {
   return `${adresaAplicatiei()}/api/tbi/notificare/${jeton}`;
+}
+
+/**
+ * Unde se intoarce clientul de pe pagina tbi: pagina de confirmare a magazinului, ca la Netopia si
+ * Klarna. Pagina citeste comanda dupa id, deci in adresa nu pleaca nimic personal.
+ */
+export function adreseleDeIntoarcere(slug: string, orderId: string): { reusita: string; esuata: string } {
+  const baza = `${adresaAplicatiei()}/${encodeURIComponent(slug)}/confirm`;
+  const id = encodeURIComponent(orderId);
+  return { reusita: `${baza}?orderId=${id}`, esuata: `${baza}?status=esuat&orderId=${id}` };
 }
 
 function istoricCu(vechi: Json, intrare: Record<string, Json>): Json[] {
@@ -48,12 +58,13 @@ function istoricCu(vechi: Json, intrare: Record<string, Json>): Json[] {
 export type RezultatPornire = { ok: true; adresa: string } | { ok: false; status: number; mesaj: string };
 
 const PRODUS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NEPREGATITA = "Nu am putut pregati cererea de finantare. Reincearca peste cateva momente.";
 
 /**
  * Trimite cererea de finantare a unei comenzi si intoarce adresa paginii tbi.
  *
- * ⚠ RANDUL SE SCRIE INAINTEA APELULUI („creata"), cu jetonul din `back_ref`. Daca procesul moare
- * intre apel si scrierea adresei, vestea tbi tot gaseste cererea, dupa jeton. Fara rand scris
+ * ⚠ RANDUL SE SCRIE INAINTEA APELULUI („creata"), cu jetonul din `statusURL`. Daca procesul moare
+ * intre apel si scrierea raspunsului, vestea tbi tot gaseste cererea, dupa jeton. Fara rand scris
  * inainte, o aprobare venita pentru o cerere pe care n-o mai stim s-ar fi pierdut.
  *
  * Mesajele de aici le citeste CUMPARATORUL, in vitrina: fara diacritice.
@@ -62,15 +73,16 @@ export async function pornesteCerereaTbi(
   admin: Admin,
   p: { orderId: string; businessId: string },
 ): Promise<RezultatPornire> {
-  const [{ data: order, error: eO }, { data: st, error: eS }] = await Promise.all([
+  const [{ data: order, error: eO }, { data: st, error: eS }, { data: biz, error: eB }] = await Promise.all([
     admin.from("orders")
-      .select("id, business_id, order_number, total, status, payment_status, payment_method, items, shipping_cost, customer_name, customer_email, customer_phone, shipping_address, billing_company")
+      .select("id, business_id, order_number, total, status, payment_status, payment_method, items, shipping_cost, customer_name, customer_email, customer_phone, billing_company")
       .eq("id", p.orderId).eq("business_id", p.businessId).maybeSingle(),
     admin.from("store_settings").select("tbi_config").eq("business_id", p.businessId).maybeSingle(),
+    admin.from("businesses").select("slug").eq("id", p.businessId).maybeSingle(),
   ]);
-  if (eO || eS) {
-    await logError({ action: "tbi/start", message: `citire picata: ${(eO ?? eS)!.message}`, details: { orderId: p.orderId }, businessId: p.businessId, severity: "error" });
-    return { ok: false, status: 503, mesaj: "Nu am putut pregati cererea de finantare. Reincearca peste cateva momente." };
+  if (eO || eS || eB) {
+    await logError({ action: "tbi/start", message: `citire picata: ${(eO ?? eS ?? eB)!.message}`, details: { orderId: p.orderId }, businessId: p.businessId, severity: "error" });
+    return { ok: false, status: 503, mesaj: NEPREGATITA };
   }
   if (!order) return { ok: false, status: 404, mesaj: "Comanda nu a fost gasita." };
   if (order.payment_method !== "tbi") return { ok: false, status: 400, mesaj: "Comanda nu are aleasa plata in rate prin tbi bank." };
@@ -96,7 +108,7 @@ export async function pornesteCerereaTbi(
     .limit(20);
   if (eE) {
     await logError({ action: "tbi/start", message: `cererile existente nu s-au putut citi: ${eE.message}`, details: { orderId: order.id }, businessId: p.businessId, severity: "error" });
-    return { ok: false, status: 503, mesaj: "Nu am putut pregati cererea de finantare. Reincearca peste cateva momente." };
+    return { ok: false, status: 503, mesaj: NEPREGATITA };
   }
   const lista = existente ?? [];
   if (lista.some((c) => c.stare === "aprobata")) {
@@ -116,14 +128,6 @@ export async function pornesteCerereaTbi(
     && Date.now() - Date.parse(c.created_at) < REFOLOSIRE_MS);
   if (recenta?.adresa_cerere) return { ok: true, adresa: recenta.adresa_cerere };
 
-  let cheie: CheieCitita;
-  try {
-    cheie = citesteCheiaPublicaTbi(cfg.cheie_publica_tbi);
-  } catch (e) {
-    await logError({ action: "tbi/start", message: `cheia publica tbi nu se poate citi: ${(e as Error).message}`, businessId: p.businessId, severity: "critical" });
-    return { ok: false, status: 500, mesaj: "Plata in rate prin tbi bank nu este configurata corect la acest magazin. Alege alta metoda de plata." };
-  }
-
   const jeton = randomBytes(32).toString("base64url");
   const { data: rand, error: eI } = await admin
     .from("tbi_cereri")
@@ -140,7 +144,7 @@ export async function pornesteCerereaTbi(
     .single();
   if (eI || !rand) {
     await logError({ action: "tbi/start", message: `cererea nu s-a putut scrie: ${eI?.message ?? "fara rand"}`, details: { orderId: order.id }, businessId: p.businessId, severity: "critical" });
-    return { ok: false, status: 503, mesaj: "Nu am putut pregati cererea de finantare. Reincearca peste cateva momente." };
+    return { ok: false, status: 503, mesaj: NEPREGATITA };
   }
 
   /* Sku si imaginea vin din catalog; lipsa lor nu opreste nimic, sunt doar pentru pagina tbi. */
@@ -168,11 +172,11 @@ export async function pornesteCerereaTbi(
       customer_name: order.customer_name,
       customer_email: order.customer_email,
       customer_phone: order.customer_phone,
-      shipping_address: order.shipping_address,
     },
     cfg,
     idCerere: rand.id,
-    adresaInapoi: adresaNotificarii(jeton),
+    adresaVesti: adresaNotificarii(jeton),
+    intoarcere: adreseleDeIntoarcere(biz?.slug ?? "", order.id),
     produse,
   });
   if (sumaArticolelor(cerere) !== inBani(total)) {
@@ -180,16 +184,25 @@ export async function pornesteCerereaTbi(
     await logError({ action: "tbi/start", message: "articolele nu aduna totalul comenzii", details: { orderId: order.id, total, suma: sumaArticolelor(cerere) / 100 }, businessId: p.businessId, severity: "warning" });
   }
 
-  const r = await trimiteCererea(cfg, cheie, cerere);
+  const r = await trimiteCererea(cfg, cerere);
   const la = new Date().toISOString();
-  if (r.fel === "redirect") {
+  if (r.fel === "trimisa") {
     const { error } = await admin
       .from("tbi_cereri")
-      .update({ stare: "trimisa", adresa_cerere: r.adresa, istoric: [{ la, fel: "trimisa", status: r.status }] })
+      .update({
+        stare: "trimisa",
+        adresa_cerere: r.adresa,
+        tbi_order_id: r.idTbi,
+        tbi_token: r.token,
+        istoric: [{ la, fel: "trimisa", id_tbi: r.idTbi }],
+      })
       .eq("id", rand.id).eq("stare", "creata");
     if (error) {
-      /* Clientul pleaca oricum la tbi: vestea gaseste cererea dupa jeton, chiar ramasa „creata". */
-      await logError({ action: "tbi/start", message: `adresa cererii nu s-a scris: ${error.message}`, details: { orderId: order.id, cerere: rand.id }, businessId: p.businessId, severity: "warning" });
+      /*
+       * ⚠ Fara id-ul si jetonul lor, cererea nu se mai poate nici interoga, nici anula din Edinio.
+       * Clientul pleaca oricum la tbi (vestea gaseste cererea dupa jetonul NOSTRU), dar se striga.
+       */
+      await logError({ action: "tbi/start", message: `raspunsul tbi nu s-a scris: ${error.message}`, details: { orderId: order.id, cerere: rand.id, idTbi: r.idTbi }, businessId: p.businessId, severity: "critical" });
     }
     return { ok: true, adresa: r.adresa };
   }
@@ -198,20 +211,20 @@ export async function pornesteCerereaTbi(
     .from("tbi_cereri")
     .update({ stare: "eroare", motiv: r.mesaj, istoric: [{ la, fel: r.fel, status: r.status, detaliu: r.detaliu }] })
     .eq("id", rand.id).eq("stare", "creata");
-  const autentificare = r.fel === "refuz" && (r.status === 401 || r.status === 403);
+  const deAcces = r.fel === "refuz" && (r.motiv === "credentiale" || r.motiv === "cheie");
   await logError({
     action: "tbi/start",
-    message: `${r.fel === "refuz" ? "tbi a refuzat cererea" : "raspuns necunoscut de la tbi"}: ${r.mesaj}`,
+    message: `${r.fel === "refuz" ? `tbi a refuzat cererea (${r.motiv})` : "raspuns necunoscut de la tbi"}: ${r.mesaj}`,
     details: { orderId: order.id, cerere: rand.id, status: r.status, detaliu: r.detaliu, mediu },
     businessId: p.businessId,
-    severity: autentificare ? "critical" : "error",
+    severity: deAcces || (r.fel === "refuz" && r.motiv === "date") ? "critical" : "error",
   });
   /*
-   * ⚠ Credentialele respinse se spun COMERCIANTULUI, nu doar jurnalului: pana nu le repara, niciun
+   * ⚠ Datele de acces respinse se spun COMERCIANTULUI, nu doar jurnalului: pana nu le repara, niciun
    * client nu poate plati in rate, iar el n-ar afla decat din vanzarile pierdute. O data la sase
    * ore, ca o zi cu multi clienti sa nu-i umple clopotelul.
    */
-  if (autentificare && (await consumaLimita(`tbi-autentificare:${p.businessId}`, 1, 6 * 3600)).permis) {
+  if (deAcces && (await consumaLimita(`tbi-autentificare:${p.businessId}`, 1, 6 * 3600)).permis) {
     const proprietari = await proprietariiMagazinelor(admin, [p.businessId]);
     await semnaleazaExpedierea(admin, {
       userId: proprietari.get(p.businessId) ?? null,
@@ -220,11 +233,14 @@ export async function pornesteCerereaTbi(
       orderNumber: order.order_number,
       tip: "plata",
       titlu: "tbi bank refuză datele de acces",
-      mesaj: "Un client a ales plata în rate, dar tbi bank a respins autentificarea. Verifică în Integrări > tbi bank "
-        + "codul magazinului, utilizatorul, parola și cheia publică tbi. Până atunci, clienții nu pot plăti în rate.",
+      mesaj: `Un client a ales plata în rate, dar ${r.mesaj.charAt(0).toLowerCase()}${r.mesaj.slice(1)} Verifică în Integrări > tbi bank `
+        + "codul de reseller, cheia de reseller și cheia de criptare (butonul „Verifică legătura”). Până atunci, clienții nu pot plăti în rate.",
       actiune: "tbi/start",
       detalii: { status: r.status, mediu },
     });
+  }
+  if (r.fel === "refuz" && r.motiv === "suma") {
+    return { ok: false, status: 400, mesaj: "Suma comenzii este in afara limitelor de finantare tbi bank. Alege alta metoda de plata." };
   }
   return {
     ok: false,
@@ -241,14 +257,19 @@ export type RezultatVeste =
   | { fel: "reincearca"; mesaj: string };
 
 /**
- * Aplica o veste deja descifrata si potrivita cu cererea ei.
+ * Aplica o veste deja descifrata si potrivita cu cererea ei (sau o stare citita de cron).
  *
  * ⚠ RANDUL SE SCRIE INAINTE DE EFECTE, cu doua conditii in `WHERE`: starea si `updated_at` citite.
  * Doua vesti sosite deodata nu pot scrie amandoua peste aceeasi citire; a doua reciteste si se
  * aplica peste prima. Fara `updated_at` in conditie, doua vesti cu aceeasi stare ar fi trecut
  * amandoua, iar una din intrarile din istoric s-ar fi pierdut.
  */
-export async function aplicaVesteaTbi(admin: Admin, cerere: RandCerere, veste: VesteTbi): Promise<RezultatVeste> {
+export async function aplicaVesteaTbi(
+  admin: Admin,
+  cerere: RandCerere,
+  veste: VesteTbi,
+  sursa: "veste" | "interogare" = "veste",
+): Promise<RezultatVeste> {
   let curenta = cerere;
   for (let incercare = 0; incercare < 3; incercare++) {
     const anterioara = curenta.stare as StareTbi;
@@ -259,8 +280,11 @@ export async function aplicaVesteaTbi(admin: Admin, cerere: RandCerere, veste: V
       .update({
         stare,
         motiv: veste.motiv || (stare === "aprobata" ? null : curenta.motiv),
+        ...(veste.contract ? { contract: veste.contract } : {}),
         ultima_veste_la: la,
-        istoric: istoricCu(curenta.istoric, { la, fel: "veste", status_id: veste.statusId, motiv: veste.motiv || null, stare }),
+        istoric: istoricCu(curenta.istoric, {
+          la, fel: sursa, status_id: veste.statusId, mesaj: veste.mesaj || null, motiv: veste.motiv || null, stare,
+        }),
       })
       .eq("id", curenta.id)
       .eq("stare", curenta.stare)
@@ -285,7 +309,7 @@ export async function aplicaVesteaTbi(admin: Admin, cerere: RandCerere, veste: V
  * alta suma) sa nu se repete: comerciantul le-a primit la vestea adevarata.
  */
 export async function reiaPlataAprobata(admin: Admin, cerere: RandCerere): Promise<RezultatVeste> {
-  return faEfectul(admin, cerere, "aprobata", "aprobata", "plateste", { orderId: String(cerere.id), statusId: 1, motiv: "" });
+  return faEfectul(admin, cerere, "aprobata", "aprobata", "plateste", { orderId: String(cerere.id), statusId: 1, mesaj: "", motiv: "", contract: "" });
 }
 
 async function spune(admin: Admin, cerere: RandCerere, titlu: string, mesaj: string, detalii: Record<string, unknown>) {
@@ -301,6 +325,19 @@ async function spune(admin: Admin, cerere: RandCerere, titlu: string, mesaj: str
     actiune: "tbi/notificare",
     detalii: { cerere: cerere.id, ...detalii },
   });
+}
+
+/** Ultima rambursare ceruta din Edinio pentru cererea asta (din istoric): suma ei, in lei. */
+function ultimaRambursareCeruta(istoric: Json): number | null {
+  const lista = Array.isArray(istoric) ? (istoric as Record<string, unknown>[]) : [];
+  for (let i = lista.length - 1; i >= 0; i--) {
+    const x = lista[i];
+    if (x && typeof x === "object" && x.fel === "rambursare" && x.rezultat === "inregistrata") {
+      const suma = Number(x.suma);
+      return Number.isFinite(suma) && suma > 0 ? suma : null;
+    }
+  }
+  return null;
 }
 
 async function faEfectul(
@@ -335,13 +372,13 @@ async function faEfectul(
     /*
      * ⚠ COMANDA ANULATA NU SE MARCHEAZA PLATITA. Banca a aprobat un credit pentru marfa pe care
      * magazinul n-o mai trimite; scrisa `paid`, comanda ar fi pornit facturarea automata si ar fi
-     * aparut ca vanzare. Comerciantul afla, iar contractul se anuleaza la tbi.
+     * aparut ca vanzare. Comerciantul afla, iar banii se intorc prin rambursare, din pagina comenzii.
      */
     if (o.status === "cancelled") {
       if (primaAprobare) {
         await spune(admin, cerere, `Finanțare aprobată pentru o comandă anulată (${nr})`,
-          `tbi bank a aprobat finanțarea pentru comanda ${nr}, care e anulată. Ia legătura cu tbi bank ca să anuleze `
-          + "contractul de credit al clientului. Comanda nu a fost marcată plătită.", { stare_comanda: o.status });
+          `tbi bank a aprobat finanțarea pentru comanda ${nr}, care e anulată. Comanda nu a fost marcată plătită. `
+          + "Din pagina comenzii poți cere la tbi bank rambursarea integrală, ca să se închidă creditul clientului.", { stare_comanda: o.status });
       }
       return { fel: "aplicata", stare, efect };
     }
@@ -349,7 +386,7 @@ async function faEfectul(
       if (primaAprobare) {
         await spune(admin, cerere, `Finanțare tbi aprobată, dar comanda ${nr} are altă plată`,
           `tbi bank a aprobat finanțarea pentru comanda ${nr}, dar metoda de plată a comenzii a fost schimbată între timp. `
-          + "Comanda nu a fost marcată plătită. Verifică cu clientul cum plătește și, dacă renunță la credit, anunță tbi bank.",
+          + "Comanda nu a fost marcată plătită. Verifică cu clientul cum plătește și, dacă renunță la credit, cere rambursarea din pagina comenzii.",
           { metoda: o.payment_method });
       }
       return { fel: "aplicata", stare, efect };
@@ -399,7 +436,68 @@ async function faEfectul(
     return { fel: "aplicata", stare, efect };
   }
 
+  if (efect === "rambursata") {
+    /*
+     * ⚠ CAT S-A INTORS se stie doar cand rambursarea a pornit din Edinio (suma sta in istoric). Una
+     * pornita din portalul tbi n-are suma in veste: comanda nu se atinge, comerciantul afla.
+     */
+    const suma = ultimaRambursareCeruta(cerere.istoric);
+    if (!cerere.order_id || suma === null) {
+      await spune(admin, cerere, `tbi bank a încheiat o rambursare pentru comanda ${nr}`,
+        `tbi bank a anunțat că rambursarea creditului pentru comanda ${nr} s-a încheiat. Suma nu ne-a fost transmisă, `
+        + "deci starea plății comenzii nu a fost schimbată: verifică suma în portalul tbi bank.", {});
+      return { fel: "aplicata", stare, efect };
+    }
+    const { data: o, error } = await admin
+      .from("orders").select("id, business_id, order_number, status, payment_status, total")
+      .eq("id", cerere.order_id).maybeSingle();
+    if (error) return { fel: "reincearca", mesaj: error.message };
+    if (!o) return { fel: "aplicata", stare, efect };
+    const v = await baniiSAuIntors(admin, o, {
+      intors: inBani(suma),
+      incasat: inBani(cerere.suma),
+      moneda: "RON",
+      referinta: veste.contract || cerere.contract || String(cerere.id),
+    }, { actiune: "tbi/notificare", furnizor: "portalul tbi bank" });
+    if (v.fel === "esec") return { fel: "reincearca", mesaj: v.mesaj };
+    return { fel: "aplicata", stare, efect };
+  }
+
   return { fel: "aplicata", stare, efect };
+}
+
+// ─── Interogarea starii (cronul) ─────────────────────────────────────────────
+
+/**
+ * Starea unei cereri deschise, intrebata la tbi (`GetApplicationStatus`), pentru cand vestea n-a
+ * ajuns. Se aplica pe ACELASI drum ca o veste, deci cu aceleasi garzi. Un text necunoscut sau o
+ * stare care repeta ce stim nu misca nimic.
+ */
+export async function interogheazaCerereaTbi(admin: Admin, cerere: RandCerere, raw: unknown): Promise<RezultatVeste | { fel: "sarita"; mesaj: string }> {
+  if (!cerere.tbi_order_id || !cerere.tbi_token) return { fel: "sarita", mesaj: "cererea n-are id-ul si jetonul tbi" };
+  const cfg = citesteConfigTbi(raw);
+  if (!cfg.reseller_code || !cfg.reseller_key) return { fel: "sarita", mesaj: "integrarea nu mai are datele de acces" };
+  const r = await stareaCererii({ ...cfg, sandbox: cerere.mediu === "test" }, Number(cerere.tbi_order_id), cerere.tbi_token);
+  /*
+   * ⚠ `interogata_la` se scrie si cand nu s-a schimbat nimic, dar NU in istoric: cronul trece la zece
+   * minute, iar o cerere deschisa zile intregi ar fi umplut istoricul cu acelasi „in analiza". Marcajul
+   * muta si `updated_at`, de care se uita cronul ca sa nu intrebe aceeasi cerere la fiecare trecere.
+   */
+  const marcheaza = () => admin.from("tbi_cereri").update({ interogata_la: new Date().toISOString() }).eq("id", cerere.id);
+  if (r.fel !== "ok") {
+    await marcheaza();
+    return { fel: "sarita", mesaj: r.mesaj };
+  }
+  const cod = codulDinTextTbi(r.stare);
+  const neschimbata = cod === null
+    || (() => { const t = treceLa(cerere.stare as StareTbi, { statusId: cod }); return t.stare === cerere.stare && t.efect === "nimic"; })();
+  if (neschimbata) {
+    await marcheaza();
+    return { fel: "sarita", mesaj: cod === null ? `stare necunoscuta: ${r.stare}` : "neschimbata" };
+  }
+  const aplicata = await aplicaVesteaTbi(admin, cerere, { orderId: String(cerere.id), statusId: cod, mesaj: r.stare, motiv: "", contract: "" }, "interogare");
+  await marcheaza();
+  return aplicata;
 }
 
 // ─── Anularea unei cereri deschise ───────────────────────────────────────────
@@ -417,28 +515,36 @@ export async function anuleazaCerereaTbi(admin: Admin, cerere: RandCerere, raw: 
   if (!STARI_DESCHISE.includes(cerere.stare as StareTbi)) {
     return { ok: false, mesaj: "Cererea nu mai poate fi anulată din Edinio: banca a hotărât deja." };
   }
-  const cfg = citesteConfigTbi(raw);
-  if (!cfg.store_id || !cfg.username || !cfg.password || !cfg.cheie_publica_tbi.trim()) {
-    return { ok: false, mesaj: "Integrarea tbi bank nu mai are datele de acces, deci cererea nu se poate anula de aici." };
+  const la = new Date().toISOString();
+
+  /*
+   * O cerere ramasa „creata" fara id-ul tbi n-a primit raspuns de la banca (procesul a cazut intre
+   * apel si scriere, sau apelul n-a plecat). Nu avem cu ce s-o anula la ei; se inchide la noi.
+   */
+  if (!cerere.tbi_order_id || !cerere.tbi_token) {
+    await admin.from("tbi_cereri")
+      .update({ stare: "anulata", anulare_ceruta_la: la, motiv: "Anulată de magazin", istoric: istoricCu(cerere.istoric, { la, fel: "anulare", rezultat: "locala" }) })
+      .eq("id", cerere.id).in("stare", [...STARI_DESCHISE]);
+    return { ok: true, mesaj: "Cererea nu ajunsese la tbi bank, deci a fost închisă doar în Edinio." };
   }
-  let cheie: CheieCitita;
-  try {
-    cheie = citesteCheiaPublicaTbi(cfg.cheie_publica_tbi);
-  } catch (e) {
-    return { ok: false, mesaj: (e as Error).message };
+
+  const cfg = citesteConfigTbi(raw);
+  if (!cfg.reseller_code || !cfg.reseller_key.trim() || !cfg.cheie_criptare.trim()) {
+    return { ok: false, mesaj: "Integrarea tbi bank nu mai are datele de acces, deci cererea nu se poate anula de aici." };
   }
   /* Mediul cererii, nu cel de acum: o cerere de test se anuleaza la serverul de test. */
   const cfgCerere = { ...cfg, sandbox: cerere.mediu === "test" };
 
-  const la = new Date().toISOString();
   const { error: eMarcaj } = await admin.from("tbi_cereri").update({ anulare_ceruta_la: la }).eq("id", cerere.id);
   if (eMarcaj) return { ok: false, mesaj: "Nu am putut pregăti anularea. Reîncearcă peste câteva momente." };
 
-  const r = await anuleazaCererea(cfgCerere, cheie, String(cerere.id));
+  const r = await anuleazaCererea(cfgCerere, Number(cerere.tbi_order_id), cerere.tbi_token);
   const { data: proaspata } = await admin.from("tbi_cereri").select("stare, istoric").eq("id", cerere.id).maybeSingle();
-  const istoric = istoricCu(proaspata?.istoric ?? cerere.istoric, { la, fel: "anulare", rezultat: r.fel, ...(r.fel !== "anulata" ? { mesaj: r.mesaj } : {}) });
+  const istoric = istoricCu(proaspata?.istoric ?? cerere.istoric, {
+    la, fel: "anulare", rezultat: r.fel === "facuta" ? "anulata" : r.fel, ...(r.fel !== "facuta" ? { mesaj: r.mesaj } : {}),
+  });
 
-  if (r.fel === "anulata") {
+  if (r.fel === "facuta") {
     await admin.from("tbi_cereri")
       .update({ stare: "anulata", motiv: "Anulată de magazin", istoric })
       .eq("id", cerere.id).in("stare", [...STARI_DESCHISE]);
@@ -452,7 +558,77 @@ export async function anuleazaCerereaTbi(admin: Admin, cerere: RandCerere, raw: 
     businessId: cerere.business_id,
     severity: r.fel === "refuz" ? "warning" : "error",
   });
+  if (r.fel === "refuz" && r.cod === 409) {
+    return { ok: false, mesaj: "tbi bank a aprobat deja creditul, deci nu se mai poate anula. Banii se întorc prin rambursare, după ce vine vestea aprobării." };
+  }
   return r.fel === "refuz"
     ? { ok: false, mesaj: r.mesaj }
     : { ok: false, mesaj: `${r.mesaj} Nu știm dacă anularea a ajuns la tbi bank; verifică în portalul lor.`, necunoscut: true };
+}
+
+// ─── Rambursarea unui credit aprobat ─────────────────────────────────────────
+
+export type RezultatRambursare = { ok: true; mesaj: string } | { ok: false; mesaj: string };
+
+/**
+ * Cere la tbi rambursarea unui credit aprobat (integrala sau partiala), din pagina comenzii.
+ *
+ * ⚠ Suma se scrie in istoric numai dupa ce tbi a INREGISTRAT cererea: de acolo o citeste vestea
+ * „rambursare terminata" (6), care nu poarta suma, ca sa stie cati bani s-au intors.
+ */
+export async function ramburseazaCerereaTbi(
+  admin: Admin,
+  cerere: RandCerere,
+  raw: unknown,
+  p: { tip: "integral" | "partial"; suma: number },
+): Promise<RezultatRambursare> {
+  if (cerere.stare !== "aprobata") return { ok: false, mesaj: "Se poate rambursa doar un credit aprobat de tbi bank." };
+  if (!cerere.tbi_order_id || !cerere.tbi_token) {
+    return { ok: false, mesaj: "Cererea nu are datele tbi necesare rambursării. Cere rambursarea din portalul tbi bank." };
+  }
+  const finantat = inBani(cerere.suma);
+  const suma = p.tip === "integral" ? finantat : inBani(p.suma);
+  if (!(suma > 0)) return { ok: false, mesaj: "Suma de rambursat trebuie să fie mai mare decât zero." };
+  if (suma > finantat) return { ok: false, mesaj: `Suma de rambursat nu poate trece de suma finanțată (${(finantat / 100).toFixed(2)} lei).` };
+  const tip = p.tip === "integral" || suma === finantat ? "integral" : "partial";
+
+  const cfg = citesteConfigTbi(raw);
+  if (!cfg.reseller_code || !cfg.reseller_key.trim() || !cfg.cheie_criptare.trim()) {
+    return { ok: false, mesaj: "Integrarea tbi bank nu mai are datele de acces, deci rambursarea nu se poate cere de aici." };
+  }
+  /*
+   * ⚠ Vestile despre rambursare vin la `refundLink`, cu un jeton NOU: pe cel al cererii nu-l mai avem
+   * in clar (in baza sta doar amprenta lui). Amprenta noua se ADAUGA in `jetoane_rambursare`, nu o
+   * inlocuieste pe a cererii: vestile despre credit vin mai departe la `statusURL`, cu jetonul vechi.
+   * Se scrie INAINTEA apelului, ca o veste rapida sa gaseasca deja cererea.
+   */
+  const jeton = randomBytes(32).toString("base64url");
+  const { data: inainte, error: eJ } = await admin.from("tbi_cereri").select("jetoane_rambursare").eq("id", cerere.id).maybeSingle();
+  if (eJ || !inainte) return { ok: false, mesaj: "Nu am putut pregăti rambursarea. Reîncearcă peste câteva momente." };
+  const { error: eScris } = await admin.from("tbi_cereri")
+    .update({ jetoane_rambursare: [...(inainte.jetoane_rambursare ?? []), hashJeton(jeton)].slice(-20) })
+    .eq("id", cerere.id);
+  if (eScris) return { ok: false, mesaj: "Nu am putut pregăti rambursarea. Reîncearcă peste câteva momente." };
+
+  const r = await ramburseaza({ ...cfg, sandbox: cerere.mediu === "test" }, Number(cerere.tbi_order_id), cerere.tbi_token, {
+    tip, suma: suma / 100, adresaVesti: adresaNotificarii(jeton),
+  });
+  const la = new Date().toISOString();
+  const { data: proaspata } = await admin.from("tbi_cereri").select("istoric").eq("id", cerere.id).maybeSingle();
+  const intrare = { la, fel: "rambursare", tip, suma: suma / 100, rezultat: r.fel === "facuta" ? "inregistrata" : r.fel, ...(r.fel !== "facuta" ? { mesaj: r.mesaj } : {}) };
+  await admin.from("tbi_cereri")
+    .update({ istoric: istoricCu(proaspata?.istoric ?? cerere.istoric, intrare) })
+    .eq("id", cerere.id);
+
+  if (r.fel === "facuta") return { ok: true, mesaj: `Rambursarea de ${(suma / 100).toFixed(2)} lei a fost înregistrată la tbi bank.` };
+  await logError({
+    action: "tbi/rambursare",
+    message: `${r.fel}: ${r.mesaj}`,
+    details: { cerere: cerere.id, orderId: cerere.order_id, status: r.status, tip, suma: suma / 100 },
+    businessId: cerere.business_id,
+    severity: r.fel === "refuz" ? "warning" : "error",
+  });
+  return r.fel === "refuz"
+    ? { ok: false, mesaj: r.mesaj }
+    : { ok: false, mesaj: `${r.mesaj} Nu știm dacă rambursarea a ajuns la tbi bank; verifică în portalul lor înainte să încerci din nou.` };
 }

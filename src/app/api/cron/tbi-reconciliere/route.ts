@@ -4,11 +4,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { proprietariiMagazinelor, semnaleazaExpedierea } from "@/lib/orders/semnalarea-ajunge-la-om";
 import { STARI_DESCHISE } from "@/lib/tbi/stari";
-import { anuleazaCerereaTbi, reiaPlataAprobata, type RandCerere } from "@/lib/tbi/server";
+import { anuleazaCerereaTbi, interogheazaCerereaTbi, reiaPlataAprobata, type RandCerere } from "@/lib/tbi/server";
 
 /**
- * Reconcilierea tbi. API-ul lor n-are nicio interogare de stare, deci aici nu se INTREABA banca
- * despre nimic: se pun in acord doua lucruri pe care le stim deja, in baza noastra.
+ * Reconcilierea tbi: trei treceri.
  *
  * ═══ 1. ⚠⚠ O COMANDA ANULATA NU LASA IN URMA O CERERE DE CREDIT DESCHISA ═══
  *
@@ -18,7 +17,7 @@ import { anuleazaCerereaTbi, reiaPlataAprobata, type RandCerere } from "@/lib/tb
  *
  * Drumurile de anulare sunt multe si se pot inmulti; o anulare legata de fiecare ar fi uitata la
  * primul drum nou. Trecerea asta le prinde pe toate: orice cerere deschisa a unei comenzi anulate
- * (sau sterse) se anuleaza la tbi („CanceledByCustomer", ingaduita inainte de aprobare).
+ * (sau sterse) se anuleaza la tbi (`loanCancellation`, ingaduita inainte de aprobare).
  *
  * ⚠ O SINGURA INCERCARE PE CERERE: `anuleazaCerereaTbi` scrie `anulare_ceruta_la`, iar trecerea
  * cauta numai cererile fara el. O anulare refuzata sau nelamurita se spune comerciantului, iar
@@ -30,6 +29,12 @@ import { anuleazaCerereaTbi, reiaPlataAprobata, type RandCerere } from "@/lib/tb
  * doua, ruta raspunde 503, dar documentatia lor nu spune daca tbi repeta vestile. Cererea ramane
  * „aprobata", comanda „neplatita", si n-ar mai trece nimeni pe acolo. Trecerea asta reia plata,
  * cu exact aceleasi garzi ca vestea (comanda anulata, alta metoda, alta suma: nu se atinge).
+ *
+ * ═══ 3. O VESTE PIERDUTA NU LASA O CERERE DESCHISA PENTRU TOTDEAUNA ═══
+ *
+ * API-ul vechi n-avea nicio interogare de stare; Fusion Pay are (`GetApplicationStatus`). Cererile
+ * trimise care n-au mai auzit nimic de o jumatate de ora se intreaba la tbi, iar raspunsul trece pe
+ * drumul vestii, cu aceleasi garzi. Asa o aprobare a carei veste s-a pierdut tot ajunge la comanda.
  */
 
 export const dynamic = "force-dynamic";
@@ -37,8 +42,18 @@ export const maxDuration = 60;
 
 const BUGET_MS = maxDuration * 1000 - 15_000;
 const MAX_ANULARI = 100;
+const MAX_INTEROGARI = 60;
 /** Cat de departe in urma se cauta aprobarile neincasate. Peste o saptamana, e treaba omului. */
 const ZILE_APROBARI = 7;
+/**
+ * Cat asteapta o cerere deschisa vestea, inainte sa fie intrebata (din nou): o jumatate de ora in
+ * prima zi, cand se hotaraste de obicei, apoi trei ore. Se masoara de la ultima atingere a randului
+ * (`updated_at`), pe care o muta si intrebarea insasi (`interogata_la`).
+ */
+const LINISTE_PRIMA_ZI_MS = 30 * 60_000;
+const LINISTE_APOI_MS = 3 * 3600_000;
+/** Peste atat, o cerere deschisa nu se mai intreaba: tbi o inchide oricum. */
+const ZILE_INTEROGARI = 14;
 
 type CuComanda = RandCerere & {
   orders: { status: string | null; payment_status: string | null; payment_method: string | null } | null;
@@ -78,29 +93,46 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
   }
 
-  const deAnulat = ((deschise.data ?? []) as CuComanda[])
+  const toateDeschise = (deschise.data ?? []) as CuComanda[];
+  const deAnulat = toateDeschise
     .filter((c) => !c.order_id || c.orders?.status === "cancelled")
     .slice(0, MAX_ANULARI);
   const deIncasat = ((aprobate.data ?? []) as CuComanda[])
     .filter((c) => !!c.orders && c.orders.payment_status !== "paid" && c.orders.status !== "cancelled" && c.orders.payment_method === "tbi");
+  const anulateAcum = new Set(deAnulat.map((c) => c.id));
+  const deIntrebat = toateDeschise
+    .filter((c) => {
+      if (anulateAcum.has(c.id) || !c.tbi_order_id || !c.tbi_token) return false;
+      const varsta = Date.now() - Date.parse(c.created_at);
+      if (varsta > ZILE_INTEROGARI * 86_400_000) return false;
+      return Date.now() - Date.parse(c.updated_at) > (varsta < 86_400_000 ? LINISTE_PRIMA_ZI_MS : LINISTE_APOI_MS);
+    })
+    .slice(0, MAX_INTEROGARI);
 
   let anulate = 0;
   let nereusite = 0;
   let incasate = 0;
+  let intrebate = 0;
   let sarite = 0;
 
+  const configuri = new Map<string, unknown>();
+  const configul = async (businessId: string): Promise<{ ok: true; raw: unknown } | { ok: false }> => {
+    if (!configuri.has(businessId)) {
+      const { data: st, error: eS } = await admin
+        .from("store_settings").select("tbi_config").eq("business_id", businessId).maybeSingle();
+      if (eS) return { ok: false };
+      configuri.set(businessId, st?.tbi_config ?? null);
+    }
+    return { ok: true, raw: configuri.get(businessId) };
+  };
+
   if (deAnulat.length > 0) {
-    const configuri = new Map<string, unknown>();
     const proprietari = await proprietariiMagazinelor(admin, deAnulat.map((c) => c.business_id));
     for (const c of deAnulat) {
       if (Date.now() > termen) { sarite++; continue; }
-      if (!configuri.has(c.business_id)) {
-        const { data: st, error: eS } = await admin
-          .from("store_settings").select("tbi_config").eq("business_id", c.business_id).maybeSingle();
-        if (eS) { sarite++; continue; }
-        configuri.set(c.business_id, st?.tbi_config ?? null);
-      }
-      const r = await anuleazaCerereaTbi(admin, c, configuri.get(c.business_id));
+      const cfg = await configul(c.business_id);
+      if (!cfg.ok) { sarite++; continue; }
+      const r = await anuleazaCerereaTbi(admin, c, cfg.raw);
       if (r.ok) { anulate++; continue; }
       nereusite++;
       await semnaleazaExpedierea(admin, {
@@ -125,10 +157,19 @@ export async function GET(req: NextRequest) {
     else sarite++;
   }
 
+  for (const c of deIntrebat) {
+    if (Date.now() > termen) { sarite++; continue; }
+    const cfg = await configul(c.business_id);
+    if (!cfg.ok) { sarite++; continue; }
+    const r = await interogheazaCerereaTbi(admin, c, cfg.raw);
+    if (r.fel === "aplicata") intrebate++;
+    else sarite++;
+  }
+
   if (sarite > 0) console.log(`[tbi-reconciliere] ${sarite} cereri raman pentru rularea urmatoare`);
   return NextResponse.json({
     ok: true,
-    cercetate: (deschise.data?.length ?? 0) + (aprobate.data?.length ?? 0),
-    anulate, nereusite, incasate, sarite,
+    cercetate: toateDeschise.length + (aprobate.data?.length ?? 0),
+    anulate, nereusite, incasate, intrebate, sarite,
   });
 }

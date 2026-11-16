@@ -1,24 +1,30 @@
 import type { TbiConfig } from "./config";
 
 /**
- * Cererea de finantare trimisa la tbi („Finalize"), construita din comanda. Modul PUR.
+ * Cererea de finantare trimisa la tbi Fusion Pay (`RegisterApplication`, campul criptat `data`),
+ * construita din comanda. Modul PUR.
  *
- * ═══ FORMA LOR (documentatia + „4. Send application Code Example.php" + „7. Request example") ═══
+ * ═══ FORMA LOR (documentatia „RO Fusion Pay", „Encrypted JSON Parameters") ═══
  *
- *   store_id, order_id, back_ref, order_total, username, password,
- *   customer { fname, lname, cnp, email, phone, billing_*, shipping_*, promo },
- *   items [ { name, qty, price, category, sku, ImageLink } ]
+ *   orderid, firstname, lastname, email, phone,
+ *   items [ { name, description, qty, price, sku, category, imagelink } ],
+ *   statusURL, successRedirectURL, failRedirectURL
  *
- * Ordinea cheilor e chiar a exemplelor lor. Campurile scrise cu ROSU in documentatie (deci
- * obligatorii) sunt `order_total`, `promo` si tot ce e in `items`; restul se trimite oricum,
- * fiindca il avem si fiindca pagina lor de cerere il precompleteaza.
+ * Obligatorii dupa documentatie: `orderid`, `items`, iar in fiecare articol `name`, `qty`, `price`,
+ * `sku`, `category`, `imagelink`. Tipurile din tabel: `qty` si `category` numere intregi, `price`
+ * numar cu zecimale (exemplele lor le scriu ca text; serverul de test le primeste pe amandoua).
+ *
+ * ⚠ Serverul de test e mai ingaduitor decat documentatia (masurat 16.11.2026): a primit si un
+ * `orderid` gol, si un articol fara `sku`, cu avertismente PHP in raspuns. Nu ne bizuim pe asta:
+ * pleaca mereu toate campurile.
  *
  * ═══ ⚠ ARTICOLELE ADUNA EXACT TOTALUL ═══
  *
- * Banca finanteaza `order_total`. Daca articolele ar aduna altceva (transportul lipsa, o reducere
- * scazuta doar din total, TVA adaugat peste preturi fara TVA), clientul ar vedea in cererea lui o
- * lista de produse care nu da suma pe care o semneaza, iar tbi ar putea s-o refuze. Modulul lor de
- * WooCommerce trimite pretul DUPA reducere (`line_total / qty`), deci si la ei lista urmeaza totalul.
+ * tbi isi socoteste suma din articole („Total basket amount (74200) is below or above financing
+ * limits", eroarea 210), nu dintr-un camp de total. Daca articolele ar aduna altceva decat comanda
+ * (transportul lipsa, o reducere scazuta doar din total, TVA adaugat peste preturi fara TVA), banca
+ * ar finanta alta suma decat cea de incasat. Modulul lor de WooCommerce trimite pretul DUPA reducere
+ * (`line_total / qty`), deci si la ei lista urmeaza totalul.
  *
  * Aici: produsele si transportul, apoi diferenta fata de total se imparte proportional pe linii, in
  * bani, fiecare linie ramanand un multiplu al cantitatii ei (ca `qty x price` sa dea exact linia).
@@ -35,42 +41,29 @@ export type ComandaPentruTbi = {
   customer_name: string;
   customer_email: string | null;
   customer_phone: string;
-  shipping_address: unknown;
 };
 
 export type ProdusPentruTbi = { sku?: string | null; imagine?: string | null };
 
 export type ArticolTbi = {
   name: string;
-  qty: string;
+  qty: number;
   price: number;
-  category: string;
   sku: string;
-  ImageLink: string;
+  category: number;
+  imagelink: string;
 };
 
 export type CerereTbi = {
-  store_id: string;
-  order_id: string;
-  back_ref: string;
-  order_total: string;
-  username: string;
-  password: string;
-  customer: {
-    fname: string;
-    lname: string;
-    cnp: string;
-    email: string;
-    phone: string;
-    billing_address: string;
-    billing_city: string;
-    billing_county: string;
-    shipping_address: string;
-    shipping_city: string;
-    shipping_county: string;
-    promo: 0 | 1;
-  };
+  orderid: string;
+  firstname: string;
+  lastname: string;
+  email: string;
+  phone: string;
   items: ArticolTbi[];
+  statusURL: string;
+  successRedirectURL: string;
+  failRedirectURL: string;
 };
 
 type Linie = { nume: string; cantitate: number; bani: number; sku: string; imagine: string };
@@ -81,11 +74,6 @@ const text = (v: unknown, max = 200) => (typeof v === "string" ? v.trim().slice(
 export function inBani(lei: unknown): number {
   const n = Number(lei);
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
-}
-
-/** Bani -> text cu doua zecimale, cum arata `order_total` in exemplele lor („1234.00"). */
-export function leiText(bani: number): string {
-  return (bani / 100).toFixed(2);
 }
 
 /**
@@ -100,8 +88,8 @@ export function imparteNumele(complet: string): { fname: string; lname: string }
 }
 
 /**
- * Telefonul in forma romaneasca pe care o asteapta exemplele lor („0752000000"). `+40`, `0040` si
- * `40` din fata se scot; un numar strain ramane cum l-a scris omul (fara spatii).
+ * Telefonul in forma romaneasca din exemplele lor („0777777777"). `+40`, `0040` si `40` din fata
+ * se scot; un numar strain ramane cum l-a scris omul (fara spatii).
  */
 export function telefonRomanesc(t: string): string {
   const curat = String(t ?? "").replace(/[^\d+]/g, "");
@@ -176,25 +164,21 @@ export function liniileComenzii(c: ComandaPentruTbi, produse: Map<string, Produs
   return linii;
 }
 
-function adresa(raw: unknown): { address: string; city: string; county: string } {
-  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return { address: text(a.address), city: text(a.city, 100), county: text(a.county, 100) };
-}
-
 export function construiesteCererea(p: {
   comanda: ComandaPentruTbi;
-  cfg: Pick<TbiConfig, "store_id" | "username" | "password" | "promo" | "categorie">;
-  /** Id-ul cererii la noi; pleaca drept `order_id`. Numar intreg, cum cere documentatia. */
+  cfg: Pick<TbiConfig, "categorie">;
+  /** Id-ul cererii la noi; pleaca drept `orderid` si se intoarce ca `OrderId` in vesti. */
   idCerere: number | string;
-  /** `back_ref`: adresa la care tbi trimite fiecare schimbare de stare. */
-  adresaInapoi: string;
+  /** `statusURL`: adresa la care tbi trimite fiecare schimbare de stare a cererii. */
+  adresaVesti: string;
+  /** Unde se intoarce clientul dupa pagina tbi: cererea trimisa, respectiv abandonata. */
+  intoarcere: { reusita: string; esuata: string };
   produse: Map<string, ProdusPentruTbi>;
 }): CerereTbi {
   const { comanda, cfg } = p;
   const total = inBani(comanda.total);
   const nume = imparteNumele(comanda.customer_name);
-  const livrare = adresa(comanda.shipping_address);
-  const categorie = cfg.categorie || "1";
+  const categorie = Number(cfg.categorie) || 1;
 
   /*
    * O reducere (cupon) priveste MARFA, nu transportul: cand totalul e sub suma liniilor, transportul
@@ -210,41 +194,27 @@ export function construiesteCererea(p: {
     : potrivesteLiniile(toate, total);
 
   return {
-    store_id: cfg.store_id,
-    order_id: String(p.idCerere),
-    back_ref: p.adresaInapoi,
-    order_total: leiText(total),
-    username: cfg.username,
-    password: cfg.password,
-    customer: {
-      fname: nume.fname,
-      lname: nume.lname,
-      cnp: "",
-      email: text(comanda.customer_email, 120),
-      phone: telefonRomanesc(comanda.customer_phone),
-      /* Plata in rate e numai pentru persoane fizice (formularul o ascunde la comanda pe firma),
-         deci facturarea e chiar adresa omului. */
-      billing_address: livrare.address,
-      billing_city: livrare.city,
-      billing_county: livrare.county,
-      shipping_address: livrare.address,
-      shipping_city: livrare.city,
-      shipping_county: livrare.county,
-      promo: cfg.promo ? 1 : 0,
-    },
+    orderid: String(p.idCerere),
+    firstname: nume.fname,
+    lastname: nume.lname,
+    email: text(comanda.customer_email, 120),
+    phone: telefonRomanesc(comanda.customer_phone),
     items: linii.map((l) => ({
       name: l.nume,
-      qty: String(l.cantitate),
+      qty: l.cantitate,
       /* Multiplu exact de cantitate (vezi `potrivesteLiniile`), deci impartirea nu lasa rest. */
       price: Math.round(l.bani / l.cantitate) / 100,
-      category: categorie,
       sku: l.sku,
-      ImageLink: l.imagine,
+      category: categorie,
+      imagelink: l.imagine,
     })),
+    statusURL: p.adresaVesti,
+    successRedirectURL: p.intoarcere.reusita,
+    failRedirectURL: p.intoarcere.esuata,
   };
 }
 
-/** Suma articolelor, in bani: trebuie sa fie chiar `order_total`. Folosita de probe si de jurnal. */
+/** Suma articolelor, in bani: trebuie sa fie chiar totalul comenzii. Folosita de probe si de jurnal. */
 export function sumaArticolelor(c: CerereTbi): number {
-  return c.items.reduce((s, a) => s + Math.round(a.price * 100) * Number(a.qty), 0);
+  return c.items.reduce((s, a) => s + Math.round(a.price * 100) * a.qty, 0);
 }

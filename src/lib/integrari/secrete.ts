@@ -128,10 +128,10 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      marfa. Acelasi caz cu `smartship_config.iban`. */
   shipo_config: ["api_key"],
   smartbill_config: ["token"],
-  /* tbi bank: parola merge CRIPTATA in fiecare cerere, iar cheia privata descifreaza vestile bancii.
-     `username`, `store_id` si cheia PUBLICA tbi nu sunt secrete: omul trebuie sa le poata reciti.
-     ⚠ Numele sunt IDENTICE in `TbiConfig` (lib/tbi/config.ts) si in `privat.campuri_secrete`. */
-  tbi_config: ["password", "cheie_privata"],
+  /* tbi bank (Fusion Pay): cheia de reseller valideaza codul in fiecare cerere, iar cheia de criptare
+     cripteaza cererile si descifreaza vestile bancii. `reseller_code` nu e secret: omul trebuie sa-l
+     poata reciti. ⚠ Numele sunt IDENTICE in `TbiConfig` (lib/tbi/config.ts) si in `privat.campuri_secrete`. */
+  tbi_config: ["reseller_key", "cheie_criptare"],
   /* SmartShip: o singura credentiala, trimisa ca `X-API-KEY` la fiecare cerere.
      ⚠ `iban` NU intra aici, desi arata a date bancare: e IBAN-ul PROPRIU al
      comerciantului, pe care SmartShip vireaza rambursul, si el trebuie sa-l poata

@@ -1,5 +1,5 @@
 /**
- * tbi bank: plata in rate (credit de consum acordat la cumparare), prin API-ul eCommerce al tbi.
+ * tbi bank: plata in rate (credit de consum acordat la cumparare), prin API-ul Fusion Pay al tbi.
  *
  * Fisa completa, cu tot ce s-a masurat pe fir si ce ramane ipoteza: `docs/plati/TBI.md`.
  *
@@ -8,46 +8,35 @@
  *
  * ═══ CE PRIMESTE COMERCIANTUL DE LA TBI ═══
  *
- * Echipa lor de integrare trimite, pe email, trei credentiale si doua perechi de chei RSA:
+ * Un email cu trei valori (VetDepo, 16.11.2026) si linkul catre documentatia „RO Fusion Pay":
  *
- *   store_id / providerCode  codul magazinului la ei (ex. `magazin_ro`); acelasi in ambele locuri;
- *   username, password       se trimit CRIPTAT, in corpul fiecarei cereri;
- *   Chei_SFTL_<cod>          cheia LOR: cu `pub.pem` de acolo criptam cererile catre tbi;
- *   Chei_Comerciant_<cod>    cheia MAGAZINULUI: cu `priv_key.pem` de acolo descifram vestile lor.
+ *   reseller_code    identifica magazinul (ex. `magazin_ro`); pleaca in clar in fiecare cerere;
+ *   reseller_key     il valideaza; pleaca tot in clar, langa cod, deci il tinem ca pe o parola;
+ *   encryption key   cheia AES cu care se cripteaza cererile si se descifreaza vestile (`cripto.ts`).
  *
- * Masurat pe pachetul lor de test (DOCUMENTATIE-TEST-API.zip, 15.11.2026): ambele arhive contin
- * `priv_key.pem`, `pub.pem`, `pub.crt` si un `.pfx`, adica le trimit si cheia privata SFTL, de care
- * noi nu avem nevoie si pe care n-o cerem. Confuzia probabila e intre cele doua arhive, de aceea
- * formularul si salvarea le deosebesc anume (vezi `lib/tbi/cripto.ts`).
+ * ⚠ Pana pe 16.11.2026 integrarea vorbea cu API-ul VECHI, „eCommerce" (store_id, utilizator, parola
+ * si doua perechi de chei RSA). tbi da comerciantilor noi numai Fusion Pay, iar niciun magazin nu
+ * apucase sa-l configureze pe cel vechi, deci a fost inlocuit cu totul, nu tinut alaturi.
  */
 
 export type TbiConfig = {
   enabled: boolean;
   /** Mediul de test (UAT) al tbi, nu cel real. */
   sandbox: boolean;
-  /** Codul magazinului la tbi: merge si ca `store_id` in cerere, si ca `providerCode` in clar. */
-  store_id: string;
-  username: string;
-  /** SECRET. */
-  password: string;
-  /** Cheia publica tbi (`pub.pem` din arhiva `Chei_SFTL_<cod>`). Nu e secreta. */
-  cheie_publica_tbi: string;
-  /** SECRET. Cheia privata a magazinului (`priv_key.pem` din arhiva `Chei_Comerciant_<cod>`). */
-  cheie_privata: string;
+  /** Codul magazinului la tbi. Nu e secret: omul trebuie sa-l poata reciti in panou. */
+  reseller_code: string;
+  /** SECRET. Valideaza codul; pleaca langa el in fiecare cerere. */
+  reseller_key: string;
+  /** SECRET. Cheia AES a magazinului: cripteaza cererile si descifreaza vestile tbi. */
+  cheie_criptare: string;
   /** Cel mai mic total de comanda pentru care se ofera plata in rate, in lei. */
   suma_minima: number;
   /** Cel mai mare total de comanda pentru care se ofera plata in rate, in lei. */
   suma_maxima: number;
   /**
-   * `promo: 1` in cerere: produsul de finantare e o campanie (de exemplu rate fara dobanda).
-   * Se aprinde DOAR cand tbi i-a confirmat comerciantului campania; altfel cererile pleaca
-   * ca produs standard, cum trimit si exemplele lor.
-   */
-  promo: boolean;
-  /**
-   * `category` din fiecare articol. Documentatia il cere „numar intreg" si nu publica nicio
-   * lista; exemplele lor trimit 2 si 8, iar modulul lor de WooCommerce trimite id-ul categoriei
-   * din magazin. Ramane „1" pana cand tbi ii spune comerciantului altceva.
+   * `category` din fiecare articol: „Product category ID", numar intreg. Documentatia nu publica
+   * nicio lista (exemplele lor trimit 7 si 9, id-urile din magazinul lor de proba). Ramane „1" pana
+   * cand tbi ii spune comerciantului altceva.
    */
   categorie: string;
   /**
@@ -78,57 +67,44 @@ export function esteFormaBannerTbi(v: unknown): v is FormaBannerTbi {
 }
 
 /**
- * Limitele implicite: 300 - 30.000 lei, cele publicate de tbi pentru cumparaturile online
- * (tbibank.ro, „Online Purchases", citit 15.11.2026: „300 to 30,000 lei", 6 - 60 de luni).
- * Contractul fiecarui comerciant le poate schimba, deci sunt editabile.
+ * Limitele implicite: 100 - 65.000 lei, cele din documentatia Fusion Pay („Loan amounts range from
+ * 100 to 65 000 LEI"). Fiecare comerciant are insa produsele lui de finantare, cu limitele lor: panoul
+ * le citeste de la tbi (`GetCalculations`) si le arata langa campuri.
  */
-export const TBI_SUMA_MINIMA_IMPLICITA = 300;
-export const TBI_SUMA_MAXIMA_IMPLICITA = 30000;
+export const TBI_SUMA_MINIMA_IMPLICITA = 100;
+export const TBI_SUMA_MAXIMA_IMPLICITA = 65000;
 export const TBI_CATEGORIE_IMPLICITA = "1";
 
 export const TBI_CONFIG_IMPLICITA: TbiConfig = {
   enabled: false,
   sandbox: true,
-  store_id: "",
-  username: "",
-  password: "",
-  cheie_publica_tbi: "",
-  cheie_privata: "",
+  reseller_code: "",
+  reseller_key: "",
+  cheie_criptare: "",
   suma_minima: TBI_SUMA_MINIMA_IMPLICITA,
   suma_maxima: TBI_SUMA_MAXIMA_IMPLICITA,
-  promo: false,
   categorie: TBI_CATEGORIE_IMPLICITA,
   banner_produs: TBI_BANNER_IMPLICIT,
 };
 
 /**
- * Adresele, din documentatia lor (eCommerce-API-Documentation.pdf, 06.2024) si din foaia
- * „Credentials + Endpoints UAT" din pachetul de test.
+ * Adresele Fusion Pay, din documentatie („API documentation - RO Fusion Pay", citita 16.11.2026).
  *
- * ⚠ Productia are `/Api` in cale, testul NU. Nu e o greseala de copiere: asa scrie in
- * ambele documente, de fiecare data.
- *
- * Masurat 15.11.2026: productia raspunde public (405 la GET, adica exista si vrea POST), cu
- * certificat DigiCert valid; serverul de test nu raspunde deloc din afara (conexiunea expira),
- * deci e deschis doar adreselor aprobate de tbi. Vezi `TBI_PROXY_URL` in `lib/tbi/client.ts`.
+ * Masurat 16.11.2026: AMBELE raspund public. Testul (`ro.tbi-uat.online`) intoarce produsele de
+ * finantare pentru credentialele de test publicate in documentatie, deci tot drumul se poate proba
+ * de oriunde, spre deosebire de API-ul vechi, al carui server de test primea doar IP-uri aprobate.
  */
 export const TBI_ADRESE = {
-  live: {
-    finalizare: "https://ecommerce.tbibank.ro/Api/LoanApplication/Finalize",
-    anulare: "https://ecommerce.tbibank.ro/Api/LoanApplication/CanceledByCustomer",
-  },
-  test: {
-    finalizare: "https://vmrouatftos01.westeurope.cloudapp.azure.com/LoanApplication/Finalize",
-    anulare: "https://vmrouatftos01.westeurope.cloudapp.azure.com/LoanApplication/CanceledByCustomer",
-  },
+  live: "https://ro.tbibank.support/api",
+  test: "https://ro.tbi-uat.online/api",
 } as const;
 
-export function adreseleTbi(sandbox: boolean) {
+export function adresaApiTbi(sandbox: boolean): string {
   return sandbox ? TBI_ADRESE.test : TBI_ADRESE.live;
 }
 
-/** `store_id`: litere, cifre, `_`, `-`, `.`. Asa arata toate codurile lor (`tbitestapi_ro`). */
-export const FORMA_COD_MAGAZIN = /^[A-Za-z0-9_.-]{2,64}$/;
+/** `reseller_code`: litere, cifre, `_`, `-`, `.`. Asa arata codurile lor (`TBI_test`, `magazin_ro`). */
+export const FORMA_COD_RESELLER = /^[A-Za-z0-9_.-]{2,64}$/;
 
 /**
  * ⚠ Lipsa NU e zero. `Number("")` da 0, iar o configurare fara `suma_minima` (orice magazin salvat
@@ -147,6 +123,9 @@ function sir(v: unknown): string {
 /**
  * Configuratia citita din baza, adusa la o forma sigura. Orice camp lipsa sau stricat ia
  * implicitul; limitele se reaseaza ca `min <= max` sa fie mereu adevarat.
+ *
+ * ⚠ O configurare a API-ului VECHI (store_id, username, cheile RSA) se citeste ca neconfigurata:
+ * campurile ei nu mai inseamna nimic, iar `tbiGata` o vede incompleta.
  */
 export function citesteConfigTbi(raw: unknown): TbiConfig {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -158,14 +137,11 @@ export function citesteConfigTbi(raw: unknown): TbiConfig {
   return {
     enabled: o.enabled === true,
     sandbox: o.sandbox !== false,
-    store_id: sir(o.store_id).trim(),
-    username: sir(o.username).trim(),
-    password: sir(o.password),
-    cheie_publica_tbi: sir(o.cheie_publica_tbi),
-    cheie_privata: sir(o.cheie_privata),
+    reseller_code: sir(o.reseller_code).trim(),
+    reseller_key: sir(o.reseller_key),
+    cheie_criptare: sir(o.cheie_criptare),
     suma_minima: min,
     suma_maxima: max,
-    promo: o.promo === true,
     categorie: /^\d{1,9}$/.test(categorie) ? categorie : TBI_CATEGORIE_IMPLICITA,
     /* Lipsa sau necunoscuta = randul discret: numai „ascuns" ales anume il scoate. */
     banner_produs: esteFormaBannerTbi(o.banner_produs) ? o.banner_produs : TBI_BANNER_IMPLICIT,
@@ -174,7 +150,7 @@ export function citesteConfigTbi(raw: unknown): TbiConfig {
 
 /**
  * Gata de incasat: pornit si cu tot ce trebuie ca o cerere sa plece SI ca vestea sa poata fi
- * descifrata. Fara cheia privata, banca ar aproba, iar noi n-am afla niciodata.
+ * descifrata. Fara cheia de criptare, banca n-ar putea citi cererea, iar noi vestile ei.
  *
  * ⚠ Pe clientul comerciantului secretele vin ca `enc.v1.…` (sir NEGOL), deci raspunsul de aici
  * ramane corect si pentru citirile din panou. Vezi `lib/integrari/secrete.ts`.
@@ -182,10 +158,7 @@ export function citesteConfigTbi(raw: unknown): TbiConfig {
 export function tbiGata(raw: unknown): boolean {
   if (!raw || typeof raw !== "object") return false;
   const c = citesteConfigTbi(raw);
-  return !!(
-    c.enabled && c.store_id && c.username && c.password
-    && c.cheie_publica_tbi.trim() && c.cheie_privata.trim()
-  );
+  return !!(c.enabled && c.reseller_code && c.reseller_key.trim() && c.cheie_criptare.trim());
 }
 
 /** Limitele, pentru vitrina. Nimic secret: doua numere. */
@@ -246,4 +219,30 @@ export function refuzulSumeiTbi(metoda: string | null | undefined, raw: unknown,
   if (!limite) return "Plata in rate prin tbi bank nu mai este disponibila la acest magazin. Reincarca pagina si alege alta metoda.";
   if (!sumaInLimite(limite, total)) return `${mesajLimiteTbi(limite)} Alege alta metoda de plata.`;
   return null;
+}
+
+/**
+ * Un produs de finantare al magazinului, cum il intoarce `GetCalculations`. Pentru panou: omul vede
+ * ce i-a pus tbi in contract (perioade, dobanda, sume), fara sa intre in portalul lor.
+ */
+export type ProdusFinantareTbi = {
+  id: number;
+  nume: string;
+  luni: number;
+  /** Dobanda (`nir`), in procente pe an. 0 la BNPL si la campaniile fara dobanda. */
+  dobanda: number;
+  /** Comisionul de analiza, in lei. */
+  comision: number;
+  sumaMin: number;
+  sumaMax: number;
+};
+
+/** Intervalul acoperit de produsele de finantare: cea mai mica suma minima, cea mai mare maxima. */
+export function intervalulProduselor(produse: ProdusFinantareTbi[]): LimiteTbi | null {
+  const bune = produse.filter((p) => p.sumaMax > 0 && p.sumaMin <= p.sumaMax);
+  if (bune.length === 0) return null;
+  return {
+    min: Math.min(...bune.map((p) => p.sumaMin)),
+    max: Math.max(...bune.map((p) => p.sumaMax)),
+  };
 }

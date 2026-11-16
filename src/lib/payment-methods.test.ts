@@ -180,11 +180,14 @@ test("procesatorul gata se decide dupa aceleasi campuri peste tot", () => {
   assert.equal(processorReadiness({ ipay_config: { enabled: false, username: "u", password: "p" } }).ipay, false);
   assert.equal(processorReadiness({ klarna_config: { enabled: true, username: "u", password: "p" } }).klarna, true);
   assert.equal(processorReadiness({ revolut_config: { enabled: true, secret_key: "sk" } }).revolut, true);
-  /* tbi: fara cheia privata o aprobare n-ar ajunge niciodata la comanda, deci nu e gata. */
-  const TBI = { enabled: true, store_id: "magazin_ro", username: "u", password: "p", cheie_publica_tbi: "-----BEGIN PUBLIC KEY-----", cheie_privata: "-----BEGIN PRIVATE KEY-----" };
+  /* tbi (Fusion Pay): fara cheia de criptare, nici cererea nu pleaca, nici vestea aprobarii nu se poate citi. */
+  const TBI = { enabled: true, reseller_code: "magazin_ro", reseller_key: "cheie", cheie_criptare: "secret" };
   assert.equal(processorReadiness({ tbi_config: TBI }).tbi, true);
-  assert.equal(processorReadiness({ tbi_config: { ...TBI, cheie_privata: "" } }).tbi, false);
+  assert.equal(processorReadiness({ tbi_config: { ...TBI, cheie_criptare: "" } }).tbi, false);
+  assert.equal(processorReadiness({ tbi_config: { ...TBI, reseller_key: "" } }).tbi, false);
   assert.equal(processorReadiness({ tbi_config: { ...TBI, enabled: false } }).tbi, false);
+  /* O configurare a API-ului vechi nu mai inseamna „gata”. */
+  assert.equal(processorReadiness({ tbi_config: { enabled: true, store_id: "magazin_ro", username: "u", password: "p", cheie_publica_tbi: "x", cheie_privata: "y" } }).tbi, false);
 });
 
 test("procesatorul gata dar netrecut in lista ramane ACCEPTAT", () => {

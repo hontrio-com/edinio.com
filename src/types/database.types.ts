@@ -6806,9 +6806,12 @@ export type Database = {
           adresa_cerere: string | null
           anulare_ceruta_la: string | null
           business_id: string
+          contract: string | null
           created_at: string
           id: number
+          interogata_la: string | null
           istoric: Json
+          jetoane_rambursare: string[]
           jeton_hash: string
           mediu: string
           motiv: string | null
@@ -6816,6 +6819,8 @@ export type Database = {
           order_number: string
           stare: string
           suma: number
+          tbi_order_id: number | null
+          tbi_token: string | null
           ultima_veste_la: string | null
           updated_at: string
         }
@@ -6823,9 +6828,12 @@ export type Database = {
           adresa_cerere?: string | null
           anulare_ceruta_la?: string | null
           business_id: string
+          contract?: string | null
           created_at?: string
           id?: never
+          interogata_la?: string | null
           istoric?: Json
+          jetoane_rambursare?: string[]
           jeton_hash: string
           mediu: string
           motiv?: string | null
@@ -6833,6 +6841,8 @@ export type Database = {
           order_number: string
           stare?: string
           suma: number
+          tbi_order_id?: number | null
+          tbi_token?: string | null
           ultima_veste_la?: string | null
           updated_at?: string
         }
@@ -6840,9 +6850,12 @@ export type Database = {
           adresa_cerere?: string | null
           anulare_ceruta_la?: string | null
           business_id?: string
+          contract?: string | null
           created_at?: string
           id?: never
+          interogata_la?: string | null
           istoric?: Json
+          jetoane_rambursare?: string[]
           jeton_hash?: string
           mediu?: string
           motiv?: string | null
@@ -6850,6 +6863,8 @@ export type Database = {
           order_number?: string
           stare?: string
           suma?: number
+          tbi_order_id?: number | null
+          tbi_token?: string | null
           ultima_veste_la?: string | null
           updated_at?: string
         }

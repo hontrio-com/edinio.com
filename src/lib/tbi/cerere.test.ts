@@ -5,7 +5,8 @@ import {
   type ComandaPentruTbi, type ProdusPentruTbi,
 } from "./cerere";
 
-const CFG = { store_id: "magazin_ro", username: "user", password: "Parola123", promo: false, categorie: "1" };
+const CFG = { categorie: "1" };
+const INTOARCERE = { reusita: "https://www.edinio.com/magazin/confirm?orderId=x", esuata: "https://www.edinio.com/magazin/confirm?status=esuat&orderId=x" };
 
 function comanda(p: Partial<ComandaPentruTbi> = {}): ComandaPentruTbi {
   return {
@@ -17,40 +18,38 @@ function comanda(p: Partial<ComandaPentruTbi> = {}): ComandaPentruTbi {
     customer_name: "Ion Popescu",
     customer_email: "ion@example.com",
     customer_phone: "+40 752 000 000",
-    shipping_address: { address: "Str. Exemplu 1", city: "Sector 3", county: "Bucuresti" },
     ...p,
   };
 }
 
 const cerere = (c: ComandaPentruTbi, produse = new Map<string, ProdusPentruTbi>()) =>
-  construiesteCererea({ comanda: c, cfg: CFG, idCerere: 700000001, adresaInapoi: "https://www.edinio.com/api/tbi/notificare/x", produse });
-
-test("✅ forma lor: cheile in ordinea exemplelor, `order_id` text, totalul cu doua zecimale", () => {
-  const r = cerere(comanda());
-  assert.deepEqual(Object.keys(r), ["store_id", "order_id", "back_ref", "order_total", "username", "password", "customer", "items"]);
-  assert.deepEqual(Object.keys(r.customer), [
-    "fname", "lname", "cnp", "email", "phone", "billing_address", "billing_city", "billing_county",
-    "shipping_address", "shipping_city", "shipping_county", "promo",
-  ]);
-  assert.deepEqual(Object.keys(r.items[0]), ["name", "qty", "price", "category", "sku", "ImageLink"]);
-  assert.equal(r.order_id, "700000001");
-  assert.equal(r.order_total, "1600.00");
-  assert.equal(r.customer.promo, 0);
-  assert.equal(r.customer.cnp, "");
-  assert.equal(r.items[0].qty, "1");
-  assert.equal(r.items[0].price, 1600);
-  assert.equal(r.items[0].category, "1");
-});
-
-test("promo si categoria vin din configurare", () => {
-  const r = construiesteCererea({
-    comanda: comanda(), cfg: { ...CFG, promo: true, categorie: "8" }, idCerere: 1, adresaInapoi: "https://x", produse: new Map(),
+  construiesteCererea({
+    comanda: c, cfg: CFG, idCerere: 700000001, adresaVesti: "https://www.edinio.com/api/tbi/notificare/x",
+    intoarcere: INTOARCERE, produse,
   });
-  assert.equal(r.customer.promo, 1);
-  assert.equal(r.items[0].category, "8");
+
+test("✅ forma Fusion Pay: campurile din documentatie, `orderid` text, cantitate si categorie numere", () => {
+  const r = cerere(comanda());
+  assert.deepEqual(Object.keys(r), ["orderid", "firstname", "lastname", "email", "phone", "items", "statusURL", "successRedirectURL", "failRedirectURL"]);
+  assert.deepEqual(Object.keys(r.items[0]), ["name", "qty", "price", "sku", "category", "imagelink"]);
+  assert.equal(r.orderid, "700000001");
+  assert.equal(r.firstname, "Ion");
+  assert.equal(r.lastname, "Popescu");
+  assert.equal(r.phone, "0752000000");
+  assert.equal(r.items[0].qty, 1);
+  assert.equal(r.items[0].price, 1600);
+  assert.equal(r.items[0].category, 1);
+  assert.equal(r.statusURL, "https://www.edinio.com/api/tbi/notificare/x");
+  assert.equal(r.successRedirectURL, INTOARCERE.reusita);
+  assert.equal(r.failRedirectURL, INTOARCERE.esuata);
 });
 
-describe("⚠⚠ articolele aduna EXACT totalul finantat", () => {
+test("categoria vine din configurare, ca numar", () => {
+  const r = construiesteCererea({ comanda: comanda(), cfg: { categorie: "8" }, idCerere: 1, adresaVesti: "https://x", intoarcere: INTOARCERE, produse: new Map() });
+  assert.equal(r.items[0].category, 8);
+});
+
+describe("⚠⚠ articolele aduna EXACT totalul finantat (tbi isi socoteste suma din ele)", () => {
   const cazuri: [string, Partial<ComandaPentruTbi>][] = [
     ["fara diferente", {}],
     ["cu transport", { total: 1620, shipping_cost: 20 }],
@@ -82,8 +81,9 @@ describe("⚠⚠ articolele aduna EXACT totalul finantat", () => {
       assert.equal(sumaArticolelor(r), inBani(p.total ?? 1600));
       for (const a of r.items) {
         assert.ok(a.price > 0, `pret nepozitiv pe „${a.name}”`);
-        assert.ok(Number.isInteger(Math.round(a.price * 100)) && Math.abs(a.price * 100 - Math.round(a.price * 100)) < 1e-6, `pretul „${a.name}” are mai mult de doua zecimale`);
-        assert.ok(Number.isInteger(Number(a.qty)) && Number(a.qty) >= 1);
+        assert.ok(Math.abs(a.price * 100 - Math.round(a.price * 100)) < 1e-6, `pretul „${a.name}” are mai mult de doua zecimale`);
+        assert.ok(Number.isInteger(a.qty) && a.qty >= 1);
+        assert.ok(a.sku, `„${a.name}” pleaca fara sku`);
       }
     });
   }
@@ -93,8 +93,7 @@ describe("⚠⚠ articolele aduna EXACT totalul finantat", () => {
       total: 1220, shipping_cost: 20,
       items: [{ name: "A", price: 1300, quantity: 1, product_id: "p1" }],
     }));
-    const t = r.items.find((a) => a.name === "Transport");
-    assert.equal(t?.price, 20);
+    assert.equal(r.items.find((a) => a.name === "Transport")?.price, 20);
     assert.equal(r.items.find((a) => a.name === "A")?.price, 1200);
   });
 
@@ -119,9 +118,9 @@ test("sku si imaginea vin din catalog; o imagine care nu e https nu pleaca", () 
   ]);
   const r = cerere(comanda(), produse);
   assert.equal(r.items[0].sku, "DTZ1MCBBM");
-  assert.equal(r.items[0].ImageLink, "https://cdn.exemplu.ro/ceas.jpg");
+  assert.equal(r.items[0].imagelink, "https://cdn.exemplu.ro/ceas.jpg");
   const r2 = cerere(comanda(), new Map([["a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d", { sku: null, imagine: "javascript:alert(1)" }]]));
-  assert.equal(r2.items[0].ImageLink, "");
+  assert.equal(r2.items[0].imagelink, "");
   assert.equal(r2.items[0].sku, "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d");
 });
 
@@ -141,10 +140,7 @@ test("numele: primul cuvant e prenumele; un singur cuvant merge in amandoua", ()
   assert.deepEqual(imparteNumele(""), { fname: "", lname: "" });
 });
 
-test("facturarea e adresa de livrare (plata in rate e doar pentru persoane fizice)", () => {
-  const r = cerere(comanda());
-  assert.equal(r.customer.billing_address, "Str. Exemplu 1");
-  assert.equal(r.customer.billing_city, "Sector 3");
-  assert.equal(r.customer.billing_county, "Bucuresti");
-  assert.equal(r.customer.shipping_city, "Sector 3");
+test("⚠ in cerere nu pleaca adresa clientului: Fusion Pay n-o cere, iar pagina tbi o ia de la om", () => {
+  const r = cerere(comanda()) as unknown as Record<string, unknown>;
+  for (const camp of ["customer", "billing_address", "shipping_address", "cnp"]) assert.equal(camp in r, false, camp);
 });

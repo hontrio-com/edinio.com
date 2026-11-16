@@ -13755,7 +13755,12 @@ create table if not exists public.tbi_cereri (
   anulare_ceruta_la timestamp with time zone,
   istoric jsonb default '[]'::jsonb not null,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  tbi_order_id bigint,
+  tbi_token text,
+  contract text,
+  jetoane_rambursare text[] default '{}'::text[] not null,
+  interogata_la timestamp with time zone);
 
 create table if not exists public.tiktok_comenzi_raportate (
   order_id uuid not null,
@@ -14591,8 +14596,8 @@ insert into privat.campuri_secrete (coloana, cale) values ('shipo_config', 'api_
 insert into privat.campuri_secrete (coloana, cale) values ('smartbill_config', 'token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smartship_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smso_config', 'api_key') on conflict do nothing;
-insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'cheie_privata') on conflict do nothing;
-insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'cheie_criptare') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'reseller_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tiktok_capi_config', 'access_token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_secret') on conflict do nothing;
@@ -14930,6 +14935,7 @@ CREATE INDEX support_tickets_status_idx ON public.support_tickets USING btree (s
 CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (user_id);
 CREATE INDEX tbi_cereri_business_idx ON public.tbi_cereri USING btree (business_id, created_at DESC);
 CREATE INDEX tbi_cereri_deschise_idx ON public.tbi_cereri USING btree (updated_at) WHERE (stare = ANY (ARRAY['creata'::text, 'trimisa'::text, 'in_analiza'::text]));
+CREATE INDEX tbi_cereri_jetoane_rambursare_idx ON public.tbi_cereri USING gin (jetoane_rambursare);
 CREATE INDEX tbi_cereri_order_idx ON public.tbi_cereri USING btree (order_id);
 CREATE INDEX tiktok_comenzi_raportate_business_idx ON public.tiktok_comenzi_raportate USING btree (business_id);
 CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
@@ -15029,7 +15035,7 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(curiera_config, '{api_key}'::text[]) AS curiera_config,
     privat.decripteaza_config(epacket_config, '{api_key}'::text[]) AS epacket_config,
     privat.decripteaza_config(easysales_config, '{client_secret,website_token,access_token,refresh_token,webhook_secret,pat}'::text[]) AS easysales_config,
-    privat.decripteaza_config(tbi_config, '{password,cheie_privata}'::text[]) AS tbi_config
+    privat.decripteaza_config(tbi_config, '{reseller_key,cheie_criptare}'::text[]) AS tbi_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -17656,8 +17662,6 @@ grant SELECT on table public.support_tickets to service_role;
 grant TRIGGER on table public.support_tickets to service_role;
 grant TRUNCATE on table public.support_tickets to service_role;
 grant UPDATE on table public.support_tickets to service_role;
-grant SELECT on table public.tbi_cereri to anon;
-grant SELECT on table public.tbi_cereri to authenticated;
 grant DELETE on table public.tbi_cereri to service_role;
 grant INSERT on table public.tbi_cereri to service_role;
 grant REFERENCES on table public.tbi_cereri to service_role;
@@ -18021,6 +18025,23 @@ grant SELECT (website) on table public.businesses to anon;
 grant UPDATE (website) on table public.businesses to authenticated;
 grant SELECT (whatsapp) on table public.businesses to anon;
 grant UPDATE (whatsapp) on table public.businesses to authenticated;
+grant SELECT (adresa_cerere) on table public.tbi_cereri to authenticated;
+grant SELECT (anulare_ceruta_la) on table public.tbi_cereri to authenticated;
+grant SELECT (business_id) on table public.tbi_cereri to authenticated;
+grant SELECT (contract) on table public.tbi_cereri to authenticated;
+grant SELECT (created_at) on table public.tbi_cereri to authenticated;
+grant SELECT (id) on table public.tbi_cereri to authenticated;
+grant SELECT (interogata_la) on table public.tbi_cereri to authenticated;
+grant SELECT (istoric) on table public.tbi_cereri to authenticated;
+grant SELECT (mediu) on table public.tbi_cereri to authenticated;
+grant SELECT (motiv) on table public.tbi_cereri to authenticated;
+grant SELECT (order_id) on table public.tbi_cereri to authenticated;
+grant SELECT (order_number) on table public.tbi_cereri to authenticated;
+grant SELECT (stare) on table public.tbi_cereri to authenticated;
+grant SELECT (suma) on table public.tbi_cereri to authenticated;
+grant SELECT (tbi_order_id) on table public.tbi_cereri to authenticated;
+grant SELECT (ultima_veste_la) on table public.tbi_cereri to authenticated;
+grant SELECT (updated_at) on table public.tbi_cereri to authenticated;
 grant SELECT (announcements_seen_at) on table public.users_profile to authenticated;
 grant UPDATE (announcements_seen_at) on table public.users_profile to authenticated;
 grant SELECT (avatar_url) on table public.users_profile to authenticated;

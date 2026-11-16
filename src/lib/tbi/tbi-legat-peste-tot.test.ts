@@ -45,12 +45,22 @@ describe("rutele publice si secretele", () => {
     assert.equal(apiFaraPoarta("/api/tbi/start"), true);
     assert.equal(apiFaraPoarta("/api/tbi/notificare/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ"), true);
   });
-  test("⚠ secretele: aceleasi nume in cod si in migratie", () => {
-    assert.deepEqual([...CAMPURI_SECRETE.tbi_config].sort(), ["cheie_privata", "password"]);
-    const migratie = readFileSync("migrations/2027-02-03-tbi-bank.sql", "utf8");
+  test("⚠ secretele: aceleasi nume in cod si in migratie (Fusion Pay), iar cele vechi ies din lista", () => {
+    assert.deepEqual([...CAMPURI_SECRETE.tbi_config].sort(), ["cheie_criptare", "reseller_key"]);
+    const migratie = readFileSync("migrations/2027-02-04-tbi-fusion-pay.sql", "utf8");
     for (const camp of CAMPURI_SECRETE.tbi_config) {
       assert.ok(migratie.includes(`('tbi_config', '${camp}')`), `${camp} nu se cripteaza in baza`);
     }
+    assert.match(migratie, /delete from privat\.campuri_secrete\s+where coloana = 'tbi_config' and cale in \('password', 'cheie_privata'\)/);
+    assert.match(migratie, /select privat\.reconstruieste_store_settings\(\);\s*select privat\.reconstruieste_store_settings_upd\(\);/,
+      "vederea si declansatorul nu se refac dupa schimbarea secretelor");
+  });
+  test("⚠ jetonul tbi (`tbi_token`) si amprentele nu se citesc din browser", () => {
+    const migratie = viu("migrations/2027-02-04-tbi-fusion-pay.sql");
+    assert.match(migratie, /revoke select on table public\.tbi_cereri from anon, authenticated;/);
+    const grant = /grant select \(([^)]*)\) on table public\.tbi_cereri to authenticated/.exec(migratie)?.[1] ?? "";
+    assert.ok(grant, "nu mai gasesc privilegiul pe coloane");
+    for (const ascuns of ["tbi_token", "jeton_hash", "jetoane_rambursare"]) assert.ok(!grant.includes(ascuns), `${ascuns} se poate citi din browser`);
   });
 });
 
@@ -68,6 +78,13 @@ describe("⚠⚠ vestea: trei lacate, in ordinea buna", () => {
   });
   test("`order_id` din veste trebuie sa fie chiar cererea de pe jeton, inainte de orice aplicare", () => {
     assert.ok(i("veste.orderId !== String(cerere.id)") < i("aplicaVesteaTbi("));
+  });
+  test("⚠ vestile rambursarilor gasesc cererea si pe jetoanele lor, fara sa-l inlocuiasca pe al cererii", () => {
+    assert.match(ruta, /jeton_hash\.eq\.\$\{amprenta\},jetoane_rambursare\.cs\.\{\$\{amprenta\}\}/);
+    const server = viu("src/lib/tbi/server.ts");
+    assert.match(server, /jetoane_rambursare: \[\.\.\.\(inainte\.jetoane_rambursare \?\? \[\]\), hashJeton\(jeton\)\]/);
+    assert.ok(!/jeton_hash: hashJeton\(jeton\) \}/.test(server.slice(server.indexOf("export async function ramburseazaCerereaTbi"))),
+      "rambursarea inlocuieste amprenta cererii: vestile despre credit n-ar mai gasi cererea");
   });
   test("o veste care nu se poate descifra striga (jurnal + comerciant), nu tace", () => {
     assert.match(ruta, /strigaCheia/);
@@ -114,11 +131,15 @@ describe("panoul si vitrina", () => {
     assert.ok(!/tbi\.svg", soon: true/.test(pagina));
     assert.match(pagina, /integration\.id === "tbi" \? "\/dashboard\/features\/tbi"/);
   });
-  test("pagina comenzii arata caseta tbi, iar anularea are buton PROPRIU", () => {
+  test("pagina comenzii arata caseta tbi, iar anularea si rambursarea au butoane PROPRII", () => {
     const o = viu("src/components/dashboard/OrderDetailClient.tsx");
     assert.match(o, /<TbiComandaPanel /);
-    /* Selectorul de stare nu cheama banca: anularea cererii nu e legata de schimbarea starii. */
-    assert.ok(!viu("src/lib/actions/order.actions.ts").includes("anuleazaCerereaTbi"));
+    /* Selectorul de stare nu cheama banca: anularea si rambursarea nu sunt legate de schimbarea starii. */
+    const comenzi = viu("src/lib/actions/order.actions.ts");
+    assert.ok(!comenzi.includes("anuleazaCerereaTbi") && !comenzi.includes("ramburseazaCerereaTbi"));
+    const caseta = viu("src/components/dashboard/tbi/TbiComandaPanel.tsx");
+    assert.match(caseta, /anuleazaCerereaTbiDinPanou\(/);
+    assert.match(caseta, /ramburseazaTbiDinPanou\(/);
   });
   test("pagina produsului arata randul de rate in ambele machete", () => {
     for (const f of [

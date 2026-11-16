@@ -3,25 +3,30 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, XCircle } from "lucide-react";
-import { anuleazaCerereaTbiDinPanou, cererileTbiAleComenzii, type CerereTbiPanou } from "@/lib/actions/tbi.actions";
+import { AlertTriangle, Loader2, Undo2, XCircle } from "lucide-react";
+import {
+  anuleazaCerereaTbiDinPanou, cererileTbiAleComenzii, ramburseazaTbiDinPanou, type CerereTbiPanou,
+} from "@/lib/actions/tbi.actions";
 import { ETICHETA_STARE_TBI, type StareTbi } from "@/lib/tbi/stari";
 import { formatPrice } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Panel } from "@/components/ui/panel";
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 /**
- * Plata in rate tbi, pe pagina comenzii: cererile de finantare, ce a spus banca la fiecare, si
- * anularea unei cereri inca deschise.
+ * Plata in rate tbi, pe pagina comenzii: cererile de finantare, ce a spus banca la fiecare, anularea
+ * unei cereri inca deschise si rambursarea unui credit aprobat.
  *
- * ⚠ Anularea are buton PROPRIU, nu e legata de selectorul de stare al comenzii: o schimbare de stare
- * n-are voie sa porneasca singura un apel catre banca. Pentru comenzile anulate cronul `tbi-reconciliere`
- * o face oricum; butonul e pentru cand comerciantul vrea s-o faca pe loc, sau cand cronul n-a reusit.
+ * ⚠ Anularea si rambursarea au butoane PROPRII, nu sunt legate de selectorul de stare al comenzii: o
+ * schimbare de stare n-are voie sa porneasca singura un apel catre banca. Pentru comenzile anulate
+ * cronul `tbi-reconciliere` anuleaza oricum cererile deschise; butonul e pentru cand comerciantul vrea
+ * s-o faca pe loc, sau cand cronul n-a reusit.
  */
 
 const TON: Record<StareTbi, TonEticheta> = {
@@ -40,6 +45,8 @@ function data(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString("ro-RO", { dateStyle: "medium", timeStyle: "short" });
 }
 
+type Rambursare = { cerere: CerereTbiPanou; tip: "integral" | "partial"; suma: string };
+
 export function TbiComandaPanel({
   businessId,
   orderId,
@@ -52,6 +59,7 @@ export function TbiComandaPanel({
   const router = useRouter();
   const [cereri, setCereri] = useState<CerereTbiPanou[] | null | undefined>(undefined);
   const [deAnulat, setDeAnulat] = useState<CerereTbiPanou | null>(null);
+  const [deRambursat, setDeRambursat] = useState<Rambursare | null>(null);
   const [lucru, setLucru] = useState<number | null>(null);
 
   useEffect(() => {
@@ -71,6 +79,11 @@ export function TbiComandaPanel({
     );
   }
 
+  async function reciteste() {
+    const proaspete = await cererileTbiAleComenzii(businessId, orderId);
+    setCereri("error" in proaspete ? null : proaspete.cereri);
+  }
+
   async function anuleaza(c: CerereTbiPanou) {
     setLucru(c.id);
     try {
@@ -81,8 +94,7 @@ export function TbiComandaPanel({
         toast.success(r.mesaj);
         router.refresh();
       }
-      const proaspete = await cererileTbiAleComenzii(businessId, orderId);
-      setCereri("error" in proaspete ? null : proaspete.cereri);
+      await reciteste();
     } catch {
       toast.error("Nu am primit răspuns, deci nu știm dacă anularea a ajuns la tbi bank. Reîmprospătează pagina.", { duration: 12000 });
     } finally {
@@ -90,7 +102,29 @@ export function TbiComandaPanel({
     }
   }
 
+  async function ramburseaza(r: Rambursare) {
+    setLucru(r.cerere.id);
+    try {
+      const rez = await ramburseazaTbiDinPanou(businessId, orderId, r.cerere.id, {
+        tip: r.tip, suma: Number(String(r.suma).replace(",", ".")),
+      });
+      if (!rez.success) toast.error(rez.error, { duration: 12000 });
+      else toast.success(rez.mesaj);
+      await reciteste();
+    } catch {
+      toast.error("Nu am primit răspuns, deci nu știm dacă rambursarea a ajuns la tbi bank. Verifică în portalul lor înainte să încerci din nou.", { duration: 12000 });
+    } finally {
+      setLucru(null);
+    }
+  }
+
   const deschisa = cereri.find((c) => c.poateAnula);
+  /* Dupa o rambursare partiala, ce mai poate fi intors. Integrala ramane doar cand nu s-a cerut nimic. */
+  const ramas = deRambursat ? Math.round((deRambursat.cerere.suma - deRambursat.cerere.rambursatCerut) * 100) / 100 : 0;
+  const sumaCeruta = deRambursat
+    ? (deRambursat.tip === "integral" ? deRambursat.cerere.suma : Number(String(deRambursat.suma).replace(",", ".")))
+    : 0;
+  const sumaBuna = deRambursat?.tip === "integral" || (Number.isFinite(sumaCeruta) && sumaCeruta > 0 && sumaCeruta <= ramas);
 
   return (
     <Panel title="Plată în rate (tbi bank)">
@@ -110,9 +144,15 @@ export function TbiComandaPanel({
               <div className="flex flex-wrap items-center gap-2">
                 <EtichetaStare ton={TON[c.stare] ?? "neutru"} marime="mic">{ETICHETA_STARE_TBI[c.stare] ?? c.stare}</EtichetaStare>
                 {c.mediu === "test" && <EtichetaStare ton="asteptare" marime="mic">Mod test</EtichetaStare>}
-                <span className="text-xs text-muted-foreground">Cererea nr. {c.id} · {formatPrice(c.suma)} · {data(c.creata)}</span>
+                <span className="text-xs text-muted-foreground">
+                  Cererea nr. {c.id} · {formatPrice(c.suma)} · {data(c.creata)}
+                  {c.contract && <> · contract tbi {c.contract}</>}
+                </span>
               </div>
               {c.motiv && <p className="mt-1.5 text-xs font-medium text-foreground">{c.motiv}</p>}
+              {c.rambursatCerut > 0 && (
+                <p className="mt-1.5 text-xs text-muted-foreground">Rambursări cerute din Edinio: {formatPrice(c.rambursatCerut)} din {formatPrice(c.suma)}.</p>
+              )}
               {c.istoric.length > 0 && (
                 <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                   {c.istoric.slice(0, 8).map((e, j) => (
@@ -125,10 +165,17 @@ export function TbiComandaPanel({
                   {lucru === c.id ? <Loader2 className="animate-spin" /> : <XCircle />} Anulează cererea de finanțare
                 </Button>
               )}
+              {c.poateRambursa && (
+                <Button type="button" variant="outline" size="sm" className="mt-3" disabled={lucru !== null}
+                  onClick={() => setDeRambursat({ cerere: c, tip: c.rambursatCerut > 0 ? "partial" : "integral", suma: "" })}>
+                  {lucru === c.id ? <Loader2 className="animate-spin" /> : <Undo2 />} Rambursează la tbi bank
+                </Button>
+              )}
             </div>
           ))}
         </div>
       )}
+
       <Dialog open={!!deAnulat} onOpenChange={(v) => { if (!v) setDeAnulat(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -141,6 +188,52 @@ export function TbiComandaPanel({
             <DialogClose render={<Button variant="outline" />}>Renunță</DialogClose>
             <Button type="button" variant="destructive" onClick={() => { const c = deAnulat; setDeAnulat(null); if (c) void anuleaza(c); }}>
               Anulează cererea
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deRambursat} onOpenChange={(v) => { if (!v) setDeRambursat(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rambursezi creditul la tbi bank?</DialogTitle>
+            <DialogDescription>
+              tbi bank întoarce banii clientului și închide creditul (integral) sau îl micșorează (parțial). Când tbi termină
+              rambursarea, plata comenzii trece pe „rambursată” la cea integrală; la cea parțială primești o notificare cu suma.
+            </DialogDescription>
+          </DialogHeader>
+          {deRambursat && (
+            <div className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Felul rambursării">
+                {([
+                  { tip: "integral", titlu: "Integrală", text: `Toată suma finanțată: ${formatPrice(deRambursat.cerere.suma)}.`, oprita: deRambursat.cerere.rambursatCerut > 0 },
+                  { tip: "partial", titlu: "Parțială", text: `O parte, cel mult ${formatPrice(ramas)}.`, oprita: false },
+                ] as const).map((o) => (
+                  <button key={o.tip} type="button" role="radio" aria-checked={deRambursat.tip === o.tip} disabled={o.oprita}
+                    onClick={() => setDeRambursat((r) => (r ? { ...r, tip: o.tip } : r))}
+                    className={cn(
+                      "rounded-lg border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                      deRambursat.tip === o.tip ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
+                    )}>
+                    <span className="block text-sm font-medium text-foreground">{o.titlu}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{o.text}</span>
+                  </button>
+                ))}
+              </div>
+              {deRambursat.tip === "partial" && (
+                <InputGroup>
+                  <InputGroupInput type="number" min={0.01} max={ramas} step="0.01" inputMode="decimal" aria-label="Suma de rambursat"
+                    value={deRambursat.suma} onChange={(e) => setDeRambursat((r) => (r ? { ...r, suma: e.target.value } : r))} placeholder="0,00" />
+                  <InputGroupAddon align="inline-end"><InputGroupText>lei</InputGroupText></InputGroupAddon>
+                </InputGroup>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Renunță</DialogClose>
+            <Button type="button" disabled={!sumaBuna}
+              onClick={() => { const r = deRambursat; setDeRambursat(null); if (r) void ramburseaza(r); }}>
+              Cere rambursarea{deRambursat && sumaBuna ? ` de ${formatPrice(sumaCeruta)}` : ""}
             </Button>
           </DialogFooter>
         </DialogContent>

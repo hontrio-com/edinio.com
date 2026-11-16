@@ -1,149 +1,183 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, test } from "node:test";
-import { constants, generateKeyPairSync, privateDecrypt } from "node:crypto";
-import { anuleazaCererea, trimiteCererea } from "./client";
-import { citesteCheiaPublicaTbi } from "./cripto";
+import {
+  anuleazaCererea, produseleDeFinantare, ramburseaza, stareaCererii, trimiteCererea, verificaLegatura,
+} from "./client";
+import { descifreazaDeLaTbi } from "./cripto";
 import { construiesteCererea } from "./cerere";
 
 /*
- * Clientul tbi, cu banca SIMULATA: `fetch` e inlocuit, iar „banca" de aici face ce face a lor:
- * desparte corpul, descifreaza `order_data` cu cheia ei privata (algoritmul PHP: bucati de k octeti,
- * lipite), si raspunde ca ei (301 + Location). Asa se probeaza drumul intreg al octetilor, nu doar
- * functiile pe bucati.
+ * Clientul Fusion Pay, cu banca SIMULATA: `fetch` e inlocuit, iar „banca" de aici face ce face a lor:
+ * citeste corpul JSON, descifreaza `data` cu cheia magazinului, si raspunde cu formele si codurile
+ * MASURATE pe serverul lor de test (16.11.2026): 200 + `error: 0` la inregistrare, `error: 200` la
+ * anulare si rambursare, 401, 207, 404, 204 fara corp.
  */
 
-const SFTL = generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-  publicKeyEncoding: { type: "spki", format: "pem" },
-  privateKeyEncoding: { type: "pkcs8", format: "pem" },
-});
-const PUBLICA = citesteCheiaPublicaTbi(SFTL.publicKey);
-const CFG = { sandbox: false, store_id: "magazin_ro", username: "user", password: "Parola123" };
-
-function descifreazaCaBanca(b64: string): string {
-  const octeti = Buffer.from(b64, "base64");
-  const bucati: Buffer[] = [];
-  for (let i = 0; i < octeti.length; i += 256) {
-    bucati.push(privateDecrypt({ key: SFTL.privateKey, padding: constants.RSA_PKCS1_PADDING }, octeti.subarray(i, i + 256)));
-  }
-  return Buffer.concat(bucati).toString("utf8");
-}
+const CHEIE = "cheie-de-criptare-de-proba";
+const CFG = { sandbox: false, reseller_code: "magazin_ro", reseller_key: "cheie_reseller", cheie_criptare: CHEIE };
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
 
-type Primit = { url: string; tip: string; corp: string; redirect?: string };
+type Primit = { url: string; tip: string; corp: Record<string, unknown>; date: Record<string, unknown> | null };
 function banca(raspuns: (p: Primit) => Response): Primit[] {
   const primite: Primit[] = [];
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
-    const headers = new Headers(init?.headers);
-    const p = { url: String(url), tip: headers.get("content-type") ?? "", corp: String(init?.body ?? ""), redirect: init?.redirect };
+    const corp = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    let date: Record<string, unknown> | null = null;
+    if (typeof corp.data === "string") {
+      try { date = JSON.parse(descifreazaDeLaTbi(corp.data, CHEIE)); } catch { date = null; }
+    }
+    const p = { url: String(url), tip: new Headers(init?.headers).get("content-type") ?? "", corp, date };
     primite.push(p);
     return raspuns(p);
   }) as typeof fetch;
   return primite;
 }
-
-/** Campurile unui corp multipart, citite ca la ei (ASP.NET / PHP le citesc la fel). */
-async function campuriMultipart(p: Primit): Promise<Record<string, string>> {
-  const fd = await new Response(p.corp, { headers: { "content-type": p.tip } }).formData();
-  const iesire: Record<string, string> = {};
-  for (const [k, v] of fd.entries()) iesire[k] = String(v);
-  return iesire;
-}
+const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
 const CERERE = construiesteCererea({
   comanda: {
     id: "x", order_number: "#0007", total: 2500.5, shipping_cost: 25,
     items: [{ name: "Șosete bărbătești", price: 2475.5, quantity: 1, product_id: "p1" }],
     customer_name: "Ion Popescu", customer_email: "ion@exemplu.ro", customer_phone: "0752000000",
-    shipping_address: { address: "Str. A 1", city: "Iasi", county: "Iasi" },
   },
-  cfg: { ...CFG, promo: false, categorie: "1" },
+  cfg: { categorie: "1" },
   idCerere: 700000123,
-  adresaInapoi: "https://www.edinio.com/api/tbi/notificare/JETON",
+  adresaVesti: "https://www.edinio.com/api/tbi/notificare/JETON",
+  intoarcere: { reusita: "https://www.edinio.com/m/confirm?orderId=x", esuata: "https://www.edinio.com/m/confirm?status=esuat&orderId=x" },
   produse: new Map(),
 });
+const RAZPUNS_BUN = { error: 0, order_id: 60, token: "f27df5405197d00d71f0642c0d9cb0f2", url: "https://app-rotbi-envoy-fos24-uat.azurewebsites.net/b2cportal/x" };
 
-describe("Finalize", () => {
-  test("✅ corpul e cel din exemplele lor, iar banca il descifreaza intreg", async () => {
-    const primite = banca(() => new Response(null, { status: 301, headers: { location: "https://ecommerce.tbibank.ro/TBILandingPage/Home/Index/?url=abc&link2payid=123" } }));
-    const r = await trimiteCererea(CFG, PUBLICA, CERERE);
-    assert.deepEqual(r, { fel: "redirect", adresa: "https://ecommerce.tbibank.ro/TBILandingPage/Home/Index/?url=abc&link2payid=123", status: 301 });
-    assert.equal(primite.length, 1);
-    assert.equal(primite[0].url, "https://ecommerce.tbibank.ro/Api/LoanApplication/Finalize");
-    assert.equal(primite[0].redirect, "manual", "urmata, redirectarea ar aduce pagina lor in loc de adresa ei");
-    assert.match(primite[0].tip, /^multipart\/form-data; boundary=/);
-    const campuri = await campuriMultipart(primite[0]);
-    assert.deepEqual(Object.keys(campuri).sort(), ["order_data", "providerCode"]);
-    assert.equal(campuri.providerCode, "magazin_ro");
-    const json = JSON.parse(descifreazaCaBanca(campuri.order_data));
-    assert.deepEqual(json, JSON.parse(JSON.stringify(CERERE)));
-    assert.equal(json.items[0].name, "Șosete bărbătești", "diacriticele au ajuns intregi la banca");
-    /* Credentialele pleaca DOAR criptate. */
-    assert.ok(!primite[0].corp.includes("Parola123"));
+describe("RegisterApplication", () => {
+  test("✅ JSON cu codul si cheia in clar, cererea CRIPTATA in `data`, pe care banca o descifreaza intreaga", async () => {
+    const primite = banca(() => json(RAZPUNS_BUN));
+    const r = await trimiteCererea(CFG, CERERE);
+    assert.deepEqual(r, { fel: "trimisa", adresa: RAZPUNS_BUN.url, idTbi: 60, token: RAZPUNS_BUN.token });
+    assert.equal(primite[0].url, "https://ro.tbibank.support/api/RegisterApplication");
+    assert.match(primite[0].tip, /application\/json/);
+    assert.equal(primite[0].corp.reseller_code, "magazin_ro");
+    assert.equal(primite[0].corp.reseller_key, "cheie_reseller");
+    assert.deepEqual(primite[0].date, JSON.parse(JSON.stringify(CERERE)), "banca nu primeste cererea intreaga (diacriticele)");
   });
 
-  test("mediul de test merge la serverul lor de test, fara `/Api` in cale", async () => {
-    const primite = banca(() => new Response(null, { status: 302, headers: { location: "/TBILandingPage/x" } }));
-    const r = await trimiteCererea({ ...CFG, sandbox: true }, PUBLICA, CERERE);
-    assert.equal(primite[0].url, "https://vmrouatftos01.westeurope.cloudapp.azure.com/LoanApplication/Finalize");
-    /* O adresa relativa se rezolva fata de serverul lor. */
-    assert.deepEqual(r, { fel: "redirect", adresa: "https://vmrouatftos01.westeurope.cloudapp.azure.com/TBILandingPage/x", status: 302 });
+  test("mediul de test merge la serverul lor de test", async () => {
+    const primite = banca(() => json(RAZPUNS_BUN));
+    await trimiteCererea({ ...CFG, sandbox: true }, CERERE);
+    assert.equal(primite[0].url, "https://ro.tbi-uat.online/api/RegisterApplication");
   });
 
-  test("⚠ 401 = credentiale respinse: refuz DOVEDIT, cu sfatul potrivit", async () => {
-    banca(() => new Response("Unauthorized", { status: 401 }));
-    const r = await trimiteCererea(CFG, PUBLICA, CERERE);
-    assert.equal(r.fel, "refuz");
-    assert.match((r as { mesaj: string }).mesaj, /autentificarea/);
+  test("⚠ avertismentele PHP din fata JSON-ului (masurate pe serverul lor de test) nu strica raspunsul", async () => {
+    banca(() => new Response(`<br />\n<b>Warning</b>:  Undefined property: stdClass::$firstname in <b>x.php</b><br />\n${JSON.stringify(RAZPUNS_BUN)}`, { status: 200 }));
+    assert.equal((await trimiteCererea(CFG, CERERE)).fel, "trimisa");
   });
 
-  test("⚠ 5xx, retea picata, 200 fara adresa: NU stim, nu „refuz”", async () => {
-    banca(() => new Response("<html>eroare</html>", { status: 502 }));
-    assert.equal((await trimiteCererea(CFG, PUBLICA, CERERE)).fel, "necunoscut");
-    banca(() => new Response("<html>pagina</html>", { status: 200 }));
-    assert.equal((await trimiteCererea(CFG, PUBLICA, CERERE)).fel, "necunoscut");
+  test("⚠ refuzurile se deosebesc: 401 datele de reseller, 204 si 207 cheia de criptare, 210 suma, 208/209 datele", async () => {
+    const cazuri: [Response, string][] = [
+      [json({ error: 401, message: "Invalid credentials. Access denied." }, 401), "credentiale"],
+      [new Response(null, { status: 204 }), "cheie"],
+      [json({ error: 207, message: "Error encryption key or data." }, 207), "cheie"],
+      [json({ error: 210, message: "Total basket amount (74200) is below or above financing limits." }), "suma"],
+      [json({ error: 208, message: "Missing [ items or orderid ] list." }), "date"],
+      [json({ error: 209, message: "Missing mandatory parameters in items list." }), "date"],
+    ];
+    for (const [raspuns, motiv] of cazuri) {
+      banca(() => raspuns.clone());
+      const r = await trimiteCererea(CFG, CERERE);
+      assert.equal(r.fel, "refuz", motiv);
+      assert.equal(r.fel === "refuz" && r.motiv, motiv);
+    }
+  });
+
+  test("⚠ 5xx, retea picata, raspuns fara adresa sau cu adresa http: NU stim, nu „refuz”", async () => {
+    banca(() => new Response("eroare", { status: 502 }));
+    assert.equal((await trimiteCererea(CFG, CERERE)).fel, "necunoscut");
     globalThis.fetch = (async () => { throw new TypeError("fetch failed"); }) as typeof fetch;
-    assert.equal((await trimiteCererea(CFG, PUBLICA, CERERE)).fel, "necunoscut");
-  });
-
-  test("o redirectare catre o adresa nesigura (http) nu trimite clientul acolo", async () => {
-    banca(() => new Response(null, { status: 301, headers: { location: "http://ecommerce.tbibank.ro/x" } }));
-    assert.equal((await trimiteCererea(CFG, PUBLICA, CERERE)).fel, "necunoscut");
-  });
-
-  test("adresa intoarsa in corp (unele instalari) e primita", async () => {
-    banca(() => new Response("https://ecommerce.tbibank.ro/TBILandingPage/y", { status: 200 }));
-    const r = await trimiteCererea(CFG, PUBLICA, CERERE);
-    assert.deepEqual(r, { fel: "redirect", adresa: "https://ecommerce.tbibank.ro/TBILandingPage/y", status: 200 });
+    assert.equal((await trimiteCererea(CFG, CERERE)).fel, "necunoscut");
+    banca(() => json({ error: 0, order_id: 60, token: "t" }));
+    assert.equal((await trimiteCererea(CFG, CERERE)).fel, "necunoscut");
+    banca(() => json({ ...RAZPUNS_BUN, url: "http://nesigur.example/x" }));
+    assert.equal((await trimiteCererea(CFG, CERERE)).fel, "necunoscut");
   });
 });
 
-describe("CanceledByCustomer", () => {
-  test("✅ formularul din exemplul lor: `orderData` criptat + `encryptCode`, iar raspunsul `isSuccess`", async () => {
-    const primite = banca(() => Response.json({ isSuccess: true, error: null }));
-    const r = await anuleazaCererea(CFG, PUBLICA, "700000123");
-    assert.deepEqual(r, { fel: "anulata" });
-    assert.equal(primite[0].url, "https://ecommerce.tbibank.ro/Api/LoanApplication/CanceledByCustomer");
-    assert.equal(primite[0].tip, "application/x-www-form-urlencoded");
-    const sp = new URLSearchParams(primite[0].corp);
-    assert.equal(sp.get("encryptCode"), "magazin_ro");
-    assert.deepEqual(JSON.parse(descifreazaCaBanca(sp.get("orderData")!)),
-      { orderId: "700000123", statusId: "1", username: "user", password: "Parola123" });
+describe("GetApplicationStatus", () => {
+  test("✅ id-ul si jetonul LOR, iar raspunsul cu starea si lantul ei", async () => {
+    const primite = banca(() => json({
+      error: 0, store_order_id: "700000123", status: "Comanda in derulare TBI",
+      status_chain: [{ datetime: "2026-11-16 18:54:33", status: "Comanda in derulare TBI" }, { datetime: "2026-11-16 18:54:24", status: "Comanda trimisa catre TBI" }],
+    }));
+    const r = await stareaCererii(CFG, 60, "tok");
+    assert.equal(primite[0].url, "https://ro.tbibank.support/api/GetApplicationStatus");
+    assert.equal(primite[0].corp.order_id, 60);
+    assert.equal(primite[0].corp.token, "tok");
+    assert.ok(r.fel === "ok" && r.stare === "Comanda in derulare TBI" && r.lant.length === 2);
+  });
+});
+
+describe("loanCancellation si loanRefund", () => {
+  test("✅ anularea: `data` criptat cu platforma „Api”, id-ul si jetonul lor; `error: 200` inseamna facuta", async () => {
+    const primite = banca(() => json({ error: 200, message: "Loan cancellation registered successfully." }));
+    assert.deepEqual(await anuleazaCererea(CFG, 60, "tok"), { fel: "facuta" });
+    assert.equal(primite[0].url, "https://ro.tbibank.support/api/loanCancellation");
+    assert.deepEqual(primite[0].date, { platform: "Api", orderId: "60", token: "tok", action: "cancel" });
   });
 
-  test("`isSuccess: false` e refuz, cu mesajul lor", async () => {
-    banca(() => Response.json({ isSuccess: false, error: "Application already approved" }));
-    const r = await anuleazaCererea(CFG, PUBLICA, "1");
-    assert.equal(r.fel, "refuz");
-    assert.match((r as { mesaj: string }).mesaj, /already approved/);
+  test("⚠ dupa aprobare tbi refuza anularea cu 409, iar refuzul poarta codul", async () => {
+    banca(() => json({ error: 409, message: "Cannot cancel an approved loan." }, 409));
+    const r = await anuleazaCererea(CFG, 60, "tok");
+    assert.ok(r.fel === "refuz" && r.cod === 409);
   });
 
-  test("un raspuns necitibil sau o cadere nu e confundat cu o anulare", async () => {
-    banca(() => new Response("oops", { status: 500 }));
-    assert.equal((await anuleazaCererea(CFG, PUBLICA, "1")).fel, "necunoscut");
-    banca(() => new Response("ok", { status: 200 }));
-    assert.equal((await anuleazaCererea(CFG, PUBLICA, "1")).fel, "necunoscut");
+  test("✅ rambursarea: tipul, suma la ban si adresa vestilor ei (`refundLink`)", async () => {
+    const primite = banca(() => json({ error: 200, message: "Loan refund registered successfully." }));
+    const r = await ramburseaza(CFG, 60, "tok", { tip: "partial", suma: 125.005, adresaVesti: "https://www.edinio.com/api/tbi/notificare/R" });
+    assert.deepEqual(r, { fel: "facuta" });
+    assert.equal(primite[0].url, "https://ro.tbibank.support/api/loanRefund");
+    assert.deepEqual(primite[0].date, {
+      platform: "Api", orderId: "60", token: "tok", action: "refund", type: "partial", amount: 125.01,
+      refundLink: "https://www.edinio.com/api/tbi/notificare/R",
+    });
+  });
+
+  test("un raspuns necitibil sau o cadere nu e confundat cu o operatie facuta", async () => {
+    banca(() => new Response("<html>", { status: 500 }));
+    assert.equal((await anuleazaCererea(CFG, 60, "tok")).fel, "necunoscut");
+  });
+});
+
+describe("⚠⚠ verificarea datelor de acces, fara sa se atinga nimic la banca", () => {
+  test("o anulare pentru o cerere care nu exista: 404 = tot bun, 207 = cheia de criptare, 401 = codul sau cheia de reseller", async () => {
+    const primite = banca(() => json({ error: 404, message: "No application found for the given details." }, 404));
+    assert.deepEqual(await verificaLegatura(CFG), { fel: "buna" });
+    assert.equal(primite[0].date?.action, "cancel");
+    assert.equal(Number(primite[0].date?.orderId) > 900_000_000, true, "sonda nu are voie sa nimereasca o cerere adevarata");
+    banca(() => json({ error: 207, message: "Error encryption key or data." }, 207));
+    assert.equal((await verificaLegatura(CFG)).fel, "cheie");
+    banca(() => json({ error: 401, message: "Invalid credentials. Access denied." }, 401));
+    assert.equal((await verificaLegatura(CFG)).fel, "credentiale");
+    banca(() => new Response("x", { status: 503 }));
+    assert.equal((await verificaLegatura(CFG)).fel, "necunoscut");
+  });
+});
+
+describe("GetCalculations", () => {
+  test("✅ produsele lor, ordonate dupa suma minima, cu dobanda, comisionul si limitele", async () => {
+    const primite = banca(() => json([
+      { scheme_id: 2, name: "Promo 0", period: 6, analysis_fee: 95, nir: 29, amount_min: 1000.01, amount_max: 4000 },
+      { scheme_id: 1, name: "BNPL", period: 4, analysis_fee: 40, nir: 0, amount_min: 100, amount_max: 2000 },
+    ]));
+    const r = await produseleDeFinantare(CFG);
+    assert.equal(primite[0].url, "https://ro.tbibank.support/api/GetCalculations");
+    assert.ok(r.fel === "ok");
+    assert.deepEqual(r.produse.map((p) => [p.nume, p.luni, p.dobanda, p.comision, p.sumaMin, p.sumaMax]), [
+      ["BNPL", 4, 0, 40, 100, 2000],
+      ["Promo 0", 6, 29, 95, 1000.01, 4000],
+    ]);
+  });
+  test("401 = codul sau cheia de reseller", async () => {
+    banca(() => json({ error: 401, message: "Invalid credentials. Access denied." }, 401));
+    assert.equal((await produseleDeFinantare(CFG)).fel, "refuz");
   });
 });

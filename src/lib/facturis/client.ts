@@ -85,10 +85,13 @@ export function citesteRaspunsul(text: string): RaspunsFacturis | null {
   }
   if (!date || typeof date !== "object" || Array.isArray(date)) return null;
   const d = date as Record<string, unknown>;
-  if (d.error !== undefined && d.error !== null && d.error !== "" && d.error !== false) {
-    return { ok: false, cod: String(d.error), mesaj: textulMesajului(d.result, d.msg) };
-  }
+  /* ⚠ SUCCESUL CASTIGA. Un `error: 0` langa `success: 2000` nu e un refuz: citit drept refuz pe o
+     emitere, factura creata la ei ar fi eliberat slotul, iar a doua apasare ar fi emis inca una. */
   if (String(d.success ?? "") === "2000") return { ok: true, rezultat: d.result };
+  const e = d.error;
+  if (e !== undefined && e !== null && e !== "" && e !== false && e !== 0 && e !== "0") {
+    return { ok: false, cod: String(e), mesaj: textulMesajului(d.result, d.msg) };
+  }
   return null;
 }
 
@@ -232,8 +235,13 @@ async function cere(
   }
 
   const r = citesteRaspunsul(text);
-  /* Un refuz al lor e refuz si pe un status HTTP de eroare: l-au citit si au raspuns. */
-  if (r && !r.ok) return r;
+  /*
+   * Un refuz al lor e refuz si pe un 4xx: l-au citit si au raspuns. ⚠ Pe o SCRIERE, un 5xx sau 408,
+   * chiar cu corp de eroare, NU dovedeste ca nu s-a facut (poate au salvat, apoi au cazut): merge mai
+   * jos, la `eroareCuStatus`, adica „nu stim”, ca in `eroare-furnizor.ts`.
+   */
+  const refuzCitit = res.ok || !o.scriere || (res.status >= 400 && res.status < 500 && res.status !== 408);
+  if (r && !r.ok && refuzCitit) return r;
   if (!res.ok) {
     throw o.scriere
       ? eroareCuStatus(`Facturis a răspuns ${res.status} (${o.ce}). Verifică în contul Facturis înainte de a reîncerca.`, res.status)

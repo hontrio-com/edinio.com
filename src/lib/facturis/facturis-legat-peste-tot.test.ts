@@ -90,21 +90,24 @@ describe("facturarea, peste tot unde se intreaba „are factura?”", () => {
   test("dispecerul automat: cheia in select si in garda, si Facturis dupa fGO", () => {
     const d = viu("src/lib/actions/invoice-auto.actions.ts");
     assert.match(d, /fgo_invoice_number, facturis_invoice_key/);
-    assert.match(d, /o\.fgo_invoice_number \|\| o\.facturis_invoice_key\) return;/);
-    const fgo = d.indexOf("fgo.maybeAutoGenerateInvoice(");
-    const facturis = d.indexOf("facturis.maybeAutoGenerateInvoice(");
-    assert.ok(fgo > 0 && facturis > fgo, "Facturis trebuie chemata DUPA fGO");
+    /* Garda e regula unica `areFacturaEmisa` (factura-pe-comanda.ts), care cuprinde cheia Facturis. */
+    assert.match(d, /if \(areFacturaEmisa\(o\)\) return;/);
+    /* Dispecerul alege o singura casa (`casaResponsabila`), in ordinea `CASE_AUTOMATE`. */
+    const ordine = viu("src/lib/billing/casa-automata.ts");
+    assert.match(ordine, /\["smartbill", "oblio", "fgo", "facturis",/, "Facturis trebuie sa vina DUPA fGO");
+    assert.ok(d.includes('facturis: () => import("@/lib/actions/facturis.actions")'));
   });
-  test("⚠ cheia, nu numarul: lotul, editarea, adaugarea de produse, easySales, About You", () => {
+  test("⚠ cheia, nu numarul: regula unica o cuprinde, iar locurile o intreaba (vezi factura-pe-comanda.test.ts)", () => {
+    assert.match(viu("src/lib/billing/factura-pe-comanda.ts"), /"facturis_invoice_key"/);
     for (const f of [
       "src/lib/actions/bulk-orders.actions.ts",
-      "src/components/dashboard/OrderEditModal.tsx",
       "src/lib/actions/order.actions.ts",
       "src/lib/actions/easysales.actions.ts",
       "src/lib/aboutyou/orders.ts",
     ]) {
-      assert.match(viu(f), /facturis_invoice_key/, f);
+      assert.match(viu(f), /facturis_invoice_key/, `${f}: cheia Facturis lipseste din select`);
     }
+    assert.match(viu("src/components/dashboard/OrderEditModal.tsx"), /areFacturaEmisa\(order\)/);
   });
   test("lotul poate alege Facturis si o cheama", () => {
     const b = viu("src/lib/actions/bulk-orders.actions.ts");
@@ -141,8 +144,10 @@ describe("ecranele", () => {
     assert.match(viu("src/app/(dashboard)/dashboard/orders/[orderId]/page.tsx"), /facturisEnabled=\{facturisEnabled\}/);
     assert.match(viu("src/app/(dashboard)/dashboard/orders/page.tsx"), /facturisEnabled=\{integrari\.facturisEnabled\}/);
     const d = viu("src/components/dashboard/OrderDetailClient.tsx");
-    assert.match(d, /activeProvider === "facturis" && renderFacturis\(\)/);
-    assert.match(d, /Da, stornează/, "stornarea trebuie sa ceara a doua apasare");
+    /* Fila e componenta comuna a caselor cu cheie (`FilaCaseiCuCheie`), cu actiunile Facturis. */
+    assert.match(d, /facturisEnabled && \(\s*<div hidden=\{activeProvider !== "facturis"\}>\s*<FilaCaseiCuCheie\s+casa="Facturis"\s+ruta="\/api\/facturis\/pdf"/);
+    assert.match(d, /storneaza=\{\(\) => stornoFacturisInvoiceAction\(businessId, order\.id\)\}/);
+    assert.match(viu("src/components/dashboard/facturare/FilaCaseiCuCheie.tsx"), /Da, stornează/, "stornarea trebuie sa ceara a doua apasare");
     const l = viu("src/components/dashboard/OrdersClient.tsx");
     assert.match(l, /facturisEnabled && \(/);
     assert.ok(!/stornoFacturisInvoiceAction/.test(l), "stornarea nu se face din lista, fara confirmare");

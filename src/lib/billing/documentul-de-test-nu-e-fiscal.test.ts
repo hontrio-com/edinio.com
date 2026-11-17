@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
 import { readFileSync } from "node:fs";
-import { DOCUMENT_DE_TEST, eDocumentDeTest } from "./factura-comenzii";
+import { DOCUMENT_DE_TEST, eDocumentDeTest, facturaComenzii, facturaDeTest } from "./factura-comenzii";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -58,6 +58,33 @@ const viu = (cale: string) =>
   readFileSync(cale, "utf8").replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
 
+describe("documentul de test, la ORICE casa (`facturaDeTest`)", () => {
+  test("fGO dupa gazda linkului, Factureaza.ro dupa cheia `test:`; restul, niciodata", () => {
+    assert.equal(facturaDeTest({ furnizor: "fgo", numar: "A1", url: "https://testuat.fgo.ro/factura/x" }), true);
+    assert.equal(facturaDeTest({ furnizor: "fgo", numar: "A1", url: "https://fgo.ro/factura/x" }), false);
+    assert.equal(facturaDeTest({ furnizor: "factureaza", numar: "A1", url: "", cheie: "test:12" }), true);
+    assert.equal(facturaDeTest({ furnizor: "factureaza", numar: "A1", url: "", cheie: "12" }), false);
+    assert.equal(facturaDeTest({ furnizor: "facturis", numar: "A1", url: "", cheie: "test:12" }), false, "Facturis n-are sandbox");
+    assert.equal(facturaDeTest({ furnizor: "easybill", numar: "A1", url: "", cheie: "test:12" }), false, "easybill n-are sandbox");
+  });
+  test("⚠ un document de test NU ascunde factura reala de la alta casa; singur, se intoarce ca garda sa vorbeasca", () => {
+    const mixta = facturaComenzii({
+      factureaza_invoice_key: "test:9", factureaza_invoice_series: "SRV", factureaza_invoice_number: "1",
+      easybill_invoice_key: "55", easybill_invoice_series: "EBF", easybill_invoice_number: "12",
+    });
+    assert.equal(mixta?.furnizor, "easybill");
+    const fgoTestSiOblio = facturaComenzii({
+      oblio_invoice_number: "7", oblio_invoice_link: "https://www.oblio.eu/x",
+      fgo_invoice_number: "3", fgo_invoice_link: "https://testuat.fgo.ro/f",
+    });
+    assert.equal(fgoTestSiOblio?.furnizor, "oblio");
+    const doarTest = facturaComenzii({ factureaza_invoice_key: "test:9", factureaza_invoice_number: "1" });
+    assert.equal(doarTest?.furnizor, "factureaza");
+    assert.equal(doarTest && facturaDeTest(doarTest), true, "garda o opreste, cu mesajul ei");
+    assert.equal(facturaComenzii({}), null);
+  });
+});
+
 describe("Nu pleaca la marketplace, si nici tacut", () => {
   const DRUMURI = [
     { nume: "eMAG", cale: "src/lib/emag/facturi.ts" },
@@ -67,7 +94,8 @@ describe("Nu pleaca la marketplace, si nici tacut", () => {
   for (const d of DRUMURI) {
     test(`⚠⚠ ${d.nume}: documentul de test se opreste`, () => {
       const s = viu(d.cale);
-      assert.match(s, /if \(eDocumentDeTest\(factura\.url\)\) return \{ fel: "esec", mesaj: DOCUMENT_DE_TEST \};/,
+      /* O singura intrebare pentru toate casele: fGO (linkul) si Factureaza.ro (cheia `test:`). */
+      assert.match(s, /if \(facturaDeTest\(factura\)\) return \{ fel: "esec", mesaj: DOCUMENT_DE_TEST \};/,
         `${d.nume}: garda lipseste`);
     });
 
@@ -77,7 +105,7 @@ describe("Nu pleaca la marketplace, si nici tacut", () => {
        * `esec` ajunge in jurnal cu mesajul care spune ce e de facut.
        */
       const s = viu(d.cale);
-      const i = s.indexOf("eDocumentDeTest(factura.url)");
+      const i = s.indexOf("facturaDeTest(factura)");
       assert.ok(i > 0, `${d.nume}: garda lipseste`);
       const linia = s.slice(i, s.indexOf("\n", i));
       assert.ok(!linia.includes("fara_factura"), `${d.nume}: s-ar reincerca la nesfarsit`);
@@ -86,8 +114,10 @@ describe("Nu pleaca la marketplace, si nici tacut", () => {
     test(`⚠ ${d.nume}: si INAINTE de a aduce PDF-ul`, () => {
       /* Nu are rost sa descarcam si sa rehostam un document pe care oricum il refuzam. */
       const s = viu(d.cale);
-      assert.ok(s.indexOf("eDocumentDeTest(factura.url)") < s.indexOf("await aduPdf("),
-        `${d.nume}: garda vine dupa descarcare`);
+      /* ⚠ Intai ca garda EXISTA: un `indexOf` negasit da -1, iar -1 e „inainte” de orice. */
+      const garda = s.indexOf("facturaDeTest(factura)");
+      assert.ok(garda > 0, `${d.nume}: garda lipseste`);
+      assert.ok(garda < s.indexOf("await aduPdf("), `${d.nume}: garda vine dupa descarcare`);
     });
   }
 

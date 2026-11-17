@@ -48,9 +48,12 @@ function Field({
               {required && <span className="text-destructive"> *</span>}
             </label>
           )
-          /* Fara ajutor, randul ramane EXACT cum era: sute de formulare il folosesc. */
+          /* Fara ajutor, randul ramane EXACT cum era: sute de formulare il folosesc.
+             Cu ajutor, randul are FIX inaltimea etichetei simple (`h-4`, linia lui `text-xs`): semnul
+             „i” are 20px si, lasat sa creasca randul, cobora campul cu 4px fata de vecinul fara semn
+             (17.11.2026, „Utilizator API” langa „Parolă”). Semnul iese 2px in golul de sub rand. */
           return ajutor ? (
-            <div className="flex items-center gap-0.5">
+            <div className="flex h-4 items-center gap-0.5">
               {eticheta}
               {ajutor}
             </div>

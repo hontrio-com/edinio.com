@@ -47,6 +47,10 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   /* Sigla Facturis e ALBA 100% (masurat): pe placa alba a antetului ar fi invizibila. Inversata,
      ramane un cuvant negru, fara alta culoare de pierdut (spre deosebire de Pall-Ex). */
   facturis: { src: "/integrations/facturis.png", alt: "Facturis Online", filter: "invert(1)" },
+  /* Cerneala inchisa si culoare pe fond gol (masurat): nu cer `filter`. */
+  factureaza: { src: "/integrations/factureaza.ro.webp", alt: "Factureaza.ro" },
+  easybill: { src: "/integrations/easybill.png", alt: "easybill" },
+  saga: { src: "/integrations/saga.svg", alt: "SAGA" },
   smso: { src: "/integrations/smso.svg", alt: "Smso.ro" },
   notice: { src: "/integrations/notice.ro.png", alt: "Notice.ro" },
   stripe: { src: "/integrations/stripe.svg", alt: "Stripe" },

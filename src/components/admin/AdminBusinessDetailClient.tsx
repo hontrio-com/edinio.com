@@ -51,7 +51,8 @@ interface StoreSettings {
   activ: {
     sameday: boolean; fanCourier: boolean; cargus: boolean; dpd: boolean;
     colete: boolean; fgo: boolean; stripe: boolean; netopia: boolean;
-    smartbill: boolean; oblio: boolean; facturis: boolean; smso: boolean; marketing: boolean;
+    smartbill: boolean; oblio: boolean; facturis: boolean; factureaza: boolean; easybill: boolean; saga: boolean;
+    smso: boolean; marketing: boolean;
   };
 }
 
@@ -592,6 +593,10 @@ export function AdminBusinessDetailClient({
                   {/* fGO statea la „Curieri configurati": e casa de facturare, deci sta aici. */}
                   <CourierStatus enabled={settings.activ.fgo} name="fGO" />
                   <CourierStatus enabled={settings.activ.facturis} name="Facturis" />
+                  <CourierStatus enabled={settings.activ.factureaza} name="Factureaza.ro" />
+                  <CourierStatus enabled={settings.activ.easybill} name="easybill" />
+                  {/* SAGA nu emite: trimite documentele emise in contabilitate. */}
+                  <CourierStatus enabled={settings.activ.saga} name="SAGA (contabilitate)" />
                 </div>
               </div>
             ) : (

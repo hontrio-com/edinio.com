@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cheieOperatie, cuRegistru, eAtarnata, nuStim, PRAG_ATARNATA_MS, type Verdict } from "./registru";
-import { eroareCuStatus, eroareNesigura, eroareRefuz, verdictFurnizor } from "./eroare-furnizor";
+import { cuReferintaRamasa, eroareCuStatus, eroareNesigura, eroareRefuz, referintaRamasa, verdictFurnizor } from "./eroare-furnizor";
 import { ipayOrderNumber, urmatoareaIncercareIpay } from "@/lib/ipay";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -364,6 +364,29 @@ test("verdictul implicit e `necunoscut` pentru orice eroare nemarcata", () => {
   // `fetch` picat, `JSON.parse` crapat, o exceptie din codul nostru.
   assert.equal(verdictFurnizor(new Error("fetch failed")), "necunoscut");
   assert.equal(verdictFurnizor("nici macar Error"), "necunoscut");
+});
+
+test("⚠ documentul ramas la furnizor ramane pe rand, si la caderea unui pas de dupa creare", async () => {
+  const trimise: unknown[] = [];
+  const admin = {
+    rpc: async (nume: string, args: unknown) => {
+      if (nume === "rezerva_operatie_externa") return { data: { rezervat: true, id: "op1" }, error: null };
+      trimise.push(args);
+      return { data: { gasit: true, stare: "necunoscut" }, error: null };
+    },
+  } as unknown as SupabaseClient<Database>;
+  const r = await cuRegistru(admin, CERERE, async () => {
+    throw cuReferintaRamasa(eroareNesigura("linia 3 a cazut"), "88231");
+  }, verdictFurnizor);
+  assert.equal(r.fel, "eroare");
+  assert.equal((trimise[0] as { p_referinta_externa: unknown }).p_referinta_externa, "88231");
+  assert.equal((trimise[0] as { p_stare: unknown }).p_stare, "necunoscut", "verdictul ramane al erorii");
+  /* Fara document ramas, nimic nu se pune pe rand. */
+  trimise.length = 0;
+  await cuRegistru(admin, CERERE, async () => { throw eroareRefuz("nu"); }, verdictFurnizor);
+  assert.equal((trimise[0] as { p_referinta_externa: unknown }).p_referinta_externa, null);
+  assert.equal(referintaRamasa(new Error("x")), null);
+  assert.equal(referintaRamasa(cuReferintaRamasa(new Error("x"), "  ")), null, "un id gol nu e un id");
 });
 
 test("refuzul dovedit deblocheaza reincercarea, nesigurul nu", () => {

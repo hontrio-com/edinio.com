@@ -669,6 +669,16 @@ async function patchConfig(admin: Admin, businessId: string, patch: Partial<Tren
 
 
 /**
+ * Casele care dau PDF-ul numai prin API, dupa id: modulul fiecareia, incarcat LENES (caile sunt
+ * literale, ca bundlerul sa le gaseasca).
+ */
+const MODUL_PDF_PRIN_API = {
+  facturis: () => import("@/lib/facturis/server"),
+  factureaza: () => import("@/lib/factureaza/server"),
+  easybill: () => import("@/lib/easybill/server"),
+} as const;
+
+/**
  * Aduce octetii facturii de la furnizorul care a emis-o.
  *
  * ⚠ ADRESA E A COMERCIANTULUI, si de-aia se aduce de la noi, cu acreditarile lui deja folosite
@@ -677,13 +687,14 @@ async function patchConfig(admin: Admin, businessId: string, patch: Partial<Tren
  */
 async function aduPdfFacturii(f: Factura, admin: Admin, businessId: string): Promise<ArrayBuffer | { error: string }> {
   /*
-   * ⚠ FACTURIS N-ARE ADRESA A DOCUMENTULUI: PDF-ul se cere prin API, dupa id, cu acreditarile
-   * magazinului. Modulul se incarca LENES, numai cand chiar e o factura Facturis de urcat.
+   * ⚠ FACTURIS, FACTUREAZA.RO SI EASYBILL N-AU ADRESA A DOCUMENTULUI: PDF-ul se cere prin API, dupa
+   * id, cu acreditarile magazinului. Modulul casei se incarca LENES, numai cand chiar e o factura a ei
+   * de urcat (`MODUL_PDF_PRIN_API`; cele trei au aceeasi semnatura, probata de tipuri).
    * Lasat pe ramura de mai jos, `fetch("")` ar fi cazut ca „eroare de retea", iar urcarea ar fi
    * iesit `necunoscut` in registru: blocata, pentru o factura care exista si se poate aduce.
    */
-  if (f.furnizor === "facturis") {
-    const { pdfDocumentAlMagazinului } = await import("@/lib/facturis/server");
+  if (f.furnizor === "facturis" || f.furnizor === "factureaza" || f.furnizor === "easybill") {
+    const { pdfDocumentAlMagazinului } = await MODUL_PDF_PRIN_API[f.furnizor]();
     return pdfDocumentAlMagazinului(admin, businessId, f.cheie);
   }
   try {

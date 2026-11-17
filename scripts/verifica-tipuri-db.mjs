@@ -62,6 +62,8 @@ const IN_ASTEPTARE = [
   // Facturis Online (17.11.2026): aplicata pe baza DEMO, asteapta productia odata cu pushul.
   // Cand intra in productie se muta in `migrations/` si intrarea de aici se scoate.
   "docs/facturare/2027-02-05-facturis.sql",
+  // Factureaza.ro, easybill si SAGA (17.11.2026): la fel, pe DEMO; intra in productie DUPA Facturis.
+  "docs/facturare/2027-02-06-factureaza-easybill-saga.sql",
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

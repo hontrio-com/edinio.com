@@ -11,6 +11,9 @@ import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice } from "@/lib/actions/fgo.actions";
 import { generateFacturisInvoice } from "@/lib/actions/facturis.actions";
+import { generateFactureazaInvoice } from "@/lib/actions/factureaza.actions";
+import { generateEasybillInvoice } from "@/lib/actions/easybill.actions";
+import { areFacturaEmisa } from "@/lib/billing/factura-pe-comanda";
 import { createCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { createSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { createFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
@@ -24,6 +27,8 @@ import type { SmartbillConfig } from "@/lib/smartbill";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import { facturisGata } from "@/lib/facturis/config";
+import { factureazaGata } from "@/lib/factureaza/config";
+import { easybillGata } from "@/lib/easybill/config";
 import type { CargusConfig } from "@/lib/cargus";
 import type { SamedayConfig } from "@/lib/sameday/client";
 import { tipPunctFan, type FanCourierConfig } from "@/lib/fancourier";
@@ -74,6 +79,17 @@ export interface BulkResult {
    */
   oprit?: true;
   /**
+   * De ce s-a oprit lotul, cand NU e timpul (SAGA: cheie refuzata, pana la ei). Cu el, ecranul
+   * spune motivul adevarat in locul textului despre timp.
+   */
+  motivOprire?: string;
+  /**
+   * Ce trebuie sa afle omul desi documentul s-a emis (modul de test, total diferit, incasare
+   * neinregistrata, numar necitit), cate unul pe comanda: „#1042: ...”. Fara ele, un lot pe
+   * sandbox-ul unei case arata „reușite” verzi.
+   */
+  avertismente?: string[];
+  /**
    * ⚠ DE CE SE DESFACE „SARITE" (14.09.2026).
    *
    * `skipped` era un singur numar peste trei motive care cer miscari OPUSE:
@@ -105,7 +121,7 @@ const MAX_BULK = 50;
 const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
-export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo" | "facturis";
+export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo" | "facturis" | "factureaza" | "easybill";
 export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket";
 const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera", "epacket"];
 
@@ -231,6 +247,15 @@ function cleanIds(orderIds: string[]): { ids: string[] } | { error: string } {
 const BUGET_LOT_MS = 210_000;
 
 /**
+ * ⚠ Bugetul LOTULUI DE FACTURI e mai strans: casele care intorc doar id-ul si citesc documentul
+ * inapoi au drumuri mai lungi decat curierii. Cel mai lung, citit din surse: Facturis ~110s
+ * (emiterea, apoi citirea cu reincercari), Factureaza.ro ~105s (pregatirea, clientul, emiterea,
+ * incasarea), easybill limitat de propriul termen (refuza sa inceapa o factura pe care n-o mai
+ * poate termina). 150_000 lasa 150s: cel mai lung drum plus scrierile de dupa.
+ */
+const BUGET_LOT_FACTURI_MS = 150_000;
+
+/**
  * Bazin cu concurenta marginita SI cu termen.
  *
  * JS e cu un singur fir, deci obiectul de rezultat se muteaza in siguranta intre `await`-uri.
@@ -242,8 +267,10 @@ const BUGET_LOT_MS = 210_000;
  * ⚠ Nu se INTRERUPE o lucrare pornita: un AWB pe drum spre curier trebuie dus pana la capat,
  * altfel am avea un colet emis pe care nu l-am scris nicaieri. Se opreste doar PORNIREA altora.
  */
-async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, size: number): Promise<void> {
-  const termen = Date.now() + BUGET_LOT_MS;
+async function runPool<T>(
+  items: T[], worker: (item: T) => Promise<void>, size: number, bugetMs: number = BUGET_LOT_MS,
+): Promise<void> {
+  const termen = Date.now() + bugetMs;
   let cursor = 0;
   const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
     while (cursor < items.length) {
@@ -312,7 +339,8 @@ export async function greutateaComenziiPentruAwb(
 
 // ── Bulk invoices ───────────────────────────────────────────────────────────────
 // One invoice per order (never double-invoice), with the chosen provider or the
-// highest-priority enabled one (SmartBill → Oblio → fGO → Facturis) — mirrors auto-invoicing.
+// highest-priority enabled one (SmartBill → Oblio → fGO → Facturis → Factureaza.ro → easybill), the
+// same order as auto-invoicing (`COLOANE_FACTURA_EMISA`).
 export async function bulkGenerateInvoices(
   businessId: string, orderIds: string[], provider: InvoiceProvider = "auto",
 ): Promise<BulkResult | { error: string }> {
@@ -325,7 +353,7 @@ export async function bulkGenerateInvoices(
 
   const admin = createAdminClient();
   const { data: settings } = await admin
-    .from("store_settings").select("smartbill_config, oblio_config, fgo_config, facturis_config").eq("business_id", businessId).single();
+    .from("store_settings").select("smartbill_config, oblio_config, fgo_config, facturis_config, factureaza_config, easybill_config").eq("business_id", businessId).single();
   const sb = settings?.smartbill_config as SmartbillConfig | null;
   const ob = settings?.oblio_config as OblioConfig | null;
   const fg = settings?.fgo_config as FgoConfig | null;
@@ -335,11 +363,14 @@ export async function bulkGenerateInvoices(
     fgo: !!(fg?.enabled && fg?.cod_unic && fg?.private_key && fg?.serie),
     /* `facturisGata` insasi: aceeasi regula ca in Integrari si in pagina comenzii. */
     facturis: facturisGata(settings?.facturis_config),
+    factureaza: factureazaGata(settings?.factureaza_config),
+    easybill: easybillGata(settings?.easybill_config),
   };
-  const pick: "smartbill" | "oblio" | "fgo" | "facturis" | null =
+  const ORDINE = ["smartbill", "oblio", "fgo", "facturis", "factureaza", "easybill"] as const;
+  const pick: (typeof ORDINE)[number] | null =
     provider !== "auto"
       ? (enabled[provider] ? provider : null)
-      : (enabled.smartbill ? "smartbill" : enabled.oblio ? "oblio" : enabled.fgo ? "fgo" : enabled.facturis ? "facturis" : null);
+      : (ORDINE.find((c) => enabled[c]) ?? null);
   if (!pick) return { error: "Niciun furnizor de facturare activ pentru optiunea aleasa." };
 
   /* ⚠ SI EROAREA, nu doar randurile. Fara ea, o citire picata dadea `orders` null, iar
@@ -349,7 +380,7 @@ export async function bulkGenerateInvoices(
      din acelasi fisier isi verifica citirea de mult; astea doua ramasesera in urma. */
   const { data: orders, error: eCitire } = await admin
     .from("orders")
-    .select("id, order_number, order_source, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key")
+    .select("id, order_number, order_source, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, factureaza_invoice_key, easybill_invoice_key")
     .eq("business_id", businessId).in("id", ids);
   if (eCitire) return { error: `Nu am putut citi comenzile selectate: ${eCitire.message}` };
 
@@ -357,8 +388,8 @@ export async function bulkGenerateInvoices(
 
   await runPool(orders ?? [], async (o) => {
     const row = o as Record<string, unknown>;
-    /* ⚠ La Facturis, CHEIA: o factura al carei numar nu s-a citit inca EXISTA. */
-    if (row.smartbill_invoice_number || row.oblio_invoice_number || row.fgo_invoice_number || row.facturis_invoice_key) { result.skipped++; return; }
+    /* O factura la ORICARE casa (la Facturis, Factureaza.ro si easybill: CHEIA) inseamna „sarita". */
+    if (areFacturaEmisa(row)) { result.skipped++; return; }
     /* easySales: factura se face ACOLO. Sarita, nu refuzata: lotul amestecat e cazul obisnuit. */
     if (procesataInEasySales(row.order_source)) { result.skipped++; return; }
     try {
@@ -366,14 +397,22 @@ export async function bulkGenerateInvoices(
         pick === "smartbill" ? await generateOrderInvoice(businessId, o.id)
         : pick === "oblio" ? await generateOblioInvoice(businessId, o.id)
         : pick === "fgo" ? await generateFgoInvoice(businessId, o.id)
-        : await generateFacturisInvoice(businessId, o.id);
+        : pick === "facturis" ? await generateFacturisInvoice(businessId, o.id)
+        : pick === "factureaza" ? await generateFactureazaInvoice(businessId, o.id)
+        : await generateEasybillInvoice(businessId, o.id);
       if (isErr(res)) { result.failed++; result.errors.push({ order: o.order_number, message: res.error }); }
-      else result.done++;
+      else {
+        result.done++;
+        const avertisment = (res as { avertisment?: unknown }).avertisment;
+        if (typeof avertisment === "string" && avertisment.trim()) {
+          (result.avertismente ??= []).push(`#${o.order_number}: ${avertisment.trim()}`);
+        }
+      }
     } catch (e) {
       result.failed++;
       result.errors.push({ order: o.order_number, message: (e as Error).message });
     }
-  }, INVOICE_CONCURRENCY);
+  }, INVOICE_CONCURRENCY, BUGET_LOT_FACTURI_MS);
 
   logError({ action: "bulkGenerateInvoices", message: `provider=${pick} done=${result.done} skipped=${result.skipped} failed=${result.failed}`, details: { businessId }, businessId, userId: g.userId, severity: "info" });
   revalidatePath("/dashboard/orders");

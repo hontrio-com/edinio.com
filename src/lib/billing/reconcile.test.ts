@@ -127,12 +127,15 @@ test("refuzul spune numerele SI pasul urmator", () => {
   assert.match(m, /71,63 lei/);
   assert.match(m, /7,64 lei/);
   assert.match(m, /Editeaza comanda/, "un refuz care nu spune ce sa faci opreste facturarea fara sa o repare");
+  assert.ok(!m.includes("—"), "fara linie lunga in textul pentru om");
+  assert.match(m, /însumează/, "textul pentru om are diacritice");
 });
 
 test("pe o comanda PLATITA, indemnul se schimba: banii au intrat deja", () => {
   const r = { fel: "refuz" as const, asteptat: 63.99, gasit: 71.63, delta: 7.64, total: 71.63 };
   const m = mesajRefuz(r, "0002", true);
-  assert.match(m, /incasarea/);
+  assert.match(m, /încasarea/);
+  assert.ok(!m.includes("—"), "fara linie lunga in textul pentru om");
   assert.doesNotMatch(m, /Editeaza comanda/, "resalvarea ar cobori totalul sub suma platita");
 });
 

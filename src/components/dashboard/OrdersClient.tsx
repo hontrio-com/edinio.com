@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Download, Package, CheckSquare, Printer } from "lucide-react";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Download, Package, CheckSquare, Printer, Upload } from "lucide-react";
 import { printeazaEticheta } from "@/lib/orders/printeaza-eticheta";
 import { WootBulkModal } from "./WootBulkModal";
 import { toast } from "sonner";
@@ -21,7 +21,11 @@ import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { generateFacturisInvoice } from "@/lib/actions/facturis.actions";
-import { descarcaPdfFacturis } from "@/components/dashboard/facturis/descarcaPdfFacturis";
+import { generateFactureazaInvoice } from "@/lib/actions/factureaza.actions";
+import { generateEasybillInvoice } from "@/lib/actions/easybill.actions";
+import { exportaComenzileInSaga } from "@/lib/actions/saga.actions";
+import { eDocumentDeTestFactureaza } from "@/lib/factureaza/config";
+import { CelulaCaseiCuCheie } from "@/components/dashboard/facturare/CelulaCaseiCuCheie";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
@@ -106,7 +110,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled, sagaEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /**
@@ -130,6 +134,10 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   oblioEnabled?: boolean;
   fgoEnabled?: boolean;
   facturisEnabled?: boolean;
+  factureazaEnabled?: boolean;
+  easybillEnabled?: boolean;
+  /** SAGA e conectat: lotul poate trimite documentele comenzilor in contabilitate. */
+  sagaEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
   glsEnabled?: boolean;
@@ -192,8 +200,6 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
-  const [facturisActionOrderId, setFacturisActionOrderId] = useState<string | null>(null);
-  const [, startFacturisTransition] = useTransition();
 
   // ── Bulk selection ──
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -282,8 +288,10 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     if (oblioEnabled) list.push({ key: "oblio", label: "Oblio" });
     if (fgoEnabled) list.push({ key: "fgo", label: "fGO" });
     if (facturisEnabled) list.push({ key: "facturis", label: "Facturis" });
+    if (factureazaEnabled) list.push({ key: "factureaza", label: "Factureaza.ro" });
+    if (easybillEnabled) list.push({ key: "easybill", label: "easybill" });
     return list;
-  }, [smartbillEnabled, oblioEnabled, fgoEnabled, facturisEnabled]);
+  }, [smartbillEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled]);
   const anyInvoice = invoiceProviders.length > 0;
 
   const awbCouriers = useMemo(() => {
@@ -381,13 +389,23 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
      */
     if (res.oprit) {
       const ramase = res.total - res.done - res.skipped - res.failed;
+      const neincercate = `${ramase} ${ramase === 1 ? "comandă nu a fost încercată" : "comenzi nu au fost încercate"}`;
+      /* ⚠ Motivul ADEVARAT, cand serverul il da (SAGA: cheie refuzata, pana); altfel e timpul. */
       toast.warning(
-        `${title}: ${parts.join(", ")}. Lotul s-a oprit la timp, iar ${ramase} `
-        + `${ramase === 1 ? "comandă nu a fost încercată" : "comenzi nu au fost încercate"}. `
-        + "Selectează-le din nou si reia: nimic nu s-a trimis de două ori.",
+        res.motivOprire
+          ? `${title}: ${parts.join(", ")}. Lotul s-a oprit: ${res.motivOprire} ${neincercate}.`
+          : `${title}: ${parts.join(", ")}. Lotul s-a oprit la timp, iar ${neincercate}. `
+            + "Selectează-le din nou și reia: nimic nu s-a trimis de două ori.",
+        { duration: 12000 },
       );
     } else if (res.failed > 0) toast.error(`${title}: ${parts.join(", ")}`);
     else toast.success(`${title}: ${parts.join(", ")}`);
+    /* Ce s-a emis, dar cere atentie (sandbox, total diferit, incasare): spus, nu inghitit. */
+    if (res.avertismente?.length) {
+      const primele = res.avertismente.slice(0, 3).join(" ");
+      const rest = res.avertismente.length - 3;
+      toast.warning(`${primele}${rest > 0 ? ` Și încă ${rest}.` : ""}`, { duration: 20000 });
+    }
     router.refresh();
   }
 
@@ -485,6 +503,14 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     }
   }
 
+  /* SAGA primeste documente DEJA emise (o copie in contabilitate), nu emite nimic fiscal. Comenzile
+     fara factura, sau cu documentele deja trimise, ies „sărite”. */
+  function runBulkSaga() {
+    const n = selected.size;
+    /* Nu emite nimic fiscal, dar cu importul automat pornit documentele intra pe loc in contabilitate. */
+    if (!window.confirm(`Trimiți în SAGA documentele a ${n} ${n === 1 ? "comandă" : "comenzi"}? Un document trimis nu mai pleacă a doua oară.`)) return;
+    void runBulk("SAGA", () => exportaComenzileInSaga(businessId!, [...selected]));
+  }
   function runBulkInvoices() {
     const n = selected.size;
     if (!window.confirm(`Generezi facturi pentru ${n} ${n === 1 ? "comandă" : "comenzi"}? Se emit documente fiscale reale (nu pot fi șterse, doar stornate).`)) return;
@@ -723,39 +749,6 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
         toast.success(`${label} ${result.series}${result.number} generata`);
         router.refresh();
       }
-    });
-  }
-
-  /*
-   * Facturis din lista: doar emiterea. ⚠ Raspunsul pierdut nu invita la reincercare oarba: emiterea
-   * trece prin registru, dar un document emis si nelegat de comanda se lamureste din contul Facturis.
-   */
-  function handleFacturisInvoice(e: React.MouseEvent, orderId: string) {
-    e.stopPropagation();
-    if (!businessId) return;
-    setFacturisActionOrderId(orderId);
-    startFacturisTransition(async () => {
-      let result: Awaited<ReturnType<typeof generateFacturisInvoice>>;
-      try {
-        result = await generateFacturisInvoice(businessId, orderId);
-      } catch {
-        toast.error(
-          "Nu am primit răspuns de la server, deci nu știm dacă factura s-a emis în Facturis. Verifică în contul Facturis înainte să încerci din nou.",
-          { duration: 12000 },
-        );
-        router.refresh();
-        return;
-      } finally {
-        setFacturisActionOrderId(null);
-      }
-      if ("error" in result) {
-        toast.error(result.error, { duration: 10000 });
-        return;
-      }
-      const nr = [result.series, result.number].filter(Boolean).join(" ");
-      toast.success(nr ? `Factura Facturis ${nr} a fost emisă.` : "Factura Facturis a fost emisă.");
-      if (result.avertisment) toast.warning(result.avertisment, { duration: 15000 });
-      router.refresh();
     });
   }
 
@@ -1237,6 +1230,18 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
               </div>
             )}
 
+            {/* SAGA: documentele emise pleaca in contabilitate */}
+            {sagaEnabled && businessId && (
+              <button
+                type="button"
+                onClick={runBulkSaga}
+                disabled={bulkBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" /> Trimite în SAGA
+              </button>
+            )}
+
             {/* Bulk AWBs */}
             {anyAwb && businessId && (
               <div className="flex items-center gap-1.5">
@@ -1524,6 +1529,12 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                     )}
                     {facturisEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Facturis</th>
+                    )}
+                    {factureazaEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Factureaza.ro</th>
+                    )}
+                    {easybillEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">easybill</th>
                     )}
                     {smartbillEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
@@ -2346,46 +2357,51 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                             </div>
                           </td>
                         )}
+                        {/*
+                          Casele „cu cheie” (Facturis, Factureaza.ro, easybill): aceeasi celula,
+                          `CelulaCaseiCuCheie`. ⚠ Fara stornare din lista, dinadins (vezi componenta).
+                        */}
                         {facturisEnabled && (
                           <td className="px-5 py-3.5 hidden lg:table-cell">
-                            {/*
-                              ⚠ STORNAREA NU SE FACE DIN LISTA, dinadins: e un act fiscal ireversibil, iar in
-                              pagina comenzii cere o a doua apasare, cu ce se intampla scris pe fata. Aici
-                              raman emiterea (pazita de registru si de slot) si PDF-ul.
-                            */}
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {order.facturis_storno_key ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive">
-                                  <XCircle className="h-3 w-3" />
-                                  Storno {[order.facturis_storno_series, order.facturis_storno_number].filter(Boolean).join("")}
-                                </span>
-                              ) : order.facturis_invoice_key ? (
-                                <>
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success">
-                                    <FileCheck className="h-3 w-3" />
-                                    {[order.facturis_invoice_series, order.facturis_invoice_number].filter(Boolean).join("") || "Factura"}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={e => { e.stopPropagation(); void descarcaPdfFacturis(order.id, "invoice"); }}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
-                                  >
-                                    <FileText className="h-3 w-3" />
-                                    PDF
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={e => handleFacturisInvoice(e, order.id)}
-                                  disabled={facturisActionOrderId === order.id}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
-                                >
-                                  {facturisActionOrderId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
-                                  Factura
-                                </button>
-                              )}
-                            </div>
+                            {businessId && (
+                              <CelulaCaseiCuCheie
+                                casa="Facturis"
+                                ruta="/api/facturis/pdf"
+                                orderId={order.id}
+                                factura={{ cheie: order.facturis_invoice_key, serie: order.facturis_invoice_series, numar: order.facturis_invoice_number }}
+                                storno={{ cheie: order.facturis_storno_key, serie: order.facturis_storno_series, numar: order.facturis_storno_number }}
+                                emite={() => generateFacturisInvoice(businessId, order.id)}
+                              />
+                            )}
+                          </td>
+                        )}
+                        {factureazaEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {businessId && (
+                              <CelulaCaseiCuCheie
+                                casa="Factureaza.ro"
+                                ruta="/api/factureaza/pdf"
+                                orderId={order.id}
+                                factura={{ cheie: order.factureaza_invoice_key, serie: order.factureaza_invoice_series, numar: order.factureaza_invoice_number }}
+                                storno={{ cheie: order.factureaza_storno_key, serie: order.factureaza_storno_series, numar: order.factureaza_storno_number }}
+                                deTest={eDocumentDeTestFactureaza(order.factureaza_storno_key ?? order.factureaza_invoice_key)}
+                                emite={() => generateFactureazaInvoice(businessId, order.id)}
+                              />
+                            )}
+                          </td>
+                        )}
+                        {easybillEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {businessId && (
+                              <CelulaCaseiCuCheie
+                                casa="easybill"
+                                ruta="/api/easybill/pdf"
+                                orderId={order.id}
+                                factura={{ cheie: order.easybill_invoice_key, serie: order.easybill_invoice_series, numar: order.easybill_invoice_number }}
+                                storno={{ cheie: order.easybill_storno_key, serie: order.easybill_storno_series, numar: order.easybill_storno_number }}
+                                emite={() => generateEasybillInvoice(businessId, order.id)}
+                              />
+                            )}
                           </td>
                         )}
                         {smartbillEnabled && (

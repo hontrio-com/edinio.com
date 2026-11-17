@@ -17,6 +17,9 @@ import type { COConfig } from "@/lib/colete";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import { facturisGata } from "@/lib/facturis/config";
+import { factureazaGata } from "@/lib/factureaza/config";
+import { easybillGata } from "@/lib/easybill/config";
+import { sagaGata } from "@/lib/saga/config";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
@@ -63,7 +66,7 @@ export default async function OrdersPage({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config)")
+    .select("id, business_name, store_settings(smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, factureaza_config, easybill_config, saga_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config)")
     .eq("user_id", user.id)
     .eq("type", "ministore")
     .limit(1)
@@ -85,6 +88,10 @@ export default async function OrdersPage({
   const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
   /* `facturisGata` insasi: aceeasi regula ca in Integrari, in pagina comenzii si in lot. */
   const facturisEnabled = facturisGata(settings?.facturis_config);
+  /* La fel, regula fiecarei integrari, aceeasi ca in Integrari, in pagina comenzii si in lot. */
+  const factureazaEnabled = factureazaGata(settings?.factureaza_config);
+  const easybillEnabled = easybillGata(settings?.easybill_config);
+  const sagaEnabled = sagaGata(settings?.saga_config);
   const cg = settings?.cargus_config as CargusConfig | null;
   const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
   const dg = settings?.dpd_config as DpdConfig | null;
@@ -170,7 +177,7 @@ export default async function OrdersPage({
   const samedayEnabled = !!(sg?.enabled && sg?.username && sg?.pickup_point_id);
 
   const integrari: Integrari = {
-    smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled,
+    smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled, sagaEnabled,
     cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, curieraEnabled, epacketEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled,
     curieraOptiuni, epacketOptiuni, postaZilePrezentare,
     fanPickup: { lastDate: fg?.last_pickup_date ?? null, lastId: fg?.last_pickup_id ?? null },
@@ -200,6 +207,9 @@ type Integrari = {
   oblioEnabled: boolean;
   fgoEnabled: boolean;
   facturisEnabled: boolean;
+  factureazaEnabled: boolean;
+  easybillEnabled: boolean;
+  sagaEnabled: boolean;
   cargusEnabled: boolean;
   dpdEnabled: boolean;
   glsEnabled: boolean;
@@ -324,7 +334,7 @@ async function ListaComenzi({
    */
   return (
     <CampuriCheckoutProvider campuri={campuriDinConfigurare((setariCheckout as { checkout?: unknown } | null)?.checkout)}>
-    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} facturisEnabled={integrari.facturisEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} facturisEnabled={integrari.facturisEnabled} factureazaEnabled={integrari.factureazaEnabled} easybillEnabled={integrari.easybillEnabled} sagaEnabled={integrari.sagaEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
     </CampuriCheckoutProvider>
   );
 }

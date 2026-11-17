@@ -58,6 +58,26 @@ export const eroareRefuz = (mesaj: string): Error => cu(mesaj, "esuat");
 export const eroareNesigura = (mesaj: string): Error => cu(mesaj, "necunoscut");
 
 /**
+ * Documentul RAMAS la furnizor dintr-o operatie cazuta la jumatate.
+ *
+ * Unele case scriu in mai multi pasi (easybill: intai factura goala, apoi liniile, una cate una). Daca
+ * un pas de dupa crearea documentului cade, documentul EXISTA la ei, iar reluarea trebuie sa-l
+ * regaseasca, nu sa creeze altul. Id-ul lui merge pe randul registrului (`referinta_externa`) si
+ * ramane acolo si dupa deblocare (`incheie_operatie_externa` face `coalesce` pe referinta), deci
+ * reluarea il citeste dupa id, nu il cauta intr-o fereastra de zile care poate fi prea scurta.
+ */
+export function cuReferintaRamasa<E extends Error>(e: E, referinta: string): E {
+  (e as E & { referintaRamasa?: string }).referintaRamasa = referinta;
+  return e;
+}
+
+/** Id-ul documentului ramas la furnizor, daca eroarea il poarta (vezi `cuReferintaRamasa`). */
+export function referintaRamasa(e: unknown): string | null {
+  const r = (e as { referintaRamasa?: unknown } | null | undefined)?.referintaRamasa;
+  return typeof r === "string" && r.trim() ? r.trim().slice(0, 200) : null;
+}
+
+/**
  * Cand tot ce avem e statusul HTTP.
  *
  *   4xx   furnizorul a inteles si a respins -> REFUZ.

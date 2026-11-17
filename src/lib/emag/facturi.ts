@@ -34,10 +34,11 @@ import { LIMITE_EMAG, taiat } from "./limite";
 import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
 import {
-  cheiaPdfFactura, DOCUMENT_DE_TEST, eDocumentDeTest, esteChiarPdf, facturaComenzii, NU_E_PDF,
+  cheiaPdfFactura, DOCUMENT_DE_TEST, esteChiarPdf, facturaComenzii, facturaDeTest, NU_E_PDF,
   type Factura,
 } from "@/lib/billing/factura-comenzii";
 import { cuRegistru } from "@/lib/operatii/registru";
+import { eroareRefuz, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { salveazaAtasamente, isEmagError } from "./client";
 import type { ContextEmag } from "./sync";
 
@@ -57,6 +58,12 @@ interface RandComanda {
   facturis_invoice_key: string | null;
   facturis_invoice_series: string | null;
   facturis_invoice_number: string | null;
+  factureaza_invoice_key: string | null;
+  factureaza_invoice_series: string | null;
+  factureaza_invoice_number: string | null;
+  easybill_invoice_key: string | null;
+  easybill_invoice_series: string | null;
+  easybill_invoice_number: string | null;
   order_source: unknown;
 }
 
@@ -139,7 +146,7 @@ async function urcaFacturaCitita(
   aduPdf: (f: Factura) => Promise<ArrayBuffer | { error: string }>,
 ): Promise<RezultatFactura> {
   const o = randCitit<RandComanda>("orders", await admin.from("orders")
-    .select("id, smartbill_invoice_number, smartbill_invoice_series, smartbill_invoice_url, oblio_invoice_number, oblio_invoice_series, oblio_invoice_link, fgo_invoice_number, fgo_invoice_series, fgo_invoice_link, facturis_invoice_key, facturis_invoice_series, facturis_invoice_number, order_source")
+    .select("id, smartbill_invoice_number, smartbill_invoice_series, smartbill_invoice_url, oblio_invoice_number, oblio_invoice_series, oblio_invoice_link, fgo_invoice_number, fgo_invoice_series, fgo_invoice_link, facturis_invoice_key, facturis_invoice_series, facturis_invoice_number, factureaza_invoice_key, factureaza_invoice_series, factureaza_invoice_number, easybill_invoice_key, easybill_invoice_series, easybill_invoice_number, order_source")
     .eq("id", orderId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!o) return { fel: "esec", mesaj: "Comanda nu a fost găsită." };
 
@@ -157,7 +164,7 @@ async function urcaFacturaCitita(
    * ⚠ `esec`, nu `fara_factura`: a doua ar insemna „inca nu s-a emis" si cronul ar reincerca la
    * nesfarsit, tacut. Asa, mesajul ajunge in jurnal si spune ce e de facut.
    */
-  if (eDocumentDeTest(factura.url)) return { fel: "esec", mesaj: DOCUMENT_DE_TEST };
+  if (facturaDeTest(factura)) return { fel: "esec", mesaj: DOCUMENT_DE_TEST };
 
   const sursa = o.order_source as { emag_order_id?: number; tip?: number | null } | null;
   const emagOrderId = sursa?.emag_order_id;
@@ -209,11 +216,17 @@ async function urcaFacturaCitita(
       cheie: `emag-factura-${orderId}-${factura.numar}`,
     },
     async () => {
+      /*
+       * ⚠ PDF-ul se aduce INAINTE de orice urcare: daca nu vine (casa a refuzat, integrarea e acum pe
+       * alt mediu, limita de cereri, termen), la marketplace nu s-a atasat NIMIC. E deci un refuz
+       * dovedit (`eroareRefuz`), nu „nu stim”: altfel randul ramanea `necunoscut` si bloca urcarea
+       * pana la o deblocare de mana, pentru ceva ce nici n-a plecat.
+       */
       const pdf = await aduPdf(factura);
-      if ("error" in pdf) throw new Error(pdf.error);
+      if ("error" in pdf) throw eroareRefuz(pdf.error);
       /* ⚠ Ce a venit chiar e un document? Vezi `esteChiarPdf`: o adresa care cere autentificare
          raspunde `200` cu pagina de login, iar aceea NU are ce cauta la marketplace ca factura. */
-      if (!esteChiarPdf(pdf)) throw new Error(NU_E_PDF);
+      if (!esteChiarPdf(pdf)) throw eroareRefuz(NU_E_PDF);
 
       /* ⚠ `private, no-store`: documentul are numele si adresa cumparatorului. */
       const url = await uploadToR2(
@@ -252,6 +265,8 @@ async function urcaFacturaCitita(
        * atunci registrul blocheaza si cere o privire de om. Aceeasi alegere ca in
        * `eroare-furnizor.ts`, unde implicitul e `necunoscut` dinadins.
        */
+      /* Intai verdictul pus chiar la aruncare (PDF-ul neadus, documentul care nu e PDF). */
+      if (verdictFurnizor(e) === "esuat") return "esuat";
       const m = (e instanceof Error ? e.message : "").toLowerCase();
       if (m.includes("not found") || m.includes("invalid")) return "esuat";
       return "necunoscut";

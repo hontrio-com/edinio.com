@@ -227,7 +227,7 @@ export function FgoConfigClient({
         </div>
         {form.auto_invoice && (
           <Field label="Declanșează generarea când comanda devine" htmlFor="fgo-declansator"
-            hint="Cu mai multe programe de facturare pe automat, se emite o singură factură: întâi SmartBill, apoi Oblio, apoi fGO.">
+            hint="Cu mai multe programe de facturare pe automat, se emite o singură factură: întâi SmartBill, apoi Oblio, fGO, Facturis, Factureaza.ro și easybill.">
             <select id="fgo-declansator" value={form.auto_invoice_trigger ?? "confirmed"}
               onChange={e => set("auto_invoice_trigger", e.target.value as AutoInvoiceTrigger)} className={selectCls}>
               {AUTO_INVOICE_TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}

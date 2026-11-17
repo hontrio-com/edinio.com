@@ -3,6 +3,7 @@
 import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sagaPermiteReemiterea } from "@/lib/saga/server";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
@@ -530,6 +531,12 @@ export async function generateFgoInvoice(
     storno: orderData.fgo_storno_number,
   });
   if (!slot.poateEmite) return { error: slot.mesaj };
+  /* SAGA: refacturarea dupa storno asteapta pana pleaca in contabilitate si stornarea facturii
+     inlocuite (`sagaPermiteReemiterea`); altfel acolo ar ramane factura veche, neanulata. */
+  if (slot.inlocuieste) {
+    const saga = await sagaPermiteReemiterea(createAdminClient(), businessId, orderId);
+    if (!saga.ok) return { error: saga.mesaj };
+  }
 
   try {
     const addr = order.shipping_address as ShippingAddress | null;

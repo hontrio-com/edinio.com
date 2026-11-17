@@ -143,6 +143,18 @@ describe("emiterea", () => {
     fir({ status: 400, body: JSON.stringify({ error: 1112, result: "Clientul exista" }) });
     await assert.rejects(emiteFactura(A, {}, []), (e: unknown) => verdictFurnizor(e) === "esuat");
   });
+  test("⚠ pe o scriere, un 5xx sau 408 cu corp de eroare NU e refuz dovedit: NU STIM", async () => {
+    for (const status of [500, 503, 408]) {
+      fir({ status, body: JSON.stringify({ error: "9999", result: "Eroare interna" }) });
+      await assert.rejects(emiteFactura(A, {}, []), (e: unknown) => verdictFurnizor(e) === "necunoscut", String(status));
+    }
+  });
+  test("⚠ succesul castiga: `error: 0` langa `success: 2000` nu e refuz", async () => {
+    for (const eroare of [0, "0", "", null]) {
+      fir({ body: JSON.stringify({ success: 2000, error: eroare, result: { id: 77 } }) });
+      assert.equal(await emiteFactura(A, {}, []), "77", String(eroare));
+    }
+  });
 });
 
 describe("citirea", () => {

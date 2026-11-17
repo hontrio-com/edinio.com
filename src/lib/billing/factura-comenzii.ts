@@ -15,6 +15,7 @@
  * trebuie sa-si puna un secret de proba — vezi `emag/awb-propriu.test.ts`.
  */
 import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
+import { eDocumentDeTestFactureaza } from "@/lib/factureaza/config";
 
 export type Factura =
   | {
@@ -25,7 +26,8 @@ export type Factura =
       url: string;
     }
   | {
-      furnizor: "facturis";
+      /* Casele care dau PDF-ul numai pe API, dupa id: Facturis, Factureaza.ro, easybill. */
+      furnizor: "facturis" | "factureaza" | "easybill";
       numar: string;
       /**
        * ⚠ GOL, dinadins: Facturis n-are o adresa a documentului. PDF-ul se cere prin API
@@ -54,35 +56,71 @@ export function facturaComenzii(o: {
   oblio_invoice_number?: string | null; oblio_invoice_series?: string | null; oblio_invoice_link?: string | null;
   fgo_invoice_number?: string | null; fgo_invoice_series?: string | null; fgo_invoice_link?: string | null;
   facturis_invoice_key?: string | null; facturis_invoice_series?: string | null; facturis_invoice_number?: string | null;
+  factureaza_invoice_key?: string | null; factureaza_invoice_series?: string | null; factureaza_invoice_number?: string | null;
+  easybill_invoice_key?: string | null; easybill_invoice_series?: string | null; easybill_invoice_number?: string | null;
 }): Factura | null {
   const numar = (serie?: string | null, nr?: string | null) =>
     [(serie ?? "").trim(), (nr ?? "").trim()].filter(Boolean).join("");
 
+  /*
+   * ⚠ Documentul de TEST nu ascunde o factura reala de la alta casa. Pe o comanda probata intai in
+   * sandbox-ul unei case si facturata apoi de-adevaratelea la alta, prima (de test) ar fi oprit
+   * urcarea pentru totdeauna, iar factura reala n-ar fi ajuns niciodata la marketplace. Deci se ia
+   * PRIMA FISCALA, in ordinea caselor; documentul de test se intoarce doar cand nu exista alta,
+   * ca garda `facturaDeTest` sa spuna DE CE nu urca (un `null` ar fi parut „inca neemisa”).
+   */
+  const toate = toateFacturile(o, numar);
+  return toate.find((f) => !facturaDeTest(f)) ?? toate[0] ?? null;
+}
+
+/** Facturile de pe comanda, in ordinea caselor (cea a dispecerului). */
+function toateFacturile(
+  o: Parameters<typeof facturaComenzii>[0],
+  numar: (serie?: string | null, nr?: string | null) => string,
+): Factura[] {
+  const toate: Factura[] = [];
   if (o.smartbill_invoice_number && o.smartbill_invoice_url) {
-    return {
+    toate.push({
       furnizor: "smartbill",
       numar: numar(o.smartbill_invoice_series, o.smartbill_invoice_number),
       url: o.smartbill_invoice_url,
-    };
+    });
   }
   if (o.oblio_invoice_number && o.oblio_invoice_link) {
-    return { furnizor: "oblio", numar: numar(o.oblio_invoice_series, o.oblio_invoice_number), url: o.oblio_invoice_link };
+    toate.push({ furnizor: "oblio", numar: numar(o.oblio_invoice_series, o.oblio_invoice_number), url: o.oblio_invoice_link });
   }
   if (o.fgo_invoice_number && o.fgo_invoice_link) {
-    return { furnizor: "fgo", numar: numar(o.fgo_invoice_series, o.fgo_invoice_number), url: o.fgo_invoice_link };
+    toate.push({ furnizor: "fgo", numar: numar(o.fgo_invoice_series, o.fgo_invoice_number), url: o.fgo_invoice_link });
   }
   /* ⚠ Facturis: cheia si NUMARUL. Cheia singura inseamna o factura al carei numar nu s-a citit
      inca; la marketplace ar fi plecat cu un nume fara numar, iar cheia de R2 si a registrului
      poarta numarul. Asteapta pana se citeste (din pagina comenzii). */
   if (o.facturis_invoice_key && o.facturis_invoice_number) {
-    return {
+    toate.push({
       furnizor: "facturis",
       numar: numar(o.facturis_invoice_series, o.facturis_invoice_number),
       url: "",
       cheie: o.facturis_invoice_key,
-    };
+    });
   }
-  return null;
+  /* La fel Factureaza.ro si easybill: cheia SI numarul, PDF-ul prin API. */
+  if (o.factureaza_invoice_key && o.factureaza_invoice_number) {
+    toate.push({
+      furnizor: "factureaza",
+      numar: numar(o.factureaza_invoice_series, o.factureaza_invoice_number),
+      url: "",
+      cheie: o.factureaza_invoice_key,
+    });
+  }
+  if (o.easybill_invoice_key && o.easybill_invoice_number) {
+    toate.push({
+      furnizor: "easybill",
+      numar: numar(o.easybill_invoice_series, o.easybill_invoice_number),
+      url: "",
+      cheie: o.easybill_invoice_key,
+    });
+  }
+  return toate;
 }
 
 /**
@@ -153,6 +191,15 @@ export const GAZDE_DE_TEST = ["testuat.fgo.ro"];
 export function eDocumentDeTest(url: string): boolean {
   const u = (url ?? "").toLowerCase();
   return GAZDE_DE_TEST.some((g) => u.includes(g));
+}
+
+/**
+ * Documentul de proba, la ORICE casa: fGO dupa gazda linkului (`eDocumentDeTest`), Factureaza.ro
+ * dupa cheia `test:` (id-ul din sandbox-ul lor, `eDocumentDeTestFactureaza`). Urcarea la marketplace
+ * intreaba asta, nu regulile pe rand: o casa noua cu mod de test se adauga AICI.
+ */
+export function facturaDeTest(f: Factura): boolean {
+  return eDocumentDeTest(f.url) || (f.furnizor === "factureaza" && eDocumentDeTestFactureaza(f.cheie));
 }
 
 /** Ce i se spune omului cand documentul comenzii e unul de proba. */

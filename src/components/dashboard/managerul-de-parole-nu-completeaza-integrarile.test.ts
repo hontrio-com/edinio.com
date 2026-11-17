@@ -56,9 +56,8 @@ function toateEcranele(dir: string): string[] {
  * curate chiar campurile stricate. Pierdut o data pe drum; de-aia se numara
  * acoladele si sirurile.
  */
-function etichetePentruParole(sursa: string): { text: string; rand: number }[] {
+function etichetePentruParole(sursa: string, re: RegExp = /<input\b/g): { text: string; rand: number }[] {
   const gasite: { text: string; rand: number }[] = [];
-  const re = /<input\b/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(sursa)) !== null) {
     let i = m.index;
@@ -157,6 +156,38 @@ test("⚠⚠ orice camp de parola din panou isi spune `autoComplete`, si NU e `o
       + "\nScrie `autoComplete=\"new-password\"` pe ele. `off` NU ajuta: Chrome il ignora"
       + " pe campurile de parola.",
   );
+});
+
+/* ══ 3b. Componenta `Input`: implicitul e bun, dar un `autoComplete` scris il BATE ══ */
+
+test("⚠⚠ niciun `<Input type=\"password\">` nu-si suprascrie implicitul cu `off`", () => {
+  /*
+    17.11.2026: „Cheie API” Factureaza.ro avea `autoComplete="off"`. Pus pe componenta, bate
+    implicitul `new-password` (`{...props}` vine dupa el); iar Chrome ignora `off` pe campurile de
+    parola si completa PAROLA DE LOGIN Edinio, care pleca apoi, la „Testează”, in antetul catre un
+    tert. Scanerul de mai sus cauta doar `<input` mic, deci n-a vazut-o.
+  */
+  const vinovate: string[] = [];
+  for (const radacina of PANOURI) {
+    for (const fisier of toateEcranele(join(process.cwd(), radacina))) {
+      const sursa = readFileSync(fisier, "utf8");
+      if (!sursa.includes('type="password"')) continue;
+      for (const eticheta of etichetePentruParole(sursa, /<Input\b/g)) {
+        const m = eticheta.text.match(/autoComplete="([a-z-]+)"/);
+        if (m && m[1] !== "new-password" && m[1] !== "current-password") {
+          vinovate.push(`${fisier.replace(process.cwd(), "").split("\\").join("/")}:${eticheta.rand} (autoComplete="${m[1]}")`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(vinovate, [], "Campuri de secret pe care managerul de parole le completeaza cu parola de login");
+});
+
+test("⚠ scanerul vede si componenta `Input` (altfel proba de sus ar trece goala)", () => {
+  const mostra = '<Input id="x" type="password" autoComplete="off" value={v} onChange={(e) => s(e.target.value)} />';
+  const gasite = etichetePentruParole(mostra, /<Input\b/g);
+  assert.equal(gasite.length, 1);
+  assert.ok(gasite[0].text.includes('autoComplete="off"'), "eticheta s-a taiat inainte de `autoComplete`");
 });
 
 /* ══ 4. Cealalta jumatate: campul in care ajungea EMAILUL ══════════════════ */

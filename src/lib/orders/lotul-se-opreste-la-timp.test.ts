@@ -99,8 +99,16 @@ test("⚠⚠ bugetul lotului sta SUB `maxDuration`, cu marja de scriere", () => 
 
 test("⚠ bazinul chiar verifica termenul, si nu intrerupe o lucrare pornita", () => {
   const s = sursa(LOT);
-  assert.match(s, /const termen = Date\.now\(\) \+ BUGET_LOT_MS;/,
+  /* Bugetul e al lotului: implicit `BUGET_LOT_MS`; lotul de facturi trece unul mai strans. */
+  assert.match(s, /size: number, bugetMs: number = BUGET_LOT_MS,/, "bazinul si-a pierdut bugetul implicit");
+  assert.match(s, /const termen = Date\.now\(\) \+ bugetMs;/,
     "bazinul nu-si mai socoteste termenul la pornire");
+  assert.match(s, /\}, INVOICE_CONCURRENCY, BUGET_LOT_FACTURI_MS\);/,
+    "lotul de facturi nu mai are bugetul lui (casele cu citire inapoi au drumuri mai lungi decat curierii)");
+  const facturi = Number((/const BUGET_LOT_FACTURI_MS = ([\d_]+);/.exec(s)?.[1] ?? "").replace(/_/g, ""));
+  const curieri = Number((/const BUGET_LOT_MS = ([\d_]+);/.exec(s)?.[1] ?? "").replace(/_/g, ""));
+  assert.ok(facturi > 0 && facturi < curieri, "bugetul facturilor trebuie sa fie mai strans decat al AWB-urilor");
+  assert.ok(300_000 - facturi >= 140_000, "sub 140s de rezerva, o factura pornita in ultima clipa trece de maxDuration");
   assert.match(s, /if \(Date\.now\(\) >= termen\) return;/,
     "bazinul nu mai verifica termenul inainte de a porni o comanda noua");
 

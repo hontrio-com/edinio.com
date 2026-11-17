@@ -4,6 +4,21 @@ import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
 import { coteleLiniilor } from "@/lib/billing/cote-pe-linii";
 import { procesataInEasySales } from "@/lib/orders/origin";
+import { areFacturaEmisa } from "@/lib/billing/factura-pe-comanda";
+import { casaResponsabila, COLOANE_CONFIG_AUTOMATE, type CasaAutomata } from "@/lib/billing/casa-automata";
+
+/* Modulul fiecarei case, incarcat LENES: numai casa raspunzatoare se incarca (cai literale, ca
+   bundlerul sa le gaseasca). Nu se exporta: intr-un modul „use server” fiecare export e un capat. */
+const MODUL_AUTOMAT: Record<CasaAutomata, () => Promise<{
+  maybeAutoGenerateInvoice: (businessId: string, orderId: string, newStatus: string, newPaymentStatus: string, sistem?: SistemClient) => Promise<boolean>;
+}>> = {
+  smartbill: () => import("@/lib/actions/smartbill.actions"),
+  oblio: () => import("@/lib/actions/oblio.actions"),
+  fgo: () => import("@/lib/actions/fgo.actions"),
+  facturis: () => import("@/lib/actions/facturis.actions"),
+  factureaza: () => import("@/lib/actions/factureaza.actions"),
+  easybill: () => import("@/lib/actions/easybill.actions"),
+};
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -31,10 +46,10 @@ export async function maybeAutoInvoice(
          venit `undefined`, `coteleLiniilor` ar fi raspuns „uniforma" pe o lista goala, si
          poarta ar fi tacut exact pe comenzile pentru care exista. Aceeasi lectie ca la
          coloanele de AWB din generarea in masa. */
-      /* ⚠ La Facturis se intreaba CHEIA, nu numarul: emiterea intoarce doar id-ul documentului, iar
-         numarul se citeste dupa. O factura cu cheie si fara numar EXISTA, si nu are voie sa primeasca
-         o a doua de la alta casa. */
-      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, payment_method, order_source, items")
+      /* ⚠ La Facturis, Factureaza.ro si easybill se intreaba CHEIA, nu numarul: emiterea intoarce doar
+         id-ul documentului, iar numarul se citeste dupa. O factura cu cheie si fara numar EXISTA, si nu
+         are voie sa primeasca o a doua de la alta casa. Coloanele: `COLOANE_FACTURA_EMISA`. */
+      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, factureaza_invoice_key, easybill_invoice_key, payment_method, order_source, items")
       .eq("id", orderId)
       .eq("business_id", businessId)
       .single();
@@ -267,19 +282,29 @@ export async function maybeAutoInvoice(
          steag ar fi rămas fără factură fără ca nimeni să afle de ce. */
       if (complet === 0) return;
     }
-    if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number || o.facturis_invoice_key) return;
+    /* O factura la ORICARE casa opreste dispecerul: vezi `areFacturaEmisa`, regula unica. */
+    if (areFacturaEmisa(o)) return;
 
-    const smartbill = await import("@/lib/actions/smartbill.actions");
-    if (await smartbill.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
-
-    const oblio = await import("@/lib/actions/oblio.actions");
-    if (await oblio.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
-
-    const fgo = await import("@/lib/actions/fgo.actions");
-    if (await fgo.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
-
-    const facturis = await import("@/lib/actions/facturis.actions");
-    if (await facturis.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
+    /*
+     * ⚠ O SINGURA CASA raspunde de factura automata (`casaResponsabila`): prima, in ordine, cu
+     * automatul pornit, configurarea gata si declansatorul potrivit. Se cheama numai ea, si
+     * dispecerul se opreste acolo, ORICARE ar fi rezultatul: inainte, o casa a carei emitere cadea
+     * intorcea `false`, iar dispecerul trecea la urmatoarea, care emitea si ea (doua facturi fiscale
+     * dupa un raspuns pierdut). O emitere cazuta ramane pentru calea manuala, cu motivul in jurnal.
+     *
+     * ⚠ O citire picata a configurarilor nu alege nimic: trecerea se reia la urmatoarea schimbare
+     * (dispecerul e chemat din cronurile curierilor si din fiecare schimbare de stare).
+     */
+    const { data: setari, error: eSetari } = await supabase
+      .from("store_settings")
+      .select(COLOANE_CONFIG_AUTOMATE)
+      .eq("business_id", businessId)
+      .maybeSingle();
+    if (eSetari) return;
+    const casa = casaResponsabila(setari as Record<string, unknown> | null, newStatus, newPaymentStatus);
+    if (!casa) return;
+    const modul = await MODUL_AUTOMAT[casa]();
+    await modul.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem);
   } catch {
     // best-effort; auto-invoicing must never block an order update
   }

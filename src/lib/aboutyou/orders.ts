@@ -13,6 +13,7 @@
 // sandbox. Money integer fields are treated as minor units (cents). Parsing is
 // tolerant so ingestion keeps working as the shape is pinned down.
 
+import { areFacturaEmisa } from "@/lib/billing/factura-pe-comanda";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { logError } from "@/lib/error-logger";
@@ -640,17 +641,18 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
         oblio_invoice_number: string | null;
         fgo_invoice_number: string | null;
         facturis_invoice_key: string | null;
+        factureaza_invoice_key: string | null;
+        easybill_invoice_key: string | null;
         items: unknown;
         total: number | null;
       }>("aboutyou.comandaDeActualizat", await admin
         .from("orders")
-        .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, items, total")
+        .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, factureaza_invoice_key, easybill_invoice_key, items, total")
         .eq("id", ex.order_id).eq("business_id", ctx.businessId).maybeSingle());
 
       /* ⚠ Comanda necitibila NU se rescrie orbeste: fara ea nu stim daca are factura. */
       const hotarare = comanda == null ? "nimic" : hotarareaActualizarii({
-        facturata: !!(comanda.smartbill_invoice_number
-          ?? comanda.oblio_invoice_number ?? comanda.fgo_invoice_number ?? comanda.facturis_invoice_key),
+        facturata: areFacturaEmisa(comanda),
         itemsVechi: comanda.items, totalVechi: comanda.total,
         itemsNoi: edinioItems, totalNou: total,
       });

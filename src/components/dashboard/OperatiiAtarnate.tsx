@@ -271,17 +271,24 @@ function etichetaFel(fel: OperatieAtarnata["fel"]): string {
     : fel === "anulare_document" ? "Anularea documentului"
     : fel === "ridicare" ? "Comanda de ridicare"
     : fel === "plata" ? "Plata"
-    : fel === "incasare" ? "Incasarea"
+    : fel === "incasare" ? "Încasarea"
     : fel === "rambursare" ? "Rambursarea"
     : fel === "publicare" ? "Publicarea pe marketplace"
     : fel === "retragere" ? "Retragerea de pe marketplace"
     : fel === "expediere" ? "Confirmarea expedierii"
-    : "Operatia";
+    : fel === "export" ? "Trimiterea în contabilitate"
+    : "Operația";
 }
+
+/** Numele caselor de facturare si al contabilitatii, cum le stie omul (restul raman cu id-ul lor). */
+const NUME_FURNIZOR: Record<string, string> = {
+  smartbill: "SmartBill", oblio: "Oblio", fgo: "fGO", facturis: "Facturis",
+  factureaza: "Factureaza.ro", easybill: "easybill", saga: "SAGA",
+};
 
 function eticheta(op: OperatieAtarnata): string {
   // `in_curs` si `necunoscut` nu inseamna acelasi lucru pentru cel care citeste:
   // primul e „a plecat si nu s-a mai auzit nimic", al doilea „a raspuns prost".
-  const stare = op.stare === "in_curs" ? "a plecat si nu s-a mai auzit nimic" : "raspunsul nu a ajuns";
-  return `${etichetaFel(op.fel)} la ${op.furnizor} — ${stare}`;
+  const stare = op.stare === "in_curs" ? "a plecat și nu s-a mai auzit nimic" : "răspunsul nu a ajuns";
+  return `${etichetaFel(op.fel)} la ${NUME_FURNIZOR[op.furnizor] ?? op.furnizor}: ${stare}`;
 }

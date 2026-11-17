@@ -90,6 +90,13 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      ⚠ Numele sunt IDENTICE in `FacturisConfig` (lib/facturis/config.ts) si in
      `privat.campuri_secrete` (migratia 2027-02-05); `facturis-legat-peste-tot.test.ts` le compara. */
   facturis_config: ["api_key", "password"],
+  /* Factureaza.ro: cheia API (Basic, in antet). easybill: parola utilizatorului de tip API (numele
+     ramane vizibil, ca omul sa stie ce cont a legat). SAGA: cheia de acces, care se ROTESTE la
+     raspunsuri (`saga_roteste_cheia`). ⚠ Numele sunt identice in config.ts-ul fiecareia si in
+     `privat.campuri_secrete` (migratia 2027-02-06); probele de legare le compara. */
+  factureaza_config: ["api_key"],
+  easybill_config: ["password"],
+  saga_config: ["api_key"],
   /* FedEx: DOUA credentiale in portalul lor („API Key" si „Secret Key"), dar numai
      una e secreta. `client_id` NU intra aici, desi ei il numesc cheie: singur nu
      deschide nimic (OAuth-ul lor cere si secretul), iar comerciantul trebuie sa-l

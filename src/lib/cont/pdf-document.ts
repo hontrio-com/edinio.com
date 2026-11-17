@@ -1,6 +1,9 @@
 import { esteChiarPdf, eDocumentDeTest } from "@/lib/billing/factura-comenzii";
 import { fetchMerchantPdf, getMerchantInvoicePdfUrl } from "@/lib/smartbill";
-import { pdfFactura, type AcreditariFacturis } from "@/lib/facturis/client";
+import { pdfFactura as pdfFacturis, type AcreditariFacturis } from "@/lib/facturis/client";
+import { pdfFactura as pdfFactureaza, type AcreditariFactureaza } from "@/lib/factureaza/client";
+import { pdfFactura as pdfEasybill, type AcreditariEasybill } from "@/lib/easybill/client";
+import { eDocumentDeTestFactureaza } from "@/lib/factureaza/config";
 
 /**
  * Aducerea PDF-ului unui document fiscal, pentru cumparator.
@@ -33,9 +36,11 @@ export type MotivEsec =
 
 export type SursaPdf =
   | { fel: "smartbill"; email: string; token: string; cif: string; serie: string; numar: string }
-  /* Facturis n-are adresa a documentului: PDF-ul se cere prin API, dupa id, cu acreditarile
-     magazinului. Nimic despre Facturis nu pleaca spre om, ca la SmartBill. */
+  /* Facturis, Factureaza.ro si easybill n-au adresa a documentului: PDF-ul se cere prin API, dupa
+     id, cu acreditarile magazinului. Nimic despre casa nu pleaca spre om, ca la SmartBill. */
   | { fel: "facturis"; acreditari: AcreditariFacturis | null; cheie: string }
+  | { fel: "factureaza"; acreditari: AcreditariFactureaza | null; cheie: string }
+  | { fel: "easybill"; acreditari: AcreditariEasybill | null; cheie: string }
   | { fel: "link"; adresa: string };
 
 export type RezultatPdf = { ok: true; octeti: ArrayBuffer } | { ok: false; motiv: MotivEsec };
@@ -57,12 +62,17 @@ export async function aducePdf(sursa: SursaPdf): Promise<RezultatPdf> {
     );
     if ("error" in rez) return { ok: false, motiv: "furnizor_indisponibil" };
     octeti = rez;
-  } else if (sursa.fel === "facturis") {
+  } else if (sursa.fel === "facturis" || sursa.fel === "factureaza" || sursa.fel === "easybill") {
     if (!sursa.acreditari) return { ok: false, motiv: "casa_neconectata" };
     if (!sursa.cheie) return { ok: false, motiv: "fara_document" };
+    /* ⚠ Garda 1, INAINTE de retea: documentul din sandbox-ul Factureaza.ro (cheia `test:`). */
+    if (sursa.fel === "factureaza" && eDocumentDeTestFactureaza(sursa.cheie)) return { ok: false, motiv: "document_de_test" };
+    const semnal = AbortSignal.timeout(LIMITA_DE_TIMP_MS);
     try {
-      /* `pdfFactura` verifica singura antetul `%PDF-` si marimea; aici se pastreaza doar motivul. */
-      octeti = await pdfFactura(sursa.acreditari, sursa.cheie, AbortSignal.timeout(LIMITA_DE_TIMP_MS));
+      /* `pdfFactura`-ul fiecarei case verifica singur antetul `%PDF-` si marimea; aici ramane motivul. */
+      octeti = sursa.fel === "facturis" ? await pdfFacturis(sursa.acreditari, sursa.cheie, semnal)
+        : sursa.fel === "factureaza" ? await pdfFactureaza(sursa.acreditari, sursa.cheie, semnal)
+        : await pdfEasybill(sursa.acreditari, sursa.cheie, semnal);
     } catch {
       return { ok: false, motiv: "furnizor_indisponibil" };
     }

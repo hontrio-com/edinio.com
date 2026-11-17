@@ -39,7 +39,13 @@ import {
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { generateFacturisInvoice, refreshFacturisDocuments, stornoFacturisInvoiceAction } from "@/lib/actions/facturis.actions";
-import { descarcaPdfFacturis } from "@/components/dashboard/facturis/descarcaPdfFacturis";
+import { generateFactureazaInvoice, refreshFactureazaDocuments, stornoFactureazaInvoiceAction } from "@/lib/actions/factureaza.actions";
+import { generateEasybillInvoice, refreshEasybillDocuments } from "@/lib/actions/easybill.actions";
+import { eDocumentDeTestFactureaza } from "@/lib/factureaza/config";
+import { FilaCaseiCuCheie } from "@/components/dashboard/facturare/FilaCaseiCuCheie";
+import { EasybillStornareManuala } from "@/components/dashboard/easybill/EasybillStornareManuala";
+import { SagaComandaPanel } from "@/components/dashboard/saga/SagaComandaPanel";
+import type { StarePanouSaga } from "@/lib/saga/config";
 import { rambourseazaPrinNetopia } from "@/lib/actions/netopia.actions";
 import { rambourseazaPrinIpay } from "@/lib/actions/ipay.actions";
 import { rambourseazaPrinKlarna } from "@/lib/actions/klarna.actions";
@@ -79,6 +85,9 @@ import { detaliileDeLaCheckout } from "@/lib/cont/detalii-checkout";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
+
+/** Casele de facturare care pot avea o fila in cardul „Facturare” al comenzii. */
+type CasaDeFacturare = "smartbill" | "oblio" | "fgo" | "facturis" | "factureaza" | "easybill";
 
 interface OrderItem {
   product_id: string;
@@ -388,6 +397,10 @@ export function OrderDetailClient({
   oblioEnabled,
   fgoEnabled,
   facturisEnabled,
+  factureazaEnabled,
+  factureazaTest,
+  easybillEnabled,
+  saga,
   cargusEnabled,
   dpdEnabled,
   glsEnabled,
@@ -454,6 +467,12 @@ export function OrderDetailClient({
   oblioEnabled?: boolean;
   fgoEnabled?: boolean;
   facturisEnabled?: boolean;
+  factureazaEnabled?: boolean;
+  /** Factureaza.ro e ACUM in modul de test (documentele emise de aici nu sunt fiscale). */
+  factureazaTest?: boolean;
+  easybillEnabled?: boolean;
+  /** Panoul SAGA (contabilitatea); `null` = SAGA nu e conectat. */
+  saga?: StarePanouSaga | null;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
   glsEnabled?: boolean;
@@ -635,12 +654,6 @@ export function OrderDetailClient({
   const [fgoActionPending, startFgoTransition] = useTransition();
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
 
-  // Facturis state
-  const [facturisActionPending, startFacturisTransition] = useTransition();
-  const [facturisAction, setFacturisAction] = useState<"invoice" | "storno" | "refresh" | null>(null);
-  const [facturisPdf, setFacturisPdf] = useState<"invoice" | "storno" | null>(null);
-  const [confirmStornoFacturis, setConfirmStornoFacturis] = useState(false);
-
   // ── Invoicing providers (unified card) ──
   const invoicingProviders = ([
     smartbillEnabled && { id: "smartbill" as const, name: "SmartBill", logo: "/integrations/smartbill.webp" },
@@ -648,15 +661,21 @@ export function OrderDetailClient({
     fgoEnabled && { id: "fgo" as const, name: "fGO", logo: "/integrations/fgo.svg" },
     /* Semnul patrat: sigla lor intreaga e lata si ALBA, iar in casuta de 16 px n-ar fi citibila. */
     facturisEnabled && { id: "facturis" as const, name: "Facturis", logo: "/integrations/facturis-mic.png" },
-  ].filter(Boolean)) as { id: "smartbill" | "oblio" | "fgo" | "facturis"; name: string; logo: string }[];
+    /* La fel, semne patrate decupate din siglele lor: pastila „.RO” si „e”-ul. */
+    factureazaEnabled && { id: "factureaza" as const, name: "Factureaza.ro", logo: "/integrations/factureaza-mic.png" },
+    easybillEnabled && { id: "easybill" as const, name: "easybill", logo: "/integrations/easybill-mic.png" },
+  ].filter(Boolean)) as { id: CasaDeFacturare; name: string; logo: string }[];
 
   const smartbillHasDoc = !!(invoiceNumber || estimateNumber || stornoNumber);
   const oblioHasDoc = !!(order.oblio_invoice_number || order.oblio_proforma_number || order.oblio_storno_number);
   const fgoHasDoc = !!(ord["fgo_invoice_number"] || ord["fgo_storno_number"]);
   /* ⚠ Facturis: CHEIA spune ca documentul exista, chiar daca numarul nu s-a citit inca. */
   const facturisHasDoc = !!(order.facturis_invoice_key || order.facturis_storno_key);
-  const defaultProvider = smartbillHasDoc ? "smartbill" : oblioHasDoc ? "oblio" : fgoHasDoc ? "fgo" : facturisHasDoc ? "facturis" : invoicingProviders[0]?.id;
-  const [activeProvider, setActiveProvider] = useState<"smartbill" | "oblio" | "fgo" | "facturis" | undefined>(defaultProvider);
+  const factureazaHasDoc = !!(order.factureaza_invoice_key || order.factureaza_storno_key);
+  const easybillHasDoc = !!(order.easybill_invoice_key || order.easybill_storno_key);
+  const defaultProvider: CasaDeFacturare | undefined = smartbillHasDoc ? "smartbill" : oblioHasDoc ? "oblio" : fgoHasDoc ? "fgo"
+    : facturisHasDoc ? "facturis" : factureazaHasDoc ? "factureaza" : easybillHasDoc ? "easybill" : invoicingProviders[0]?.id;
+  const [activeProvider, setActiveProvider] = useState<CasaDeFacturare | undefined>(defaultProvider);
   const activeProviderMeta = invoicingProviders.find(p => p.id === activeProvider) ?? invoicingProviders[0];
 
   // ── Couriers (Expediere card) ──
@@ -1341,67 +1360,6 @@ export function OrderDetailClient({
     });
   }
 
-  /*
-   * ═══ FACTURIS ═══
-   *
-   * Emiterea intoarce numai id-ul documentului; seria si numarul se citesc dupa. Daca citirea n-a
-   * raspuns, factura EXISTA (cheia e pe comanda) si cardul arata „Citește numărul”, o citire pura.
-   * ⚠ Mesajul de cadere nu invita la reincercare oarba: un raspuns pierdut nu spune daca s-a emis.
-   */
-  function handleFacturisAction(action: "invoice" | "storno" | "refresh") {
-    setFacturisAction(action);
-    setConfirmStornoFacturis(false);
-    startFacturisTransition(async () => {
-      let result:
-        | Awaited<ReturnType<typeof generateFacturisInvoice>>
-        | Awaited<ReturnType<typeof refreshFacturisDocuments>>;
-      try {
-        result = action === "invoice"
-          ? await generateFacturisInvoice(businessId, order.id)
-          : action === "storno"
-            ? await stornoFacturisInvoiceAction(businessId, order.id)
-            : await refreshFacturisDocuments(businessId, order.id);
-      } catch {
-        if (action === "refresh") {
-          toast.error("Nu am primit răspuns de la server. Încearcă din nou.");
-          return;
-        }
-        const ce = action === "invoice" ? "factura" : "stornarea";
-        toast.error(
-          `Nu am primit răspuns de la server, deci nu știm dacă ${ce} s-a emis în Facturis. Verifică în contul Facturis înainte să încerci din nou.`,
-          { duration: 12000 },
-        );
-        router.refresh();
-        return;
-      } finally {
-        setFacturisAction(null);
-      }
-      if ("error" in result) {
-        toast.error(result.error, { duration: 10000 });
-        return;
-      }
-      const nr = [result.series, result.number].filter(Boolean).join(" ");
-      if (action === "refresh") {
-        toast.success(nr ? `Numărul din Facturis: ${nr}.` : "Facturis n-a dat încă numărul documentului.");
-      } else {
-        const ce = action === "invoice" ? "Factura Facturis" : "Stornarea Facturis";
-        toast.success(nr ? `${ce} ${nr} a fost emisă.` : `${ce} a fost emisă.`);
-      }
-      if ("avertisment" in result && result.avertisment) toast.warning(result.avertisment, { duration: 15000 });
-      router.refresh();
-    });
-  }
-
-  /* PDF-ul vine prin noi (`/api/facturis/pdf`): Facturis il da numai pe API, cu cheile contului. */
-  async function pdfFacturis(tip: "invoice" | "storno") {
-    setFacturisPdf(tip);
-    try {
-      await descarcaPdfFacturis(order.id, tip);
-    } finally {
-      setFacturisPdf(null);
-    }
-  }
-
   const smsLen = smsMessage.length;
   const smsSegments = smsLen === 0 ? 0 : Math.ceil(smsLen / 160);
 
@@ -1654,95 +1612,6 @@ export function OrderDetailClient({
         Genereaza factura
       </button>
     );
-  }
-
-  function renderFacturis() {
-    const cheie = order.facturis_invoice_key;
-    const cheieStorno = order.facturis_storno_key;
-    const nrFactura = [order.facturis_invoice_series, order.facturis_invoice_number].filter(Boolean).join(" ");
-    const nrStorno = [order.facturis_storno_series, order.facturis_storno_number].filter(Boolean).join(" ");
-    const lipsesteNumarul = (!!cheie && !order.facturis_invoice_number) || (!!cheieStorno && !order.facturis_storno_number);
-    const ocupat = facturisActionPending;
-    const roteste = (ce: "invoice" | "storno" | "refresh") => ocupat && facturisAction === ce;
-
-    const butonPdf = (tip: "invoice" | "storno", eticheta: string) => (
-      <button type="button" onClick={() => pdfFacturis(tip)} disabled={facturisPdf !== null}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-        {facturisPdf === tip ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-        {eticheta}
-      </button>
-    );
-    const citesteNumarul = lipsesteNumarul ? (
-      <button type="button" onClick={() => handleFacturisAction("refresh")} disabled={ocupat}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-        {roteste("refresh") ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-        Citește numărul
-      </button>
-    ) : null;
-    const butonEmitere = (text: string) => (
-      <button type="button" onClick={() => handleFacturisAction("invoice")} disabled={ocupat}
-        className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
-        {roteste("invoice") ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-        {roteste("invoice") ? "Se emite..." : text}
-      </button>
-    );
-
-    if (cheieStorno) {
-      return (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-            <p className="text-sm font-mono font-bold text-destructive">Storno {nrStorno || "(numărul nu s-a citit încă)"}</p>
-          </div>
-          {nrFactura && <p className="text-xs text-muted-foreground">Stornează factura <span className="font-mono">{nrFactura}</span>.</p>}
-          <div className="flex flex-wrap items-center gap-2">
-            {butonPdf("storno", "PDF stornare")}
-            {cheie && butonPdf("invoice", "PDF factură")}
-            {citesteNumarul}
-          </div>
-          {/* Dupa storno comanda e din nou facturabila: factura noua o mentioneaza pe cea stornata. */}
-          {butonEmitere("Emite factură nouă")}
-        </div>
-      );
-    }
-    if (cheie) {
-      return (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
-            <p className="text-sm font-mono font-bold text-foreground">Factura {nrFactura || "(numărul nu s-a citit încă)"}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {butonPdf("invoice", "PDF")}
-            {citesteNumarul}
-          </div>
-          {/* ⚠ Stornarea e un act fiscal ireversibil: cere a doua apasare, cu ce se intampla scris pe fata. */}
-          {confirmStornoFacturis ? (
-            <div className="space-y-2 rounded-lg border border-destructive/30 p-3">
-              <p className="text-xs text-foreground">Se emite în Facturis o factură cu cantitățile cu minus, care anulează factura {nrFactura || "comenzii"}. Nu se poate retrage.</p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => handleFacturisAction("storno")} disabled={ocupat}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50">
-                  {roteste("storno") ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                  Da, stornează
-                </button>
-                <button type="button" onClick={() => setConfirmStornoFacturis(false)} disabled={ocupat}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-50">
-                  Renunță
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setConfirmStornoFacturis(true)} disabled={ocupat}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-              <RotateCcw className="h-4 w-4" />
-              Emite storno
-            </button>
-          )}
-        </div>
-      );
-    }
-    return butonEmitere("Generează factura");
   }
 
   return (
@@ -2396,10 +2265,62 @@ export function OrderDetailClient({
                 {activeProvider === "smartbill" && renderSmartbill()}
                 {activeProvider === "oblio" && renderOblio()}
                 {activeProvider === "fgo" && renderFgo()}
-                {activeProvider === "facturis" && renderFacturis()}
+                {/*
+                  Casele „cu cheie”: aceeasi fila (`FilaCaseiCuCheie`), cu actiunile fiecareia.
+                  ⚠ RAMAN MONTATE si cand alta fila e aleasa (doar ascunse): starea „se emite” traieste
+                  in fila, iar o fila demontata in timpul emiterii ar fi revenit cu butonul activ.
+                */}
+                {facturisEnabled && (
+                  <div hidden={activeProvider !== "facturis"}>
+                  <FilaCaseiCuCheie
+                    casa="Facturis"
+                    ruta="/api/facturis/pdf"
+                    orderId={order.id}
+                    factura={{ cheie: order.facturis_invoice_key, serie: order.facturis_invoice_series, numar: order.facturis_invoice_number }}
+                    storno={{ cheie: order.facturis_storno_key, serie: order.facturis_storno_series, numar: order.facturis_storno_number }}
+                    emite={() => generateFacturisInvoice(businessId, order.id)}
+                    citeste={() => refreshFacturisDocuments(businessId, order.id)}
+                    storneaza={() => stornoFacturisInvoiceAction(businessId, order.id)}
+                  />
+                  </div>
+                )}
+                {factureazaEnabled && (
+                  <div hidden={activeProvider !== "factureaza"}>
+                  <FilaCaseiCuCheie
+                    casa="Factureaza.ro"
+                    ruta="/api/factureaza/pdf"
+                    orderId={order.id}
+                    factura={{ cheie: order.factureaza_invoice_key, serie: order.factureaza_invoice_series, numar: order.factureaza_invoice_number }}
+                    storno={{ cheie: order.factureaza_storno_key, serie: order.factureaza_storno_series, numar: order.factureaza_storno_number }}
+                    deTest={eDocumentDeTestFactureaza(order.factureaza_storno_key ?? order.factureaza_invoice_key)}
+                    modTest={factureazaTest}
+                    emite={() => generateFactureazaInvoice(businessId, order.id)}
+                    citeste={() => refreshFactureazaDocuments(businessId, order.id)}
+                    storneaza={() => stornoFactureazaInvoiceAction(businessId, order.id)}
+                  />
+                  </div>
+                )}
+                {easybillEnabled && (
+                  <div hidden={activeProvider !== "easybill"}>
+                  <FilaCaseiCuCheie
+                    casa="easybill"
+                    ruta="/api/easybill/pdf"
+                    orderId={order.id}
+                    factura={{ cheie: order.easybill_invoice_key, serie: order.easybill_invoice_series, numar: order.easybill_invoice_number }}
+                    storno={{ cheie: order.easybill_storno_key, serie: order.easybill_storno_series, numar: order.easybill_storno_number }}
+                    emite={() => generateEasybillInvoice(businessId, order.id)}
+                    citeste={() => refreshEasybillDocuments(businessId, order.id)}
+                    /* easybill n-are stornare in API: se face in contul lor, apoi se inregistreaza aici. */
+                    stornareInAfara={<EasybillStornareManuala businessId={businessId} orderId={order.id} />}
+                  />
+                  </div>
+                )}
               </div>
             </div>
           )}
+
+          {/* Contabilitatea: documentele emise (de oricare casa) pleaca in SAGA. */}
+          {saga && <SagaComandaPanel businessId={businessId} orderId={order.id} stare={saga} />}
 
           {/* Expediere */}
           {isEmag && <EmagFulfillmentPanel businessId={businessId} order={order} />}

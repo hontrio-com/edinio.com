@@ -7,6 +7,8 @@ import { aducePdf, numeleFisierului, type MotivEsec, type SursaPdf } from "./pdf
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import { acreditari, configurareaMagazinului } from "@/lib/facturis/server";
+import * as factureaza from "@/lib/factureaza/server";
+import * as easybill from "@/lib/easybill/server";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -75,7 +77,7 @@ export async function servesteDocumentul(
   const admin = createAdminClient();
   const { data: rand } = await admin
     .from("orders")
-    .select("smartbill_invoice_series, smartbill_invoice_number, smartbill_storno_series, smartbill_storno_number, oblio_invoice_link, oblio_storno_link, fgo_invoice_link, facturis_invoice_key, facturis_storno_key")
+    .select("smartbill_invoice_series, smartbill_invoice_number, smartbill_storno_series, smartbill_storno_number, oblio_invoice_link, oblio_storno_link, fgo_invoice_link, facturis_invoice_key, facturis_storno_key, factureaza_invoice_key, factureaza_storno_key, easybill_invoice_key, easybill_storno_key")
     .eq("id", orderId)
     .eq("business_id", magazin.id)
     .single();
@@ -112,6 +114,29 @@ export async function servesteDocumentul(
       fel: "facturis",
       acreditari: acreditari(config),
       cheie: (fel === "factura" ? rand.facturis_invoice_key : rand.facturis_storno_key) ?? "",
+    };
+  } else if (doc.casa === "factureaza") {
+    /* La fel la Factureaza.ro; documentul de test il opreste `aducePdf`, inainte de orice cerere. */
+    const config = await factureaza.configurareaMagazinului(admin, magazin.id);
+    if (!config) {
+      await jurnal(magazin.id, orderId, fel, "casa_neconectata", doc.casa);
+      return esec("casa_neconectata");
+    }
+    sursa = {
+      fel: "factureaza",
+      acreditari: factureaza.acreditari(config),
+      cheie: (fel === "factura" ? rand.factureaza_invoice_key : rand.factureaza_storno_key) ?? "",
+    };
+  } else if (doc.casa === "easybill") {
+    const config = await easybill.configurareaMagazinului(admin, magazin.id);
+    if (!config) {
+      await jurnal(magazin.id, orderId, fel, "casa_neconectata", doc.casa);
+      return esec("casa_neconectata");
+    }
+    sursa = {
+      fel: "easybill",
+      acreditari: easybill.acreditari(config),
+      cheie: (fel === "factura" ? rand.easybill_invoice_key : rand.easybill_storno_key) ?? "",
     };
   } else {
     /* fGO nu pastreaza link pentru stornare; `stornoDescarcabil` e deja fals. */

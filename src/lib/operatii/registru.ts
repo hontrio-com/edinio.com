@@ -55,13 +55,15 @@ export type FelOperatie =
   | "factura" | "proforma" | "storno" | "anulare_document"
   | "plata" | "incasare" | "rambursare"
   | "publicare" | "retragere" | "expediere"
+  /* Trimiterea unui document deja emis catre contabilitate (SAGA). Nu emite nimic fiscal nou. */
+  | "export"
   | "proba";
 
 /** Care furnizor. Trebuie sa ramana in pas cu `operatii_externe_furnizor_check`. */
 export type FurnizorOperatie =
   | "cargus" | "sameday" | "fancourier" | "dpd" | "woot" | "colete" | "gls" | "pallex" | "ecolet"
   | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket"
-  | "smartbill" | "oblio" | "fgo" | "facturis"
+  | "smartbill" | "oblio" | "fgo" | "facturis" | "factureaza" | "easybill" | "saga"
   | "stripe" | "netopia" | "ipay" | "klarna" | "revolut"
   | "trendyol" | "aboutyou" | "olx" | "gmc" | "emag"
   | "proba";
@@ -85,7 +87,7 @@ export type FurnizorOperatie =
  * sa se departeze una de alta.
  */
 export type { Verdict } from "@/lib/operatii/eroare-furnizor";
-import type { Verdict } from "@/lib/operatii/eroare-furnizor";
+import { referintaRamasa, type Verdict } from "@/lib/operatii/eroare-furnizor";
 
 export interface CerereOperatie {
   /**
@@ -298,7 +300,9 @@ async function incearca<T>(
   } catch (e) {
     const verdict = clasifica(e);
     const mesaj = e instanceof Error ? e.message : String(e);
-    await incheie(admin, cerere, operatieId, verdict, null, null, mesaj);
+    /* Un document creat INAINTE de caderea unui pas urmator ramane legat de rand (vezi
+       `cuReferintaRamasa`): reluarea il gaseste dupa id, chiar si dupa deblocare. */
+    await incheie(admin, cerere, operatieId, verdict, referintaRamasa(e), null, mesaj);
     return { fel: "eroare", mesaj, verdict };
   }
 
@@ -516,6 +520,7 @@ function numeOperatie(fel: FelOperatie): string {
     case "publicare": return "Publicarea pe marketplace";
     case "retragere": return "Retragerea de pe marketplace";
     case "expediere": return "Confirmarea expedierii";
+    case "export": return "Trimiterea in contabilitate";
     case "proba": return "Proba";
   }
 }

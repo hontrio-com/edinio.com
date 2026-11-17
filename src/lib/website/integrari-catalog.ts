@@ -328,20 +328,20 @@ export const INTEGRARI: Integrare[] = [
   {
     cheie: "saga",
     categorie: "facturare",
-    stare: "in-curand",
-    descriere: "Trimiți datele comenzilor către SAGA și reduci introducerea manuală în contabilitate.",
+    stare: "activa",
+    descriere: "Trimiți în SAGA facturile și stornările emise, din comandă, în masă sau automat, fără să le introduci de mână.",
   },
   {
     cheie: "easybill",
     categorie: "facturare",
-    stare: "in-curand",
-    descriere: "Generezi documentele EasyBill direct folosind datele din fiecare comandă.",
+    stare: "activa",
+    descriere: "Emiți facturi easybill din comenzi, manual sau automat, cu PDF-ul și încasarea la plata cu cardul.",
   },
   {
     cheie: "factureaza",
     categorie: "facturare",
-    stare: "in-curand",
-    descriere: "Transformi comenzile în facturi fără să copiezi manual clientul și produsele.",
+    stare: "activa",
+    descriere: "Emiți facturi și stornări Factureaza.ro din comenzi, manual sau automat, cu mod de test înainte de lansare.",
   },
 
   /* ── Marketplace ───────────────────────────────────────────────────────── */

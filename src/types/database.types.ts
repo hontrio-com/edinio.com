@@ -4806,6 +4806,18 @@ export type Database = {
           facturis_storno_key: string | null
           facturis_storno_number: string | null
           facturis_storno_series: string | null
+          factureaza_invoice_key: string | null
+          factureaza_invoice_number: string | null
+          factureaza_invoice_series: string | null
+          factureaza_storno_key: string | null
+          factureaza_storno_number: string | null
+          factureaza_storno_series: string | null
+          easybill_invoice_key: string | null
+          easybill_invoice_number: string | null
+          easybill_invoice_series: string | null
+          easybill_storno_key: string | null
+          easybill_storno_number: string | null
+          easybill_storno_series: string | null
           id: string
           innoship_awb_at: string | null
           innoship_awb_number: string | null
@@ -5059,6 +5071,18 @@ export type Database = {
           facturis_storno_key?: string | null
           facturis_storno_number?: string | null
           facturis_storno_series?: string | null
+          factureaza_invoice_key?: string | null
+          factureaza_invoice_number?: string | null
+          factureaza_invoice_series?: string | null
+          factureaza_storno_key?: string | null
+          factureaza_storno_number?: string | null
+          factureaza_storno_series?: string | null
+          easybill_invoice_key?: string | null
+          easybill_invoice_number?: string | null
+          easybill_invoice_series?: string | null
+          easybill_storno_key?: string | null
+          easybill_storno_number?: string | null
+          easybill_storno_series?: string | null
           id?: string
           innoship_awb_at?: string | null
           innoship_awb_number?: string | null
@@ -5312,6 +5336,18 @@ export type Database = {
           facturis_storno_key?: string | null
           facturis_storno_number?: string | null
           facturis_storno_series?: string | null
+          factureaza_invoice_key?: string | null
+          factureaza_invoice_number?: string | null
+          factureaza_invoice_series?: string | null
+          factureaza_storno_key?: string | null
+          factureaza_storno_number?: string | null
+          factureaza_storno_series?: string | null
+          easybill_invoice_key?: string | null
+          easybill_invoice_number?: string | null
+          easybill_invoice_series?: string | null
+          easybill_storno_key?: string | null
+          easybill_storno_number?: string | null
+          easybill_storno_series?: string | null
           id?: string
           innoship_awb_at?: string | null
           innoship_awb_number?: string | null
@@ -6205,6 +6241,84 @@ export type Database = {
          urmatoarea regenerare a tipurilor. Nota sta AFARA din blocul `Row`: inauntru,
          ea rupe cititorul din `coloanele-scrise-exista.test.ts`, care cere randuri de
          coloane fara intrerupere. */
+      saga_exporturi: {
+        Row: {
+          business_id: string
+          casa: string
+          cheie: string
+          cod_http: number | null
+          creat_la: string
+          data_document: string | null
+          fisier: string | null
+          id: string
+          import_automat: boolean
+          mesaj: string | null
+          numar: string
+          order_id: string | null
+          raport: string | null
+          serie: string
+          stare: string
+          sursa: string
+          tip: string
+          total: number | null
+        }
+        Insert: {
+          business_id: string
+          casa: string
+          cheie: string
+          cod_http?: number | null
+          creat_la?: string
+          data_document?: string | null
+          fisier?: string | null
+          id?: string
+          import_automat?: boolean
+          mesaj?: string | null
+          numar: string
+          order_id?: string | null
+          raport?: string | null
+          serie?: string
+          stare: string
+          sursa: string
+          tip: string
+          total?: number | null
+        }
+        Update: {
+          business_id?: string
+          casa?: string
+          cheie?: string
+          cod_http?: number | null
+          creat_la?: string
+          data_document?: string | null
+          fisier?: string | null
+          id?: string
+          import_automat?: boolean
+          mesaj?: string | null
+          numar?: string
+          order_id?: string | null
+          raport?: string | null
+          serie?: string
+          stare?: string
+          sursa?: string
+          tip?: string
+          total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saga_exporturi_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saga_exporturi_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_analytics: {
         Row: {
           business_id: string
@@ -6549,6 +6663,9 @@ export type Database = {
           fedex_config: Json | null
           fgo_config: Json | null
           facturis_config: Json | null
+          factureaza_config: Json | null
+          easybill_config: Json | null
+          saga_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
           innoship_config: Json | null
@@ -6633,6 +6750,9 @@ export type Database = {
           fedex_config?: Json | null
           fgo_config?: Json | null
           facturis_config?: Json | null
+          factureaza_config?: Json | null
+          easybill_config?: Json | null
+          saga_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
@@ -6717,6 +6837,9 @@ export type Database = {
           fedex_config?: Json | null
           fgo_config?: Json | null
           facturis_config?: Json | null
+          factureaza_config?: Json | null
+          easybill_config?: Json | null
+          saga_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
@@ -8855,6 +8978,18 @@ export type Database = {
         Returns: undefined
       }
       reseteaza_limita: { Args: { p_cheie: string }; Returns: undefined }
+      saga_elibereaza_apelul: {
+        Args: { p_business_id: string; p_detinator: string }
+        Returns: undefined
+      }
+      saga_ocupa_apelul: {
+        Args: { p_business_id: string; p_detinator: string; p_secunde?: number }
+        Returns: boolean
+      }
+      saga_roteste_cheia: {
+        Args: { p_business_id: string; p_cheie_noua: string; p_cheie_veche: string }
+        Returns: boolean
+      }
       cosuri_abandonate_grafic: {
         Args: {
           p_business: string

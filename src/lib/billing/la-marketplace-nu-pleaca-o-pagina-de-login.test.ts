@@ -74,7 +74,10 @@ describe("Amandoua urcarile trec prin garda", () => {
   for (const d of DRUMURI) {
     test(`⚠⚠ ${d.nume}: nu se urca nimic neverificat`, () => {
       const s = viu(d.cale);
-      assert.match(s, /if \(!esteChiarPdf\(pdf\)\) throw new Error\(NU_E_PDF\);/, `${d.nume}: garda lipseste`);
+      /* Refuz DOVEDIT (`eroareRefuz`): nimic nu s-a atasat inca, deci randul nu ramane blocat. */
+      assert.match(s, /if \(!esteChiarPdf\(pdf\)\) throw eroareRefuz\(NU_E_PDF\);/, `${d.nume}: garda lipseste`);
+      assert.match(s, /if \("error" in pdf\) throw eroareRefuz\(pdf\.error\);/, `${d.nume}: PDF-ul neadus nu e refuz`);
+      assert.match(s, /if \(verdictFurnizor\(e\) === "esuat"\) return "esuat";/, `${d.nume}: clasificatorul nu citeste verdictul`);
     });
 
     test(`⚠⚠ ${d.nume}: garda e INAINTE de `+"`uploadToR2`", () => {

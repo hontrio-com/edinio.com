@@ -1,5 +1,6 @@
 "use client";
 
+import { areFacturaEmisa, etichetaFacturiiEmise } from "@/lib/billing/factura-pe-comanda";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -423,10 +424,9 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   );
 
   const isPaid = order.payment_status === "paid";
-  /* ⚠ La Facturis se intreaba CHEIA: o factura al carei numar nu s-a citit inca EXISTA. */
-  const hasInvoice = !!(order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number || order.facturis_invoice_key);
-  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number
-    || (order.facturis_invoice_key ? ([order.facturis_invoice_series, order.facturis_invoice_number].filter(Boolean).join(" ") || "Facturis") : null);
+  /* Regula unica pentru toate casele: `areFacturaEmisa` (la casele cu cheie, CHEIA spune ca exista). */
+  const hasInvoice = areFacturaEmisa(order);
+  const numarFactura = etichetaFacturiiEmise(order);
   const isLocker = addr.delivery_type === "locker";
   const prevItems = useMemo(() => (Array.isArray(order.items) ? (order.items as unknown[]) : []), [order.items]);
   const marketplace = (order.order_source as { marketplace?: string } | null)?.marketplace ?? null;

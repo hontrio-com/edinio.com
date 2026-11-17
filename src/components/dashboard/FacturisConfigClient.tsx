@@ -239,7 +239,7 @@ export function FacturisConfigClient({
         />
         {form.auto_invoice && (
           <Field label="Declanșează generarea când comanda devine" htmlFor="facturis-declansator"
-            hint="Cu mai multe programe de facturare pe automat, se emite o singură factură: întâi SmartBill, apoi Oblio, apoi fGO, apoi Facturis.">
+            hint="Cu mai multe programe de facturare pe automat, se emite o singură factură: întâi SmartBill, apoi Oblio, fGO, Facturis, Factureaza.ro și easybill.">
             <select id="facturis-declansator" value={form.auto_invoice_trigger ?? "confirmed"}
               onChange={(e) => set("auto_invoice_trigger", e.target.value as AutoInvoiceTrigger)} className={selectCls}>
               {AUTO_INVOICE_TRIGGERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}

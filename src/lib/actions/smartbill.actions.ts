@@ -3,6 +3,7 @@
 import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sagaPermiteReemiterea } from "@/lib/saga/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
 import { logError } from "@/lib/error-logger";
@@ -865,6 +866,12 @@ export async function generateOrderInvoice(
     storno: order.smartbill_storno_number,
   });
   if (!slot.poateEmite) return { error: slot.mesaj };
+  /* SAGA: refacturarea dupa storno asteapta pana pleaca in contabilitate si stornarea facturii
+     inlocuite (`sagaPermiteReemiterea`); altfel acolo ar ramane factura veche, neanulata. */
+  if (slot.inlocuieste) {
+    const saga = await sagaPermiteReemiterea(createAdminClient(), businessId, orderId);
+    if (!saga.ok) return { error: saga.mesaj };
+  }
 
   const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
   const params = await buildInvoiceParams(
@@ -999,6 +1006,12 @@ export async function convertEstimateToInvoice(
     storno: order.smartbill_storno_number,
   });
   if (!slot.poateEmite) return { error: slot.mesaj };
+  /* SAGA: refacturarea dupa storno asteapta pana pleaca in contabilitate si stornarea facturii
+     inlocuite (`sagaPermiteReemiterea`); altfel acolo ar ramane factura veche, neanulata. */
+  if (slot.inlocuieste) {
+    const saga = await sagaPermiteReemiterea(createAdminClient(), businessId, orderId);
+    if (!saga.ok) return { error: saga.mesaj };
+  }
 
   const estimateRef = {
     seriesName: order.smartbill_estimate_series as string,

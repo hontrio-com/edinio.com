@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sagaPermiteReemiterea } from "@/lib/saga/server";
 import type { Json } from "@/types/database.types";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
@@ -92,7 +93,7 @@ async function context(businessId: string, orderId: string, sistem?: SistemClien
     const p = await proprietar(businessId);
     if ("error" in p) return p;
   }
-  const [config, { data: setari }, { data: comanda, error: eComanda }] = await Promise.all([
+  const [config, { data: setari, error: eSetari }, { data: comanda, error: eComanda }] = await Promise.all([
     configurareaMagazinului(createAdminClient(), businessId),
     supabase.from("store_settings").select("vat_enabled, vat_rate, prices_include_vat").eq("business_id", businessId).maybeSingle(),
     supabase.from("orders").select(COLOANE_COMANDA).eq("id", orderId).eq("business_id", businessId).maybeSingle(),
@@ -100,6 +101,10 @@ async function context(businessId: string, orderId: string, sistem?: SistemClien
   if (eComanda) return { error: "Comanda nu s-a putut citi. Încearcă din nou." };
   if (!comanda) return { error: "Comanda negăsită." };
   if (!config) return { error: "Facturis nu este configurat complet." };
+  /* ⚠ TVA-ul magazinului NECITIT nu e „fara TVA”: cazut pe `vat_enabled: false`, fiecare linie ar fi
+     plecat cu cota 0%, iar reconcilierea pe brut tot ar fi trecut. Un document fiscal gresit nu se
+     retrage, se storneaza; deci se opreste aici. */
+  if (eSetari || !setari) return { error: "Setările de TVA ale magazinului nu s-au putut citi. Încearcă din nou." };
   const s = setari as { vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean } | null;
   return {
     supabase,
@@ -112,6 +117,12 @@ async function context(businessId: string, orderId: string, sistem?: SistemClien
       prices_include_vat: s?.prices_include_vat ?? true,
     },
   };
+}
+
+/** „YYYY-MM-DD” din `facturi_data` („YYYY-MM-DD HH:MM:SS”, ora Romaniei), pentru `detalii.data` din registru. */
+function ziuaDocumentului(dataFact: Record<string, unknown>): string | null {
+  const zi = String(dataFact.facturi_data ?? "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(zi) ? zi : null;
 }
 
 /** „EDN 141", sau id-ul cat timp numarul nu s-a citit. Pentru mesaje si pentru mentiunile de pe document. */
@@ -320,6 +331,12 @@ export async function generateFacturisInvoice(
   if (!slotCheie.poateEmite || !slot.poateEmite) {
     return { error: !slot.poateEmite ? slot.mesaj : "Comanda are deja o factură Facturis." };
   }
+  /* SAGA: refacturarea dupa storno asteapta pana pleaca in contabilitate si stornarea facturii
+     inlocuite (`sagaPermiteReemiterea`); altfel acolo ar ramane factura veche, neanulata. */
+  if (slotCheie.inlocuieste) {
+    const saga = await sagaPermiteReemiterea(createAdminClient(), businessId, orderId);
+    if (!saga.ok) return { error: saga.mesaj };
+  }
 
   const skus = await fetchSkuMap(supabase, businessId, (Array.isArray(comanda.items) ? comanda.items : []) as { product_id?: string | null }[], (m) =>
     logError({ action: "billing.skuMap", message: m.message, details: { ...m.details, casa: "facturis" }, severity: "warning" }));
@@ -351,6 +368,8 @@ export async function generateFacturisInvoice(
         detalii: {
           serie: citita?.serie ?? null, numar: citita?.numar ?? null,
           total: citita?.total ?? null, client: citita?.clientCheie ?? null,
+          /* Ziua scrisa pe document: SAGA o ia de aici, nu din clipa randului (`ziuaDocumentului`). */
+          data: ziuaDocumentului(compusa.dataFact),
         },
         valoare: { cheie, citita },
       };
@@ -570,7 +589,10 @@ export async function stornoFacturisInvoiceAction(
       const citita = await citesteDupaEmitere(a, cheie);
       return {
         referinta: cheie,
-        detalii: { serie: citita?.serie ?? null, numar: citita?.numar ?? null, total: citita?.total ?? null },
+        detalii: {
+          serie: citita?.serie ?? null, numar: citita?.numar ?? null, total: citita?.total ?? null,
+          data: ziuaDocumentului(compusa.dataFact),
+        },
         valoare: { cheie, citita, asteptat: compusa.total, original },
       };
     },

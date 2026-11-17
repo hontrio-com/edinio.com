@@ -15,6 +15,9 @@ import type { COConfig } from "@/lib/colete";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import { facturisGata } from "@/lib/facturis/config";
+import { factureazaGata, mediul, type FactureazaConfig } from "@/lib/factureaza/config";
+import { easybillGata } from "@/lib/easybill/config";
+import { stareaPanouluiSaga } from "@/lib/saga/server";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
@@ -29,6 +32,14 @@ import type { InnoshipConfig } from "@/lib/innoship/client";
 import type { FanCourierConfig } from "@/lib/fancourier";
 import type { SamedayConfig } from "@/lib/sameday/client";
 import type { SmsoConfig } from "@/lib/smso";
+
+/*
+ * Actiunile pornite din pagina comenzii ruleaza in functia ei. Unele sunt lungi: o trimitere in SAGA
+ * poate tine ~55 s pe document (asteptarea lacatului magazinului si importul), iar casele care
+ * intorc doar id-ul (Facturis, easybill) citesc documentul inapoi, cu reincercari. Plafonul e scris
+ * aici, la fel ca la lista comenzilor, ca sa nu depinda de implicitul platformei.
+ */
+export const maxDuration = 300;
 
 interface Props {
   params: Promise<{ orderId: string }>;
@@ -61,7 +72,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, factureaza_config, easybill_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config")
       .eq("business_id", order.business_id)
       .single(),
     /* Pozele din „Produse comandate”, din catalog: liniile comenzii nu le poarta. ⚠ Nu cade pagina. */
@@ -69,6 +80,10 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   ]);
 
   if (!biz) notFound();
+
+  /* Panoul SAGA (`null` = SAGA nu e conectat). Proprietarul e dovedit chiar mai sus. ⚠ Nu cade
+     pagina: o citire picata a SAGA lasa comanda fara panou, nu fara pagina. */
+  const saga = await stareaPanouluiSaga(createAdminClient(), biz.id, order).catch(() => null);
 
   const sbConfig = settings?.smartbill_config as SmartbillConfig | null;
   const smartbillEnabled = sbConfig?.enabled === true;
@@ -84,6 +99,11 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
   /* `facturisGata` insasi: aceeasi regula ca in Integrari, in lista comenzilor si in lot. */
   const facturisEnabled = facturisGata(settings?.facturis_config);
+  /* La fel, regula fiecarei case, aceeasi ca in Integrari, in lista comenzilor si in lot. */
+  const factureazaEnabled = factureazaGata(settings?.factureaza_config);
+  /* Modul de test SPUS pe fila: documentele emise de aici nu sunt fiscale. */
+  const factureazaTest = factureazaEnabled && mediul(settings?.factureaza_config as Pick<FactureazaConfig, "mediu"> | null) === "test";
+  const easybillEnabled = easybillGata(settings?.easybill_config);
   const cg = settings?.cargus_config as CargusConfig | null;
   const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
   const dg = settings?.dpd_config as DpdConfig | null;
@@ -284,6 +304,10 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       oblioEnabled={oblioEnabled}
       fgoEnabled={fgoEnabled}
       facturisEnabled={facturisEnabled}
+      factureazaEnabled={factureazaEnabled}
+      factureazaTest={factureazaTest}
+      easybillEnabled={easybillEnabled}
+      saga={saga}
       cargusEnabled={cargusEnabled}
       dpdEnabled={dpdEnabled}
       glsEnabled={glsEnabled}

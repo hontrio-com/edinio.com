@@ -4,11 +4,11 @@ import type { TonEticheta } from "@/components/ui/eticheta-stare";
  * Documentul fiscal al unei comenzi, asa cum il intoarce baza
  * (`privat.cont_documentul_comenzii`), citit defensiv.
  *
- * ⚠ Regula „care e documentul" (SmartBill, apoi Oblio, apoi fGO, apoi Facturis, sarind
- * documentele de TEST) sta NUMAI in baza. Aici doar se citeste ce a venit.
+ * ⚠ Regula „care e documentul" (SmartBill, apoi Oblio, fGO, Facturis, Factureaza.ro, easybill,
+ * sarind documentele de TEST) sta NUMAI in baza. Aici doar se citeste ce a venit.
  */
 
-export type CasaDeFacturare = "smartbill" | "oblio" | "fgo" | "facturis";
+export type CasaDeFacturare = "smartbill" | "oblio" | "fgo" | "facturis" | "factureaza" | "easybill";
 
 export type DocumentFiscal = {
   casa: CasaDeFacturare;
@@ -22,7 +22,7 @@ export type DocumentFiscal = {
   emisaLa: string | null;
 };
 
-const CASE = new Set<CasaDeFacturare>(["smartbill", "oblio", "fgo", "facturis"]);
+const CASE = new Set<CasaDeFacturare>(["smartbill", "oblio", "fgo", "facturis", "factureaza", "easybill"]);
 
 const sir = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
 

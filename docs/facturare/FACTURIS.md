@@ -149,9 +149,28 @@ catalogul de pe site. Proba care cade la prima uitare: `facturis-legat-peste-tot
   `facturi_prod_um`, `prod_cod_cautare: "all"`, `idMarketpalce`. Trimitem numai ce e documentat; registrul
   nostru e paza impotriva duplicatului.
 
+## Masurat pe fir, 17.11.2026 (cu chei INVENTATE: nu se creeaza nimic)
+
+| cerere | raspuns |
+| --- | --- |
+| orice metoda, chei gresite (citire, emitere, PDF) | `200`, `{"error":1004,"result":"Datele de autentificare sunt gresite"}` |
+| fara campurile de autentificare | `200`, `{"msg":"Campul este obligatoriu!","cod":1005,"error":"1005","result":{"c":{...},"u":{...},"p":{...}}}` |
+| JSON stricat | `200`, `{"error":"2110","result":"The json format is incorrect! "}` |
+
+De aici trei lucruri care nu erau in documentatie: **autentificarea se verifica INAINTEA validarii**
+(deci un refuz la emitere chiar inseamna „nimic creat"); **codul vine si ca TEXT** („2110"); **erorile
+de validare vin ca OBIECT, cate unul pe camp** (fara ramura pentru el, mesajul ar fi fost JSON brut).
+Si PDF-ul cu chei gresite vine JSON, nu PDF: garda `%PDF-` il prinde si mesajul lor ajunge la om.
+
+Rulat apoi CHIAR clientul nostru (nu `curl`) pe acelasi capat: proba de conexiune da `refuz: true` cu
+mesajul tradus (deci salvarea se opreste), iar emiterea, citirea si PDF-ul ies cu verdictul `esuat`
+(registrul lasa reincercarea libera dupa corectarea cheilor). Raspunsurile brute stau in
+`client.test.ts`.
+
 ## ⚠ CE ASTEAPTA DOVADA PE FIR
 
-N-avem cont Facturis de proba. Ce s-a putut dovedi fara fir e in probe (44 pe client si pe compunere).
+N-avem cont Facturis de proba, deci drumul CU chei bune n-a atins serverul lor. Ce s-a putut dovedi
+fara el e in probe (69: clientul, compunerea si legarea in platforma; banc de mutanti 12 din 12).
 **Prima factura reala e dovada.** De urmarit atunci:
 
 1. Raspunsul la `Ins`: `result.id` (documentatia) sau `result.id_fact` (modulul lor). Le primim pe amandoua;

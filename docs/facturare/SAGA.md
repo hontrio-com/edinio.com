@@ -13,8 +13,8 @@ sase case si ziua lor, `reguli.ts` hotararile pure (garda de reemitere, planul c
 cheia rotita, exportul, garda `sagaPermiteReemiterea` si starea panoului), `src/lib/actions/saga.actions.ts`,
 `src/app/api/cron/saga-export/route.ts`, `src/components/dashboard/SagaConfigClient.tsx`,
 `src/components/dashboard/saga/SagaComandaPanel.tsx`, pagina `dashboard/features/saga`.
-**Baza:** `docs/facturare/2027-02-06-factureaza-easybill-saga.sql` (migratia comuna a celor trei;
-se aplica INAINTE de deploy, dupa `2027-02-05-facturis.sql`).
+**Baza:** `migrations/2027-02-06-factureaza-easybill-saga.sql` (migratia comuna a celor trei;
+aplicata in productie pe 18.11.2026, dupa `2027-02-05-facturis.sql`; baseline-ul o contine).
 **Probe:** `src/lib/saga/*.test.ts` (198; `server.test.ts` pe purtare, cu baza si firul false; `legat.test.ts`
 pe sursa, pentru ruta, actiuni si panou). Banc de mutanti cu SHA-1: 88 de mutanti, la reparatiile din 17-18.11.
 

@@ -59,11 +59,8 @@ const IGNORATE = /^(zz_|_)/;
  * exceptia sa nu-si supravietuiasca motivul.
  */
 const IN_ASTEPTARE = [
-  // Facturis Online (17.11.2026): aplicata pe baza DEMO, asteapta productia odata cu pushul.
-  // Cand intra in productie se muta in `migrations/` si intrarea de aici se scoate.
-  "docs/facturare/2027-02-05-facturis.sql",
-  // Factureaza.ro, easybill si SAGA (17.11.2026): la fel, pe DEMO; intra in productie DUPA Facturis.
-  "docs/facturare/2027-02-06-factureaza-easybill-saga.sql",
+  // Gol: Facturis (2027-02-05) si Factureaza.ro/easybill/SAGA (2027-02-06) au intrat in productie pe
+  // 18.11.2026, s-au mutat in `migrations/`, iar baseline-ul le contine.
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

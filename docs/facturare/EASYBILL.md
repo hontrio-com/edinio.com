@@ -10,8 +10,8 @@
 citirea configurarii), `src/lib/actions/easybill.actions.ts`, `src/components/dashboard/EasybillConfigClient.tsx`,
 `src/components/dashboard/easybill/EasybillStornareManuala.tsx`, `src/app/(dashboard)/dashboard/features/easybill/`,
 `src/app/api/easybill/pdf/route.ts`, plus regulile comune din `src/lib/billing/*`.
-**Baza:** `docs/facturare/2027-02-06-factureaza-easybill-saga.sql` (migratia comuna a celor trei;
-se aplica INAINTE de deploy, dupa `2027-02-05-facturis.sql`).
+**Baza:** `migrations/2027-02-06-factureaza-easybill-saga.sql` (migratia comuna a celor trei;
+aplicata in productie pe 18.11.2026, dupa `2027-02-05-facturis.sql`; baseline-ul o contine).
 **Probe:** `src/lib/easybill/*.test.ts` (143). Bancuri de mutanti: 27 pe client si compunere, 13 pe
 stornarea inregistrata, 31 pe regulile din revizia din 17.11 (factura dubla, liniile, stornarea partiala,
 legatura stornare-factura, timpul, plafonul listei, ciorna, judetul, TVA-ul); toti ucisi, cu fisierele

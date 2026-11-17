@@ -122,6 +122,68 @@ AS $function$
         'storno_descarcabil', false,
         'emisa_la', null
       )
+    when nullif(btrim(coalesce(o.facturis_invoice_key, '')), '') is not null
+     and nullif(btrim(coalesce(o.facturis_invoice_number, '')), '') is not null then
+      jsonb_build_object(
+        'casa', 'facturis',
+        'serie', o.facturis_invoice_series,
+        'numar', o.facturis_invoice_number,
+        'stornata', nullif(btrim(coalesce(o.facturis_storno_key, '')), '') is not null,
+        'storno_serie', o.facturis_storno_series,
+        'storno_numar', o.facturis_storno_number,
+        /* Facturis da PDF-ul stornarii prin acelasi FacturiHtml, dupa id-ul ei. */
+        'storno_descarcabil', nullif(btrim(coalesce(o.facturis_storno_key, '')), '') is not null
+                              and nullif(btrim(coalesce(o.facturis_storno_number, '')), '') is not null,
+        'emisa_la', (
+          select (min(x.creat_la) at time zone 'UTC')::date
+            from public.operatii_externe x
+           where x.business_id = o.business_id and x.order_id = o.id
+             and x.fel = 'factura' and x.furnizor = 'facturis' and x.stare = 'reusit'
+             and x.referinta_externa = o.facturis_invoice_key
+        )
+      )
+    when nullif(btrim(coalesce(o.factureaza_invoice_key, '')), '') is not null
+     and nullif(btrim(coalesce(o.factureaza_invoice_number, '')), '') is not null
+     /* Cheia `test:<id>` = document din sandbox-ul lor: nu e fiscal, deci nu e documentul comenzii. */
+     and o.factureaza_invoice_key not like 'test:%' then
+      jsonb_build_object(
+        'casa', 'factureaza',
+        'serie', o.factureaza_invoice_series,
+        'numar', o.factureaza_invoice_number,
+        'stornata', nullif(btrim(coalesce(o.factureaza_storno_key, '')), '') is not null,
+        'storno_serie', o.factureaza_storno_series,
+        'storno_numar', o.factureaza_storno_number,
+        /* Factureaza.ro: PDF-ul stornarii se cere prin API, dupa id-ul ei, ca al facturii. */
+        'storno_descarcabil', nullif(btrim(coalesce(o.factureaza_storno_key, '')), '') is not null
+                              and nullif(btrim(coalesce(o.factureaza_storno_number, '')), '') is not null,
+        'emisa_la', (
+          select (min(x.creat_la) at time zone 'UTC')::date
+            from public.operatii_externe x
+           where x.business_id = o.business_id and x.order_id = o.id
+             and x.fel = 'factura' and x.furnizor = 'factureaza' and x.stare = 'reusit'
+             and x.referinta_externa = o.factureaza_invoice_key
+        )
+      )
+    when nullif(btrim(coalesce(o.easybill_invoice_key, '')), '') is not null
+     and nullif(btrim(coalesce(o.easybill_invoice_number, '')), '') is not null then
+      jsonb_build_object(
+        'casa', 'easybill',
+        'serie', o.easybill_invoice_series,
+        'numar', o.easybill_invoice_number,
+        'stornata', nullif(btrim(coalesce(o.easybill_storno_key, '')), '') is not null,
+        'storno_serie', o.easybill_storno_series,
+        'storno_numar', o.easybill_storno_number,
+        /* easybill: PDF-ul stornarii se cere prin API, dupa id-ul ei, ca al facturii. */
+        'storno_descarcabil', nullif(btrim(coalesce(o.easybill_storno_key, '')), '') is not null
+                              and nullif(btrim(coalesce(o.easybill_storno_number, '')), '') is not null,
+        'emisa_la', (
+          select (min(x.creat_la) at time zone 'UTC')::date
+            from public.operatii_externe x
+           where x.business_id = o.business_id and x.order_id = o.id
+             and x.fel = 'factura' and x.furnizor = 'easybill' and x.stare = 'reusit'
+             and x.referinta_externa = o.easybill_invoice_key
+        )
+      )
     else null
   end;
 $function$
@@ -504,7 +566,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config, facturis_config, factureaza_config, easybill_config, saga_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -10441,6 +10503,67 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.saga_elibereaza_apelul(p_business_id uuid, p_detinator uuid)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  delete from privat.saga_apel_in_curs
+   where business_id = p_business_id
+     and detinator = p_detinator;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.saga_ocupa_apelul(p_business_id uuid, p_detinator uuid, p_secunde integer DEFAULT 120)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_ocupat boolean;
+begin
+  if p_business_id is null or p_detinator is null then
+    return false;
+  end if;
+  insert into privat.saga_apel_in_curs as a (business_id, detinator, pana_la)
+  values (p_business_id, p_detinator,
+          now() + make_interval(secs => greatest(10, least(coalesce(p_secunde, 120), 600))))
+  on conflict (business_id) do update
+     set detinator = excluded.detinator,
+         pana_la   = excluded.pana_la
+   where a.pana_la < now()
+      or a.detinator = excluded.detinator
+  returning true into v_ocupat;
+  return coalesce(v_ocupat, false);
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.saga_roteste_cheia(p_business_id uuid, p_cheie_veche text, p_cheie_noua text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_n integer;
+begin
+  if coalesce(p_cheie_noua, '') = '' or coalesce(p_cheie_veche, '') = '' then
+    return false;
+  end if;
+  update privat.store_settings s
+     set saga_config = jsonb_set(s.saga_config, '{api_key}', to_jsonb(privat.cripteaza(p_cheie_noua)))
+   where s.business_id = p_business_id
+     and jsonb_typeof(s.saga_config) = 'object'
+     and privat.decripteaza(s.saga_config ->> 'api_key') = p_cheie_veche;
+  get diagnostics v_n = row_count;
+  return v_n = 1;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb DEFAULT '[]'::jsonb, p_variante_necesar jsonb DEFAULT '[]'::jsonb)
  RETURNS jsonb
  LANGUAGE sql
@@ -11035,6 +11158,13 @@ AS $function$
        (o.smartbill_invoice_number is not null and o.smartbill_invoice_url is not null)
        or (o.oblio_invoice_number is not null and o.oblio_invoice_link is not null)
        or (o.fgo_invoice_number is not null and o.fgo_invoice_link is not null)
+       -- Facturis n-are link: PDF-ul se cere prin API, dupa cheie. Numarul trebuie sa fie citit.
+       or (o.facturis_invoice_key is not null and o.facturis_invoice_number is not null)
+       -- La fel Factureaza.ro si easybill. ⚠ Documentul din sandbox-ul Factureaza.ro (cheia `test:`)
+       -- RAMANE in lista, dinadins: garda din cod (`facturaDeTest`) il opreste cu un mesaj in jurnal,
+       -- ca la fGO. Scos de aici, comanda ar fi asteptat in tacere, fara ca omul sa afle de ce.
+       or (o.factureaza_invoice_key is not null and o.factureaza_invoice_number is not null)
+       or (o.easybill_invoice_key is not null and o.easybill_invoice_number is not null)
      )
      -- Nu se factureaza in lei o comanda care n-a fost in lei.
      and coalesce(o.order_source->>'currency', 'RON') = 'RON'
@@ -11709,6 +11839,11 @@ create table if not exists privat.ritm_extern (
   actualizat_la timestamp with time zone default now() not null,
   pauza_pana timestamp with time zone);
 
+create table if not exists privat.saga_apel_in_curs (
+  business_id uuid not null,
+  detinator uuid not null,
+  pana_la timestamp with time zone not null);
+
 create table if not exists privat.store_settings (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -11790,7 +11925,23 @@ create table if not exists privat.store_settings (
   curiera_config jsonb,
   epacket_config jsonb,
   easysales_config jsonb default '{}'::jsonb not null,
-  tbi_config jsonb);
+  tbi_config jsonb,
+  facturis_config jsonb,
+  factureaza_config jsonb,
+  easybill_config jsonb,
+  saga_config jsonb);
+
+create table if not exists privat.suporti_numar_20261117_speckless_inainte (
+  id uuid,
+  business_id uuid,
+  name text,
+  slug text,
+  external_id text,
+  description text,
+  tags jsonb,
+  page_sections jsonb,
+  updated_at timestamp with time zone,
+  copiat_la timestamp with time zone);
 
 create table if not exists privat.vetdepo_20261114_emag_offers (
   id uuid,
@@ -13472,7 +13623,25 @@ create table if not exists public.orders (
   epacket_status_code text,
   epacket_status_label text,
   epacket_status_at timestamp with time zone,
-  epacket_status_checked_at timestamp with time zone);
+  epacket_status_checked_at timestamp with time zone,
+  facturis_invoice_key text,
+  facturis_invoice_series text,
+  facturis_invoice_number text,
+  facturis_storno_key text,
+  facturis_storno_series text,
+  facturis_storno_number text,
+  factureaza_invoice_key text,
+  factureaza_invoice_series text,
+  factureaza_invoice_number text,
+  factureaza_storno_key text,
+  factureaza_storno_series text,
+  factureaza_storno_number text,
+  easybill_invoice_key text,
+  easybill_invoice_series text,
+  easybill_invoice_number text,
+  easybill_storno_key text,
+  easybill_storno_series text,
+  easybill_storno_number text);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -13647,6 +13816,26 @@ create table if not exists public.return_requests (
   is_read boolean default false not null,
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null);
+
+create table if not exists public.saga_exporturi (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  order_id uuid,
+  cheie text not null,
+  casa text not null,
+  tip text not null,
+  serie text default ''::text not null,
+  numar text not null,
+  data_document date,
+  total numeric(12,2),
+  stare text not null,
+  cod_http integer,
+  import_automat boolean default false not null,
+  sursa text not null,
+  fisier text,
+  mesaj text,
+  raport text,
+  creat_la timestamp with time zone default now() not null);
 
 create table if not exists public.site_analytics (
   id uuid default gen_random_uuid() not null,
@@ -14075,6 +14264,7 @@ alter table privat.cont_jurnal add constraint cont_jurnal_pkey PRIMARY KEY (id);
 alter table privat.cont_poza add constraint cont_poza_pkey PRIMARY KEY (cont_id);
 alter table privat.cont_sesiune add constraint cont_sesiune_pkey PRIMARY KEY (id);
 alter table privat.ritm_extern add constraint ritm_extern_pkey PRIMARY KEY (cheie);
+alter table privat.saga_apel_in_curs add constraint saga_apel_in_curs_pkey PRIMARY KEY (business_id);
 alter table privat.store_settings add constraint store_settings_pkey PRIMARY KEY (id);
 alter table public.abandoned_carts add constraint abandoned_carts_pkey PRIMARY KEY (id);
 alter table public.aboutyou_batches add constraint aboutyou_batches_pkey PRIMARY KEY (id);
@@ -14183,6 +14373,7 @@ alter table public.rate_limits add constraint rate_limits_pkey PRIMARY KEY (chei
 alter table public.recovery_optout add constraint recovery_optout_pkey PRIMARY KEY (id);
 alter table public.recovery_sends add constraint recovery_sends_pkey PRIMARY KEY (id);
 alter table public.return_requests add constraint return_requests_pkey PRIMARY KEY (id);
+alter table public.saga_exporturi add constraint saga_exporturi_pkey PRIMARY KEY (id);
 alter table public.site_analytics add constraint site_analytics_pkey PRIMARY KEY (id);
 alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_pkey PRIMARY KEY (id);
 alter table public.sms_campaigns add constraint sms_campaigns_pkey PRIMARY KEY (id);
@@ -14329,8 +14520,8 @@ alter table public.intentii_publicare add constraint intentii_publicare_marketpl
 alter table public.intentii_publicare add constraint intentii_publicare_sursa_check CHECK ((sursa = ANY (ARRAY['auto_publish'::text, 'import'::text, 'manual'::text])));
 alter table public.olx_adverts add constraint olx_adverts_dezactivat_de_check CHECK (((dezactivat_de IS NULL) OR (dezactivat_de = ANY (ARRAY['om'::text, 'stoc'::text, 'produs-inactiv'::text, 'inainte-de-stergere'::text]))));
 alter table public.olx_sync_queue add constraint olx_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'deactivate'::text, 'activate'::text])));
-alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'proba'::text])));
-alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'curiera'::text, 'epacket'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_fel_check CHECK ((fel = ANY (ARRAY['awb'::text, 'anulare_awb'::text, 'ridicare'::text, 'factura'::text, 'proforma'::text, 'storno'::text, 'anulare_document'::text, 'plata'::text, 'incasare'::text, 'rambursare'::text, 'publicare'::text, 'retragere'::text, 'expediere'::text, 'export'::text, 'proba'::text])));
+alter table public.operatii_externe add constraint operatii_externe_furnizor_check CHECK ((furnizor = ANY (ARRAY['cargus'::text, 'sameday'::text, 'fancourier'::text, 'dpd'::text, 'woot'::text, 'colete'::text, 'gls'::text, 'pallex'::text, 'ecolet'::text, 'posta'::text, 'innoship'::text, 'packeta'::text, 'smartship'::text, 'shipo'::text, 'fedex'::text, 'ups'::text, 'dhl'::text, 'curiera'::text, 'epacket'::text, 'smartbill'::text, 'oblio'::text, 'fgo'::text, 'facturis'::text, 'factureaza'::text, 'easybill'::text, 'saga'::text, 'stripe'::text, 'netopia'::text, 'ipay'::text, 'klarna'::text, 'revolut'::text, 'trendyol'::text, 'aboutyou'::text, 'olx'::text, 'gmc'::text, 'emag'::text, 'proba'::text])));
 alter table public.operatii_externe add constraint operatii_externe_stare_check CHECK ((stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'esuat'::text, 'necunoscut'::text, 'anulat'::text])));
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
@@ -14345,6 +14536,14 @@ alter table public.posta_plaja add constraint posta_plaja_urmator_check CHECK ((
 alter table public.recovery_optout add constraint recovery_optout_are_un_contact CHECK (((email IS NOT NULL) OR (phone IS NOT NULL)));
 alter table public.recovery_sends add constraint recovery_sends_canal_check CHECK ((canal = ANY (ARRAY['email'::text, 'sms'::text])));
 alter table public.recovery_sends add constraint recovery_sends_sursa_check CHECK ((sursa = ANY (ARRAY['manual'::text, 'automatizare'::text])));
+alter table public.saga_exporturi add constraint saga_exporturi_casa_check CHECK ((casa = ANY (ARRAY['smartbill'::text, 'oblio'::text, 'fgo'::text, 'facturis'::text, 'factureaza'::text, 'easybill'::text])));
+alter table public.saga_exporturi add constraint saga_exporturi_cheie_check CHECK (((char_length(cheie) >= 1) AND (char_length(cheie) <= 200)));
+alter table public.saga_exporturi add constraint saga_exporturi_fisier_check CHECK (((fisier IS NULL) OR (char_length(fisier) <= 200)));
+alter table public.saga_exporturi add constraint saga_exporturi_mesaj_check CHECK (((mesaj IS NULL) OR (char_length(mesaj) <= 1000)));
+alter table public.saga_exporturi add constraint saga_exporturi_raport_check CHECK (((raport IS NULL) OR (char_length(raport) <= 4000)));
+alter table public.saga_exporturi add constraint saga_exporturi_stare_check CHECK ((stare = ANY (ARRAY['importat'::text, 'incarcat'::text, 'avertismente'::text, 'respins'::text, 'refuzat'::text, 'necunoscut'::text, 'nepregatit'::text])));
+alter table public.saga_exporturi add constraint saga_exporturi_sursa_check CHECK ((sursa = ANY (ARRAY['manual'::text, 'lot'::text, 'automat'::text])));
+alter table public.saga_exporturi add constraint saga_exporturi_tip_check CHECK ((tip = ANY (ARRAY['factura'::text, 'storno'::text])));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
 alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_stare_check CHECK ((stare = ANY (ARRAY['de_trimis'::text, 'in_lucru'::text, 'trimis'::text, 'esuat'::text, 'sarit'::text, 'necunoscut'::text])));
 alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['in_curs'::text, 'sent'::text, 'partial'::text, 'failed'::text, 'oprita'::text])));
@@ -14380,6 +14579,7 @@ alter table privat.cont_jurnal add constraint cont_jurnal_business_fk FOREIGN KE
 alter table privat.cont_jurnal add constraint cont_jurnal_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
 alter table privat.cont_poza add constraint cont_poza_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
 alter table privat.cont_sesiune add constraint cont_sesiune_cont_id_business_id_fkey FOREIGN KEY (cont_id, business_id) REFERENCES privat.cont_cumparator(id, business_id) ON DELETE CASCADE;
+alter table privat.saga_apel_in_curs add constraint saga_apel_in_curs_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table privat.store_settings add constraint store_settings_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.abandoned_carts add constraint abandoned_carts_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.abandoned_carts add constraint abandoned_carts_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
@@ -14530,6 +14730,8 @@ alter table public.recovery_sends add constraint recovery_sends_cart_id_fkey FOR
 alter table public.recovery_sends add constraint recovery_sends_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.return_requests add constraint return_requests_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.return_requests add constraint return_requests_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.saga_exporturi add constraint saga_exporturi_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.saga_exporturi add constraint saga_exporturi_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.site_analytics add constraint site_analytics_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES sms_campaigns(id) ON DELETE CASCADE;
@@ -14579,6 +14781,7 @@ insert into privat.campuri_secrete (coloana, cale) values ('colete_config', 'tok
 insert into privat.campuri_secrete (coloana, cale) values ('curiera_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('dhl_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('dpd_config', 'password') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('easybill_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('easysales_config', 'access_token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('easysales_config', 'client_secret') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('easysales_config', 'pat') on conflict do nothing;
@@ -14589,6 +14792,9 @@ insert into privat.campuri_secrete (coloana, cale) values ('ecolet_config', 'api
 insert into privat.campuri_secrete (coloana, cale) values ('emag_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('email_config', 'smtp.pass') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('epacket_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('factureaza_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('facturis_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('facturis_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fan_courier_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fedex_config', 'client_secret') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('fgo_config', 'private_key') on conflict do nothing;
@@ -14621,6 +14827,7 @@ insert into privat.campuri_secrete (coloana, cale) values ('posta_config', 'pass
 insert into privat.campuri_secrete (coloana, cale) values ('revolut_config', 'secret_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('revolut_config', 'signing_secret') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('revolut_config', 'token') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('saga_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('sameday_config', 'password') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('shipo_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smartbill_config', 'token') on conflict do nothing;
@@ -14897,6 +15104,7 @@ CREATE INDEX olx_sync_queue_product_id_idx ON public.olx_sync_queue USING btree 
 CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btree (creat_la) WHERE (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text]));
 CREATE UNIQUE INDEX operatii_externe_awb_viu_pe_comanda_idx ON public.operatii_externe USING btree (order_id) WHERE ((fel = 'awb'::text) AND (order_id IS NOT NULL) AND (cheie !~~ 'retur:%'::text) AND (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text])));
 CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
+CREATE INDEX operatii_externe_documente_emise_idx ON public.operatii_externe USING btree (business_id, creat_la DESC) WHERE ((fel = ANY (ARRAY['factura'::text, 'storno'::text])) AND (stare = 'reusit'::text));
 CREATE INDEX operatii_externe_order_id_idx ON public.operatii_externe USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
 CREATE UNIQUE INDEX operatii_externe_tinta_deschisa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), furnizor, fel, tinta_idempotenta) WHERE ((tinta_idempotenta IS NOT NULL) AND (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text])));
@@ -14953,6 +15161,12 @@ CREATE INDEX return_requests_business_created_idx ON public.return_requests USIN
 CREATE INDEX return_requests_business_unread_idx ON public.return_requests USING btree (business_id, is_read);
 CREATE INDEX return_requests_order_id_idx ON public.return_requests USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX return_requests_order_idx ON public.return_requests USING btree (order_id);
+CREATE INDEX saga_exporturi_cheie_idx ON public.saga_exporturi USING btree (business_id, cheie, creat_la DESC);
+CREATE INDEX saga_exporturi_comanda_idx ON public.saga_exporturi USING btree (business_id, order_id, creat_la DESC);
+CREATE INDEX saga_exporturi_creat_la_idx ON public.saga_exporturi USING btree (creat_la);
+CREATE INDEX saga_exporturi_de_golit_idx ON public.saga_exporturi USING btree (id) WHERE ((order_id IS NULL) AND ((raport IS NOT NULL) OR (mesaj IS NOT NULL)));
+CREATE INDEX saga_exporturi_magazin_idx ON public.saga_exporturi USING btree (business_id, creat_la DESC);
+CREATE INDEX saga_exporturi_order_idx ON public.saga_exporturi USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX site_analytics_sesiune ON public.site_analytics USING btree (business_id, session_id) WHERE (session_id IS NOT NULL);
 CREATE INDEX site_analytics_vizitator ON public.site_analytics USING btree (business_id, visitor_id, created_at DESC) WHERE (visitor_id IS NOT NULL);
 CREATE INDEX sms_campaign_destinatari_lot ON public.sms_campaign_destinatari USING btree (campaign_id, stare, id);
@@ -15068,7 +15282,11 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(curiera_config, '{api_key}'::text[]) AS curiera_config,
     privat.decripteaza_config(epacket_config, '{api_key}'::text[]) AS epacket_config,
     privat.decripteaza_config(easysales_config, '{client_secret,website_token,access_token,refresh_token,webhook_secret,pat}'::text[]) AS easysales_config,
-    privat.decripteaza_config(tbi_config, '{reseller_key,cheie_criptare}'::text[]) AS tbi_config
+    privat.decripteaza_config(tbi_config, '{reseller_key,cheie_criptare}'::text[]) AS tbi_config,
+    privat.decripteaza_config(facturis_config, '{api_key,password}'::text[]) AS facturis_config,
+    privat.decripteaza_config(factureaza_config, '{api_key}'::text[]) AS factureaza_config,
+    privat.decripteaza_config(easybill_config, '{password}'::text[]) AS easybill_config,
+    privat.decripteaza_config(saga_config, '{api_key}'::text[]) AS saga_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -15124,6 +15342,7 @@ CREATE TRIGGER set_users_profile_updated_at BEFORE UPDATE ON public.users_profil
 CREATE TRIGGER users_profile_blocheaza_escaladare BEFORE UPDATE ON public.users_profile FOR EACH ROW EXECUTE FUNCTION blocheaza_escaladare_users_profile();
 
 -- ── RLS ───────────────────────────────────────────────────
+alter table privat.saga_apel_in_curs enable row level security;
 alter table privat.store_settings enable row level security;
 alter table public.abandoned_carts enable row level security;
 alter table public.aboutyou_batches enable row level security;
@@ -15232,6 +15451,7 @@ alter table public.rate_limits enable row level security;
 alter table public.recovery_optout enable row level security;
 alter table public.recovery_sends enable row level security;
 alter table public.return_requests enable row level security;
+alter table public.saga_exporturi enable row level security;
 alter table public.site_analytics enable row level security;
 alter table public.sms_campaign_destinatari enable row level security;
 alter table public.sms_campaigns enable row level security;
@@ -15561,6 +15781,9 @@ create policy owner_select_return_requests on public.return_requests as PERMISSI
 create policy owner_update_return_requests on public.return_requests as PERMISSIVE for UPDATE to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
+create policy owner_select_saga_exporturi on public.saga_exporturi as PERMISSIVE for SELECT to authenticated using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Owners can view own analytics" on public.site_analytics as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = site_analytics.business_id) AND (b.user_id = auth.uid())))));
@@ -17542,6 +17765,14 @@ grant SELECT on table public.return_requests to service_role;
 grant TRIGGER on table public.return_requests to service_role;
 grant TRUNCATE on table public.return_requests to service_role;
 grant UPDATE on table public.return_requests to service_role;
+grant SELECT on table public.saga_exporturi to authenticated;
+grant DELETE on table public.saga_exporturi to service_role;
+grant INSERT on table public.saga_exporturi to service_role;
+grant REFERENCES on table public.saga_exporturi to service_role;
+grant SELECT on table public.saga_exporturi to service_role;
+grant TRIGGER on table public.saga_exporturi to service_role;
+grant TRUNCATE on table public.saga_exporturi to service_role;
+grant UPDATE on table public.saga_exporturi to service_role;
 grant DELETE on table public.site_analytics to anon;
 grant REFERENCES on table public.site_analytics to anon;
 grant SELECT on table public.site_analytics to anon;
@@ -18493,6 +18724,9 @@ grant execute on function public.revendica_stoc_batch(p_items jsonb) to service_
 grant execute on function public.revendica_stoc_comanda(p_order_id uuid) to service_role;
 grant execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text, p_tinta text) to service_role;
+grant execute on function public.saga_elibereaza_apelul(p_business_id uuid, p_detinator uuid) to service_role;
+grant execute on function public.saga_ocupa_apelul(p_business_id uuid, p_detinator uuid, p_secunde integer) to service_role;
+grant execute on function public.saga_roteste_cheia(p_business_id uuid, p_cheie_veche text, p_cheie_noua text) to service_role;
 grant execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) to service_role;
 grant execute on function public.scade_variante_raportat(p_items jsonb) to service_role;
 grant execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) to service_role;
@@ -18815,6 +19049,9 @@ revoke execute on function public.revendica_stoc_batch(p_items jsonb) from publi
 revoke execute on function public.revendica_stoc_comanda(p_order_id uuid) from public;
 revoke execute on function public.revendica_stoc_complet(p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.rezerva_operatie_externa(p_business_id uuid, p_order_id uuid, p_fel text, p_furnizor text, p_cheie text, p_tinta text) from public;
+revoke execute on function public.saga_elibereaza_apelul(p_business_id uuid, p_detinator uuid) from public;
+revoke execute on function public.saga_ocupa_apelul(p_business_id uuid, p_detinator uuid, p_secunde integer) from public;
+revoke execute on function public.saga_roteste_cheia(p_business_id uuid, p_cheie_veche text, p_cheie_noua text) from public;
 revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;

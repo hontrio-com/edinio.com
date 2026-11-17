@@ -479,7 +479,7 @@ describe("configurarea", () => {
    * ramane necriptat in baza, in tacere; o stare de jurnal lipsa din constrangere ar face scrierea
    * jurnalului sa cada pe exact starea noua.
    */
-  const sql = readFileSync("docs/facturare/2027-02-06-factureaza-easybill-saga.sql", "utf8").replace(/\r\n/g, "\n");
+  const sql = readFileSync("migrations/2027-02-06-factureaza-easybill-saga.sql", "utf8").replace(/\r\n/g, "\n");
   const lista = (constrangere: string): string[] => {
     const i = sql.indexOf(`constraint ${constrangere} check`);
     assert.ok(i >= 0, `lipseste ${constrangere} din fragment`);

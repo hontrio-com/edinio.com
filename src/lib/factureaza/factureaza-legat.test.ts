@@ -22,7 +22,7 @@ import { pdfDocumentAlMagazinului } from "./server";
 
 const viu = (f: string) => faraComentarii(readFileSync(f, "utf8").replace(/\r\n/g, "\n"));
 /* Migratia comuna (fragmentul Factureaza.ro e lipit in ea). */
-const FRAGMENT = "docs/facturare/2027-02-06-factureaza-easybill-saga.sql";
+const FRAGMENT = "migrations/2027-02-06-factureaza-easybill-saga.sql";
 const ACTIUNI = "src/lib/actions/factureaza.actions.ts";
 
 const fetchOriginal = globalThis.fetch;

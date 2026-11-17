@@ -9,8 +9,8 @@ firul; `document.ts` compunerea pura; `server.ts` citirea configurarii si PDF-ul
 `src/lib/actions/factureaza.actions.ts`, `src/components/dashboard/FactureazaConfigClient.tsx`,
 `src/app/(dashboard)/dashboard/features/factureaza/`, `src/app/api/factureaza/pdf/route.ts`, plus
 regulile comune din `src/lib/billing/*`.
-**Baza:** `docs/facturare/2027-02-06-factureaza-easybill-saga.sql` (migratia comuna a celor trei;
-se aplica INAINTE de deploy, dupa `2027-02-05-facturis.sql`).
+**Baza:** `migrations/2027-02-06-factureaza-easybill-saga.sql` (migratia comuna a celor trei;
+aplicata in productie pe 18.11.2026, dupa `2027-02-05-facturis.sql`; baseline-ul o contine).
 **Probe:** `src/lib/factureaza/*.test.ts` (112, toate verzi; banc de mutanti 45 din 45, cu fiecare
 fisier refacut identic, verificat pe sha1).
 

@@ -23,7 +23,7 @@ import { facturaComenzii, facturaDeTest } from "./factura-comenzii";
 
 const viu = (f: string) => faraComentarii(readFileSync(f, "utf8").replace(/\r\n/g, "\n"));
 const brut = (f: string) => readFileSync(f, "utf8").replace(/\r\n/g, "\n");
-const MIGRATIE = "docs/facturare/2027-02-06-factureaza-easybill-saga.sql";
+const MIGRATIE = "migrations/2027-02-06-factureaza-easybill-saga.sql";
 
 /* Casele „cu cheie": emiterea intoarce id-ul documentului, PDF-ul vine numai prin API. */
 const CASE = [
@@ -33,8 +33,12 @@ const CASE = [
 
 describe("baza: migratia comuna", () => {
   const sql = brut(MIGRATIE);
-  test("e in asteptare (verificatorul tipurilor o stie) si se aplica DUPA Facturis", () => {
-    assert.ok(brut("scripts/verifica-tipuri-db.mjs").includes(`"${MIGRATIE}"`));
+  test("a intrat in productie (e in baseline, nu mai e in asteptare) si s-a aplicat DUPA Facturis", () => {
+    assert.ok(!brut("scripts/verifica-tipuri-db.mjs").includes(`"${MIGRATIE}"`), "inca in asteptare");
+    const baseline = brut("migrations/000-schema-baseline.sql");
+    for (const urma of ["factureaza_invoice_key text", "easybill_invoice_key text", "create table if not exists public.saga_exporturi", "saga_exporturi_de_golit_idx"]) {
+      assert.ok(baseline.includes(urma), `baseline-ul nu are: ${urma}`);
+    }
     assert.match(sql, /DUPA `2027-02-05-facturis\.sql`/);
     assert.ok(!sql.includes("@@"), "a ramas un loc de lipit negolit");
   });

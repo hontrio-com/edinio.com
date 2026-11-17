@@ -20,7 +20,7 @@ import { facturisGata, seriaStornarii } from "./config";
  */
 
 const viu = (f: string) => faraComentarii(readFileSync(f, "utf8"));
-const MIGRATIE = "docs/facturare/2027-02-05-facturis.sql";
+const MIGRATIE = "migrations/2027-02-05-facturis.sql";
 
 describe("baza si secretele", () => {
   test("⚠ secretele: aceleasi nume in cod, in tip si in migratie, si vederea se reface dupa ele", () => {
@@ -43,8 +43,9 @@ describe("baza si secretele", () => {
     assert.match(sql, /x\.furnizor = 'facturis'/);
     assert.match(sql, /o\.facturis_invoice_key is not null and o\.facturis_invoice_number is not null/);
   });
-  test("migratia in asteptare e declarata, iar tipurile au coloanele", () => {
-    assert.ok(readFileSync("scripts/verifica-tipuri-db.mjs", "utf8").includes(`"${MIGRATIE}"`));
+  test("migratia a intrat in productie (e in baseline, nu mai e in asteptare), iar tipurile au coloanele", () => {
+    assert.ok(!readFileSync("scripts/verifica-tipuri-db.mjs", "utf8").includes(`"${MIGRATIE}"`), "inca in asteptare");
+    assert.match(readFileSync("migrations/000-schema-baseline.sql", "utf8"), /facturis_invoice_key text/, "baseline-ul nu stie de Facturis");
     const tipuri = readFileSync("src/types/database.types.ts", "utf8");
     for (const c of ["facturis_invoice_key", "facturis_invoice_number", "facturis_storno_key", "facturis_config"]) {
       assert.ok(tipuri.includes(`${c}: `), `${c} lipseste din tipuri`);

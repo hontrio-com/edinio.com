@@ -8,8 +8,7 @@
 pura, `server.ts` citirea configurarii), `src/lib/actions/facturis.actions.ts`,
 `src/components/dashboard/FacturisConfigClient.tsx`, `src/app/api/facturis/pdf/route.ts`, plus regulile
 comune din `src/lib/billing/*`.
-**Migratia:** `docs/facturare/2027-02-05-facturis.sql` (aplicata pe DEMO; se muta in `migrations/` cand
-intra in productie).
+**Migratia:** `migrations/2027-02-05-facturis.sql` (aplicata in productie pe 18.11.2026; baseline-ul o contine).
 **Probe:** `src/lib/facturis/*.test.ts`.
 
 ---

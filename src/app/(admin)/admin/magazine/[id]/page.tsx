@@ -117,6 +117,7 @@ async function DetaliiMagazin({ id, business }: { id: string; business: Magazin 
           netopia: esteActiv(settings.netopia_config),
           smartbill: esteActiv(settings.smartbill_config),
           oblio: esteActiv(settings.oblio_config),
+          facturis: esteActiv(settings.facturis_config),
           smso: esteActiv(settings.smso_config),
           marketing: esteActiv(settings.marketing_config),
         },

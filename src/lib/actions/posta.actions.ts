@@ -699,7 +699,7 @@ function areFirma(order: Record<string, unknown>): boolean {
 
 /** Numarul facturii, de pe oricare dintre casele de facturare. */
 function numarFactura(order: Record<string, unknown>): string | null {
-  for (const camp of ["smartbill_invoice_number", "oblio_invoice_number", "fgo_invoice_number"]) {
+  for (const camp of ["smartbill_invoice_number", "oblio_invoice_number", "fgo_invoice_number", "facturis_invoice_number"]) {
     const v = order[camp];
     if (typeof v === "string" && v.trim()) return v.trim();
   }

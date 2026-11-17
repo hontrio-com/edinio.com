@@ -20,6 +20,8 @@ import {
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
+import { generateFacturisInvoice } from "@/lib/actions/facturis.actions";
+import { descarcaPdfFacturis } from "@/components/dashboard/facturis/descarcaPdfFacturis";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
 import { GlsAwbModal } from "@/components/dashboard/GlsAwbModal";
@@ -104,7 +106,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /**
@@ -127,6 +129,7 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   coleteEnabled?: boolean;
   oblioEnabled?: boolean;
   fgoEnabled?: boolean;
+  facturisEnabled?: boolean;
   cargusEnabled?: boolean;
   dpdEnabled?: boolean;
   glsEnabled?: boolean;
@@ -189,6 +192,8 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   const [fgoActionOrderId, setFgoActionOrderId] = useState<string | null>(null);
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
   const [, startFgoTransition] = useTransition();
+  const [facturisActionOrderId, setFacturisActionOrderId] = useState<string | null>(null);
+  const [, startFacturisTransition] = useTransition();
 
   // ── Bulk selection ──
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -276,8 +281,9 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     if (smartbillEnabled) list.push({ key: "smartbill", label: "SmartBill" });
     if (oblioEnabled) list.push({ key: "oblio", label: "Oblio" });
     if (fgoEnabled) list.push({ key: "fgo", label: "fGO" });
+    if (facturisEnabled) list.push({ key: "facturis", label: "Facturis" });
     return list;
-  }, [smartbillEnabled, oblioEnabled, fgoEnabled]);
+  }, [smartbillEnabled, oblioEnabled, fgoEnabled, facturisEnabled]);
   const anyInvoice = invoiceProviders.length > 0;
 
   const awbCouriers = useMemo(() => {
@@ -717,6 +723,39 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
         toast.success(`${label} ${result.series}${result.number} generata`);
         router.refresh();
       }
+    });
+  }
+
+  /*
+   * Facturis din lista: doar emiterea. ⚠ Raspunsul pierdut nu invita la reincercare oarba: emiterea
+   * trece prin registru, dar un document emis si nelegat de comanda se lamureste din contul Facturis.
+   */
+  function handleFacturisInvoice(e: React.MouseEvent, orderId: string) {
+    e.stopPropagation();
+    if (!businessId) return;
+    setFacturisActionOrderId(orderId);
+    startFacturisTransition(async () => {
+      let result: Awaited<ReturnType<typeof generateFacturisInvoice>>;
+      try {
+        result = await generateFacturisInvoice(businessId, orderId);
+      } catch {
+        toast.error(
+          "Nu am primit răspuns de la server, deci nu știm dacă factura s-a emis în Facturis. Verifică în contul Facturis înainte să încerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        setFacturisActionOrderId(null);
+      }
+      if ("error" in result) {
+        toast.error(result.error, { duration: 10000 });
+        return;
+      }
+      const nr = [result.series, result.number].filter(Boolean).join(" ");
+      toast.success(nr ? `Factura Facturis ${nr} a fost emisă.` : "Factura Facturis a fost emisă.");
+      if (result.avertisment) toast.warning(result.avertisment, { duration: 15000 });
+      router.refresh();
     });
   }
 
@@ -1482,6 +1521,9 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                     )}
                     {fgoEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">fGO</th>
+                    )}
+                    {facturisEnabled && (
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Facturis</th>
                     )}
                     {smartbillEnabled && (
                       <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Documente</th>
@@ -2298,6 +2340,48 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
                                 >
                                   {fgoActionOrderId === order.id && fgoAction === "invoice" ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
+                                  Factura
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                        {facturisEnabled && (
+                          <td className="px-5 py-3.5 hidden lg:table-cell">
+                            {/*
+                              ⚠ STORNAREA NU SE FACE DIN LISTA, dinadins: e un act fiscal ireversibil, iar in
+                              pagina comenzii cere o a doua apasare, cu ce se intampla scris pe fata. Aici
+                              raman emiterea (pazita de registru si de slot) si PDF-ul.
+                            */}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {order.facturis_storno_key ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-destructive/10 text-destructive">
+                                  <XCircle className="h-3 w-3" />
+                                  Storno {[order.facturis_storno_series, order.facturis_storno_number].filter(Boolean).join("")}
+                                </span>
+                              ) : order.facturis_invoice_key ? (
+                                <>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success">
+                                    <FileCheck className="h-3 w-3" />
+                                    {[order.facturis_invoice_series, order.facturis_invoice_number].filter(Boolean).join("") || "Factura"}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={e => { e.stopPropagation(); void descarcaPdfFacturis(order.id, "invoice"); }}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    PDF
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={e => handleFacturisInvoice(e, order.id)}
+                                  disabled={facturisActionOrderId === order.id}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors disabled:opacity-50"
+                                >
+                                  {facturisActionOrderId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck className="h-3 w-3" />}
                                   Factura
                                 </button>
                               )}

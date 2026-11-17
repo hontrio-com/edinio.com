@@ -4800,6 +4800,12 @@ export type Database = {
           fgo_invoice_series: string | null
           fgo_storno_number: string | null
           fgo_storno_series: string | null
+          facturis_invoice_key: string | null
+          facturis_invoice_number: string | null
+          facturis_invoice_series: string | null
+          facturis_storno_key: string | null
+          facturis_storno_number: string | null
+          facturis_storno_series: string | null
           id: string
           innoship_awb_at: string | null
           innoship_awb_number: string | null
@@ -5047,6 +5053,12 @@ export type Database = {
           fgo_invoice_series?: string | null
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
+          facturis_invoice_key?: string | null
+          facturis_invoice_number?: string | null
+          facturis_invoice_series?: string | null
+          facturis_storno_key?: string | null
+          facturis_storno_number?: string | null
+          facturis_storno_series?: string | null
           id?: string
           innoship_awb_at?: string | null
           innoship_awb_number?: string | null
@@ -5294,6 +5306,12 @@ export type Database = {
           fgo_invoice_series?: string | null
           fgo_storno_number?: string | null
           fgo_storno_series?: string | null
+          facturis_invoice_key?: string | null
+          facturis_invoice_number?: string | null
+          facturis_invoice_series?: string | null
+          facturis_storno_key?: string | null
+          facturis_storno_number?: string | null
+          facturis_storno_series?: string | null
           id?: string
           innoship_awb_at?: string | null
           innoship_awb_number?: string | null
@@ -6530,6 +6548,7 @@ export type Database = {
           tiktok_capi_config: Json | null
           fedex_config: Json | null
           fgo_config: Json | null
+          facturis_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
           innoship_config: Json | null
@@ -6613,6 +6632,7 @@ export type Database = {
           tiktok_capi_config?: Json | null
           fedex_config?: Json | null
           fgo_config?: Json | null
+          facturis_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
@@ -6696,6 +6716,7 @@ export type Database = {
           tiktok_capi_config?: Json | null
           fedex_config?: Json | null
           fgo_config?: Json | null
+          facturis_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null

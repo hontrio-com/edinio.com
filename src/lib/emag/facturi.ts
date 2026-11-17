@@ -54,6 +54,9 @@ interface RandComanda {
   fgo_invoice_number: string | null;
   fgo_invoice_series: string | null;
   fgo_invoice_link: string | null;
+  facturis_invoice_key: string | null;
+  facturis_invoice_series: string | null;
+  facturis_invoice_number: string | null;
   order_source: unknown;
 }
 
@@ -136,7 +139,7 @@ async function urcaFacturaCitita(
   aduPdf: (f: Factura) => Promise<ArrayBuffer | { error: string }>,
 ): Promise<RezultatFactura> {
   const o = randCitit<RandComanda>("orders", await admin.from("orders")
-    .select("id, smartbill_invoice_number, smartbill_invoice_series, smartbill_invoice_url, oblio_invoice_number, oblio_invoice_series, oblio_invoice_link, fgo_invoice_number, fgo_invoice_series, fgo_invoice_link, order_source")
+    .select("id, smartbill_invoice_number, smartbill_invoice_series, smartbill_invoice_url, oblio_invoice_number, oblio_invoice_series, oblio_invoice_link, fgo_invoice_number, fgo_invoice_series, fgo_invoice_link, facturis_invoice_key, facturis_invoice_series, facturis_invoice_number, order_source")
     .eq("id", orderId).eq("business_id", ctx.businessId).maybeSingle() as never);
   if (!o) return { fel: "esec", mesaj: "Comanda nu a fost găsită." };
 

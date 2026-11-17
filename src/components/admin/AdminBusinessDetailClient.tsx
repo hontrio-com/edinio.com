@@ -51,7 +51,7 @@ interface StoreSettings {
   activ: {
     sameday: boolean; fanCourier: boolean; cargus: boolean; dpd: boolean;
     colete: boolean; fgo: boolean; stripe: boolean; netopia: boolean;
-    smartbill: boolean; oblio: boolean; smso: boolean; marketing: boolean;
+    smartbill: boolean; oblio: boolean; facturis: boolean; smso: boolean; marketing: boolean;
   };
 }
 
@@ -530,7 +530,6 @@ export function AdminBusinessDetailClient({
                   <CourierStatus enabled={settings.activ.cargus} name="Cargus" />
                   <CourierStatus enabled={settings.activ.dpd} name="DPD" />
                   <CourierStatus enabled={settings.activ.colete} name="Colete Online" />
-                  <CourierStatus enabled={settings.activ.fgo} name="FGO" />
                 </div>
               </div>
             ) : (
@@ -590,6 +589,9 @@ export function AdminBusinessDetailClient({
                   <p className="text-xs font-semibold text-zinc-500 mb-2 uppercase tracking-wide">Facturare</p>
                   <CourierStatus enabled={settings.activ.smartbill} name="SmartBill" />
                   <CourierStatus enabled={settings.activ.oblio} name="Oblio" />
+                  {/* fGO statea la „Curieri configurati": e casa de facturare, deci sta aici. */}
+                  <CourierStatus enabled={settings.activ.fgo} name="fGO" />
+                  <CourierStatus enabled={settings.activ.facturis} name="Facturis" />
                 </div>
               </div>
             ) : (

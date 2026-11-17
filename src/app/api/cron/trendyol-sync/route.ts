@@ -491,7 +491,7 @@ export async function GET(req: NextRequest) {
       if (!ctx || ctx.config.factureaza_clientul !== true) continue;
       try {
         for (const orderId of await comenziDeFacturat(admin, businessId)) {
-          const rez = await urcaFacturaLaTrendyol(admin, ctx, orderId, aduPdfFacturii);
+          const rez = await urcaFacturaLaTrendyol(admin, ctx, orderId, (f) => aduPdfFacturii(f, admin, businessId));
           /* ⚠ `fara_factura` si `oprit` NU sunt esecuri: prima inseamna ca inca nu s-a emis, a
              doua ca omul n-a cerut-o. Nu se scrie nimic pentru ele. */
           if (rez.fel === "esec") {
@@ -675,7 +675,17 @@ async function patchConfig(admin: Admin, businessId: string, patch: Partial<Tren
  * la emitere. Data mai departe catre Trendyol ca atare, ei n-ar putea-o deschide — sta in
  * spatele unei autentificari.
  */
-async function aduPdfFacturii(f: Factura): Promise<ArrayBuffer | { error: string }> {
+async function aduPdfFacturii(f: Factura, admin: Admin, businessId: string): Promise<ArrayBuffer | { error: string }> {
+  /*
+   * ⚠ FACTURIS N-ARE ADRESA A DOCUMENTULUI: PDF-ul se cere prin API, dupa id, cu acreditarile
+   * magazinului. Modulul se incarca LENES, numai cand chiar e o factura Facturis de urcat.
+   * Lasat pe ramura de mai jos, `fetch("")` ar fi cazut ca „eroare de retea", iar urcarea ar fi
+   * iesit `necunoscut` in registru: blocata, pentru o factura care exista si se poate aduce.
+   */
+  if (f.furnizor === "facturis") {
+    const { pdfDocumentAlMagazinului } = await import("@/lib/facturis/server");
+    return pdfDocumentAlMagazinului(admin, businessId, f.cheie);
+  }
   try {
     const r = await fetch(f.url, { cache: "no-store" });
     if (!r.ok) return { error: `Nu s-a putut descarca factura (${r.status}).` };

@@ -6,6 +6,7 @@ import { sesiuneExpirata } from "./cerere";
 import { aducePdf, numeleFisierului, type MotivEsec, type SursaPdf } from "./pdf-document";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SmartbillConfig } from "@/lib/smartbill";
+import { acreditari, configurareaMagazinului } from "@/lib/facturis/server";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -74,7 +75,7 @@ export async function servesteDocumentul(
   const admin = createAdminClient();
   const { data: rand } = await admin
     .from("orders")
-    .select("smartbill_invoice_series, smartbill_invoice_number, smartbill_storno_series, smartbill_storno_number, oblio_invoice_link, oblio_storno_link, fgo_invoice_link")
+    .select("smartbill_invoice_series, smartbill_invoice_number, smartbill_storno_series, smartbill_storno_number, oblio_invoice_link, oblio_storno_link, fgo_invoice_link, facturis_invoice_key, facturis_storno_key")
     .eq("id", orderId)
     .eq("business_id", magazin.id)
     .single();
@@ -100,6 +101,18 @@ export async function servesteDocumentul(
     };
   } else if (doc.casa === "oblio") {
     sursa = { fel: "link", adresa: (fel === "factura" ? rand.oblio_invoice_link : rand.oblio_storno_link) ?? "" };
+  } else if (doc.casa === "facturis") {
+    /* ⚠ Aceeasi conditie ca la SmartBill: integrarea stinsa (sau incompleta) nu mai aduce nimic. */
+    const config = await configurareaMagazinului(admin, magazin.id);
+    if (!config) {
+      await jurnal(magazin.id, orderId, fel, "casa_neconectata", doc.casa);
+      return esec("casa_neconectata");
+    }
+    sursa = {
+      fel: "facturis",
+      acreditari: acreditari(config),
+      cheie: (fel === "factura" ? rand.facturis_invoice_key : rand.facturis_storno_key) ?? "",
+    };
   } else {
     /* fGO nu pastreaza link pentru stornare; `stornoDescarcabil` e deja fals. */
     sursa = { fel: "link", adresa: rand.fgo_invoice_link ?? "" };

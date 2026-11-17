@@ -344,7 +344,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Dacă operația nu există acolo, întoarce-te în tabul cu pagina comenzii. Panoul se reîncarcă singur când revii.",
           ],
           detalii: [
-            { titlu: "Furnizorii care pot apărea în etichetă", text: "Curieri: cargus, sameday, fancourier, dpd, gls, posta, packeta, fedex, ups, dhl și altele configurate în contul tău. Facturare: smartbill, oblio, fgo. Plăți: stripe, netopia. Marketplace: trendyol. Numele din etichetă îți spune exact în ce cont trebuie să te uiți." },
+            { titlu: "Furnizorii care pot apărea în etichetă", text: "Curieri: cargus, sameday, fancourier, dpd, gls, posta, packeta, fedex, ups, dhl și altele configurate în contul tău. Facturare: smartbill, oblio, fgo, facturis. Plăți: stripe, netopia. Marketplace: trendyol. Numele din etichetă îți spune exact în ce cont trebuie să te uiți." },
             { titlu: "Edinio nu verifică în locul tău", text: "Nu există nicio interogare automată către furnizor pentru operațiile agățate. Panoul nu compară nimic cu contul extern. Verificarea e integral manuală." },
             { titlu: "Contul și contractul rămân ale tale", text: "Edinio face integrarea, dar contul și contractul cu curierul sau cu casa de facturare trebuie să fie ale tale. Ca să verifici, ai nevoie de acces la contul sub care e configurată integrarea în Edinio." },
             { titlu: "Panoul nu îți dă numărul de AWB sau de document", text: "Rândul din panou nu conține referința externă păstrată de Edinio. Caută în contul furnizorului după numărul comenzii, nu după un număr de document pe care panoul nu ți-l arată." },

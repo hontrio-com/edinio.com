@@ -320,16 +320,16 @@ export const INTEGRARI: Integrare[] = [
     descriere: "Conectezi FGO și generezi documentele folosind automat datele comenzii.",
   },
   {
+    cheie: "facturis",
+    categorie: "facturare",
+    stare: "activa",
+    descriere: "Emiți facturi și stornări Facturis Online din comenzi, manual sau automat, cu încasarea la plata cu cardul.",
+  },
+  {
     cheie: "saga",
     categorie: "facturare",
     stare: "in-curand",
     descriere: "Trimiți datele comenzilor către SAGA și reduci introducerea manuală în contabilitate.",
-  },
-  {
-    cheie: "facturis",
-    categorie: "facturare",
-    stare: "in-curand",
-    descriere: "Generezi documente și sincronizezi datele comerciale cu Facturis.",
   },
   {
     cheie: "easybill",

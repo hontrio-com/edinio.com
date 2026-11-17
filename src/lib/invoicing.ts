@@ -1,5 +1,5 @@
 // Shared model for automatic invoicing across all invoicing providers
-// (SmartBill, Oblio, fGO). Each provider stores its own `auto_invoice` +
+// (SmartBill, Oblio, fGO, Facturis). Each provider stores its own `auto_invoice` +
 // `auto_invoice_trigger` in its config; the dispatcher
 // (src/lib/actions/invoice-auto.actions.ts) issues with at most one provider per
 // order, in priority order, guaranteeing a single automatic invoice.

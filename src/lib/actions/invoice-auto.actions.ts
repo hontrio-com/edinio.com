@@ -10,7 +10,7 @@ import { procesataInEasySales } from "@/lib/orders/origin";
  * exactly ONE automatic invoice, with the highest-priority provider that has
  * auto-invoicing enabled and whose trigger matches the change.
  *
- * Priority: SmartBill → Oblio → fGO. A merchant normally enables auto on just one
+ * Priority: SmartBill → Oblio → fGO → Facturis. A merchant normally enables auto on just one
  * provider, so priority only decides the rare case where several are enabled. If
  * the order already has an invoice from ANY provider (auto OR manual), nothing
  * happens — we never double-invoice. Fire-and-forget: never throws, never blocks
@@ -31,7 +31,10 @@ export async function maybeAutoInvoice(
          venit `undefined`, `coteleLiniilor` ar fi raspuns „uniforma" pe o lista goala, si
          poarta ar fi tacut exact pe comenzile pentru care exista. Aceeasi lectie ca la
          coloanele de AWB din generarea in masa. */
-      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, payment_method, order_source, items")
+      /* ⚠ La Facturis se intreaba CHEIA, nu numarul: emiterea intoarce doar id-ul documentului, iar
+         numarul se citeste dupa. O factura cu cheie si fara numar EXISTA, si nu are voie sa primeasca
+         o a doua de la alta casa. */
+      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, payment_method, order_source, items")
       .eq("id", orderId)
       .eq("business_id", businessId)
       .single();
@@ -264,7 +267,7 @@ export async function maybeAutoInvoice(
          steag ar fi rămas fără factură fără ca nimeni să afle de ce. */
       if (complet === 0) return;
     }
-    if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return;
+    if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number || o.facturis_invoice_key) return;
 
     const smartbill = await import("@/lib/actions/smartbill.actions");
     if (await smartbill.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
@@ -274,6 +277,9 @@ export async function maybeAutoInvoice(
 
     const fgo = await import("@/lib/actions/fgo.actions");
     if (await fgo.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
+
+    const facturis = await import("@/lib/actions/facturis.actions");
+    if (await facturis.maybeAutoGenerateInvoice(businessId, orderId, newStatus, newPaymentStatus, sistem)) return;
   } catch {
     // best-effort; auto-invoicing must never block an order update
   }

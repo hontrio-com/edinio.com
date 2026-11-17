@@ -14,6 +14,7 @@ import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
+import { facturisGata } from "@/lib/facturis/config";
 import type { CargusConfig } from "@/lib/cargus";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
@@ -60,7 +61,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config")
       .eq("business_id", order.business_id)
       .single(),
     /* Pozele din „Produse comandate”, din catalog: liniile comenzii nu le poarta. ⚠ Nu cade pagina. */
@@ -81,6 +82,8 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   const oblioEnabled = !!(oc?.enabled && oc?.client_id && oc?.cif && oc?.series_invoice);
   const fc = settings?.fgo_config as FgoConfig | null;
   const fgoEnabled = !!(fc?.enabled && fc?.cod_unic && fc?.private_key && fc?.serie);
+  /* `facturisGata` insasi: aceeasi regula ca in Integrari, in lista comenzilor si in lot. */
+  const facturisEnabled = facturisGata(settings?.facturis_config);
   const cg = settings?.cargus_config as CargusConfig | null;
   const cargusEnabled = !!(cg?.enabled && cg?.username && cg?.subscription_key && cg?.location_id);
   const dg = settings?.dpd_config as DpdConfig | null;
@@ -280,6 +283,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       coleteEnabled={coleteEnabled}
       oblioEnabled={oblioEnabled}
       fgoEnabled={fgoEnabled}
+      facturisEnabled={facturisEnabled}
       cargusEnabled={cargusEnabled}
       dpdEnabled={dpdEnabled}
       glsEnabled={glsEnabled}

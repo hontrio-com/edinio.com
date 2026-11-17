@@ -1477,7 +1477,7 @@ async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
   for (const r of (data ?? []) as { id: string; order_id: string | null }[]) {
     if (!r.order_id) continue;
 
-    const rez = await urcaFacturaLaEmag(admin, ctx, r.order_id, aduPdfFacturii);
+    const rez = await urcaFacturaLaEmag(admin, ctx, r.order_id, (f) => aduPdfFacturii(f, admin, ctx.businessId));
 
     if (rez.fel === "urcata" || rez.fel === "deja") {
       await admin.from("emag_orders")
@@ -1513,7 +1513,17 @@ async function urcaFacturile(admin: Admin, ctx: ContextEmag): Promise<number> {
  * rulare a cronului — inclusiv cele in care nu e nicio factura de urcat — ar fi tras
  * dupa ea trei module de facturare cu tot cu dependintele lor.
  */
-async function aduPdfFacturii(f: Factura): Promise<ArrayBuffer | { error: string }> {
+async function aduPdfFacturii(f: Factura, admin: Admin, businessId: string): Promise<ArrayBuffer | { error: string }> {
+  /*
+   * ⚠ FACTURIS N-ARE ADRESA A DOCUMENTULUI: PDF-ul se cere prin API, dupa id, cu acreditarile
+   * magazinului. Modulul se incarca LENES, numai cand chiar e o factura Facturis de urcat.
+   * Lasat pe ramura de mai jos, `fetch("")` ar fi cazut ca „eroare de retea", iar urcarea ar fi
+   * iesit `necunoscut` in registru: blocata, pentru o factura care exista si se poate aduce.
+   */
+  if (f.furnizor === "facturis") {
+    const { pdfDocumentAlMagazinului } = await import("@/lib/facturis/server");
+    return pdfDocumentAlMagazinului(admin, businessId, f.cheie);
+  }
   try {
     const r = await fetch(f.url, { cache: "no-store" });
     if (!r.ok) return { error: `Nu s-a putut descarca factura (${r.status}).` };

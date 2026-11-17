@@ -639,17 +639,18 @@ export async function ingestOrder(admin: Db, ctx: AboutYouSyncContext, order: Ab
         smartbill_invoice_number: string | null;
         oblio_invoice_number: string | null;
         fgo_invoice_number: string | null;
+        facturis_invoice_key: string | null;
         items: unknown;
         total: number | null;
       }>("aboutyou.comandaDeActualizat", await admin
         .from("orders")
-        .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, items, total")
+        .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, items, total")
         .eq("id", ex.order_id).eq("business_id", ctx.businessId).maybeSingle());
 
       /* ⚠ Comanda necitibila NU se rescrie orbeste: fara ea nu stim daca are factura. */
       const hotarare = comanda == null ? "nimic" : hotarareaActualizarii({
         facturata: !!(comanda.smartbill_invoice_number
-          ?? comanda.oblio_invoice_number ?? comanda.fgo_invoice_number),
+          ?? comanda.oblio_invoice_number ?? comanda.fgo_invoice_number ?? comanda.facturis_invoice_key),
         itemsVechi: comanda.items, totalVechi: comanda.total,
         itemsNoi: edinioItems, totalNou: total,
       });

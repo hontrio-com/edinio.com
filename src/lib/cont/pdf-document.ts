@@ -1,5 +1,6 @@
 import { esteChiarPdf, eDocumentDeTest } from "@/lib/billing/factura-comenzii";
 import { fetchMerchantPdf, getMerchantInvoicePdfUrl } from "@/lib/smartbill";
+import { pdfFactura, type AcreditariFacturis } from "@/lib/facturis/client";
 
 /**
  * Aducerea PDF-ului unui document fiscal, pentru cumparator.
@@ -32,6 +33,9 @@ export type MotivEsec =
 
 export type SursaPdf =
   | { fel: "smartbill"; email: string; token: string; cif: string; serie: string; numar: string }
+  /* Facturis n-are adresa a documentului: PDF-ul se cere prin API, dupa id, cu acreditarile
+     magazinului. Nimic despre Facturis nu pleaca spre om, ca la SmartBill. */
+  | { fel: "facturis"; acreditari: AcreditariFacturis | null; cheie: string }
   | { fel: "link"; adresa: string };
 
 export type RezultatPdf = { ok: true; octeti: ArrayBuffer } | { ok: false; motiv: MotivEsec };
@@ -53,6 +57,15 @@ export async function aducePdf(sursa: SursaPdf): Promise<RezultatPdf> {
     );
     if ("error" in rez) return { ok: false, motiv: "furnizor_indisponibil" };
     octeti = rez;
+  } else if (sursa.fel === "facturis") {
+    if (!sursa.acreditari) return { ok: false, motiv: "casa_neconectata" };
+    if (!sursa.cheie) return { ok: false, motiv: "fara_document" };
+    try {
+      /* `pdfFactura` verifica singura antetul `%PDF-` si marimea; aici se pastreaza doar motivul. */
+      octeti = await pdfFactura(sursa.acreditari, sursa.cheie, AbortSignal.timeout(LIMITA_DE_TIMP_MS));
+    } catch {
+      return { ok: false, motiv: "furnizor_indisponibil" };
+    }
   } else {
     const adresa = (sursa.adresa ?? "").trim();
     if (!adresa) return { ok: false, motiv: "fara_document" };

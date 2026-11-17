@@ -3145,7 +3145,7 @@ export async function updateOrderDetails(orderId: string, data: {
     // jos compara datele NOI cu cele din baza, ca sa stie daca destinatarul chiar s-a
     // schimbat. Necerute, ar fi venit `undefined`, comparatia ar fi raspuns „s-a schimbat" la
     // fiecare salvare, si comerciantul n-ar mai fi putut salva nimic pe o comanda Pepita.
-    .select("id, business_id, status, payment_status, payment_method, customer_name, customer_phone, customer_email, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number, epacket_awb_number")
+    .select("id, business_id, status, payment_status, payment_method, customer_name, customer_phone, customer_email, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, facturis_invoice_series, facturis_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number, curiera_awb_number, epacket_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -3198,7 +3198,9 @@ export async function updateOrderDetails(orderId: string, data: {
    *
    * Proformele nu intra: nu sunt documente fiscale.
    */
-  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number;
+  /* ⚠ La Facturis, CHEIA spune ca factura exista; numarul se poate citi mai tarziu. */
+  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number
+    || (order.facturis_invoice_key ? ([order.facturis_invoice_series, order.facturis_invoice_number].filter(Boolean).join(" ") || "Facturis") : null);
   const cereAdaugari = (data.added_items ?? []).some((i) => i?.product_id && Number(i.quantity) > 0);
   const cereModificari = (data.linii_modificate ?? []).length > 0;
   /*

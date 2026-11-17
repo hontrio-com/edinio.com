@@ -30,7 +30,7 @@
  */
 
 /** Numele casei, asa cum il vede comerciantul pe ecran. */
-export type Casa = "SmartBill" | "Oblio" | "fGO";
+export type Casa = "SmartBill" | "Oblio" | "fGO" | "Facturis";
 
 /** Documentul desfiintat pe care il inlocuieste factura care urmeaza sa plece. */
 export interface DocumentInlocuit {

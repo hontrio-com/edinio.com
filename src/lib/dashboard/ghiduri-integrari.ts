@@ -18,6 +18,7 @@ const GHIDURI: Record<string, [categorie: string, ghid: string]> = {
   smartbill: ["plati-si-facturare", "cum-conectezi-smartbill"],
   oblio: ["plati-si-facturare", "cum-conectezi-oblio"],
   fgo: ["plati-si-facturare", "cum-conectezi-fgo"],
+  facturis: ["plati-si-facturare", "cum-conectezi-facturis"],
   /* Curieri */
   "fan-courier": ["comenzi-si-livrare", "cum-conectezi-fan-courier"],
   dpd: ["comenzi-si-livrare", "cum-conectezi-dpd"],

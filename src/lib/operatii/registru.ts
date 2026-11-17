@@ -61,7 +61,7 @@ export type FelOperatie =
 export type FurnizorOperatie =
   | "cargus" | "sameday" | "fancourier" | "dpd" | "woot" | "colete" | "gls" | "pallex" | "ecolet"
   | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket"
-  | "smartbill" | "oblio" | "fgo"
+  | "smartbill" | "oblio" | "fgo" | "facturis"
   | "stripe" | "netopia" | "ipay" | "klarna" | "revolut"
   | "trendyol" | "aboutyou" | "olx" | "gmc" | "emag"
   | "proba";

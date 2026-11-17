@@ -3,8 +3,8 @@
  *
  * ═══ ⚠ MUTAT AICI DIN `src/lib/emag` PE 26.08.2026 ═══
  *
- * Trendyol are nevoie de exact aceeasi socoteala: comerciantul emite prin SmartBill, Oblio sau
- * fGO, iar noi trebuie sa stim CARE factura e a comenzii si de unde se ia. Importata din
+ * Trendyol are nevoie de exact aceeasi socoteala: comerciantul emite prin SmartBill, Oblio,
+ * fGO sau Facturis, iar noi trebuie sa stim CARE factura e a comenzii si de unde se ia. Importata din
  * `emag/facturi.ts`, ar fi tras clientul eMAG cu tot cu dependintele lui in pachetul Trendyol.
  *
  * ⚠ MODUL FARA LEGATURI GRELE: nu stie de baza, de retea si de niciun furnizor. Asa poate fi
@@ -16,13 +16,27 @@
  */
 import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
 
-export interface Factura {
-  furnizor: "smartbill" | "oblio" | "fgo";
-  /** Seria si numarul, lipite: „EDN1234". */
-  numar: string;
-  /** Adresa de unde se aduce PDF-ul, cu acreditarile comerciantului. */
-  url: string;
-}
+export type Factura =
+  | {
+      furnizor: "smartbill" | "oblio" | "fgo";
+      /** Seria si numarul, lipite: „EDN1234". */
+      numar: string;
+      /** Adresa de unde se aduce PDF-ul, cu acreditarile comerciantului. */
+      url: string;
+    }
+  | {
+      furnizor: "facturis";
+      numar: string;
+      /**
+       * ⚠ GOL, dinadins: Facturis n-are o adresa a documentului. PDF-ul se cere prin API
+       * (`FacturiHtml`), dupa `cheie`, cu acreditarile magazinului — vezi `aduPdfFacturii` din
+       * cronurile eMAG si Trendyol. Campul ramane, gol, ca garda `eDocumentDeTest(f.url)` sa
+       * mearga la fel pe toate casele.
+       */
+      url: "";
+      /** Id-ul documentului in Facturis (`facturi_key`). */
+      cheie: string;
+    };
 
 /**
  * Care factura are comanda.
@@ -39,6 +53,7 @@ export function facturaComenzii(o: {
   smartbill_invoice_number?: string | null; smartbill_invoice_series?: string | null; smartbill_invoice_url?: string | null;
   oblio_invoice_number?: string | null; oblio_invoice_series?: string | null; oblio_invoice_link?: string | null;
   fgo_invoice_number?: string | null; fgo_invoice_series?: string | null; fgo_invoice_link?: string | null;
+  facturis_invoice_key?: string | null; facturis_invoice_series?: string | null; facturis_invoice_number?: string | null;
 }): Factura | null {
   const numar = (serie?: string | null, nr?: string | null) =>
     [(serie ?? "").trim(), (nr ?? "").trim()].filter(Boolean).join("");
@@ -55,6 +70,17 @@ export function facturaComenzii(o: {
   }
   if (o.fgo_invoice_number && o.fgo_invoice_link) {
     return { furnizor: "fgo", numar: numar(o.fgo_invoice_series, o.fgo_invoice_number), url: o.fgo_invoice_link };
+  }
+  /* ⚠ Facturis: cheia si NUMARUL. Cheia singura inseamna o factura al carei numar nu s-a citit
+     inca; la marketplace ar fi plecat cu un nume fara numar, iar cheia de R2 si a registrului
+     poarta numarul. Asteapta pana se citeste (din pagina comenzii). */
+  if (o.facturis_invoice_key && o.facturis_invoice_number) {
+    return {
+      furnizor: "facturis",
+      numar: numar(o.facturis_invoice_series, o.facturis_invoice_number),
+      url: "",
+      cheie: o.facturis_invoice_key,
+    };
   }
   return null;
 }

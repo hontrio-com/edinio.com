@@ -59,7 +59,9 @@ const IGNORATE = /^(zz_|_)/;
  * exceptia sa nu-si supravietuiasca motivul.
  */
 const IN_ASTEPTARE = [
-  // Gol. Ultima intrare (pretul trimis la Pepita, migratia 2027-02-02) a intrat in productie pe 12.11.2026.
+  // Facturis Online (17.11.2026): aplicata pe baza DEMO, asteapta productia odata cu pushul.
+  // Cand intra in productie se muta in `migrations/` si intrarea de aici se scoate.
+  "docs/facturare/2027-02-05-facturis.sql",
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

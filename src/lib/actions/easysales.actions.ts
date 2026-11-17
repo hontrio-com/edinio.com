@@ -233,7 +233,7 @@ export async function deconecteazaEasySales(businessId: string): Promise<{ ok: t
 
 /* ─── Comenzile deschise dinaintea activarii ──────────────────────────────── */
 
-const COLOANE_DESCHISE = `id, order_source, status, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, ${coloanelePortii().join(", ")}`;
+const COLOANE_DESCHISE = `id, order_source, status, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key, ${coloanelePortii().join(", ")}`;
 
 async function comenzileDeschise(businessId: string, zile: number): Promise<string[] | { error: string }> {
   const z = Math.max(1, Math.min(30, Math.floor(Number(zile) || 7)));
@@ -244,7 +244,7 @@ async function comenzileDeschise(businessId: string, zile: number): Promise<stri
   return ((data ?? []) as unknown as Record<string, unknown>[]).filter((o) => {
     const src = o.order_source as Record<string, unknown> | null;
     if (src && typeof src === "object" && ("easysales" in src || (typeof src.marketplace === "string" && src.marketplace))) return false;
-    if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number) return false;
+    if (o.smartbill_invoice_number || o.oblio_invoice_number || o.fgo_invoice_number || o.facturis_invoice_key) return false;
     return Object.values(awburiDinRand(o)).every((v) => !v);
   }).map((o) => String(o.id));
 }

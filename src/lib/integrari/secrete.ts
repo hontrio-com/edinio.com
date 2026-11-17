@@ -83,6 +83,13 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      fiecare cerere. E singura credentiala — nu exista user si parola. */
   ecolet_config: ["api_token"],
   fan_courier_config: ["password"],
+  /* Facturis Online: patru valori pleaca in CORPUL fiecarei cereri (cheia API, utilizatorul,
+     parola, codul fiscal), dar numai doua sunt secrete. `username` si `cif` NU intra aici: singure
+     nu deschid nimic, iar comerciantul trebuie sa le poata reciti ca sa stie CE CONT a legat —
+     acelasi rationament ca la `dhl_config.username`.
+     ⚠ Numele sunt IDENTICE in `FacturisConfig` (lib/facturis/config.ts) si in
+     `privat.campuri_secrete` (migratia 2027-02-05); `facturis-legat-peste-tot.test.ts` le compara. */
+  facturis_config: ["api_key", "password"],
   /* FedEx: DOUA credentiale in portalul lor („API Key" si „Secret Key"), dar numai
      una e secreta. `client_id` NU intra aici, desi ei il numesc cheie: singur nu
      deschide nimic (OAuth-ul lor cere si secretul), iar comerciantul trebuie sa-l

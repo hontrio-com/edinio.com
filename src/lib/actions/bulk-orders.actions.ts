@@ -10,6 +10,7 @@ import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import { generateOrderInvoice } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice } from "@/lib/actions/fgo.actions";
+import { generateFacturisInvoice } from "@/lib/actions/facturis.actions";
 import { createCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { createSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { createFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
@@ -22,6 +23,7 @@ import type { ProdusCotat } from "@/lib/shipping/cart-weight";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
+import { facturisGata } from "@/lib/facturis/config";
 import type { CargusConfig } from "@/lib/cargus";
 import type { SamedayConfig } from "@/lib/sameday/client";
 import { tipPunctFan, type FanCourierConfig } from "@/lib/fancourier";
@@ -103,7 +105,7 @@ const MAX_BULK = 50;
 const INVOICE_CONCURRENCY = 1;
 const AWB_CONCURRENCY = 3;
 
-export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo";
+export type InvoiceProvider = "auto" | "smartbill" | "oblio" | "fgo" | "facturis";
 export type BulkCourier = "auto" | "cargus" | "sameday" | "fancourier" | "dpd" | "gls" | "pallex" | "posta" | "innoship" | "packeta" | "smartship" | "shipo" | "fedex" | "ups" | "dhl" | "curiera" | "epacket";
 const SUPPORTED_COURIERS: Exclude<BulkCourier, "auto">[] = ["cargus", "sameday", "fancourier", "dpd", "gls", "pallex", "posta", "innoship", "packeta", "smartship", "shipo", "fedex", "ups", "dhl", "curiera", "epacket"];
 
@@ -310,7 +312,7 @@ export async function greutateaComenziiPentruAwb(
 
 // ── Bulk invoices ───────────────────────────────────────────────────────────────
 // One invoice per order (never double-invoice), with the chosen provider or the
-// highest-priority enabled one (SmartBill → Oblio → fGO) — mirrors auto-invoicing.
+// highest-priority enabled one (SmartBill → Oblio → fGO → Facturis) — mirrors auto-invoicing.
 export async function bulkGenerateInvoices(
   businessId: string, orderIds: string[], provider: InvoiceProvider = "auto",
 ): Promise<BulkResult | { error: string }> {
@@ -323,7 +325,7 @@ export async function bulkGenerateInvoices(
 
   const admin = createAdminClient();
   const { data: settings } = await admin
-    .from("store_settings").select("smartbill_config, oblio_config, fgo_config").eq("business_id", businessId).single();
+    .from("store_settings").select("smartbill_config, oblio_config, fgo_config, facturis_config").eq("business_id", businessId).single();
   const sb = settings?.smartbill_config as SmartbillConfig | null;
   const ob = settings?.oblio_config as OblioConfig | null;
   const fg = settings?.fgo_config as FgoConfig | null;
@@ -331,11 +333,13 @@ export async function bulkGenerateInvoices(
     smartbill: sb?.enabled === true,
     oblio: !!(ob?.enabled && ob?.client_id && ob?.cif && ob?.series_invoice),
     fgo: !!(fg?.enabled && fg?.cod_unic && fg?.private_key && fg?.serie),
+    /* `facturisGata` insasi: aceeasi regula ca in Integrari si in pagina comenzii. */
+    facturis: facturisGata(settings?.facturis_config),
   };
-  const pick: "smartbill" | "oblio" | "fgo" | null =
+  const pick: "smartbill" | "oblio" | "fgo" | "facturis" | null =
     provider !== "auto"
       ? (enabled[provider] ? provider : null)
-      : (enabled.smartbill ? "smartbill" : enabled.oblio ? "oblio" : enabled.fgo ? "fgo" : null);
+      : (enabled.smartbill ? "smartbill" : enabled.oblio ? "oblio" : enabled.fgo ? "fgo" : enabled.facturis ? "facturis" : null);
   if (!pick) return { error: "Niciun furnizor de facturare activ pentru optiunea aleasa." };
 
   /* ⚠ SI EROAREA, nu doar randurile. Fara ea, o citire picata dadea `orders` null, iar
@@ -345,7 +349,7 @@ export async function bulkGenerateInvoices(
      din acelasi fisier isi verifica citirea de mult; astea doua ramasesera in urma. */
   const { data: orders, error: eCitire } = await admin
     .from("orders")
-    .select("id, order_number, order_source, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number")
+    .select("id, order_number, order_source, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, facturis_invoice_key")
     .eq("business_id", businessId).in("id", ids);
   if (eCitire) return { error: `Nu am putut citi comenzile selectate: ${eCitire.message}` };
 
@@ -353,14 +357,16 @@ export async function bulkGenerateInvoices(
 
   await runPool(orders ?? [], async (o) => {
     const row = o as Record<string, unknown>;
-    if (row.smartbill_invoice_number || row.oblio_invoice_number || row.fgo_invoice_number) { result.skipped++; return; }
+    /* ⚠ La Facturis, CHEIA: o factura al carei numar nu s-a citit inca EXISTA. */
+    if (row.smartbill_invoice_number || row.oblio_invoice_number || row.fgo_invoice_number || row.facturis_invoice_key) { result.skipped++; return; }
     /* easySales: factura se face ACOLO. Sarita, nu refuzata: lotul amestecat e cazul obisnuit. */
     if (procesataInEasySales(row.order_source)) { result.skipped++; return; }
     try {
       const res =
         pick === "smartbill" ? await generateOrderInvoice(businessId, o.id)
         : pick === "oblio" ? await generateOblioInvoice(businessId, o.id)
-        : await generateFgoInvoice(businessId, o.id);
+        : pick === "fgo" ? await generateFgoInvoice(businessId, o.id)
+        : await generateFacturisInvoice(businessId, o.id);
       if (isErr(res)) { result.failed++; result.errors.push({ order: o.order_number, message: res.error }); }
       else result.done++;
     } catch (e) {

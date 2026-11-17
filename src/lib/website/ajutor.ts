@@ -31,7 +31,7 @@ export * from "./ajutor-tipuri";
 
 
 /**
- * Centrul de ajutor Edinio: 432 de ghiduri, în nouă categorii.
+ * Centrul de ajutor Edinio: 434 de ghiduri, în nouă categorii.
  *
  * ═══ DE UNDE VIN TEXTELE ═══
  *

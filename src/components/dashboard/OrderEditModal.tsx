@@ -423,8 +423,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   );
 
   const isPaid = order.payment_status === "paid";
-  const hasInvoice = !!(order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number);
-  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number;
+  /* ⚠ La Facturis se intreaba CHEIA: o factura al carei numar nu s-a citit inca EXISTA. */
+  const hasInvoice = !!(order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number || order.facturis_invoice_key);
+  const numarFactura = order.smartbill_invoice_number || order.oblio_invoice_number || order.fgo_invoice_number
+    || (order.facturis_invoice_key ? ([order.facturis_invoice_series, order.facturis_invoice_number].filter(Boolean).join(" ") || "Facturis") : null);
   const isLocker = addr.delivery_type === "locker";
   const prevItems = useMemo(() => (Array.isArray(order.items) ? (order.items as unknown[]) : []), [order.items]);
   const marketplace = (order.order_source as { marketplace?: string } | null)?.marketplace ?? null;

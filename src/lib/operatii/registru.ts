@@ -371,6 +371,17 @@ async function incheie(
  * catre butonul pe care nu vrem sa-l apese — vezi si `slotFacturare`, unde lectia
  * a fost aceeasi.
  */
+/** Casele de facturare si contabilitatea, cum le stie omul (curierii vin din `NUME_CURIER`). */
+const NUME_FURNIZOR_FACTURARE: Partial<Record<string, string>> = {
+  smartbill: "SmartBill", oblio: "Oblio", fgo: "fGO", facturis: "Facturis",
+  factureaza: "Factureaza.ro", easybill: "easybill", saga: "SAGA",
+};
+
+/** Numele furnizorului in mesajele pentru om; id-ul ramane doar cand nu-i stim numele. */
+function numeFurnizor(furnizor: string): string {
+  return NUME_CURIER[furnizor as CurierPropriu] || NUME_FURNIZOR_FACTURARE[furnizor] || furnizor;
+}
+
 /**
  * Ce i se spune omului cand rezervarea a fost refuzata.
  *
@@ -444,11 +455,11 @@ export function mesajBlocat(
 
   switch (motiv) {
     case "in_curs":
-      return `${nume}${peComanda} este deja in lucru la ${cerere.furnizor}${
+      return `${nume}${peComanda} este deja in lucru la ${numeFurnizor(cerere.furnizor)}${
         incercari && incercari > 2 ? ` (a ${incercari}-a incercare)` : ""
-      }. Nu trimitem a doua oara ca sa nu se creeze un duplicat. Daca a ramas asa, verifica in contul ${cerere.furnizor} si ${undeSeDeblocheaza}.`;
+      }. Nu trimitem a doua oara ca sa nu se creeze un duplicat. Daca a ramas asa, verifica in contul ${numeFurnizor(cerere.furnizor)} si ${undeSeDeblocheaza}.`;
     case "necunoscut":
-      return `${nume} a fost trimisa catre ${cerere.furnizor}, dar raspunsul nu a ajuns, deci nu stim daca s-a facut. Verifica in contul ${cerere.furnizor} inainte de a incerca din nou: daca exista deja, o a doua incercare ar produce un duplicat. Daca nu exista, ${undeSeDeblocheaza}.`;
+      return `${nume} a fost trimisa catre ${numeFurnizor(cerere.furnizor)}, dar raspunsul nu a ajuns, deci nu stim daca s-a facut. Verifica in contul ${numeFurnizor(cerere.furnizor)} inainte de a incerca din nou: daca exista deja, o a doua incercare ar produce un duplicat. Daca nu exista, ${undeSeDeblocheaza}.`;
     case "alt magazin":
     case "comanda negasita":
       return "Comanda nu apartine acestui magazin.";

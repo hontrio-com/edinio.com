@@ -3,6 +3,7 @@
 import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ziuaCalendaristica, ziuaPlus } from "@/lib/billing/ziua-facturii";
 import { sagaPermiteReemiterea } from "@/lib/saga/server";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
@@ -66,7 +67,7 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
   // TVA si comanda NU sunt secrete, deci raman pe clientul de mai sus, unde RLS
   // decide. Proprietarul e verificat mai sus (manual) sau e serverul insusi.
   const admin = createAdminClient();
-  const [{ data: settings }, { data: secrete }, { data: order }] = await Promise.all([
+  const [{ data: settings, error: eSetari }, { data: secrete }, { data: order }] = await Promise.all([
     supabase.from("store_settings")
       .select("prices_include_vat, vat_enabled, vat_rate")
       .eq("business_id", businessId).single(),
@@ -75,6 +76,10 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
   ]);
 
   if (!order) return { error: "Comanda negasita" as const };
+  /* ⚠ TVA-ul magazinului NECITIT nu e „fara TVA”: cazut pe `vat_enabled: false`, liniile ar fi
+     plecat cu 0%, iar reconcilierea pe brut tot ar fi trecut. Un document fiscal gresit nu se
+     retrage, se storneaza; deci se opreste aici. */
+  if (eSetari || !settings) return { error: "Setările de TVA ale magazinului nu s-au putut citi. Încearcă din nou." as const };
 
   const config = secrete?.oblio_config as OblioConfig | null;
   if (!config?.enabled || !config.client_id || !config.client_secret || !config.cif) {
@@ -496,7 +501,8 @@ async function buildInvoiceData(
    */
 
   const addr = order.shipping_address as ShippingAddress | null;
-  const today = new Date().toISOString().split("T")[0];
+  /* Ziua din Romania, nu cea UTC: vezi `ziua-facturii.ts`. */
+  const today = ziuaCalendaristica();
   const products = await buildProducts(sursa, order, config, vat, vatName, numePeCota, fiaraFaraNume);
   if ("error" in products) return products;
   const parte = invoiceParty(order, addr);
@@ -504,7 +510,7 @@ async function buildInvoiceData(
 
   const dueDays = Math.floor(Number(config.due_days) || 0);
   const dueDate = dueDays > 0
-    ? new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString().split("T")[0]
+    ? ziuaPlus(today, dueDays)
     : undefined;
 
   return {
@@ -788,7 +794,8 @@ export async function generateOblioInvoice(
         const rezultat = await createOblioDoc(token, "invoice", data);
         return {
           referinta: rezultat.number,
-          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null },
+          /* `data`: ziua scrisa pe document; SAGA o ia de aici, nu din clipa randului. */
+          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null, data: data.issueDate ?? null },
           valoare: rezultat,
         };
       },
@@ -991,7 +998,7 @@ export async function stornoOblioInvoice(
     const token = await getOblioToken(config.client_id, config.client_secret);
 
     // Create storno invoice via referenceDocument
-    const today = new Date().toISOString().split("T")[0];
+    const today = ziuaCalendaristica();
     // Stornul trebuie sa poarte ACELASI titular ca factura pe care o anuleaza.
     // Cu `order.customer_name`, o factura emisa pe „SC Exemplu SRL" primea o nota
     // de credit pe „Ion Popescu", persoana de contact — doua documente care nu se
@@ -1055,7 +1062,7 @@ export async function stornoOblioInvoice(
         const rezultat = await createOblioDoc(token, "invoice", stornoData);
         return {
           referinta: rezultat.number,
-          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null },
+          detalii: { serie: rezultat.seriesName, link: rezultat.link ?? null, data: stornoData.issueDate ?? null },
           valoare: rezultat,
         };
       },

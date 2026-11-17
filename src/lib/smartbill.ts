@@ -1,3 +1,5 @@
+import { ziuaCalendaristica } from "@/lib/billing/ziua-facturii";
+
 const SMARTBILL_BASE = "https://ws.smartbill.ro/SBORO/api";
 
 function getSmartbillAuth(): string {
@@ -66,7 +68,7 @@ export async function createSmartbillInvoice(
       saveToDb: true,
     },
     isDraft: false,
-    issueDate: new Date().toISOString().split("T")[0],
+    issueDate: ziuaCalendaristica(),
     seriesName: process.env.SMARTBILL_SERIES,
     currency: "RON",
     language: "RO",
@@ -435,14 +437,15 @@ export async function createMerchantEstimate(
  */
 export async function reverseMerchantInvoice(
   config: Pick<SmartbillConfig, "email" | "token">,
-  params: { cif: string; seriesName: string; number: string }
+  /** `issueDate`: ziua scrisa pe stornare („YYYY-MM-DD”, ziua din Romania); implicit azi. */
+  params: { cif: string; seriesName: string; number: string; issueDate?: string }
 ): Promise<{ stornoNumber?: string; stornoSeries?: string } | { error: string }> {
   try {
     const body = {
       companyVatCode: params.cif,
       seriesName: params.seriesName,
       number: params.number,
-      issueDate: new Date().toISOString().split("T")[0],
+      issueDate: params.issueDate ?? ziuaCalendaristica(),
     };
     const res = await fetch(`${SMARTBILL_BASE}/invoice/reverse`, {
       method: "POST",

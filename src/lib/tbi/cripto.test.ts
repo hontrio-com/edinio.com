@@ -80,6 +80,21 @@ describe("⚠ descifrarea nu poate spune singura „cheie gresita”", () => {
   });
 });
 
+test("⚠ un `+` la INCEPUTUL sau la CAPATUL vestii, devenit spatiu, nu se pierde (cadea ~1 din 64)", () => {
+  /* Determinist: cazul gasit cand proba de mai jos cadea din cand in cand. */
+  assert.equal(normalizeazaBase64(" Pys9M3 wrZh7EhfqLVg7ZQvW8nZFDCh1U0="), "+Pys9M3+wrZh7EhfqLVg7ZQvW8nZFDCh1U0=");
+  assert.equal(normalizeazaBase64("abcd ab "), "abcd+ab+");
+  /* Si cap la cap: se cauta o veste care incepe cu `+` (la ~1 din 64) si se descifreaza stricata. */
+  let gasite = 0;
+  for (let i = 0; i < 4000 && gasite < 3; i++) {
+    const corect = cripteazaPentruTbi("text cu ă", "k");
+    if (!corect.startsWith("+")) continue;
+    gasite++;
+    assert.equal(descifreazaDeLaTbi(corect.replace(/\+/g, " "), "k"), "text cu ă", corect);
+  }
+  assert.ok(gasite > 0, "n-am gasit nicio veste care incepe cu `+`: proba n-ar mai apara nimic");
+});
+
 test("⚠ base64 venit prin formular: „+” devenit spatiu, varianta URL-safe, randuri noi", () => {
   const corect = cripteazaPentruTbi("text cu ă", "k");
   const stricat = corect.replace(/\+/g, " ");

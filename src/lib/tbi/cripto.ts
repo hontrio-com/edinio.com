@@ -52,9 +52,15 @@ export function cripteazaPentruTbi(text: string, cheie: string): string {
  * ⚠ Un `+` trimis intr-un formular fara codare ajunge la noi ca SPATIU („a+b" -> „a b"). Base64
  * nu contine niciodata spatii, deci un spatiu de acolo e sigur un `+` pierdut. Iar varianta
  * „URL-safe" (`-`, `_`) se intoarce la cea standard.
+ *
+ * ⚠ SPATIILE SE INTORC IN `+` INAINTE de orice taiere (18.11.2026). Cu `.trim()` pus primul, un `+`
+ * de la INCEPUTUL sau de la CAPATUL vestii (devenit spatiu) era taiat, nu refacut: vestea pierdea un
+ * caracter si nu se mai putea descifra. Se intampla la ~1 din 64 de vesti (primul caracter base64 e
+ * `+`), adica exact proba care cadea „din cand in cand”. Celelalte spatii albe (randuri noi, tab-uri)
+ * se scot dupa.
  */
 export function normalizeazaBase64(v: string): string {
-  let s = String(v ?? "").trim().replace(/ /g, "+").replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  let s = String(v ?? "").replace(/ /g, "+").replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/");
   s = s.replace(/=+$/, "");
   if (!s || !/^[A-Za-z0-9+/]+$/.test(s)) throw new EroareCriptareTbi("Vestea nu e in base64.");
   const rest = s.length % 4;

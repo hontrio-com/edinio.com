@@ -3,6 +3,7 @@
 import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ziuaCalendaristica, ziuaPlus } from "@/lib/billing/ziua-facturii";
 import { sagaPermiteReemiterea } from "@/lib/saga/server";
 import { clientFacturare, eSistem, type SistemClient } from "@/lib/invoicing-context";
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
@@ -417,12 +418,13 @@ async function buildInvoiceParams(
   const products = await buildInvoiceProducts(sursa, config, order, pricesIncludeVat, vatEnabled, storeVatRate);
   if ("error" in products) return products;
   const parte = invoiceParty(order, address);
-  const today = new Date().toISOString().split("T")[0];
+  /* Ziua din Romania, nu cea UTC: vezi `ziua-facturii.ts`. */
+  const today = ziuaCalendaristica();
 
   // Scadenta optionala (zile de la emitere); fara ea SmartBill pune data emiterii.
   const dueDays = Math.floor(Number(config.due_days) || 0);
   const dueDate = dueDays > 0
-    ? new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString().split("T")[0]
+    ? ziuaPlus(today, dueDays)
     : undefined;
 
   const payLabel = PAYMENT_METHOD_DEFAULT_LABELS[order.payment_method as PaymentMethodType]
@@ -601,7 +603,8 @@ async function emiteFacturaSubRegistru(
          * e si sursa de rehidratare cand scrierea locala s-a pierdut, deci ce intra aici ajunge
          * pe comanda, si de acolo la marketplace, adus cu `fetch` fara acreditari.
          */
-        detalii: { serie: rezultat.series, url: rezultat.documentViewUrl ?? null },
+        /* `data`: ziua scrisa pe document; SAGA o ia de aici, nu din clipa randului. */
+        detalii: { serie: rezultat.series, url: rezultat.documentViewUrl ?? null, data: params.issueDate ?? null },
         valoare: rezultat,
       };
     },
@@ -696,13 +699,18 @@ async function jurnalRefacturare(
   });
 }
 
+/**
+ * ⚠ `null` cand setarile nu s-au putut citi: TVA-ul NECITIT nu e „fara TVA” (cazut pe `vat_enabled:
+ * false`, liniile ar fi plecat cu 0%, iar reconcilierea pe brut tot ar fi trecut). Apelantii opresc.
+ */
 async function getStoreVatSettings(businessId: string) {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("store_settings")
     .select("prices_include_vat, vat_enabled, vat_rate")
     .eq("business_id", businessId)
     .single();
+  if (error || !data) return null;
   return {
     pricesIncludeVat: data?.prices_include_vat ?? false,
     vatEnabled: data?.vat_enabled ?? false,
@@ -873,7 +881,9 @@ export async function generateOrderInvoice(
     if (!saga.ok) return { error: saga.mesaj };
   }
 
-  const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
+  const tva = await getStoreVatSettings(businessId);
+  if (!tva) return { error: "Setările de TVA ale magazinului nu s-au putut citi. Încearcă din nou." };
+  const { pricesIncludeVat, vatEnabled, vatRate } = tva;
   const params = await buildInvoiceParams(
     { supabase, businessId }, config, order, config.series_name, pricesIncludeVat, vatEnabled, vatRate,
     slot, paymentAtIssue(config, order),
@@ -921,7 +931,9 @@ export async function generateOrderEstimate(
   if (!order) return { error: "Comanda nu a fost gasita." };
   if (order.smartbill_estimate_number) return { error: "Proforma a fost deja generata pentru aceasta comanda." };
 
-  const { pricesIncludeVat, vatEnabled, vatRate } = await getStoreVatSettings(businessId);
+  const tva = await getStoreVatSettings(businessId);
+  if (!tva) return { error: "Setările de TVA ale magazinului nu s-au putut citi. Încearcă din nou." };
+  const { pricesIncludeVat, vatEnabled, vatRate } = tva;
   // Proforma nu se storneaza, deci nu inlocuieste vreun document desfiintat.
   const params = await buildInvoiceParams({ supabase, businessId }, config, order, config.estimate_series_name, pricesIncludeVat, vatEnabled, vatRate, { poateEmite: true });
   if ("error" in params) return params;
@@ -1066,7 +1078,7 @@ export async function convertEstimateToInvoice(
   const params: MerchantInvoiceParams = {
     companyVatCode: config.company_vat_code,
     seriesName: config.series_name,
-    issueDate: new Date().toISOString().split("T")[0],
+    issueDate: ziuaCalendaristica(),
     isDraft: false,
     sendEmail: false,
     useEstimateDetails: true,
@@ -1128,6 +1140,8 @@ export async function stornoOrderInvoice(
   // Cheia leaga stornoul de FACTURA anulata, nu de comanda: dupa o reemitere
   // legitima, factura noua are alt numar, deci si stornoul ei alta cheie. Fara
   // asta, a doua stornare de pe aceeasi comanda ar fi blocata pe vecie de prima.
+  /* Ziua stornarii, aceeasi pe document si pe randul de registru (SAGA o ia de acolo). */
+  const ziuaStornarii = ziuaCalendaristica();
   const r = await cuRegistru(
     createAdminClient(),
     {
@@ -1143,13 +1157,14 @@ export async function stornoOrderInvoice(
         cif: config.company_vat_code,
         seriesName: order.smartbill_invoice_series as string,
         number: order.smartbill_invoice_number as string,
+        issueDate: ziuaStornarii,
       });
       if ("error" in rezultat) throw new Error(rezultat.error);
       return {
         // Cand SmartBill nu intoarce numarul notei de credit, referinta ramane
         // factura stornata — acelasi marcaj pe care il scrie si randul comenzii.
         referinta: rezultat.stornoNumber ?? String(order.smartbill_invoice_number),
-        detalii: { serie: rezultat.stornoSeries ?? null, numar: rezultat.stornoNumber ?? null },
+        detalii: { serie: rezultat.stornoSeries ?? null, numar: rezultat.stornoNumber ?? null, data: ziuaStornarii },
         valoare: rezultat,
       };
     },
@@ -1327,8 +1342,19 @@ export async function maybeAutoGenerateInvoice(
     });
     if (!slot.poateEmite) return false;
 
-    const { data: storeSettings } = await supabase
+    const { data: storeSettings, error: eSetari } = await supabase
       .from("store_settings").select("prices_include_vat, vat_enabled, vat_rate").eq("business_id", businessId).single();
+    /* ⚠ TVA-ul necitit nu e „fara TVA”: pe calea automata nu se emite nimic, iar omul afla. */
+    if (eSetari || !storeSettings) {
+      await logError({
+        action: "smartbill.autoInvoiceTvaNecitit",
+        message: `Facturarea automata s-a oprit pentru comanda ${orderId}: setarile de TVA nu s-au putut citi.`,
+        details: { orderId },
+        businessId,
+        severity: "critical",
+      });
+      return false;
+    }
 
     const pricesIncludeVat = storeSettings?.prices_include_vat ?? false;
     const vatEnabled = storeSettings?.vat_enabled ?? false;

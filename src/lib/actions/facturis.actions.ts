@@ -242,9 +242,17 @@ export async function testFacturisConfig(
   businessId: string,
   input: Pick<FacturisConfig, "api_key" | "username" | "password" | "cif">,
 ): Promise<{ ok: true } | { error: string }> {
+  /* `secretDinConfig` dovedeste intai proprietarul, apoi da cheia (tastata sau salvata). */
   const api_key = await secretDinConfig(businessId, "facturis_config", "api_key", input.api_key);
-  const password = await secretDinConfig(businessId, "facturis_config", "password", input.password);
   if (!api_key) return { error: "Completează cheia API Facturis." };
+  /* ⚠ Parola NU se taie la spatii, ca la salvare si la emitere (`acreditari`): `secretDinConfig` le
+     taie, iar o parola cu spatiu la capat ar fi picat la „Testează conexiunea” si ar fi trecut la
+     „Salvează”. Tastata se ia ca atare; goala, se ia cea salvata, tot netaiata (proprietarul e
+     dovedit chiar mai sus). */
+  const tastata = typeof input.password === "string" ? input.password.slice(0, 500) : "";
+  const password = tastata.trim()
+    ? tastata
+    : (await configurareaMagazinului(createAdminClient(), businessId))?.password ?? "";
   if (!password) return { error: "Completează parola utilizatorului Facturis." };
   const username = text(input.username);
   const cif = text(input.cif, 40);

@@ -3,6 +3,7 @@
 import { MESAJ_PROCESATA_IN_EASYSALES, procesataInEasySales } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ziuaCalendaristica, ziuaPlus } from "@/lib/billing/ziua-facturii";
 import { sagaPermiteReemiterea } from "@/lib/saga/server";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
@@ -60,7 +61,7 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
   // Cotele de TVA si comanda NU sunt secrete si raman pe clientul de mai sus.
   // Proprietarul e verificat mai sus (manual) sau e serverul insusi.
   const admin = createAdminClient();
-  const [{ data: settings }, { data: secrete }, { data: order }] = await Promise.all([
+  const [{ data: settings, error: eSetari }, { data: secrete }, { data: order }] = await Promise.all([
     supabase.from("store_settings")
       .select("vat_enabled, vat_rate, prices_include_vat")
       .eq("business_id", businessId).single(),
@@ -69,6 +70,10 @@ async function getConfigAndOrder(businessId: string, orderId: string, sistem?: S
   ]);
 
   if (!order) return { error: "Comanda negasita" as const };
+  /* ⚠ TVA-ul magazinului NECITIT nu e „fara TVA”: cazut pe `vat_enabled: false`, liniile ar fi
+     plecat cu 0%, iar reconcilierea pe brut tot ar fi trecut. Un document fiscal gresit nu se
+     retrage, se storneaza; deci se opreste aici. */
+  if (eSetari || !settings) return { error: "Setările de TVA ale magazinului nu s-au putut citi. Încearcă din nou." as const };
 
   const config = secrete?.fgo_config as FgoConfig | null;
   if (!config?.enabled || !config.cod_unic || !config.private_key || !config.serie) {
@@ -546,7 +551,7 @@ export async function generateFgoInvoice(
 
     const dueDays = Math.floor(Number(config.due_days) || 0);
     const dueDate = dueDays > 0
-      ? new Date(Date.now() + dueDays * 24 * 3600 * 1000).toISOString().split("T")[0]
+      ? ziuaPlus(ziuaCalendaristica(), dueDays)
       : undefined;
 
     // fGO avea de la inceput `tip` si `codUnic` in tip; doar nu i se trimitea

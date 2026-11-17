@@ -73,7 +73,8 @@ test("rezervare refuzata cu `in_curs` -> furnizorul NU e chemat", async () => {
   assert.equal(chemat, false, "furnizorul a fost chemat desi operatia e in curs");
   assert.equal(r.fel, "blocat");
   if (r.fel === "blocat") {
-    assert.ok(r.mesaj.includes("woot"), r.mesaj);
+    /* Numele furnizorului, cum il stie omul („Woot”), nu id-ul lui din cod. */
+    assert.match(r.mesaj, /Woot/, r.mesaj);
     // Mesajul trebuie sa spuna ce are omul de facut, nu doar ca a esuat.
     assert.ok(r.mesaj.includes("verifica"), r.mesaj);
   }

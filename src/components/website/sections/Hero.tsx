@@ -41,6 +41,7 @@ function HeroCadru({
   fundal,
   spatiere,
   latimeTitlu = "max-w-[900px]",
+  dedesubt,
 }: {
   /** Pastila de deasupra titlului. Lipsește pe paginile care n-au ce anunța. */
   eticheta?: React.ReactNode;
@@ -83,6 +84,11 @@ function HeroCadru({
    * doua rupe potrivirea între pagini.
    */
   latimeTitlu?: string;
+  /**
+   * Ce stă SUB text, în aceeași secțiune și pe aceeași lumină (16.11.2026: banda dublă de teme de pe „/teme”). Cu el,
+   * spațiul de sub rândul de garanții se micșorează: îl umple ce vine dedesubt, nu golul hero-ului.
+   */
+  dedesubt?: React.ReactNode;
 }) {
   return (
     /*
@@ -111,7 +117,9 @@ function HeroCadru({
           "relative mx-auto max-w-[1200px] px-5 text-center sm:px-6 lg:px-8",
           spatiere
             ? "hero-banda"
-            : "pt-10 pb-16 sm:pt-16 sm:pb-20 lg:pt-28 lg:pb-32",
+            : dedesubt
+              ? "pt-10 pb-6 sm:pt-16 sm:pb-8 lg:pt-28 lg:pb-10"
+              : "pt-10 pb-16 sm:pt-16 sm:pb-20 lg:pt-28 lg:pb-32",
         )}
         style={spatiere}
       >
@@ -161,6 +169,7 @@ function HeroCadru({
         */}
         <p className="mt-7 text-[14px] text-ink-3">{TRUST}</p>
       </div>
+      {dedesubt}
     </section>
   );
 }
@@ -214,6 +223,7 @@ export function HeroPagina({
   fundal,
   spatiere,
   latimeTitlu,
+  dedesubt,
 }: {
   /** Vezi nota de sus: ce scrie deasupra titlului. */
   eticheta?: React.ReactNode;
@@ -227,6 +237,8 @@ export function HeroPagina({
   spatiere?: CSSProperties;
   /** Vezi `HeroCadru`: lățimea la care se rupe titlul. */
   latimeTitlu?: string;
+  /** Vezi `HeroCadru`: ce stă sub text, în aceeași secțiune. */
+  dedesubt?: React.ReactNode;
 }) {
   return (
     <HeroCadru
@@ -238,6 +250,7 @@ export function HeroPagina({
       fundal={fundal}
       spatiere={spatiere}
       latimeTitlu={latimeTitlu}
+      dedesubt={dedesubt}
     />
   );
 }

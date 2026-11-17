@@ -17,7 +17,12 @@ export interface CiornaOnboarding {
   phone: string;
   slug: string;
   culoare?: string;
+  /** Stilul de la pasul 2 pana pe 16.11.2026; il mai poarta doar ciornele de dinainte (`createBusiness` il citeste). */
   stil?: string;
+  /** Tema aleasa la pasul 2, din 16.11.2026, in locul stilului. Serverul o trece prin `temaDupaCheie`. */
+  tema?: string;
+  /** Bifa „Importă și datele demo” de la pasul 2 (pornita la intrare, cerut de el). */
+  dateDemo?: boolean;
 }
 
 const CHEIE = "onboarding_details";

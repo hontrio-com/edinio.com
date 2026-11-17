@@ -48,6 +48,8 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
   "magazin-online", "integrari", "optimizare",
   "mentenanta-gratuita", "vs", "ajutor", "blog",
   "intrebari-frecvente",
+  // 16.11.2026: pagina temelor. Verificat in productie: niciun magazin cu slugul `teme`.
+  "teme",
   /*
    * ⚠ `industrii` NU MAI ARE PAGINĂ, ȘI TOCMAI DE ACEEA STĂ AICI (04.09.2026).
    *

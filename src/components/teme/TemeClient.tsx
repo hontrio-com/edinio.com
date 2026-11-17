@@ -12,6 +12,7 @@ import { pluralRo } from "@/lib/utils/format";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLucru } from "@/components/dashboard/useLucru";
 import { aplicaTema, puneLaLocDesignulDeDinainte, stergeDateleDemo } from "@/lib/actions/store-design.actions";
+import { CapturaDerulata, useDerulareCaptura, type CapturaTema } from "@/components/teme/CapturaDerulata";
 
 export interface TemaPeCard {
   cheie: string;
@@ -23,7 +24,7 @@ export interface TemaPeCard {
    * Captura primei pagini a demo-ului, intreaga (`scripts/teme/capturi-teme.mjs`); `null` cand lipseste. Din 08.11.2026
    * in locul demo-ului viu din iframe (cerut de el: o poza care se deruleaza cand tii mouse-ul pe ea).
    */
-  captura: { adresa: string; latime: number; inaltime: number } | null;
+  captura: CapturaTema | null;
   /** Datele demo ale temei (etapa 18): cate sunt si daca incap in planul lui. */
   demo: {
     produse: number;
@@ -362,12 +363,9 @@ function Punct({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Cat ramane vizibil din captura in card: inaltimea ferestrei cardului fata de latime (`aspect-[4/3]`). */
-const FEREASTRA = 3 / 4;
-
 /**
  * Cardul unei teme: captura primei pagini, care se deruleaza pana jos cat tii mouse-ul pe ea (sau focusul, de la
- * tastatura), numele, descrierea si cele doua actiuni.
+ * tastatura; `CapturaDerulata`, comuna cu pasul „Aspect” de la inscriere), numele, descrierea si cele doua actiuni.
  */
 function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
   tema: TemaPeCard;
@@ -375,17 +373,7 @@ function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
   lucreaza: boolean;
   onAplica: () => void;
 }) {
-  // Derularea tine cat pagina: ~3 s pe fiecare „ecran” al cardului, ca o pagina lunga sa nu treaca in fuga.
-  const ecrane = t.captura ? Math.max(0, t.captura.inaltime / t.captura.latime - FEREASTRA) / FEREASTRA : 0;
-  const durata = `${Math.max(2.5, ecrane * 3).toFixed(1)}s`;
-  /*
-   * Starea, nu `group-hover`: cu durata scrisa ca clasa arbitrara, Tailwind lasa tranzitia scurta de baza (0,7 s) si
-   * poza sarea jos dintr-odata (vazut de el pe 08.11: „sa fie asa de sus in jos”). Stilul scris pe element se aplica sigur.
-   */
-  const [derulata, setDerulata] = useState(false);
-  const stilDerulare: React.CSSProperties = derulata
-    ? { top: "100%", transform: "translateY(-100%)", transition: `top ${durata} cubic-bezier(0.45, 0, 0.55, 1), transform ${durata} cubic-bezier(0.45, 0, 0.55, 1)` }
-    : { top: 0, transform: "translateY(0)", transition: "top 0.8s cubic-bezier(0.22, 1, 0.36, 1), transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)" };
+  const { derulata, evenimente } = useDerulareCaptura();
 
   return (
     <li className="group/card flex flex-col">
@@ -393,10 +381,7 @@ function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
         href={t.adresaDemo}
         target="_blank"
         rel="noopener noreferrer"
-        onPointerEnter={(e) => { if (e.pointerType === "mouse") setDerulata(true); }}
-        onPointerLeave={() => setDerulata(false)}
-        onFocus={(e) => setDerulata(e.currentTarget.matches(":focus-visible"))}
-        onBlur={() => setDerulata(false)}
+        {...evenimente}
         aria-label={`Vezi demo-ul temei ${t.nume}, într-o filă nouă`}
         className={cn(
           "group/poza relative block aspect-[4/3] overflow-hidden rounded-2xl bg-muted outline-none",
@@ -407,25 +392,7 @@ function CardTema({ tema: t, esteAplicata, lucreaza, onAplica }: {
         )}
       >
         {t.captura ? (
-          /*
-           * Derularea: invelisul pleaca de sus (top 0) pana la `top: 100%` si se trage in sus cu toata inaltimea lui,
-           * deci josul pozei ajunge la josul cardului, oricat de lunga ar fi. Inapoi, mai repede.
-           */
-          <span
-            className="absolute inset-x-0 block will-change-transform motion-reduce:transition-none!"
-            style={stilDerulare}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={t.captura.adresa}
-              width={t.captura.latime}
-              height={t.captura.inaltime}
-              alt={`Prima pagină a temei ${t.nume}`}
-              loading="lazy"
-              decoding="async"
-              className="block h-auto w-full"
-            />
-          </span>
+          <CapturaDerulata captura={t.captura} alt={`Prima pagină a temei ${t.nume}`} derulata={derulata} />
         ) : (
           <span className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">{t.nume}</span>
         )}

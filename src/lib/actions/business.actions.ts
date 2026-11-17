@@ -9,9 +9,12 @@ import { logError } from "@/lib/error-logger";
 import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 import { esteSlugDeMagazinDemo } from "@/lib/teme/gazde-demo";
-import { culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
+import { culoareaPesteTema, culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
 import { designInitial } from "@/lib/onboarding/design-initial";
 import type { DesignContext } from "@/lib/storefront/design/types";
+import { temaDupaCheie } from "@/lib/teme/teme";
+import { citesteLoculPentruDemo, motivulLimitei } from "@/lib/teme/limita-demo";
+import { aplicaTema } from "@/lib/actions/store-design.actions";
 
 /*
  * Adresa magazinului se valideaza AICI, pe server, nu doar in formular.
@@ -68,6 +71,20 @@ async function areAbonamentPlatitActiv(db: ReturnType<typeof createAdminClient>,
   return new Date(profil.plan_expires_at).getTime() > Date.now();
 }
 
+/**
+ * Asteapta planul platit scris de webhook-ul Stripe: `true` cand e in profil, `false` dupa `pana` ms. Pentru datele demo
+ * ale temei alese la inscriere (vezi `createBusiness`): limita lor se citeste din plan. Neexportata: in fisierul asta
+ * orice export e o actiune de server, adica un capat HTTP.
+ */
+async function asteaptaPlanulPlatit(db: ReturnType<typeof createAdminClient>, userId: string, pana: number): Promise<boolean> {
+  const limita = Date.now() + pana;
+  for (;;) {
+    if (await areAbonamentPlatitActiv(db, userId)) return true;
+    if (Date.now() >= limita) return false;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
 export async function createBusiness(data: {
   business_name: string;
   tagline?: string;
@@ -97,8 +114,16 @@ export async function createBusiness(data: {
   /**
    * Stilul ales la pasul „Aspectul" (`lib/onboarding/aspect.ts`). Venit din
    * browser, deci trece prin `stilDupaId`: un id necunoscut da stilul clasic.
+   * Din 16.11.2026 pasul alege o tema; stilul il mai poarta doar ciornele de dinainte.
    */
   stil?: string;
+  /**
+   * Tema aleasa la pasul „Aspect” (din 16.11.2026). Venita din browser, deci trece prin
+   * `temaDupaCheie`: o cheie necunoscuta lasa designul stilului.
+   */
+  tema?: string;
+  /** Bifa „Importă și datele demo” de la acelasi pas: doar un `true` adevarat, si doar cat incape planul. */
+  dateDemo?: boolean;
   /**
    * Firma verificata in ANAF de `/api/stripe/checkout`, cand omul a platit din
    * onboarding: acolo magazinul nu exista inca, deci datele n-aveau unde sa se
@@ -231,6 +256,65 @@ export async function createBusiness(data: {
       .eq("business_id", business.id);
     if (designError) {
       await logError({ action: "createBusiness.design", message: designError.message, details: { code: designError.code, stil: stil.id }, userId: user.id });
+    }
+  }
+
+  /*
+    ⚠ TEMA ALEASA LA INSCRIERE (16.11.2026, cerut de el: „La Aspect in loc de stilul
+    magazinului, adaugi Teme”).
+
+    Pe ACELASI drum ca pagina „Teme” (`aplicaTema`): designul de mai sus intra in
+    Istoric (deci „Pune la loc” il readuce), tema se publica cu identitatea ei
+    (culoare, fundal, fonturi), iar semnul ei o arata ca aplicata in pagina „Teme”.
+
+    Datele demo (bifa, pornita la intrare): doar cu `true` si doar cat incape planul,
+    citit abia acum, dupa plata. Altfel tema fara ele: magazinul nu ramane pe
+    designul simplu din cauza datelor demo.
+
+    ⚠ PLANUL POATE VENI DUPA. Aici se ajunge si cu plata confirmata direct de Stripe
+    (`plata.ok`), INAINTEA webhook-ului care scrie planul. Limita citita atunci e a
+    planului gratuit (10 produse): o tema cu 18 produse demo s-ar fi aplicat FARA ele,
+    pe tacute (si `aplicaTema` isi reface singura verificarea, din profil). Deci, dupa
+    o plata confirmata, se asteapta planul platit cel mult 6 s (webhook-ul ajunge de
+    obicei in 1-2 s), apoi se citeste locul. Tot fara plan: tema intra fara datele
+    demo (le importa din „Teme”), iar jurnalul spune de ce.
+
+    Culoarea: alegerea temei pune la pas culoarea ei; daca omul a ales alta dupa, a
+    lui castiga (raspunsul lui: „Rămâne, după temă”). Se scrie DUPA tema, care pune
+    culoarea ei.
+
+    ⚠ NU OPRESTE CREAREA, ca designul de mai sus: o tema cazuta lasa magazinul pe
+    designul stilului, iar omul o aplica din pagina „Teme”.
+  */
+  const tema = temaDupaCheie(data.tema);
+  if (tema) {
+    let cuDateDemo = data.dateDemo === true;
+    if (cuDateDemo) {
+      if (plata.ok) await asteaptaPlanulPlatit(adminDb, user.id, 6_000);
+      const loc = await citesteLoculPentruDemo(supabase, user.id, business.id, tema.cheie, tema.date);
+      cuDateDemo = !("error" in loc) && loc.incap;
+      if (!cuDateDemo) {
+        await logError({
+          action: "createBusiness.dateDemo",
+          message: "error" in loc ? loc.error : motivulLimitei(loc),
+          details: { tema: tema.cheie },
+          userId: user.id,
+          severity: "warning",
+        });
+      }
+    }
+    const aplicata = await aplicaTema(business.id, tema.cheie, cuDateDemo);
+    if ("error" in aplicata) {
+      await logError({ action: "createBusiness.tema", message: aplicata.error, details: { tema: tema.cheie, cuDateDemo }, userId: user.id });
+    } else {
+      const culoare = culoareaPesteTema(data.primary_color, tema.identitate.culoare);
+      if (culoare) {
+        const { error: eCuloare } = await supabase.from("businesses").update({ primary_color: culoare })
+          .eq("id", business.id).eq("user_id", user.id);
+        if (eCuloare) {
+          await logError({ action: "createBusiness.culoare", message: eCuloare.message, details: { tema: tema.cheie }, userId: user.id });
+        }
+      }
     }
   }
 

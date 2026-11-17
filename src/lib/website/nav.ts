@@ -118,6 +118,12 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
         href: "/integrari",
         description: "Facturare, marketing, curieri și plăți într-un singur loc.",
       },
+      /* 16.11.2026, cerut de el: pagina temelor, cu magazinul demo al fiecăreia. Intră singură și în sitemap. */
+      {
+        label: "Teme",
+        href: "/teme",
+        description: "Teme gata de folosit, fiecare cu magazinul ei demo.",
+      },
     ],
   },
   {

@@ -16,6 +16,8 @@ import type { AddressInfo } from "node:net";
 */
 
 const cereri: string[] = [];
+/* Ce raspunde baza despre profil: terminat (implicit), neterminat, sau nimic (baza cazuta). */
+let profil: "terminat" | "neterminat" | "cade" = "terminat";
 
 const supabase = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://baza");
@@ -28,8 +30,13 @@ const supabase = http.createServer((req, res) => {
     return json({ id: "om-cu-magazin", aud: "authenticated", role: "authenticated", email: "om@proba.test", app_metadata: {}, user_metadata: {}, created_at: "2026-11-10T00:00:00Z" });
   }
   if (url.pathname === "/rest/v1/users_profile") {
+    if (profil === "cade") {
+      res.writeHead(503, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ message: "baza nu raspunde" }));
+    }
     const unul = (req.headers.accept ?? "").includes("vnd.pgrst.object");
-    return json(unul ? { onboarding_completed: true } : [{ onboarding_completed: true }]);
+    const rand = { onboarding_completed: profil === "terminat" };
+    return json(unul ? rand : [rand]);
   }
   res.writeHead(404, { "content-type": "application/json" });
   res.end(JSON.stringify({ message: "ruta de proba necunoscuta" }));
@@ -90,5 +97,55 @@ describe("onboardingul terminat: navigarea merge in panou, actiunile de server r
       headers: { cookie: cookieSesiune, accept: "text/html" },
     }));
     assert.equal(r.status, 307);
+  });
+});
+
+/*
+  ═══ COOKIE-UL `onboarding_done` RAMAS DE LA ALT CONT NU MAI FACE BUCLA (16.11.2026) ═══
+
+  Masurat pe local: adminul (cu `onboarding_done=1` de la panoul lui) a intrat prin impersonare ca un cont fara magazin.
+  /onboarding il trimitea in panou dupa cookie, panoul (onboarding neterminat) inapoi in onboarding: ERR_TOO_MANY_REDIRECTS.
+  Cookie-ul nu poarta contul, deci pe /onboarding decide baza.
+*/
+describe("⚠⚠ `onboarding_done` de la alt cont: pe /onboarding decide baza, nu cookie-ul", () => {
+  const cuCookieVechi = (cale: string) => updateSession(new NextRequest(`http://localhost:3000${cale}`, {
+    headers: { cookie: `${cookieSesiune}; onboarding_done=1`, accept: "text/html" },
+  }));
+
+  test("onboarding NETERMINAT + cookie-ul altui cont: pagina se deschide, iar cookie-ul se sterge", async () => {
+    profil = "neterminat";
+    try {
+      const r = await cuCookieVechi("/onboarding/details");
+      assert.equal(r.headers.get("location"), null, "trimis in panou, iar panoul il trimite inapoi: ERR_TOO_MANY_REDIRECTS");
+      const sters = r.headers.getSetCookie().find((c) => c.startsWith("onboarding_done="));
+      assert.ok(sters, "cookie-ul altui cont a ramas: panoul ar sari iar verificarea onboardingului");
+      assert.match(sters, /^onboarding_done=;/);
+      assert.match(sters, /Expires=Thu, 01 Jan 1970|Max-Age=0/i);
+    } finally {
+      profil = "terminat";
+    }
+  });
+
+  test("onboarding TERMINAT + cookie: tot in panou, ca inainte", async () => {
+    const r = await cuCookieVechi("/onboarding/details");
+    assert.equal(r.status, 307);
+    assert.equal(new URL(r.headers.get("location") ?? "http://x/nimic").pathname, "/dashboard");
+  });
+
+  test("baza nu raspunde + cookie: cookie-ul e crezut, ca inainte (in panou)", async () => {
+    profil = "cade";
+    try {
+      const r = await cuCookieVechi("/onboarding/plan");
+      assert.equal(r.status, 307);
+      assert.equal(new URL(r.headers.get("location") ?? "http://x/nimic").pathname, "/dashboard");
+    } finally {
+      profil = "terminat";
+    }
+  });
+
+  test("impersonarea sterge cookie-ul adminului", async () => {
+    const { readFileSync } = await import("node:fs");
+    const ruta = readFileSync("src/app/api/admin/impersonate/route.ts", "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    assert.match(ruta, /raspuns\.cookies\.delete\("onboarding_done"\);\s*return raspuns;/);
   });
 });

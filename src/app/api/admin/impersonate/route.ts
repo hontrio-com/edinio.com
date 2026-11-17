@@ -164,5 +164,12 @@ export async function POST(req: NextRequest) {
     secure: process.env.NODE_ENV === "production",
   });
 
+  /*
+   * `onboarding_done` ramas de la admin nu e al omului preluat: cu el, panoul sarea verificarea onboardingului, iar
+   * pentru un cont fara magazin iesea o bucla de redirectari (vezi `updateSession`). Il sterg si `login()`, si iesirea;
+   * `updateSession` il reface la prima cerere, dupa contul de acum.
+   */
+  raspuns.cookies.delete("onboarding_done");
+
   return raspuns;
 }

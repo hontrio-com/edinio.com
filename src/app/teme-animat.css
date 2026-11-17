@@ -1,0 +1,118 @@
+/*
+  Banda dubla din hero-ul paginii „/teme” (16.11.2026). Ceruta „un HERO mai modern dar sa ramana tot acelasi stil”, apoi
+  aleasa de el dintre cinci variante („Ramane varianta C”): doua randuri de ferestre cu teme, sub text, care curg incet in
+  sensuri opuse si se sting pe margini.
+
+  Cum se misca: fiecare rand are temele DE DOUA ORI, una dupa alta, si se muta exact cu jumatate din latimea lui; la
+  capatul buclei, al doilea set sta fix unde era primul, deci nu se vede cusatura. De aceea cardurile au MARGINE in
+  dreapta, nu `gap`: cu `gap`, latimea n-ar fi fost de doua ori aceeasi, iar bucla ar fi sarit cu jumatate de spatiu.
+
+  ⚠ Capcanele masurate pe animatiile site-ului (memoria „animatii pe compozitor”): doar `transform` in cadre (ramane pe
+  compozitor); oprita cand iese din ecran (`data-in-afara`, scris de `OprireInAfaraEcranului`), altfel tine placa grafica
+  treaza la fiecare derulare; regula de pauza cu selector MAI SPECIFIC decat prescurtarea `animation`, care o repune pe
+  „running”; capturile micsorate dinainte (`scripts/teme/capturi-banda.mjs`), fiindca pe compozitor Chrome filtreaza
+  imaginile in miscare mai slab.
+*/
+
+.banda-teme {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+  padding: 8px 0 56px;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 9%, #000 91%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 9%, #000 91%, transparent 100%);
+}
+
+.banda-teme__rand {
+  display: flex;
+  width: max-content;
+  animation: banda-teme-stanga 80s linear infinite;
+  will-change: transform;
+}
+
+.banda-teme__rand[data-sens="dreapta"] {
+  animation-name: banda-teme-dreapta;
+  animation-duration: 92s;
+}
+
+.banda-teme__card {
+  width: 170px;
+  margin: 0 16px 0 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgb(15 23 42 / 0.07),
+    0 1px 2px rgb(15 23 42 / 0.05),
+    0 16px 32px -20px rgb(15 23 42 / 0.35);
+}
+
+.banda-teme__card img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.banda-teme__bara {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgb(15 23 42 / 0.06);
+  background: #fafafa;
+}
+
+/* Trei puncte gri (nu culorile semaforului), desenate dintr-un singur element: fond cu trei cercuri. */
+.banda-teme__puncte {
+  flex-shrink: 0;
+  width: 22px;
+  height: 6px;
+  background:
+    radial-gradient(circle at 3px 3px, #d4d4d4 2.5px, transparent 3px),
+    radial-gradient(circle at 11px 3px, #d4d4d4 2.5px, transparent 3px),
+    radial-gradient(circle at 19px 3px, #d4d4d4 2.5px, transparent 3px);
+}
+
+.banda-teme__adresa {
+  overflow: hidden;
+  flex: 1;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgb(15 23 42 / 0.06);
+  padding: 1px 6px;
+  color: var(--color-ink-3, #6b7280);
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes banda-teme-stanga {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@keyframes banda-teme-dreapta {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
+@media (min-width: 640px) {
+  .banda-teme { gap: 22px; }
+  .banda-teme__card { width: 230px; margin-right: 22px; }
+  .banda-teme__adresa { font-size: 10px; }
+}
+
+/* Mai specific decat `.banda-teme__rand` (prescurtarea `animation` repune „running”). */
+.banda-teme[data-in-afara] .banda-teme__rand {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banda-teme .banda-teme__rand {
+    animation: none;
+  }
+}

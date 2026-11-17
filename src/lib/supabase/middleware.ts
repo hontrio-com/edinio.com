@@ -187,9 +187,14 @@ export async function updateSession(request: NextRequest) {
 
   // Authenticated on onboarding → redirect to dashboard if already completed
   if (user && isOnboarding && !eActiuneDeServer) {
-    if (onboardingDone) {
-      return redirectTo("/dashboard");
-    }
+    /*
+     * ⚠ `onboarding_done` E AL BROWSERULUI, NU AL CONTULUI (16.11.2026). Cand in acelasi browser intra alt cont fara sa
+     * treaca prin `login()` (impersonarea din admin), ramanea cookie-ul celui de dinainte. Ramura de aici il credea si
+     * trimitea omul in panou, iar panoul (`(dashboard)/layout.tsx`, onboarding neterminat) il trimitea inapoi:
+     * ERR_TOO_MANY_REDIRECTS, masurat la un admin care intra ca un cont fara magazin. Pe /onboarding se intreaba deci
+     * MEREU baza (ruta e rara, interogarea ieftina), iar cookie-ul altui cont se sterge. Cookie-ul ramane crezut doar
+     * cand baza nu raspunde, ca inainte.
+     */
     const { data: profile } = await supabase
       .from("users_profile")
       .select("onboarding_completed")
@@ -199,6 +204,10 @@ export async function updateSession(request: NextRequest) {
       const res = redirectTo("/dashboard");
       res.cookies.set("onboarding_done", "1", { httpOnly: true, path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
       return res;
+    }
+    if (onboardingDone) {
+      if (!profile) return redirectTo("/dashboard");
+      supabaseResponse.cookies.delete("onboarding_done");
     }
   }
 

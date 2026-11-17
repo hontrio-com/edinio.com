@@ -19,6 +19,14 @@ export const metadata: Metadata = {
   title: "Creează-ți magazinul",
 };
 
+/*
+ * Cat poate dura o actiune de server pornita din onboarding (16.11.2026). `createBusiness`, chemata de pagina de plan
+ * (componenta client, deci fara configurare proprie), aplica acum si tema aleasa la pasul 2, cu datele ei demo, si
+ * poate astepta cateva secunde planul scris de webhook-ul Stripe. Taiata la jumatate de limita implicita, ar lasa un
+ * magazin creat fara onboardingul incheiat.
+ */
+export const maxDuration = 60;
+
 export default async function OnboardingLayout({
   children,
 }: {

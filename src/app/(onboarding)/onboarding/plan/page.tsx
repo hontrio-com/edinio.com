@@ -233,9 +233,14 @@ function PlanPageContent() {
         business_name: String(details.business_name ?? ""),
         phone: String(details.phone ?? ""),
         slug: String(details.slug ?? ""),
-        /* Culoarea si stilul alese la pasul 2. Serverul le verifica din nou: vin din browser. */
+        /*
+          Culoarea, tema si bifa datelor demo, alese la pasul 2 (stilul il mai poarta doar ciornele de dinainte de
+          16.11.2026). Serverul le verifica din nou: vin din browser.
+        */
         primary_color: culoareValida(details.culoare),
         stil: details.stil,
+        tema: details.tema,
+        dateDemo: details.dateDemo === true,
         /*
           ⚠ ID-UL SESIUNII: serverul il duce la Stripe si intreaba daca e platita.
           Nu e un „am platit" pe cuvantul nostru. Un id inventat da „n-a platit",

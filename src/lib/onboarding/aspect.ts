@@ -52,6 +52,19 @@ export function culoareValida(v: unknown): string {
   return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim() : CULOARE_IMPLICITA;
 }
 
+/**
+ * Culoarea de scris PESTE tema, la crearea magazinului (16.11.2026). Cand omul alege tema, pasul pune culoarea ei; daca
+ * alege alta dupa, a lui castiga (raspunsul lui: culoarea „Rămâne, după temă”). `null` = ramane culoarea temei: aceeasi
+ * culoare, sau nimic valid venit din browser.
+ *
+ * ⚠ O lipsa NU devine verdele platformei, cum face `culoareValida`: peste o tema, verdele ar fi sters culoarea ei.
+ */
+export function culoareaPesteTema(aleasa: unknown, aTemei: string): string | null {
+  if (typeof aleasa !== "string" || !/^#[0-9a-fA-F]{6}$/.test(aleasa.trim())) return null;
+  const v = aleasa.trim();
+  return v.toLowerCase() === aTemei.trim().toLowerCase() ? null : v;
+}
+
 /*
  * Telefonul, in forma pe care o scriu oamenii: `+40 722 123 456`, `0040722123456`,
  * `0722-123-456`. Pana azi trecea doar `07XXXXXXXX` scris lipit, iar un fix de

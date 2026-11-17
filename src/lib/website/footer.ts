@@ -76,6 +76,8 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       */
       { label: "Optimizare", href: "/optimizare" },
       { label: "Integrări", href: "/integrari" },
+      /* 16.11.2026: pagina temelor, cu eticheta din meniul de sus. */
+      { label: "Teme", href: "/teme" },
       { label: "Prețuri", href: "/preturi" },
     ],
   },

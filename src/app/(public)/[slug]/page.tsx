@@ -1,5 +1,6 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
 import { graf, magazinJsonLd } from "@/lib/storefront/date-structurate";
+import { EvenimentTheMarketer } from "@/components/storefront/EvenimentTheMarketer";
 import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -819,6 +820,8 @@ export default async function SlugPage({ params, searchParams }: Props) {
         />
       ) : null}
       {stilPagina?.css ? <style dangerouslySetInnerHTML={{ __html: stilPagina.css }} /> : null}
+      {/* theMarketer: pagina principala, numai cand nu e filtrata (atunci e catalog, nu „acasa”). */}
+      {!filtreAcasa.cautare.trim() && !catParam ? <EvenimentTheMarketer event="__sm__view_homepage" /> : null}
       <MiniStoreRenderer
         paginaProprie={paginaProprie}
         sloturiContinut={sloturiContinut}

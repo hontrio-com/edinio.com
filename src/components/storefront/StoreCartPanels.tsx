@@ -2,6 +2,10 @@
 
 import { CartDrawerClassic } from "@/components/storefront/sections/cart/CartDrawerClassic";
 import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
+import { useCart } from "@/components/storefront/cart/CartProvider";
+import { fbTrack, gtagEvent, mktrEvent, ttqTrack } from "@/lib/marketing";
+import { continutDinCos } from "@/lib/facebook/pixel-continut";
+import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { checkoutHref, checkoutOnPage } from "@/lib/storefront/design/commerce";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
 import type { StoreDesign } from "@/lib/storefront/design/types";
@@ -35,6 +39,8 @@ export function StoreCartPanels({
   deschideComanda: () => void;
   inchideComanda: () => void;
 }) {
+  /* Inaintea iesirii timpurii: un hook nu se cheama conditionat. */
+  const { items, lineUnit, total, count } = useCart();
   const comert = chrome.comert;
   if (!comert || chrome.cartMode !== "drawer") return null;
 
@@ -61,6 +67,23 @@ export function StoreCartPanels({
             return;
           }
           deschideComanda();
+          /*
+           * ⚠ EVENIMENTELE DE PALNIE, CA PE PAGINA DE MAGAZIN (18.11.2026). Fereastra deschisa de aici
+           * (pagina de produs, paginile proprii, politicile) nu trimitea NIMIC: nici Meta, nici TikTok,
+           * nici GA4, nici theMarketer, desi `MiniStoreRenderer` le trimite pe toate patru la acelasi
+           * clic. Masurat in vitrina, la theMarketer: comanda inceputa din sertarul paginii de produs nu
+           * aparea. Aceeasi forma ca acolo, cu `lineUnit(i)`, nu `i.price`.
+           */
+          fbTrack("InitiateCheckout", {
+            value: total, currency: "RON", num_items: count,
+            ...continutDinCos(items.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+          });
+          ttqTrack("InitiateCheckout", {
+            value: total, currency: "RON", num_items: count,
+            ...continutTikTokDinCos(items.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+          });
+          gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
+          mktrEvent("__sm__initiate_checkout");
         }}
         shippingCost={comert.shippingCost}
         freeShippingThreshold={comert.freeShippingThreshold}

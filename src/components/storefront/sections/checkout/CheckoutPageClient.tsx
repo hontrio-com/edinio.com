@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { fbTrack, gtagEvent, ttqTrack } from "@/lib/marketing";
+import { fbTrack, gtagEvent, ttqTrack, mktrEvent } from "@/lib/marketing";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -55,6 +55,8 @@ export function CheckoutPageClient({
       ...continutTikTokDinCos(items.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
     });
     gtagEvent("begin_checkout", { currency: "RON", value: total, items: linii });
+    /* theMarketer: „every time a user goes to the checkout page”. */
+    mktrEvent("__sm__initiate_checkout");
   }, [items, total, count]);
 
   return (

@@ -8,6 +8,7 @@ import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { inlocuiesteLinia } from "@/lib/storefront/cart/editare";
+import { trackCantitateTM } from "@/lib/storefront/cart/track-add";
 import { cereRevizuire, pozaLiniei, pretulNevalidat, pretulNesigur, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
 import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
@@ -248,10 +249,16 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    * Vezi `inlocuiesteLinia`, unde stau si cele trei cazuri, si de ce nu „adauga apoi sterge".
    */
   function replaceItem(cheieVeche: string, item: Omit<CartItem, "quantity">, cantitate = 1) {
+    /* theMarketer tine cosul din evenimente: linia veche iese, cea noua intra. Vezi `trackCantitateTM`. */
+    const veche = items.find((i) => lineKey(i) === cheieVeche);
+    if (veche) trackCantitateTM(veche, 0);
+    trackCantitateTM({ ...item, quantity: 0 }, normalizeazaCantitate(cantitate));
     save((prev) => inlocuiesteLinia(prev, cheieVeche, item, cantitate));
   }
 
   function removeItem(key: string) {
+    const linie = items.find((i) => lineKey(i) === key);
+    if (linie) trackCantitateTM(linie, 0);
     save((prev) => prev.filter((i) => lineKey(i) !== key));
   }
 
@@ -264,6 +271,8 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
     // al cosului, deci o poate chema orice pagina custom. Fara clema, valoarea
     // primita se si SCRIA in localStorage, de mana noastra.
     const n = normalizeazaCantitate(qty);
+    const linie = items.find((i) => lineKey(i) === key);
+    if (linie) trackCantitateTM(linie, n);
     save((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: n } : i)));
   }
 

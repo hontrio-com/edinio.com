@@ -88,6 +88,7 @@ export function AddToCartButton({ product, storeSlug, basePath, color }: {
       trackAddToCart({
         productId: line.productId, name: line.name, price: line.price,
         comboId: comboIdDupaTitlu(product.pageSections, line.variantTitle), areVariante: !!variants,
+        titluVarianta: line.variantTitle, skuVarianta: line.variantSku,
       });
     } catch {}
   }

@@ -20,6 +20,7 @@ import type { Furnizor, FelEveniment, Verdict } from "./coada";
 import { evenimentMailchimp } from "@/lib/mailchimp-sync";
 import { evenimentBrevo } from "@/lib/brevo-sync";
 import { evenimentKlaviyo } from "@/lib/klaviyo-sync";
+import { evenimentTheMarketer } from "@/lib/themarketer/sync";
 
 /** Trimite un rand al cozii la furnizorul lui. Nu arunca: fiecare functie isi prinde singura erorile. */
 export function trimiteEveniment(furnizor: Furnizor, orderId: string, fel: FelEveniment): Promise<Verdict> {
@@ -27,6 +28,7 @@ export function trimiteEveniment(furnizor: Furnizor, orderId: string, fel: FelEv
     case "mailchimp": return evenimentMailchimp(orderId, fel);
     case "brevo": return evenimentBrevo(orderId, fel);
     case "klaviyo": return evenimentKlaviyo(orderId, fel);
+    case "themarketer": return evenimentTheMarketer(orderId, fel);
   }
   return Promise.resolve({ fel: "refuzat", motiv: `furnizor necunoscut: ${String(furnizor)}` });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { gtagEvent, fbTrack, ttqTrack } from "@/lib/marketing";
+import { gtagEvent, fbTrack, ttqTrack, mktrEvent } from "@/lib/marketing";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -95,6 +95,8 @@ export function CartPageClient({
       ...continutTikTokDinCos(items.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
     });
     gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
+    /* theMarketer: aceeasi regula de mai sus, comanda deschisa din cos. */
+    mktrEvent("__sm__initiate_checkout");
     setComandaDeschisa(true);
   }
 

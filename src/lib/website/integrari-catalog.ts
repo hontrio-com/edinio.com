@@ -484,8 +484,8 @@ export const INTEGRARI: Integrare[] = [
   {
     cheie: "theMarketer",
     categorie: "email",
-    stare: "in-curand",
-    descriere: "Conectezi magazinul cu theMarketer pentru email, SMS și recomandări de produse.",
+    stare: "activa",
+    descriere: "Trimiți catalogul, comenzile și abonații în theMarketer, pentru emailuri, SMS, push, fidelitate și recenzii.",
   },
 
   /* ── SMS ───────────────────────────────────────────────────────────────── */
@@ -694,10 +694,12 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
   /* ── Email marketing ───────────────────────────────────────────────────────
      `newsletter`: cuvântul cădea la ZERO. Nu e o afirmație despre ce face
      Edinio, ci despre la ce folosești unealta după ce îi trimitem clienții și
-     comenzile. theMarketer NU-l primește: e nelivrată. */
+     comenzile. theMarketer l-a primit la livrare (18.11.2026), cu `loialitate`, cum mai caută omul
+     fidelitatea, si `abandonat`, pentru automatizarea de coș abandonat. */
   mailchimp: ["newsletter"],
   brevo: ["newsletter"],
   klaviyo: ["newsletter"],
+  theMarketer: ["newsletter", "loialitate", "abandonat"],
 
   /* ── SMS ───────────────────────────────────────────────────────────────────
      ⚠ `whatsapp` e o capabilitate LIVRATĂ pe care textul nou n-o mai spune:

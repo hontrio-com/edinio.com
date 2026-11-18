@@ -13,6 +13,8 @@ import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { sloturiContinutLiber } from "@/components/storefront/sloturi-pe-server";
 import { continuturiInSectiune, faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
 import { UrmaCautarePixel } from "@/components/storefront/UrmaCautarePixel";
+import { EvenimentTheMarketer } from "@/components/storefront/EvenimentTheMarketer";
+import { ierarhieDupaNume } from "@/lib/themarketer/feed-categorii";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { CHEIE_BRAND, construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
 import {
@@ -696,6 +698,16 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
           termen={filtre.cautare}
           rezultate={reusitPeServer ? products.slice(0, 10).map((p) => ({ id: p.id, pret: Number(p.price) || 0 })) : []}
         />
+      ) : null}
+      {/*
+        theMarketer: pagina de brand, sau de categorie cu ierarhia COMPLETA („Barbati|Incaltaminte|Sneakers”,
+        cum o cer ei si cum pleaca in feed). Cautarea si-o trimite `UrmaCautarePixel`.
+      */}
+      {brandPagina ? (
+        <EvenimentTheMarketer event="__sm__view_brand" date={{ name: brandPagina.nume }} />
+      ) : !esteCautare && initialCategory !== "toate" ? (
+        <EvenimentTheMarketer event="__sm__view_category"
+          date={{ category: ierarhieDupaNume(categoriiDeNavigat)(initialCategory) ?? initialCategory }} />
       ) : null}
     <MiniStoreRenderer
       surface="shop"

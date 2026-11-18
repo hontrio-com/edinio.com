@@ -107,6 +107,7 @@ export async function updateForm(
     mailchimp_enabled?: boolean;
     brevo_enabled?: boolean;
     klaviyo_enabled?: boolean;
+    themarketer_enabled?: boolean;
     /**
      * `updated_at` de la incarcare (26.09.2026, ca la pagini): salvarea trece numai
      * daca formularul n-a fost salvat intre timp din alt tab. Lipsa = fara verificare.
@@ -164,6 +165,7 @@ export async function updateForm(
   if (patch.mailchimp_enabled !== undefined) update.mailchimp_enabled = !!patch.mailchimp_enabled;
   if (patch.brevo_enabled !== undefined) update.brevo_enabled = !!patch.brevo_enabled;
   if (patch.klaviyo_enabled !== undefined) update.klaviyo_enabled = !!patch.klaviyo_enabled;
+  if (patch.themarketer_enabled !== undefined) update.themarketer_enabled = !!patch.themarketer_enabled;
 
   let cerere = supabase.from("forms").update(update as never).eq("id", formId);
   if (patch.versiune) cerere = cerere.eq("updated_at", patch.versiune);
@@ -216,6 +218,7 @@ export async function duplicateForm(formId: string): Promise<{ error: string } |
     mailchimp_enabled: src.mailchimp_enabled,
     brevo_enabled: src.brevo_enabled,
     klaviyo_enabled: src.klaviyo_enabled,
+    themarketer_enabled: src.themarketer_enabled,
   }).select("id").single();
   if (error || !data) return { error: "Eroare la duplicarea formularului." };
   revalidatePath("/dashboard/pages/forms");

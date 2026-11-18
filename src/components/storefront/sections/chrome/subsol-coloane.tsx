@@ -5,6 +5,7 @@ import { cdnImage } from "@/lib/cdn-image";
 import { menuItemHref } from "@/lib/pages/menu";
 import { isExternalHref, resolveHref } from "@/lib/pages/href";
 import { aboneazaNewsletter } from "@/lib/actions/page.actions";
+import { mktrEvent } from "@/lib/marketing";
 import { radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import { hrefCategorie } from "@/lib/storefront/category-href";
 import { useStoreChrome, useStorefrontOptional } from "@/components/storefront/StorefrontProvider";
@@ -118,7 +119,11 @@ export function FormularNewsletterSubsol({ coloana, idSubsol, marunt, inchis, ce
     try {
       const r = await aboneazaNewsletter({ businessId: business.id, blockId: coloana.id, cale: idSubsol, email, acord, honeypot: capcana });
       if ("error" in r) setEroare(r.error);
-      else setGata(true);
+      else {
+        /* theMarketer: abonare cu acord, deci browserul se leaga de adresa (`__sm__set_email`). */
+        mktrEvent("__sm__set_email", { email_address: email.trim().toLowerCase() });
+        setGata(true);
+      }
     } catch {
       setEroare("Nu am putut trimite. Incearca din nou.");
     } finally {

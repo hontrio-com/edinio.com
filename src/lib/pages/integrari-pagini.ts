@@ -33,7 +33,7 @@ export interface MetodaAfisata {
 }
 
 export interface IntegrariPagini {
-  newsletter: { mailchimp: boolean; brevo: boolean; klaviyo: boolean };
+  newsletter: { mailchimp: boolean; brevo: boolean; klaviyo: boolean; themarketer: boolean };
   plati: MetodaAfisata[];
   curieri: MetodaAfisata[];
 }
@@ -77,6 +77,9 @@ export async function integrariPentruPagini(businessId: string): Promise<Integra
       "mc_on:mailchimp_config->enabled", "mc_lista:mailchimp_config->audience_id", "mc_surse:mailchimp_config->sources",
       "bv_on:brevo_config->enabled", "bv_lista:brevo_config->list_id", "bv_surse:brevo_config->sources",
       "kv_on:klaviyo_config->enabled", "kv_lista:klaviyo_config->list_id", "kv_surse:klaviyo_config->sources",
+      /* ⚠ theMarketer: numai campurile publice, prin cale JSON. `rest_key` nu se cere: citita cu cheia de
+         serviciu ar veni DECRIPTATA, iar aici nu e nevoie de ea (contul se leaga doar cu ea scrisa). */
+      "tm_on:themarketer_config->enabled", "tm_cont:themarketer_config->>customer_id", "tm_surse:themarketer_config->abonati",
     ].join(", "))
     .eq("business_id", businessId)
     .maybeSingle();
@@ -96,6 +99,8 @@ export async function integrariPentruPagini(businessId: string): Promise<Integra
       mailchimp: r.mc_on === true && !!r.mc_lista && formulareOk(r.mc_surse),
       brevo: r.bv_on === true && !!r.bv_lista && formulareOk(r.bv_surse),
       klaviyo: r.kv_on === true && !!r.kv_lista && formulareOk(r.kv_surse),
+      /* theMarketer n-are liste: abonatii intra in contul magazinului. */
+      themarketer: r.tm_on === true && typeof r.tm_cont === "string" && r.tm_cont.trim() !== "" && formulareOk(r.tm_surse),
     },
     plati,
     curieri,
@@ -103,4 +108,5 @@ export async function integrariPentruPagini(businessId: string): Promise<Integra
 }
 
 /** Macar un furnizor de newsletter conectat: altfel blocul n-are unde trimite adresa. */
-export const areNewsletter = (i: IntegrariPagini) => i.newsletter.mailchimp || i.newsletter.brevo || i.newsletter.klaviyo;
+export const areNewsletter = (i: IntegrariPagini) =>
+  i.newsletter.mailchimp || i.newsletter.brevo || i.newsletter.klaviyo || i.newsletter.themarketer;

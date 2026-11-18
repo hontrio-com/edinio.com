@@ -156,7 +156,7 @@ async function incarcaDateBlocuri(
       supabase.from("categories").select("id, name").eq("business_id", business.id)
         .order("sort_order").order("id").range(from, to)
     ),
-    supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
+    supabase.from("forms").select("id, name, fields, submit_label, success_message, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled, themarketer_enabled")
       .eq("business_id", business.id).order("created_at"),
     /* Pentru sugestiile de link: paginile magazinului (fara cea deschisa) si prefixele adreselor. */
     (faraPagina
@@ -175,6 +175,7 @@ async function incarcaDateBlocuri(
   ]);
   const furnizori = [
     integrari.newsletter.mailchimp && "Mailchimp", integrari.newsletter.brevo && "Brevo", integrari.newsletter.klaviyo && "Klaviyo",
+    integrari.newsletter.themarketer && "theMarketer",
   ].filter((x): x is string => !!x);
 
   const pc = (ss?.page_content ?? {}) as Record<string, unknown>;
@@ -219,7 +220,7 @@ async function incarcaDateBlocuri(
     id: f.id, name: f.name,
     fields: Array.isArray(f.fields) ? (f.fields as unknown as FormField[]) : [],
     submit_label: f.submit_label, success_message: f.success_message,
-    email_enabled: f.email_enabled, email_to: f.email_to, mailchimp_enabled: f.mailchimp_enabled, brevo_enabled: f.brevo_enabled ?? false, klaviyo_enabled: f.klaviyo_enabled ?? false,
+    email_enabled: f.email_enabled, email_to: f.email_to, mailchimp_enabled: f.mailchimp_enabled, brevo_enabled: f.brevo_enabled ?? false, klaviyo_enabled: f.klaviyo_enabled ?? false, themarketer_enabled: f.themarketer_enabled ?? false,
   }));
 
   return {

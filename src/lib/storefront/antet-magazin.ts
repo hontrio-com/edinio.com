@@ -25,10 +25,12 @@ export const incarcaAntetMagazin = cache(async (slug: string) => {
     .from("businesses")
     // Un singur literal, NU concatenare: supabase-js deduce tipul randului din
     // textul lui `select`, iar un sir compus ii scapa si intoarce `GenericStringError`.
+    // ⚠ theMarketer: NUMAI campurile publice, prin cale JSON (`tm_*`). Coloana poarta si cheia REST, iar
+    // randul asta ajunge in componente de vitrina; cheia nu are ce cauta in el. Vezi `themarketer/vitrina.ts`.
     // Reuniunea antetului CU `COLOANE_BUSINESS_PUBLIC`: acelasi rand era cerut inca
     // o data de fiecare pagina de magazin, cu clientul vizitatorului. Doua
     // dus-intorsuri pe vizita pentru un rand deja adus. Vezi `incarcaMagazinul`.
-    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config, cont_client_config)")
+    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config, cont_client_config, tm_activ:themarketer_config->enabled, tm_cheie:themarketer_config->>tracking_key, tm_urmarire:themarketer_config->urmarire, tm_captura:themarketer_config->captura_email, tm_push:themarketer_config->push, tm_fidelitate:themarketer_config->fidelitate, tm_recenzii:themarketer_config->recenzii)")
     .eq("slug", slug)
     .maybeSingle();
   if (!error) return data;

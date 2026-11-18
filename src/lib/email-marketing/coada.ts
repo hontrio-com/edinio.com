@@ -1,6 +1,6 @@
 /*
   ═══════════════════════════════════════════════════════════════════════════════
-  COADA EVENIMENTELOR DE COMANDA CATRE MAILCHIMP, BREVO SI KLAVIYO
+  COADA EVENIMENTELOR DE COMANDA CATRE MAILCHIMP, BREVO, KLAVIYO SI THEMARKETER
   ═══════════════════════════════════════════════════════════════════════════════
 
   Randurile le scrie triggerul de pe `orders` (migratia `2027-01-28-email-marketing-coada.sql`):
@@ -16,7 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { dupaEsec, candSeReincearca } from "@/lib/edinio-marketing/server/ritm-reincercari";
 
-export type Furnizor = "mailchimp" | "brevo" | "klaviyo";
+export type Furnizor = "mailchimp" | "brevo" | "klaviyo" | "themarketer";
 export type FelEveniment = "creata" | "platita" | "expediata" | "livrata" | "anulata" | "rambursata";
 
 export type RandDeTrimis = {

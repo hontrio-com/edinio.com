@@ -20,13 +20,19 @@ const CATEGORY_LABELS: Record<ConsentCategory, { title: string; desc: string }> 
   },
 };
 
-export function CookieConsent({ slug, color, categories, position, policyHref, storeName }: {
+export function CookieConsent({ slug, color, categories, position, policyHref, storeName, furnizoriMarketing }: {
   slug: string;
   color: string;
   categories: ConsentCategory[];
   position: CookieBannerPosition;
   policyHref: string | null;
   storeName: string;
+  /**
+   * Instrumentele de marketing pornite chiar in magazinul asta („Facebook, TikTok, theMarketer”). Lipsa lor
+   * pastreaza textul de pana acum. ⚠ Omul isi da acordul pentru ce e scris aici, deci lista trebuie sa fie
+   * cea adevarata, nu una generica.
+   */
+  furnizoriMarketing?: string[];
 }) {
   /* Panoul e alb: culoarea magazinului prea deschisa (lime-ul temei Canopus, 1,28:1) nu se vede pe el. */
   const culoareIconita = (raportContrast(color, "#FFFFFF") ?? 3) < 3 ? "#374151" : color;
@@ -199,7 +205,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
             {categories.includes("marketing") && (
               <ConsentRow
                 title={CATEGORY_LABELS.marketing.title}
-                desc={CATEGORY_LABELS.marketing.desc}
+                desc={descriereMarketing(furnizoriMarketing)}
                 checked={prefs.marketing}
                 onChange={(v) => setPrefs((p) => ({ ...p, marketing: v }))}
                 color={color}
@@ -226,6 +232,15 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
       </div>
     </div>
   );
+}
+
+/**
+ * Textul categoriei „Marketing”, cu instrumentele pornite chiar in magazin. Fara lista, textul vechi.
+ * theMarketer nu afiseaza reclame: personalizeaza emailurile si recomandarile, deci textul spune si asta.
+ */
+function descriereMarketing(furnizori?: string[]): string {
+  if (!furnizori || furnizori.length === 0) return CATEGORY_LABELS.marketing.desc;
+  return `Permit reclame si mesaje personalizate (${furnizori.join(", ")}).`;
 }
 
 function ConsentRow({ title, desc, checked, onChange, disabled, color }: {

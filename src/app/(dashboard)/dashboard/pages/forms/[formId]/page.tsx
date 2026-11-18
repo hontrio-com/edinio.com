@@ -46,6 +46,7 @@ export default async function FormEditorPage({ params }: { params: Promise<{ for
       initialMailchimpEnabled={form.mailchimp_enabled}
       initialBrevoEnabled={form.brevo_enabled ?? false}
       initialKlaviyoEnabled={form.klaviyo_enabled ?? false}
+      initialTheMarketerEnabled={form.themarketer_enabled ?? false}
       statistica={stat ? <PanouStatistica s={stat} /> : null}
     />
   );

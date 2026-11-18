@@ -4,6 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { Check, Loader2, Mail } from "lucide-react";
 import { BlockShell } from "../BlockShell";
 import { aboneazaNewsletter } from "@/lib/actions/page.actions";
+import { mktrEvent } from "@/lib/marketing";
 import { cuTransparenta } from "@/lib/pages/culori";
 import { cdnSrcSet, imaginePagina } from "@/lib/cdn-image";
 import type { NewsletterBlock } from "@/lib/pages/blocks.types";
@@ -50,6 +51,8 @@ export function NewsletterBlockView({ block, color, businessId, pageId, caleDesi
         return;
       }
       if ("error" in r) { setEroare(r.error); return; }
+      /* theMarketer: omul s-a abonat cu acord, deci browserul lui se leaga de adresa (`__sm__set_email`). */
+      mktrEvent("__sm__set_email", { email_address: email.trim().toLowerCase(), ...(nume.trim() ? { firstname: nume.trim().split(/\s+/)[0] } : {}) });
       setGata(true);
     });
   }

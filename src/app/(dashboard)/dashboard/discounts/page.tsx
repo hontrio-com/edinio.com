@@ -55,7 +55,7 @@ export default async function DiscountsPage({
   const sortare = sortareValida(firstParam(sp.sort));
   const pagina = pageParam(sp.page);
 
-  const [{ data: randuri }, { data: peStare }, { data: totaluri }, { data: faraLegatura }, { data: categorii }] =
+  const [{ data: randuri }, { data: peStare }, { data: totaluri }, { data: faraLegatura }, { data: categorii }, { data: tm }] =
     await Promise.all([
       /*
         ⚠ O SINGURĂ CITIRE pentru pagină: rândurile, cifrele fiecărui cod ȘI
@@ -89,6 +89,14 @@ export default async function DiscountsPage({
         (`searchProductsForPicker`), fiindca un catalog poate avea mii.
       */
       supabase.from("categories").select("id, name").eq("business_id", row.id).order("name"),
+      /*
+        theMarketer: când îi generează coduri unice, lista nu le arată, deci pagina trebuie să spună unde sunt.
+        Doar cele două comutatoare, prin cale JSON: configurarea întreagă poartă cheia REST.
+      */
+      supabase.from("store_settings")
+        .select("tm_activ:themarketer_config->enabled, tm_coduri:themarketer_config->coduri")
+        .eq("business_id", row.id)
+        .maybeSingle(),
     ]);
 
   const coduri: CodDinLista[] = (randuri ?? []).map((d) => ({
@@ -156,6 +164,7 @@ export default async function DiscountsPage({
           spune asta decat un raport care tace.
         */
         faraLegatura={Number(faraLegatura ?? 0)}
+        codurileTheMarketer={tm?.tm_activ === true && tm?.tm_coduri !== false}
         businessId={row.id}
         categorii={categorii ?? []}
       />

@@ -538,7 +538,7 @@ function DeleteDialog({ discount, businessId, onClose }: DeleteDialogProps) {
 export function DiscountsClient({
   coduri, cateSunt, pagina, catePeStare, totaluri,
   cautare: cautareDinAdresa, stare, sortare,
-  faraLegatura, businessId, categorii,
+  faraLegatura, businessId, categorii, codurileTheMarketer = false,
 }: {
   /**
    * ⚠⚠ O PAGINA, deja filtrata si sortata in baza. Nu tot magazinul.
@@ -557,6 +557,11 @@ export function DiscountsClient({
   sortare: Sortare;
   /** Comenzi cu cod dar fara legatura catre el. Azi zero peste tot. */
   faraLegatura: number;
+  /**
+   * theMarketer genereaza coduri unice (`discounts.generat_de`). Lista, cifrele de langa filtre si numarul
+   * codurilor din cap NU le cuprind cat timp nu se cauta (pot fi mii), deci pagina spune unde sunt.
+   */
+  codurileTheMarketer?: boolean;
   businessId: string;
   /** Categoriile magazinului, pentru restrangerea codului. Produsele se CAUTA. */
   categorii: { id: string; name: string }[];
@@ -706,7 +711,25 @@ export function DiscountsClient({
         Confundate, cine filtra gresit primea „Niciun cod de reducere" si credea
         ca si-a pierdut campaniile.
       */}
-      {totaluri.coduri === 0 ? (
+      {/*
+        ⚠ Codurile unice ale theMarketer sunt ascunse din listă cât timp nu se caută: altfel o automatizare cu
+        mii de clienți ar fi îngropat codurile comerciantului. Spus aici, ca omul care caută un cod MKTR- să
+        știe că există și cum îl găsește.
+      */}
+      {codurileTheMarketer && !cautareDinAdresa && (
+        <div className="mb-4 flex flex-col gap-2 rounded-xl border border-border p-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            Codurile unice generate de theMarketer (câte unul pentru fiecare client, încep cu MKTR-) nu apar în
+            listă, ca să n-o umple. Comenzile făcute cu ele se numără totuși în cifrele paginii.
+          </p>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => scrieCautarea("MKTR-")}>
+            Arată-le
+          </Button>
+        </div>
+      )}
+
+      {/* ⚠ Cu o căutare în adresă, lista rămâne pe ecran: altfel codurile MKTR- n-ar avea unde să apară. */}
+      {totaluri.coduri === 0 && !cautareDinAdresa ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
             <Ticket className="h-7 w-7 text-primary" />
@@ -806,7 +829,7 @@ export function DiscountsClient({
             egale, ca la Clienți: într-un `flex-wrap` fiecare ieșea cât textul ei
             și rândurile se rupeau la întâmplare.
           */}
-          {totaluri.coduri >= 4 && (
+          {(totaluri.coduri >= 4 || cautareDinAdresa !== "" || codurileTheMarketer) && (
             <div className="mb-4 space-y-2">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

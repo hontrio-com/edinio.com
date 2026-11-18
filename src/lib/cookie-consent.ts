@@ -56,10 +56,16 @@ export function parseCookieBannerConfig(raw: unknown): CookieBannerConfig {
 export function detectConsentCategories(
   mc: MarketingConfig | null | undefined,
   gaMeasurementId?: string | null,
+  /**
+   * Alt instrument de marketing pornit in vitrina, in afara pixelilor (theMarketer). ⚠ Fara el, un magazin
+   * cu theMarketer si fara pixeli n-ar fi aratat categoria „Marketing” in banner, deci nimeni n-ar fi putut
+   * da acordul, iar scriptul n-ar fi pornit niciodata.
+   */
+  altMarketing = false,
 ): ConsentCategory[] {
   const cats: ConsentCategory[] = [];
   if (mc?.google_tag_id?.trim() || gaMeasurementId) cats.push("analytics");
-  if (mc?.facebook_pixel_id?.trim() || mc?.tiktok_pixel_id?.trim()) cats.push("marketing");
+  if (mc?.facebook_pixel_id?.trim() || mc?.tiktok_pixel_id?.trim() || altMarketing) cats.push("marketing");
   return cats;
 }
 

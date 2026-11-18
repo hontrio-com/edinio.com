@@ -11,7 +11,7 @@ import { getRecoverableCart } from "@/lib/actions/abandoned-cart.actions";
 import { parseProductSections, resolveSectionProducts } from "@/lib/store-sections";
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { documentDeCautare } from "@/lib/storefront/catalog/doc-cautare";
-import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { fbTrack, ttqTrack, gtagEvent, mktrEvent } from "@/lib/marketing";
 import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
@@ -1478,8 +1478,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
-  function trackAndFlash(productId: string, name: string, price: number, comboId?: string | null, areVariante = false, idOferta?: string | null) {
-    trackAddToCart({ productId, name, price, comboId, areVariante, idOferta });
+  function trackAndFlash(
+    productId: string, name: string, price: number, comboId?: string | null, areVariante = false, idOferta?: string | null,
+    titluVarianta?: string | null, skuVarianta?: string | null,
+  ) {
+    trackAddToCart({ productId, name, price, comboId, areVariante, idOferta, titluVarianta, skuVarianta });
     setAddedId(productId);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -1527,6 +1530,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       line.productId, line.name, line.price,
       comboIdDupaTitlu(quickAddProduct?.page_sections, line.variantTitle), true,
       idOfertaDupaTitlu(line.productId, quickAddProduct?.page_sections, line.variantTitle),
+      line.variantTitle, line.variantSku,
     );
   }
 
@@ -1821,6 +1825,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               ...continutTikTokDinCos(cartItemsForTracking.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
             });
             gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
+            mktrEvent("__sm__initiate_checkout");
           }}
           shippingCost={shippingCost}
           freeShippingThreshold={freeShippingThreshold}

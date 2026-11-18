@@ -11,7 +11,7 @@ import { CU_OPTIUNI, createFormField, FORM_FIELD_TYPES, MAX_CAMPURI, MAX_OPTIUNI
 const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
 
 export function FormBuilderClient({
-  formId, initialName, initialFields, initialSubmitLabel, initialSuccessMessage, initialEmailEnabled, initialEmailTo, initialMailchimpEnabled, initialBrevoEnabled, initialKlaviyoEnabled,
+  formId, initialName, initialFields, initialSubmitLabel, initialSuccessMessage, initialEmailEnabled, initialEmailTo, initialMailchimpEnabled, initialBrevoEnabled, initialKlaviyoEnabled, initialTheMarketerEnabled = false,
   statistica, initialVersiune, adreseleLui, areSmtp,
 }: {
   /** Emailul magazinului si al contului: fara SMTP propriu, singurele adrese de primire permise. */
@@ -23,7 +23,7 @@ export function FormBuilderClient({
   /** Statisticile formularului, randate pe server (vezi `PanouStatistica`). */
   statistica?: React.ReactNode;
   formId: string; initialName: string; initialFields: FormField[];
-  initialSubmitLabel: string; initialSuccessMessage: string; initialEmailEnabled: boolean; initialEmailTo: string; initialMailchimpEnabled: boolean; initialBrevoEnabled: boolean; initialKlaviyoEnabled: boolean;
+  initialSubmitLabel: string; initialSuccessMessage: string; initialEmailEnabled: boolean; initialEmailTo: string; initialMailchimpEnabled: boolean; initialBrevoEnabled: boolean; initialKlaviyoEnabled: boolean; initialTheMarketerEnabled?: boolean;
 }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
@@ -35,6 +35,7 @@ export function FormBuilderClient({
   const [mailchimpEnabled, setMailchimpEnabled] = useState(initialMailchimpEnabled);
   const [brevoEnabled, setBrevoEnabled] = useState(initialBrevoEnabled);
   const [klaviyoEnabled, setKlaviyoEnabled] = useState(initialKlaviyoEnabled);
+  const [theMarketerEnabled, setTheMarketerEnabled] = useState(initialTheMarketerEnabled);
   const [dirty, setDirty] = useState(false);
   const [isSaving, startSave] = useTransition();
   const versiune = useRef(initialVersiune);
@@ -91,7 +92,7 @@ export function FormBuilderClient({
       try {
         res = await updateForm(formId, {
           name, fields, submit_label: submitLabel, success_message: successMessage,
-          email_enabled: emailEnabled, email_to: emailTo, mailchimp_enabled: mailchimpEnabled, brevo_enabled: brevoEnabled, klaviyo_enabled: klaviyoEnabled,
+          email_enabled: emailEnabled, email_to: emailTo, mailchimp_enabled: mailchimpEnabled, brevo_enabled: brevoEnabled, klaviyo_enabled: klaviyoEnabled, themarketer_enabled: theMarketerEnabled,
           versiune: versiune.current,
         });
       } catch {
@@ -232,6 +233,13 @@ export function FormBuilderClient({
               Adaugă contactele în Klaviyo
             </label>
             <p className="text-[11px] text-muted-foreground mt-1">Cine completează formularul (cu email) intră în lista ta Klaviyo, cu acordul lor. Folosește-l pentru formulare de abonare.</p>
+          </div>
+          <div className="pt-3 border-t border-border">
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">
+              <input type="checkbox" checked={theMarketerEnabled} onChange={(e) => { setTheMarketerEnabled(e.target.checked); mark(); }} className="w-4 h-4 rounded accent-green-600" />
+              Adaugă abonații în theMarketer
+            </label>
+            <p className="text-[11px] text-muted-foreground mt-1">Cine completează formularul (cu email) primește de la theMarketer emailul de confirmare a abonării. Folosește-l pentru formulare de abonare, cu acordul lor.</p>
           </div>
           <div className="pt-3 border-t border-border">
             <label className="flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer select-none">

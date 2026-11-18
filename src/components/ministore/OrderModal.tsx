@@ -21,7 +21,8 @@ import { getAttribution } from "@/lib/storefront/attribution";
 import type { StarePersonalizare } from "@/components/storefront/sections/product/_shared/usePersonalizare";
 import { pretPeTrepte, type QuantityTier, type Trepte } from "@/lib/storefront/quantity-tiers";
 import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
-import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { pastreazaPentruTheMarketer } from "@/lib/themarketer/comanda-browser";
+import { fbTrack, ttqTrack, gtagEvent, mktrEvent, mktrCapteazaEmailul } from "@/lib/marketing";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
 import { continutTikTok } from "@/lib/tiktok/continut";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
@@ -650,6 +651,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     const unit = quantity > 0 ? Math.round((productSubtotal / quantity) * 100) / 100 : product.price;
     if (trackTimer.current) clearTimeout(trackTimer.current);
     trackTimer.current = setTimeout(() => {
+      /*
+       * theMarketer: emailul scris in checkout, pentru automatizarea lor de cos abandonat. Pleaca numai
+       * cu scriptul incarcat (acord) si cu „captarea emailului” pornita de comerciant; o data pe adresa.
+       */
+      if (form.email.trim()) mktrCapteazaEmailul(form.email, form.phone.replace(/[\s\-().]/g, ""));
       void trackAbandonedCart({
         businessId: business.id,
         sessionId,
@@ -759,6 +765,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       ...continutTikTok([{ productId: product.id, areVariante: !!product.variantTitle, cantitate: quantityLaDeschidere.current, pret: pePiesa, nume: product.name }]),
     });
     gtagEvent("begin_checkout", { currency: "RON", value, items: [{ item_id: product.id, item_name: product.name, price: pePiesa, quantity: quantityLaDeschidere.current }] });
+    /* theMarketer: fereastra de comanda E pagina de finalizare. */
+    mktrEvent("__sm__initiate_checkout");
   }, [open, product.id, product.name]);
 
   // Reset on open
@@ -1260,6 +1268,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         }
         orderId = result.orderId;
         placedRef.current = { payloadKey, orderId };
+      }
+
+      /* theMarketer: ca la checkout-ul cosului, datele scrise de om, pentru pagina de multumire. */
+      if (orderId) {
+        pastreazaPentruTheMarketer(orderId, {
+          email: form.email, telefon: form.phone, nume: form.name,
+          oras: form.city, judet: form.county, adresa: form.address,
+        });
       }
 
       if (paymentMethod !== "cash_on_delivery") {

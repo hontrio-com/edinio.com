@@ -30,7 +30,7 @@ import {
 // bootstrap drains its own events the instant it defines the global.
 // ─────────────────────────────────────────────────────────────────────────
 
-type Vendor = "fb" | "tt" | "ga";
+type Vendor = "fb" | "tt" | "ga" | "mk";
 type QueuedCall = { vendor: Vendor; run: () => void };
 const QUEUE_CAP = 50; // bound memory / replay if consent is never granted
 
@@ -41,9 +41,11 @@ function getQueue(): QueuedCall[] {
 }
 
 function ready(vendor: Vendor): boolean {
-  const w = window as unknown as { fbq?: unknown; ttq?: { track?: unknown }; gtag?: unknown };
+  const w = window as unknown as { fbq?: unknown; ttq?: { track?: unknown }; gtag?: unknown; __edinioMktr?: unknown };
   if (vendor === "fb") return typeof w.fbq === "function";
   if (vendor === "tt") return !!w.ttq && typeof w.ttq.track === "function";
+  /* theMarketer: gata cand codul lui de baza a rulat (`TheMarketerTracking`), adica numai dupa acord. */
+  if (vendor === "mk") return !!w.__edinioMktr && typeof w.__edinioMktr === "object";
   return typeof w.gtag === "function";
 }
 
@@ -216,6 +218,38 @@ export function gtagRaw(...args: unknown[]) {
   dispatch("ga", () => {
     const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
     if (typeof gtag === "function") gtag(...args);
+  });
+}
+
+/**
+ * theMarketer: un eveniment `__sm__…` in `window.dataLayer`, de unde il citeste scriptul lor
+ * (developers.themarketer.com/reference/javascript-tracking-code-copy). Prin coada, ca la ceilalti: pleaca
+ * numai dupa ce scriptul s-a incarcat, adica numai cu acordul pentru marketing.
+ */
+export function mktrEvent(event: string, data?: Record<string, unknown>) {
+  dispatch("mk", () => {
+    const w = window as unknown as { dataLayer?: unknown[] };
+    w.dataLayer = w.dataLayer || [];
+    w.dataLayer.push({ event, ...(data ?? {}) });
+  });
+}
+
+/**
+ * Emailul (si telefonul) scrise in checkout, inainte de comanda: `__sm__set_email`, ca theMarketer sa aiba
+ * cui sa scrie daca omul pleaca fara sa comande. NUMAI cu modulul „captarea emailului” pornit de comerciant
+ * (`window.__edinioMktr.captura`), verificat abia cand scriptul e gata.
+ */
+export function mktrCapteazaEmailul(email: string, telefon?: string | null) {
+  const e = email.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return;
+  dispatch("mk", () => {
+    const w = window as unknown as { dataLayer?: unknown[]; __edinioMktr?: { captura?: boolean; ultimEmail?: string } };
+    if (!w.__edinioMktr?.captura) return;
+    /* Aceeasi adresa iesita de doua ori din camp nu pleaca de doua ori. */
+    if (w.__edinioMktr.ultimEmail === e) return;
+    w.__edinioMktr.ultimEmail = e;
+    w.dataLayer = w.dataLayer || [];
+    w.dataLayer.push({ event: "__sm__set_email", email_address: e, ...(telefon?.trim() ? { phone: telefon.trim() } : {}) });
   });
 }
 

@@ -268,12 +268,18 @@ export async function GET(req: NextRequest) {
      *
      * ⚠ O interogare pe magazin, nu pe cos: cel mai mare magazin masurat are
      * cinci coduri.
+     *
+     * ⚠ Fara codurile generate de theMarketer (18.11.2026): pot fi MII, iar peste
+     * plafonul de o mie de randuri codul pasului ar fi lipsit din multime si ar fi
+     * plecat emailul fara el. Niciunul nu poate fi codul unui pas: alegerea din
+     * panou nu le arata.
      */
     const { data: coduriMagazin } = await admin
       .from("discounts")
       .select(`code, ${COLOANELE_STARII}`)
       .eq("business_id", store.businessId)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .is("generat_de", null);
     const coduriBune = new Set(doarFolosibile(coduriMagazin).map((d) => d.code.toUpperCase()));
 
     const { data: carts, error: eCarts } = await admin

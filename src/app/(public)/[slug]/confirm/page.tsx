@@ -27,6 +27,10 @@ import { utilizatorulPentruGoogle, type UtilizatorGoogle } from "@/lib/google-ad
 import { randurileInstantaneului } from "@/lib/customization/comanda";
 import { ContulDupaComanda } from "@/components/storefront/cont/ContulDupaComanda";
 import { setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
+import { ComandaTheMarketer } from "@/components/public/ComandaTheMarketer";
+import { vitrinaTheMarketer, type SetariTMBrute } from "@/lib/themarketer/vitrina";
+import { corpComandaFaraPersoana, liniiTM } from "@/lib/themarketer/comanda";
+import { produseleLiniilor } from "@/lib/themarketer/sync";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -76,6 +80,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let cardDiscountAmount = 0;
   let codDiscountAmount = 0;
   let codFeeAmount = 0;
+  let offerDiscountAmount = 0;
   let vatAmount = 0;
   let vatRate = 0;
   let discountCode: string | null = null;
@@ -110,7 +115,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, prices_include_vat, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source, shipping_address")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, prices_include_vat, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source, shipping_address, offer_discount_amount")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -133,6 +138,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       cardDiscountAmount = order.card_discount_amount ?? 0;
       codDiscountAmount = order.cod_discount_amount ?? 0;
       codFeeAmount = order.cod_fee_amount ?? 0;
+      offerDiscountAmount = Number((order as { offer_discount_amount?: unknown }).offer_discount_amount ?? 0) || 0;
       vatAmount = Number(order.vat_amount ?? 0);
       vatRate = Number(order.vat_rate ?? 0);
       discountCode = order.discount_code ?? null;
@@ -159,10 +165,38 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
-    .select("marketing_config, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown")
+    .select("marketing_config, page_content, storefront_design, default_shipping_cost, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, tm_activ:themarketer_config->enabled, tm_cheie:themarketer_config->>tracking_key, tm_urmarire:themarketer_config->urmarire")
     .eq("business_id", business.id)
     .single();
   const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
+
+  /*
+   * theMarketer: `__sm__order` pentru o vanzare confirmata, ca la pixeli. Serverul da numai partea FARA
+   * date personale (numar, sume, produse cu SKU-ul variantei); omul se adauga in browser, din ce a scris
+   * el la checkout (`ComandaTheMarketer`). O citire cazuta inseamna doar ca evenimentul din browser nu
+   * pleaca: comanda ajunge oricum prin `save_order`.
+   */
+  let corpTheMarketer: Record<string, unknown> | null = null;
+  if (orderId && vanzareConfirmata && orderNumber && vitrinaTheMarketer(storeSettings as SetariTMBrute | null)
+    && !clientDeMarketplace(sursaComenzii)) {
+    try {
+      const produse = await produseleLiniilor(business.id, orderItems);
+      corpTheMarketer = corpComandaFaraPersoana({
+        order_number: orderNumber,
+        discount_code: discountCode,
+        discount_amount: discountAmount,
+        card_discount_amount: cardDiscountAmount,
+        offer_discount_amount: offerDiscountAmount,
+        cod_discount_amount: codDiscountAmount,
+        cod_fee_amount: codFeeAmount,
+        shipping_cost: shippingCost,
+        vat_amount: vatAmount,
+        total: totalComanda ?? displayTotal,
+      }, liniiTM(orderItems, produse));
+    } catch {
+      corpTheMarketer = null;
+    }
+  }
 
   /*
    * ═══ ⚠ PIXELUL META: POTRIVIREA IN `init` SI ID-URILE DIN CATALOG (17.09.2026) ═══
@@ -338,6 +372,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
           {potrivireTikTok && (
             <script dangerouslySetInnerHTML={{ __html: `window.__edinioTTAM=${JSON.stringify(potrivireTikTok)};` }} />
           )}
+          {orderId && corpTheMarketer && <ComandaTheMarketer orderId={orderId} corp={corpTheMarketer} />}
           {orderId && vanzareConfirmata && (
             <FbPurchaseEvent
               continutMeta={continutMeta}

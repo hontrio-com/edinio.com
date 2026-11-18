@@ -7,6 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
 import { stareAdaugareValida, type ClientNou, type StareAdaugare } from "@/lib/customers/gestionare";
 import { CATI_DEODATA, citesteUrma, type UrmaAnonimizarii } from "@/lib/customers/anonimizare";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { citesteConfig } from "@/lib/themarketer/server";
+import { modulPornit } from "@/lib/themarketer/config";
+import { anonimizeazaInTheMarketer } from "@/lib/themarketer/sync";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -136,6 +140,23 @@ export async function anonimizeazaClienti(
     return { error: `Maximum ${CATI_DEODATA} de clienți deodată. Ai ales ${curate.length}.` };
   }
 
+  /*
+   * theMarketer: adresele se afla INAINTE, cat comenzile inca le poarta. Dupa `customer_anonymize` n-ar
+   * mai fi nimic de trimis. Cu cheia de serviciu, deci numai dupa ce s-a vazut ca magazinul e al lui.
+   * O pana aici nu opreste anonimizarea din Edinio: se scrie, iar omul e anuntat mai jos.
+   */
+  let emailuriTheMarketer: string[] = [];
+  try {
+    const { data: alLui } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).maybeSingle();
+    if (alLui && modulPornit(await citesteConfig(businessId), "anonimizare")) {
+      const { data: adrese, error: eAdrese } = await createAdminClient().rpc("themarketer_emailurile_clientilor", { bid: businessId, p_keys: curate });
+      if (eAdrese) throw new Error(eAdrese.message);
+      emailuriTheMarketer = ((adrese ?? []) as string[]).filter((e) => typeof e === "string" && e.includes("@"));
+    }
+  } catch (e) {
+    logError({ action: "anonimizeazaClienti.themarketer", message: e instanceof Error ? e.message : "adresele nu s-au putut afla", businessId, severity: "warning" });
+  }
+
   const { data, error } = await supabase.rpc("customer_anonymize", {
     bid: businessId,
     p_keys: curate,
@@ -157,6 +178,14 @@ export async function anonimizeazaClienti(
   }
 
   const urma = citesteUrma(data?.[0]);
+  /*
+   * ⚠ DUPA raspuns: un apel pe adresa, iar o selectie mare ar tine butonul minute intregi. Ce nu merge
+   * ajunge la om (starea integrarii, in pagina theMarketer).
+   */
+  if (emailuriTheMarketer.length > 0) {
+    const adrese = emailuriTheMarketer;
+    dupaRaspuns(() => anonimizeazaInTheMarketer(businessId, adrese), "themarketer.anonimizare", businessId);
+  }
   /* ⚠ Numai daca s-a atins ceva: altfel se reface pagina degeaba. */
   if (urma.comenzi + urma.contacte + urma.cosuri + urma.retururi + urma.mesaje > 0) {
     revalidatePath("/dashboard/customers");

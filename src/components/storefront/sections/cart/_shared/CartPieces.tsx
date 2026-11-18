@@ -310,6 +310,7 @@ function stergeCuEveniment(item: CartItem, valoare: number, pretBucata: number) 
     value: valoare,
     items: [{ item_id: item.productId, item_name: item.name, price: pretBucata, quantity: item.quantity }],
   });
+  /* theMarketer afla din `CartProvider.removeItem`, ca de la orice alta schimbare a cosului. */
 }
 
 /** Bara catre pragul de livrare gratuita. Lipseste cand magazinul n-are prag. */

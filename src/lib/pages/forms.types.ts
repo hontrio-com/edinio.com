@@ -34,6 +34,7 @@ export interface FormDef {
   mailchimp_enabled: boolean;
   brevo_enabled: boolean;
   klaviyo_enabled: boolean;
+  themarketer_enabled: boolean;
 }
 
 /** Public-safe subset rendered on the storefront (no email settings exposed). */

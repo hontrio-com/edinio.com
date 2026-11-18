@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
+import { TheMarketerTracking } from "@/components/public/TheMarketerTracking";
+import { vitrinaTheMarketer, type SetariTMBrute, type VitrinaTM } from "@/lib/themarketer/vitrina";
 import { GoogleTag } from "@/components/public/GoogleTag";
 import { parseIdConversieAds } from "@/lib/google-ads/conversie";
 import { ConsentGate } from "@/components/public/ConsentGate";
@@ -174,6 +176,7 @@ export default async function StoreLayout({ children, params }: Props) {
   let mc: MarketingConfig | null = null;
   let cookieRaw: unknown = null;
   let contRaw: unknown = null;
+  let tm: VitrinaTM | null = null;
 
   if (business) {
     const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown; cont_client_config?: unknown } | { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown; cont_client_config?: unknown }[] | null }).store_settings;
@@ -181,6 +184,8 @@ export default async function StoreLayout({ children, params }: Props) {
     mc = (settings?.marketing_config ?? null) as MarketingConfig | null;
     cookieRaw = settings?.cookie_banner_config ?? null;
     contRaw = settings?.cont_client_config ?? null;
+    /* theMarketer: numai campurile publice (`tm_*`), citite prin cale JSON. Vezi `themarketer/vitrina.ts`. */
+    tm = vitrinaTheMarketer(settings as SetariTMBrute | null);
     fbPixelId = mc?.facebook_pixel_id?.trim() || null;
     ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
     googleTagId = mc?.google_tag_id?.trim() || null;
@@ -198,7 +203,9 @@ export default async function StoreLayout({ children, params }: Props) {
   const googleTagIds = [...new Set([googleTagId, gaMeasurementId, adsConversionId].filter((v): v is string => !!v))];
 
   const cookieConfig = parseCookieBannerConfig(cookieRaw);
-  const consentCategories = detectConsentCategories(mc, gaMeasurementId);
+  const consentCategories = detectConsentCategories(mc, gaMeasurementId, tm !== null);
+  /* Ce sta sub „Marketing” in banner, pe nume: omul isi da acordul pentru ce citeste acolo. */
+  const furnizoriMarketing = [fbPixelId && "Facebook", ttPixelId && "TikTok", tm && "theMarketer"].filter((x): x is string => !!x);
   const color = (business?.primary_color as string | null) ?? "#07c527";
   const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
 
@@ -261,6 +268,9 @@ export default async function StoreLayout({ children, params }: Props) {
           {googleTagIds.length > 0 && (
             <ConsentGate slug={slug} category={["analytics", "marketing"]} bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} adsId={adsConversionId} /></ConsentGate>
           )}
+          {tm && (
+            <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TheMarketerTracking cheie={tm.cheie} captura={tm.captura} /></ConsentGate>
+          )}
         </DoarInMagazinReal>
       </DoarInAfaraContului>
       {/* Prefixele din Setari > Permalink-uri, din acelasi rand: nicio cerere in plus. */}
@@ -276,6 +286,7 @@ export default async function StoreLayout({ children, params }: Props) {
             position={cookieConfig.position}
             policyHref={`${basePath}/politici/confidentialitate`}
             storeName={storeName}
+            furnizoriMarketing={furnizoriMarketing}
           />
         </DoarInMagazinReal>
       )}

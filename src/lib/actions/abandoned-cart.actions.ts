@@ -341,7 +341,12 @@ export async function getAbandonedCartsData(
       azi, iar cumparatorul ar fi primit un cod care nu merge. Vezi
       `COLOANELE_STARII` in `src/lib/discounts/stare.ts`.
     */
-    supabase.from("discounts").select(`code, type, value, ${COLOANELE_STARII}`).eq("business_id", businessId).eq("is_active", true).order("code"),
+    /*
+      ⚠ Fara codurile generate de theMarketer: sunt de O SINGURA folosire, facute pentru un om anume, deci
+      niciunul nu poate pleca in emailurile tuturor cosurilor. Si pot fi MII: ar fi umplut alegerea si,
+      peste plafonul de o mie de randuri, ar fi taiat in tacere chiar codurile comerciantului.
+    */
+    supabase.from("discounts").select(`code, type, value, ${COLOANELE_STARII}`).eq("business_id", businessId).eq("is_active", true).is("generat_de", null).order("code"),
   ]);
   const isPremium = isPremiumPlan(profile?.plan);
   const discounts = doarFolosibile(discountRows)

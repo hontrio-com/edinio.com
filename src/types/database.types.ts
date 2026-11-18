@@ -2188,6 +2188,7 @@ export type Database = {
           created_at: string
           doar_prima_comanda: boolean
           expires_at: string | null
+          generat_de: string | null
           id: string
           is_active: boolean
           max_uses: number | null
@@ -2206,6 +2207,7 @@ export type Database = {
           created_at?: string
           doar_prima_comanda?: boolean
           expires_at?: string | null
+          generat_de?: string | null
           id?: string
           is_active?: boolean
           max_uses?: number | null
@@ -2224,6 +2226,7 @@ export type Database = {
           created_at?: string
           doar_prima_comanda?: boolean
           expires_at?: string | null
+          generat_de?: string | null
           id?: string
           is_active?: boolean
           max_uses?: number | null
@@ -3646,6 +3649,7 @@ export type Database = {
           fields: Json
           id: string
           klaviyo_enabled: boolean | null
+          themarketer_enabled: boolean
           mailchimp_enabled: boolean
           name: string
           submit_label: string
@@ -3661,6 +3665,7 @@ export type Database = {
           fields?: Json
           id?: string
           klaviyo_enabled?: boolean | null
+          themarketer_enabled?: boolean
           mailchimp_enabled?: boolean
           name: string
           submit_label?: string
@@ -3676,6 +3681,7 @@ export type Database = {
           fields?: Json
           id?: string
           klaviyo_enabled?: boolean | null
+          themarketer_enabled?: boolean
           mailchimp_enabled?: boolean
           name?: string
           submit_label?: string
@@ -6068,6 +6074,69 @@ export type Database = {
         }
         Relationships: []
       }
+      recenzii_produse: {
+        Row: {
+          autor: string
+          ascunsa: boolean
+          business_id: string
+          creat_la: string
+          data_recenzie: string | null
+          email: string | null
+          id: number
+          id_extern: string
+          media: Json
+          nota: number
+          product_id: string
+          sursa: string
+          text: string
+        }
+        Insert: {
+          autor?: string
+          ascunsa?: boolean
+          business_id: string
+          creat_la?: string
+          data_recenzie?: string | null
+          email?: string | null
+          id?: number
+          id_extern: string
+          media?: Json
+          nota: number
+          product_id: string
+          sursa?: string
+          text?: string
+        }
+        Update: {
+          autor?: string
+          ascunsa?: boolean
+          business_id?: string
+          creat_la?: string
+          data_recenzie?: string | null
+          email?: string | null
+          id?: number
+          id_extern?: string
+          media?: Json
+          nota?: number
+          product_id?: string
+          sursa?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recenzii_produse_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recenzii_produse_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recovery_optout: {
         Row: {
           business_id: string
@@ -6666,6 +6735,7 @@ export type Database = {
           factureaza_config: Json | null
           easybill_config: Json | null
           saga_config: Json | null
+          themarketer_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
           innoship_config: Json | null
@@ -6753,6 +6823,7 @@ export type Database = {
           factureaza_config?: Json | null
           easybill_config?: Json | null
           saga_config?: Json | null
+          themarketer_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
@@ -6840,6 +6911,7 @@ export type Database = {
           factureaza_config?: Json | null
           easybill_config?: Json | null
           saga_config?: Json | null
+          themarketer_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
           innoship_config?: Json | null
@@ -7121,6 +7193,91 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      themarketer_chei: {
+        Row: {
+          amprenta: string
+          business_id: string
+          creat_la: string
+          revocat_la: string | null
+        }
+        Insert: {
+          amprenta: string
+          business_id: string
+          creat_la?: string
+          revocat_la?: string | null
+        }
+        Update: {
+          amprenta?: string
+          business_id?: string
+          creat_la?: string
+          revocat_la?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "themarketer_chei_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      themarketer_stare: {
+        Row: {
+          business_id: string
+          citit_branduri_la: string | null
+          citit_categorii_la: string | null
+          citit_comenzi_la: string | null
+          citit_produse_la: string | null
+          dezabonari_de_la: string | null
+          dezabonari_sincronizat_la: string | null
+          recenzii_de_la: number | null
+          recenzii_sincronizat_la: string | null
+          ultim_cod_la: string | null
+          ultim_webhook_la: string | null
+          ultima_eroare: string | null
+          ultima_eroare_la: string | null
+        }
+        Insert: {
+          business_id: string
+          citit_branduri_la?: string | null
+          citit_categorii_la?: string | null
+          citit_comenzi_la?: string | null
+          citit_produse_la?: string | null
+          dezabonari_de_la?: string | null
+          dezabonari_sincronizat_la?: string | null
+          recenzii_de_la?: number | null
+          recenzii_sincronizat_la?: string | null
+          ultim_cod_la?: string | null
+          ultim_webhook_la?: string | null
+          ultima_eroare?: string | null
+          ultima_eroare_la?: string | null
+        }
+        Update: {
+          business_id?: string
+          citit_branduri_la?: string | null
+          citit_categorii_la?: string | null
+          citit_comenzi_la?: string | null
+          citit_produse_la?: string | null
+          dezabonari_de_la?: string | null
+          dezabonari_sincronizat_la?: string | null
+          recenzii_de_la?: number | null
+          recenzii_sincronizat_la?: string | null
+          ultim_cod_la?: string | null
+          ultim_webhook_la?: string | null
+          ultima_eroare?: string | null
+          ultima_eroare_la?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "themarketer_stare_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: true
+            referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
         ]
@@ -8092,6 +8249,11 @@ export type Database = {
       }
       aboutyou_salveaza_variante: { Args: { p_business_id: string; p_listing_id: string; p_randuri: Json }; Returns: Json }
       aboutyou_repune_stoc_retur: { Args: { p_business_id: string; p_retur_id: string }; Returns: Json }
+      /* Dezabonatii (si adresele respinse sau marcate spam) din theMarketer, in `recovery_optout`.
+         Intoarce cate randuri noi a scris. Vezi `migrations/2027-02-07-themarketer.sql`. */
+      themarketer_dezaboneaza: { Args: { p_business: string; p_emailuri: string[]; p_motiv: string }; Returns: number }
+      /* Adresele clientilor de anonimizat (fara marketplace), citite INAINTE de `customer_anonymize`. */
+      themarketer_emailurile_clientilor: { Args: { bid: string; p_keys: string[] }; Returns: string[] }
       trendyol_comenzi_de_facturat: { Args: { p_business_id: string; p_limita?: number; p_de_la?: number }; Returns: { order_id: string; shipment_package_id: string }[] }
       trendyol_magazine_cu_loturi_deschise: { Args: Record<string, never>; Returns: { business_id: string; cate: number }[] }
       trendyol_magazine_de_reconciliat: { Args: Record<string, never>; Returns: { business_id: string; cate: number }[] }

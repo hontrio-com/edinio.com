@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { fbTrack, ttqTrack } from "@/lib/marketing";
+import { fbTrack, mktrEvent, ttqTrack } from "@/lib/marketing";
 
 /**
  * Evenimentul standard Meta `Search`, pe pagina de cautare a magazinului.
@@ -44,6 +44,8 @@ export function UrmaCautarePixel({ termen, rezultate }: {
         contents: primele.map((r) => ({ content_id: r.id, quantity: 1, price: bani(r.pret) })),
       } : {}),
     });
+    /* theMarketer: `__sm__search` („each time the search functionality on your website is used”). */
+    mktrEvent("__sm__search", { search_term: t.slice(0, 200) });
     // `semnatura` acopera termenul si rezultatele; enumerate, tabloul ar fi o dependinta noua la fiecare randare.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [semnatura]);

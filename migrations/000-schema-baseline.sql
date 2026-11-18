@@ -30,6 +30,7 @@ create sequence if not exists public.emag_family_id_seq;
 create sequence if not exists public.emag_offers_emag_id_seq;
 create sequence if not exists public.email_marketing_coada_id_seq;
 create sequence if not exists public.order_number_seq;
+create sequence if not exists public.recenzii_produse_id_seq;
 create sequence if not exists public.sms_campaign_destinatari_id_seq;
 create sequence if not exists public.tbi_cereri_id_seq;
 
@@ -566,7 +567,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config, facturis_config, factureaza_config, easybill_config, saga_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config, facturis_config, factureaza_config, easybill_config, saga_config, themarketer_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -6936,6 +6937,7 @@ AS $function$
          count(*) as cate
   from public.discounts d cross join cautat c
   where d.business_id = bid and (c.q = '' or d.code ilike '%' || c.q || '%' escape '\')
+    and (d.generat_de is null or c.q <> '')
   group by 1
 $function$
 ;
@@ -6976,8 +6978,8 @@ CREATE OR REPLACE FUNCTION public.discount_totaluri(bid uuid)
  STABLE
  SET search_path TO ''
 AS $function$
-  select count(*),
-    count(*) filter (where public.discount_state(d.is_active, d.starts_at, d.expires_at, d.max_uses, d.uses_count) = 'activ'),
+  select count(*) filter (where d.generat_de is null),
+    count(*) filter (where d.generat_de is null and public.discount_state(d.is_active, d.starts_at, d.expires_at, d.max_uses, d.uses_count) = 'activ'),
     coalesce(sum(coalesce(s.comenzi_valide, 0)), 0),
     round(coalesce(sum(coalesce(s.bani_dati, 0)), 0), 2),
     round(coalesce(sum(coalesce(s.vanzari, 0)), 0), 2)
@@ -7012,6 +7014,8 @@ AS $function$
     cross join cautat c
     where d.business_id = bid
       and (c.q = '' or d.code ilike '%' || c.q || '%' escape '\')
+      -- ⚠ Codurile generate de theMarketer (mii, unul pe om) numai la cautare. Vezi `generat_de`.
+      and (d.generat_de is null or c.q <> '')
   ),
   filtrate as (
     select r.* from randuri r
@@ -8099,6 +8103,7 @@ declare
   v_mc jsonb;
   v_br jsonb;
   v_kl jsonb;
+  v_tm jsonb;
   v_mp text;
 begin
   -- Cumparatorul unui marketplace nu e clientul comerciantului (aceeasi regula ca `clientDeMarketplace`:
@@ -8135,8 +8140,8 @@ begin
     return new;
   end if;
 
-  select s.mailchimp_config, s.brevo_config, s.klaviyo_config
-    into v_mc, v_br, v_kl
+  select s.mailchimp_config, s.brevo_config, s.klaviyo_config, s.themarketer_config
+    into v_mc, v_br, v_kl, v_tm
     from privat.store_settings s
    where s.business_id = new.business_id;
   if not found then
@@ -8151,6 +8156,9 @@ begin
   end if;
   if coalesce(v_kl ->> 'enabled', '') = 'true' and coalesce(v_kl ->> 'ecommerce_sync', '') = 'true' then
     v_furnizori := v_furnizori || 'klaviyo'::text;
+  end if;
+  if coalesce(v_tm ->> 'enabled', '') = 'true' and coalesce(v_tm ->> 'comenzi', 'true') = 'true' then
+    v_furnizori := v_furnizori || 'themarketer'::text;
   end if;
   if cardinality(v_furnizori) = 0 then
     return new;
@@ -11038,6 +11046,60 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.themarketer_dezaboneaza(p_business uuid, p_emailuri text[], p_motiv text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_scrise integer;
+begin
+  if p_motiv not in ('dezabonare', 'email_respins', 'reclamatie_spam') then
+    raise exception 'motiv necunoscut: %', p_motiv;
+  end if;
+  if cardinality(coalesce(p_emailuri, '{}')) > 5000 then
+    raise exception 'prea multe adrese intr-un apel: %', cardinality(p_emailuri);
+  end if;
+
+  insert into public.recovery_optout (business_id, email, motiv)
+  select distinct on (lower(btrim(e))) p_business, lower(btrim(e)), p_motiv
+    from unnest(p_emailuri) as u(e)
+   where e is not null
+     and btrim(e) ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+     and length(btrim(e)) <= 254
+  on conflict (business_id, lower(email)) do nothing;
+
+  get diagnostics v_scrise = row_count;
+  return v_scrise;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.themarketer_emailurile_clientilor(bid uuid, p_keys text[])
+ RETURNS text[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce(array_agg(distinct x.e), '{}')
+    from (
+      select lower(btrim(o.customer_email)) as e
+        from public.orders o
+       where o.business_id = bid
+         and nullif(btrim(o.customer_email), '') is not null
+         and coalesce(nullif(btrim(o.order_source ->> 'marketplace'), ''), '') = ''
+         and public.order_customer_key(o.customer_phone, o.customer_email, o.id) = any(coalesce(p_keys, '{}'))
+      union
+      select lower(btrim(c.email))
+        from public.customers c
+       where c.business_id = bid
+         and c.key = any(coalesce(p_keys, '{}'))
+         and nullif(btrim(c.email), '') is not null
+    ) x;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.touch_customers()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -11929,7 +11991,8 @@ create table if not exists privat.store_settings (
   facturis_config jsonb,
   factureaza_config jsonb,
   easybill_config jsonb,
-  saga_config jsonb);
+  saga_config jsonb,
+  themarketer_config jsonb);
 
 create table if not exists privat.suporti_numar_20261117_speckless_inainte (
   id uuid,
@@ -12741,7 +12804,8 @@ create table if not exists public.discounts (
   starts_at timestamp with time zone,
   per_customer_limit integer,
   doar_prima_comanda boolean default false not null,
-  restrangere jsonb default '{"fel": "tot", "produse": [], "categorii": []}'::jsonb not null);
+  restrangere jsonb default '{"fel": "tot", "produse": [], "categorii": []}'::jsonb not null,
+  generat_de text);
 
 create table if not exists public.domain_orders (
   id uuid default gen_random_uuid() not null,
@@ -13125,7 +13189,8 @@ create table if not exists public.forms (
   updated_at timestamp with time zone default now() not null,
   mailchimp_enabled boolean default false not null,
   brevo_enabled boolean,
-  klaviyo_enabled boolean);
+  klaviyo_enabled boolean,
+  themarketer_enabled boolean default false not null);
 
 create table if not exists public.ga4_comenzi_raportate (
   order_id uuid not null,
@@ -13779,6 +13844,21 @@ create table if not exists public.rate_limits (
   blocat_pana timestamp with time zone,
   actualizat_la timestamp with time zone default now() not null);
 
+create table if not exists public.recenzii_produse (
+  id bigint generated always as identity not null,
+  business_id uuid not null,
+  product_id uuid not null,
+  sursa text default 'themarketer'::text not null,
+  id_extern text not null,
+  autor text default ''::text not null,
+  email text,
+  nota smallint not null,
+  text text default ''::text not null,
+  media jsonb default '[]'::jsonb not null,
+  data_recenzie timestamp with time zone,
+  ascunsa boolean default false not null,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.recovery_optout (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -13971,6 +14051,27 @@ create table if not exists public.tbi_cereri (
   contract text,
   jetoane_rambursare text[] default '{}'::text[] not null,
   interogata_la timestamp with time zone);
+
+create table if not exists public.themarketer_chei (
+  amprenta text not null,
+  business_id uuid not null,
+  creat_la timestamp with time zone default now() not null,
+  revocat_la timestamp with time zone);
+
+create table if not exists public.themarketer_stare (
+  business_id uuid not null,
+  citit_produse_la timestamp with time zone,
+  citit_categorii_la timestamp with time zone,
+  citit_branduri_la timestamp with time zone,
+  citit_comenzi_la timestamp with time zone,
+  ultim_cod_la timestamp with time zone,
+  ultim_webhook_la timestamp with time zone,
+  recenzii_sincronizat_la timestamp with time zone,
+  recenzii_de_la bigint,
+  dezabonari_sincronizat_la timestamp with time zone,
+  dezabonari_de_la date,
+  ultima_eroare text,
+  ultima_eroare_la timestamp with time zone);
 
 create table if not exists public.tiktok_comenzi_raportate (
   order_id uuid not null,
@@ -14370,6 +14471,7 @@ alter table public.product_import_rows add constraint product_import_rows_pkey P
 alter table public.product_imports add constraint product_imports_pkey PRIMARY KEY (id);
 alter table public.products add constraint products_pkey PRIMARY KEY (id);
 alter table public.rate_limits add constraint rate_limits_pkey PRIMARY KEY (cheie);
+alter table public.recenzii_produse add constraint recenzii_produse_pkey PRIMARY KEY (id);
 alter table public.recovery_optout add constraint recovery_optout_pkey PRIMARY KEY (id);
 alter table public.recovery_sends add constraint recovery_sends_pkey PRIMARY KEY (id);
 alter table public.return_requests add constraint return_requests_pkey PRIMARY KEY (id);
@@ -14385,6 +14487,8 @@ alter table public.stripe_events add constraint stripe_events_pkey PRIMARY KEY (
 alter table public.support_messages add constraint support_messages_pkey PRIMARY KEY (id);
 alter table public.support_tickets add constraint support_tickets_pkey PRIMARY KEY (id);
 alter table public.tbi_cereri add constraint tbi_cereri_pkey PRIMARY KEY (id);
+alter table public.themarketer_chei add constraint themarketer_chei_pkey PRIMARY KEY (amprenta);
+alter table public.themarketer_stare add constraint themarketer_stare_pkey PRIMARY KEY (business_id);
 alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_pkey PRIMARY KEY (order_id);
 alter table public.trendyol_batches add constraint trendyol_batches_pkey PRIMARY KEY (id);
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_pkey PRIMARY KEY (id);
@@ -14444,6 +14548,7 @@ alter table public.pepita_articole add constraint pepita_articole_business_id_ar
 alter table public.pepita_articole add constraint pepita_articole_business_id_product_id_combinatie_key UNIQUE (business_id, product_id, combinatie);
 alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_external_order_id_key UNIQUE (business_id, external_order_id);
 alter table public.pepita_listari add constraint pepita_listari_business_id_product_id_key UNIQUE (business_id, product_id);
+alter table public.recenzii_produse add constraint recenzii_produse_business_id_sursa_id_extern_key UNIQUE (business_id, sursa, id_extern);
 alter table public.sms_campaign_destinatari add constraint sms_campaign_destinatari_campaign_id_telefon_key UNIQUE (campaign_id, telefon);
 alter table public.sms_optout add constraint sms_optout_business_id_phone_key UNIQUE (business_id, phone);
 alter table public.tbi_cereri add constraint tbi_cereri_jeton_unic UNIQUE (jeton_hash);
@@ -14496,6 +14601,7 @@ alter table public.businesses add constraint businesses_type_check CHECK ((type 
 alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));
 alter table public.custom_pages add constraint custom_pages_blocks_marime CHECK ((octet_length((blocks)::text) <= 1000000));
 alter table public.customer_segments add constraint customer_segments_fel_check CHECK ((fel = ANY (ARRAY['criterii'::text, 'lista'::text])));
+alter table public.discounts add constraint discounts_generat_de_check CHECK (((generat_de IS NULL) OR (generat_de = 'themarketer'::text)));
 alter table public.discounts add constraint discounts_per_customer_limit_pozitiv CHECK (((per_customer_limit IS NULL) OR (per_customer_limit >= 1)));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
@@ -14512,7 +14618,7 @@ alter table public.easysales_sync_queue add constraint easysales_sync_queue_op_c
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
 alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK ((op = ANY (ARRAY['oferta'::text, 'pret'::text, 'stoc'::text, 'retragere'::text, 'masuratori'::text])));
 alter table public.email_marketing_coada add constraint email_marketing_coada_fel_check CHECK ((fel = ANY (ARRAY['creata'::text, 'platita'::text, 'expediata'::text, 'livrata'::text, 'anulata'::text, 'rambursata'::text])));
-alter table public.email_marketing_coada add constraint email_marketing_coada_furnizor_check CHECK ((furnizor = ANY (ARRAY['mailchimp'::text, 'brevo'::text, 'klaviyo'::text])));
+alter table public.email_marketing_coada add constraint email_marketing_coada_furnizor_check CHECK ((furnizor = ANY (ARRAY['mailchimp'::text, 'brevo'::text, 'klaviyo'::text, 'themarketer'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_motiv_revocare_check CHECK ((motiv_revocare = ANY (ARRAY['comerciant'::text, 'hontrio'::text, 'inlocuita'::text, 'cod_refolosit'::text])));
 alter table public.hontrio_conexiuni add constraint hontrio_conexiuni_revocare_cu_motiv CHECK (((revocat_la IS NULL) = (motiv_revocare IS NULL)));
@@ -14533,6 +14639,9 @@ alter table public.pepita_listari add constraint pepita_listari_safety_stock_che
 alter table public.posta_plaja add constraint posta_plaja_cifre_check CHECK (((cifre >= 1) AND (cifre <= 28)));
 alter table public.posta_plaja add constraint posta_plaja_interval_check CHECK ((de_la <= pana_la));
 alter table public.posta_plaja add constraint posta_plaja_urmator_check CHECK ((urmator >= de_la));
+alter table public.recenzii_produse add constraint recenzii_produse_id_extern_check CHECK (((length(id_extern) >= 1) AND (length(id_extern) <= 100)));
+alter table public.recenzii_produse add constraint recenzii_produse_nota_check CHECK (((nota >= 0) AND (nota <= 10)));
+alter table public.recenzii_produse add constraint recenzii_produse_sursa_check CHECK ((sursa = 'themarketer'::text));
 alter table public.recovery_optout add constraint recovery_optout_are_un_contact CHECK (((email IS NOT NULL) OR (phone IS NOT NULL)));
 alter table public.recovery_sends add constraint recovery_sends_canal_check CHECK ((canal = ANY (ARRAY['email'::text, 'sms'::text])));
 alter table public.recovery_sends add constraint recovery_sends_sursa_check CHECK ((sursa = ANY (ARRAY['manual'::text, 'automatizare'::text])));
@@ -14559,6 +14668,7 @@ alter table public.tbi_cereri add constraint tbi_cereri_istoric_check CHECK ((js
 alter table public.tbi_cereri add constraint tbi_cereri_mediu_check CHECK ((mediu = ANY (ARRAY['test'::text, 'live'::text])));
 alter table public.tbi_cereri add constraint tbi_cereri_stare_check CHECK ((stare = ANY (ARRAY['creata'::text, 'trimisa'::text, 'in_analiza'::text, 'aprobata'::text, 'respinsa'::text, 'anulata'::text, 'eroare'::text])));
 alter table public.tbi_cereri add constraint tbi_cereri_suma_check CHECK ((suma > (0)::numeric));
+alter table public.themarketer_chei add constraint themarketer_chei_amprenta_check CHECK ((amprenta ~ '^[0-9a-f]{64}$'::text));
 alter table public.trendyol_batches add constraint trendyol_batches_kind_check CHECK ((kind = ANY (ARRAY['product'::text, 'inventory'::text, 'archive'::text, 'update'::text, 'delete'::text, 'dezarhivare'::text, 'livrare'::text])));
 alter table public.trendyol_listings add constraint trendyol_listings_origin_chk CHECK (((country_of_origin IS NULL) OR (country_of_origin ~ '^[A-Z]{2}$'::text)));
 alter table public.trendyol_sync_queue add constraint trendyol_sync_queue_op_check CHECK ((op = ANY (ARRAY['upsert'::text, 'delete'::text, 'inventory'::text, 'livrare'::text])));
@@ -14724,6 +14834,8 @@ alter table public.product_import_rows add constraint product_import_rows_produc
 alter table public.product_imports add constraint product_imports_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.product_imports add constraint product_imports_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.products add constraint products_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.recenzii_produse add constraint recenzii_produse_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.recenzii_produse add constraint recenzii_produse_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.recovery_optout add constraint recovery_optout_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.recovery_sends add constraint recovery_sends_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.recovery_sends add constraint recovery_sends_cart_id_fkey FOREIGN KEY (cart_id) REFERENCES abandoned_carts(id) ON DELETE CASCADE;
@@ -14748,6 +14860,8 @@ alter table public.support_tickets add constraint support_tickets_business_id_fk
 alter table public.support_tickets add constraint support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.tbi_cereri add constraint tbi_cereri_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.tbi_cereri add constraint tbi_cereri_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
+alter table public.themarketer_chei add constraint themarketer_chei_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.themarketer_stare add constraint themarketer_stare_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -14835,6 +14949,8 @@ insert into privat.campuri_secrete (coloana, cale) values ('smartship_config', '
 insert into privat.campuri_secrete (coloana, cale) values ('smso_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'cheie_criptare') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'reseller_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('themarketer_config', 'cheie_feed') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('themarketer_config', 'rest_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tiktok_capi_config', 'access_token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_secret') on conflict do nothing;
@@ -14937,6 +15053,7 @@ CREATE INDEX cw_semn ON public.catalog_cuvant USING btree (business_id, semnatur
 CREATE INDEX cw_trgm ON public.catalog_cuvant USING gin (cuvant extensions.gin_trgm_ops);
 CREATE INDEX dhl_etichete_business_idx ON public.dhl_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX dhl_etichete_order_id_idx ON public.dhl_etichete USING btree (order_id) WHERE (order_id IS NOT NULL);
+CREATE INDEX discounts_generate_idx ON public.discounts USING btree (business_id, created_at DESC) WHERE (generat_de IS NOT NULL);
 CREATE UNIQUE INDEX domain_orders_stripe_session_id_key ON public.domain_orders USING btree (stripe_session_id) WHERE (stripe_session_id IS NOT NULL);
 CREATE UNIQUE INDEX domains_business_domain_key ON public.domains USING btree (business_id, domain);
 CREATE INDEX easysales_categorii_categorie_idx ON public.easysales_categorii USING btree (category_id);
@@ -15151,6 +15268,8 @@ CREATE UNIQUE INDEX products_business_slug_unique ON public.products USING btree
 CREATE UNIQUE INDEX products_import_row_uidx ON public.products USING btree (import_row_id) WHERE (import_row_id IS NOT NULL);
 CREATE UNIQUE INDEX products_source_external_uidx ON public.products USING btree (business_id, source, external_id) WHERE ((source IS NOT NULL) AND (external_id IS NOT NULL));
 CREATE INDEX rate_limits_curatare_idx ON public.rate_limits USING btree (actualizat_la);
+CREATE INDEX recenzii_produse_magazin_idx ON public.recenzii_produse USING btree (business_id, creat_la DESC);
+CREATE INDEX recenzii_produse_vizibile_idx ON public.recenzii_produse USING btree (product_id, data_recenzie DESC) WHERE (ascunsa = false);
 CREATE UNIQUE INDEX recovery_optout_business_email_uidx ON public.recovery_optout USING btree (business_id, lower(email));
 CREATE UNIQUE INDEX recovery_optout_business_phone_uidx ON public.recovery_optout USING btree (business_id, phone) WHERE (phone IS NOT NULL);
 CREATE INDEX recovery_sends_business_trimis_idx ON public.recovery_sends USING btree (business_id, trimis_la DESC);
@@ -15184,6 +15303,7 @@ CREATE INDEX tbi_cereri_business_idx ON public.tbi_cereri USING btree (business_
 CREATE INDEX tbi_cereri_deschise_idx ON public.tbi_cereri USING btree (updated_at) WHERE (stare = ANY (ARRAY['creata'::text, 'trimisa'::text, 'in_analiza'::text]));
 CREATE INDEX tbi_cereri_jetoane_rambursare_idx ON public.tbi_cereri USING gin (jetoane_rambursare);
 CREATE INDEX tbi_cereri_order_idx ON public.tbi_cereri USING btree (order_id);
+CREATE INDEX themarketer_chei_magazin_idx ON public.themarketer_chei USING btree (business_id) WHERE (revocat_la IS NULL);
 CREATE INDEX tiktok_comenzi_raportate_business_idx ON public.tiktok_comenzi_raportate USING btree (business_id);
 CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
@@ -15286,7 +15406,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(facturis_config, '{api_key,password}'::text[]) AS facturis_config,
     privat.decripteaza_config(factureaza_config, '{api_key}'::text[]) AS factureaza_config,
     privat.decripteaza_config(easybill_config, '{password}'::text[]) AS easybill_config,
-    privat.decripteaza_config(saga_config, '{api_key}'::text[]) AS saga_config
+    privat.decripteaza_config(saga_config, '{api_key}'::text[]) AS saga_config,
+    privat.decripteaza_config(themarketer_config, '{rest_key,cheie_feed}'::text[]) AS themarketer_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -15448,6 +15569,7 @@ alter table public.product_import_rows enable row level security;
 alter table public.product_imports enable row level security;
 alter table public.products enable row level security;
 alter table public.rate_limits enable row level security;
+alter table public.recenzii_produse enable row level security;
 alter table public.recovery_optout enable row level security;
 alter table public.recovery_sends enable row level security;
 alter table public.return_requests enable row level security;
@@ -15463,6 +15585,8 @@ alter table public.stripe_events enable row level security;
 alter table public.support_messages enable row level security;
 alter table public.support_tickets enable row level security;
 alter table public.tbi_cereri enable row level security;
+alter table public.themarketer_chei enable row level security;
+alter table public.themarketer_stare enable row level security;
 alter table public.tiktok_comenzi_raportate enable row level security;
 alter table public.trendyol_batches enable row level security;
 alter table public.trendyol_claim_items enable row level security;
@@ -17704,6 +17828,13 @@ grant SELECT on table public.rate_limits to service_role;
 grant TRIGGER on table public.rate_limits to service_role;
 grant TRUNCATE on table public.rate_limits to service_role;
 grant UPDATE on table public.rate_limits to service_role;
+grant DELETE on table public.recenzii_produse to service_role;
+grant INSERT on table public.recenzii_produse to service_role;
+grant REFERENCES on table public.recenzii_produse to service_role;
+grant SELECT on table public.recenzii_produse to service_role;
+grant TRIGGER on table public.recenzii_produse to service_role;
+grant TRUNCATE on table public.recenzii_produse to service_role;
+grant UPDATE on table public.recenzii_produse to service_role;
 grant DELETE on table public.recovery_optout to anon;
 grant INSERT on table public.recovery_optout to anon;
 grant REFERENCES on table public.recovery_optout to anon;
@@ -17977,6 +18108,20 @@ grant SELECT on table public.tbi_cereri to service_role;
 grant TRIGGER on table public.tbi_cereri to service_role;
 grant TRUNCATE on table public.tbi_cereri to service_role;
 grant UPDATE on table public.tbi_cereri to service_role;
+grant DELETE on table public.themarketer_chei to service_role;
+grant INSERT on table public.themarketer_chei to service_role;
+grant REFERENCES on table public.themarketer_chei to service_role;
+grant SELECT on table public.themarketer_chei to service_role;
+grant TRIGGER on table public.themarketer_chei to service_role;
+grant TRUNCATE on table public.themarketer_chei to service_role;
+grant UPDATE on table public.themarketer_chei to service_role;
+grant DELETE on table public.themarketer_stare to service_role;
+grant INSERT on table public.themarketer_stare to service_role;
+grant REFERENCES on table public.themarketer_stare to service_role;
+grant SELECT on table public.themarketer_stare to service_role;
+grant TRIGGER on table public.themarketer_stare to service_role;
+grant TRUNCATE on table public.themarketer_stare to service_role;
+grant UPDATE on table public.themarketer_stare to service_role;
 grant DELETE on table public.tiktok_comenzi_raportate to anon;
 grant INSERT on table public.tiktok_comenzi_raportate to anon;
 grant REFERENCES on table public.tiktok_comenzi_raportate to anon;
@@ -18755,6 +18900,8 @@ grant execute on function public.stoc_combinatie(p_combinatie jsonb) to service_
 grant execute on function public.sync_product_stock_from_variants() to anon;
 grant execute on function public.sync_product_stock_from_variants() to authenticated;
 grant execute on function public.sync_product_stock_from_variants() to service_role;
+grant execute on function public.themarketer_dezaboneaza(p_business uuid, p_emailuri text[], p_motiv text) to service_role;
+grant execute on function public.themarketer_emailurile_clientilor(bid uuid, p_keys text[]) to service_role;
 grant execute on function public.touch_customers() to anon;
 grant execute on function public.touch_customers() to authenticated;
 grant execute on function public.touch_customers() to service_role;
@@ -19064,6 +19211,8 @@ revoke execute on function public.sms_pregateste_campanie(p_campaign uuid) from 
 revoke execute on function public.sms_statistici(p_business uuid) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
 revoke execute on function public.stoc_combinatie(p_combinatie jsonb) from public;
+revoke execute on function public.themarketer_dezaboneaza(p_business uuid, p_emailuri text[], p_motiv text) from public;
+revoke execute on function public.themarketer_emailurile_clientilor(bid uuid, p_keys text[]) from public;
 revoke execute on function public.trafic_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;
 revoke execute on function public.trafic_pe_sursa(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;
 revoke execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer, p_de_la integer) from public;

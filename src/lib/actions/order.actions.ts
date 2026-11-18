@@ -83,6 +83,7 @@ import { maybeSyncMailchimpSubscriber, orderValueTag } from "@/lib/mailchimp-syn
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
+import { maybeSyncTheMarketerSubscriber } from "@/lib/themarketer/sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
 import { raporteazaCumparareaGa4, raporteazaRambursareaGa4 } from "@/lib/orders/ga4-comanda";
@@ -2567,6 +2568,14 @@ export async function placeOrder(data: {
           county: data.customer_county,
           orderValue: total,
         }), "klaviyo.abonat", data.business_id);
+        dupaRaspuns(() => maybeSyncTheMarketerSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: emailAbonat,
+          name: numeClient,
+          phone: data.customer_phone,
+          city: data.customer_city,
+        }), "themarketer.abonat", data.business_id);
       }
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
@@ -5576,6 +5585,14 @@ export async function placeCartOrder(data: {
           county: data.customer_county,
           orderValue: total,
         }), "klaviyo.abonat", data.business_id);
+        dupaRaspuns(() => maybeSyncTheMarketerSubscriber({
+          businessId: data.business_id,
+          source: "checkout",
+          email: emailAbonat,
+          name: numeClient,
+          phone: data.customer_phone,
+          city: data.customer_city,
+        }), "themarketer.abonat", data.business_id);
       }
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }

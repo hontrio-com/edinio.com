@@ -7,6 +7,7 @@ import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
+import { vitrinaTheMarketer, type SetariTMBrute } from "@/lib/themarketer/vitrina";
 import { incarcaStareaConturilor } from "@/lib/actions/cont-client.actions";
 import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
 import type { MarketingConfig } from "@/lib/marketing-config";
@@ -44,6 +45,12 @@ type ProfilSetari = Pick<
  * interogare de un rand pusa inaintea celorlalte (inainte mergeau in paralel) —
  * in schimb scheletul pleaca imediat, nu dupa produse.
  */
+/** Campurile publice ale configurarii theMarketer, in forma citita de vitrina. */
+function tmPublic(c: unknown): SetariTMBrute {
+  const x = (c ?? {}) as { enabled?: unknown; tracking_key?: unknown; urmarire?: unknown };
+  return { tm_activ: x.enabled, tm_cheie: x.tracking_key, tm_urmarire: x.urmarire };
+}
+
 export default async function SettingsPage({ searchParams }: Props) {
   const { plan_success, domain_success, sectiune } = await searchParams;
   /*
@@ -435,7 +442,12 @@ async function ContinutSetari({
       codFee={parseCodFeeConfig(storeSettings?.cod_fee_config)}
       cookieBanner={parseCookieBannerConfig(storeSettings?.cookie_banner_config)}
       stareaConturilor={stareaConturilor}
-      cookieCategories={detectConsentCategories(storeSettings?.marketing_config as MarketingConfig | null)}
+      cookieCategories={detectConsentCategories(
+        storeSettings?.marketing_config as MarketingConfig | null,
+        undefined,
+        /* Aceeasi regula ca in vitrina: theMarketer cu urmarirea pornita aduce categoria „Marketing”. */
+        vitrinaTheMarketer(tmPublic(storeSettings?.themarketer_config)) !== null,
+      )}
       storeSeo={storeSeo}
       seoDefaults={seoDefaults}
       seoPreviewUrl={seoPreviewUrl}

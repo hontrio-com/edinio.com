@@ -73,7 +73,7 @@ function decalajul(ms: number): number {
  * graniței. A doua trecere o așază la loc. Mai mult de două nu trebuie: după
  * corecție, clipa e deja în aceeași parte a graniței cu ea însăși.
  */
-function clipaRomaneasca(zi: string, ore: number, minute: number, secunde: number, milisecunde: number): Date {
+export function clipaRomaneasca(zi: string, ore: number, minute: number, secunde: number, milisecunde: number): Date {
   const [an, luna, ziua] = zi.split("-").map(Number);
   const tinta = Date.UTC(an, luna - 1, ziua, ore, minute, secunde, milisecunde);
   let t = tinta - decalajul(tinta);

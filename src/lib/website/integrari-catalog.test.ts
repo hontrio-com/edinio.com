@@ -207,13 +207,15 @@ test("numărătoarea de active și de anunțate e cea din panou", () => {
   /* ⚠ 15.11.2026: cu tbi bank livrata, anuntatele scad 24 -> 23. */
   /* ⚠ 17.11.2026: cu Facturis livrata, anuntatele scad 23 -> 22. */
   /* ⚠ 17.11.2026: cu Factureaza.ro, easybill si SAGA livrate, anuntatele scad 22 -> 19. */
-  assert.equal(NUMAR_IN_CURAND, 19);
+  /* ⚠ 18.11.2026: cu theMarketer livrat, anuntatele scad 19 -> 18. */
+  assert.equal(NUMAR_IN_CURAND, 18);
   /* ⚠ 07.10.2026: e-packet a intrat direct „activa": activele urca 42 -> 43. */
   /* ⚠ 13.10.2026: easySales a intrat direct „activa": activele urca 43 -> 44. */
   /* ⚠ 15.11.2026: tbi bank a trecut din „in curand" in „activa": activele urca 44 -> 45. */
   /* ⚠ 17.11.2026: Facturis a trecut din „in curand" in „activa": activele urca 45 -> 46. */
   /* ⚠ 17.11.2026: Factureaza.ro, easybill si SAGA trec in „activa": activele urca 46 -> 49. */
-  assert.equal(NUMAR_ACTIVE, 49);
+  /* ⚠ 18.11.2026: theMarketer trece in „activa": activele urca 49 -> 50. */
+  assert.equal(NUMAR_ACTIVE, 50);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {
@@ -514,7 +516,8 @@ test("căutările care cădeau la ZERO după textele noi întorc iar ce trebuie"
   assert.equal(gaseste("expediere").length, 19);
   assert.deepEqual(gaseste("whatsapp"), ["notice"]);
   assert.deepEqual(gaseste("shopping"), ["googleMerchant"]);
-  assert.equal(gaseste("newsletter").length, 3);
+  /* 18.11.2026: cu theMarketer livrat, al patrulea care primeste abonatii. */
+  assert.equal(gaseste("newsletter").length, 4);
 
   /*
     ⚠ CEA MAI STRICATĂ CĂUTARE DE PE PAGINĂ, și e mai veche decât textele noi:

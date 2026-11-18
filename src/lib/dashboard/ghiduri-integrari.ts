@@ -46,6 +46,7 @@ const GHIDURI: Record<string, [categorie: string, ghid: string]> = {
   mailchimp: ["marketing-si-clienti", "cum-conectezi-mailchimp"],
   brevo: ["marketing-si-clienti", "cum-conectezi-brevo"],
   klaviyo: ["marketing-si-clienti", "cum-conectezi-klaviyo"],
+  themarketer: ["marketing-si-clienti", "cum-conectezi-themarketer"],
   "facebook-pixel": ["marketing-si-clienti", "cum-conectezi-facebook-pixel"],
   "tiktok-pixel": ["marketing-si-clienti", "cum-conectezi-tiktok-pixel"],
   "google-ads": ["marketing-si-clienti", "cum-conectezi-google-ads"],

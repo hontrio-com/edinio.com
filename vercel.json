@@ -218,6 +218,10 @@
     {
       "path": "/api/cron/saga-export",
       "schedule": "7,37 * * * *"
+    },
+    {
+      "path": "/api/cron/themarketer",
+      "schedule": "23 * * * *"
     }
   ]
 }

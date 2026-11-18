@@ -23,6 +23,9 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
+import { RecenziiProdus } from "@/components/storefront/RecenziiProdus";
+import { recenziileProdusului, recenziiJsonLd } from "@/lib/themarketer/recenzii-server";
+import { faraCampuriTM, moduleServerVitrina } from "@/lib/themarketer/vitrina";
 import { resolveProductOffers } from "@/lib/offers/offers";
 import { esteEditorDeDesign, sablonImpusDin, semneDeEditor } from "@/lib/storefront/design/preview-protocol";
 import { areSabloanePeCategorii, lantulProdusului, paginaSablonului, sablonulProdusului } from "@/lib/storefront/design/sabloane-produs";
@@ -198,15 +201,21 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
   const { produs: prefixProdus } = await setareaPermalinkurilorMagazinului(slug);
 
   // store_settings is no longer anon-readable — fetch the public-safe columns via service role.
-  const { data: storeSettings } = await createAdminClient()
+  const { data: setariCitite } = await createAdminClient()
     .from("store_settings")
     // Coloanele de TVA lipseau, iar pagina le citeste: eticheta „(TVA inclus)" /
     // „(fara TVA)" de langa pret nu s-a afisat NICIODATA, la niciun magazin,
     // fiindca `vat_enabled` venea `undefined` si cadea pe rezerva `false`.
     // Sunt sigure public — se dau oricum prin `getPublicStoreConfig`.
-    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, vat_rate, prices_include_vat, show_vat_label, show_vat_breakdown")
+    .select("page_content, store_policies, default_shipping_cost, free_shipping_threshold, min_order_amount, storefront_design, vat_enabled, vat_rate, prices_include_vat, show_vat_label, show_vat_breakdown, tm_activ:themarketer_config->enabled, tm_recenzii:themarketer_config->recenzii")
     .eq("business_id", business.id)
     .single();
+  /*
+   * theMarketer: comutatorul recenziilor se citeste in aceeasi cerere (`tm_*`), apoi se scoate din rand:
+   * randul pleaca mai departe spre componenta de client, unde n-are ce cauta.
+   */
+  const recenziiTheMarketer = moduleServerVitrina(setariCitite as { tm_activ?: unknown; tm_recenzii?: unknown } | null).recenzii;
+  const storeSettings = faraCampuriTM(setariCitite);
 
   // Detect custom domain access (also the One Product Store homepage target).
   const headersList = await headers();
@@ -275,6 +284,13 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
   },
     product.is_bundle && !disponibilitatePachet(bundleComponents).inStock);
   const breadcrumbJsonLd = buildBreadcrumbJsonLd(brand, storeBase, product.name, productUrl);
+
+  /*
+   * theMarketer: recenziile aduse din modulul Feedback, sub produs si in datele structurate. Numai cu
+   * modulul pornit; o citire cazuta da doar o pagina fara recenzii.
+   */
+  const recenzii = recenziiTheMarketer ? await recenziileProdusului(business.id, product.id) : null;
+  const jsonLdProdus = recenzii && jsonLd && typeof jsonLd === "object" ? { ...(jsonLd as object), ...recenziiJsonLd(recenzii) } : jsonLd;
 
   // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.
   //
@@ -377,7 +393,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLdProdus) }}
       />
       <script
         type="application/ld+json"
@@ -414,6 +430,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
             privitori={privitori}
           />
           </FurnizorSloturiBlocuri>
+          {recenzii && <RecenziiProdus date={recenzii} />}
           </main>
         </StorePageShell>
       </StorefrontThemeScope>

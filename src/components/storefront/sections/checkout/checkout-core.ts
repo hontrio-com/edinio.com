@@ -4,12 +4,13 @@ import { CAMP_COD_POSTAL_OPRIT, codPostalDeTrimis, eroareCodPostalRo } from "@/l
 import { useState, useEffect, useTransition, useRef } from "react";
 import { computeVat, vatBase, type VatConfig } from "@/lib/utils/vat";
 import { placeCartOrder } from "@/lib/actions/order.actions";
+import { pastreazaPentruTheMarketer } from "@/lib/themarketer/comanda-browser";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
-import { gtagEvent, fbTrack, ttqTrack } from "@/lib/marketing";
+import { gtagEvent, fbTrack, ttqTrack, mktrCapteazaEmailul } from "@/lib/marketing";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
@@ -607,6 +608,11 @@ export function useCheckoutOrder({
     if (!hasContact) return;
     if (trackTimer.current) clearTimeout(trackTimer.current);
     trackTimer.current = setTimeout(() => {
+      /*
+       * theMarketer: emailul scris in checkout, pentru automatizarea lor de cos abandonat. Pleaca numai
+       * cu scriptul incarcat (acord) si cu „captarea emailului” pornita de comerciant; o data pe adresa.
+       */
+      if (form.email.trim()) mktrCapteazaEmailul(form.email, form.phone.replace(/[\s\-().]/g, ""));
       void trackAbandonedCart({
         businessId,
         sessionId,
@@ -982,6 +988,17 @@ export function useCheckoutOrder({
         }
         orderId = (result as { orderId: string }).orderId;
         placedRef.current = { payloadKey, orderId };
+      }
+
+      /*
+       * theMarketer: datele scrise de om, pastrate in tab pentru `__sm__order` de pe pagina de multumire, ca
+       * sa nu treaca prin HTML. Numai cu scriptul lor incarcat (acord dat). Vezi `comanda-browser.ts`.
+       */
+      if (orderId) {
+        pastreazaPentruTheMarketer(orderId, {
+          email: form.email, telefon: form.phone, nume: form.name,
+          oras: form.city, judet: form.county, adresa: form.address,
+        });
       }
 
       if (paymentMethod !== "cash_on_delivery") {

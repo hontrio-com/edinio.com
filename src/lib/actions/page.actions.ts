@@ -13,6 +13,7 @@ import { logError } from "@/lib/error-logger";
 import { maybeSyncMailchimpSubscriber } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
+import { maybeSyncTheMarketerSubscriber } from "@/lib/themarketer/sync";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { problemaTitlului, validatePageSlug } from "@/lib/pages/reserved-slugs";
 import type { Block, ContactBlock, PageSeo, TipPaginaProprie } from "@/lib/pages/blocks.types";
@@ -617,6 +618,7 @@ export async function submitPageForm(input: {
   let mailchimpEnabled = false;
   let brevoEnabled = false;
   let klaviyoEnabled = false;
+  let theMarketerEnabled = false;
 
   /*
    * ⚠⚠ RASPUNSUL SE RECONSTRUIESTE DIN DEFINITIE (26.09.2026). Pana acum se scria
@@ -653,7 +655,7 @@ export async function submitPageForm(input: {
 
   if (input.formId) {
     const { data: form } = await admin
-      .from("forms").select("id, name, fields, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled")
+      .from("forms").select("id, name, fields, email_enabled, email_to, mailchimp_enabled, brevo_enabled, klaviyo_enabled, themarketer_enabled")
       .eq("id", input.formId).eq("business_id", biz.id).single();
     if (form) {
       definitie = Array.isArray(form.fields) ? (form.fields as unknown as FormField[]) : [];
@@ -664,6 +666,7 @@ export async function submitPageForm(input: {
       mailchimpEnabled = form.mailchimp_enabled;
       brevoEnabled = form.brevo_enabled ?? false;
       klaviyoEnabled = form.klaviyo_enabled ?? false;
+      theMarketerEnabled = form.themarketer_enabled ?? false;
     }
   } else if (pagina && input.blockId) {
     // Built-in contact block: read its opt-in flag from the stored page (trusted).
@@ -725,6 +728,16 @@ export async function submitPageForm(input: {
       const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
       const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
       dupaRaspuns(() => maybeSyncKlaviyoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal }), "maybeSyncKlaviyoSubscriber", biz.id);
+    }
+  }
+
+  // theMarketer, la fel: formularul bifat pentru abonare trimite omul in contul theMarketer.
+  if (theMarketerEnabled) {
+    const emailVal = fields.find((f) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.value))?.value;
+    if (emailVal) {
+      const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
+      const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
+      dupaRaspuns(() => maybeSyncTheMarketerSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal }), "maybeSyncTheMarketerSubscriber", biz.id);
     }
   }
 
@@ -854,5 +867,6 @@ export async function aboneazaNewsletter(input: {
   dupaRaspuns(() => maybeSyncMailchimpSubscriber({ ...comun, tags: [eticheta] }), "maybeSyncMailchimpSubscriber", biz.id);
   dupaRaspuns(() => maybeSyncBrevoSubscriber(comun), "maybeSyncBrevoSubscriber", biz.id);
   dupaRaspuns(() => maybeSyncKlaviyoSubscriber(comun), "maybeSyncKlaviyoSubscriber", biz.id);
+  dupaRaspuns(() => maybeSyncTheMarketerSubscriber(comun), "maybeSyncTheMarketerSubscriber", biz.id);
   return { success: true };
 }

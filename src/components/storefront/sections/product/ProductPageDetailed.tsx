@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { contrastOn } from "@/lib/storefront/design/css-vars";
-import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { fbTrack, ttqTrack, gtagEvent, mktrEvent } from "@/lib/marketing";
 import { disponibilitatePachet } from "@/lib/bundles";
 import type { BundleComponent } from "@/lib/storefront/product-data";
 import { getProductPriceRange } from "@/lib/utils/product-price";
@@ -337,6 +337,8 @@ export function ProductPageDetailed({
       value: productPrice, currency: "RON",
       ...continutTikTok([{ productId, areVariante: produsCuVariante, cantitate: 1, pret: productPrice, nume: productName }]),
     });
+    /* theMarketer: id-ul produsului, acelasi cu `<id>` din feedul lor (`themarketer/identitate.ts`). */
+    mktrEvent("__sm__view_product", { product_id: productId });
   }, [demo, productId, productName, productPrice, produsCuVariante]);
 
   // Afisarea ofertelor, in contorul lor — aceeasi judecata ca in
@@ -765,6 +767,7 @@ export function ProductPageDetailed({
       productId: product.id, name: product.name, price: pers.pretPeBucata(displayPrice), cantitate, comboId: selectedCombo?.id,
       areVariante: !!variantsData,
       idOferta: selectedCombo ? offerIdVarianta(product.id, selectedCombo) : (variantsData ? null : product.id),
+      titluVarianta: selectedCombo?.title, skuVarianta: selectedCombo?.sku,
     });
     setAdaugat(true);
     setTimeout(() => setAdaugat(false), 1800);

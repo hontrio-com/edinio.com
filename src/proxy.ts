@@ -10,7 +10,7 @@ import { isPlatformHost, esteGazdaDeDesfasurare, bareHost as gazdaFaraPort } fro
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { ecranDomeniuNeconectat, ecranMagazinNepublicat } from "@/lib/ecran-domeniu";
 import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
-import { EXTENSII_STATICE, NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
+import { EXTENSII_STATICE, FISIERE_PUSH_THEMARKETER, NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
 import { slugDemoDupaGazda } from "@/lib/teme/gazde-demo";
 import {
   ANTET_ROBOTS,
@@ -158,7 +158,12 @@ export async function proxy(request: NextRequest) {
   // Fisierele statice din `public/` nu au nevoie de nimic din proxy. Un POST
   // catre aceeasi cale, insa, nu e un fisier — vezi comentariul de la
   // `EXTENSII_STATICE` si pe cel de la `config` din coada fisierului.
-  if (request.method !== "POST" && EXTENSII_STATICE.test(request.nextUrl.pathname)) {
+  if (
+    request.method !== "POST"
+    && EXTENSII_STATICE.test(request.nextUrl.pathname)
+    /* Cele doua fisiere push theMarketer merg mai departe, la rescrierea domeniului propriu. */
+    && !FISIERE_PUSH_THEMARKETER.has(request.nextUrl.pathname)
+  ) {
     return NextResponse.next();
   }
 

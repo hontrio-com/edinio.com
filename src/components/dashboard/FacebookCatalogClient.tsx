@@ -99,8 +99,12 @@ export function FacebookCatalogClient({ feedUrl, hasCustomDomain, productCount, 
  * ⚠ Textele scurte de aici au diacritice, ca restul panoului (refacut pe 15.11.2026); etichetele si
  * explicatiile vin din `lasate-afara.ts`, unde vecinul lor e `MOTIV_PRET_CARE_MINTE`, acelasi text
  * pe care il arata si panoul Google Merchant. Rescrise aici, ar fi fost a doua copie a lor.
+ *
+ * ⚠ Il foloseste si panoul theMarketer (18.11.2026): feedul lui lasa afara EXACT aceleasi produse
+ * (`motivulLipseiDinCatalog`, aceleasi filtre). Se schimba doar explicatia, unde textul de aici
+ * vorbeste despre Meta.
  */
-function LasateAfara() {
+export function LasateAfara({ explicatii }: { explicatii?: Partial<Record<MotivLipsaDinCatalog, string>> } = {}) {
   const [raspuns, setRaspuns] = useState<{ total: number; produse: ProdusLasatAfara[] } | { error: string } | null>(null);
   const [aratate, setAratate] = useState(false);
 
@@ -152,7 +156,7 @@ function LasateAfara() {
           {grupe.map((g) => (
             <div key={g.motiv}>
               <p className="text-xs font-medium text-foreground">{MOTIVE_LASATE_AFARA[g.motiv].eticheta}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{MOTIVE_LASATE_AFARA[g.motiv].explicatie}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{explicatii?.[g.motiv] ?? MOTIVE_LASATE_AFARA[g.motiv].explicatie}</p>
               <ul className="mt-1.5 space-y-1">
                 {g.produse.map((p) => (
                   <li key={p.id} className="truncate text-[11px]">

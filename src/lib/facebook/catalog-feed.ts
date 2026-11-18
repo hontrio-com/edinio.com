@@ -109,7 +109,7 @@ const ENTITATI: Record<string, string> = {
  * ⚠ ENTITATILE SE DECODEAZA, nu se inlocuiesc cu spatiu (17.09.2026). Forma de dinainte facea din
  * `c&acirc;ine` „c ine” si din `Negru &amp; Alb` „Negru Alb”: text stricat chiar in descrierea reclamei.
  */
-function plainText(html: string | null, fallback: string): string {
+export function plainText(html: string | null, fallback: string): string {
   const text = (html ?? "")
     .replace(/<[^>]+>/g, " ")
     .replace(/&#(\d{1,6});/g, (_m, n: string) => {

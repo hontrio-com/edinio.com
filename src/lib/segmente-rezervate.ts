@@ -115,6 +115,14 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
 export const EXTENSII_STATICE = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js|mp4|webm)$/i;
 
 /**
+ * Fisierele notificarilor push theMarketer: au extensie de fisier static, dar NU stau in `public/`. Pe un
+ * domeniu propriu trebuie rescrise spre vitrina (`/<slug>/firebase-messaging-sw.js`), unde le serveste
+ * ruta magazinului, numai daca are modulul push pornit. ⚠ EXACT aceste doua cai, nimic pe prefix: orice
+ * alt `.js` ramane fisier static.
+ */
+export const FISIERE_PUSH_THEMARKETER: ReadonlySet<string> = new Set(["/firebase-messaging-sw.js", "/firebase-config.js"]);
+
+/**
  * Primul segment al unei cai („/floraria-mea/product/x" → „floraria-mea";
  * „/" → „"), DECODIFICAT.
  *

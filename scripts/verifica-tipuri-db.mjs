@@ -59,8 +59,8 @@ const IGNORATE = /^(zz_|_)/;
  * exceptia sa nu-si supravietuiasca motivul.
  */
 const IN_ASTEPTARE = [
-  // Gol: Facturis (2027-02-05) si Factureaza.ro/easybill/SAGA (2027-02-06) au intrat in productie pe
-  // 18.11.2026, s-au mutat in `migrations/`, iar baseline-ul le contine.
+  // Gol: Facturis (2027-02-05), Factureaza.ro/easybill/SAGA (2027-02-06) si theMarketer (2027-02-07) au
+  // intrat in productie pe 18.11.2026, s-au mutat in `migrations/`, iar baseline-ul le contine.
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

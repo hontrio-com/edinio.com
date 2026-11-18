@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import { stareaPlatiiNetopia, type NetopiaConfig } from "@/lib/netopia";
-import { aplicaStatusulNetopia } from "@/lib/netopia-aplica-statusul";
+import { aplicaStatusulNetopia, type StareaStiuta } from "@/lib/netopia-aplica-statusul";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -131,6 +131,30 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  /*
+   * ═══ CE NE-AU SPUS ULTIMA OARA (18.11.2026) ═══
+   *
+   * Intrebarea se repeta in fiecare ora, iar raspunsul de cele mai multe ori e acelasi. Pana azi se
+   * scria in jurnal de fiecare data: 335 de „REFUZATA” pentru o singura comanda, 380 de
+   * „NERECUNOSCUT: 0” in patru zile. Regula comuna scrie acum doar cand raspunsul e altul decat cel
+   * tinut minte aici. Vezi `aplicaStatusulNetopia`.
+   *
+   * ⚠ Bucati de 100: adresa unei cereri PostgREST are limita de lungime, iar o cerere cazuta ar
+   * insemna ca nu stim nimic. Si daca totusi cade, cronul se poarta ca pana azi (scrie fiecare
+   * raspuns): mai zgomotos, dar nu tace.
+   */
+  const stiute = new Map<string, StareaStiuta>();
+  const ids = randuri.map((c) => c.id);
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await admin
+      .from("netopia_stari").select("order_id, cod, ntp_id").in("order_id", ids.slice(i, i + 100));
+    if (error) {
+      console.error("[netopia/reconciliere] starile stiute nu s-au putut citi:", error.message);
+      break;
+    }
+    for (const r of data ?? []) stiute.set(r.order_id, { cod: r.cod, ntp_id: r.ntp_id });
+  }
+
   let lamurite = 0;
   let nelamurite = 0;
   const socoteala: Record<string, number> = {};
@@ -187,8 +211,10 @@ export async function GET(req: NextRequest) {
         incasat: spuse.incasat ?? Number(c.total),
         codLor: spuse.codLor,
         mesajLor: spuse.mesajLor,
+        mediu: cfg.sandbox ? "test" : "real",
       },
       "reconciliere",
+      stiute.get(c.id) ?? null,
     );
 
     socoteala[verdict.fel] = (socoteala[verdict.fel] ?? 0) + 1;

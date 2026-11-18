@@ -4211,6 +4211,35 @@ export type Database = {
           },
         ]
       }
+      netopia_stari: {
+        Row: {
+          cod: string
+          ntp_id: string | null
+          order_id: string
+          schimbata_la: string
+        }
+        Insert: {
+          cod: string
+          ntp_id?: string | null
+          order_id: string
+          schimbata_la?: string
+        }
+        Update: {
+          cod?: string
+          ntp_id?: string | null
+          order_id?: string
+          schimbata_la?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "netopia_stari_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notice_inbox: {
         Row: {
           body: string | null

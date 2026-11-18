@@ -13314,6 +13314,12 @@ create table if not exists public.meta_comenzi_raportate (
   business_id uuid not null,
   trimisa_la timestamp with time zone default now() not null);
 
+create table if not exists public.netopia_stari (
+  order_id uuid not null,
+  cod text not null,
+  ntp_id text,
+  schimbata_la timestamp with time zone default now() not null);
+
 create table if not exists public.notice_inbox (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -14451,6 +14457,7 @@ alter table public.invoices add constraint invoices_pkey PRIMARY KEY (id);
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_pkey PRIMARY KEY (id);
 alter table public.media_library add constraint media_library_pkey PRIMARY KEY (id);
 alter table public.meta_comenzi_raportate add constraint meta_comenzi_raportate_pkey PRIMARY KEY (order_id);
+alter table public.netopia_stari add constraint netopia_stari_pkey PRIMARY KEY (order_id);
 alter table public.notice_inbox add constraint notice_inbox_pkey PRIMARY KEY (id);
 alter table public.notice_sms_log add constraint notice_sms_log_pkey PRIMARY KEY (id);
 alter table public.notifications add constraint notifications_pkey PRIMARY KEY (id);
@@ -14799,6 +14806,7 @@ alter table public.media_library add constraint media_library_business_id_fkey F
 alter table public.media_library add constraint media_library_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.meta_comenzi_raportate add constraint meta_comenzi_raportate_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.meta_comenzi_raportate add constraint meta_comenzi_raportate_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
+alter table public.netopia_stari add constraint netopia_stari_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.notice_inbox add constraint notice_inbox_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.notice_inbox add constraint notice_inbox_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.notice_sms_log add constraint notice_sms_log_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -15549,6 +15557,7 @@ alter table public.invoices enable row level security;
 alter table public.mailchimp_suppressions enable row level security;
 alter table public.media_library enable row level security;
 alter table public.meta_comenzi_raportate enable row level security;
+alter table public.netopia_stari enable row level security;
 alter table public.notice_inbox enable row level security;
 alter table public.notice_sms_log enable row level security;
 alter table public.notifications enable row level security;
@@ -17456,6 +17465,13 @@ grant SELECT on table public.meta_comenzi_raportate to service_role;
 grant TRIGGER on table public.meta_comenzi_raportate to service_role;
 grant TRUNCATE on table public.meta_comenzi_raportate to service_role;
 grant UPDATE on table public.meta_comenzi_raportate to service_role;
+grant DELETE on table public.netopia_stari to service_role;
+grant INSERT on table public.netopia_stari to service_role;
+grant REFERENCES on table public.netopia_stari to service_role;
+grant SELECT on table public.netopia_stari to service_role;
+grant TRIGGER on table public.netopia_stari to service_role;
+grant TRUNCATE on table public.netopia_stari to service_role;
+grant UPDATE on table public.netopia_stari to service_role;
 grant DELETE on table public.notice_inbox to anon;
 grant INSERT on table public.notice_inbox to anon;
 grant REFERENCES on table public.notice_inbox to anon;

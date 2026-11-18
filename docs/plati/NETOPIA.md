@@ -248,6 +248,27 @@ in specul lor viu. **Chemate, raspund.** Pe `ntpID` 3022507: `/operation/status`
      ajuns**, iar comerciantul a avut o comanda aratand „neplatita" cu banii deja incasati.
    * ⚠ O interogare **picata** nu lamureste nimic si se reia la ora urmatoare. O pana de retea
      citita drept „Netopia zice ca nu e platita" ar fi fost cea mai urata purtare cu putinta.
+   * ⚠⚠ **18.11.2026: reconcilierea spune un raspuns O SINGURA DATA.** Pana atunci scria in jurnal
+     raspunsul lor la FIECARE ora, chiar daca era acelasi. Masurat in productie, la `caian-textile`:
+     335 de `warning` „REFUZATA" pentru o singura comanda, 234 pentru alta, 57 de „stare
+     intermediara", si 380 de „NERECUNOSCUT: 0" in patru zile. Acum ultima stare spusa de ei sta in
+     `netopia_stari` (cronul o citeste in bucati de 100), iar jurnalul scrie doar cand raspunsul e
+     altul: alt cod, sau alta tranzactie cu acelasi cod. IPN-ul scrie mereu (fiecare notificare e o
+     incercare a cumparatorului), dar tine si el minte starea, ca cronul sa nu repete refuzul. Un
+     esec nu se tine minte, ca sa se vada iar. Migratia: `migrations/2027-02-08-netopia-ultima-stare.sql`, aplicata in productie pe 18.11.2026.
+     * ⚠ **De ce o tabela si nu o coloana pe `orders`:** orice scriere pe comanda muta `updated_at`
+       (declansatorul `set_orders_updated_at`), iar `plati-neconfirmate` tine minte cui a spus deja
+       „Marfa expediata, plata neconfirmata" chiar prin `updated_at`. O coloana ar fi re-trimis
+       clopotelul pe orice comanda expediata si neplatita (`ORD-MW2HMPJR-18Y` e chiar asa). Masurat
+       ca se intampla deja din alte scrieri: `#0281` de la suporti-numar a primit acelasi clopotel
+       patru zile la rand (21-24.09).
+     * ⚠ **`status 0` cu `99 Invalid ntpID` = „nu stiu de tranzactia asta".** 0 nu are niciun inteles
+       in specificatia lor (apare doar ca valoare de exemplu, citit 18.11). L-am masurat: plati
+       pornite pe modul de TEST, intrebate dupa ce magazinul a trecut pe plati REALE. Cheile de Live
+       nu vad tranzactiile din Sandbox. Se numeste acum pe nume, cu mediul pe care am intrebat; un 0
+       cu ALT mesaj ramane „NERECUNOSCUT", fiindca numai perechea asta e masurata.
+     * ntpID-urile din sandbox au 7 cifre (2.960.976-3.154.183), cele reale 9 (536-565 de milioane).
+       Nu e documentat, deci nu se foloseste in cod; ajuta doar la citit jurnalul.
 5. ✅ **RAMBURSAREA SE PORNESTE DIN PLATFORMA.** Buton propriu in ecranul comenzii, aparat de
    registrul de operatii externe.
    * ⚠⚠ **Nu e legata de selectorul de status, si asta e hotararea centrala.** Niciun procesator
@@ -262,6 +283,14 @@ in specul lor viu. **Chemate, raspund.** Pe `ntpID` 3022507: `/operation/status`
 6. **Rambursarea partiala** si **anularea inainte de decontare** (`/operation/void`) nu sunt scrise.
    Capetele par sa raspunda, dar n-au fost probate cap la cap, si nu se scrie cod care muta bani pe
    temeiul ca „probabil merge".
+7. ⚠⚠ **Un magazin viu poate primi comenzi reale pe modul de TEST, si nimeni nu afla** (gasit
+   18.11.2026). `caian-textile` a avut Netopia pe Sandbox cel putin din 25.09 pana pe 14.11. Cinci
+   comenzi au ajuns pe pagina de test, niciuna cu adresa proprietarului: trei refuzate (status 12,
+   cum raspunde sandbox-ul la un card adevarat; `ORD-MW2HMPJR-18Y` a incercat de cinci ori in zece
+   ore) si doua oprite la pagina de plata. Doua au plecat la client neplatite: `ORD-MUGPPMIM-QYW`
+   (74,36 lei, livrata) si `ORD-MW2HMPJR-18Y` (210 lei, expediata). Singurul semn era eticheta „Mod
+   test" din pagina integrarii; formularul e pornit implicit pe Sandbox. NEREPARAT, de hotarat:
+   un semnal la comerciant cand o comanda reala intra pe modul de test, sau o eticheta la checkout.
 
 ---
 

@@ -597,7 +597,10 @@ describe("Interogarea starii: ce face CHIAR clientul", () => {
   });
 
   test("⚠ un corp fara status intoarce `null`, nu zero", async () => {
-    /* `Number(undefined)` e `NaN`, dar `Number(null)` e ZERO, iar zero e un status adevarat la ei.
+    /* `Number(undefined)` e `NaN`, dar `Number(null)` e ZERO, iar zero are la ei un inteles MASURAT:
+       cu „Invalid ntpID”, inseamna „nu stiu de tranzactia asta” (vezi `aplicaStatusulNetopia` si
+       `netopia-reconcilierea-spune-o-data.test.ts`). Un corp gol citit drept 0 ar minti in jurnal.
+       In specificatia lor, 0 nu are niciun inteles: apare doar ca valoare de exemplu.
        Vezi memoria `feeduri-facebook-pretmax-zero`. */
     raspunde(200, { error: { code: "00" }, payment: {} });
     assert.equal((await cheama()).status, null);

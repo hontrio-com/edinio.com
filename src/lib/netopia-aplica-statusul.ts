@@ -39,6 +39,17 @@ export interface SpuseleLor {
   incasat?: number | null;
   codLor?: string | null;
   mesajLor?: string | null;
+  /**
+   * Mediul pe care am INTREBAT (doar la reconciliere). Intra in mesajul despre o tranzactie pe care ei
+   * n-o gasesc, fiindca de obicei asta e cauza: plata a fost pornita pe celalalt mediu.
+   */
+  mediu?: "test" | "real";
+}
+
+/** Ce a spus Netopia ULTIMA OARA despre plata unei comenzi: randul ei din `netopia_stari`. */
+export interface StareaStiuta {
+  cod: string;
+  ntp_id: string | null;
 }
 
 export type Verdict =
@@ -50,6 +61,11 @@ export type Verdict =
   | { fel: "rambursata" }
   /** Stare de asteptare pe care o cunoastem. Comanda nu s-a miscat, si asa e corect. */
   | { fel: "intermediara" }
+  /**
+   * Netopia nu gaseste tranzactia (`status 0`, „Invalid ntpID”) pe mediul si contul pe care am
+   * intrebat. Nu e o stare a platii, ci lipsa ei acolo. Comanda nu s-a miscat.
+   */
+  | { fel: "negasita" }
   /** Cod pe care nu-l stim. Comanda nu s-a miscat, si s-a scris in jurnal ca harta sa creasca. */
   | { fel: "necunoscuta" }
   /**
@@ -58,12 +74,68 @@ export type Verdict =
    */
   | { fel: "esec"; mesaj: string; suma?: true };
 
+/**
+ * ═══ ⚠ JURNALUL SCRIE DOAR CAND SE SCHIMBA CEVA (18.11.2026) ═══
+ *
+ * Cronul intreaba din ora in ora despre fiecare plata nedecisa din ultimele 14 zile, si pana azi
+ * scria raspunsul lor in jurnal de FIECARE data. Masurat in productie, la un singur magazin: 335 de
+ * avertismente „REFUZATA” pentru O comanda, si 380 de „NERECUNOSCUT: 0” in patru zile, pentru patru
+ * comenzi. Un jurnal care repeta acelasi rand de sute de ori ascunde tocmai randul care conteaza.
+ *
+ * Acum se tine minte ce au spus ultima oara (`netopia_stari`), iar reconcilierea scrie in jurnal doar
+ * cand raspunsul e ALTUL. IPN-ul scrie mereu, fiindca fiecare notificare e o intamplare noua (cinci
+ * refuzuri la rand sunt cinci incercari ale cumparatorului), dar tine si el minte starea, ca cronul
+ * sa nu repete un refuz pe care notificarea l-a spus deja.
+ *
+ * ⚠ STAREA NU STA PE `orders`, SI E DINADINS. Orice scriere acolo muta `updated_at`, iar
+ * `plati-neconfirmate` tine minte prin `updated_at` cui a spus deja „Marfa expediata, plata
+ * neconfirmata”. Pe o comanda expediata si neplatita, scrierea starii ar fi re-trimis clopotelul
+ * comerciantului (masurat: `#0281` l-a primit patru zile la rand).
+ *
+ * `stiuta`: ce stim deja, citit de cron o data pentru toate comenzile. Lipsa ei (IPN-ul nu citeste)
+ * inseamna „nu stim nimic”, deci se scrie in jurnal, ca pana acum.
+ */
 export async function aplicaStatusulNetopia(
   admin: SupabaseClient<Database>,
   order: ComandaDeMiscat,
   spuse: SpuseleLor,
   /** De unde am aflat. Intra in jurnal, ca sa se poata deosebi o plata reconciliata de una notificata. */
   sursa: "notify" | "reconciliere",
+  stiuta?: StareaStiuta | null,
+): Promise<Verdict> {
+  const cod = String(spuse.status);
+  const ntp = String(spuse.ntpID ?? "").trim() || null;
+  const neschimbata = !!stiuta && stiuta.cod === cod && (stiuta.ntp_id ?? null) === ntp;
+
+  const verdict = await hotaraste(admin, order, spuse, sursa, sursa === "reconciliere" && neschimbata);
+
+  /*
+   * ⚠ ESECUL NU SE TINE MINTE. Un esec (suma care nu se potriveste, o scriere picata) se reia la
+   * rularea urmatoare si TREBUIE sa se vada din nou: tinut minte, ar fi tacut ca un raspuns stiut.
+   *
+   * Si o scriere picata aici nu e despre bani: cel mult, acelasi raspuns se mai scrie o data in jurnal
+   * la rularea urmatoare. De aceea nu schimba verdictul si nu urca in `error_logs`.
+   */
+  if (verdict.fel !== "esec" && !neschimbata) {
+    const { error } = await admin.from("netopia_stari").upsert(
+      { order_id: order.id, cod, ntp_id: ntp, schimbata_la: new Date().toISOString() },
+      { onConflict: "order_id" },
+    );
+    if (error) {
+      console.error("[netopia] starea platii nu s-a putut tine minte:", { orderId: order.id, cod, err: error.message });
+    }
+  }
+
+  return verdict;
+}
+
+async function hotaraste(
+  admin: SupabaseClient<Database>,
+  order: ComandaDeMiscat,
+  spuse: SpuseleLor,
+  sursa: "notify" | "reconciliere",
+  /** Reconcilierea a primit ACELASI raspuns ca data trecuta: comanda nu se misca, si nici nu se spune iar. */
+  tace: boolean,
 ): Promise<Verdict> {
   const { orderStatus, paymentStatus: nou, refuzat, intermediar } = resolveNetopiaStatus(spuse.status);
   const actiune = sursa === "notify" ? "netopia/notify" : "netopia/reconciliere";
@@ -79,16 +151,18 @@ export async function aplicaStatusulNetopia(
    * la critical, alarma s-ar toci si n-ar mai fi citita cand chiar conteaza.
    */
   if (refuzat) {
-    await logError({
-      action: actiune,
-      message:
-        `Plata cu cardul a fost REFUZATA pentru comanda ${order.order_number ?? order.id} `
-        + `(status ${spuse.status}: cont invalid / tranzactie respinsa). Comanda ramane in asteptare, `
-        + "iar clientul poate reincerca plata.",
-      details: { orderId: order.id, ntpID: spuse.ntpID, status: spuse.status },
-      businessId: order.business_id,
-      severity: "warning",
-    });
+    if (!tace) {
+      await logError({
+        action: actiune,
+        message:
+          `Plata cu cardul a fost REFUZATA pentru comanda ${order.order_number ?? order.id} `
+          + `(status ${spuse.status}: cont invalid / tranzactie respinsa). Comanda ramane in asteptare, `
+          + "iar clientul poate reincerca plata.",
+        details: { orderId: order.id, ntpID: spuse.ntpID, status: spuse.status },
+        businessId: order.business_id,
+        severity: "warning",
+      });
+    }
     return { fel: "refuzata" };
   }
 
@@ -192,19 +266,60 @@ export async function aplicaStatusulNetopia(
      * documentat trimite pe cine il citeste sa „repare" o harta care e deja corecta.
      *
      * ⚠ SI TOTUSI SE SCRIE. Masurat pe 16.09: ei trimit un SINGUR IPN, la deznodamant, deci pe
-     * drumul obisnuit codurile astea nu ajung niciodata aici. Daca ajung, vrem sa aflam.
+     * drumul obisnuit codurile astea nu ajung niciodata aici. Daca ajung, vrem sa aflam. O data:
+     * reconcilierea o vede apoi in fiecare ora cat timp cumparatorul n-a terminat.
      */
-    await logError({
-      action: actiune,
-      message: `stare intermediara Netopia (${spuse.status}). Comanda nu s-a miscat, si asa e corect.`,
-      details: {
-        orderId: order.id, status: spuse.status, ntpID: spuse.ntpID,
-        codLor: spuse.codLor ?? null, mesajLor: spuse.mesajLor ?? null,
-      },
-      businessId: order.business_id,
-      severity: "info",
-    });
+    if (!tace) {
+      await logError({
+        action: actiune,
+        message: `stare intermediara Netopia (${spuse.status}). Comanda nu s-a miscat, si asa e corect.`,
+        details: {
+          orderId: order.id, status: spuse.status, ntpID: spuse.ntpID,
+          codLor: spuse.codLor ?? null, mesajLor: spuse.mesajLor ?? null,
+        },
+        businessId: order.business_id,
+        severity: "info",
+      });
+    }
     return { fel: "intermediara" };
+  }
+
+  /*
+   * ═══ „NU STIU DE TRANZACTIA ASTA”: STATUSUL 0 CU „Invalid ntpID” ═══
+   *
+   * 0 nu e o stare a platii. In specificatia lor nu are niciun inteles, apare doar ca valoare de
+   * exemplu (citita pe 18.11.2026). E campul gol al unui raspuns care spune, de fapt, ca tranzactia
+   * nu exista ACOLO unde am intrebat.
+   *
+   * Masurat in productie, 14-18.11.2026, la `caian-textile`: 380 de raspunsuri de la
+   * `/operation/status`, toate `status 0` cu `99 Invalid ntpID`, pentru patru plati pornite cand
+   * magazinul era pe modul de TEST si intrebate dupa ce a trecut pe plati REALE. Cheile de Live nu
+   * vad tranzactiile din Sandbox (si nici pe ale altui cont Netopia), deci intrebarea nu are raspuns.
+   * Pana azi ajungeau la ramura de mai jos si se scriau „NERECUNOSCUT: 0”, in fiecare ora.
+   *
+   * ⚠ SE RECUNOASTE DUPA MESAJUL LOR, NU DOAR DUPA 0. Numai perechea asta am masurat-o: un 0 cu alt
+   * mesaj ramane necunoscut si se scrie ca atare, ca harta sa creasca din trafic, nu din presupuneri.
+   */
+  if (spuse.status === 0 && /\bntpid\b/i.test(spuse.mesajLor ?? "")) {
+    if (!tace) {
+      const mediu = spuse.mediu === "test" ? " pe modul de TEST configurat acum"
+        : spuse.mediu === "real" ? " pe platile REALE configurate acum" : "";
+      await logError({
+        action: actiune,
+        message:
+          `Netopia nu gaseste tranzactia ${spuse.ntpID ?? "?"} a comenzii ${order.order_number ?? order.id}${mediu} `
+          + `(raspunsul lor: ${[spuse.codLor, spuse.mesajLor].filter(Boolean).join(" ")}). De obicei plata a fost `
+          + "pornita pe celalalt mediu (test sau real) ori cu alt cont Netopia, deci nu se poate verifica de "
+          + "aici. Comanda nu s-a miscat.",
+        details: {
+          orderId: order.id, status: spuse.status, ntpID: spuse.ntpID, mediu: spuse.mediu ?? null,
+          codLor: spuse.codLor ?? null, mesajLor: spuse.mesajLor ?? null,
+        },
+        businessId: order.business_id,
+        severity: "info",
+      });
+    }
+    return { fel: "negasita" };
   }
 
   /*
@@ -218,17 +333,20 @@ export async function aplicaStatusulNetopia(
    * facut harta Woot si cum se strange vocabularul Cargus. ⚠ Si a lucrat: codul 8 (rambursarea) a
    * fost prins de el la mai putin de o ora dupa ce a fost pus.
    *
-   * ⚠ `info`, nu alarma: nu s-a intamplat nimic rau, doar am vazut ceva ce nu stim.
+   * ⚠ `info`, nu alarma: nu s-a intamplat nimic rau, doar am vazut ceva ce nu stim. Si o data pe
+   * raspuns: harta creste din primul rand, iar al trei-suta-optzecilea nu mai spune nimic nou.
    */
-  await logError({
-    action: actiune,
-    message: `status Netopia NERECUNOSCUT: ${spuse.status}. Comanda nu s-a miscat.`,
-    details: {
-      orderId: order.id, status: spuse.status, ntpID: spuse.ntpID,
-      codLor: spuse.codLor ?? null, mesajLor: spuse.mesajLor ?? null,
-    },
-    businessId: order.business_id,
-    severity: "info",
-  });
+  if (!tace) {
+    await logError({
+      action: actiune,
+      message: `status Netopia NERECUNOSCUT: ${spuse.status}. Comanda nu s-a miscat.`,
+      details: {
+        orderId: order.id, status: spuse.status, ntpID: spuse.ntpID,
+        codLor: spuse.codLor ?? null, mesajLor: spuse.mesajLor ?? null,
+      },
+      businessId: order.business_id,
+      severity: "info",
+    });
+  }
   return { fel: "necunoscuta" };
 }

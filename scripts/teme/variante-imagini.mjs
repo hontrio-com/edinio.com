@@ -11,6 +11,12 @@
       de script), cu latimile lor. Sub 700 px, o varianta de 640 ar fi fost o copie a originalului (18 MB in plus).
   O proba (`import-demo.test.ts`) cere ca nicio poza sa nu ramana fara variante.
 
+  CALITATEA: 78 la variantele mici si la cea de 640; 75 (cat `CALITATE`, calitatea platformei pentru pozele
+  comerciantilor) la cea de 1080. Varianta de 1080 e cea pe care o primeste un telefon cu densitate 3 pentru bannerul
+  principal, adica elementul LCP: masurat pe 19.11.2026, la 78 cantarea 51-72 KB pe sapte teme si ajungea dupa prima
+  afisare (LCP cu 120-580 ms peste FCP); la 75 e cu 11% mai usoara si nu se vede nicio diferenta la densitatea aceea.
+  Schimbarea calitatii NU reface singura fisierele (se compara doar datele): sterge variantele vizate si ruleaza din nou.
+
   Rulare, din `edinio/`, dupa orice poza noua sau schimbata in `public/teme`:
     node scripts/teme/variante-imagini.mjs
 */
@@ -47,7 +53,8 @@ for (const p of toate.sort()) {
     const tinta = p.replace(/\.(webp|png|jpe?g)$/i, `.w${w}.webp`);
     pastrate.add(tinta);
     if (existsSync(tinta) && statSync(tinta).mtimeMs >= statSync(p).mtimeMs) continue;
-    await sharp(p).resize({ width: Math.min(w, width), withoutEnlargement: true }).webp({ quality: 78, effort: 5 }).toFile(tinta);
+    const codare = w >= 1080 ? { quality: 75, effort: 6, smartSubsample: true } : { quality: 78, effort: 5 };
+    await sharp(p).resize({ width: Math.min(w, width), withoutEnlargement: true }).webp(codare).toFile(tinta);
     facute++;
   }
   if (mariAle.length) mari.push(["/" + relative("public", p).split(sep).join("/"), mariAle]);

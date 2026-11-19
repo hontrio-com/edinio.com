@@ -17,6 +17,7 @@ import type { StoreDesign } from "@/lib/storefront/design/types";
 import { pentruBrowser, type BusinessCitit } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 /**
  * Intrarea e randul INTREG (apelantii sunt componente de server, care au nevoie
@@ -129,7 +130,7 @@ export function buildChromeData({
     // din editor — ramane forma cu interogare, adica exact ce era inainte.
     categoriiPePagina: !!design && shopOnPage(design),
     isHome,
-    color: business.primary_color ?? "#07c527",
+    color: culoareMagazin(business.primary_color),
     pageContent,
     features: (business.features as StoreFeatures) ?? {},
     social: (business.social as StoreSocial) ?? {},

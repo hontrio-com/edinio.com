@@ -59,6 +59,7 @@ import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { slotBlocuri, sloturiContinutLiber, type ComunSloturi } from "@/components/storefront/sloturi-pe-server";
 import { continuturiInSectiune, continuturiPeAcasa, faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
 import type { Block } from "@/lib/pages/blocks.types";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 /*
  * `sort`, `pmin`, `pmax` si `stoc` sunt aici fiindca grila paginii principale are
@@ -149,7 +150,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center">
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mb-6 mx-auto"
-          style={{ backgroundColor: business.primary_color }}>
+          style={{ backgroundColor: culoareMagazin(business.primary_color) }}>
           {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
         </div>
         <h1 className="text-2xl font-semibold text-foreground mb-2">{business.store_name ?? business.business_name}</h1>
@@ -157,7 +158,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
         {business.phone && (
           <a href={`tel:${business.phone}`}
             className="inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-white rounded-xl transition-colors"
-            style={{ backgroundColor: business.primary_color }}>
+            style={{ backgroundColor: culoareMagazin(business.primary_color) }}>
             Contacteaza-ne
           </a>
         )}
@@ -193,7 +194,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       return (
         <SuspendedStorePage
           businessName={business.store_name ?? business.business_name}
-          primaryColor={business.primary_color}
+          primaryColor={culoareMagazin(business.primary_color)}
           phone={business.phone}
         />
       );
@@ -268,7 +269,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * nu se intampla nimic, fiindca serverul nu ceruse produsele.
    */
   const resolvedMagazin = resolveDesign(designDeRandat, {
-    primaryColor: magazin.primary_color ?? "#07c527",
+    primaryColor: culoareMagazin(magazin.primary_color),
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: magazin.cover_url,
@@ -590,7 +591,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
     businessId: business.id,
     hideNoImage: pcSloturi.hide_products_without_images === true,
     hideOutOfStock: pcSloturi.hide_out_of_stock_products === true,
-    color: magazin.primary_color ?? "#07c527",
+    color: culoareMagazin(magazin.primary_color),
     basePath,
     storeSlug: business.slug,
     social: (business.social ?? {}) as Record<string, string>,
@@ -626,7 +627,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
       // cos din header n-are unde sa duca.
       const opsResolved = resolveDesign(designDeRandat, {
-        primaryColor: magazin.primary_color ?? "#07c527",
+        primaryColor: culoareMagazin(magazin.primary_color),
         pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
         features: (business.features as Record<string, unknown>) ?? {},
         coverUrl: magazin.cover_url,

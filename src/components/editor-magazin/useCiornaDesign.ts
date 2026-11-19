@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import { discardDesignDraft, publishDesign, saveDesignDraft } from "@/lib/actions/store-design.actions";
-import { creeazaCoadaSalvarii, type CoadaSalvarii } from "@/lib/editor-magazin/coada-salvarii";
+import { creeazaCoadaSalvarii, type CoadaSalvarii, type RezultatScriere } from "@/lib/editor-magazin/coada-salvarii";
 import {
   amprentaCiornei,
   amprentaDesignului,
@@ -27,6 +27,16 @@ import type { StoreDesign } from "@/lib/storefront/design/types";
  * acolo: salvarea amanata, baza pentru garda de concurenta, „epoca” pentru Publica si Renunta.
  * Starea si istoricul sunt in `lib/editor-magazin/ciorna.ts`, fara React.
  */
+
+/** Un singur mesaj pentru salvarea ciornei: caderile repetate il innoiesc pe acelasi, nu aduna cate unul. */
+const MESAJ_CIORNA = "ciorna-salvare";
+
+/**
+ * De ce n-a ajuns ciorna in baza: `legatura` = cererea a cazut pe drum (internetul, serverul, contul deconectat intre
+ * timp), se reincearca singura; `refuzat` = serverul a raspuns si a spus nu (alta fila, plafonul de marime), mesajul
+ * lui spune ce e de facut.
+ */
+export type EsecSalvare = "legatura" | "refuzat";
 
 export function useCiornaDesign({
   businessId,
@@ -66,6 +76,13 @@ export function useCiornaDesign({
   const [publicat, setPublicat] = useState<StoreDesign>(publicatInitial);
   const [continutPublicat, setContinutPublicat] = useState<ContinutPublicat>(continutPublicatInitial);
   const [salvez, setSalvez] = useState(false);
+  /**
+   * Ultima salvare a ciornei a cazut si inca n-a reusit alta (19.11.2026). Pana atunci caderea se vedea doar intr-un
+   * mesaj care disparea in cateva secunde, bara scria mai departe „Modificări nepublicate”, iar „Ieși” ramanea pe loc
+   * fara niciun cuvant. Acum bara o arata cat dureaza, cu „Reîncearcă”.
+   */
+  const [esecSalvare, setEsecSalvare] = useState<EsecSalvare | null>(null);
+  const inEsec = useRef(false);
   const [publicaInCurs, setPublicaInCurs] = useState(false);
   const [renuntaInCurs, setRenuntaInCurs] = useState(false);
   /**
@@ -139,11 +156,21 @@ export function useCiornaDesign({
    */
   const coada = useRef<CoadaSalvarii<{ ciorna: Ciorna; gen: number }> | null>(null);
   useEffect(() => {
+    /** Ciorna e din nou la zi in baza: starea de cadere se stinge, iar dupa o cadere se si spune. */
+    const salvatDinNou = () => {
+      if (!inEsec.current) return;
+      inEsec.current = false;
+      setEsecSalvare(null);
+      toast.success("Ciorna s-a salvat.", { id: MESAJ_CIORNA });
+    };
     const c = creeazaCoadaSalvarii<{ ciorna: Ciorna; gen: number }>({
       intarziere: 1200,
-      scrie: async ({ ciorna: deSalvat, gen }) => {
+      scrie: async ({ ciorna: deSalvat, gen }): Promise<RezultatScriere> => {
         if (gen !== epoca.current) return true;
-        if (amprentaCiornei(deSalvat) === salvatAmprenta.current) return true;
+        if (amprentaCiornei(deSalvat) === salvatAmprenta.current) {
+          salvatDinNou();
+          return true;
+        }
         const coloana = ciornaCuContinut(deSalvat.design, deSalvat.continut);
         setSalvez(true);
         let res: Awaited<ReturnType<typeof saveDesignDraft>>;
@@ -151,15 +178,24 @@ export function useCiornaDesign({
           res = await saveDesignDraft(businessId, coloana, cioarnaInBaza.current);
         } catch {
           setSalvez(false);
-          toast.error("Nu am putut salva ciorna. Verifică legătura la internet; încercăm din nou la următoarea modificare.");
+          if (gen !== epoca.current) return true;
+          // Mesajul o singura data pe cadere: reincercarile (`coada-salvarii.ts`) nu-l mai ridica de fiecare data.
+          if (!inEsec.current) {
+            toast.error("Nu am putut salva ciorna. Verifică legătura la internet; reîncercăm singuri.", { id: MESAJ_CIORNA });
+          }
+          inEsec.current = true;
+          setEsecSalvare("legatura");
           return false;
         }
         setSalvez(false);
         if (gen !== epoca.current) return true;
         if ("error" in res) {
-          toast.error(res.error);
-          return false;
+          toast.error(res.error, { id: MESAJ_CIORNA });
+          inEsec.current = true;
+          setEsecSalvare("refuzat");
+          return "refuzat";
         }
+        salvatDinNou();
         salvatAmprenta.current = amprentaCiornei(deSalvat);
         cioarnaInBaza.current = coloana;
         const amprentaNoua = amprentaContinut(deSalvat.continut);
@@ -181,6 +217,16 @@ export function useCiornaDesign({
 
   /** Trimite pe loc ciorna programata si asteapta scrierea; `false` = n-a ajuns in baza. Pentru „Ieși”. */
   const salveazaAcum = useCallback(async () => (coada.current ? coada.current.goleste() : true), []);
+
+  /** „Reîncearcă” din bara: trimite pe loc ciorna a carei salvare a cazut. */
+  const reincearcaSalvarea = useCallback(() => { coada.current?.reincearca(); }, []);
+
+  // Legatura a revenit: nu se mai asteapta urmatoarea reincercare programata.
+  useEffect(() => {
+    const laRevenire = () => coada.current?.reincearca();
+    window.addEventListener("online", laRevenire);
+    return () => window.removeEventListener("online", laRevenire);
+  }, []);
 
   // Iesirea cu modificari nepublicate merita un avertisment.
   useEffect(() => {
@@ -256,6 +302,10 @@ export function useCiornaDesign({
       continutInBaza.current = amprentaContinut(CONTINUT_GOL);
       // Publicarea goleste coloana de ciorna; urmatoarea salvare porneste de la `null`.
       cioarnaInBaza.current = null;
+      // O salvare de ciorna cazuta inainte nu mai are ce salva: totul e in magazin.
+      inEsec.current = false;
+      setEsecSalvare(null);
+      toast.dismiss(MESAJ_CIORNA);
       toast.success("Modificările sunt acum în magazin.");
       return true;
     } finally {
@@ -287,6 +337,10 @@ export function useCiornaDesign({
       despacha({ tip: "inlocuieste", ciorna: goala });
       salvatAmprenta.current = amprentaCiornei(goala);
       cioarnaInBaza.current = null;
+      // O salvare de ciorna cazuta inainte nu mai are ce salva: ciorna e aruncata.
+      inEsec.current = false;
+      setEsecSalvare(null);
+      toast.dismiss(MESAJ_CIORNA);
       if (continutInBaza.current !== amprentaContinut(CONTINUT_GOL)) {
         continutInBaza.current = amprentaContinut(CONTINUT_GOL);
         laContinutInBaza.current();
@@ -309,6 +363,9 @@ export function useCiornaDesign({
     ctxPublicat,
     areModificari,
     salvez,
+    /** Ultima salvare a ciornei a cazut si n-a reusit inca alta; `null` cand ciorna e la zi sau pe drum. */
+    esecSalvare,
+    reincearcaSalvarea,
     publicaInCurs,
     /** „Publică” sau „Renunță” e pe drum: ciorna nu primeste modificari pana se intoarce. */
     blocata: publicaInCurs || renuntaInCurs,

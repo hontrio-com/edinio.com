@@ -59,6 +59,7 @@ import type { Privitori } from "@/lib/analitice/privitori";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
 import { fereastraDeLivrare, parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { LocPesteBaraDeJos } from "@/components/storefront/LocPesteBaraDeJos";
 
 /**
  * Pagina de produs, varianta „Detaliat".
@@ -169,7 +170,7 @@ function Galerie({ slides, activ, mergiLa, imgAlt, hasDiscount, discountPct, col
               className="absolute inset-0 transition-opacity duration-300"
               style={{ opacity: i === activ ? 1 : 0, pointerEvents: i === activ ? "auto" : "none" }}>
               <Image src={src} alt={imgAlt(src, i)} fill sizes={SIZES_GALERIE}
-                className="object-contain p-6" priority={i === 0} loading={i === 0 ? undefined : "lazy"} />
+                className="object-contain p-6" preload={i === 0} fetchPriority={i === 0 ? "high" : undefined} loading={i === 0 ? undefined : "lazy"} />
             </div>
           ))}
           {hasDiscount && (
@@ -1158,19 +1159,21 @@ export function ProductPageDetailed({
     ),
     contact: (
       <>
-        {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista */}
+        {/* Intrebari: telefonul si WhatsApp-ul magazinului, cand exista. Zona de atins creste cu 4 px sus si jos printr-un
+            `::after` (WCAG 2.5.8: 24 px), fara sa schimbe randul: cu inaltime minima, pagina se muta cu un pixel (vazut
+            la compararea capturilor, 19.11.2026). La fel legatura de categorie, mai jos. */}
         {(business.phone || business.whatsapp) && (
           <div className="flex items-center gap-4 flex-wrap text-[13px] pt-1">
             <span className="text-muted-foreground">Ai intrebari despre produs?</span>
             {business.phone && (
-              <a href={`tel:${business.phone}`} className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
+              <a href={`tel:${business.phone}`} className="relative inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']" style={{ color }}>
                 <Phone size={14} /> {business.phone}
               </a>
             )}
             {business.whatsapp && (
               <a href={`https://wa.me/${String(business.whatsapp).replace(/[^0-9]/g, "")}`}
                 target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity" style={{ color }}>
+                className="relative inline-flex items-center gap-1.5 font-medium hover:opacity-70 transition-opacity after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']" style={{ color }}>
                 <MessageCircle size={14} /> WhatsApp
               </a>
             )}
@@ -1206,7 +1209,7 @@ export function ProductPageDetailed({
             {ean !== "" && <RandMeta eticheta="Cod EAN">{ean}</RandMeta>}
             {categorie !== "" && (
               <RandMeta eticheta="Categorie">
-                <a href={hrefCategorie(radacinaCatalog, categorie, chrome?.categoriiPePagina)} className="underline hover:opacity-70 transition-opacity">{categorie}</a>
+                <a href={hrefCategorie(radacinaCatalog, categorie, chrome?.categoriiPePagina)} className="relative underline hover:opacity-70 transition-opacity after:absolute after:inset-x-0 after:-inset-y-1 after:content-['']">{categorie}</a>
               </RandMeta>
             )}
             {etichete.length > 0 && <RandMeta eticheta="Etichete">{etichete.join(", ")}</RandMeta>}
@@ -1491,6 +1494,7 @@ export function ProductPageDetailed({
           {/* ─── Bara lipita jos, pe telefon ─────────────────────────────── */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-surface border-t border-border px-4 py-3 flex items-center gap-3"
             style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+            <LocPesteBaraDeJos />
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-muted-foreground truncate">{product.name}</p>
               <p className="text-base font-bold text-foreground">

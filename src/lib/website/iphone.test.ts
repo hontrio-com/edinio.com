@@ -36,8 +36,12 @@ const AICI = dirname(fileURLToPath(import.meta.url));
 
   Proba asta a cazut la mutare, si bine a facut: fara ea, `.iphone` ar fi putut
   ramane in urma fara sa se vada.
+
+  ⚠ 19.11.2026: regulile site-ului (printre ele `.iphone`) au trecut in
+  `stil-site.css`, pe care il importa `globals.css` si `website.css` dupa
+  `stil-comun.css`; foaia magazinelor nu le mai cara. Proba a cazut din nou.
 */
-const CSS = join(AICI, "..", "..", "app", "stil-comun.css");
+const CSS = join(AICI, "..", "..", "app", "stil-site.css");
 
 test("rama plus ecranul plus rama fac exact corpul", () => {
   /* Pe orizontală, prin construcție. */

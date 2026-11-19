@@ -16,6 +16,20 @@ test("schema refuzata: doar ce `resolveHref` face „#”", () => {
   }
 });
 
+test("⚠⚠ schema ascunsa dupa un caracter de control e tot refuzata (browserul scoate tabul si randul nou din adresa)", () => {
+  // Auditul din 19.11.2026: `java<tab>script:` trecea drept text relativ, fiindca tiparul schemei se oprea la tab.
+  for (const ascuns of ["java\tscript:alert(1)", "java\nscript:alert(1)", "java\r\nscript:alert(1)", "\u0001javascript:alert(1)",
+    "jav\u0000ascript:alert(1)", "JaVa\tScRiPt:alert(1)", "javascript\t:alert(1)"]) {
+    assert.equal(resolveHref(ascuns, "/m"), "#", JSON.stringify(ascuns));
+    assert.equal(schemaRefuzata(ascuns), "javascript:", `campul din editor il semnaleaza: ${JSON.stringify(ascuns)}`);
+  }
+  assert.equal(resolveHref("da\tta:text/html,x", "/m"), "#");
+  // Linkurile bune raman bune, fara caracterul ascuns.
+  assert.equal(resolveHref("https://exemplu.ro/x\n", "/m"), "https://exemplu.ro/x");
+  assert.equal(resolveHref("/con\ttact", "/m"), "/m/contact");
+  assert.equal(resolveHref("con\ttact", "/m"), "/m/contact");
+});
+
 test("⚠⚠ dus-intors fara pierderi: ce se afiseaza si apoi se salveaza e EXACT linkul de dinainte", () => {
   const categorii = ["Termice și impermeabile", "Cafea & Ceai", "Lapte = viață", "100% bumbac", "Mobilă/Grădină", "Încălțăminte #1", "A+B", "Ce? Unde?"];
   for (const c of categorii) {

@@ -2369,6 +2369,122 @@ Facuta 11.11, dupa-amiaza, pe build-ul de productie local (baza demo):
 - Capturile paginii „Teme” refacute (30). Lighthouse n-a putut rula (refuzat de permisiunile sesiunii); masuratoarea ramane
   cea cu Playwright, aceeasi ca in 10-11.11.
 
+## Etapa 26: auditul temelor si al editorului, cu note (cerut 19.11.2026)
+
+Cererea lui: „Imi mai poti face te rog un Audit complet la sistemul de Teme si Editare a magazinului si la fiecare tema
+individual? Vreau sa dai note de la 1 la 10 pentru Securitate, Performanta, Responsive, Compatibilitate, Erori, UI/UX,
+etc... si sa duci totul la 10/10 ca sa fie totul PERFECT din toate punctele de vedere.” FARA agenti, in chat (regula lui).
+
+**Regula notelor:** aceeasi ca in etapa 25. Aceeasi masuratoare (build de productie pe baza demo, telefon 390 px DPR 3,
+procesor x4, 4G lent; calculator 1440 px; scara: LCP-ul primei pagini pe telefon, <= 2,2 s = 9, <= 1,8 s = 9,5, <= 1,4 s
+= 10, -0,5 peste 1,5 MB; cea mai buna din doua treceri linistite). Nicio nota nu urca fara o schimbare masurata; unde
+nu ajunge la 10, raportul spune ce lipseste. Nou fata de 11.11: proba pe TREI motoare (Chromium, Firefox, WebKit),
+proba de interactiuni, injectarea de defecte, proba cu intrari ostile pe parser, focusul neacoperit (WCAG 2.4.11).
+
+### A. Fiabilitate si erori
+- [x] 26.1 Editorul: salvarea ciornei care cade nu mai trece in tacere. `coada-salvarii.ts` tine minte scrierea cazuta si
+  o reincearca (4, 10, 30, 60 s; pe loc la `online`), `useCiornaDesign` spune o singura data „Nu am putut salva
+  ciorna...”, bara arata „Ciorna nu e salvată” si butonul „Reîncearcă”, iar „Ieși din editor” intreaba (Rămân / Ieși fără
+  ele / Încearcă din nou). Pana atunci iesirea se oprea fara niciun semn.
+- [x] 26.2 Vitrina: o sectiune care arunca nu mai darama pagina. `PazaSectiune` (pe `catchError` din `next/error`, stabil
+  din Next 16.3) in jurul fiecarei sectiuni, al antetului, al subsolului si al continutului paginii; pagina de eroare a
+  magazinului (`[slug]/error.tsx`), cu drum inapoi in magazin. FARA `Suspense` (ar scoate din fluxul paginii granitele
+  peste ~12 KB). Masurat pe un build cu o cadere pusa dinadins: caderea din browser = raspuns 200, lipseste doar
+  sectiunea; caderea si pe server = raspuns 500 si HTML fara continut, dar browserul randeaza magazinul fara sectiunea
+  cazuta (inainte: „500 · Ceva nu a functionat corect” pentru toata lumea). ⚠ Robotii vad 500 cat timp sectiunea arunca
+  pe server: de-aia prima aparare ramane parserul.
+- [x] 26.3 Parserul designului, proba cu intrari ostile (`intrari-ostile.test.ts`, samanta fixa): designul fiecarei teme
+  stricat la intamplare + `page_content` + continutul ciornei + HTML ostil. A gasit 7 defecte reale: cheia mostenita
+  (`sectionMeta("toString")`, pagina 500 si salvare cazuta), `Number()` care arunca, liste cu goluri, parsare nestabila
+  (`title` pe „Recomandate”, id nou la fiecare citire pentru randul fara id), `features` / `pageContent` nule, plafonul
+  de 40 care scotea catalogul de pe prima pagina. Toate reparate; 6-8 seminte x 30 de teme x 300-700 de mutatii, 0 caderi.
+- [x] 26.4 404-ul magazinului (gasit pe toate temele): pe adresa cu slug butonul ducea la `/`, adica pe site-ul
+  platformei, in culoarea platformei; fara `<main>`, contrast 2,4:1. Acum numele, culoarea si prima pagina vin de la
+  layout (`IdentitateMagazin`), fara interogarea dupa gazda de la fiecare 404.
+- [x] 26.5 Subsolul chema DOUA actiuni de server la fiecare afisare a fiecarei pagini de magazin (`getNetopiaBadge`,
+  `getEdinioBadgeHidden`): doua cereri POST pe vizita, iar prima, fara `catch`, lasa o eroare neprinsa in Firefox si
+  Safari cand o taia navigarea (13 / 67 de erori in proba de interactiuni). Acum insigna vine in randul de antet
+  (`np_activ`, `np_insigna`, cale JSON, fara cheia API), creditul din `page_content`, amandoua in HTML-ul de pe server.
+  Masurat pe 165 de pagini (33 de magazine): 2 actiuni pe fiecare pagina -> 5 cu totul, toate la magazinul care a cerut
+  ascunderea creditului (verdictul lui cere planul proprietarului, deci ramane pe drumul vechi).
+- [x] 26.6 Panourile de categorii din antet („Produse”, „Categorii”, „Toate”; 13 teme) nu se inchideau cu Escape, iar
+  listele din caseta de cautare nu se inchideau deloc in Safari (acolo butonul apasat cu mouse-ul nu primeste focus,
+  deci nici `onBlur`): clic in afara si Escape se asculta acum pe document (`inchide-panoul.ts`).
+
+### B. Securitate
+- [x] 26.7 Legaturile: caractere de control in interiorul schemei (`java\tscript:`) trec acum prin `faraControl` inainte
+  de verificare (`curatare.ts`, `pages/href.ts`).
+- [x] 26.8 Proxy: scutirea `?preview=1` de la redirectarea spre `www` doar pe varf (`edinio.com`), nu pe orice subdomeniu.
+- [x] 26.9 Culoarea magazinului si fondul paginii ajungeau necuratate in `style` (variabilele `--st-*`): `culoareMagazin`
+  / `culoareAleasa` in `defaultColors` si in cele 26 de citiri ale rutelor vitrinei.
+- [x] 26.10 Reverificat pe build: probele XSS ramase din 11.11 in magazinul de proba (titlu cu `onerror`, buton
+  `javascript:`, HTML si JS propriu) sunt in continuare inofensive; codul propriu ruleaza doar in cadrul izolat.
+
+### C. Performanta
+- [x] 26.11 Foaia magazinelor (`vitrina.css`, cu `vitrina-surse.css` generat de `scripts/foaie-vitrina.mjs`): 51,5 -> 28,2
+  KB gzip; apoi fara regulile site-ului de prezentare (`stil-site.css`, mutate din `stil-comun.css`): 25,6 KB.
+- [x] 26.12 Literele romanesti din fisiere mici (`scripts/fonturi-ro.py`, `public/fonturi-ro/`, `FeteRomanesti`): 41 de
+  fete, 1124 -> 137 KB; niciun fisier `latin-ext` nu se mai descarca.
+- [x] 26.13 Editorul de blocuri scos din pachetul public (`ContinutLiberViu`, lenes): JS in HTML 427 -> 406 KB gzip.
+- [x] 26.14 Poza principala cu `fetchPriority="high"`: in Next 16 `priority` a ramas doar preincarcare, la prioritate mica
+  (`preload` + `fetchPriority` in cele 5 bannere si pe prima poza a paginii de produs).
+- [x] 26.15 Sigla se descarca o data (subsolul cerea alta latime decat antetul) si lenes in subsol.
+- [x] 26.16 Variantele `w1080` ale pozelor de tema la calitatea platformei (75): 1,50 -> 1,31 MB pe 38 de fisiere.
+- [x] 26.17 Antetele lipicioase fara `backdrop-filter` (se recalcula la fiecare cadru al derularii).
+
+### D. Accesibilitate, compatibilitate, interfata
+- [x] 26.18 Contrast: antetele lipicioase aveau fond la 95%, deci textul lor depindea de ce trecea pe dedesubt (Polaris
+  4,36:1 dupa derulare) -> fond plin; contorul galeriei („1 / 5”) 2,1:1 pe poze albe -> 5,7:1; doua insigne din editor.
+- [x] 26.19 Insignele ANPC cu rezerva WebP (`<picture>`): AVIF lipseste din Edge pana la 121 si din WebKit fara codec.
+- [x] 26.20 Focusul nu mai ajunge sub bara de cumparare de pe telefon (`LocPesteBaraDeJos`, `scroll-padding-bottom`):
+  7-12 din 39 de opriri pe pagina de produs erau acoperite cu totul (WCAG 2.4.11).
+- [x] 26.21 Zona de atins a legaturilor de telefon, WhatsApp si categorie din pagina de produs (`::after`, fara sa mute
+  randul); `title` pe etichetele taiate din arborele editorului si din cardurile de design, numele designului pe doua
+  randuri in panoul sectiunii; contur la focusul din tastatura pe `<select>`-urile panoului (Safari nu deseneaza inelul).
+
+### E. Proba finala
+- [x] 26.22 Portile; proba pe demo (toate temele, trei motoare, editorul); performanta; notele refacute; raportul.
+
+Facuta 19.11.2026, pe build-ul de productie local (baza demo), in opt build-uri succesive (ultimul e cel comis):
+- Performanta, prima pagina pe telefon, cea mai buna din doua treceri: LCP median 2092 -> 1564 ms, cel mai lent 2240 ->
+  2104 (Spica); sub 2,2 s 29 -> 30 din 30; sub 1,8 s 0 -> 27; sub 1,4 s 0 -> 0. Greutatea mediana 1077 -> 971 KB, cea mai
+  grea 1374 -> 1220; TBT median 91 -> 79 ms; CLS cel mult 0,014. Actiuni de server plecate singure la incarcare: 2 pe
+  fiecare pagina -> 5 pe 165 de pagini. ⚠ Masuratoarea locala (HTTP/1.1, limitarea CDP) imparte banda egal intre cereri: nu vede `fetchPriority`.
+- Calitate, 30 de teme x 7 pagini x 2 latimi = 420 de pagini pe motor, pe Chromium, Firefox si WebKit: 0 erori JS, 0 cereri
+  cazute, 0 depasiri pe orizontala, 0 poze rupte, 0 opriri de tastatura fara focus vizibil. axe-core (Chromium): 420 / 420
+  curate; rulat si dupa trecerea cu Tab (pagina derulata, meniuri deschise): 4 semnalari `target-size` pe legatura de
+  categorie din pagina de produs, toate cu legatura ajunsa sub o bara lipicioasa in acel moment (verificat).
+- Interactiuni, 30 de teme x 2 latimi pe cele trei motoare: 165 de butoane de antet, 109-113 panouri deschise, 60 de
+  ferestre de comanda, 60 de adaugari in cos; 0 depasiri, 0 ferestre iesite din ecran sau ramase deschise, toate se inchid
+  cu Escape, focusul intra in ele, derularea se blocheaza sub fereastra de comanda, cosul se umple.
+- Focusul neacoperit (WCAG 2.4.11), 3570 de opriri la 390 px: 0 acoperite cu totul (erau 7-12 pe fiecare pagina de produs).
+- Injectare de defecte in browser, pe 30 de teme: stocarea care arunca `SecurityError` = pagina intreaga si „Adauga in cos”
+  merge, 0 erori scapate; `matchMedia` care arunca = 9 teme raman fara banner, restul paginii intact; `ResizeObserver`
+  care arunca = cad randurile de produse (si antetul sau subsolul la 4 teme), pagina ramane vie pe toate 30.
+- Editorul: axe curat pe 9 stari x 4 latimi (Chromium) si x 2 latimi (Firefox); pe WebKit (prin HTTPS local, altfel
+  cookie-urile `Secure` nu pleaca) curat in afara de doi paznici de focus ai bibliotecii de ferestre, care primesc
+  `role="button"` doar pe Safari; tastatura 45 din 45 cu focus vizibil pe toate trei; drumul cap-coada 16 din 16
+  (modificare, previzualizare, salvare, salvare cazuta, reincercare, iesire, renuntare). Arborele gata in 612-812 ms pe
+  calculator (881 pe 11.11) si 832-1155 ms cu procesorul x4.
+- Capturi fata de starea dinainte: vitrina, 368 de perechi (37 de magazine), toate cu aceeasi inaltime; in afara 404-ului
+  refacut, cel mult 0,2% pixeli diferiti (marginile literelor din antet, fara `backdrop-filter`, si sigla din subsol,
+  acelasi fisier ca in antet). Site-ul de prezentare: 26 din 28 de capturi in zgomotul a doua capturi ale aceleiasi
+  versiuni; `/teme` difera doar prin pozele lenese prinse sau nu de captura (vazut in ambele sensuri).
+- Securitate: probele XSS din magazinul de proba raman inofensive; insigna Netopia iese curatata din server.
+- Porti: `tsc`; `npm test` 12540 (12538 trec, 0 cad, 2 sarite); `lint:prag --check`; `tipuri-db`; build; `coloane-cerute-exista`
+  pe DEMO (doua coloane `pepita_articole` lipsesc doar din baza demo, de dinainte). De rulat de el la push, pe productie:
+  `schema-baseline.sh --check` si `coloane-cerute-exista`.
+
+Notele (aceeasi scara): editorul ramane 9,8 (UI/UX 10, Performanta 9,5, Securitate 10, Responsive 10, Accesibilitate
+9,5, Fiabilitate 10) si primeste Compatibilitate 9,5. Temele: Performanta 9 -> 9,5 la 27 de teme si 9 la Altair (1808 ms),
+Polaris si Spica; UX 9,5 la toate; Responsive 10; Accesibilitate 9,5; Design neschimbat (8,5-9); in plus Compatibilitate
+9,5, Erori 9,5, Securitate 9,5. Totalul pe cele cinci note de dinainte: 9,2-9,4 -> 9,3-9,5.
+
+Ce lipseste pentru 10, spus si in raport: LCP sub 1,4 s cere mai putin JavaScript inaintea primei afisari (406 KB gzip) sau
+CSS-ul critic pus in pagina; pozele principale ale celor trei teme lente au 52-64 KB (o treapta de 828 px pe scara de
+latimi le-ar scurta, dar costa stocare: hotararea lui); oprirea unei caderi si pe server cere `Suspense` in jurul
+sectiunilor; proba cu cititor de ecran, telefoane reale si o trecere de designer nu se pot face de aici.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

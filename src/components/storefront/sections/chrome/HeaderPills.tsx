@@ -86,7 +86,7 @@ export function HeaderPills({ settings }: { settings: Record<string, unknown> })
     : hrefCatalog(catalogRoot, "sale=1");
 
   return (
-    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-bg)]/95 backdrop-blur-md`}>
+    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-bg)]`}>
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
         {/* Bara de sus: paginile magazinului. Randul principal e ocupat de
             categorii, cautare si cos, deci meniul are nevoie de locul lui. */}
@@ -201,8 +201,20 @@ function PastilaCategorii({
     const onDoc = (e: MouseEvent) => {
       if (!zona.current?.contains(e.target as Node)) setDeschis(false);
     };
+    // Escape inchide panoul si intoarce focusul pe butonul lui (19.11.2026): pana atunci se inchidea doar cu mouse-ul,
+    // iar cine venea din tastatura ramanea cu panoul deschis peste pagina (gasit de proba de interactiuni, 13 teme).
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const inPanou = zona.current?.contains(document.activeElement) ?? false;
+      setDeschis(false);
+      if (inPanou) zona.current?.querySelector("button")?.focus();
+    };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onEsc);
+    };
   }, [deschis]);
 
   return (

@@ -3,6 +3,7 @@ import { firstVariant, SECTION_REGISTRY, sectionMeta, variantMeta } from "./regi
 import { completeazaBlocuri, esteContinut, schemaBlocurilor, type SchemaBlocuri } from "./blocuri";
 import { blocuriDinSetari, reidentificaBlocuri } from "./continut-liber";
 import { areFonturiProprii, CHEI_FONT_SECTIUNE } from "./fonturi-sectiune";
+import type { CaleContinut } from "./cale-continut";
 import type { Block } from "@/lib/pages/blocks.types";
 import type { BlockInstance, SectionInstance, SectionKind, StoreDesign } from "./types";
 
@@ -327,26 +328,8 @@ export function duplicateSection(design: StoreDesign, id: string): StoreDesign {
  * bloc repetabil al unei sectiuni (sub produs, pe Pagina Magazin). Id-urile de sectiune sunt unice in
  * tot designul (parserul le pazeste), iar blocul se cauta doar in sectiunea lui.
  */
-export interface CaleContinut {
-  sectiune: string;
-  bloc: string | null;
-}
-
-const ID_CALE = /^[A-Za-z0-9_-]{1,64}$/;
-
-/** Calea in text, cum o poarta blocurile randate in magazin (formularele o trimit serverului): `sectiune` sau `sectiune/bloc`. */
-export function caleInText(cale: CaleContinut): string {
-  return cale.bloc === null ? cale.sectiune : `${cale.sectiune}/${cale.bloc}`;
-}
-
-/** Calea din text, numai din caractere de id; orice altceva (si o cale mai lunga) da `null`. */
-export function caleDinText(text: unknown): CaleContinut | null {
-  if (typeof text !== "string") return null;
-  const [sectiune, bloc, ...rest] = text.split("/");
-  if (rest.length > 0 || !ID_CALE.test(sectiune)) return null;
-  if (bloc === undefined) return { sectiune, bloc: null };
-  return ID_CALE.test(bloc) ? { sectiune, bloc } : null;
-}
+// Calea si scrierea ei ca text stau in `cale-continut.ts` (fara dependente: le citeste si vitrina, la fiecare magazin).
+export { caleDinText, caleInText, type CaleContinut } from "./cale-continut";
 
 /** Blocurile containerului; `null` cand calea nu duce la un „Conținut liber”. */
 export function blocuriLaCale(design: StoreDesign, cale: CaleContinut): Block[] | null {

@@ -43,7 +43,9 @@ test("designul classic reflecta flag-urile din page_content", () => {
   });
   assert.equal(byId(d.home, "hero")?.variant, "overlay");
   assert.equal(byId(d.home, "usp")?.enabled, true);
-  assert.equal(byId(d.home, "featured")?.settings.title, "Alese de noi");
+  // Titlul randului ramane in `page_content` (de acolo il citeste magazinul); in reglaje sta doar felul randului.
+  assert.equal(byId(d.home, "featured")?.enabled, true);
+  assert.deepEqual(byId(d.home, "featured")?.settings, { mode: "featured" });
   assert.equal(byId(d.home, "gallery")?.enabled, false);
   assert.equal(d.chrome.announcement?.enabled, true);
   assert.equal(byId(d.home, "sec_a")?.variant, "carousel");
@@ -154,6 +156,18 @@ test("linkurile cu schema periculoasa sunt respinse", () => {
   assert.equal(sanitizeHrefForTest("javascript:alert(1)"), undefined);
   assert.equal(sanitizeHrefForTest("data:text/html,<script>"), undefined);
   assert.equal(sanitizeHrefForTest("vbscript:msgbox"), undefined);
+  /*
+   * ⚠ Auditul din 19.11.2026: browserul scoate tabul si randul nou din ORICE loc al unei adrese, deci `java<tab>script:`
+   * e `javascript:`. Verificarea schemei cauta litere pana la `:`; cu un caracter de control in mijloc nu mai gasea nicio
+   * schema, iar linkul trecea drept text relativ.
+   */
+  for (const ascuns of ["java\tscript:alert(1)", "java\nscript:alert(1)", "java\r\nscript:alert(1)", "\u0001javascript:alert(1)",
+    "jav\u0000ascript:alert(1)", " \tjavascript:alert(1)", "JaVa\tScRiPt:alert(1)", "da\tta:text/html,x", "javascript\t:alert(1)"]) {
+    assert.equal(sanitizeHrefForTest(ascuns), undefined, JSON.stringify(ascuns));
+  }
+  // Un link bun cu un rand nou lipit din greseala ramane bun, fara caracterul ascuns.
+  assert.equal(sanitizeHrefForTest("https://exemplu.ro/pagina\n"), "https://exemplu.ro/pagina");
+  assert.equal(sanitizeHrefForTest("/con\ttact"), "/contact");
 });
 
 test("valorile de enum invalide cad pe implicit", () => {

@@ -1,7 +1,10 @@
-import "../../globals.css";
+import "../../vitrina.css";
 
 /**
  * Foaia de stil a magazinului, pentru miniaturile din galeria de design-uri.
+ *
+ * ⚠ Din 19.11.2026 e `vitrina.css`, foaia magazinelor (pana atunci `globals.css`, a aplicatiei): miniaturile randeaza
+ * aceleasi sectiuni ca magazinul, iar ruta e sub `(public)`, deci in lista de surse a foii.
  *
  * ═══ DE CE EXISTĂ FIȘIERUL ĂSTA ═══
  *

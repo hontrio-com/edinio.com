@@ -279,7 +279,14 @@ export async function proxy(request: NextRequest) {
    * tastare) ar fi servit tot site-ul a doua oara, adica defectul de mai sus.
    * Ramane doar `www`.
    */
-  if ((bare === "edinio.com" || (bare.endsWith(".edinio.com") && bare !== "www.edinio.com")) && !isPreview) {
+  /*
+   * ⚠ Scutirea previzualizarii e DOAR a varfului (19.11.2026, auditul temelor). Pana atunci acoperea si subdomeniile:
+   * `orice.edinio.com/login?preview=1` servea tot site-ul, cu 200, pe un subdomeniu oarecare (domeniul cu stea al
+   * temelor le aduce pe toate aici). Cadrul editorului se incarca de pe gazda panoului, iar panoul nu poate rula pe un
+   * subdomeniu: orice cerere fara semn pleaca de acolo la www. Deci scutirea nu apara nimic pe subdomenii.
+   */
+  const peSubdomeniuStrain = bare.endsWith(".edinio.com") && bare !== "www.edinio.com";
+  if (peSubdomeniuStrain || (bare === "edinio.com" && !isPreview)) {
     const url = request.nextUrl.clone();
     url.host = "www.edinio.com";
     /* Portul mostenit de la gazda de dezvoltare n-are ce cauta pe adresa reala. */

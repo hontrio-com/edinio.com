@@ -185,8 +185,13 @@ for (const { nume, ctx } of FIXTURES) {
 
     const featured = find(h, "featured");
     assert.equal(featured?.enabled, azi.featured, "sectiunea Recomandate");
-    assert.equal(featured?.settings.title, azi.featuredTitlu, "titlul sectiunii Recomandate");
-    assert.equal(featured?.settings.mode, "featured");
+    /*
+     * Titlul randului NU sta in reglajele sectiunii (19.11.2026): magazinul il citeste din
+     * `page_content.featured_section_title`, iar parserul nu-l recunoaste ca reglaj, deci il taia la a doua citire si
+     * designul derivat iesea altfel la a doua parsare decat la prima (vezi `intrari-ostile.test.ts`).
+     */
+    assert.deepEqual(featured?.settings, { mode: "featured" }, "reglajele sectiunii Recomandate");
+    assert.ok(azi.featuredTitlu, "titlul ramane in continut");
 
     for (const rand of azi.randuri) {
       const s = find(h, rand.id);

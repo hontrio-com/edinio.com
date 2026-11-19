@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { grupuriCategorii, radaciniCategorii } from "@/lib/storefront/categories-chrome";
 import Image from "next/image";
 import { ChevronDown, Menu, Phone, Search, ShoppingBag, Undo2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode, type CategoryItem } from "@/components/storefront/StorefrontProvider";
+import { useInchidePanoul } from "../_shared/inchide-panoul";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { CategoryScroller } from "@/components/storefront/sections/catalog/CategoryScroller";
@@ -85,7 +86,7 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
   const despartitorCls = textSus ? "hidden lg:block text-[var(--st-border)]" : "text-[var(--st-border)]";
 
   return (
-    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)]/95 backdrop-blur-md border-b border-[var(--st-border)]`}>
+    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)] border-b border-[var(--st-border)]`}>
       {baraSus && (
         <div className="border-b border-[var(--st-border)] bg-[var(--st-bg)]">
           <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
@@ -225,6 +226,9 @@ function BaraCautare({
   const [catLocal, setCatLocal] = useState("toate");
   const [deschis, setDeschis] = useState(false);
   const inchide = useRef<number | null>(null);
+  // Clic in afara si Escape, ascultate pe document: Safari nu muta focusul pe butonul apasat, deci `onBlur` nu ajunge.
+  const zonaCategorii = useRef<HTMLDivElement>(null);
+  useInchidePanoul(deschis, setDeschis, zonaCategorii);
 
   const categorie = catalog ? catalog.categoryFilter : catLocal;
   const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ categorie });
@@ -247,7 +251,7 @@ function BaraCautare({
       className={`relative flex items-stretch rounded-[var(--st-radius-sm)] border-2 bg-[var(--st-surface)] focus-within:ring-2 focus-within:ring-[var(--st-text)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--st-surface)] ${compact ? "h-11" : "h-12"}`}
       style={{ borderColor: "var(--st-primary)" }}>
       {categorii.length > 0 && (
-        <div className="relative hidden sm:block shrink-0"
+        <div ref={zonaCategorii} className="relative hidden sm:block shrink-0"
           onBlur={() => { inchide.current = window.setTimeout(() => setDeschis(false), 120); }}
           onFocus={() => { if (inchide.current) window.clearTimeout(inchide.current); }}>
           <button type="button" onClick={() => setDeschis((v) => !v)} aria-expanded={deschis}
@@ -327,18 +331,12 @@ function ToateCategoriile({
       }));
   }, [catalog?.categories, searchCategories, categorii]);
 
-  useEffect(() => {
-    if (!deschis) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!zona.current?.contains(e.target as Node)) setDeschis(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [deschis]);
+  // Clic in afara si Escape, pe document (vezi `inchide-panoul.ts`): Escape era prins pe invelis, deci cerea focusul
+  // inauntru, iar in Safari butonul apasat cu mouse-ul nu-l primeste.
+  useInchidePanoul(deschis, setDeschis, zona);
 
   return (
-    <div ref={zona} className="relative shrink-0"
-      onKeyDown={(e) => { if (e.key === "Escape") setDeschis(false); }}>
+    <div ref={zona} className="relative shrink-0">
       <button type="button" onClick={() => setDeschis((v) => !v)} aria-expanded={deschis}
         className="inline-flex items-center gap-2 text-sm font-bold text-[var(--st-text)] hover:opacity-70 transition-opacity">
         <Menu className="h-[18px] w-[18px]" strokeWidth={2} />

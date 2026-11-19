@@ -34,3 +34,20 @@ test("25.14: selectorul „Pagina pe care o editezi” are inel de focus vizibil
   assert.ok(sel, "selectorul de pagina nu mai e unde il stiam");
   assert.match(sel![1], /focus-visible:ring-2 focus-visible:ring-primary\/40/);
 });
+
+test("WebKit (19.11.2026): un `<select>` al panoului are CONTUR la focusul din tastatura, nu doar inel", () => {
+  /*
+    Inelul (`ring`) e `box-shadow`, iar Safari nu deseneaza umbre pe un `<select>` cu aspect nativ: la proba editorului pe
+    WebKit, selectorul de pagina ramanea doar cu chenarul de 1 px. Regula sta in afara straturilor, ca sa bata
+    `focus:outline-none` din clasele campurilor, si doar in zona aplicatiei (vitrina are culorile ei).
+  */
+  const css = cod("src/app/stil-comun.css").replace(/\/\*[\s\S]*?\*\//g, "");
+  const regula = css.match(/\.zona-aplicatie select:focus-visible \{([^}]*)\}/);
+  assert.ok(regula, "regula de contur pentru `<select>` a disparut din `stil-comun.css`");
+  assert.match(regula![1], /outline: 2px solid color-mix\(in oklab, var\(--primary\) 60%, transparent\);/);
+  assert.match(regula![1], /outline-offset: 1px;/);
+  // In afara oricarui `@layer`: inauntrul unuia, `focus:outline-none` (strat de utilitare) ar castiga.
+  const pana = css.slice(0, css.indexOf(".zona-aplicatie select:focus-visible"));
+  const deschise = (pana.match(/\{/g) ?? []).length - (pana.match(/\}/g) ?? []).length;
+  assert.equal(deschise, 0, "regula de contur a ajuns inauntrul unui bloc (strat sau media)");
+});

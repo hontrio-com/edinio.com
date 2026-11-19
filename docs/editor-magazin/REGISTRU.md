@@ -308,6 +308,27 @@ Pas cu pas, cu comenzile, pentru ziua lansarii: sectiunea „F”.
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
   iar o cautare obisnuita gaseste ca inainte.
 
+- **Auditul temelor si al editorului (etapa 26, 19.11.2026), comis LOCAL, fara push.** Fara migratii si fara variabile
+  noi. Inainte de push, de rulat de el pe productie: `schema-baseline.sh --check` si `coloane-cerute-exista` (randul de
+  antet cere acum si `np_activ:netopia_config->enabled`, `np_insigna:netopia_config->>badge_html`, la fel ca `tm_*`).
+  Dupa push, pe doua-trei magazine reale (unul cu Netopia, unul pe domeniu propriu, unul pe adresa cu slug):
+  - prima pagina arata la fel; in retea, foaia de stil a magazinului e la jumatate (25,6 KB gzip, era 51,5), fisierele `/fonturi-ro/*.woff2`
+    raspund 200 si ă, ș, ț se vad in fontul temei; la incarcare nu pleaca nicio cerere POST cu antetul `next-action`
+    (pleca doua pe fiecare pagina; ramane una doar la magazinele care au ascuns „Creat cu Edinio”);
+  - subsolul: sigla, insignele ANPC, „Creat cu Edinio” si, unde e cazul, insigna Netopia („Plata securizata”) sunt la
+    locul lor de la prima afisare, fara sa apara cu intarziere;
+  - o adresa gresita din magazin (`/<slug>/nu-exista`) arata 404-ul magazinului, cu butonul „Inapoi in magazin” in
+    culoarea lui, care duce la prima pagina a MAGAZINULUI, nu la edinio.com;
+  - in Safari (Mac sau iPhone): lista de categorii din caseta de cautare se inchide la clic in afara si la Escape; pe
+    telefon, pe pagina de produs, trecerea cu tastatura nu duce focusul sub bara de cumparare;
+  - editorul: cu reteaua oprita din DevTools, o modificare arata „Ciorna nu e salvată” si butonul „Reîncearcă”, iar „Ieși
+    din editor” intreaba; cu reteaua repornita, „Ciorna s-a salvat.”;
+  - Sentry: o cadere de sectiune ar veni cu contextul `granita.sectiune` (numele sectiunii);
+  - PageSpeed Insights pe doua magazine, ca sa se vada LCP-ul real: masuratoarea locala nu vede prioritatea pozei
+    principale (`fetchPriority="high"`), care conteaza abia pe HTTP/2.
+  De hotarat de el (nefacute): constrangerea CHECK pe `businesses.primary_color` (cere intai citirea valorilor din
+  productie), treapta de 828 px pe scara pozelor, CSP strict, rezerva WebP pentru ANPC si in subsolul site-ului.
+
 ## D. Capturi si texte de ajutor
 - **Etapa 16 (29.10): ghidurile** `cum-reglezi-headerul-magazinului` (9 design-uri, „Hipermarket, cu meniu de categorii”),
   `cum-reglezi-footerul-magazinului` (al patrulea design), `cum-reglezi-sectiunea-hero` (4 design-uri, cardurile),

@@ -147,7 +147,8 @@ function RandFix({ sectiune, eticheta, selectat, nesalvat, onSelect, ochi, onPes
     <li onMouseEnter={() => onPeste(sectiune?.id ?? null)} onMouseLeave={() => onPeste(null)}
       className={`rounded-xl border bg-surface ${selectat ? "border-primary ring-1 ring-primary/20" : "border-border"}`}>
       <div className="flex items-center gap-1 pl-3 pr-1.5 py-1">
-        <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center py-2 text-left">
+        <button type="button" onClick={onSelect} title={sectiune ? `${eticheta}: ${varianta?.label ?? sectiune.variant}` : eticheta}
+          className="flex-1 min-w-0 flex items-center py-2 text-left">
           <span className="min-w-0">
             <span className={`flex items-center gap-1.5 text-sm font-medium ${aprinsa || !ochi ? "text-foreground" : "text-muted-foreground"}`}>
               <span className="truncate">{eticheta}</span>
@@ -241,7 +242,8 @@ export function ArboreSectiuni({
     <>
       {nesalvat(felContinut(s)) ? <PunctNesalvat /> : null}
       {eListaPaginii && s.enabled && !randate.has(s.id) && (
-        <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Pe pagina Magazin</span>
+        // Text mai inchis decat `muted-foreground`: pe `bg-muted` plin acela are 4,39:1, sub pragul de 4,5 (axe, 19.11.2026).
+        <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-foreground/75">Pe pagina Magazin</span>
       )}
     </>
   );

@@ -138,8 +138,13 @@ export function ColoanaSubsol({ coloana, idSubsol, stil }: { coloana: BlockInsta
           {s.arataLogo !== false && (
             <div className={`flex items-center gap-3 min-w-0 ${stil.placaSigla && business.logo_url ? "w-fit max-w-full rounded-md bg-white px-4 py-3" : ""}`}>
               {business.logo_url ? (
+                /*
+                  Aceeasi adresa ca in antet (480 pe scara comuna), ca browserul sa foloseasca fisierul deja adus, si
+                  incarcare lenesa: pana pe 19.11.2026 subsolul cerea alta latime, deci sigla se descarca de DOUA ori,
+                  amandoua inaintea pozei principale (React preincarca orice <img> fara loading="lazy").
+                */
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={cdnImage(business.logo_url, 320)} alt={nume}
+                <img src={cdnImage(business.logo_url, 480)} alt={nume} loading="lazy" decoding="async"
                   style={stilSigla(logoSize)}
                   className="w-auto object-contain" />
               ) : (

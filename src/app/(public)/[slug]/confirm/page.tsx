@@ -31,6 +31,7 @@ import { ComandaTheMarketer } from "@/components/public/ComandaTheMarketer";
 import { vitrinaTheMarketer, type SetariTMBrute } from "@/lib/themarketer/vitrina";
 import { corpComandaFaraPersoana, liniiTM } from "@/lib/themarketer/comanda";
 import { produseleLiniilor } from "@/lib/themarketer/sync";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -54,7 +55,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     .single();
   if (!business) notFound();
 
-  const color = business.primary_color ?? "#07c527";
+  const color = culoareMagazin(business.primary_color);
 
   // Detect custom domain access
   const headersList = await headers();

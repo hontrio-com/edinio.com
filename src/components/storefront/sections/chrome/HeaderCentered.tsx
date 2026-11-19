@@ -63,7 +63,7 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
   const [cauta, setCauta] = useState(false);
 
   return (
-    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)]/95 backdrop-blur-md border-b border-[var(--st-border)]`}>
+    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)] border-b border-[var(--st-border)]`}>
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
         {/* Trei coloane de latimi egale, ca logo-ul sa cada fix pe mijlocul
             paginii, nu pe mijlocul spatiului ramas dupa contact. */}

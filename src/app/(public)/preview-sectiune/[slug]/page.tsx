@@ -20,6 +20,7 @@ import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ci
 import { sectionMeta, variantMeta } from "@/lib/storefront/design/registry";
 import type { SectionKind } from "@/lib/storefront/design/types";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 /**
  * O singura sectiune de magazin, randata izolat.
@@ -113,7 +114,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   // Designul se deriva din configuratia REALA: ce sectiuni are magazinul aprinse
   // si ce varianta foloseste nu trebuie sa depinda de continutul demonstrativ.
   const resolved = resolveDesign(designDeCitit, {
-    primaryColor: business.primary_color ?? "#07c527",
+    primaryColor: culoareMagazin(business.primary_color),
     pageContent: realPageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
@@ -155,7 +156,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
       businessId: business.id,
       hideNoImage: false,
       hideOutOfStock: false,
-      color: business.primary_color ?? "#07c527",
+      color: culoareMagazin(business.primary_color),
       basePath: `/${business.slug}`,
       storeSlug: business.slug,
       social: {},

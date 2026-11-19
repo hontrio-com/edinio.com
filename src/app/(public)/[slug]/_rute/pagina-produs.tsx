@@ -45,6 +45,7 @@ import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/perm
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
 import { adresaCurenta, setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
 import { esteProdusDemo } from "@/lib/teme/produse-demo";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 /*
  * ⚠ AICI STA PAGINA DE PRODUS, nu in `product/[productSlug]/page.tsx` (25.09.2026).
@@ -302,7 +303,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
   const magazin = magazinCuCiorna(business, ciorna.continut);
   const pageContent = pcCuCiorna((storeSettings?.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as StorePageContent;
   const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
-    primaryColor: magazin.primary_color ?? "#07c527",
+    primaryColor: culoareMagazin(magazin.primary_color),
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: magazin.cover_url,
@@ -360,7 +361,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     businessId: business.id,
     hideNoImage: pageContent.hide_products_without_images === true,
     hideOutOfStock: pageContent.hide_out_of_stock_products === true,
-    color: magazin.primary_color ?? "#07c527",
+    color: culoareMagazin(magazin.primary_color),
     basePath,
     storeSlug: business.slug,
     social: (business.social ?? {}) as Record<string, string>,

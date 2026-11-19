@@ -1,4 +1,8 @@
-import "../../globals.css";
+/*
+ * Foaia magazinelor, nu a aplicatiei (19.11.2026): aceleasi reguli, dar cu utilitarele generate doar din fisierele
+ * vitrinei. Vezi `app/vitrina.css`.
+ */
+import "../../vitrina.css";
 import { headers } from "next/headers";
 import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";
@@ -23,6 +27,11 @@ import { contulMagazinului as contulMagazinuluiPeCerere } from "@/lib/cont/confi
 import { ContulMagazinuluiProvider } from "@/components/storefront/cont/ContulMagazinului";
 import { PermalinkuriProvider } from "@/components/storefront/PermalinkuriMagazin";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { FeteRomanesti } from "@/components/pages/FeteRomanesti";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
+import { contrastOn } from "@/lib/storefront/design/css-vars";
+import { IdentitateMagazinProvider } from "@/components/storefront/IdentitateMagazin";
+import { sanitizeNetopiaBadge } from "@/lib/utils/sanitize-embed";
 
 interface Props {
   children: React.ReactNode;
@@ -169,6 +178,31 @@ export default async function StoreLayout({ children, params }: Props) {
   // mai atinge baza.
   const business = await incarcaAntetMagazin(slug);
 
+  /*
+   * Insigna Netopia si creditul „Creat cu Edinio” din subsol, hotarate AICI, pe server (19.11.2026, auditul temelor).
+   *
+   * Pana atunci subsolul le cerea din browser, prin doua actiuni de server, la FIECARE afisare a FIECAREI pagini de
+   * magazin: doua cereri POST in plus pe vizita (doua porniri de functie), puse la coada inaintea oricarei alte
+   * actiuni a vizitatorului („Adauga in cos”, cautarea), iar insigna aparea abia dupa raspuns. Cea de la Netopia nici
+   * nu avea `catch`: taiata de o navigare, lasa o eroare neprinsa in Firefox si Safari (gasita de proba pe 3 motoare).
+   *
+   * ⚠ FARA NICIO CERERE NOUA: insigna vine in randul de antet (`np_activ`, `np_insigna`; vezi `antet-magazin.ts`), iar
+   * creditul se hotaraste din `page_content`, adus si el. Prima varianta chema aici cele doua actiuni ca functii si le
+   * astepta: masurat, timpul pana la primul octet crestea cu un drum la baza (419 -> 452 ms pe demo), cat castiga restul.
+   *
+   * ⚠ Magazinele care AU cerut ascunderea creditului (`hide_edinio_badge`) raman pe drumul vechi (`null` = piesa
+   * intreaba din browser): verdictul lor cere planul proprietarului, adica inca o citire, pe care nu o platim in
+   * timpul randarii. Restul magazinelor afla raspunsul fara nicio citire: creditul se arata.
+   *
+   * `null` la insigna = randul a venit fara campuri (selectul de rezerva): piesa cere atunci singura, ca inainte.
+   */
+  const setarileSubsolului = setarileDin<{ page_content: unknown; np_activ?: unknown; np_insigna?: unknown }>(business);
+  const cereAscundereaCreditului = Boolean((setarileSubsolului?.page_content as { hide_edinio_badge?: unknown } | null | undefined)?.hide_edinio_badge);
+  const creditAscuns: boolean | null = !business || cereAscundereaCreditului ? null : false;
+  const insignaNetopia: string | null = setarileSubsolului && "np_activ" in setarileSubsolului
+    ? (setarileSubsolului.np_activ ? sanitizeNetopiaBadge(typeof setarileSubsolului.np_insigna === "string" ? setarileSubsolului.np_insigna : "") : "")
+    : null;
+
   let fbPixelId: string | null = null;
   let ttPixelId: string | null = null;
   let googleTagId: string | null = null;
@@ -206,7 +240,7 @@ export default async function StoreLayout({ children, params }: Props) {
   const consentCategories = detectConsentCategories(mc, gaMeasurementId, tm !== null);
   /* Ce sta sub „Marketing” in banner, pe nume: omul isi da acordul pentru ce citeste acolo. */
   const furnizoriMarketing = [fbPixelId && "Facebook", ttPixelId && "TikTok", tm && "theMarketer"].filter((x): x is string => !!x);
-  const color = (business?.primary_color as string | null) ?? "#07c527";
+  const color = culoareMagazin(business?.primary_color);
   const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
 
   // Policy link must honour custom domains (proxy rewrites customdomain.ro/x → /slug/x).
@@ -247,6 +281,11 @@ export default async function StoreLayout({ children, params }: Props) {
   return (
     <>
       {/*
+        Literele romanesti dintr-un fisier mic, nu din tot subsetul latin-ext al fontului (19.11.2026): primul lucru
+        din pagina, inaintea oricarui text. Vezi `lib/fonturi-ro-css.ts`.
+      */}
+      <FeteRomanesti />
+      {/*
         ⚠⚠ SI NU IN ZONA DE CONT. Paginile de sub `/{slug}/cont` sunt copiii
         layoutului asta, deci pana pe 23.09.2026 mosteneau pixelii alesi de
         comerciant: adresa paginii, care poarta identificatorul comenzii, pleaca
@@ -275,7 +314,12 @@ export default async function StoreLayout({ children, params }: Props) {
       </DoarInAfaraContului>
       {/* Prefixele din Setari > Permalink-uri, din acelasi rand: nicio cerere in plus. */}
       <PermalinkuriProvider valoare={permalinkuriDin(setarileDin<{ page_content: unknown }>(business)?.page_content)}>
-        <ContulMagazinuluiProvider valoare={contulMagazinului}>{children}</ContulMagazinuluiProvider>
+        <ContulMagazinuluiProvider valoare={contulMagazinului}>
+          {/* Pentru 404-ul si pagina de eroare a magazinului, care nu primesc slugul (vezi `IdentitateMagazin.tsx`). */}
+          <IdentitateMagazinProvider valoare={{ nume: business ? storeName : null, culoare: color, culoareText: contrastOn(color), acasa: basePath || "/", insignaNetopia, creditAscuns }}>
+            {children}
+          </IdentitateMagazinProvider>
+        </ContulMagazinuluiProvider>
       </PermalinkuriProvider>
       {cookieConfig.enabled && (
         <DoarInMagazinReal>

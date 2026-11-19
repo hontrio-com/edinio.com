@@ -204,7 +204,7 @@ function blobStyle(blob: Blob): CSSProperties {
     /*
       ⚠ Nu `filter: blur()` pe pată: estomparea se refăcea la fiecare cadru cât pata se plimba (MĂSURAT,
       vezi `luminaPetei`). Lumina deja estompată stă pe `::before`, mai mare decât pata cu
-      `DEVIATII_DINCOLO` neclarități (`stil-comun.css`); pata își păstrează mărimea, deci și cursa
+      `DEVIATII_DINCOLO` neclarități (`stil-site.css`); pata își păstrează mărimea, deci și cursa
       animației, care e în procente din ea.
     */
     ["--mesh-lumina" as string]: luminaPetei(blob, rgb),

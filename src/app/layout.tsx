@@ -27,7 +27,7 @@ const geistMono = Geist_Mono({
     „niciodată pe site-ul de prezentare". FALS, și verificat: apare pe
     `/optimizare` (blocul de sitemap din `PanouSitemap.tsx:96`) și pe
     `/mentenanta-gratuita` (titlul din `TitluMentenanta.tsx:79`, prin
-    `--font-mono`, care e legat de `--font-geist-mono` în `stil-comun.css:1527`).
+    `--font-mono`, care e legat de `--font-geist-mono` în `@theme`-ul din `stil-comun.css`).
     În HTML-ul construit: 2 apariții pe prima, 4 pe a doua, 0 pe restul.
 
     Hotărârea rămâne aceeași, dar din motivul adevărat: DOUĂ din optsprezece

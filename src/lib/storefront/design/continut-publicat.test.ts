@@ -242,6 +242,29 @@ test("⚠⚠ in editor, pe loc se randeaza NUMAI ce a trimis editorul, niciodata
   assert.match(s, /export function ContinutLiber\(\{ cale \}: \{ cale: CaleContinut \}\)/, "fara prop de blocuri");
   assert.match(s, /if \(e\.origin !== window\.location\.origin \|\| !isPreviewMessage\(e\.data\)\) return;/);
   assert.match(s, /if \(!editor \|\| !chrome \|\| !viu\.design \|\| !viu\.date\) return <SlotBlocuri cheie=\{cheie\} \/>;/);
-  assert.match(s, /const blocuri = blocuriLaCale\(viu\.design, cale\) \?\? \[\];/);
-  assert.match(s, /preview: true,/, "formularele nu trimit nimic din previzualizare");
+  /*
+   * Din 19.11.2026 randarea pe loc sta in `ContinutLiberViu`, incarcat doar in editor. Regula e aceeasi, pe doua fisiere:
+   * `ContinutLiber` ii da NUMAI designul venit prin mesaj (`viu.design`), iar el randeaza numai din ce a primit.
+   */
+  assert.match(s, /<ContinutLiberViu cale=\{cale\} cheie=\{cheie\} chrome=\{chrome\} design=\{viu\.design\} date=\{viu\.date\} reluari=\{viu\.reluari\} \/>/);
+  const viu = cod("src/components/storefront/ContinutLiberViu.tsx");
+  assert.match(viu, /const blocuri = blocuriLaCale\(design, cale\) \?\? \[\];/);
+  assert.match(viu, /preview: true,/, "formularele nu trimit nimic din previzualizare");
+});
+
+test("⚠ `ContinutLiber` se incarca pe fiecare magazin: nu trage static randatorul de blocuri si nici operatiile editorului", () => {
+  /*
+   * Auditul din 19.11.2026: prin `ContinutLiber`, tot randatorul de blocuri (text, formulare, pachete, harta, cod
+   * personalizat), `edit.ts` si etichetele blocurilor ajungeau in pachetul de JavaScript al ORICAREI vitrine, desi pe
+   * magazinul public blocurile se randeaza pe server. Un import static pus la loc aici le aduce inapoi, in tacere.
+   */
+  const s = cod("src/components/storefront/ContinutLiber.tsx");
+  const importuri = [...s.matchAll(/^import\s[^;]*?from\s+"([^"]+)";/gm)].map((m) => m[1]);
+  assert.ok(importuri.length >= 5, "proba nu mai gaseste importurile");
+  for (const interzis of ["@/components/pages/BlockRenderer", "@/lib/storefront/design/edit", "@/lib/pages/blocks.types", "@/lib/storefront/design/continut-liber", "@/components/pages/PornesteAnimatiile"]) {
+    assert.ok(!importuri.includes(interzis), `ContinutLiber importa static ${interzis}`);
+  }
+  assert.match(s, /const ContinutLiberViu = lazy\(\(\) => import\("\.\/ContinutLiberViu"\)\);/);
+  // Cat se incarca bucata editorului, ramane slotul de pe server: fara loc gol in previzualizare.
+  assert.match(s, /<Suspense fallback=\{<SlotBlocuri cheie=\{cheie\} \/>\}>/);
 });

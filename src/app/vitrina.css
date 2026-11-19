@@ -1,0 +1,41 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  FOAIA MAGAZINELOR (vitrina): tot ce se randeaza sub `/{slug}`
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ⚠ DE CE EXISTA (19.11.2026, auditul temelor). Pana azi magazinele incarcau `globals.css`, foaia aplicatiei, care
+  scaneaza TOT proiectul: 338 KB (52 KB gzip) de utilitare, cele mai multe ale panoului (`input-group`, `switch`,
+  `tabs-list`, calendarul, tema intunecata). Foaia e in drumul primei afisari: pe telefon, poza bannerului era deja
+  descarcata si astepta CSS-ul. Masurat pe 11.11.2026, pe sase teme, cu o foaie doar a vitrinei pusa in locul ei:
+  LCP median 2096 -> 1592 ms, cu 0,00% pixeli diferiti.
+
+  ⚠ CUM SE OBTINE. La fel ca `website.css` (31.08.2026): `source(none)` opreste descoperirea automata a fisierelor, iar
+  `vitrina-surse.css` spune exact ce se scaneaza. Diferenta: lista NU e scrisa de mana. O genereaza
+  `scripts/foaie-vitrina.mjs` din importurile rutelor magazinului (peste 700 de fisiere), iar `foi-de-stil.test.ts`
+  cade cand a ramas in urma. Dupa un import nou in vitrina:
+
+      node scripts/foaie-vitrina.mjs --scrie
+
+  ⚠ REGULILE SCRISE DE MANA NU SUNT DUPLICATE: `stil-comun.css` e acelasi fisier pe care il importa si `globals.css` si
+  `website.css`. Aceleasi importuri ca `globals.css` (`tw-animate-css`, `shadcn/tailwind.css`, varianta `dark`), deci
+  aceleasi reguli, in aceeasi ordine; difera doar ce utilitare se genereaza.
+
+  ⚠ CE NU SE IMPORTA AICI: `stil-site.css`, regulile site-ului de prezentare (fundalul mesh, rama de iPhone, benzile de
+  sigle). Pana pe 19.11.2026 stateau in `stil-comun.css` si ajungeau si aici: 12,6 KB (2,6 KB gzip, 9% din foaie) pentru
+  clase pe care niciun magazin nu le foloseste. `foi-de-stil.test.ts` cade daca un fisier al vitrinei incepe sa foloseasca
+  vreuna; atunci regula ei se muta in `stil-comun.css`.
+
+  ⚠ HTML-UL SCRIS DE COMERCIANTI poate purta clase care nu apar in niciun fisier al vitrinei: editorul de text pune
+  `text-primary` si `underline` pe legaturi (masurat in productie pe 11.11.2026: singurele doua, in 48 de descrieri si
+  29 de pagini). `@source inline` de mai jos le genereaza orice ar fi, ca descrierile lor sa arate la fel.
+*/
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@import "./vitrina-surse.css";
+@source inline("text-primary underline");
+
+@import "./stil-comun.css";

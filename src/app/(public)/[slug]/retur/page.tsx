@@ -10,6 +10,7 @@ import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-v
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { ReturnRequestClient } from "@/components/ministore/ReturnRequestClient";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 // Funcția de retragere din contract — OUG 18/2026. Pagină personală/tranzitorie: noindex.
 export const metadata: Metadata = { robots: { index: false } };
@@ -37,7 +38,7 @@ export default async function ReturPage({ params, searchParams }: Props) {
     .eq("business_id", business.id)
     .single();
 
-  const color = business.primary_color ?? "#07c527";
+  const color = culoareMagazin(business.primary_color);
   const storeName = business.store_name ?? business.business_name;
 
   // Custom-domain aware base path (proxy rewrites customdomain.ro/x -> /slug/x).

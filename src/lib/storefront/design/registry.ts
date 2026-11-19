@@ -1398,6 +1398,22 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
   },
 };
 
+/*
+ * ⚠⚠ TABELELE DE CAUTARE NU MOSTENESC NIMIC (19.11.2026, auditul temelor).
+ *
+ * `SECTION_REGISTRY[kind]` si `meta.variants[variant]` primesc chei venite din DATE: felul si varianta unei sectiuni din
+ * `jsonb`-ul designului, pe care comerciantul si-l poate scrie si direct, pe langa editor. Pe un obiect obisnuit,
+ * `tabel["toString"]` nu e `undefined`, ci functia mostenita de la `Object.prototype`, adica „o sectiune care exista”.
+ * Un design cu `{ "kind": "toString" }` facea parserul („total”, care nu are voie sa cada) sa ARUNCE la
+ * `meta.variants[...]`: pagina magazinului dadea 500 la fiecare vizita, iar salvarea ciornei cadea. Gasit de proba cu
+ * intrari stricate la intamplare (`intrari-ostile.test.ts`), nu de un om.
+ *
+ * Fara prototip, o cheie necunoscuta e pur si simplu necunoscuta, in TOATE locurile care cauta asa (peste zece), si in
+ * cele scrise de acum incolo. `Object.keys` / `Object.values` / `in` merg la fel.
+ */
+Object.setPrototypeOf(SECTION_REGISTRY, null);
+for (const meta of Object.values(SECTION_REGISTRY)) Object.setPrototypeOf(meta.variants, null);
+
 export function sectionMeta(kind: SectionKind): SectionMeta | undefined {
   return SECTION_REGISTRY[kind];
 }

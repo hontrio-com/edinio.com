@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 /**
  * Pune `data-in-afara` pe PĂRINTELE ei cât părintele nu e pe ecran, ca animațiile CSS fără sfârșit de
- * dedesubt să stea (regula e în `stil-comun.css`, la „Animațiile paginii, oprite cât nu se văd”).
+ * dedesubt să stea (regula e în `stil-site.css`, la „Animațiile paginii, oprite cât nu se văd”).
  *
  * O insulă de client cât un `<span>` ascuns, ca secțiunile în care stă (petele primului ecran, benzile
  * de sigle) să rămână componente de server. Fără JavaScript sau fără `IntersectionObserver`, atributul

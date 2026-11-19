@@ -50,7 +50,7 @@ export function ShopPageCompact({ titlu, coloane, coloaneMobil, grupuriPornite, 
             ales, cu bara de anunt inclusa. Un decalaj scris de mana ar fi bagat
             bara sub header la sase din cele opt variante.
           */}
-          <div className="sticky z-20 -mx-4 px-4 py-2.5 bg-[var(--st-bg)]/95 backdrop-blur-sm border-b border-[var(--st-border)] mb-4"
+          <div className="sticky z-20 -mx-4 px-4 py-2.5 bg-[var(--st-bg)] border-b border-[var(--st-border)] mb-4"
             style={{ top: "var(--st-header-offset, 100px)" }}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">

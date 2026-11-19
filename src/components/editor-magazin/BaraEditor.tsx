@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, ExternalLink, History, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
+import { ArrowLeft, Check, CloudOff, ExternalLink, History, Loader2, Monitor, MoreHorizontal, Paintbrush2, Redo2, RotateCw, Smartphone, Tablet, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -70,8 +70,11 @@ export function BaraEditor({
   /* „Renunță” arunca ciorna intreaga si pasii Anuleaza / Refa, fara drum inapoi: intreaba inainte (10.11.2026). */
   const [confirmaRenuntarea, setConfirmaRenuntarea] = useState(false);
   const router = useRouter();
-  /** „intreaba” = fereastra de iesire deschisa; „pleaca” = ciorna se trimite, apoi se iese. */
-  const [iesire, setIesire] = useState<"intreaba" | "pleaca" | null>(null);
+  /**
+   * „intreaba” = fereastra de iesire deschisa; „pleaca” = ciorna se trimite, apoi se iese; „nesalvat” = ciorna n-a
+   * ajuns in baza, deci omul hotaraste (19.11.2026: pana atunci „Ieși” ramanea pe loc fara niciun cuvant).
+   */
+  const [iesire, setIesire] = useState<"intreaba" | "pleaca" | "nesalvat" | null>(null);
 
   async function pleaca(cuPublicare = false) {
     setIesire("pleaca");
@@ -79,7 +82,8 @@ export function BaraEditor({
        pe loc si se asteapta. Altfel ultima modificare dinaintea iesirii nu mai ajungea in baza. */
     const ok = cuPublicare ? await ciorna.publica() : await ciorna.salveazaAcum();
     if (!ok) {
-      setIesire(null);
+      // „Publică” isi spune singura caderea; la salvarea ciornei, fereastra de mai jos spune ce se pierde.
+      setIesire(cuPublicare ? null : "nesalvat");
       return;
     }
     router.push(laIesire);
@@ -94,7 +98,9 @@ export function BaraEditor({
     ? "Se încarcă o imagine..."
     : ciorna.salvez
       ? "Se salvează ciorna..."
-      : ciorna.areModificari ? "Modificări nepublicate" : "Totul e publicat";
+      : ciorna.esecSalvare
+        ? "Ciorna nu e salvată"
+        : ciorna.areModificari ? "Modificări nepublicate" : "Totul e publicat";
 
   return (
     <div className="h-14 shrink-0 border-b border-border bg-surface px-3 flex items-center gap-2">
@@ -177,9 +183,22 @@ export function BaraEditor({
         </button>
 
         <div className="hidden lg:block min-w-0 text-right">
-          <p className="text-[11px] text-muted-foreground truncate">{stare}</p>
+          <p className={cn("text-[11px] truncate", ciorna.esecSalvare && !ciorna.salvez && !seIncarca ? "text-amber-700 font-medium" : "text-muted-foreground")}>{stare}</p>
           {continutNesalvat && !seIncarca && <p className="text-[11px] text-amber-600 truncate">Conținut nesalvat</p>}
         </div>
+
+        {/*
+          Salvarea ciornei a cazut (19.11.2026): semnul ramane cat dureaza, pe orice latime (starea scrisa apare abia de
+          la 1024 px), iar apasarea reincearca pe loc. Reincercarile merg si singure (`coada-salvarii.ts`).
+        */}
+        {ciorna.esecSalvare && (
+          <button type="button" onClick={ciorna.reincearcaSalvarea} disabled={ciorna.salvez}
+            title="Ciorna nu s-a salvat. Apasă ca să încercăm din nou." aria-label="Ciorna nu s-a salvat. Încearcă din nou"
+            className="h-9 shrink-0 px-2.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-medium inline-flex items-center gap-1.5 hover:bg-amber-100 disabled:opacity-60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50">
+            {ciorna.salvez ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CloudOff className="h-3.5 w-3.5" />}
+            <span className="hidden xl:inline">Reîncearcă</span>
+          </button>
+        )}
 
         <button type="button" onClick={() => setConfirma(true)} disabled={publicareInCurs}
           title={publicat ? "Magazinul e vizibil pentru clienți" : "Magazinul e ascuns pentru clienți"}
@@ -300,6 +319,28 @@ export function BaraEditor({
                 <Button disabled={ciorna.blocata} onClick={() => void pleaca(true)}>Publică și ieși</Button>
               </>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        Ciorna n-a ajuns in baza la iesire (19.11.2026). Pana atunci `pleaca` se oprea aici fara niciun semn: butonul
+        „Ieși” parea mort, iar singurul drum afara era inchiderea filei. Acum omul afla ce se pierde si alege.
+      */}
+      <Dialog open={iesire === "nesalvat"} onOpenChange={(deschis) => { if (!deschis) setIesire(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ciorna nu s-a putut salva</DialogTitle>
+            <DialogDescription>
+              {ciorna.esecSalvare === "refuzat"
+                ? "Serverul a refuzat salvarea (mesajul apărut pe ecran spune de ce). Dacă ieși acum, ultimele modificări se pierd. Clienții văd magazinul ca până acum."
+                : "Ultimele modificări nu au ajuns pe server: verifică legătura la internet și dacă mai ești în cont. Dacă ieși acum, ele se pierd. Clienții văd magazinul ca până acum."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIesire(null)}>Rămân</Button>
+            <Button variant="destructive" onClick={() => { setIesire("pleaca"); router.push(laIesire); }}>Ieși fără ele</Button>
+            <Button onClick={() => void pleaca()}>Încearcă din nou</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

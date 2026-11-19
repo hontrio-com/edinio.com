@@ -50,7 +50,7 @@ export function HeaderClassic() {
   const acasa = radacinaMagazin(basePath);
 
   return (
-    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background/95 backdrop-blur-md border-b border-border`}>
+    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background border-b border-border`}>
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
         <StoreNavHamburger items={menu} basePath={basePath} color={color} logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} />
         <a href={acasa} className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">

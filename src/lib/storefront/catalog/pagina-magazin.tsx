@@ -47,6 +47,7 @@ import type { Json } from "@/types/database.types";
 import { parseStoreSeo, storeBaseUrl } from "@/lib/seo";
 import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
 import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 /*
  * Metadata sta in `metadata-magazin.ts`, fara JSX, ca sa poata fi rulata in probe.
@@ -124,7 +125,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
   };
   const magazin = magazinCuCiorna(business, ciorna.continut);
   const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
-    primaryColor: magazin.primary_color ?? "#07c527",
+    primaryColor: culoareMagazin(magazin.primary_color),
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: magazin.cover_url,
@@ -209,7 +210,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
       return (
         <SuspendedStorePage
           businessName={business.store_name ?? business.business_name}
-          primaryColor={business.primary_color}
+          primaryColor={culoareMagazin(business.primary_color)}
           phone={business.phone}
         />
       );
@@ -680,7 +681,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
       businessId: business.id,
       hideNoImage: pc.hide_products_without_images === true,
       hideOutOfStock: pc.hide_out_of_stock_products === true,
-      color: magazin.primary_color ?? "#07c527",
+      color: culoareMagazin(magazin.primary_color),
       basePath,
       storeSlug: business.slug,
       social: (business.social ?? {}) as Record<string, string>,

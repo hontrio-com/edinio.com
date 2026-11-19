@@ -31,7 +31,12 @@ export function porneste(): void {
   });
 }
 
-export function captureaza(eroare: unknown): void {
+/**
+ * `context` = unde a cazut, pentru granitele care stiu (paza unei sectiuni a vitrinei: numele ei si stiva de
+ * componente). Ajunge in eveniment ca un context separat, nu in mesaj: gruparea erorilor ramane dupa eroare.
+ */
+export function captureaza(eroare: unknown, context?: Record<string, string>): void {
   porneste();
-  Sentry.captureException(eroare);
+  if (context) Sentry.captureException(eroare, { contexts: { granita: context } });
+  else Sentry.captureException(eroare);
 }

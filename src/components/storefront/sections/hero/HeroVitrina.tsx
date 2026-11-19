@@ -38,7 +38,7 @@ export function HeroVitrina({ settings }: { settings: Record<string, unknown> })
             <a key={i} href={c.link ? resolveHref(c.link, basePath) : catreProduse}
               className={`group relative isolate shrink-0 snap-start overflow-hidden rounded-[var(--st-radius-lg)] w-[78%] sm:w-[46%] ${latimeDesktop} aspect-[3/4] ${carduri.length <= 3 ? "lg:aspect-[4/5]" : ""}`}
               style={{ backgroundColor: "color-mix(in srgb, var(--st-primary) 35%, #0b0b0b)" }}>
-              <Image src={c.imagine} alt="" fill priority={i < 2}
+              <Image src={c.imagine} alt="" fill preload={i < 2} fetchPriority={i === 0 ? "high" : undefined}
                 sizes="(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 25vw"
                 className="-z-10 object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
               <span aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />

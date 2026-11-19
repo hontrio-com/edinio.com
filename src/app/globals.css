@@ -29,8 +29,11 @@
   31.08.2026 și n-au fost actualizate.
 
   Unde se caută de fapt:
-    `src/app/stil-comun.css`  — toate regulile scrise de mână, pentru amândouă
-                                foile (`.hero-mesh-blob`, `.iphone`, `.banda`, …)
+    `src/app/stil-comun.css`  : jetoanele și regulile scrise de mână pe care le
+                                folosesc toate foile (sertarul de coș, paginile proprii, …)
+    `src/app/stil-site.css`   : din 19.11.2026, regulile site-ului de prezentare
+                                (`.hero-mesh-blob`, `.iphone`, `.banda`, …); îl importă
+                                foaia asta și `website.css`, nu și `vitrina.css`
     `src/app/website.css`     — foaia site-ului de prezentare, cu lista `@source`
     fișierul ăsta            — doar importurile aplicației și `dark`
 */
@@ -41,3 +44,4 @@
 @custom-variant dark (&:is(.dark *));
 
 @import "./stil-comun.css";
+@import "./stil-site.css";

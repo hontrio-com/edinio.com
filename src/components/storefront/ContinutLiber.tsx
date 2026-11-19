@@ -1,22 +1,10 @@
 "use client";
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
-import { BlockRenderer } from "@/components/pages/BlockRenderer";
-import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
+import { Suspense, lazy, useEffect, useSyncExternalStore } from "react";
 import { SlotBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
-import { cheieAnimatie } from "@/lib/pages/animatii";
-import { BLOCK_META, type Block } from "@/lib/pages/blocks.types";
-import { ETICHETA_CONTINUT_LIBER } from "@/lib/storefront/design/continut-liber";
-import { blocuriLaCale, caleInText, type CaleContinut } from "@/lib/storefront/design/edit";
-import {
-  BLOC_ATTR,
-  ETICHETA_ATTR,
-  PREVIEW_MESSAGE,
-  idBloc,
-  isPreviewMessage,
-  type DatePrevizualizarePagina,
-} from "@/lib/storefront/design/preview-protocol";
+import { caleInText, type CaleContinut } from "@/lib/storefront/design/cale-continut";
+import { PREVIEW_MESSAGE, isPreviewMessage, type DatePrevizualizarePagina } from "@/lib/storefront/design/preview-protocol";
 import type { StoreDesign } from "@/lib/storefront/design/types";
 
 /**
@@ -25,13 +13,17 @@ import type { StoreDesign } from "@/lib/storefront/design/types";
  *
  * Pe magazinul public (si in editor, pana sosesc datele): slotul randat pe SERVER, cu blocurile
  * curatate (`sloturiContinutLiber`), cu tot cu interogarile lor. In editor, odata sosite designul si
- * datele trimise de editor, blocurile se randeaza aici, pe loc, nesalvate inca, ca la paginile proprii
+ * datele trimise de editor, blocurile se randeaza pe loc, nesalvate inca, ca la paginile proprii
  * (`PaginaVie`), fiecare cu marcajul lui (`<cale>/<bloc>`), ca un clic sa-l deschida in panou.
  *
  * ⚠⚠ Pe loc se randeaza NUMAI blocurile venite prin mesajul editorului, niciodata designul primit ca
  * prop. In modul editor acela e ciorna citita pe server, necuratata: un `<img onerror>` scris direct
  * in baza ar fi rulat aici, pe originea panoului, inclusiv la un admin intrat prin impersonare.
  * Editorul isi curata blocurile la incarcare (`curataContinutulPentruEditor`), deci ce trimite e curat.
+ *
+ * ⚠ Randarea pe loc sta in `ContinutLiberViu`, incarcat la nevoie (19.11.2026). Fisierul asta se incarca pe FIECARE
+ * magazin, deci nu importa nimic din randatorul de blocuri si nici din operatiile editorului: doar ascultatorul de
+ * mesaje, starea lui si slotul de pe server.
  */
 
 interface StareVie {
@@ -69,6 +61,9 @@ const citeste = () => stare;
 const FARA: StareVie = { design: null, date: null, reluari: {} };
 const peServer = () => FARA;
 
+/** Randarea pe loc, doar in editor: bucata ei de JavaScript se cere abia cand editorul trimite designul. */
+const ContinutLiberViu = lazy(() => import("./ContinutLiberViu"));
+
 export function ContinutLiber({ cale }: { cale: CaleContinut }) {
   const chrome = useStoreChromeOptional();
   const editor = chrome?.esteEditorDesign === true;
@@ -82,49 +77,10 @@ export function ContinutLiber({ cale }: { cale: CaleContinut }) {
   }, [editor, viu.date]);
 
   if (!editor || !chrome || !viu.design || !viu.date) return <SlotBlocuri cheie={cheie} />;
-  const blocuri = blocuriLaCale(viu.design, cale) ?? [];
-  if (blocuri.length === 0) {
-    // Doar in editor: un continut gol nu lasa un loc nevazut in magazin, dar aici trebuie gasit si ales.
-    return (
-      <div className="mx-auto my-6 max-w-3xl rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-        {ETICHETA_CONTINUT_LIBER}: adaugă un bloc din stânga.
-      </div>
-    );
-  }
-  const marcheazaBloc = (b: Block, continut: ReactNode) => (
-    // Cheia animatiei: o animatie aleasa sau reluata remonteaza blocul, iar scriptul il porneste.
-    <div key={cheieAnimatie(b, viu.reluari[b.id] ?? 0)} {...{ [BLOC_ATTR]: idBloc(cheie, b.id), [ETICHETA_ATTR]: BLOCK_META[b.type]?.label ?? b.type }} className="contents">
-      {continut}
-    </div>
-  );
+  // Cat se incarca bucata editorului (o singura data), ramane slotul de pe server, ca pana sosesc datele.
   return (
-    /*
-     * ⚠ PORNIREA ANIMATIILOR, si in editor (etapa 13, gasit dupa mentiunea lui: „nu vad animatia la
-     * buton”). In magazin, scriptul vine cu slotul de pe server (`slotBlocuri`); aici slotul e ocolit,
-     * fiindca blocurile se deseneaza din designul viu, deci animatia aleasa n-avea cine s-o porneasca.
-     * Cheia de animatie remonteaza blocul, iar observatorul pornit aici il prinde si il anima.
-     */
-    <div className="contents">
-      <BlockRenderer
-        blocks={blocuri}
-        ctx={{
-          color: chrome.color,
-          basePath: chrome.basePath,
-          storeSlug: chrome.business.slug,
-          social: chrome.social,
-          businessId: chrome.business.id,
-          products: viu.date.products,
-          bundles: viu.date.bundles,
-          forms: viu.date.forms,
-          plati: viu.date.plati,
-          curieri: viu.date.curieri,
-          preview: true,
-          caleDesign: cheie,
-          h1Id: null,
-          marcheazaBloc,
-        }}
-      />
-      <PornesteAnimatiile />
-    </div>
+    <Suspense fallback={<SlotBlocuri cheie={cheie} />}>
+      <ContinutLiberViu cale={cale} cheie={cheie} chrome={chrome} design={viu.design} date={viu.date} reluari={viu.reluari} />
+    </Suspense>
   );
 }

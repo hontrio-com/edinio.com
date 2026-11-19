@@ -41,14 +41,14 @@ test("petele primului ecran: fără filter, lumina estompată stă pe ::before",
   const fara = sursa.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   assert.ok(!/\bfilter\s*:/.test(fara), "o pată primește din nou `filter`");
   assert.ok(fara.includes('"--mesh-lumina"') && fara.includes('"--mesh-intindere"'), "petele nu-și mai scriu lumina");
-  const css = citeste("src/app/stil-comun.css");
+  const css = citeste("src/app/stil-site.css");
   assert.ok(!/\bfilter\s*:/.test(regula(css, ".hero-mesh-blob")), ".hero-mesh-blob are filter");
   const inainte = regula(css, ".hero-mesh-blob::before");
   assert.ok(inainte.includes("background: var(--mesh-lumina);") && inainte.includes("var(--mesh-intindere)"));
 });
 
 test("animațiile paginii stau cât nu se văd: regula de pauză și componenta în ambele secțiuni", () => {
-  const css = citeste("src/app/stil-comun.css");
+  const css = citeste("src/app/stil-site.css");
   const i = css.indexOf("[data-in-afara] .hero-mesh-blob,\n[data-in-afara] .banda {");
   assert.ok(i >= 0, "lipsește regula de pauză (două clase: prescurtarea `animation` repune `running`)");
   assert.ok(css.slice(i, css.indexOf("}", i)).includes("animation-play-state: paused;"));

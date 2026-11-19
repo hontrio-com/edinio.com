@@ -329,6 +329,15 @@ const SUBSOL_CENTRAT: SchemaBlocuri = {
 };
 
 /** Schema blocurilor unei sectiuni, dupa tip si varianta; `null` cand sectiunea n-are blocuri. */
+/*
+ * ⚠⚠ `schema.tipuri[tip]` primeste tipul unui bloc venit din DATE (`jsonb`-ul designului). Fara prototip, un tip ca
+ * `toString` sau `constructor` e necunoscut, nu „functia mostenita de la `Object.prototype`”. Vezi nota de la sfarsitul
+ * lui `SECTION_REGISTRY` (`registry.ts`), aceeasi capcana (auditul din 19.11.2026).
+ */
+for (const schema of [BLOCURI_CLASIC, BLOCURI_DETALIAT, BLOCURI_MAGAZIN, SUBSOL_PE_COLOANE, SUBSOL_CENTRAT]) {
+  Object.setPrototypeOf(schema.tipuri, null);
+}
+
 export function schemaBlocurilor(kind: SectionKind, variant: string): SchemaBlocuri | null {
   if (kind === "shop_page") return BLOCURI_MAGAZIN;
   if (kind === "footer") return variant === "centered" ? SUBSOL_CENTRAT : SUBSOL_PE_COLOANE;

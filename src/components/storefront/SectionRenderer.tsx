@@ -27,6 +27,7 @@ import { GalleryClassic } from "./sections/content/GalleryClassic";
 import { ReviewsClassic } from "./sections/content/ReviewsClassic";
 import { SlotBlocuri } from "./SloturiBlocuri";
 import { ContinutLiber } from "./ContinutLiber";
+import { PazaSectiune } from "./PazaSectiune";
 
 /**
  * Variantele care nu sunt „classic" se incarca la cerere.
@@ -258,9 +259,17 @@ function SectionOne({ section, estePrima = false }: { section: SectionInstance; 
  * click. Vezi `preview-protocol.ts`.
  */
 function Marcata({ section, estePrima = false }: { section: SectionInstance; estePrima?: boolean }) {
+  const { esteEditorDesign } = useStoreChrome();
+  /*
+   * Fiecare sectiune in paza ei (19.11.2026, `PazaSectiune`): una care arunca la randare lipseste, restul paginii
+   * merge. INAUNTRUL marcajului de editor: fara element in plus cat timp nimic nu cade, deci `LocGol` (`only:`) si
+   * selectorii variantelor vad exact ce vedeau.
+   */
   const marcata = (
     <MarcajSectiune sectiune={section}>
-      <SectionOne section={section} estePrima={estePrima} />
+      <PazaSectiune nume={sectionMeta(section.kind)?.label ?? section.kind} inEditor={esteEditorDesign === true}>
+        <SectionOne section={section} estePrima={estePrima} />
+      </PazaSectiune>
     </MarcajSectiune>
   );
   /*

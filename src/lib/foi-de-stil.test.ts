@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { FISIER_SURSE, continutulFisierului, fisiereleVitrinei } from "../../scripts/foaie-vitrina.mjs";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -13,11 +14,15 @@ import { join, relative, sep } from "node:path";
   atinși de nicio pagină de prezentare. Erau utilitare de panou: `input-group`,
   `switch`, `tabs-list`, `combobox`, calendarul, 190 de reguli de temă întunecată.
 
-      globals.css   panou, admin, autentificare, onboarding, magazine, /reactivare
+      globals.css   panou, admin, autentificare, onboarding, /reactivare
       website.css   (website), (ajutor)
+      vitrina.css   magazinele: (public)/[slug] și miniaturile din (public)/preview-sectiune
+                    (din 19.11.2026; până atunci magazinele încărcau `globals.css`)
 
-  Amândouă importă `stil-comun.css`, deci regulile scrise de mână sunt scrise o
-  singură dată. Diferă doar ce scanează Tailwind.
+  Toate trei importă `stil-comun.css`, deci regulile scrise de mână sunt scrise o
+  singură dată. Diferă doar ce scanează Tailwind. (Din 19.11.2026, regulile pe
+  care le folosește DOAR site-ul de prezentare stau în `stil-site.css`, importat
+  de primele două, nu și de `vitrina.css`.)
 
   Rezultat măsurat pe build: paginile de prezentare 45.277 → 22.389 octeți gzip.
   Magazinele: 288.090 → 287.995, adică neatinse, cum trebuia.
@@ -37,10 +42,22 @@ function foaiaImportata(fisier: string): string | null {
 }
 
 const PREZENTARE = ["(website)", "(ajutor)"];
-const APLICATIE = ["(auth)", "(dashboard)", "(admin)", "(onboarding)", "(public)/[slug]", "reactivare"];
+const APLICATIE = ["(auth)", "(dashboard)", "(admin)", "(onboarding)", "reactivare"];
+/*
+  ⚠ Din 19.11.2026 magazinele au foaia lor, `vitrina.css` (auditul temelor): aceleași reguli scrise de mână, dar cu
+  utilitarele generate doar din fișierele la care ajung rutele magazinului. Până atunci încărcau `globals.css`, cu
+  utilitarele întregului proiect în drumul primei afișări. Vezi nota din `app/vitrina.css`.
+*/
+const VITRINA = ["(public)/[slug]", "(public)/preview-sectiune"];
 
 test("fiecare grup de rute importă foaia care i se cuvine", () => {
   const gresite: string[] = [];
+
+  for (const g of VITRINA) {
+    const l = join(APP, g, "layout.tsx");
+    const f = existsSync(l) ? foaiaImportata(l) : null;
+    if (f !== "vitrina.css") gresite.push(`${g}/layout.tsx importă ${f ?? "nimic"}, aștept vitrina.css`);
+  }
 
   for (const g of PREZENTARE) {
     const l = join(APP, g, "layout.tsx");
@@ -195,7 +212,7 @@ test("cele două foi împart aceleași reguli scrise de mână", () => {
     două foi ar începe să devieze — o culoare schimbată în panou și rămasă veche
     pe site, sau invers. Regulile se scriu O SINGURĂ DATĂ.
   */
-  for (const n of ["globals.css", "website.css"]) {
+  for (const n of ["globals.css", "website.css", "vitrina.css"]) {
     const s = readFileSync(join(APP, n), "utf8");
     assert.match(
       s,
@@ -204,10 +221,148 @@ test("cele două foi împart aceleași reguli scrise de mână", () => {
         "să rămână într-un singur fișier, altfel cele două foi deviază tăcut.",
     );
   }
+  /*
+    Din 19.11.2026 regulile site-ului de prezentare stau în `stil-site.css` (62 KB), iar `stil-comun.css` a rămas cu
+    jetoanele și cu ce folosesc toate trei foile (41 KB). Pragurile apără amândouă jumătățile.
+  */
   assert.ok(
-    statSync(join(APP, "stil-comun.css")).size > 50_000,
+    statSync(join(APP, "stil-comun.css")).size > 30_000,
     "`stil-comun.css` e suspect de mic — s-au pierdut reguli la vreo mutare?",
   );
+  assert.ok(
+    statSync(join(APP, "stil-site.css")).size > 40_000,
+    "`stil-site.css` e suspect de mic: s-au pierdut reguli la vreo mutare?",
+  );
+});
+
+/*
+  ═══ REGULILE SITE-ULUI, ÎN AFARA FOII MAGAZINELOR (19.11.2026) ═══
+
+  `stil-site.css` poartă regulile scrise de mână ale site-ului de prezentare (fundalul mesh, rama de iPhone, benzile de
+  sigle…). Până pe 19.11.2026 stăteau în `stil-comun.css`, deci ajungeau și în foaia magazinelor: 2,6 KB gzip, 9% din
+  ea, în drumul primei afișări, pentru clase pe care niciun magazin nu le folosește.
+*/
+test("`stil-site.css`: îl importă panoul și site-ul, imediat după `stil-comun.css`; magazinele nu", () => {
+  const faraComentarii = (n: string) => readFileSync(join(APP, n), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const n of ["globals.css", "website.css"]) {
+    assert.match(
+      faraComentarii(n),
+      /@import\s+"\.\/stil-comun\.css";\s*@import\s+"\.\/stil-site\.css";/,
+      `\`${n}\` nu mai importă \`stil-site.css\` imediat după \`stil-comun.css\`: paginile lui pierd regulile site-ului`,
+    );
+  }
+  assert.ok(!/stil-site\.css/.test(faraComentarii("vitrina.css")), "`vitrina.css` cară din nou regulile site-ului de prezentare");
+});
+
+test("⚠ nicio clasă din `stil-site.css` nu e folosită de vreun fișier al magazinelor", () => {
+  /*
+    ⚠ Ce apără: o componentă a vitrinei care ar începe să folosească o clasă de acolo (rama de iPhone într-un bloc, de
+    pildă) ar arăta bine în panou și pe site și NESTILIZATĂ în magazin, fără nicio eroare. Regula trebuie atunci mutată
+    în `stil-comun.css`.
+
+    ⚠ Cinci clase de acolo sunt și cuvinte obișnuite (`banda`, `placa`, `rapid`, `google`, `iphone`): în vitrină apar ca
+    nume de variabile, ca text („Livrare rapida”, „S-ar putea sa-ti placa”) și într-un tipar de `user-agent`, nu ca nume
+    de clase. Pentru ele se caută doar forma de clasă: cuvântul întreg, într-un șir din valoarea unui `className` sau
+    dintr-un apel `cn(` / `clsx(`.
+  */
+  /** Șirurile din valorile de clasă ale unui fișier: `className="…"`, `className={…}`, `cn(…)`, `clsx(…)`. */
+  const sirurileDeClasa = (cod: string): string[] => {
+    const valori: string[] = [];
+    const inceput = /className=|\bcn\(|\bclsx\(/g;
+    for (let m = inceput.exec(cod); m; m = inceput.exec(cod)) {
+      const atribut = m[0] === "className=";
+      let j = atribut ? m.index + m[0].length : m.index + m[0].length - 1;
+      if (atribut && cod[j] === '"') { valori.push(cod.slice(j + 1, cod.indexOf('"', j + 1))); continue; }
+      const [deschis, inchis] = atribut ? ["{", "}"] : ["(", ")"];
+      if (cod[j] !== deschis) continue;
+      const start = j;
+      for (let adancime = 0; j < cod.length; j++) {
+        if (cod[j] === deschis) adancime++;
+        else if (cod[j] === inchis && --adancime === 0) break;
+      }
+      for (const sir of cod.slice(start, j).matchAll(/["'`]([^"'`]*)["'`]/g)) valori.push(sir[1].replace(/\$\{[^}]*\}/g, " "));
+    }
+    return valori;
+  };
+  const css = readFileSync(join(APP, "stil-site.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/url\([^)]*\)/g, "");
+  const clase = [...new Set([...css.matchAll(/\.(-?[a-zA-Z_][\w-]*)/g)].map((m) => m[1]))];
+  assert.ok(clase.length > 25 && clase.includes("iphone") && clase.includes("hero-mesh-blob"), `doar ${clase.length} clase citite din \`stil-site.css\``);
+  const OBISNUITE = new Set(["banda", "placa", "rapid", "google", "iphone"]);
+  const gasite: string[] = [];
+  for (const fisier of fisiereleVitrinei()) {
+    const cod = readFileSync(fisier, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const cuvinteDeClasa = new Set(sirurileDeClasa(cod).flatMap((s) => s.split(/\s+/)));
+    for (const clasa of clase) {
+      const folosita = OBISNUITE.has(clasa) ? cuvinteDeClasa.has(clasa) : new RegExp(`(?<![\\w-])${clasa}(?![\\w-])`).test(cod);
+      if (folosita) gasite.push(`${curat(fisier)}: \`${clasa}\``);
+    }
+  }
+  // Martor: unealta de mai sus chiar vede o clasă scrisă într-un `className` (altfel proba ar trece pe orice).
+  assert.deepEqual(
+    [...new Set(sirurileDeClasa('<i className="a iphone" /><b className={cn("x", ok ? `banda ${y}` : "z")} />').flatMap((s) => s.split(/\s+/)))].filter((c) => OBISNUITE.has(c)),
+    ["iphone", "banda"],
+  );
+  assert.deepEqual(gasite, [], "clase ale site-ului folosite în vitrină (mută regula în `stil-comun.css`):\n  " + gasite.join("\n  "));
+});
+
+/*
+  ═══ FOAIA MAGAZINELOR (19.11.2026) ═══
+
+  `vitrina.css` generează utilitare doar din fișierele la care ajung rutele magazinului. Lista lor e în
+  `vitrina-surse.css`, scris de `scripts/foaie-vitrina.mjs` din importuri. Două lucruri o pot strica în tăcere, și
+  amândouă arată la fel: pagina răspunde 200, cu markup corect, dar clasele noi nu fac nimic.
+*/
+test("⚠⚠ `vitrina-surse.css` e la zi cu importurile rutelor magazinului", () => {
+  const scris = readFileSync(FISIER_SURSE, "utf8").replace(/\r\n/g, "\n");
+  assert.equal(
+    scris,
+    continutulFisierului(),
+    "Vitrina importă un fișier care nu e în `vitrina-surse.css` (sau lista ține unul șters). Clasele lui NU se\n" +
+      "generează în foaia magazinelor, deci apar nestilizate fără nicio eroare. Rulează:\n" +
+      "  node scripts/foaie-vitrina.mjs --scrie",
+  );
+});
+
+test("`vitrina.css`: fără scanarea proiectului, cu aceleași importuri ca `globals.css` și cu sursele ei", () => {
+  const faraComentarii = (n: string) => readFileSync(join(APP, n), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const vitrina = faraComentarii("vitrina.css");
+  const globala = faraComentarii("globals.css");
+
+  assert.match(vitrina, /@import\s+"tailwindcss"\s+source\(none\)/, "`vitrina.css` scanează iar tot proiectul: lipsește `source(none)`");
+  assert.match(vitrina, /@import\s+"\.\/vitrina-surse\.css"/, "`vitrina.css` nu-și mai importă lista de surse");
+
+  /*
+    Aceleași foi de bază, în aceeași ordine: altfel magazinele ar primi alte reguli decât până la despărțire.
+    `stil-site.css` (regulile site-ului de prezentare) e singura pe care vitrina NU o ia; vezi proba ei, mai sus.
+  */
+  const importuri = (css: string) => [...css.matchAll(/@import\s+"([^"]+)"/g)].map((m) => m[1]).filter((i) => i !== "./vitrina-surse.css" && i !== "./stil-site.css");
+  assert.deepEqual(importuri(vitrina), importuri(globala), "importurile de bază ale celor două foi au ajuns să difere");
+  assert.match(vitrina, /@custom-variant dark \(&:is\(\.dark \*\)\);/);
+
+  /*
+    Clasele pe care le scrie editorul de text în HTML-ul comercianților (descrieri, pagini): nu apar neapărat în
+    vreun fișier al vitrinei, deci se generează anume. Măsurat în producție pe 11.11.2026: singurele două.
+  */
+  const inline = /@source inline\("([^"]+)"\)/.exec(vitrina)?.[1].split(/\s+/) ?? [];
+  for (const clasa of ["text-primary", "underline"]) assert.ok(inline.includes(clasa), `\`@source inline\` nu mai generează \`${clasa}\``);
+});
+
+test("fiecare sursă a foii magazinelor există, iar căile cu `[slug]` intră ca dosar", () => {
+  const surse = [...readFileSync(FISIER_SURSE, "utf8").matchAll(/@source\s+"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(surse.length > 300, `doar ${surse.length} surse: graful de importuri n-a mai fost parcurs`);
+  const lipsa = surse.filter((s) => !existsSync(join(APP, s)));
+  assert.deepEqual(lipsa, [], "`@source` care nu arată spre nimic (Tailwind tace):\n  " + lipsa.join("\n  "));
+  /*
+    ⚠ Tailwind citește `@source` ca TIPAR: `[slug]` ar însemna „o literă din s, l, u, g”, deci fișierul nu s-ar mai
+    găsi, în tăcere. De aceea `(public)` intră întreg, ca dosar, și nicio altă cale nu are voie să poarte asemenea semne.
+  */
+  assert.ok(surse.includes("./(public)"), "dosarul `(public)` nu mai e sursă întreagă");
+  const cuTipar = surse.filter((s) => /[[\]{}*?!]/.test(s));
+  assert.deepEqual(cuTipar, [], "căi cu semne de tipar:\n  " + cuTipar.join("\n  "));
+  // Câteva fișiere despre care știm sigur că se randează în magazin: unealta chiar le găsește.
+  for (const sigur of ["../components/storefront/SectionRenderer.tsx", "../components/ministore/MiniStoreRenderer.tsx", "../components/storefront/sections/hero/HeroBanners.tsx", "../components/pages/BlockRenderer.tsx"]) {
+    assert.ok(surse.includes(sigur), `${sigur} lipsește din surse`);
+  }
 });
 
 test("nicio altă pagină din `app/` nu importă direct o foaie de stil", () => {

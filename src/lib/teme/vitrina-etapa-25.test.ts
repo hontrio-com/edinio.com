@@ -107,3 +107,71 @@ test("25.21: un singur <main> pe pagina principala si pe Magazin, si unul pe pag
   assert.match(cod("src/app/(public)/[slug]/_rute/pagina-produs.tsx"), /<main>\s*<FurnizorSloturiBlocuri sloturi=\{sloturiContinut\}>/);
   assert.match(cod("src/components/storefront/sections/shop/_shared/ShopPieces.tsx"), /aria-label="Sorteaza produsele"/);
 });
+
+test("WCAG 1.4.3 (19.11.2026): antetele lipicioase si bara lipicioasa din Magazin au fond plin, nu translucid", () => {
+  /*
+    Gasit de auditul temelor pe Polaris, dupa derulare: antetul era `bg-…/95 backdrop-blur-md`, deci 5% din ce trecea pe
+    sub el (o poza inchisa) ajungea in fondul lui, iar legaturile de categorie cadeau de la 4,6:1 la 4,36:1, sub pragul
+    de 4,5. Contrastul unui text nu are voie sa depinda de ce se nimereste sub bara. La 95% nici nu se vedea vreo
+    transparenta; ramanea doar costul: `backdrop-filter` pe o bara lata cat ecranul se recalculeaza la fiecare cadru al
+    derularii.
+  */
+  const antete = ["HeaderCentered", "HeaderClassic", "HeaderMarket", "HeaderNav", "HeaderPills", "HeaderSearch"];
+  for (const nume of antete) {
+    const s = cod(`src/components/storefront/sections/chrome/${nume}.tsx`);
+    const antet = s.match(/<header className=\{`sticky [^`]+`\}>/);
+    assert.ok(antet, `${nume}: antetul lipicios nu mai e unde il stiam`);
+    assert.doesNotMatch(antet![0], /backdrop-blur|\]\/\d+|bg-background\/\d+/, `${nume}: antetul lipicios e iar translucid`);
+    assert.match(antet![0], /bg-(?:\[var\(--st-(?:surface|bg)\)\]|background)(?:[ `]|$)/, `${nume}: antetul lipicios nu mai are fond`);
+  }
+  const bara = cod("src/components/storefront/sections/shop/ShopPageCompact.tsx").match(/<div className="sticky [^"]+"/);
+  assert.ok(bara, "bara lipicioasa din Magazin nu mai e unde o stiam");
+  assert.doesNotMatch(bara![0], /backdrop-blur|\]\/\d+/, "bara lipicioasa din Magazin e iar translucida");
+});
+
+test("WCAG 2.1.1 (19.11.2026): panourile de categorii din antet se inchid cu Escape si intorc focusul pe butonul lor", () => {
+  /*
+    Gasit de proba de interactiuni pe 13 teme, pe toate cele trei motoare: „Produse”, „Categorii”, „Toate (categoriile)”
+    se deschideau la apasare si se inchideau doar cu mouse-ul (clic in afara) sau la pierderea focusului. Din tastatura,
+    panoul ramanea deschis peste pagina. Celelalte antete (Hipermarket, Centered, Editorial, Wedge) aveau deja Escape.
+  */
+  for (const nume of ["HeaderNav", "HeaderPills"]) {
+    const s = cod(`src/components/storefront/sections/chrome/${nume}.tsx`);
+    assert.match(s, /const onEsc = \(e: KeyboardEvent\) => \{\s*if \(e\.key !== "Escape"\) return;[\s\S]{0,160}?setDeschis\(false\);\s*if \(inPanou\) zona\.current\?\.querySelector\("button"\)\?\.focus\(\);/, `${nume}: panoul de categorii nu se mai inchide cu Escape`);
+    assert.match(s, /document\.addEventListener\("keydown", onEsc\);[\s\S]{0,200}?document\.removeEventListener\("keydown", onEsc\);/, `${nume}: ascultatorul de Escape nu se mai curata`);
+  }
+  // Listele din caseta de cautare si panoul „Toate categoriile”: clic in afara si Escape ascultate pe DOCUMENT, prin carligul
+  // comun. Pe invelis (`onKeyDown`, `onBlur`) cereau focusul inauntru, iar Safari nu-l muta pe butonul apasat cu mouse-ul:
+  // acolo lista ramanea deschisa (gasit pe WebKit, dupa ce Chrome si Firefox trecusera).
+  const carlig = cod("src/components/storefront/sections/_shared/inchide-panoul.ts");
+  assert.match(carlig, /document\.addEventListener\("mousedown", laClic\);\s*document\.addEventListener\("keydown", laTasta\);/);
+  assert.match(carlig, /if \(e\.key !== "Escape"\) return;[\s\S]{0,200}?setDeschis\(false\);\s*if \(inPanou\) zona\.current\?\.querySelector\("button"\)\?\.focus\(\);/);
+  const piata = cod("src/components/storefront/sections/chrome/HeaderMarket.tsx");
+  assert.equal((piata.match(/useInchidePanoul\(deschis, setDeschis, zona(?:Categorii)?\);/g) ?? []).length, 2, "HeaderMarket: cele doua panouri nu mai folosesc carligul comun");
+  assert.match(cod("src/components/storefront/sections/chrome/HeaderSearch.tsx"), /useInchidePanoul\(deschis, setDeschis, zonaCategorii\);/);
+  for (const nume of ["HeaderMarket", "HeaderSearch"]) {
+    assert.doesNotMatch(cod(`src/components/storefront/sections/chrome/${nume}.tsx`), /onKeyDown=\{\(e\) => \{\s*if \(e\.key (?:!==|===) "Escape"/, `${nume}: Escape e iar prins pe invelis (cere focusul inauntru)`);
+  }
+});
+
+test("WCAG 2.4.11 (19.11.2026): barele lipite de josul ecranului lasa loc de derulare, ca focusul sa nu ajunga sub ele", () => {
+  /*
+    Gasit trecand cu Tab prin pagina de produs la 390 px: 7-12 din 39 de opriri pe tema ajungeau cu totul sub bara de
+    cumparare. Regula sta INAUNTRUL fiecarei bare (exista cat exista si bara) si doar sub 1024 px, unde bara se vede.
+  */
+  const regula = cod("src/components/storefront/LocPesteBaraDeJos.tsx");
+  assert.match(regula, /@media \(max-width:1023\.98px\)\{html\{scroll-padding-bottom:calc\(5\.5rem \+ env\(safe-area-inset-bottom\)\)\}\}/);
+  const bare: [string, RegExp][] = [
+    ["src/components/storefront/sections/product/ProductPageDetailed.tsx", /<div className="lg:hidden fixed bottom-0 left-0 right-0[^"]*"\s*style=\{\{ paddingBottom: "calc\(0\.75rem \+ env\(safe-area-inset-bottom\)\)" \}\}>\s*<LocPesteBaraDeJos \/>/],
+    ["src/components/storefront/sections/product/ProductPageClassic.tsx", /<div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden[^"]*"\s*style=\{\{ paddingBottom: "calc\(0\.75rem \+ env\(safe-area-inset-bottom\)\)" \}\}>\s*<LocPesteBaraDeJos \/>/],
+    ["src/components/ministore/MiniStoreRenderer.tsx", /<div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden[^"]*"\s*style=\{\{ paddingBottom: "calc\(0\.75rem \+ env\(safe-area-inset-bottom\)\)" \}\}>\s*<LocPesteBaraDeJos \/>/],
+  ];
+  for (const [fisier, tipar] of bare) assert.match(cod(fisier), tipar, `${fisier}: bara de jos nu mai lasa loc de derulare`);
+  // Nicio alta bara fixa de jos, pe telefon, fara regula: o bara noua trebuie sa o primeasca si ea.
+  for (const fisier of bare.map(([f]) => f)) {
+    const s = cod(fisier);
+    const fixe = (s.match(/className="[^"]*\bfixed bottom-0 left-0 right-0\b[^"]*lg:hidden[^"]*"|className="[^"]*lg:hidden[^"]*\bfixed bottom-0 left-0 right-0\b[^"]*"/g) ?? []).length;
+    const cuLoc = (s.match(/<LocPesteBaraDeJos \/>/g) ?? []).length;
+    assert.equal(cuLoc, fixe, `${fisier}: ${fixe} bare fixe de jos, ${cuLoc} cu loc de derulare`);
+  }
+});

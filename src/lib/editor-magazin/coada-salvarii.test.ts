@@ -11,10 +11,13 @@ import { creeazaCoadaSalvarii, type Ceas } from "./coada-salvarii";
 function ceasFals() {
   let urmatorul = 1;
   const programate = new Map<number, () => void>();
+  /** Intarzierile cerute, in ordine: asa se vede rarirea reincercarilor. */
+  const intarzieri: number[] = [];
   const ceas: Ceas = {
-    setTimeout: (fn) => {
+    setTimeout: (fn, ms) => {
       const id = urmatorul++;
       programate.set(id, fn);
+      intarzieri.push(ms);
       return id;
     },
     clearTimeout: (id) => {
@@ -30,6 +33,7 @@ function ceasFals() {
       for (const fn of acum) fn();
     },
     numar: () => programate.size,
+    intarzieri,
   };
 }
 
@@ -142,4 +146,144 @@ test("o scriere care arunca nu opreste coada", async () => {
   coada.programeaza("B");
   assert.equal(await coada.goleste(), true);
   assert.deepEqual(scrise, ["B"]);
+});
+
+/*
+  ═══ O SCRIERE CAZUTA NU SE MAI UITA (19.11.2026, auditul editorului) ═══
+
+  Pana atunci, dupa o cadere coada ramanea goala. Ciorna de pe ecran nu mai ajungea in baza pana la urmatoarea
+  modificare, iar „Ieși” primea `false` de la `goleste` la nesfarsit, fara sa mai incerce nimic: butonul parea mort.
+*/
+
+test("⚠⚠ dupa o cadere, `goleste` REINCEARCA scrierea, nu raspunde `false` la nesfarsit („Ieși” ramanea blocat)", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  let legatura = false;
+  const coada = creeazaCoadaSalvarii<string>({ intarziere: 1200, ceas: timp.ceas, scrie: async (v) => { scrise.push(v); return legatura; } });
+  coada.programeaza("A");
+  assert.equal(await coada.goleste(), false, "prima incercare cade");
+  // Omul apasa „Ieși” din nou, cu legatura revenita: fara nicio modificare noua, scrierea trebuie sa plece iar.
+  legatura = true;
+  assert.equal(await coada.goleste(), true, "a doua golire o reincearca si reuseste");
+  assert.deepEqual(scrise, ["A", "A"]);
+  assert.equal(await coada.goleste(), true, "odata scrisa, nu mai e nimic de reluat");
+  assert.deepEqual(scrise, ["A", "A"]);
+});
+
+test("⚠⚠ o scriere cazuta se reincearca SINGURA, tot mai rar, pana reuseste", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  let caderi = 3;
+  const coada = creeazaCoadaSalvarii<string>({
+    intarziere: 1200, ceas: timp.ceas, reincercari: [4000, 10000, 30000],
+    scrie: async (v) => { scrise.push(v); return caderi-- <= 0; },
+  });
+  coada.programeaza("A");
+  timp.trece();
+  await asteapta();
+  for (let i = 0; i < 3; i++) {
+    assert.equal(timp.numar(), 1, `dupa caderea ${i + 1} e programata o reincercare`);
+    timp.trece();
+    await asteapta();
+  }
+  assert.deepEqual(scrise, ["A", "A", "A", "A"], "trei caderi, apoi reusita");
+  assert.equal(timp.numar(), 0, "dupa reusita nu mai e nimic programat");
+  assert.deepEqual(timp.intarzieri, [1200, 4000, 10000, 30000], "prima e amanarea obisnuita, apoi rarirea");
+});
+
+test("rarirea ramane pe ultima treapta cand caderile continua", async () => {
+  const timp = ceasFals();
+  const coada = creeazaCoadaSalvarii<string>({ intarziere: 1200, ceas: timp.ceas, reincercari: [100, 200], scrie: async () => false });
+  coada.programeaza("A");
+  for (let i = 0; i < 5; i++) { timp.trece(); await asteapta(); }
+  assert.deepEqual(timp.intarzieri, [1200, 100, 200, 200, 200, 200]);
+});
+
+test("⚠ o modificare mai noua inlocuieste scrierea cazuta: cea veche nu se mai trimite", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  const coada = creeazaCoadaSalvarii<string>({ intarziere: 1200, ceas: timp.ceas, scrie: async (v) => { scrise.push(v); return v !== "A"; } });
+  coada.programeaza("A");
+  timp.trece();
+  await asteapta();
+  assert.equal(timp.numar(), 1, "A a cazut si asteapta reincercarea");
+  coada.programeaza("B");
+  assert.equal(timp.numar(), 1, "reincercarea lui A s-a oprit, ramane doar amanarea lui B");
+  timp.trece();
+  await asteapta();
+  assert.deepEqual(scrise, ["A", "B"], "B duce ciorna intreaga; A nu se mai scrie peste ea");
+  assert.equal(timp.numar(), 0);
+});
+
+test("⚠ un refuz al serverului NU se reincearca singur (ar primi acelasi raspuns), dar `goleste` il mai incearca o data", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  let refuza = true;
+  const coada = creeazaCoadaSalvarii<string>({
+    intarziere: 1200, ceas: timp.ceas,
+    scrie: async (v) => { scrise.push(v); return refuza ? "refuzat" : true; },
+  });
+  coada.programeaza("A");
+  timp.trece();
+  await asteapta();
+  assert.equal(timp.numar(), 0, "niciun temporizator dupa un refuz");
+  assert.equal(await coada.goleste(), false, "la cerere se incearca din nou si se spune ca tot nu a mers");
+  refuza = false;
+  assert.equal(await coada.goleste(), true);
+  assert.deepEqual(scrise, ["A", "A", "A"]);
+});
+
+test("`anuleaza` uita si scrierea cazuta (Publica, Renunta): nu mai invie ciorna golita", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  const coada = creeazaCoadaSalvarii<string>({ intarziere: 1200, ceas: timp.ceas, scrie: async (v) => { scrise.push(v); return false; } });
+  coada.programeaza("A");
+  timp.trece();
+  await asteapta();
+  assert.equal(timp.numar(), 1);
+  coada.anuleaza();
+  assert.equal(timp.numar(), 0, "reincercarea e oprita");
+  timp.trece();
+  await asteapta();
+  assert.deepEqual(scrise, ["A"]);
+  // Dupa „Publică” / „Renunță” nu mai e nimic de scris: caderea de dinainte nu mai tine „Ieși” pe loc.
+  assert.equal(await coada.goleste(), true, "nimic de scris, deci gata; caderea veche e uitata");
+  assert.deepEqual(scrise, ["A"]);
+});
+
+test("`reincearca` trimite pe loc scrierea cazuta (legatura a revenit) si nu face nimic cand nu e nimic cazut", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  let legatura = false;
+  const coada = creeazaCoadaSalvarii<string>({ intarziere: 1200, ceas: timp.ceas, scrie: async (v) => { scrise.push(v); return legatura; } });
+  coada.reincearca();
+  await asteapta();
+  assert.deepEqual(scrise, [], "nimic cazut, nimic de trimis");
+
+  coada.programeaza("A");
+  timp.trece();
+  await asteapta();
+  legatura = true;
+  coada.reincearca();
+  await asteapta();
+  assert.deepEqual(scrise, ["A", "A"]);
+  assert.equal(timp.numar(), 0, "reincercarea automata e oprita, nu scrie a treia oara");
+  coada.reincearca();
+  await asteapta();
+  assert.deepEqual(scrise, ["A", "A"]);
+});
+
+test("cu o modificare noua programata, `reincearca` lasa locul ei (n-o intrece cu valoarea veche)", async () => {
+  const timp = ceasFals();
+  const scrise: string[] = [];
+  const coada = creeazaCoadaSalvarii<string>({ intarziere: 1200, ceas: timp.ceas, scrie: async (v) => { scrise.push(v); return v !== "A"; } });
+  coada.programeaza("A");
+  timp.trece();
+  await asteapta();
+  coada.programeaza("B");
+  coada.reincearca();
+  await asteapta();
+  assert.deepEqual(scrise, ["A"], "nimic pana nu vine randul lui B");
+  assert.equal(await coada.goleste(), true);
+  assert.deepEqual(scrise, ["A", "B"]);
 });

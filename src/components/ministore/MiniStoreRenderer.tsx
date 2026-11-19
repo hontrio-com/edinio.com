@@ -58,6 +58,7 @@ import type {
   StoreSocial,
 } from "@/lib/storefront/store-content.types";
 import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
+import { LocPesteBaraDeJos } from "@/components/storefront/LocPesteBaraDeJos";
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 // Randul TAIAT, nu cel intreg: componenta e "use client", deci tot ce primeste
@@ -1772,6 +1773,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-surface border-t border-border shadow-2xl px-4 py-3"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+          <LocPesteBaraDeJos />
           <button type="button" onClick={cosPePagina ? mergiLaCos : () => setCartOpen(true)}
             className="w-full flex items-center justify-between gap-3 py-3 px-4 rounded-xl text-[var(--st-primary-contrast,#fff)] font-bold text-sm active:scale-[0.98] transition-transform"
             style={{ backgroundColor: color }}>

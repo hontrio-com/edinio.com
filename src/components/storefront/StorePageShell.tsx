@@ -7,6 +7,7 @@ import { ChromeSection } from "@/components/storefront/SectionRenderer";
 import { StoreChromeProvider } from "@/components/storefront/StorefrontProvider";
 import { cdnImage } from "@/lib/cdn-image";
 import { StoreCartPanels } from "@/components/storefront/StoreCartPanels";
+import { ContinutCazut, PazaSectiune } from "@/components/storefront/PazaSectiune";
 import type { StoreChromeData } from "@/lib/storefront/chrome-value";
 import { standaloneAnnouncement } from "@/lib/storefront/design/chrome";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
@@ -119,7 +120,14 @@ export function StorePageShell({
       <div className={className}>
         <ChromeSection section={standaloneAnnouncement(design)} />
         <ChromeSection section={design.chrome.header} />
-        {children}
+        {/*
+          Continutul paginii in paza lui (19.11.2026, `PazaSectiune`): daca pagina de produs, catalogul, cosul sau o
+          pagina proprie arunca la randare, antetul si subsolul raman, iar cumparatorul are un mesaj si doua drumuri
+          mai departe, nu „500” pe tot ecranul.
+        */}
+        <PazaSectiune nume="Conținutul paginii" inEditor={esteEditorDesign} rezerva={<ContinutCazut acasa={chrome.basePath || "/"} />}>
+          {children}
+        </PazaSectiune>
         <ChromeSection section={design.chrome.footer} />
       </div>
     </>

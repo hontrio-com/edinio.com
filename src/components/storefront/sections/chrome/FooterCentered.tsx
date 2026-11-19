@@ -113,7 +113,7 @@ function RandCentrat({ coloana, idSubsol, nrLinkuri = 1 }: { coloana: BlockInsta
             <a href={radacinaMagazin(basePath)} className="hover:opacity-80 transition-opacity" aria-label={nume}>
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={cdnImage(business.logo_url, 480)} alt={nume}
+                <img src={cdnImage(business.logo_url, 480)} alt={nume} loading="lazy" decoding="async"
                   style={stilSigla(logoSize)}
                   className="w-auto object-contain" />
               ) : (

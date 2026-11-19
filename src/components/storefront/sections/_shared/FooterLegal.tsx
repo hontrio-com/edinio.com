@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { CompanyIdentity } from "@/components/ministore/CompanyIdentity";
 import { NetopiaBadge } from "@/components/ministore/NetopiaBadge";
 import { EdinioCredit } from "@/components/ministore/EdinioCredit";
@@ -117,6 +116,23 @@ function InsigneProprii({ ton }: { ton: TonFooter }) {
   );
 }
 
+/**
+ * Insigna ANPC (SAL / SOL), obligatorie in subsolul oricarui magazin.
+ *
+ * Fisierul e AVIF, dar cu rezerva WebP (19.11.2026, auditul temelor): AVIF lipseste din Edge pana la versiunea 121 si
+ * din WebKit-ul fara codec (proba pe WebKit o arata rupta pe fiecare pagina), iar o insigna ceruta de lege nu are voie
+ * sa depinda de asta. Browserul care stie AVIF il ia pe el (3-6 KB); restul primesc WebP-ul.
+ * `height` e cel adevarat (500 x 124 la 98 px latime), ca locul pozei sa fie rezervat corect inainte sa soseasca.
+ */
+function InsignaAnpc({ fisier, alt }: { fisier: "anpc-sal" | "anpc-sol"; alt: string }) {
+  return (
+    <picture>
+      <source srcSet={`/${fisier}.avif`} type="image/avif" />
+      <img src={`/${fisier}.webp`} alt={alt} width={98} height={24} loading="lazy" decoding="async" className="rounded-md" />
+    </picture>
+  );
+}
+
 export function FooterLegal({ ton = "inchis", cuPagini = true }: {
   ton?: TonFooter;
   /** Stins cand varianta isi arata deja paginile in coloanele ei. */
@@ -181,11 +197,11 @@ export function FooterLegal({ ton = "inchis", cuPagini = true }: {
         <div className="flex items-center gap-3">
           <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer"
             className="hover:opacity-80 transition-opacity" title="SAL - Solutionarea Alternativa a Litigiilor">
-            <Image src="/anpc-sal.avif" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" width={98} height={40} className="rounded-md" />
+            <InsignaAnpc fisier="anpc-sal" alt="ANPC SAL - Solutionarea Alternativa a Litigiilor" />
           </a>
           <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer"
             className="hover:opacity-80 transition-opacity" title="SOL - Solutionarea Online a Litigiilor">
-            <Image src="/anpc-sol.avif" alt="ANPC SOL - Solutionarea Online a Litigiilor" width={98} height={40} className="rounded-md" />
+            <InsignaAnpc fisier="anpc-sol" alt="ANPC SOL - Solutionarea Online a Litigiilor" />
           </a>
         </div>
       </div>

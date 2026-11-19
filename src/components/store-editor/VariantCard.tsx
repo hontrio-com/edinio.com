@@ -210,7 +210,7 @@ export function VariantCard({
             aproape mereu numele („Simplu" cu eticheta „clasic") si nu ajuta pe
             nimeni sa aleaga. */}
         <div className="min-w-0 flex-1">
-          <p className={`text-sm font-semibold truncate ${activ ? "text-primary" : "text-foreground"}`}>{label}</p>
+          <p title={label} className={`text-sm font-semibold truncate ${activ ? "text-primary" : "text-foreground"}`}>{label}</p>
         </div>
         {motivIndisponibil ? (
           <span className="shrink-0 max-w-[60%] text-right text-[11px] leading-snug text-muted-foreground">

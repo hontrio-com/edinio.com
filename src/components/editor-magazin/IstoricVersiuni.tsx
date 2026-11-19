@@ -134,7 +134,7 @@ export function IstoricVersiuni({ businessId, ciorna, ocupat, onInchide, onReadu
                       </p>
                     </div>
                     {inMagazin && (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">În magazin acum</span>
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-[var(--primary-text)]">În magazin acum</span>
                     )}
                     <Button size="sm" variant="outline" className="shrink-0"
                       disabled={ocupat || ciorna.blocata || aduc !== null || dejaPeEcran}

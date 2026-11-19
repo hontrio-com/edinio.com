@@ -374,10 +374,17 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
   if (randuriNoi.length > 0) {
     const laCatalog = home.findIndex((s) => s.kind === "product_grid");
     const pozitie = laCatalog >= 0 ? laCatalog : home.length;
-    for (const s of randuriNoi) seenIds.add(s.id);
-    home.splice(pozitie, 0, ...randuriNoi);
-    // Plafonul ramane plafon: readucerea randurilor nu are voie sa il sara.
-    if (home.length > MAX_HOME_SECTIONS) home.length = MAX_HOME_SECTIONS;
+    /*
+     * Plafonul ramane plafon: readucerea randurilor nu are voie sa il sara. Dar intra doar CATE RANDURI MAI INCAP.
+     *
+     * ⚠ Pana la 19.11.2026 intrau toate, apoi lista se taia la plafon DE LA COADA. Randurile se pun inaintea
+     * catalogului, deci cu destule randuri in `page_content` taietura lua chiar catalogul (si tot ce era dupa el), iar
+     * regula `REQUIRED_HOME` de mai jos nu-l mai readucea: id-ul lui era deja „vazut”. Magazinul ramanea cu prima pagina
+     * fara produse, fara niciun mesaj (gasit de proba cu continut stricat, `intrari-ostile.test.ts`).
+     */
+    const incap = randuriNoi.slice(0, Math.max(0, MAX_HOME_SECTIONS - home.length));
+    for (const s of incap) seenIds.add(s.id);
+    home.splice(pozitie, 0, ...incap);
   }
 
   /*
@@ -547,8 +554,9 @@ export function parseStoreDesign(raw: unknown, ctx: DesignContext): StoreDesign 
      * cade pe prima din catalog, iar aceea poate nimeri chiar peste una derivata —
      * si atunci un design stricat s-ar fi ales singur un hero, pe veci.
      */
+    // `Array.from`, nu `.map`: intr-o lista cu goluri, `.map` lasa golurile, iar `.find` le viziteaza ca `undefined`.
     const heroBrut = Array.isArray(r.home)
-      ? (r.home.map(obj).find((x) => x.kind === "hero")?.variant)
+      ? (Array.from(r.home, (x) => obj(x)).find((x) => x.kind === "hero")?.variant)
       : undefined;
     const alesDeOm = typeof heroBrut === "string" && !!sectionMeta("hero")?.variants[heroBrut];
 

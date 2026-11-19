@@ -3,6 +3,7 @@
 import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
 import { termenPrecomanda } from "@/lib/storefront/precomanda";
 import { ButonGarantieLegala } from "@/components/storefront/GarantieLegala";
+import { LocPesteBaraDeJos } from "@/components/storefront/LocPesteBaraDeJos";
 import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -67,9 +68,14 @@ const SCHEMA_BLOCURI = schemaBlocurilor("product_page", "classic")!;
  * Latimea reala a coloanei de galerie pe desktop: (72rem container - 4rem gap) / 2.
  *
  * Acelasi `sizes` pe copia de telefon si pe cea de desktop, desi arata diferit:
- * amandoua marcheaza prima imagine cu `priority`, iar preincarcarea din <head> nu
+ * amandoua marcheaza prima imagine cu `preload`, iar preincarcarea din <head> nu
  * stie de `display:none`. Cu `sizes` diferiti browserul alegea doi candidati si
  * descarca de doua ori aceeasi fotografie; identici, alege acelasi fisier o data.
+ *
+ * ⚠ `preload` SINGUR NU AJUNGE (19.11.2026): pana in Next 16 `priority` punea si
+ * `fetchPriority="high"`; de la 16 incoace (`get-img-props.js`) doar preincarca, iar o
+ * preincarcare de imagine pleaca la prioritate MICA, la rand cu cele ~40 de scripturi.
+ * Masurat pe cascada: poza LCP era ceruta „Low". De-aia prima fotografie are amandoua.
  */
 const GALLERY_SIZES = "(min-width: 1024px) 544px, 100vw";
 
@@ -99,7 +105,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
           {slides.map((src, i) => (
             <div key={i} className="relative w-full h-full flex-shrink-0">
               <Image src={src} alt={imgAlt(src, i)} fill sizes={GALLERY_SIZES}
-                className="object-contain p-2" priority={i === 0} />
+                className="object-contain p-2" preload={i === 0} fetchPriority={i === 0 ? "high" : undefined} />
             </div>
           ))}
         </div>
@@ -118,7 +124,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
                 (miniatura departata, sau sageata care se intoarce la prima) si
                 ar lasa un patrat gol pana soseste imaginea. */}
             <Image src={src} alt={imgAlt(src, i)} fill sizes={GALLERY_SIZES}
-              className="object-contain p-2" priority={i === 0} loading={i === 0 ? undefined : "lazy"} />
+              className="object-contain p-2" preload={i === 0} fetchPriority={i === 0 ? "high" : undefined} loading={i === 0 ? undefined : "lazy"} />
           </div>
         ))
       )}
@@ -150,7 +156,9 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
               ))}
             </div>
           )}
-          <div className="absolute top-3 left-3 bg-black/30 backdrop-blur-sm text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
+          {/* `bg-black/60`, nu `/30` (19.11.2026): pe o poza de produs cu fond alb, 30% negru lasa albul cifrelor la 2,1:1;
+              la 60% e 5,7:1 in cazul cel mai rau (WCAG 1.4.3). axe nu vede asta: nu poate masura contrastul peste o poza. */}
+          <div className="absolute top-3 left-3 bg-black/60 text-white text-[10px] font-medium px-2.5 py-1 rounded-full z-10">
             {activeSlide + 1} / {slides.length}
           </div>
         </>
@@ -1444,6 +1452,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       {!modalOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-surface border-t border-border shadow-2xl px-4 py-3"
           style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+          <LocPesteBaraDeJos />
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-muted-foreground truncate">

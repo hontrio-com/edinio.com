@@ -42,6 +42,7 @@ import { PornesteAnimatiile } from "@/components/pages/PornesteAnimatiile";
 import { areTitluPrincipal, descriereDinBlocuri, titlulPrincipal } from "@/lib/pages/titlul-principal";
 import { felulSegmentului } from "@/lib/storefront/permalinkuri";
 import { adresaCurenta, setareaPermalinkurilorMagazinului } from "@/lib/storefront/permalinkuri-server";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 interface Props {
   params: Promise<{ slug: string; pageSlug: string }>;
@@ -301,7 +302,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
   if (!business.is_published && !isOwner) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 text-center">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mb-6 mx-auto" style={{ backgroundColor: business.primary_color }}>
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl mb-6 mx-auto" style={{ backgroundColor: culoareMagazin(business.primary_color) }}>
           {(business.store_name ?? business.business_name)[0]?.toUpperCase()}
         </div>
         <h1 className="text-2xl font-semibold text-foreground mb-2">{business.store_name ?? business.business_name}</h1>
@@ -323,7 +324,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
       }
     }
     if (isSuspended) {
-      return <SuspendedStorePage businessName={business.store_name ?? business.business_name} primaryColor={business.primary_color} phone={business.phone} />;
+      return <SuspendedStorePage businessName={business.store_name ?? business.business_name} primaryColor={culoareMagazin(business.primary_color)} phone={business.phone} />;
     }
   }
 
@@ -371,7 +372,7 @@ export default async function CustomPage({ params, searchParams }: Props) {
   const dateStructuratePromise = page.is_published
     ? dateStructuratePagina(supabase, business, page, blocks)
     : Promise.resolve(null);
-  const color = magazin.primary_color ?? "#07c527";
+  const color = culoareMagazin(magazin.primary_color);
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
 

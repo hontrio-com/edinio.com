@@ -1,6 +1,7 @@
 import { resolveHeroBanners } from "./hero-banners";
 import { completeazaBlocuri, schemaBlocurilor } from "./blocuri";
 import { CHEIE_FONT_TEXT, CHEIE_FONT_TITLURI, fontDinPageContent } from "./fonturi-magazin";
+import { culoareAleasa, culoareMagazin } from "@/lib/storefront/culoare-magazin";
 import {
   DESIGN_VERSION,
   type DesignContext,
@@ -33,13 +34,20 @@ import {
  * comerciantul nu schimba nimic, si se rupe de ei abia cand alege o culoare.
  */
 export function defaultColors(ctx: DesignContext): Record<StyleColorKey, string> {
-  const storeBg = typeof ctx.pageContent.store_bg_color === "string" ? ctx.pageContent.store_bg_color : "";
+  /*
+   * ⚠ Amandoua trec prin poarta culorilor (19.11.2026, `culoare-magazin.ts`): culoarea magazinului e `text` fara
+   * constrangere in baza, iar fundalul din „Stil” e o valoare libera din `page_content`. Ajung in `style`, ca variabile
+   * `--st-*`, unde un `;` din valoare adauga proprietati intregi la randarea pe server. Culorile din `design.style`
+   * treceau deja prin `sanitizeColor`, la parsare; astea doua, nu.
+   */
+  const principala = culoareMagazin(ctx.primaryColor);
+  const storeBg = culoareAleasa(ctx.pageContent?.store_bg_color);
   return {
-    primary: ctx.primaryColor,
+    primary: principala,
     // Accentul porneste identic cu primara: un singur buton de culoare pentru
     // comerciantii care nu vor sa se gandeasca la o a doua nuanta.
-    accent: ctx.primaryColor,
-    background: storeBg || "var(--color-background)",
+    accent: principala,
+    background: storeBg ?? "var(--color-background)",
     surface: "var(--color-surface)",
     text: "var(--color-text-primary)",
     muted: "var(--color-text-secondary)",
@@ -131,8 +139,14 @@ function notFalse(value: unknown): boolean {
  * (hero fara bannere, categorii fara categorii), exact ca azi.
  */
 export function buildClassicDesign(ctx: DesignContext): StoreDesign {
-  const pc = ctx.pageContent;
-  const features = ctx.features;
+  /*
+   * ⚠ Amandoua sunt `jsonb` din baza: un `null` sau orice altceva decat un obiect (o coloana scrisa de mana) se citeste
+   * ca obiect gol, nu darama derivarea. Apelantii de azi pun deja `?? {}`; aici e plasa pentru cel care uita (proba
+   * `intrari-ostile.test.ts`, 19.11.2026).
+   */
+  const obiect = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const pc = obiect(ctx.pageContent);
+  const features = obiect(ctx.features);
 
   const home: SectionInstance[] = [];
 
@@ -156,21 +170,29 @@ export function buildClassicDesign(ctx: DesignContext): StoreDesign {
   home.push(section("shipping", "shipping_progress", "banner", bool(pc.show_shipping_progress)));
 
   // „Recomandate" e, structural, un rand de produse cu sursa `featured`.
-  home.push(
-    section("featured", "product_row", "grid", bool(pc.show_featured_section), {
-      mode: "featured",
-      title: typeof pc.featured_section_title === "string" && pc.featured_section_title
-        ? pc.featured_section_title
-        : "Recomandate",
-    }),
-  );
+  /*
+   * ⚠ Fara `title` in reglaje (19.11.2026). Il purta de la prima versiune a designului, dar nu-l citea nimeni: titlul
+   * randului vine din `page_content.featured_section_title`. Iar parserul NU-l recunoaste (nu e un camp al randului),
+   * deci il taia la a doua citire: un design in care randul fusese readus din clasic iesea altfel la a doua parsare
+   * decat la prima (gasit de proba `intrari-ostile.test.ts`). Garda ciornei se sprijina pe o parsare stabila.
+   */
+  home.push(section("featured", "product_row", "grid", bool(pc.show_featured_section), { mode: "featured" }));
 
   // Randurile custom pastreaza id-ul si layout-ul deja salvate.
   const rows = Array.isArray(pc.product_sections) ? pc.product_sections : [];
-  for (const raw of rows) {
+  for (const [pozitie, raw] of rows.entries()) {
     if (!raw || typeof raw !== "object") continue;
     const r = raw as Record<string, unknown>;
-    const id = typeof r.id === "string" && r.id ? r.id : newSectionId();
+    /*
+     * ⚠ Un rand FARA id primeste unul dupa pozitie, nu unul nou la fiecare citire (19.11.2026). Cu `newSectionId()`,
+     * designul derivat iesea altul la fiecare parsare: garda ciornei compara doua parsari, deci un magazin cu un
+     * asemenea rand n-ar mai fi putut salva nimic („modificat in alta fila”, la nesfarsit), iar sectiunea se remonta
+     * la fiecare randare. Gasit de proba cu continut stricat (`intrari-ostile.test.ts`); randurile facute din editor
+     * au mereu id.
+     */
+    // Curatat ca in parser (`parseSection`: fara spatii la capete, cel mult 64 de caractere), altfel a doua parsare l-ar fi schimbat.
+    const idCurat = typeof r.id === "string" ? r.id.trim().slice(0, 64) : "";
+    const id = idCurat || `rand_fara_id_${pozitie}`;
     home.push(
       section(id, "product_row", r.layout === "carousel" ? "carousel" : "grid", r.enabled !== false, {
         mode: "custom",

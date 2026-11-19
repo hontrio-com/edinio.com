@@ -195,8 +195,11 @@ test("galeria: fara „Conținut liber” cand pagina principala e o pagina prop
 });
 
 test("previzualizarea marcheaza fiecare bloc al continutului; golul se vede doar in editor", () => {
+  // Din 19.11.2026 randarea pe loc sta in `ContinutLiberViu` (incarcat doar in editor); ascultatorul a ramas in `ContinutLiber`.
+  const viu = cod("src/components/storefront/ContinutLiberViu.tsx");
+  assert.match(viu, /\[BLOC_ATTR\]: idBloc\(cheie, b\.id\)/);
+  assert.match(viu, /if \(blocuri\.length === 0\) \{/);
   const c = cod("src/components/storefront/ContinutLiber.tsx");
-  assert.match(c, /\[BLOC_ATTR\]: idBloc\(cheie, b\.id\)/);
-  assert.match(c, /if \(blocuri\.length === 0\) \{/);
   assert.match(c, /else if \(mesaj\[PREVIEW_MESSAGE\] === "reluari"\) stare = \{ \.\.\.stare, reluari: mesaj\.reluari \};/);
+  assert.match(c, /reluari=\{viu\.reluari\}/, "reluarile animatiilor nu mai ajung la blocurile vii");
 });

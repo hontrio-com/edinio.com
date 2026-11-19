@@ -474,6 +474,25 @@ describe("gazdele platformei care nu primesc antetul", () => {
     const r = await proxy(cerere("https://edinio.com/floraria-mea?preview=1"));
     assert.notEqual(r.status, 308);
   });
+
+  test("⚠ semnul de previzualizare NU tine un subdomeniu oarecare pe loc (auditul din 19.11.2026)", async () => {
+    /*
+      Scutirea de mai sus acoperea si subdomeniile: cu `?preview=1`, `orice.edinio.com` servea tot site-ul (si pagina
+      de intrare in cont) cu 200. Panoul nu poate rula pe un subdomeniu, deci acolo scutirea nu apara nimic.
+    */
+    for (const [url, tinta] of [
+      ["https://app.edinio.com/login?preview=1", "https://www.edinio.com/login?preview=1"],
+      ["https://ajutor.edinio.com/preturi?preview=1&editor=design", "https://www.edinio.com/preturi?preview=1&editor=design"],
+      ["https://orice.edinio.com/floraria-mea?preview=1", "https://www.edinio.com/floraria-mea?preview=1"],
+    ]) {
+      const r = await proxy(cerere(url));
+      assert.equal(r.status, 308, url);
+      assert.equal(r.headers.get("location"), tinta, url);
+    }
+    // Subdomeniul unei teme isi pastreaza drumul lui (rescriere spre magazinul demo), cu sau fara semn.
+    const tema = await proxy(cerere("https://mercur.edinio.com/?preview=1"));
+    assert.notEqual(tema.status, 308, "subdomeniul unei teme s-a redirectat");
+  });
 });
 
 describe("domeniul propriu care nu serveste un magazin: doua ecrane, amandoua 404 si noindex", () => {

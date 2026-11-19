@@ -81,8 +81,10 @@ test("⚠⚠ paginile alese in editor randeaza ciorna SI continutul ei, si ascul
     assert.doesNotMatch(text, /pentruBrowser\(business\)|business: business as never|buildChromeData\(\{\s*(?:searchCategories,\s*)?business,/, `${pagina}: un loc de randare primeste magazinul fara ciorna`);
     assert.doesNotMatch(text, /const pageContent = \(storeSettings\?\.page_content \?\? \{\}\) as StorePageContent;/, `${pagina}: textele fara ciorna`);
     // Direct, sau prin `color` (pagina proprie), luata tot din magazinul cu ciorna.
-    assert.match(text, /primaryColor: magazin\.primary_color|const color = magazin\.primary_color/, `${pagina}: designul se rezolva cu culoarea veche`);
-    assert.doesNotMatch(text, /primaryColor: business\.primary_color/, `${pagina}: designul se rezolva cu culoarea veche`);
+    // Din 19.11.2026 culoarea trece prin `culoareMagazin` (poarta culorilor, `culoare-magazin.ts`); regula ramane: a
+    // magazinului CU ciorna, niciodata a celui citit.
+    assert.match(text, /primaryColor: culoareMagazin\(magazin\.primary_color\)|const color = culoareMagazin\(magazin\.primary_color\)/, `${pagina}: designul se rezolva cu culoarea veche`);
+    assert.doesNotMatch(text, /primaryColor: (?:culoareMagazin\()?business\.primary_color/, `${pagina}: designul se rezolva cu culoarea veche`);
     assert.match(text, /(esteEditorDesign|editorDesign)=\{esteEditorDesign\}/, `${pagina}: nu asculta mesajele editorului`);
   }
 });

@@ -80,3 +80,8 @@ next-env.d.ts
 # unealta. Se ruleaza cu credentialele de productie, care nu stau in arbore, si
 # ramane de rulat ori de cate ori se banuieste ca vreo usa a mai lasat copii in urma.
 !/scripts/curata-optim-personalizari.mjs
+# Foaia de stil a magazinelor (19.11.2026): `foaie-vitrina.mjs` scrie `src/app/vitrina-surse.css`, iar proba
+# `src/lib/foi-de-stil.test.ts` il IMPORTA. Fara randul asta, suita ar cadea la fiecare push, pe orice masina in afara
+# de cea care l-a scris. `fonturi-ro.py` taie fisierele din `public/fonturi-ro/` si scrie `src/lib/fonturi-ro.ts`.
+!/scripts/foaie-vitrina.mjs
+!/scripts/fonturi-ro.py

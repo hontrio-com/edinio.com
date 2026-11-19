@@ -8,6 +8,7 @@ import { formatPrice, whatsappLink } from "@/lib/utils/format";
 import { StoreNavHamburger, StoreNavLinks } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useCatalogCautabil, useStoreChrome, useStorefrontOptional, type CartMode } from "@/components/storefront/StorefrontProvider";
+import { useInchidePanoul } from "../_shared/inchide-panoul";
 import { useHeaderSettings } from "@/components/storefront/sections/_shared/header-settings";
 import { CartControl } from "@/components/storefront/sections/_shared/CartControl";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
@@ -71,7 +72,7 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
   }, [catalog?.categories, searchCategories]);
 
   return (
-    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)]/95 backdrop-blur-md border-b border-[var(--st-border)]`}>
+    <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)] border-b border-[var(--st-border)]`}>
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
         {/* Randul principal */}
         <div className="h-16 flex items-center gap-3 lg:gap-6">
@@ -163,6 +164,9 @@ function SearchBar({
   const [catLocal, setCatLocal] = useState("toate");
   const [deschis, setDeschis] = useState(false);
   const inchide = useRef<number | null>(null);
+  // Clic in afara si Escape, ascultate pe document: Safari nu muta focusul pe butonul apasat, deci `onBlur` nu ajunge.
+  const zonaCategorii = useRef<HTMLDivElement>(null);
+  useInchidePanoul(deschis, setDeschis, zonaCategorii);
 
   const categorie = catalog ? catalog.categoryFilter : catLocal;
   const { valoare, scrie, propsForm, propsZona, rezultate } = useCautareHeader({ categorie });
@@ -192,7 +196,7 @@ function SearchBar({
       />
 
       {categorii.length > 0 && (
-        <div className="relative hidden sm:block border-l border-[var(--st-border)]"
+        <div ref={zonaCategorii} className="relative hidden sm:block border-l border-[var(--st-border)]"
           onBlur={() => { inchide.current = window.setTimeout(() => setDeschis(false), 120); }}
           onFocus={() => { if (inchide.current) window.clearTimeout(inchide.current); }}>
           <button type="button" onClick={() => setDeschis((v) => !v)}

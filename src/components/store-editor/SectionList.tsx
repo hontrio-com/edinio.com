@@ -187,7 +187,9 @@ function SectionRow({
         </button>
 
         {/* Fara iconita (lista lui, 27.10.2026: „fa ceva mai Clean”): numele si varianta ajung. */}
-        <button type="button" onClick={onSelect} className="flex-1 min-w-0 flex items-center py-2 text-left">
+        {/* `title`: numele si varianta se taie cu „...” cand nu incap langa butoane; trecerea cu mouse-ul le arata intregi (19.11.2026). */}
+        <button type="button" onClick={onSelect} title={typeof subtitlu === "string" ? `${nume}: ${subtitlu}` : nume}
+          className="flex-1 min-w-0 flex items-center py-2 text-left">
           <span className="min-w-0">
             <span className={`flex items-center gap-1.5 text-sm font-medium ${section.enabled ? "text-foreground" : "text-muted-foreground"}`}>
               <span className="truncate">{nume}</span>

@@ -1,10 +1,13 @@
+import { faraControl } from "@/lib/storefront/design/curatare";
+
 /**
  * Resolve an author-provided link, honouring the store basePath (custom domain
  * vs /{slug}). Store-relative links (starting with "/") get the basePath prefix;
  * absolute/mailto/tel/anchor links are left untouched.
  */
 export function resolveHref(href: string | undefined | null, basePath: string): string {
-  const h = (href ?? "").trim();
+  // Fara caracterele de control: browserul le scoate din adresa, deci `java<tab>script:` e `javascript:` (19.11.2026).
+  const h = faraControl(href ?? "");
   if (!h) return "#";
   if (h.startsWith("#")) return h;
   // Safe absolute links.
@@ -19,7 +22,7 @@ export function resolveHref(href: string | undefined | null, basePath: string): 
 }
 
 export function isExternalHref(href: string | undefined | null): boolean {
-  return /^https?:\/\//i.test((href ?? "").trim());
+  return /^https?:\/\//i.test(faraControl(href ?? ""));
 }
 
 /*
@@ -33,7 +36,7 @@ export function isExternalHref(href: string | undefined | null): boolean {
 
 /** Schema unui link pe care magazinul il refuza (`resolveHref` il face „#”), sau `null` cand linkul e bun. */
 export function schemaRefuzata(href: string | undefined | null): string | null {
-  const h = (href ?? "").trim();
+  const h = faraControl(href ?? "");
   if (/^(https?:|mailto:|tel:)/i.test(h)) return null;
   const m = h.match(/^([a-z][a-z0-9+.-]*):/i);
   return m ? `${m[1].toLowerCase()}:` : null;

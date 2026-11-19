@@ -20,7 +20,9 @@ export function RandDesign({ sectiune, numar, onSchimba }: {
     <div className="space-y-2">
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Design</p>
       <div className="flex items-center gap-2 rounded-xl border border-border p-3">
-        <p className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">
+        {/* Numele designului se rupe pe doua randuri, nu se taie cu „...”: e singurul lucru pe care il spune randul
+            („Bannere cu două carduri alătu...” nu spunea care design e; gasit la auditul din 19.11.2026). */}
+        <p className="flex-1 min-w-0 text-sm font-medium leading-snug text-foreground">
           {variantMeta(sectiune.kind, sectiune.variant)?.label ?? sectiune.variant}
         </p>
         <button type="button" onClick={onSchimba}

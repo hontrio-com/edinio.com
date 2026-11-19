@@ -75,7 +75,8 @@ test("⚠ „Șterge” pe tot continutul si „Înapoi” in arbore: doar pe bl
 
 test("animatiile pornesc si in editor, langa blocurile desenate din designul viu", () => {
   /* In magazin le porneste slotul de pe server; in editor slotul e ocolit, deci trebuie pornite aici. */
-  const c = cod("src/components/storefront/ContinutLiber.tsx");
+  // Blocurile vii stau, din 19.11.2026, in `ContinutLiberViu` (jumatatea de editor a lui `ContinutLiber`).
+  const c = cod("src/components/storefront/ContinutLiberViu.tsx");
   assert.match(c, /<BlockRenderer[\s\S]*?\/>\s*<PornesteAnimatiile \/>/);
 });
 

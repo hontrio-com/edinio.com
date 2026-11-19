@@ -18,6 +18,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 const POLICY_META: Record<string, { label: string; key: string }> = {
   termeni:          { label: "Termeni si conditii",           key: "terms" },
@@ -159,7 +160,7 @@ export default async function PolicyPage({ params }: Props) {
     content = templates[meta.key] ?? "";
   }
 
-  const color = business.primary_color ?? "#07c527";
+  const color = culoareMagazin(business.primary_color);
   const showContent = enabled && content.trim() !== "";
 
   /*

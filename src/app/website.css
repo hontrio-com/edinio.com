@@ -23,6 +23,10 @@
   și restul sunt scrise o singură dată. Un vizitator încarcă o singură foaie, nu
   două, fiindcă fiecare grup de rute importă exact una.
 
+  ⚠ DIN 19.11.2026 clasele de mai sus stau în `stil-site.css`, importat imediat
+  după `stil-comun.css` (și aici, și în `globals.css`). S-au mutat fiindcă foaia
+  magazinelor, `vitrina.css`, le căra fără să le folosească.
+
   ⚠ CÂND ADAUGI UN DOSAR NOU DE COMPONENTE folosit de site-ul de prezentare,
   adaugă-l la lista de `@source`. Altfel utilitarele lui nu se generează și
   pagina apare nestilizată — nu parțial, ci exact clasele noi lipsesc.
@@ -92,3 +96,4 @@
 */
 
 @import "./stil-comun.css";
+@import "./stil-site.css";

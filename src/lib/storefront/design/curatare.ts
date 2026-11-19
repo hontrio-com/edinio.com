@@ -35,10 +35,26 @@ export function sanitizeColor(value: unknown): string | undefined {
   return v && v.length <= 64 && COLOR_RE.test(v) ? v : undefined;
 }
 
+/**
+ * Caracterele de control ASCII (U+0000-U+001F, U+007F), oriunde in sir.
+ *
+ * ⚠ Browserul scoate tabul si randul nou din ORICE loc al unei adrese inainte s-o citeasca (standardul URL), deci
+ * `java<tab>script:alert(1)` E `javascript:alert(1)`. Verificarea schemei de mai jos cauta litere pana la `:` si, cu un
+ * tab in mijloc, nu mai gasea nicio schema: linkul trecea drept „text relativ” (gasit la auditul din 19.11.2026). Azi
+ * il opresc React 19 (refuza `javascript:` in `href`) si `next/link`, dar curatarea trebuie sa tina si singura: un link
+ * poate ajunge maine intr-un loc pe care React nu-l pazeste (`window.location`, HTML scris ca text).
+ */
+const CONTROL = /[\u0000-\u001F\u007F]/g;
+
+/** Sirul cum il vede browserul ca adresa: fara caractere de control, fara spatii la capete. */
+export function faraControl(value: string): string {
+  return value.replace(CONTROL, "").trim();
+}
+
 /** Linkuri stocate: acceptam doar ce e sigur de randat. Vezi si lib/pages/href.ts. */
 export function sanitizeHref(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  const v = value.trim();
+  const v = faraControl(value);
   if (!v || v.length > 500) return undefined;
   if (v.startsWith("#") || v.startsWith("/")) return v;
   if (/^(https?:\/\/|mailto:|tel:)/i.test(v)) return v;
@@ -60,7 +76,18 @@ export function str(value: unknown, max: number): string | undefined {
 }
 
 export function clamp(value: unknown, min: number, max: number): number | undefined {
-  const n = Number(value);
+  /*
+   * ⚠ `Number()` ARUNCA pe un obiect care nu se poate face numar (`{ "toString": "x" }`, forma pe care o poate purta un
+   * `jsonb` scris de mana): „Cannot convert object to primitive value”. Parserul designului n-are voie sa cada, deci
+   * aruncatura devine „valoare lipsa” (gasit de `intrari-ostile.test.ts`, 19.11.2026). Tot ce se transforma fara sa
+   * arunce ramane exact ca inainte.
+   */
+  let n: number;
+  try {
+    n = Number(value);
+  } catch {
+    return undefined;
+  }
   if (!Number.isFinite(n)) return undefined;
   return Math.min(Math.max(n, min), max);
 }

@@ -22,6 +22,7 @@ import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ci
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { CheckoutPageClient } from "@/components/storefront/sections/checkout/CheckoutPageClient";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
+import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 
 /**
  * Pagina de finalizare a comenzii.
@@ -79,7 +80,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const magazin = magazinCuCiorna(business, ciorna.continut);
   const pageContent = pcCuCiorna((storeSettings?.page_content ?? {}) as Record<string, unknown>, ciorna.continut) as StorePageContent;
   const resolved = resolveDesign(ciorna.ciorna ?? storeSettings?.storefront_design, {
-    primaryColor: magazin.primary_color ?? "#07c527",
+    primaryColor: culoareMagazin(magazin.primary_color),
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: magazin.cover_url,
@@ -150,7 +151,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
           <MarcajSectiune sectiune={resolved.design.commerce.checkout}>
             <CheckoutPageClient
               variant={resolved.design.commerce.checkout.variant}
-              color={magazin.primary_color ?? "#07c527"}
+              color={culoareMagazin(magazin.primary_color)}
               basePath={basePath}
               businessId={business.id}
               shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}

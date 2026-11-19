@@ -11,7 +11,7 @@
   Sentry se aduce cu `import()`: pe vitrine nu e incarcat dinainte, deci o cadere
   acolo il descarca abia atunci (vezi `instrumentation-client.ts`).
 */
-export function raporteazaEroarea(eroare: Error & { digest?: string }): void {
+export function raporteazaEroarea(eroare: Error & { digest?: string }, context?: Record<string, string>): void {
   if (eroare.digest) return;
-  import("./client").then((m) => m.captureaza(eroare)).catch(() => undefined);
+  import("./client").then((m) => m.captureaza(eroare, context)).catch(() => undefined);
 }

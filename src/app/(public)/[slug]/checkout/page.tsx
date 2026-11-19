@@ -87,30 +87,10 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     tagline: business.tagline,
   });
 
-  const host = (await headers()).get("host");
+  // Antetele se citesc O DATA, aici, in randare: callbackul lui `after` de mai jos nu le mai poate cere.
+  const anteturi = await headers();
+  const host = anteturi.get("host");
   const basePath = adreseFaraSlug(host, { slug, custom_domain: business.custom_domain }) ? "" : `/${slug}`;
-
-  /*
-    ═══ PALNIA: „a inceput checkout-ul" ═══
-
-    Al treilea prag al palniei (dupa vizita si vederea produsului). Se scrie
-    dupa raspuns, cu aceeasi regula ca vizitele; proprietarul, gazdele de test
-    si santinela raman afara.
-  */
-  after(async () => {
-    const anteturi = await headers();
-    const ua = anteturi.get("user-agent");
-    if (!seMasoaraVizita({ esteProprietar: isOwner, host: host?.split(":")[0] ?? "", userAgent: ua })) return;
-
-    await scrieEvenimentAnalitic({
-      businessId: business.id,
-      fel: "begin_checkout",
-      ip: clientIpFromHeaders(anteturi),
-      userAgent: ua,
-      device: /mobile/i.test(ua ?? "") ? "mobile" : /tablet/i.test(ua ?? "") ? "tablet" : "desktop",
-      path: "/checkout",
-    });
-  });
 
   // In editorul de design fara redirectare, din acelasi motiv ca pe ruta cosului:
   // previzualizarea vine aici inainte ca ciorna cu pagina de comanda sa fie in baza.
@@ -134,6 +114,42 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     }
     if (suspendat) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
   }
+
+  /*
+    ═══ PALNIA: „a inceput checkout-ul" ═══
+
+    Al treilea prag al palniei (dupa vizita si vederea produsului). Se scrie
+    dupa raspuns, cu aceeasi regula ca vizitele; proprietarul, gazdele de test
+    si santinela raman afara.
+
+    ⚠ DATELE CERERII SE CITESC IN RANDARE, NU IN CALLBACK (19.11.2026). Aici statea
+    `await headers()` INAUNTRUL lui `after`. Intr-o pagina, Next arunca acolo („used
+    `headers()` inside `after()` while rendering”), deci evenimentul nu s-a scris
+    NICIODATA: in productie, de la aparitia palniei (20.09.2026) pana pe 19.11.2026,
+    zero sesiuni cu checkout in `analitice_zilnic`, langa 825 cu cos si 137 cu
+    comanda, iar cifra „Checkout-uri incepute” din Statistici a stat pe 0 la toate
+    magazinele. Eroarea se vedea doar in jurnalul serverului. Regula e tinuta de
+    `dupa-raspuns-fara-cerere.test.ts`.
+
+    ⚠ STA DUPA CELE DOUA REDIRECTARI DE MAI SUS. `after` ruleaza si cand pagina
+    redirecteaza, iar un magazin cu formularul in fereastra (fara pagina de comanda)
+    sau unul suspendat n-a aratat nimanui niciun checkout: cifra numara paginile de
+    comanda chiar servite.
+  */
+  const uaVizitator = anteturi.get("user-agent");
+  const ipVizitator = clientIpFromHeaders(anteturi);
+  after(async () => {
+    if (!seMasoaraVizita({ esteProprietar: isOwner, host: host?.split(":")[0] ?? "", userAgent: uaVizitator })) return;
+
+    await scrieEvenimentAnalitic({
+      businessId: business.id,
+      fel: "begin_checkout",
+      ip: ipVizitator,
+      userAgent: uaVizitator,
+      device: /mobile/i.test(uaVizitator ?? "") ? "mobile" : /tablet/i.test(uaVizitator ?? "") ? "tablet" : "desktop",
+      path: "/checkout",
+    });
+  });
 
   const searchCategories = await loadSearchCategories(business.id, resolved.design);
   const chrome = buildChromeData({

@@ -2485,6 +2485,64 @@ CSS-ul critic pus in pagina; pozele principale ale celor trei teme lente au 52-6
 latimi le-ar scurta, dar costa stocare: hotararea lui); oprirea unei caderi si pe server cere `Suspense` in jurul
 sectiunilor; proba cu cititor de ecran, telefoane reale si o trecere de designer nu se pot face de aici.
 
+### F. Inaintea push-ului: magazinele REALE, randate local de codul nou (19.11.2026, seara)
+
+Cererea lui, dupa raport: „Iti dau acces la tot, pune tot ce ai rezolvat in productie”. Auditul se masurase pe baza demo,
+cu magazinele temelor; inainte de push, codul nou a randat local magazinele din productie (serverul local pe baza de
+productie, DOAR citire: `localhost` si user-agentul de robot nu intra in statistici, cererile care nu sunt GET si tertii
+sunt taiate in browser). Caderea editorului a prins proba la jumatate; la reluare s-a refacut tot ce nu era incheiat.
+
+- [x] 26.23 Portile pe productie si proba pe magazinele reale.
+- [x] 26.24 Sigla lata scotea cosul din ecran pe telefon (`HeaderHipermarket`, `HeaderClassic`).
+- [x] 26.25 „A inceput checkout-ul” nu se scria niciodata (`checkout/page.tsx`).
+- [x] 26.26 Proprietarul era numarat in vederile de produs (`pagina-produs.tsx`).
+
+**26.23.** `schema-baseline.sh --check` (schema din Git = schema din productie), `coloane-cerute-exista` (461 de coloane),
+build cu mediul productiei. Apoi, pe 110 magazine publicate, 1161 de pagini la 1440 si 390 px (prima pagina, catalogul,
+cautarea, cosul, o politica, produse, paginile proprii, o adresa gresita): 0 clase din DOM care aveau regula in foaia
+veche (3624 de clase, 419 KB) si n-o mai au in cea noua (1699, 228 KB); 0 erori de server; actiuni plecate singure la
+incarcare: 131, cate una pe pagina, doar la cele 6 magazine care au ascuns „Creat cu Edinio” (erau doua pe fiecare pagina,
+la toate). Codul de raspuns al fiecarei pagini fata de productie: 374 din 378 identice (358 x 200, 16 x 404); cele 3
+diferite sunt toate pe `alexshop.ro`, unde raspunde alt server (LiteSpeed): domeniul din `custom_domain` nu mai arata
+spre noi. Fisierele noi (`/fonturi-ro/*.woff2`, `/anpc-*.webp`) raspund 200 si cu antetul `Host` al unui domeniu propriu;
+CSP-ul trimis azi de productie le permite; caile din `@source` / `@import` / `url()` se potrivesc litera cu litera cu
+indexul git (Linux deosebeste literele mari de cele mici); nicio animatie sau variabila mutata in `stil-site.css` nu e
+folosita de vitrina.
+
+**26.24.** Vazut pe un magazin real cu antetul „hipermarket” si sigla de 1600x289 la inaltimea 56: ancora siglei avea
+`shrink-0`, deci plafonul `100%` din `stilSigla` nu plafona nimic, sigla tinea 280 px, iar iconita cosului iesea din
+ecran. Pagina se derula lateral cu 47 px la 390 px latime (117 la 320). Defect VECHI: productia arata la fel inainte.
+Auditul nu l-a vazut fiindca magazinele demo au sigle scurte. Reparat: `shrink-0` doar de la `lg` in sus; in antetul
+clasic, imaginea siglei are `min-w-0` in loc de `flex-shrink-0` (iesea din ancora la marimea maxima din cursor).
+Masurat dupa: sigla lata simulata in browser pe cele 30 de teme x 320/360/390/430 px, 32 de cazuri rele -> 0; prima
+pagina a celor 110 magazine la 320/360/390 px, 0 depasiri; cele 22 de magazine reale cu unul din cele doua antete,
+productie (codul vechi) fata de local (codul nou) la sase latimi: 123 din 132 de perechi identice, 8 reparate (un magazin
+la 320/360/390, altul cu 5 px la 320, patru vitrine de tema cu 2-12 px la 320), una cu sigla cu 4 px mai ingusta (butonul
+cosului statea cu 4 px in afara randului), niciuna stricata. Pe calculator si pe tableta: identic.
+`sigla-se-stramta.test.ts` tine regula pe toate cele noua antete.
+
+**26.25.** In jurnalul serverului local: „Route /[slug]/checkout used `headers()` inside `after()` while rendering”. Next
+16 nu lasa o pagina sa ceara datele cererii in callbackul lui `after` (`docs/.../functions/after.md`), deci evenimentul
+`begin_checkout` nu s-a scris NICIODATA: in productie, 20.09-19.11.2026, zero sesiuni cu checkout in `analitice_zilnic`,
+langa 825 cu cos si 137 cu comanda, iar „Checkout-uri incepute” din Statistici a stat pe 0 la toti. Antetele se citesc
+acum in randare si se dau callbackului ca valori. Evenimentul s-a mutat si DUPA cele doua redirectari ale paginii (`after`
+ruleaza si la redirectare): numara doar paginile de comanda chiar servite.
+⚠ Se scrie doar la magazinele cu pagina de comanda proprie. La cele cu formularul in fereastra cifra ramane 0: fereastra
+trimite evenimentul doar catre pixelii comerciantului. De hotarat de el daca sa plece si spre statisticile noastre.
+
+**26.26.** Acelasi tipar, cautat in toate apelurile `after`: pagina de produs chema in callback
+`esteProprietarulMagazinului`, care citeste `cookies()`. Acolo `cookies()` arunca, functia isi prinde singura caderea si
+raspunde „vizitator”, deci proprietarul era numarat in `product_view` de la aparitia palniei. Verdictul se ia acum din
+utilizatorul citit oricum in randare, fara nicio cerere in plus. `dupa-raspuns-fara-cerere.test.ts` tine regula pe toate
+componentele de server.
+
+Probele noi cad pe codul vechi: 8 mutatii din 8 prinse (cate una pe fiecare loc reparat, plus doua antete neatinse).
+Porti pe arborele final: `tsc`, `npm test`, `lint:prag --check`, `tipuri-db`, build, `schema-baseline.sh --check`,
+`coloane-cerute-exista` pe productie.
+
+Vazute in treacat, neatinse: `alexshop.ro` (domeniul nu mai arata spre noi); un magazin are in pagina o legatura scrisa
+`https//...` (fara doua puncte), care duce intr-un 404 al magazinului.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

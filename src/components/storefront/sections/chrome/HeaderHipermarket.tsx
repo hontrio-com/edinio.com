@@ -128,7 +128,11 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url}
                 storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
             </div>
-            <a href={acasa} className="flex items-center min-w-0 shrink-0 hover:opacity-85 transition-opacity" aria-label={nume}>
+            {/* ⚠ `shrink-0` DOAR de la `lg` in sus. Pe telefon ancora siglei trebuie sa se poata stramta, altfel o sigla
+                lata (masurat pe 19.11.2026, pe un magazin real: 1600x289 la inaltimea 56, adica 310 px) nu mai lasa loc
+                si impinge iconita cosului in afara ecranului: pagina se derula lateral cu 47 px la 390 px latime.
+                Stramtata, `stilSigla` (plafonul `100%`) micsoreaza sigla intreaga. Vezi si `logo-box.ts`. */}
+            <a href={acasa} className="flex items-center min-w-0 lg:shrink-0 hover:opacity-85 transition-opacity" aria-label={nume}>
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cdnImage(business.logo_url, 480)} alt={nume} style={stilSigla(logoSize)} className="w-auto object-contain" />

@@ -7,7 +7,6 @@ import { after } from "next/server";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
-import { esteProprietarulMagazinului } from "@/lib/analitice/proprietar";
 import { vizitatoriiCererii } from "@/lib/analitice/identitate";
 import { privitoriiProdusului } from "@/lib/analitice/privitori";
 import { completeazaBlocuri, schemaBlocurilor } from "@/lib/storefront/design/blocuri";
@@ -249,11 +248,20 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     aceeasi regula ca vizitele: proprietarul, gazdele de test si santinela raman
     afara, altfel comerciantul care isi verifica produsele dimineata ar aparea ca
     zece oameni care s-au uitat si n-au cumparat.
+
+    ⚠ PROPRIETARUL SE AFLA IN RANDARE, NU IN CALLBACK (19.11.2026). Aici se chema
+    `esteProprietarulMagazinului` INAUNTRUL lui `after`. Ea citeste `cookies()`, iar
+    intr-o pagina Next arunca acolo; functia isi prinde singura caderea si raspunde
+    „vizitator”, deci proprietarul NU era scos niciodata din `product_view`: exact
+    cazul pe care il descrie randul de mai sus. Utilizatorul e oricum citit mai sus,
+    odata cu magazinul, deci verdictul nu costa nicio cerere in plus.
+    Regula e tinuta de `dupa-raspuns-fara-cerere.test.ts`.
   */
+  const esteProprietar = user?.id === business.user_id;
   after(async () => {
     const ua = headersList.get("user-agent");
     if (!seMasoaraVizita({
-      esteProprietar: await esteProprietarulMagazinului(business.user_id),
+      esteProprietar,
       host: headersList.get("host")?.split(":")[0] ?? "",
       userAgent: ua,
     })) return;

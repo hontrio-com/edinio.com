@@ -18,6 +18,15 @@ import { createClient } from "@/lib/supabase/server";
   ⚠ Cookie-ul se citeste doar ca SEMN ca ar putea exista cineva logat; cine e
   hotaraste tot `getUser()`. Un cookie stricat nu poate trece drept proprietar,
   fiindca raspunsul vine de la serverul de autentificare, nu din cookie.
+
+  ⚠ NU SE CHEAMA DIN `after()`-UL UNEI PAGINI (19.11.2026). Acolo `cookies()`
+  arunca („used `cookies()` inside `after()` while rendering”), `catch`-ul de mai
+  jos preface caderea in „vizitator”, si proprietarul ajunge numarat fara niciun
+  semn. Asa a stat pagina de produs de la aparitia palniei. Intr-o pagina,
+  verdictul se afla in randare (utilizatorul e de obicei deja citit) si se da
+  callbackului ca valoare. Locul potrivit pentru functia asta e o ruta de API sau
+  o actiune de server, unde datele cererii se pot citi oricand.
+  `dupa-raspuns-fara-cerere.test.ts` tine regula.
 */
 export async function esteProprietarulMagazinului(businessUserId: string | null | undefined): Promise<boolean> {
   if (!businessUserId) return false;

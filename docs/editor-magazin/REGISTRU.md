@@ -308,9 +308,17 @@ Pas cu pas, cu comenzile, pentru ziua lansarii: sectiunea „F”.
   nimic, fiindca scaparea dadea sirul literal „${c}”. Dupa push: cautarea „50%” gaseste produsele cu „50%” in nume,
   iar o cautare obisnuita gaseste ca inainte.
 
-- **Auditul temelor si al editorului (etapa 26, 19.11.2026), comis LOCAL, fara push.** Fara migratii si fara variabile
-  noi. Inainte de push, de rulat de el pe productie: `schema-baseline.sh --check` si `coloane-cerute-exista` (randul de
-  antet cere acum si `np_activ:netopia_config->enabled`, `np_insigna:netopia_config->>badge_html`, la fel ca `tm_*`).
+- **Auditul temelor si al editorului (etapa 26, 19.11.2026), IMPINS pe 19.11.2026 seara** (la cererea lui: „pune tot ce ai
+  rezolvat in productie”): `08a07b6d` plus commitul reparatiilor gasite inaintea push-ului (PLAN, „Etapa 26”, F). Fara
+  migratii si fara variabile noi. Rulate inainte, pe productie: `schema-baseline.sh --check` si `coloane-cerute-exista`
+  (randul de antet cere acum si `np_activ:netopia_config->enabled`, `np_insigna:netopia_config->>badge_html`, la fel ca
+  `tm_*`), apoi magazinele reale randate local de codul nou.
+  In plus fata de lista de mai jos, pentru reparatiile din F:
+  - pe telefon (390 px si mai ingust), un magazin cu antetul „hipermarket” si sigla lata nu se mai deruleaza lateral, iar
+    iconita cosului e in ecran;
+  - in Statistici, „Checkout-uri incepute” incepe sa numere la magazinele cu pagina de comanda proprie (in baza:
+    `site_analytics.event_type = 'begin_checkout'`, zero randuri pana la push); la cele cu formularul in fereastra ramane 0;
+  - proprietarul logat care isi deschide un produs nu mai apare in vederile de produs.
   Dupa push, pe doua-trei magazine reale (unul cu Netopia, unul pe domeniu propriu, unul pe adresa cu slug):
   - prima pagina arata la fel; in retea, foaia de stil a magazinului e la jumatate (25,6 KB gzip, era 51,5), fisierele `/fonturi-ro/*.woff2`
     raspund 200 si ă, ș, ț se vad in fontul temei; la incarcare nu pleaca nicio cerere POST cu antetul `next-action`

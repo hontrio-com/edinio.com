@@ -54,11 +54,15 @@ export function HeaderClassic() {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
         <StoreNavHamburger items={menu} basePath={basePath} color={color} logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} />
         <a href={acasa} className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
+          {/* ⚠ Imaginea siglei are `min-w-0`, nu `flex-shrink-0`: ancora se stramta pe telefoanele inguste, iar imaginea
+              trebuie sa vina dupa ea. Cu `flex-shrink-0` ramanea la plafonul ei in pixeli si iesea din ancora, peste
+              butoane. Plafonul sta in pixeli (nu `stilSigla`) ca randul de pe ecranele mari sa ramana cum era. Vezi
+              `logo-box.ts`. */}
           {business.logo_url ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={cdnImage(business.logo_url, 320)} alt={nume}
               style={{ height: logoSize, maxWidth: logoSize * 4.2 }}
-              className="w-auto object-contain flex-shrink-0" />
+              className="w-auto object-contain min-w-0" />
           ) : (
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
               style={{ backgroundColor: color }}>

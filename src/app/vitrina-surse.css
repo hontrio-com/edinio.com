@@ -253,8 +253,10 @@
 @source "../lib/adresa-publica.ts";
 @source "../lib/anaf/cui.ts";
 @source "../lib/anaf/lookup.ts";
+@source "../lib/analitice/cumparare.ts";
 @source "../lib/analitice/identitate.ts";
 @source "../lib/analitice/privitori.ts";
+@source "../lib/analitice/proprietar.ts";
 @source "../lib/analitice/scrie.ts";
 @source "../lib/analitice/semnal.ts";
 @source "../lib/auth/cere-mfa.ts";

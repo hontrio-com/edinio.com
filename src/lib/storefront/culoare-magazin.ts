@@ -18,6 +18,16 @@ import { culoareSigura } from "@/lib/pages/culori";
 /** Verdele platformei: culoarea unui magazin care n-are una valida. */
 export const CULOARE_PLATFORMA = "#07c527";
 
+/**
+ * Forma in care se SCRIE culoarea principala a magazinului: `#` si sase cifre hexa.
+ *
+ * ⚠ ACEEASI REGULA E SI IN BAZA (20.11.2026): constrangerea `businesses_primary_color_hex` de pe `businesses`
+ * (`migrations/2027-02-09-culoarea-magazinului-e-hex.sql`). Cine scrie coloana verifica aici inainte, ca omul sa
+ * primeasca un mesaj, nu o eroare de baza; `culoare-magazin.test.ts` cade daca una din cele doua reguli se schimba fara
+ * cealalta. Poarta de la CITIRE (`culoareMagazin`, mai jos) ramane mai larga dinadins: ea apara `style`-ul, nu coloana.
+ */
+export const CULOARE_MAGAZIN_RE = /^#[0-9A-Fa-f]{6}$/;
+
 /** Culoarea principala a magazinului, din `businesses.primary_color`. */
 export function culoareMagazin(valoare: unknown): string {
   return culoareSigura(valoare) ?? CULOARE_PLATFORMA;

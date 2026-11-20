@@ -1,4 +1,5 @@
 import { CHEI_CONTINUT } from "@/lib/editor-magazin/noduri";
+import { CULOARE_MAGAZIN_RE } from "@/lib/storefront/culoare-magazin";
 import type { DesignContext } from "./types";
 
 /**
@@ -58,7 +59,8 @@ export const MAX_CONTINUT_BYTES = 200_000;
 /** Cate imagini poate avea galeria. Editorul nu are plafon; aici e doar o plasa. */
 const MAX_GALERIE = 100;
 
-const CULOARE_RE = /^#[0-9A-Fa-f]{6}$/;
+/** Culoarea magazinului purtata de ciorna: forma pe care o primeste si coloana (`businesses_primary_color_hex`). */
+const CULOARE_RE = CULOARE_MAGAZIN_RE;
 
 function obiect(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};

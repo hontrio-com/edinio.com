@@ -80,7 +80,7 @@ const CITIRI_IN_CANALE: Record<string, number> = {
   "src/app/api/cron/emag-sync/route.ts": 2, // amprentele si deriva: doar produse cu oferte; trimiterea trece prin `citesteProdusul`
   "src/app/api/cron/gmc-sync/route.ts": 2, // a doua: componentele pachetelor
   "src/app/api/cron/olx-sync/route.ts": 1,
-  "src/app/api/cron/santinela/route.ts": 3, // monitorizare, nu trimite nimic
+  "src/app/api/cron/santinela/route.ts": 2, // monitorizare, nu trimite nimic; proba feedului numara cu poarta feedului (vezi proba de mai jos)
   "src/app/sitemap.ts": 1,
   "src/lib/aboutyou/orders.ts": 1, // comenzi venite de la ei
   "src/lib/aboutyou/sync.ts": 4, // deriva, stocul si pretul: doar produse cu listare
@@ -123,6 +123,31 @@ function fisiere(p: string, out: string[] = []): string[] {
   else if (/\.(ts|tsx)$/.test(p) && !/\.test\.ts$/.test(p)) out.push(p.split(path.sep).join("/"));
   return out;
 }
+
+test("⚠ santinela numara produsele „care ar trebui sa fie in feed” cu poarta feedului, nu cu proiectia catalogului", () => {
+  /*
+   * „Monitorizare, nu trimite nimic” a fost adevarat si totusi gresit: proba feedului Facebook COMPARA feedul (fara
+   * produse demo) cu o numaratoare din baza, care le numara. Din 12.11.2026, a doua zi dupa lansarea temelor, santinela
+   * a sunat `critical` de doua ori pe zi pentru un magazin care avea doar cele 10 produse demo ale temei: feedul lui era
+   * gol, si corect gol. O proba care compara un canal cu baza trebuie sa numere cu poarta canalului.
+   */
+  const s = cod("src/app/api/cron/santinela/route.ts");
+  const deLa = s.indexOf("function cuImagineSiTrimise(");
+  assert.ok(deLa > 0, "numaratoarea santinelei nu mai are functia ei");
+  // Pana la acolada care inchide functia (singura pe rand gol de indentare), nu pana la prima acolada din optiuni.
+  const ajutor = s.slice(deLa, s.indexOf("\n}", deLa) + 2);
+  assert.match(ajutor, /\.from\("products"\)\s*\.select\("id", \{ count: "exact", head: true \}\)\s*\.eq\("is_active", true\)\s*\.or\(FARA_PRODUSE_DEMO\)/, "numaratoarea santinelei nu mai trece prin poarta feedului");
+  // Prima imagine nevida, cum o socoteste si proiectia (`nullif(images->>0, '')`).
+  assert.match(ajutor, /\.not\("images->>0", "is", null\)\s*\.neq\("images->>0", ""\);/);
+  // Aceeasi poarta ca in ruta feedului, prin aceeasi constanta.
+  assert.match(cod("src/app/(public)/[slug]/facebook-catalog.xml/route.ts"), /\.eq\("is_active", true\)\s*(?:\/\/[^\n]*\n\s*)*\.or\(FARA_PRODUSE_DEMO\)/);
+
+  const proba = s.slice(s.indexOf('nume: "feedul Facebook al magazinului are produse"'), s.indexOf('nume: "pagina de produs poarta datele structurate"'));
+  assert.ok(proba.length > 500, "proba feedului Facebook nu s-a gasit in santinela");
+  assert.equal((proba.match(/cuImagineSiTrimise\(admin\)/g) ?? []).length, 2, "si numaratoarea magazinului, si cea a platformei trec prin poarta feedului");
+  assert.match(proba, /await cuImagineSiTrimise\(admin\)\.eq\("business_id", t\.id\);/);
+  assert.doesNotMatch(proba, /\.from\("catalog_produs"\)/, "proba feedului numara iar din proiectie, care nu stie de produsele demo");
+});
 
 test("⚠⚠ nicio citire noua de produse intr-un canal fara sa se hotarasca daca produsele demo trec pe acolo", () => {
   const gasite: Record<string, number> = {};

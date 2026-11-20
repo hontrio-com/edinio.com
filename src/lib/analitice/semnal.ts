@@ -1,5 +1,5 @@
 /*
-  Semnalul de „adaugat in cos", trimis din browser.
+  Semnalele de palnie trimise din browser: „adaugat in cos" si „a inceput comanda in fereastra".
 
   ⚠ DE CE STA AICI, SI NU IN `CartProvider`.
 
@@ -15,16 +15,27 @@
   ⚠ `keepalive`, ca cererea sa plece si daca omul apasa imediat „Finalizeaza" si
   pagina se schimba dedesubt.
 */
-export function semnaleazaAdaugareaInCos(businessId: string | undefined, productId: string | undefined): void {
-  if (!businessId || !productId || typeof window === "undefined") return;
+
+/**
+ * Evenimentele de palnie pe care ruta `/api/analitice/eveniment` le primeste din browser. Ruta le RECUNOASTE si semnalul
+ * le TRIMITE prin aceeasi lista: adaugat intr-o parte, un fel nou nu se poate desparti de cealalta.
+ *
+ * ⚠ `purchase` NU intra aici niciodata: scris din browser, oricine si-ar putea desena rata de conversie. Nici `visit`
+ * ori `product_view`: ele se scriu la randare, pe server.
+ */
+export const FELURI_DIN_BROWSER = ["add_to_cart", "begin_checkout"] as const;
+export type FelDinBrowser = (typeof FELURI_DIN_BROWSER)[number];
+
+function trimite(fel: FelDinBrowser, businessId: string | undefined, productId: string | null): void {
+  if (!businessId || typeof window === "undefined") return;
 
   void fetch("/api/analitice/eveniment", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       businessId,
-      fel: "add_to_cart",
-      productId,
+      fel,
+      ...(productId ? { productId } : {}),
       path: window.location.pathname,
     }),
     keepalive: true,
@@ -32,4 +43,24 @@ export function semnaleazaAdaugareaInCos(businessId: string | undefined, product
     () => undefined,
     () => undefined,
   );
+}
+
+export function semnaleazaAdaugareaInCos(businessId: string | undefined, productId: string | undefined): void {
+  if (!productId) return;
+  trimite("add_to_cart", businessId, productId);
+}
+
+/**
+ * „A inceput comanda", cand formularul de comanda se deschide intr-o FEREASTRA (20.11.2026).
+ *
+ * Pe magazinele cu pagina de comanda, evenimentul il scrie serverul cand randeaza `/checkout`. Pe cele cu formularul in
+ * fereastra nu se randeaza nicio pagina, deci nu-l scria nimeni: „Checkout-uri incepute" din Statistici statea pe 0 la
+ * toate aceste magazine, adica la cele mai multe. Se cheama din cele patru locuri care deschid fereastra (sertarul
+ * cosului de pe prima pagina si de pe celelalte pagini, pagina cosului, formularul rapid de pe pagina de produs), langa
+ * evenimentele trimise acolo pixelilor; NU si de pe pagina de comanda, unde ar dubla randul scris de server.
+ *
+ * `productId` doar la formularul rapid, unde comanda e a unui singur produs.
+ */
+export function semnaleazaInceputulComenzii(businessId: string | undefined, productId?: string | null): void {
+  trimite("begin_checkout", businessId, productId ?? null);
 }

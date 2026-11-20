@@ -2618,6 +2618,81 @@ care exista azi in productie (la 320 si 360 px: sigla de 200 px statea peste men
 Singura diferenta fara legatura: `alexshop.ro`, domeniul care nu mai arata spre noi (stiut din 26.23).
 Niciun magazin nu foloseste inca designul nou. Serverul local n-a scris nimic in `error_logs`.
 
+## Etapa 28: ce ramasese dupa audit (cerut 20.11.2026: „Reparam absolut tot”)
+
+Lista din raportul de dupa etapa 26, plus ce s-a gasit intre timp. Fiecare punct, cu ce s-a masurat.
+
+- [x] 28.1 Palnia: comenzile din cos nu scriau „a cumparat”.
+- [x] 28.2 Palnia: „a inceput comanda” nu se scria pe magazinele cu formularul in fereastra.
+- [x] 28.3 Palnia: fiecare comanda mai scria o vedere de produs sau o vizita fantoma.
+- [x] 28.4 Santinela: alarma falsa „feedul Facebook e GOL”, de doua ori pe zi.
+- [x] 28.5 Subsolul site-ului de prezentare: insignele ANPC doar AVIF.
+- [x] 28.6 Constrangerea din baza pe culoarea principala a magazinului.
+- [x] 28.7 Cele doua randuri din `error_logs` scrise de serverul local de proba.
+- [ ] 28.8 O treapta de 828 px pe scara pozelor. NEFACUT, cere hotararea lui (vezi mai jos).
+- [ ] 28.9 CSP strict, cu nonce. NEFACUT, cere o etapa a lui (vezi mai jos).
+
+**28.1.** `purchase` se scria de mana in `placeOrder` (comanda rapida, de pe pagina de produs) si lipsea din
+`placeCartOrder` (comanda din cos), de la aparitia palniei (20.09.2026). Masurat in productie pe 13-19.11.2026: 150 de
+comenzi din vitrina, 29 de evenimente, 27 de sesiuni „Au comandat”. Deci „Au comandat”, rata de conversie, comenzile
+si vanzarile pe sursa si pe dispozitiv vedeau cam o comanda din cinci. Acum un singur scriitor
+(`lib/analitice/cumparare.ts`), chemat din amandoua actiunile. ⚠ Schimbare de regula, dinadins: cumpararea trece prin
+`seMasoaraVizita`, ca celelalte trepte, deci comanda de proba a proprietarului si cele de pe gazde de test nu mai intra
+in palnie (inainte, sesiunea lui aparea direct la „Au comandat”, fara vizita). Comanda ramane in Comenzi.
+
+**28.2.** „A inceput comanda” se scria doar la randarea paginii `/checkout`. Pe magazinele cu formularul in fereastra nu
+se randeaza nimic, deci „Checkout-uri incepute” statea pe 0 la cele mai multe. Cele patru locuri care deschid fereastra
+(sertarul cosului de pe prima pagina si de pe celelalte pagini, pagina cosului, formularul rapid) trimit acum treapta
+prin `POST /api/analitice/eveniment`, care primeste `add_to_cart` si `begin_checkout` (lista sta langa cel care le
+trimite, `semnal.ts`) si niciodata cumpararea. Pagina de comanda NU trimite si din browser: ar dubla randul serverului.
+
+**28.3.** Dupa o actiune de server, Next reface pagina de pe care a plecat, in aceeasi cerere, iar pagina isi programa
+din nou evenimentul din `after`. Vazut in productie la 5 comenzi din 5: una-doua vederi de produs in secunda comenzii.
+`seMasoaraVizita` are acum un raspuns OBLIGATORIU, `dinActiune` (antetul `next-action`, citit in randare), in cele
+patru locuri care scriu la randare. Mecanismul, dovedit in browser: cu regula scoasa, sesiunea are doua vederi de
+produs, a doua in secunda cumpararii; cu regula, una.
+
+Proba cap-coada, in browser, pe baza demo (magazinul de proba pe o gazda `*.localhost`, care trece drept gazda de
+productie; comenzi reale de proba): cos cu fereastra = `visit`, `add_to_cart`, `begin_checkout`, `purchase` (139 lei),
+cate unul; formular rapid = `product_view`, `begin_checkout`, `purchase`, cate unul; cos cu pagina de comanda = `visit`,
+`add_to_cart`, `begin_checkout`, `purchase`, cate unul. `palnia-e-intreaga.test.ts` tine regula „toate drumurile”: o
+actiune noua care plaseaza o comanda din vitrina sau un loc nou care deschide formularul cade pana isi scrie treapta.
+
+**28.4.** Proba santinelei compara feedul Facebook cu numarul de produse cu poza din proiectia catalogului. Feedul nu
+trimite produsele DEMO ale temelor (etapa 18.1), proiectia le numara. Un magazin care are doar cele 10 produse demo are,
+corect, feedul gol, iar santinela suna `critical` din 12.11.2026 (a doua zi dupa lansarea temelor), de doua ori pe zi.
+Acum numara cu poarta feedului (`FARA_PRODUSE_DEMO`, aceeasi constanta ca ruta). Interogarea noua, rulata pe baza demo
+fata de numaratoarea de mana: 0 si 0 la doua magazine doar cu produse demo (proba veche vedea 10), 10 si 10 la unul cu
+produse proprii, 62 si 62 la unul amestecat. Randul din registrul de citiri spunea „monitorizare, nu trimite nimic”:
+adevarat, si totusi gresit, fiindca proba COMPARA un canal cu baza.
+
+**28.5.** A doua copie a aceluiasi lucru: subsolul magazinelor primise rezerva WebP in 26 (AVIF lipseste din Edge pana
+la 121 si din WebKit-ul fara codec), subsolul site-ului nu. `insigne-anpc.test.ts` tine regula pe orice loc care arata
+insignele.
+
+**28.6.** `businesses_primary_color_hex`: `primary_color ~ '^#[0-9A-Fa-f]{6}$'`
+(`migrations/2027-02-09-culoarea-magazinului-e-hex.sql`), aplicata in productie pe 20.11.2026, dupa repetitia pe baza
+demo (8 valori rele respinse, intre ele cea cu `;position:fixed`). In productie 180 de magazine din 180 aveau deja
+forma asta. E a doua plasa, la scriere, langa `culoareMagazin` de la citire (26.9). Aceeasi regula e si in aplicatie
+(`CULOARE_MAGAZIN_RE`), verificata in `updateBusiness` inaintea scrierii; `culoare-magazin.test.ts` cade daca una se
+schimba fara cealalta. Schema din Git regenerata: un rand in plus.
+
+**28.7.** Sterse dupa id, cu garda pe actiune, mesaj si secunda: doua randuri `storefront/antet` din 19.11, 18:08 UTC.
+Celelalte patru randuri cu aceeasi actiune sunt erori adevarate ale infrastructurii (502 de la Cloudflare, 02-16.11).
+
+**28.8, nefacut.** `latimi-imagini.ts` si `next.config.ts` spun de ce tripleta 640 / 750 / 828 a fost taiata la 640
+(fiecare latime distincta inseamna o varianta in plus pentru fiecare poza careia i se cere) si cer ca o latime noua sa
+intre deodata in `deviceSizes`, in treptele rutei `/api/img` si in cele ale Workerului care serveste variantele
+direct. Cu `next/image`, o varianta de 828 doar la pozele temelor n-ar fi ceruta niciodata (scara sare de la 640 la
+1024). Deci e o schimbare a scarii intregi, cu masuratoare inainte si dupa, nu un adaos la trei teme.
+
+**28.9, nefacut.** CSP-ul de azi lasa scripturile deschise dinadins (`'unsafe-inline' 'unsafe-eval' https:`), pentru
+pixelii comerciantilor si scripturile lui Next. Un CSP cu nonce cere antetul scris pe fiecare cerere (in `proxy.ts`) si
+randare dinamica pentru orice pagina care il poarta, adica si pentru cele 741 de pagini statice ale site-ului, iar
+orice script tert neprevazut se taie in tacere (asa s-au pierdut evenimentele Meta pe 02.09.2026, la o directiva mult
+mai mica). Drumul sigur are trei pasi: politica noua trimisa intai ca `Report-Only`, cu un loc care aduna incalcarile;
+cateva zile de trafic real; abia apoi aplicata.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

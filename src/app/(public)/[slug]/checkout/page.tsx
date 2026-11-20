@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { after } from "next/server";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
-import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
+import { eCerereDeActiune, seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { adreseFaraSlug } from "@/lib/teme/gazde-demo";
 import { createClient } from "@/lib/supabase/server";
@@ -136,10 +136,12 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     sau unul suspendat n-a aratat nimanui niciun checkout: cifra numara paginile de
     comanda chiar servite.
   */
+  // Pagina refacuta de actiunea care plaseaza comanda nu e un checkout nou inceput (vezi `seMasoaraVizita`).
+  const dinActiune = eCerereDeActiune(anteturi);
   const uaVizitator = anteturi.get("user-agent");
   const ipVizitator = clientIpFromHeaders(anteturi);
   after(async () => {
-    if (!seMasoaraVizita({ esteProprietar: isOwner, host: host?.split(":")[0] ?? "", userAgent: uaVizitator })) return;
+    if (!seMasoaraVizita({ esteProprietar: isOwner, host: host?.split(":")[0] ?? "", userAgent: uaVizitator, dinActiune })) return;
 
     await scrieEvenimentAnalitic({
       businessId: business.id,

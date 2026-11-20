@@ -5,7 +5,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { after } from "next/server";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
-import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
+import { eCerereDeActiune, seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { vizitatoriiCererii } from "@/lib/analitice/identitate";
 import { privitoriiProdusului } from "@/lib/analitice/privitori";
@@ -257,6 +257,8 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
     odata cu magazinul, deci verdictul nu costa nicio cerere in plus.
     Regula e tinuta de `dupa-raspuns-fara-cerere.test.ts`.
   */
+  // Tot in randare: pagina refacuta de actiunea care plaseaza comanda nu e o vedere noua (vezi `seMasoaraVizita`).
+  const dinActiune = eCerereDeActiune(headersList);
   const esteProprietar = user?.id === business.user_id;
   after(async () => {
     const ua = headersList.get("user-agent");
@@ -264,6 +266,7 @@ export async function PaginaProdus({ slug, productSlug, sp }: Props) {
       esteProprietar,
       host: headersList.get("host")?.split(":")[0] ?? "",
       userAgent: ua,
+      dinActiune,
     })) return;
 
     await scrieEvenimentAnalitic({

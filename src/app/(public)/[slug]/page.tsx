@@ -22,7 +22,7 @@ import { incarcaAcasaDeLaServer } from "@/lib/storefront/catalog/acasa-server";
 import { citesteAsezare, samantaAmestec, sortareaAsezarii } from "@/lib/storefront/asezare";
 import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
-import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
+import { eCerereDeActiune, seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { citesteFiltreDinAdresa, scrieFiltre } from "@/lib/storefront/catalog/url";
 import { metadataPaginiiPrincipale } from "@/lib/storefront/catalog/metadata-acasa";
@@ -498,7 +498,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // lib/storefront/host.ts. Si santinela: regula intreaga, cu motivul ei, sta in
   // `vizita-de-masurat.ts`, aceeasi pentru pagina de catalog.
   const ua = headersList.get("user-agent") ?? "";
-  if (seMasoaraVizita({ esteProprietar: isOwner, host, userAgent: ua })) {
+  if (seMasoaraVizita({ esteProprietar: isOwner, host, userAgent: ua, dinActiune: eCerereDeActiune(headersList) })) {
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     /*
       ═══ ⚠ SURSA SE MASOARA, NU SE PRESUPUNE (02.09.2026) ═══

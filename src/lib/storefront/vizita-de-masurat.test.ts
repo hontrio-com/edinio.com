@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { esteRobot, seMasoaraVizita, UA_SANTINELA } from "./vizita-de-masurat";
+import { ANTET_ACTIUNE, eCerereDeActiune, esteRobot, seMasoaraVizita, UA_SANTINELA } from "./vizita-de-masurat";
 
 /*
  * Cine intra in „Surse de trafic". Regula se ruleaza aici; cablarea din cele doua pagini
@@ -12,9 +12,12 @@ import { esteRobot, seMasoaraVizita, UA_SANTINELA } from "./vizita-de-masurat";
 
 const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
 
+/** O cerere obisnuita (nu pagina refacuta de o actiune de server): cazul probelor de mai jos, in afara de cea anume. */
+const masoara = (a: { esteProprietar: boolean; host: string; userAgent: string | null | undefined }) => seMasoaraVizita({ ...a, dinActiune: false });
+
 test("un vizitator oarecare, pe domeniul magazinului sau pe platforma: se masoara", () => {
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "caian-textile.ro", userAgent: CHROME }), true);
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "www.edinio.com", userAgent: CHROME }), true);
+  assert.equal(masoara({ esteProprietar: false, host: "caian-textile.ro", userAgent: CHROME }), true);
+  assert.equal(masoara({ esteProprietar: false, host: "www.edinio.com", userAgent: CHROME }), true);
 });
 
 test("⚠ o cerere FARA user-agent nu e o vizita (schimbat 28.10.2026, etapa 12)", () => {
@@ -22,9 +25,9 @@ test("⚠ o cerere FARA user-agent nu e o vizita (schimbat 28.10.2026, etapa 12)
    * Pana la etapa 12 se numara. Niciun browser nu pleaca fara user-agent, deci e un program; iar
    * hotararea lui pentru contorul masurat a fost ca robotii sa iasa „Și din Statistici”.
    */
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "www.edinio.com", userAgent: null }), false);
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "www.edinio.com", userAgent: "" }), false);
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "www.edinio.com", userAgent: "   " }), false);
+  assert.equal(masoara({ esteProprietar: false, host: "www.edinio.com", userAgent: null }), false);
+  assert.equal(masoara({ esteProprietar: false, host: "www.edinio.com", userAgent: "" }), false);
+  assert.equal(masoara({ esteProprietar: false, host: "www.edinio.com", userAgent: "   " }), false);
 });
 
 /*
@@ -86,31 +89,97 @@ const OAMENI: string[] = [
 test("⚠ robotii nu sunt vizite (etapa 12: jumatate din vederile de produs erau ale lor)", () => {
   for (const ua of ROBOTI) {
     assert.equal(esteRobot(ua), true, `ar trebui recunoscut ca robot: ${ua}`);
-    assert.equal(seMasoaraVizita({ esteProprietar: false, host: "caian-textile.ro", userAgent: ua }), false, ua);
+    assert.equal(masoara({ esteProprietar: false, host: "caian-textile.ro", userAgent: ua }), false, ua);
   }
 });
 
 test("oamenii raman vizite, si cei din browserele aplicatiilor (Facebook, Instagram, TikTok, Google)", () => {
   for (const ua of OAMENI) {
     assert.equal(esteRobot(ua), false, `om luat drept robot: ${ua}`);
-    assert.equal(seMasoaraVizita({ esteProprietar: false, host: "caian-textile.ro", userAgent: ua }), true, ua);
+    assert.equal(masoara({ esteProprietar: false, host: "caian-textile.ro", userAgent: ua }), true, ua);
   }
 });
 
 test("⚠ santinela nu e o vizita", () => {
   assert.equal(UA_SANTINELA, "edinio-santinela");
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "vetdepo.ro", userAgent: UA_SANTINELA }), false);
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "vetdepo.ro", userAgent: ` ${UA_SANTINELA} ` }), false);
+  assert.equal(masoara({ esteProprietar: false, host: "vetdepo.ro", userAgent: UA_SANTINELA }), false);
+  assert.equal(masoara({ esteProprietar: false, host: "vetdepo.ro", userAgent: ` ${UA_SANTINELA} ` }), false);
   // Egalitate exacta: un user-agent care doar o pomeneste e al altcuiva.
-  assert.equal(seMasoaraVizita({ esteProprietar: false, host: "vetdepo.ro", userAgent: `${CHROME} ${UA_SANTINELA}` }), true);
+  assert.equal(masoara({ esteProprietar: false, host: "vetdepo.ro", userAgent: `${CHROME} ${UA_SANTINELA}` }), true);
 });
 
 test("proprietarul si gazdele de test raman afara, ca pana acum", () => {
-  assert.equal(seMasoaraVizita({ esteProprietar: true, host: "caian-textile.ro", userAgent: CHROME }), false);
+  assert.equal(masoara({ esteProprietar: true, host: "caian-textile.ro", userAgent: CHROME }), false);
   for (const host of ["localhost", "127.0.0.1", "edinio-git-lucru.vercel.app"]) {
-    assert.equal(seMasoaraVizita({ esteProprietar: false, host, userAgent: CHROME }), false, host);
+    assert.equal(masoara({ esteProprietar: false, host, userAgent: CHROME }), false, host);
   }
 });
+
+test("⚠ pagina refacuta de o actiune de server nu e o vizita noua (20.11.2026)", () => {
+  /*
+   * Dupa o actiune de server, Next reface pagina de pe care a plecat, in aceeasi cerere. In productie, fiecare comanda
+   * plasata din formularul rapid de pe pagina de produs mai scria una sau doua vederi de produs in secunda comenzii.
+   */
+  const vizitator = { esteProprietar: false, host: "caian-textile.ro", userAgent: CHROME };
+  assert.equal(seMasoaraVizita({ ...vizitator, dinActiune: false }), true);
+  assert.equal(seMasoaraVizita({ ...vizitator, dinActiune: true }), false);
+
+  const anteturi = (h: Record<string, string>) => ({ get: (nume: string) => h[nume.toLowerCase()] ?? null });
+  assert.equal(eCerereDeActiune(anteturi({ "next-action": "40c1d2e3f4" })), true);
+  assert.equal(eCerereDeActiune(anteturi({ "user-agent": CHROME })), false);
+  assert.equal(eCerereDeActiune(anteturi({ "next-action": "" })), false, "un antet gol nu e o actiune");
+  // Chiar antetul lui Next: la o versiune care l-ar redenumi, regula ar tacea si vederile fantoma s-ar intoarce.
+  const nextAntete = cod("node_modules/next/dist/client/components/app-router-headers.js");
+  assert.match(nextAntete, new RegExp(`const ACTION_HEADER = '${ANTET_ACTIUNE}';`), "Next nu mai trimite actiunile cu antetul stiut");
+});
+
+test("⚠ toate locurile care scriu la randare raspund la „e pagina refacuta de o actiune?”, din antetele citite in randare", () => {
+  const LOCURI = [
+    "src/app/(public)/[slug]/page.tsx",
+    "src/lib/storefront/catalog/pagina-magazin.tsx",
+    "src/app/(public)/[slug]/_rute/pagina-produs.tsx",
+    "src/app/(public)/[slug]/checkout/page.tsx",
+  ];
+  for (const cale of LOCURI) {
+    const c = cod(cale);
+    assert.match(c, /import \{ eCerereDeActiune, seMasoaraVizita \} from "@\/lib\/storefront\/vizita-de-masurat";/, `${cale}: nu importa regula si intrebarea`);
+    assert.equal([...c.matchAll(/eCerereDeActiune\(/g)].length, 1, `${cale}: intrebarea se pune o singura data`);
+    // Raspunsul nu se scrie de mana: `dinActiune: false` intr-o pagina ar readuce vederile fantoma fara niciun semn.
+    assert.doesNotMatch(c, /dinActiune: (?:false|true)\b/, `${cale}: raspunsul trebuie sa vina din antetele cererii`);
+    // Intrebarea se pune in randare, nu in callbackul lui `after` (acolo datele cererii nu se mai pot cere intr-o pagina).
+    const inAfter = [...c.matchAll(/after\(async \(\) => \{/g)].map((m) => blocDeLa(c, m.index! + m[0].length - 1));
+    assert.ok(inAfter.length >= 1, `${cale}: nu mai scrie nimic dupa raspuns?`);
+    for (const corp of inAfter) assert.doesNotMatch(corp, /eCerereDeActiune\(/, `${cale}: intrebarea e pusa in callbackul lui after`);
+  }
+  const ruta = cod("src/app/api/analitice/eveniment/route.ts");
+  assert.match(ruta, /dinActiune: eCerereDeActiune\(anteturi\)/);
+
+  // Martorul: lista de mai sus chiar e toata. Cine cheama regula e ori unul din cele patru locuri de randare, ori ruta
+  // browserului, ori scriitorul cumpararii (o actiune, unde raspunsul e „nu” dinadins).
+  const toate: string[] = [];
+  const umbla = (dosar: string) => {
+    for (const e of readdirSync(dosar, { withFileTypes: true })) {
+      const cale = `${dosar}/${e.name}`;
+      if (e.isDirectory()) umbla(cale);
+      else if (/\.tsx?$/.test(e.name) && !/\.test\.ts$/.test(e.name) && /seMasoaraVizita\(/.test(cod(cale))) toate.push(cale);
+    }
+  };
+  umbla("src");
+  assert.deepEqual(
+    toate.filter((c) => c !== "src/lib/storefront/vizita-de-masurat.ts").sort(),
+    [...LOCURI, "src/app/api/analitice/eveniment/route.ts", "src/lib/analitice/cumparare.ts"].sort(),
+    "un loc nou cheama regula de masurare: adauga-l aici si hotaraste ce raspunde la `dinActiune`",
+  );
+});
+
+/** Blocul `{...}` care incepe la `deschis`, cu acoladele echilibrate. */
+function blocDeLa(text: string, deschis: number): string {
+  for (let j = deschis, adancime = 0; j < text.length; j++) {
+    if (text[j] === "{") adancime++;
+    else if (text[j] === "}" && --adancime === 0) return text.slice(deschis, j + 1);
+  }
+  throw new Error("bloc neinchis");
+}
 
 /** ⚠ Terminatiile se normalizeaza, iar comentariile se scot: un apel dintr-un comentariu nu e un apel. */
 function cod(rel: string): string {
@@ -152,7 +221,7 @@ test("⚠ AMBELE locuri care scriu vizite trec prin aceeasi regula, cu user-agen
     assert.doesNotMatch(c, /\.from\("site_analytics"\)/, `${cale}: scrie de-a dreptul in tabela, pe langa scriitorul comun`);
     const unde = c.indexOf("if (seMasoaraVizita(");
     assert.ok(unde >= 0, `${cale}: vizita se scrie fara regula comuna`);
-    assert.match(c.slice(unde), /^if \(seMasoaraVizita\(\{ esteProprietar: isOwner, host, userAgent: ua \}\)\)/, `${cale}: regula trebuie sa primeasca proprietarul, gazda si user-agentul`);
+    assert.match(c.slice(unde), /^if \(seMasoaraVizita\(\{ esteProprietar: isOwner, host, userAgent: ua, dinActiune: eCerereDeActiune\(\w+\) \}\)\)/, `${cale}: regula trebuie sa primeasca proprietarul, gazda, user-agentul si raspunsul la „e pagina refacuta de o actiune?”`);
     assert.match(corpulLui(c, unde), /scrieEvenimentAnalitic\(/, `${cale}: scrierea e in afara regulii`);
     assert.match(c, /const ua = \w+\.get\("user-agent"\) \?\? "";/, `${cale}: user-agentul trebuie sa fie al cererii`);
     assert.doesNotMatch(c, /isNonProductionHost\(/, `${cale}: o conditie scrisa de mana s-ar desparti de regula`);

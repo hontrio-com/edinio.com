@@ -12,6 +12,7 @@ import { parseProductSections, resolveSectionProducts } from "@/lib/store-sectio
 import { buildProductSearchIndex, queryProductSearchIndex } from "@/lib/storefront/product-search";
 import { documentDeCautare } from "@/lib/storefront/catalog/doc-cautare";
 import { fbTrack, ttqTrack, gtagEvent, mktrEvent } from "@/lib/marketing";
+import { semnaleazaInceputulComenzii } from "@/lib/analitice/semnal";
 import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
@@ -1828,6 +1829,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             });
             gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
             mktrEvent("__sm__initiate_checkout");
+            /* Si spre Statistici: fereastra de comanda nu randeaza nicio pagina, deci serverul n-are cand scrie treapta (`semnal.ts`). */
+            semnaleazaInceputulComenzii(business.id);
           }}
           shippingCost={shippingCost}
           freeShippingThreshold={freeShippingThreshold}

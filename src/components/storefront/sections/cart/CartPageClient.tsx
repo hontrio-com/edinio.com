@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gtagEvent, fbTrack, ttqTrack, mktrEvent } from "@/lib/marketing";
+import { semnaleazaInceputulComenzii } from "@/lib/analitice/semnal";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -97,6 +98,8 @@ export function CartPageClient({
     gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     /* theMarketer: aceeasi regula de mai sus, comanda deschisa din cos. */
     mktrEvent("__sm__initiate_checkout");
+    /* Si spre Statistici: fereastra de comanda nu randeaza nicio pagina, deci serverul n-are cand scrie treapta (`semnal.ts`). */
+    semnaleazaInceputulComenzii(businessId);
     setComandaDeschisa(true);
   }
 

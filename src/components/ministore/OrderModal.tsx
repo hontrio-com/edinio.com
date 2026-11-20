@@ -23,6 +23,7 @@ import { pretPeTrepte, type QuantityTier, type Trepte } from "@/lib/storefront/q
 import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
 import { pastreazaPentruTheMarketer } from "@/lib/themarketer/comanda-browser";
 import { fbTrack, ttqTrack, gtagEvent, mktrEvent, mktrCapteazaEmailul } from "@/lib/marketing";
+import { semnaleazaInceputulComenzii } from "@/lib/analitice/semnal";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
 import { continutTikTok } from "@/lib/tiktok/continut";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
@@ -767,7 +768,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     gtagEvent("begin_checkout", { currency: "RON", value, items: [{ item_id: product.id, item_name: product.name, price: pePiesa, quantity: quantityLaDeschidere.current }] });
     /* theMarketer: fereastra de comanda E pagina de finalizare. */
     mktrEvent("__sm__initiate_checkout");
-  }, [open, product.id, product.name]);
+    /* Si spre Statistici: fereastra nu randeaza nicio pagina, deci serverul n-are cand scrie treapta (`semnal.ts`). */
+    semnaleazaInceputulComenzii(business.id, product.id);
+  }, [open, product.id, product.name, business.id]);
 
   // Reset on open
   useEffect(() => {

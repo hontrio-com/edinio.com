@@ -14603,6 +14603,7 @@ alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '
 alter table public.brands add constraint brands_descriere_lungime CHECK (((description IS NULL) OR (char_length(description) <= 5000)));
 alter table public.brands add constraint brands_logo_https CHECK (((logo_url IS NULL) OR ((logo_url ~ '^https://'::text) AND (char_length(logo_url) <= 1000))));
 alter table public.brands add constraint brands_name_curat CHECK (((name = btrim(name)) AND ((char_length(name) >= 1) AND (char_length(name) <= 120))));
+alter table public.businesses add constraint businesses_primary_color_hex CHECK ((primary_color ~ '^#[0-9A-Fa-f]{6}$'::text));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));

@@ -12,6 +12,9 @@
  * NU are voie sa creada ce vine din browser fara sa treaca prin `stilDupaId`.
  */
 
+// Tot pur: doar regula de forma a culorii, aceeasi pe care o tine si baza.
+import { CULOARE_MAGAZIN_RE } from "@/lib/storefront/culoare-magazin";
+
 export interface StilMagazin {
   id: string;
   nume: string;
@@ -49,7 +52,8 @@ export const CULOARE_IMPLICITA = CULORI[0].hex;
 
 /** `#rrggbb`, altfel culoarea platformei. Se aplica si pe server: e text venit din browser. */
 export function culoareValida(v: unknown): string {
-  return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim() : CULOARE_IMPLICITA;
+  // Aceeasi forma pe care o primeste si coloana (`CULOARE_MAGAZIN_RE`, constrangerea din baza).
+  return typeof v === "string" && CULOARE_MAGAZIN_RE.test(v.trim()) ? v.trim() : CULOARE_IMPLICITA;
 }
 
 /**
@@ -60,7 +64,7 @@ export function culoareValida(v: unknown): string {
  * ⚠ O lipsa NU devine verdele platformei, cum face `culoareValida`: peste o tema, verdele ar fi sters culoarea ei.
  */
 export function culoareaPesteTema(aleasa: unknown, aTemei: string): string | null {
-  if (typeof aleasa !== "string" || !/^#[0-9a-fA-F]{6}$/.test(aleasa.trim())) return null;
+  if (typeof aleasa !== "string" || !CULOARE_MAGAZIN_RE.test(aleasa.trim())) return null;
   const v = aleasa.trim();
   return v.toLowerCase() === aTemei.trim().toLowerCase() ? null : v;
 }

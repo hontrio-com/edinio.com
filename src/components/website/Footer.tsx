@@ -129,38 +129,41 @@ export function Footer() {
 
           {/*
             Insignele ANPC. Pe fundal alb nu mai au nevoie de opacitate
-            coborâtă — pe cel închis stăteau la 0,6 tocmai ca să nu strige.
+            coborâtă: pe cel închis stăteau la 0,6 tocmai ca să nu strige.
 
-            `unoptimized`: sunt fișiere locale, iar loader-ul proiectului le lasă
-            oricum neatinse. Fără steag, Next construia degeaba un `srcSet` cu
-            patru variante ale aceleiași adrese și se plângea în consolă pe
-            fiecare pagină — avertismentul se vedea și înainte de refacere.
+            ⚠ AVIF cu rezervă WebP (20.11.2026), ca în subsolul magazinelor
+            (`FooterLegal`, 19.11.2026). AVIF lipsește din Edge până la
+            versiunea 121 și din WebKit-ul fără codec, iar aici insignele erau
+            doar AVIF, deci acolo se vedeau rupte. Vezi `InsignaAnpc`, mai jos.
           */}
           <div className="flex items-center gap-3">
             <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer">
-              <Image
-                src="/anpc-sal.avif"
-                alt="ANPC: Soluționarea Alternativă a Litigiilor"
-                width={180}
-                height={50}
-                unoptimized
-                className="h-10 w-auto"
-              />
+              <InsignaAnpc fisier="anpc-sal" alt="ANPC: Soluționarea Alternativă a Litigiilor" />
             </a>
             <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer">
-              <Image
-                src="/anpc-sol.avif"
-                alt="ANPC: Soluționarea Online a Litigiilor"
-                width={180}
-                height={50}
-                unoptimized
-                className="h-10 w-auto"
-              />
+              <InsignaAnpc fisier="anpc-sol" alt="ANPC: Soluționarea Online a Litigiilor" />
             </a>
           </div>
         </div>
       </div>
     </footer>
+  );
+}
+
+/**
+ * Insigna ANPC (SAL / SOL): AVIF, cu rezervă WebP pentru browserele fără AVIF.
+ *
+ * Browserul care știe AVIF îl ia pe el (3-6 KB); restul primesc WebP-ul. `<img>`
+ * simplu, nu `next/image`: fișierele sunt locale și deja la mărimea lor, iar
+ * `<picture>` e singurul fel de a oferi două formate. Mărimile sunt cele adevărate
+ * (500 x 124 la 40 px înălțime), ca locul să fie rezervat înainte să sosească poza.
+ */
+function InsignaAnpc({ fisier, alt }: { fisier: "anpc-sal" | "anpc-sol"; alt: string }) {
+  return (
+    <picture>
+      <source srcSet={`/${fisier}.avif`} type="image/avif" />
+      <img src={`/${fisier}.webp`} alt={alt} width={161} height={40} loading="lazy" decoding="async" className="h-10 w-auto" />
+    </picture>
   );
 }
 

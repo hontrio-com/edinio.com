@@ -10,6 +10,7 @@ import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 import { esteSlugDeMagazinDemo } from "@/lib/teme/gazde-demo";
 import { culoareaPesteTema, culoareValida, stilDupaId } from "@/lib/onboarding/aspect";
+import { CULOARE_MAGAZIN_RE } from "@/lib/storefront/culoare-magazin";
 import { designInitial } from "@/lib/onboarding/design-initial";
 import type { DesignContext } from "@/lib/storefront/design/types";
 import { temaDupaCheie } from "@/lib/teme/teme";
@@ -426,6 +427,15 @@ export async function updateBusiness(
 
   if (Object.keys(payload).length === 0) {
     return { error: "Nu exista nimic de salvat." };
+  }
+
+  /*
+   * Culoarea vine intreaga de la client, ca tot restul. Baza o respinge pe cea care nu e `#rrggbb` (constrangerea
+   * `businesses_primary_color_hex`, 20.11.2026); verificata aici inainte, omul primeste un mesaj care spune ce e
+   * gresit, nu „Nu am putut salva”. Aceeasi regula, din aceeasi constanta.
+   */
+  if ("primary_color" in payload && !(typeof payload.primary_color === "string" && CULOARE_MAGAZIN_RE.test(payload.primary_color))) {
+    return { error: "Culoarea principală nu este validă. Alege o culoare din selector." };
   }
 
   const { error } = await supabase

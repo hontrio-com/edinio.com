@@ -31,7 +31,7 @@ import { resolveDesign } from "@/lib/storefront/design/parse";
 import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { ciornaDeRandat } from "@/lib/storefront/design/ciorna-proprietarului";
 import { magazinCuCiorna, pcCuCiorna } from "@/lib/storefront/design/continut-ciorna";
-import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
+import { eCerereDeActiune, seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { parseStoreMode } from "@/lib/storefront/store-mode";
 import { citesteFiltreDinAdresa } from "@/lib/storefront/catalog/url";
 // Categoriile si rezumatul: aceleasi incarcatoare, cu `cache()`, ca metadata paginii.
@@ -530,7 +530,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, brandSlug, este
   // Si santinela: regula intreaga, cu motivul ei, sta in `vizita-de-masurat.ts`.
   const anteturi = await headers();
   const ua = anteturi.get("user-agent") ?? "";
-  if (seMasoaraVizita({ esteProprietar: isOwner, host, userAgent: ua })) {
+  if (seMasoaraVizita({ esteProprietar: isOwner, host, userAgent: ua, dinActiune: eCerereDeActiune(anteturi) })) {
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     /*
       ═══ ⚠ SURSA SE MASOARA, NU SE PRESUPUNE (02.09.2026) ═══

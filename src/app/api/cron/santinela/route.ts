@@ -10,6 +10,7 @@ import { ANTET_ROBOTS } from "@/lib/storefront/indexare-pe-platforma";
 import { UA_SANTINELA } from "@/lib/storefront/vizita-de-masurat";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { esteRandDeMagazinDemo } from "@/lib/teme/gazde-demo";
+import { FARA_PRODUSE_DEMO } from "@/lib/teme/produse-demo";
 import { caiInterziseStraine } from "@/app/robots";
 import { numeScurtMagazin } from "@/lib/storefront/catalog/descriere-generata";
 import { continutMeta, problemeDescriere } from "./descrieri";
@@ -90,6 +91,21 @@ const NICIUN_ID = "00000000-0000-0000-0000-000000000000";
 const ANTET = { "user-agent": UA_SANTINELA } as const;
 
 type Admin = SupabaseClient<Database>;
+
+/**
+ * Cate produse AR TREBUI sa fie in feedul Facebook: active, care nu sunt demo, cu prima imagine nevida. E poarta rutei
+ * feedului (`facebook-catalog.xml/route.ts`), cu aceeasi constanta: o proba care compara un canal cu baza trebuie sa numere
+ * cu poarta canalului, altfel suna pentru o diferenta voita. Apelantul adauga magazinul; fara el, numara toata platforma.
+ */
+function cuImagineSiTrimise(admin: Admin) {
+  return admin
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("is_active", true)
+    .or(FARA_PRODUSE_DEMO)
+    .not("images->>0", "is", null)
+    .neq("images->>0", "");
+}
 
 interface Proba {
   nume: string;
@@ -1159,28 +1175,32 @@ export async function GET(req: NextRequest) {
            * cu imagine, deci un magazin aflat dincolo de fereastra ar fi fost
            * clasificat drept „fara poze" si alarma ar fi dat vina pe comerciant
            * pentru un defect al nostru. Vezi [[postgrest-1000-row-cap]].
+           *
+           * ⚠⚠ SE NUMARA CU POARTA FEEDULUI, NU CU PROIECTIA CATALOGULUI (20.11.2026).
+           * Aici statea `catalog_produs` cu `are_imagine`, care numara si produsele
+           * DEMO ale unei teme. Feedul nu le trimite (etapa 18.1: „nu pleaca din
+           * magazin"), deci un magazin care are DOAR produse demo are, corect, feedul
+           * gol. Proba compara doua lucruri numarate diferit si suna `critical` de
+           * doua ori pe zi, din 12.11.2026 (a doua zi dupa lansarea temelor), pentru
+           * `ella-style-shop`: 10 produse, toate `tema-demo`, niciunul al lui.
+           * Acum intrebarea e chiar a feedului: produse active, care nu sunt demo
+           * (`FARA_PRODUSE_DEMO`, aceeasi constanta ca in ruta), cu prima imagine
+           * nevida (`images->>0`, cum o socoteste si proiectia).
            */
-          const r = await admin
-            .from("catalog_produs")
-            .select("product_id", { count: "exact", head: true })
-            .eq("business_id", t.id)
-            .eq("are_imagine", true);
+          const r = await cuImagineSiTrimise(admin).eq("business_id", t.id);
           if (r.error) { nuRaspund.push(`${t.slug}: nu am putut numara imaginile (${r.error.message})`); continue; }
           if ((r.count ?? 0) > 0) { defecte.push(t.slug); continue; }
 
           /*
-           * ⚠ „Magazinul n-are poze" se crede doar cat timp proiectia mai stie ce e o
-           * poza. Daca `are_imagine` s-ar strica si ar raporta zero peste tot, un feed
-           * chiar rupt ar fi clasificat drept problema a comerciantului si aruncat in
-           * tacere — adica proba ar redeveni una care nu poate esua. Intrebarea se
-           * pune o singura data pe rulare, si numai cand chiar am nimerit un magazin
-           * fara poze, adica aproape niciodata.
+           * ⚠ „Magazinul n-are poze" se crede doar cat timp numaratoarea mai stie ce e
+           * o poza. Daca `images` s-ar goli peste tot (o migrare de imagini) si ar
+           * raporta zero la toata lumea, un feed chiar rupt ar fi clasificat drept
+           * problema a comerciantului si aruncat in tacere, adica proba ar redeveni
+           * una care nu poate esua. Intrebarea se pune o singura data pe rulare, si
+           * numai cand chiar am nimerit un magazin fara poze sau doar cu produse demo.
            */
           if (pozePePlatforma === null) {
-            const g = await admin
-              .from("catalog_produs")
-              .select("product_id", { count: "exact", head: true })
-              .eq("are_imagine", true);
+            const g = await cuImagineSiTrimise(admin);
             if (g.error) {
               nuRaspund.push(`${t.slug}: feed gol, si n-am putut confirma proiectia (${g.error.message})`);
               continue;
@@ -1188,10 +1208,10 @@ export async function GET(req: NextRequest) {
             pozePePlatforma = g.count ?? 0;
           }
           if (pozePePlatforma === 0) {
-            defecte.push(`${t.slug} (si NICIUN produs de pe platforma n-are imagine in proiectie — s-a rupt `
-              + `\`are_imagine\`, nu magazinul)`);
+            defecte.push(`${t.slug} (si NICIUN produs de pe platforma n-are imagine — s-au golit `
+              + `\`products.images\`, nu magazinul)`);
           }
-          /* altfel: comerciantul chiar n-are poze. Nu e defectul nostru, deci nu suna. */
+          /* altfel: comerciantul chiar n-are poze, sau are doar produsele demo ale temei. Nu e defectul nostru, deci nu suna. */
         }
 
         const parti: string[] = [];

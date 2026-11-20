@@ -4,6 +4,7 @@ import { CartDrawerClassic } from "@/components/storefront/sections/cart/CartDra
 import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, gtagEvent, mktrEvent, ttqTrack } from "@/lib/marketing";
+import { semnaleazaInceputulComenzii } from "@/lib/analitice/semnal";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { checkoutHref, checkoutOnPage } from "@/lib/storefront/design/commerce";
@@ -84,6 +85,8 @@ export function StoreCartPanels({
           });
           gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
           mktrEvent("__sm__initiate_checkout");
+          /* Si spre Statistici: fereastra de comanda nu randeaza nicio pagina, deci serverul n-are cand scrie treapta (`semnal.ts`). */
+          semnaleazaInceputulComenzii(chrome.business.id);
         }}
         shippingCost={comert.shippingCost}
         freeShippingThreshold={comert.freeShippingThreshold}

@@ -19,13 +19,35 @@ import { isNonProductionHost } from "@/lib/storefront/host";
  */
 export const UA_SANTINELA = "edinio-santinela";
 
+/** Antetul cu care Next trimite o actiune de server (`ACTION_HEADER` din `next/dist/client/components/app-router-headers`). */
+export const ANTET_ACTIUNE = "next-action";
+
+/**
+ * Cererea asta e o actiune de server? Pagina randata in ea e REFACUTA dupa actiune (aceeasi cerere POST), nu deschisa de
+ * cineva. Se citeste in randare, din antetele deja luate, niciodata in callbackul lui `after` (vezi
+ * `dupa-raspuns-fara-cerere.test.ts`).
+ */
+export function eCerereDeActiune(anteturi: { get(nume: string): string | null }): boolean {
+  return !!anteturi.get(ANTET_ACTIUNE);
+}
+
 /**
  * Vizita asta se scrie in statisticile comerciantului?
  *
  *   - proprietarul NU: isi vede propriul magazin, nu e un client;
  *   - gazdele care nu sunt de productie NU (preview, localhost): scriu in baza de
  *     PRODUCTIE, deci fiecare vizita de test ar aparea la comerciant (vezi `host.ts`);
- *   - santinela NU.
+ *   - santinela NU;
+ *   - pagina refacuta de o actiune de server NU (`dinActiune`).
+ *
+ * ═══ ⚠ VEDERILE FANTOMA DE LA PLASAREA COMENZII (20.11.2026) ═══
+ *
+ * Dupa o actiune de server, Next reface pagina de pe care a plecat, in ACEEASI cerere. Pagina refacuta isi programa din
+ * nou evenimentul din `after`, deci fiecare comanda plasata din formularul rapid de pe pagina de produs mai scria una
+ * sau doua vederi de produs in aceeasi secunda cu comanda (vazut in productie pe 20.11.2026, la 5 comenzi din 5), iar o
+ * comanda din fereastra cosului mai scria o vizita. Palnia numara sesiuni, deci treptele nu se schimbau, dar afisarile
+ * si vederile brute cresteau cu fiecare comanda. `dinActiune` e OBLIGATORIU: un loc nou care scrie la randare trebuie
+ * sa raspunda la intrebare, nu s-o uite.
  *
  * ═══ ⚠ SANTINELA SCRIA VIZITE FALSE (masurat pe 10.09.2026) ═══
  *
@@ -46,7 +68,10 @@ export function seMasoaraVizita(a: {
   esteProprietar: boolean;
   host: string;
   userAgent: string | null | undefined;
+  /** Randarea vine dintr-o actiune de server (`eCerereDeActiune`)? Fals pentru o cerere obisnuita si pentru o ruta API. */
+  dinActiune: boolean;
 }): boolean {
+  if (a.dinActiune) return false;
   if (a.esteProprietar) return false;
   if (isNonProductionHost(a.host)) return false;
   if (esteRobot(a.userAgent)) return false;

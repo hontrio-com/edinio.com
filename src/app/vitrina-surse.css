@@ -188,6 +188,7 @@
 @source "../components/storefront/sections/content/ReviewsClassic.tsx";
 @source "../components/storefront/sections/hero/HeroBanners.tsx";
 @source "../components/storefront/sections/hero/HeroBannersOnly.tsx";
+@source "../components/storefront/sections/hero/HeroCaruselText.tsx";
 @source "../components/storefront/sections/hero/HeroCategories.tsx";
 @source "../components/storefront/sections/hero/HeroCuCarduri.tsx";
 @source "../components/storefront/sections/hero/HeroImpartit.tsx";
@@ -646,6 +647,7 @@
 @source "../lib/storefront/design/hero-banners.ts";
 @source "../lib/storefront/design/hero-carduri.ts";
 @source "../lib/storefront/design/hero-teme.ts";
+@source "../lib/storefront/design/hero-text.ts";
 @source "../lib/storefront/design/pagina-acasa.ts";
 @source "../lib/storefront/design/parse.ts";
 @source "../lib/storefront/design/placi-promo.ts";

@@ -9,7 +9,7 @@ import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeSco
 import { buildChromeData } from "@/lib/storefront/chrome-value";
 import { slimCatalogProduct } from "@/lib/storefront/catalog-slim";
 import { construiesteFatete } from "@/lib/storefront/catalog/facets";
-import { DEMO_BANNERS, DEMO_CARDURI_HERO, DEMO_MOZAIC_HERO, DEMO_VITRINA_HERO, DEMO_CATEGORIES, DEMO_CONTINUT_LIBER, DEMO_PLACI_PROMO, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
+import { DEMO_BANNERS, DEMO_BANNERE_FARA_TEXT, DEMO_CARDURI_HERO, DEMO_MOZAIC_HERO, DEMO_VITRINA_HERO, DEMO_TEXT_BANNERE, DEMO_CATEGORIES, DEMO_CONTINUT_LIBER, DEMO_PLACI_PROMO, DEMO_LOGO, DEMO_MENU, DEMO_TRANSPORT, demoProductPage, demoProducts } from "@/lib/storefront/design/demo-content";
 import { FurnizorSloturiBlocuri } from "@/components/storefront/SloturiBlocuri";
 import { sloturiContinutLiber } from "@/components/storefront/sloturi-pe-server";
 import { faraDesignulBrut } from "@/lib/storefront/design/continut-publicat";
@@ -108,7 +108,8 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   const pageContent: StorePageContent = {
     ...realPageContent,
     menu: DEMO_MENU,
-    hero_banners: DEMO_BANNERS,
+    // Designul cu text peste bannere se arata pe fotografii fara text: bannerele demonstrative il au desenat in poza.
+    hero_banners: kind === "hero" && variantParam === "carusel_text" ? DEMO_BANNERE_FARA_TEXT : DEMO_BANNERS,
     hero_banner_links: [],
   };
   // Designul se deriva din configuratia REALA: ce sectiuni are magazinul aprinse
@@ -191,6 +192,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
               : kind === "hero" && variantParam === "carduri" ? { carduri: DEMO_CARDURI_HERO }
               : kind === "hero" && variantParam === "mozaic" ? { placi: DEMO_MOZAIC_HERO }
               : kind === "hero" && variantParam === "vitrina" ? { carduri: DEMO_VITRINA_HERO }
+              : kind === "hero" && variantParam === "carusel_text" ? DEMO_TEXT_BANNERE
               : {}),
             ...(sectiuneaReala?.variant === variantParam ? sectiuneaReala.settings : {}),
           },

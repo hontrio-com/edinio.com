@@ -68,6 +68,22 @@ export const DEMO_VITRINA_HERO = [
   { eticheta: "", titlu: "Casa si gradina", text: "Pana la 20% reducere.", imagine: "/demo/categorie-casa-gradina.webp", link: "#" },
 ];
 
+/**
+ * Textul de peste bannere („Bannere cu text și buton peste”, 20.11.2026). Fara el, miniatura ar fi scris numele
+ * magazinului peste bannerul demonstrativ, deci n-ar fi aratat ce face designul: un mesaj al comerciantului, cu buton.
+ * Text de vitrina, fara diacritice.
+ */
+export const DEMO_TEXT_BANNERE = { titlu: "Colectia noua a sosit", text: "Descopera piesele sezonului, alese cu grija pentru tine.", buton: "Vezi colectia" };
+
+/**
+ * Bannerele miniaturii aceluiasi design: fotografii FARA text in ele. Cele trei bannere demonstrative de sus au mesajul
+ * desenat in poza (titlu, buton, chiar si sageti si puncte), deci textul designului venea peste al lor: la prima proba,
+ * miniatura arata doua titluri unul peste altul. Sunt pozele panoramice ale temelor Betelgeuse, Electra si Marte, cu
+ * subiectul in dreapta si loc liber in stanga, adica exact felul de poza pe care il cere designul; au deja variantele
+ * de latime ale pozelor de tema (`VARIANTE_MARI`).
+ */
+export const DEMO_BANNERE_FARA_TEXT = ["/teme/betelgeuse/poze/hero.webp", "/teme/electra/poze/hero.webp", "/teme/marte/poze/hero-fotoliu.webp"];
+
 /** Placile de recomandare (etapa 16.3): patru, din categoriile demonstrative. */
 export const DEMO_PLACI_PROMO = DEMO_CATEGORII.slice(0, 4).map(([titlu, imagine]) => ({ titlu, imagine, link: "#", eticheta: "" }));
 

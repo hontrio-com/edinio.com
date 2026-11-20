@@ -40,6 +40,10 @@ function sfatMarimeBanner(varianta: string | undefined): string {
   if (varianta === "banners" || varianta === "categories") {
     return "Se afișează întreg, la proporția primului banner. Recomandat 16:9 (de exemplu 1920x1080); pune-le pe toate la aceeași mărime. Cu mai multe bannere, se afișează ca un carusel.";
   }
+  // „Bannere cu text și buton peste” (20.11.2026): acelasi carusel, cu textul scris peste poza, deci poza nu-l mai poarta.
+  if (varianta === "carusel_text") {
+    return "Se afișează întreg, la proporția primului banner. Recomandat 16:9 (de exemplu 1920x1080); pune-le pe toate la aceeași mărime. Textul vine peste primul banner: alege poze fără text în ele. Cu mai multe bannere, se afișează ca un carusel.";
+  }
   return "Recomandat 16:9 (de exemplu 1920x1080). Cu mai multe bannere, se afișează ca un carusel.";
 }
 
@@ -116,7 +120,7 @@ export function ContinutHero({ continut, varianta }: { continut: ContinutMagazin
         )}
         <p className="text-[10px] text-muted-foreground">{sfatMarimeBanner(varianta)}</p>
       </Grup>
-      <Nota>Cum arată hero-ul (doar imagini, text peste imagine, cu categorii) alegi mai sus, la Design.</Nota>
+      <Nota>Cum arată hero-ul (doar imagini, bannere cu text și buton peste, cu categorii) alegi mai sus, la Design.</Nota>
     </div>
   );
 }

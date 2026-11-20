@@ -106,6 +106,11 @@ const HeroPanoramic = dynamic(
   () => import("./sections/hero/HeroPanoramic").then((m) => m.HeroPanoramic),
   { ssr: true },
 );
+// Bannerele cu text si buton peste ele (20.11.2026): tot impartit, ca magazinele pe alt design sa nu-l descarce.
+const HeroCaruselText = dynamic(
+  () => import("./sections/hero/HeroCaruselText").then((m) => m.HeroCaruselText),
+  { ssr: true },
+);
 const CategoryNavColorate = dynamic(
   () => import("./sections/catalog/CategoryNavColorate").then((m) => m.CategoryNavColorate),
   { ssr: true },
@@ -160,6 +165,7 @@ const FOOTERE: Record<string, ComponentType<{ sectiune: SectionInstance }>> = {
 const HEROURI: Record<string, VariantaSectiune> = {
   banners: HeroBannersOnly as VariantaSectiune,
   overlay: HeroOverlay as VariantaSectiune,
+  carusel_text: HeroCaruselText as VariantaSectiune,
   categories: HeroCategories as VariantaSectiune,
   carduri: HeroCuCarduri as VariantaSectiune,
   impartit: HeroImpartit as VariantaSectiune,

@@ -67,7 +67,20 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
         {/* Trei coloane de latimi egale, ca logo-ul sa cada fix pe mijlocul
             paginii, nu pe mijlocul spatiului ramas dupa contact. */}
-        <div className="h-16 lg:h-24 grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+        {/*
+          ⚠ PE TELEFON, COLOANELE DIN MARGINI AU UN MINIM (20.11.2026). Cu `1fr` simplu si `min-w-0` pe grupul din
+          stanga, o sigla lata (un cuvant scris pe un rand, 7:1) isi lua tot randul: coloanele din margini se strangeau
+          la zero, iar sigla statea PESTE butonul de meniu si peste lupa. Masurat la 390 px: sigla 32..336, meniul
+          10..54, lupa 46..90. Nu iesea nimic din ecran, deci proba de depasire din 19.11 n-a vazut-o. Sigla se
+          micsoreaza in locul ramas (`stilSigla`: `min(…, 100%)`). De la `lg` in sus, ca inainte.
+
+          ⚠ `4rem`, NU MAI MULT. Grupul din stanga (meniul si lupa) ajunge la 74 px de la inceputul coloanei; minimul de
+          64 px plus golul de 16 al grilei ii lasa 6 px pana la sigla. Prima forma avea `5rem` (coloana cat grupul), iar
+          proba pe magazinele reale a aratat ce costa: sigla de 200 px a unui magazin care NU avea nicio suprapunere
+          scadea la 166. Cu `4rem`, cine avea loc ramane cum era; se schimba doar siglele care stateau peste butoane.
+          Egal in ambele parti, ca sigla sa ramana pe mijloc (in dreapta, contul si cosul cer 60 px).
+        */}
+        <div className="h-16 lg:h-24 grid grid-cols-[minmax(4rem,1fr)_auto_minmax(4rem,1fr)] lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex items-center gap-6 min-w-0">
             <div className="lg:hidden flex items-center gap-1">
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" stil="simplu" />

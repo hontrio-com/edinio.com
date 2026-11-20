@@ -810,6 +810,48 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
         // Etapa 25.22 (11.11.2026): bannerele demo ale unor teme au textul scris in poza; peste ele, titlul s-ar suprapune.
         note: "Titlul și textul magazinului se scriu peste primul banner. Dacă bannerul are deja text în poză (cum au bannerele demo ale unor teme), cele două se suprapun: pune o poză fără text sau alege altă variantă.",
       },
+      /*
+       * Caruselul de bannere, cu un titlu, un text si un buton peste el (20.11.2026, cerut pentru un magazin real, dupa
+       * macheta lui). „Doar imagini” ramane caruselul fara nimic peste poze; aici textul e TEXT (se citeste pe telefon,
+       * il gaseste Google), nu desen in poza. Cheia se salveaza in design, deci nu se redenumeste. Citirea reglajelor:
+       * `hero-text.ts`.
+       */
+      carusel_text: {
+        label: "Bannere cu text și buton peste",
+        tags: ["cu imagine", "elegant"],
+        layout: "full",
+        // Miniatura se arata pe fotografii panoramice (2,4:1, `DEMO_BANNERE_FARA_TEXT`): 467 px de banner plus marginea de sus.
+        previewHeight: 500,
+        providesH1: true,
+        // Fara niciun banner n-are peste ce scrie: ar ramane doar titlul ascuns.
+        requires: { minBanners: 1 },
+        note: "Textul se scrie peste primul banner. Alege o poză care lasă loc liber în partea în care stă textul și care nu are deja text în ea.",
+        /*
+         * ⚠ `titlu`, `text`, `buton` si `link` sunt ACELEASI chei ca la „Imagine panoramică cu titlu mare”, dinadins: cine
+         * trece de la un design cu text la altul isi pastreaza textele. Parserul curata reglajele fata de campurile
+         * TUTUROR designurilor, iar la o cheie comuna castiga ultimul declarat, deci lungimile de aici sunt cele ale
+         * panoramicului (50 si 160). Scrise mai mari, campul din editor ar fi primit ce parserul taie apoi la salvare
+         * (gasit de `hero-text.test.ts`, cu 70 declarat si 50 pastrat).
+         */
+        fields: [
+          { key: "titlu", type: "text", label: "Titlul", maxLength: 50 },
+          { key: "text", type: "textarea", label: "Textul", maxLength: 160, help: "Pe telefon se văd doar titlul și butonul." },
+          { key: "buton", type: "text", label: "Textul butonului", placeholder: "Vezi produsele", maxLength: 30 },
+          { key: "link", type: "link", label: "Linkul butonului", help: "Gol = produsele magazinului." },
+          {
+            key: "aliniere", type: "select", label: "Unde stă textul",
+            options: [{ value: "stanga", label: "În stânga" }, { value: "centru", label: "La mijloc" }, { value: "dreapta", label: "În dreapta" }],
+          },
+          {
+            key: "culoare", type: "select", label: "Culoarea textului",
+            options: [{ value: "deschis", label: "Alb" }, { value: "inchis", label: "Închis" }, { value: "principala", label: "Titlul în culoarea principală" }],
+          },
+          { key: "estompare", type: "toggle", label: "Estompează poza sub text", help: "Un strat discret, ca textul să se citească pe orice poză." },
+          { key: "cursiv", type: "toggle", label: "Titlu cursiv" },
+          { key: "peToate", type: "toggle", label: "Textul rămâne peste toate bannerele", help: "Stins, textul stă pe primul banner și pleacă odată cu el." },
+        ],
+        defaults: { titlu: "", text: "", buton: "", link: "", aliniere: "stanga", culoare: "deschis", estompare: true, cursiv: false, peToate: false },
+      },
       carduri: {
         // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri in dreapta (in degrade de la etapa 23).
         label: "Bannere cu două carduri alăturate",

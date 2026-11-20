@@ -1,7 +1,7 @@
 "use client";
 
 import { incadrareMobil, SLOT_INCADRAT_MOBIL } from "@/lib/teme/incadrare-bannere";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { cdnImage } from "@/lib/cdn-image";
 import { resolveHref } from "@/lib/pages/href";
@@ -102,7 +102,16 @@ export function BannerSlider({
   paginare = "puncte",
   marimi,
   limiteRaport,
+  pesteBanner,
+  pesteTot,
 }: HeroBannersProps & {
+  /**
+   * Ce se aseaza PESTE un banner anume (designul „Bannere cu text și buton peste”, 20.11.2026); primeste pozitia lui.
+   * Stratul sta in banner, deci pleaca odata cu el. Fara acest reglaj, marcajul ramane exact cel de dinainte.
+   */
+  pesteBanner?: (index: number) => ReactNode;
+  /** Un strat fix peste tot caruselul: ramane pe loc cand bannerele se schimba dedesubt. */
+  pesteTot?: ReactNode;
   wrapperClass?: string;
   slideClass?: string;
   /** `segmente`: bare subtiri, cea curenta in culoarea de accent (tema Jupiter, etapa 16.3). */
@@ -218,7 +227,9 @@ export function BannerSlider({
             onScroll={onScroll}
             className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide select-none md:cursor-grab"
             onPointerDown={(e) => {
-              if (e.pointerType !== "mouse") return;
+              // Atingerea nu trage caruselul (il deruleaza browserul), dar sterge semnul ramas de la o tragere cu mouse-ul:
+              // pe un ecran tactil cu mouse, atingerea de dupa si-ar fi pierdut clicul pe banner sau pe butonul de peste el.
+              if (e.pointerType !== "mouse") { drag.current.moved = false; return; }
               const el = ref.current;
               if (!el) return;
               drag.current = { down: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
@@ -249,15 +260,31 @@ export function BannerSlider({
                   data-banner={src} onLoad={adaptiv ? (e) => noteaza(e.currentTarget) : undefined}
                   style={incadrari[i] ? { objectPosition: incadrari[i]! } : undefined} />
               );
+              const peste = pesteBanner?.(i);
               return (
-                <div key={i} className={slot} style={raportLoc ? { aspectRatio: String(raportLoc) } : undefined}>
+                // `relative` doar cand chiar sta ceva peste banner: fara strat, clasele sunt cele de dinainte.
+                <div key={i} className={peste ? `${slot} relative` : slot} style={raportLoc ? { aspectRatio: String(raportLoc) } : undefined}>
+                  {/*
+                    ⚠ `draggable={false}` (20.11.2026). O legatura se poate trage din pagina ca orice legatura: la primii
+                    pixeli de miscare browserul pornea tragerea EI (`dragstart`, apoi `pointercancel`), deci un banner cu
+                    link nu putea fi tras cu mouse-ul deloc, desi garda de clic de alaturi tocmai asta astepta. Masurat:
+                    2 miscari primite si caruselul pe loc; cu atributul, 21 de miscari si bannerul urmator.
+                  */}
                   {href ? (
-                    <a href={href} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
+                    <a href={href} draggable={false} className="block w-full h-full" onClick={(e) => { if (drag.current.moved) e.preventDefault(); }}>{img}</a>
                   ) : img}
+                  {/* Ca la linkul bannerului: o tragere cu mouse-ul inceputa pe butonul din strat nu se termina cu un clic pe el. */}
+                  {peste && (
+                    <div className="contents" onClickCapture={(e) => { if (drag.current.moved) { e.preventDefault(); e.stopPropagation(); } }}>
+                      {peste}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
+
+          {pesteTot}
 
           {/* Etapa 25.22: cu un singur banner (Deneb, Antares), nici sageti, nici puncte, nici pauza: n-au ce face. */}
           {count > 1 && (<>

@@ -90,8 +90,9 @@ test("harta se citeste doar pe cheile ei: un banner numit `constructor` nu ia ni
 test("cablajul: cele trei carusele de bannere isi potrivesc locul, fiecare cu limitele lui", () => {
   const b = cod("src/components/storefront/sections/hero/HeroBanners.tsx");
   assert.match(b, /<BannerSlider banners=\{banners\} links=\{links\} alt=\{alt\} basePath=\{basePath\} marimi=\{marimi\} limiteRaport=\{LIMITE_RAPORT\.carusel\} \/>/);
-  // Locul primeste raportul ca stil, iar poza se aseaza dupa regula, nu mereu `object-cover`.
-  assert.match(b, /<div key=\{i\} className=\{slot\} style=\{raportLoc \? \{ aspectRatio: String\(raportLoc\) \} : undefined\}>/);
+  // Locul primeste raportul ca stil, iar poza se aseaza dupa regula, nu mereu `object-cover`. (20.11.2026: locul devine
+  // `relative` doar cand sta ceva peste banner, la designul cu text; fara strat, clasele lui sunt tot `slot`.)
+  assert.match(b, /<div key=\{i\} className=\{peste \? `\$\{slot\} relative` : slot\} style=\{raportLoc \? \{ aspectRatio: String\(raportLoc\) \} : undefined\}>/);
   assert.match(b, /className=\{`w-full h-full \$\{potrivireaPozei\(rapoarte\[i\], raportLoc\) === "contain" \? "object-contain" : "object-cover"\}`\}/);
   // Bannerele demo incadrate pe telefon raman pe locul lor.
   assert.match(b, /const adaptiv = !!limiteRaport && !incadrari\.some\(Boolean\);/);

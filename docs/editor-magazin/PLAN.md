@@ -2543,6 +2543,81 @@ Porti pe arborele final: `tsc`, `npm test`, `lint:prag --check`, `tipuri-db`, bu
 Vazute in treacat, neatinse: `alexshop.ro` (domeniul nu mai arata spre noi); un magazin are in pagina o legatura scrisa
 `https//...` (fara doua puncte), care duce intr-un 404 al magazinului.
 
+## Etapa 27: bannere cu text si buton peste (cerut 20.11.2026)
+
+Un magazin real si-a trimis macheta paginii principale: caruselul de bannere, cu un titlu, un rand de text si un buton
+scrise peste prima poza. Pana azi alegerea era intre „Doar imagini” (caruselul, fara nimic peste el, deci mesajul trebuia
+desenat in poza) si designurile cu text, care arata o singura imagine. Hotararea lui: „adauga optiunea asta la toate”.
+
+- [x] 27.1 Designul „Bannere cu text și buton peste” (`carusel_text`), al noualea design de banner.
+- [x] 27.2 Marimile textului tin de banner, nu de ecran.
+- [x] 27.3 Bannerele cu link nu se puteau trage cu mouse-ul.
+- [x] 27.4 Antetul cu sigla la mijloc: sigla lata acoperea meniul si cautarea pe telefon.
+- [x] 27.5 Inaintea push-ului: magazinele reale, productie fata de codul nou.
+
+**27.1.** Design NOU in galerie, nu reglaje in plus la „Doar imagini”: niciun magazin existent nu se schimba. Acelasi
+carusel (`BannerSlider`, cu doua reglaje noi: `pesteBanner`, un strat intr-un banner anume, si `pesteTot`, un strat fix
+peste carusel), cu `HeroCaruselText` deasupra. Reglaje: titlul, textul, textul si linkul butonului, unde sta textul
+(stanga, mijloc, dreapta), culoarea (alb, inchis, titlul in culoarea principala), estomparea pozei sub text, titlu
+cursiv, textul fix peste toate bannerele. Lasate goale: numele magazinului, sloganul, „Vezi produsele”, produsele.
+Titlul e H1-ul paginii. Stratul nu prinde clicuri, doar butonul: bannerul cu link ramane apasabil pe langa text.
+⚠ `titlu`, `text`, `buton`, `link` si `aliniere` sunt aceleasi chei ca la „Imagine panoramică cu titlu mare”, dinadins
+(textele raman cand schimbi designul). Parserul curata reglajele fata de campurile TUTUROR designurilor, iar la o cheie
+comuna castiga ultimul declarat: lungimile sunt deci cele ale panoramicului (50 si 160). Prima forma declara 70 si 200;
+proba a aratat ca parserul pastra 50, adica editorul ar fi primit text pe care salvarea il taia fara un cuvant.
+Miniatura din galerie se arata pe fotografii fara text (`DEMO_BANNERE_FARA_TEXT`): bannerele demonstrative au mesajul
+desenat in poza, iar la prima proba miniatura arata doua titluri unul peste altul. Ghidul din centrul de ajutor spunea
+„șapte design-uri” cu opt in galerie (designul din lotul 5 al temelor nu ajunsese in el); acum le numara si le numeste
+pe toate noua, iar `hero-text.test.ts` cade cand apare unul nou si ghidul nu-l are.
+
+**27.2.** Bannerul isi ia raportul din poza, intre 4:3 si 4:1 (`raport-bannere.ts`), deci la aceeasi latime de ecran are
+290 px inaltime sau 97. Cu marimi pe praguri de ecran, pe un banner lat (1920x600, forma cea mai des intalnita) titlul si
+butonul nu mai incapeau pe telefon. Stratul e un container (`container-type: size`), iar marimile sunt in sutimi din
+inaltimea si latimea LUI (`cqh`, `cqw`); titlul are un rand sub 100 px inaltime, doua sub 150, trei peste; textul apare
+de la 560 x 250 px; butonul cu eticheta prea lunga se scurteaza cu „…”. Clasele pe praguri de ecran raman plasa pentru
+browserele fara aceste unitati. Masurat in browser cu textele cele mai lungi admise, pe bannere 4:3, 16:9, 3,2:1 si 4:1,
+cele trei alinieri si sase latimi (72 de cazuri): prima forma punea textul peste punctele caruselului si peste butonul
+de pauza pe bannerele late vazute pe telefon (12 cazuri rele, in sase dintre ele punctele luau clicul butonului) si
+lasa eticheta lunga a butonului sa iasa din cutia textului (vazut in capturi); forma finala, 0 din 72. Textul lasa acum
+loc punctelor (30 px jos) si, la mijloc si in dreapta, butonului de pauza (margini de cel putin 44 px).
+`hero-text.test.ts` socoteste din marimile componentei cazul cel mai rau pe 40 de marimi de banner si cade cand nu mai
+incape. Mutatii pe toata etapa: 10 din 10 prinse in suita (antetul, legaturile netrase, stratul, marimile, dispecerul,
+ghidul); garda de clic a butonului, prinsa de proba din browser.
+
+**27.3.** Gasit la proba de comportament, nu cautat: tragerea cu mouse-ul nu muta caruselul deloc. Masurat: pe un banner
+cu link, la primii pixeli porneste tragerea nativa a legaturii (`dragstart` pe `<a>`, apoi `pointercancel`); caruselul
+primea 2 miscari si ramanea pe loc. Defect VECHI, la orice design cu carusel („Doar imagini”, cu categorii, cu carduri)
+si orice banner cu link; garda de clic de langa el tocmai tragerea asta o astepta. Reparat cu `draggable={false}` pe
+linkul bannerului si pe butonul nou: 21 de miscari si bannerul urmator, fara navigare la sfarsit. Tot aici: o atingere
+care urma unei trageri cu mouse-ul (ecran tactil cu mouse) mostenea semnul „s-a tras” si isi pierdea clicul.
+⚠ Caruselul are prindere obligatorie pe bannere, deci sub jumatate de banner trasa pozitia revine pe loc: tragerea nu
+urmareste mouse-ul, sare la bannerul urmator cand trece de jumatate. Neatins.
+
+**27.4.** Vazut pe magazinul cu macheta, care are o sigla-text de 1031x149: in antetul „Logo centrat”, pe telefon, sigla
+acoperea butonul de meniu si cautarea. Coloanele din margini erau `1fr` cu `min-w-0`, deci se strangeau la zero cand
+sigla isi cerea locul. Masurat la 390 px: sigla intre 32 si 336, meniul intre 10 si 54, cautarea intre 46 si 90. Pagina
+nu depasea ecranul, de aceea proba din 26.24 (depasirea pe orizontala) nu l-a vazut. Reparat: coloanele din margini au
+un minim de 4rem pe telefon (`minmax(4rem,1fr)`), de la `lg` in sus raman `1fr`. Masurat dupa, cu sigla lata, la 320,
+360, 390 si 430 px: 0 suprapuneri, sigla de 128, 168, 198 si 238 px. `sigla-se-stramta.test.ts` tine regula.
+⚠ Prima forma avea 5rem (coloana cat grupul de butoane din stanga). Proba pe magazinele reale a aratat ce costa: sigla de
+200 px a unui magazin care NU avea nicio suprapunere scadea la 166. Grupul din stanga ajunge la 74 px de la inceputul
+coloanei, iar 4rem plus golul de 1rem al grilei ii lasa 6 px pana la sigla: cine avea loc ramane cum era. Proba cere
+acum minimul intre „destul” (cel putin 4 px liberi) si „nu mai mult decat trebuie” (cel mult 8).
+
+**27.5.** Aceeasi metoda ca la 26.23: build cu mediul productiei, serverul local doar pentru citire, user-agent de robot,
+tertii si orice cerere care nu e GET taiate. Prima pagina a celor 106 magazine publicate si nesuspendate, la 390 si
+1440 px, in productie (codul vechi) si local (codul nou): 212 perechi, 0 erori de incarcare, 0 coduri de raspuns
+diferite, 0 erori JS noi, nicio depasire noua. Caruselele de bannere (16 magazine, 32 de perechi): marcaj identic cu
+productia in toate 32, in afara atributului nou; toate cele 60 de bannere cu link il au. Comportamentul, pe patru
+magazine cu bannere cu link: in productie tragerea cu mouse-ul muta caruselul cu 0 px, local il duce la bannerul
+urmator (821-1120 px) fara sa navigheze; clicul si atingerea duc la linkul bannerului, ca inainte.
+Antetul cu sigla la mijloc il au patru magazine; masurate la 320, 360, 390, 430, 768, 1024 si 1440 px (28 de perechi):
+singurul magazin al unui comerciant e identic la toate latimile; pe trei vitrine de tema se repara patru suprapuneri
+care exista azi in productie (la 320 si 360 px: sigla de 200 px statea peste meniu si lupa), doua cazuri au sigla cu
+2 px mai ingusta, restul sunt identice. Pe tableta si pe calculator: identic.
+Singura diferenta fara legatura: `alexshop.ro`, domeniul care nu mai arata spre noi (stiut din 26.23).
+Niciun magazin nu foloseste inca designul nou. Serverul local n-a scris nimic in `error_logs`.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

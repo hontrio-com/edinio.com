@@ -76,6 +76,8 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   trendyol: { src: "/integrations/trendyol.svg", alt: "Trendyol" },
   emag: { src: "/integrations/emag.webp", alt: "eMAG Marketplace" },
   pepita: { src: "/integrations/pepita.svg", alt: "Pepita.com" },
+  /* Portocaliu si albastru pe fond gol: nu cere `filter`. */
+  compari: { src: "/integrations/compari.ro.png", alt: "Compari.ro" },
   easysales: { src: "/integrations/easysales.webp", alt: "easySales" },
 };
 

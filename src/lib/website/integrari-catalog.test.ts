@@ -208,14 +208,16 @@ test("numărătoarea de active și de anunțate e cea din panou", () => {
   /* ⚠ 17.11.2026: cu Facturis livrata, anuntatele scad 23 -> 22. */
   /* ⚠ 17.11.2026: cu Factureaza.ro, easybill si SAGA livrate, anuntatele scad 22 -> 19. */
   /* ⚠ 18.11.2026: cu theMarketer livrat, anuntatele scad 19 -> 18. */
-  assert.equal(NUMAR_IN_CURAND, 18);
+  /* ⚠ 23.11.2026: cu Compari.ro livrat, anuntatele scad 18 -> 17. */
+  assert.equal(NUMAR_IN_CURAND, 17);
   /* ⚠ 07.10.2026: e-packet a intrat direct „activa": activele urca 42 -> 43. */
   /* ⚠ 13.10.2026: easySales a intrat direct „activa": activele urca 43 -> 44. */
   /* ⚠ 15.11.2026: tbi bank a trecut din „in curand" in „activa": activele urca 44 -> 45. */
   /* ⚠ 17.11.2026: Facturis a trecut din „in curand" in „activa": activele urca 45 -> 46. */
   /* ⚠ 17.11.2026: Factureaza.ro, easybill si SAGA trec in „activa": activele urca 46 -> 49. */
   /* ⚠ 18.11.2026: theMarketer trece in „activa": activele urca 49 -> 50. */
-  assert.equal(NUMAR_ACTIVE, 50);
+  /* ⚠ 23.11.2026: Compari.ro trece in „activa": activele urca 50 -> 51. */
+  assert.equal(NUMAR_ACTIVE, 51);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {

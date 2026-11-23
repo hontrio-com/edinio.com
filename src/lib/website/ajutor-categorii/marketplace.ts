@@ -787,6 +787,28 @@ export const MARKETPLACE: CategorieAjutor = {
           termeni: ["commerce manager", "feed xml", "pixel", "reclame dinamice", "instagram shopping"],
         },
         {
+          slug: "cum-listezi-produsele-in-compari",
+          titlu: "Cum listezi produsele în Compari.ro",
+          rezumat: "Copiezi adresa feedului din Edinio și o lipești o singură dată în contul tău de magazin de la Compari.",
+          pasi: [
+            "Intră în Integrări > Marketplace > Compari.ro.",
+            "La pasul Adresa feedului apasă „Copiază”. Confirmarea este „Copiat.”",
+            "Intră în Centrul de clienți Compari, cu contul tău de magazin partener.",
+            "La Datele magazinului, Sursa listei produselor, lipește adresa copiată și salvează.",
+            "Așteaptă prima descărcare: Compari ia lista zilnic, la ora 17:00, iar produsele noi apar complet după 3-7 zile lucrătoare.",
+          ],
+          detalii: [
+            { titlu: "Ce conține feedul", text: "Fiecare produs activ, o singură dată: numele, marca, categoria cu toată calea ei, linkul, prețul, codul producătorului, codul de bare, poza și descrierea. Un produs cu mărimi sau culori pleacă pe un singur rând, cu cel mai mic preț la care se poate cumpăra." },
+            { titlu: "Prețul", text: "Compari cere prețul final, cu toate taxele. Dacă în magazin ții prețurile fără TVA, feedul adaugă singur cota magazinului. Dacă le ții cu TVA inclus, pleacă neschimbate." },
+            { titlu: "Termenul și costul de livrare", text: "Termenul vine din Setări > Livrare, unde declari în câte zile ajunge comanda. Costul e tariful tău de livrare, iar de la pragul de transport gratuit feedul scrie „gratuit”. Ce nu ai completat în setări lipsește din feed, nu se inventează." },
+            { titlu: "Produsele epuizate", text: "Rămân în feed, marcate ca indisponibile. Compari le ascunde singur și le arată din nou când revin în stoc, fără să le ia de la capăt." },
+            { titlu: "Ce rămâne afară", text: "Produsele fără poză, fără categorie sau fără preț nu pleacă. Pagina din panou îți spune câte sunt și care, cu link direct la fiecare." },
+            { titlu: "Magazinul trebuie publicat", text: "Dacă magazinul nu e publicat, adresa feedului răspunde cu eroare 404 și Compari nu are ce descărca." },
+          ],
+          nota: "Edinio îți dă feedul. Contul de magazin, bugetul de clicuri și statisticile rămân în Centrul de clienți Compari.",
+          termeni: ["compari", "comparator de preturi", "feed xml", "lista de produse", "sursa listei produselor"],
+        },
+        {
           slug: "cum-configurezi-woot",
           titlu: "Cum configurezi Woot și adresa de expeditor",
           rezumat: "Introduci cheile API din contul tău Woot și completezi adresa de unde se ridică coletele.",

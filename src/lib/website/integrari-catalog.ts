@@ -385,6 +385,14 @@ export const INTEGRARI: Integrare[] = [
     stare: "activa",
     descriere: "Trimiți comenzile magazinului în easySales, iar statusul și AWB-ul se întorc în Edinio.",
   },
+  /* Compari.ro (23.11.2026): livrată, deci urcă din „În curând" lângă easySales. Textul e cel din
+     lista clientului, neschimbat. */
+  {
+    cheie: "compari",
+    categorie: "marketplace",
+    stare: "activa",
+    descriere: "Listezi produsele în Compari.ro și aduci vizitatorii interesați direct în magazin.",
+  },
   {
     cheie: "altex",
     categorie: "marketplace",
@@ -402,12 +410,6 @@ export const INTEGRARI: Integrare[] = [
     categorie: "marketplace",
     stare: "in-curand",
     descriere: "Conectezi catalogul magazinului cu Okazii.ro pentru listarea produselor.",
-  },
-  {
-    cheie: "compari",
-    categorie: "marketplace",
-    stare: "in-curand",
-    descriere: "Listezi produsele în Compari.ro și aduci vizitatorii interesați direct în magazin.",
   },
   {
     cheie: "baseLinker",

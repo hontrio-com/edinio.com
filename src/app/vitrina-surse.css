@@ -288,6 +288,9 @@
 @source "../lib/categories/vizibilitate.ts";
 @source "../lib/cdn-image.ts";
 @source "../lib/colete.ts";
+@source "../lib/compari/feed.ts";
+@source "../lib/compari/lasate-afara.ts";
+@source "../lib/compari/server.ts";
 @source "../lib/cont/anulare-reguli.ts";
 @source "../lib/cont/banii-comenzii.ts";
 @source "../lib/cont/cautare-comenzi.ts";
@@ -525,6 +528,8 @@
 @source "../lib/payment-methods.ts";
 @source "../lib/pepita/eticheta.ts";
 @source "../lib/pepita/identitate.ts";
+@source "../lib/pepita/pret.ts";
+@source "../lib/pepita/types.ts";
 @source "../lib/pepita/xml.ts";
 @source "../lib/perioade.ts";
 @source "../lib/plans.ts";

@@ -86,8 +86,11 @@ test("⚠ si nicio integrare livrata nu duce la „#”", () => {
  *
  * ⚠ Lista se completeaza doar pentru integrari care CHIAR n-au configurare. Adaugata aici ca
  * sa treaca proba, o integrare cu configurare ar pierde tocmai plasa.
+ *
+ * Compari.ro (23.11.2026) e de acelasi fel: un feed la `{magazin}/compari.xml`, pe care comerciantul
+ * il lipeste in contul lui Compari. Nimic de salvat la noi, deci nimic de aprins.
  */
-const FARA_CONFIGURARE = new Set(["facebook-catalog"]);
+const FARA_CONFIGURARE = new Set(["facebook-catalog", "compari"]);
 
 test("bulina de „configurat” exista pentru fiecare integrare care se configureaza", () => {
   /*

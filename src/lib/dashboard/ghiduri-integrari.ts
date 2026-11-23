@@ -59,6 +59,7 @@ const GHIDURI: Record<string, [categorie: string, ghid: string]> = {
   olx: ["marketplace", "cum-conectezi-contul-olx"],
   easysales: ["marketplace", "cum-conectezi-easysales"],
   "facebook-catalog": ["marketplace", "cum-conectezi-catalogul-facebook"],
+  compari: ["marketplace", "cum-listezi-produsele-in-compari"],
   "google-merchant": ["marketplace", "cum-conectezi-google-merchant-center"],
 };
 

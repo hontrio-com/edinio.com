@@ -93,7 +93,7 @@ export const RESERVED_PAGE_SLUGS = new Set<string>([
   "cos-de-cumparaturi", "cosul-meu", "cosul-tau", "toate-produsele",
   "404", "eroare",
   // platform / framework
-  "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml",
+  "api", "_next", "sitemap.xml", "robots.txt", "favicon.ico", "facebook-catalog.xml", "compari.xml",
   // app sections that live at the root path
   "dashboard", "admin", "login", "register", "forgot-password",
   "reset-password", "onboarding", "auth",

@@ -1428,6 +1428,7 @@ CREATE OR REPLACE FUNCTION public.aplica_praguri_oferta(p_business uuid, p_ofert
  RETURNS jsonb
  LANGUAGE plpgsql
  SET search_path TO 'public', 'pg_temp'
+ SET statement_timeout TO '120s'
 AS $function$
 declare
   v_scrie   boolean := p_activa and jsonb_array_length(coalesce(p_praguri, '[]'::jsonb)) > 0;
@@ -11894,6 +11895,12 @@ create table if not exists privat.cont_sesiune (
   motiv_incheiere text,
   ip inet);
 
+create table if not exists privat.esafe_20261123_trepte_inainte (
+  id uuid,
+  slug text,
+  quantity_tiers jsonb,
+  updated_at timestamp with time zone);
+
 create table if not exists privat.ritm_extern (
   cheie text not null,
   fereastra_ms bigint not null,
@@ -12185,6 +12192,21 @@ create table if not exists privat.vetdepo_20261115_produse_inainte (
   description text,
   updated_at timestamp with time zone,
   copiat_la timestamp with time zone);
+
+create table if not exists privat.vetdepo_20261123_preturi_inainte (
+  id uuid,
+  slug text,
+  sku text,
+  price numeric(10,2),
+  compare_at_price numeric(10,2),
+  is_bundle boolean,
+  updated_at timestamp with time zone);
+
+create table if not exists privat.vetdepo_20261123_trepte_inainte (
+  id uuid,
+  slug text,
+  quantity_tiers jsonb,
+  updated_at timestamp with time zone);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),

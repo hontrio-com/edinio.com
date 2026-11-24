@@ -7,6 +7,7 @@ import { CartRecommendations } from "@/components/ministore/CartRecommendations"
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing } from "@/lib/storefront/cart/pricing";
 import { CartLine, CosGol, ProgresTransport, ScheletCos } from "./_shared/CartPieces";
+import { LocPentruButonulDeContact } from "@/components/storefront/suport/LocPentruButonulDeContact";
 import type { CartPageProps } from "./cart-page.types";
 
 /**
@@ -105,6 +106,9 @@ export function CartPageCompact({
       {/* Bara de actiune. In miniatura nu se lipeste: n-ar avea pe ce. */}
       <div className={`${preview ? "" : "sticky bottom-0 z-20"} -mx-4 sm:-mx-6 mt-5 bg-surface border-t border-border px-4 sm:px-6 py-3`}
         style={preview ? undefined : { paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
+        {/* Bara sta lipita jos la orice latime, cu „Finalizeaza comanda” in dreapta: butonul de contact urca deasupra
+            ei si o urmareste cand se desprinde. Numai la magazinele cu chat; la celelalte nu face nimic. */}
+        {!preview && <LocPentruButonulDeContact />}
         <div className="flex items-center gap-4">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground truncate">

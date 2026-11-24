@@ -32,6 +32,10 @@ import { vitrinaTheMarketer, type SetariTMBrute } from "@/lib/themarketer/vitrin
 import { corpComandaFaraPersoana, liniiTM } from "@/lib/themarketer/comanda";
 import { produseleLiniilor } from "@/lib/themarketer/sync";
 import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
+import { ComandaPentruChat } from "@/components/public/ComandaPentruChat";
+import { numeleMetodei } from "@/lib/cont/plata";
+import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
+import { vitrinaSuport, type SetariSuportBrute } from "@/lib/suport/config";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -86,6 +90,8 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let vatRate = 0;
   let discountCode: string | null = null;
   let orderNumber: string | null = null;
+  /* Felul platii, pentru operatorul de chat („Ramburs la livrare”). Fara legatura cu starea platii. */
+  let metodaPlata: string | null = null;
   // Customer identifiers for pixel Advanced Matching (hashed client-side).
   let customerName: string | null = null;
   let customerEmail: string | null = null;
@@ -144,6 +150,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       vatRate = Number(order.vat_rate ?? 0);
       discountCode = order.discount_code ?? null;
       orderNumber = order.order_number ?? null;
+      metodaPlata = (order.payment_method as string | null) ?? null;
       customerName = order.customer_name ?? null;
       customerEmail = order.customer_email ?? null;
       customerPhone = order.customer_phone ?? null;
@@ -163,6 +170,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   // adresa ramane ultima rezerva, pentru linkurile vechi.
   const computedTotal = subtotal + shippingCost - discountAmount - cardDiscountAmount - codDiscountAmount + codFeeAmount;
   const displayTotal = totalComanda ?? (computedTotal || Number(total) || 0);
+  /*
+   * Magazinul are chat, cu „Comanda abia plasata” pornita? ⚠ `incarcaAntetMagazin` e invelit in `cache` din React si
+   * l-a chemat deja layoutul in aceasta randare, deci aici nu se face niciun drum nou la baza.
+   */
+  const comandaPentruChat =
+    vitrinaSuport(setarileDin<SetariSuportBrute>(await incarcaAntetMagazin(slug)))?.date.comanda === true;
 
   const { data: storeSettings } = await createAdminClient()
     .from("store_settings")
@@ -374,6 +387,11 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
             <script dangerouslySetInnerHTML={{ __html: `window.__edinioTTAM=${JSON.stringify(potrivireTikTok)};` }} />
           )}
           {orderId && corpTheMarketer && <ComandaTheMarketer orderId={orderId} corp={corpTheMarketer} />}
+          {/*
+            Chatul de suport: comanda abia plasata, ca operatorul sa stie despre ce e vorba. ⚠ Numai numarul si
+            valoarea ei (scrise oricum pe pagina), numai la magazinele cu chat si cu „Comanda abia plasata” pornita.
+          */}
+          {orderNumber && comandaPentruChat && <ComandaPentruChat slug={slug} numar={orderNumber} total={formatPrice(displayTotal)} plata={numeleMetodei(metodaPlata) ?? undefined} />}
           {orderId && vanzareConfirmata && (
             <FbPurchaseEvent
               continutMeta={continutMeta}

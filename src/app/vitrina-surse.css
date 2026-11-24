@@ -52,6 +52,7 @@
 @source "../components/pages/fonturi-incarcate.ts";
 @source "../components/pages/icon-registry.tsx";
 @source "../components/public/AttributionCapture.tsx";
+@source "../components/public/ComandaPentruChat.tsx";
 @source "../components/public/ComandaTheMarketer.tsx";
 @source "../components/public/ConsentGate.tsx";
 @source "../components/public/CookieConsent.tsx";
@@ -217,6 +218,12 @@
 @source "../components/storefront/sections/shop/_shared/ShopPieces.tsx";
 @source "../components/storefront/sections/shop/shop-page.types.ts";
 @source "../components/storefront/sloturi-pe-server.tsx";
+@source "../components/storefront/suport/ButonContact.tsx";
+@source "../components/storefront/suport/ButonContactLaCerere.tsx";
+@source "../components/storefront/suport/ChatInMagazin.tsx";
+@source "../components/storefront/suport/LocPentruButonulDeContact.tsx";
+@source "../components/storefront/suport/MartorButonContact.tsx";
+@source "../components/storefront/suport/PictogramaChat.tsx";
 @source "../components/storefront/useDesignPreview.ts";
 @source "../components/storefront/usePastreazaPreview.ts";
 @source "../components/ui/eticheta-stare.tsx";
@@ -707,6 +714,16 @@
 @source "../lib/supabase/ids.ts";
 @source "../lib/supabase/rand-citit.ts";
 @source "../lib/supabase/server.ts";
+@source "../lib/suport/adaptoare/index.ts";
+@source "../lib/suport/adaptoare/intercom.ts";
+@source "../lib/suport/adaptoare/tawkto.ts";
+@source "../lib/suport/adaptoare/tidio.ts";
+@source "../lib/suport/adaptoare/tipuri.ts";
+@source "../lib/suport/adaptoare/zendesk.ts";
+@source "../lib/suport/config.ts";
+@source "../lib/suport/context-vitrina.ts";
+@source "../lib/suport/furnizori.ts";
+@source "../lib/suport/tipuri-chat.ts";
 @source "../lib/support/tichete.ts";
 @source "../lib/tbi/config.ts";
 @source "../lib/teme/gazde-demo.ts";

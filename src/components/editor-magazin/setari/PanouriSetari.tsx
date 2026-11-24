@@ -62,7 +62,7 @@ function Contor({ lungime, limita }: { lungime: number; limita: number }) {
 type Generale = SetariMagazin["generale"];
 
 /** Numele, sloganul, descrierea, contactul, adresa magazinului si butoanele flotante. */
-export function PanouInformatiiGenerale({ g, onInapoi }: { g: Generale; onInapoi: () => void }) {
+export function PanouInformatiiGenerale({ g, chat = "fara", onInapoi }: { g: Generale; chat?: SetariMagazin["chat"]; onInapoi: () => void }) {
   const { d, schimba } = g;
   return (
     <div className="space-y-5">
@@ -145,6 +145,17 @@ export function PanouInformatiiGenerale({ g, onInapoi }: { g: Generale; onInapoi
       </Grup>
 
       <Grup titlu="Butoane flotante">
+        {/* Cu chatul pornit (Integrări > Suport clienți), cele doua nu mai sunt cercuri separate. */}
+        {chat === "magazin" && (
+          <p className="-mt-1 text-[11px] text-muted-foreground leading-relaxed">
+            Ai chatul pornit, deci WhatsApp și apelul stau în același buton cu el: un singur buton „Contact”, pe toate paginile magazinului.
+          </p>
+        )}
+        {chat === "furnizor" && (
+          <p className="-mt-1 text-[11px] text-muted-foreground leading-relaxed">
+            Ai chatul pornit cu butonul furnizorului, deci butoanele de mai jos urcă deasupra lui.
+          </p>
+        )}
         <RandComutator titlu="Buton WhatsApp" ajutor="Apare doar dacă ai un număr de WhatsApp." pornit={d.butoane.whatsapp}
           onSchimba={(v) => schimba("butoane", { ...d.butoane, whatsapp: v })} />
         <RandComutator titlu="Buton de apel" ajutor="Apare doar dacă ai completat telefonul." pornit={d.butoane.apel}

@@ -6767,6 +6767,7 @@ export type Database = {
           factureaza_config: Json | null
           easybill_config: Json | null
           saga_config: Json | null
+          suport_config: Json | null
           themarketer_config: Json | null
           free_shipping_threshold: number | null
           gls_config: Json | null
@@ -6855,6 +6856,7 @@ export type Database = {
           factureaza_config?: Json | null
           easybill_config?: Json | null
           saga_config?: Json | null
+          suport_config?: Json | null
           themarketer_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null
@@ -6943,6 +6945,7 @@ export type Database = {
           factureaza_config?: Json | null
           easybill_config?: Json | null
           saga_config?: Json | null
+          suport_config?: Json | null
           themarketer_config?: Json | null
           free_shipping_threshold?: number | null
           gls_config?: Json | null

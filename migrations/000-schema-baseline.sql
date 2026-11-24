@@ -602,7 +602,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config, facturis_config, factureaza_config, easybill_config, saga_config, themarketer_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config, cont_client_config, curiera_config, epacket_config, easysales_config, tbi_config, facturis_config, factureaza_config, easybill_config, saga_config, themarketer_config, suport_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -12128,7 +12128,8 @@ create table if not exists privat.store_settings (
   factureaza_config jsonb,
   easybill_config jsonb,
   saga_config jsonb,
-  themarketer_config jsonb);
+  themarketer_config jsonb,
+  suport_config jsonb);
 
 create table if not exists privat.suporti_numar_20261117_speckless_inainte (
   id uuid,
@@ -15108,6 +15109,9 @@ insert into privat.campuri_secrete (coloana, cale) values ('shipo_config', 'api_
 insert into privat.campuri_secrete (coloana, cale) values ('smartbill_config', 'token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smartship_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smso_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('suport_config', 'intercom_secret') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('suport_config', 'tawkto_cheie_api') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('suport_config', 'zendesk_secret') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'cheie_criptare') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('tbi_config', 'reseller_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('themarketer_config', 'cheie_feed') on conflict do nothing;
@@ -15568,7 +15572,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(factureaza_config, '{api_key}'::text[]) AS factureaza_config,
     privat.decripteaza_config(easybill_config, '{password}'::text[]) AS easybill_config,
     privat.decripteaza_config(saga_config, '{api_key}'::text[]) AS saga_config,
-    privat.decripteaza_config(themarketer_config, '{rest_key,cheie_feed}'::text[]) AS themarketer_config
+    privat.decripteaza_config(themarketer_config, '{rest_key,cheie_feed}'::text[]) AS themarketer_config,
+    privat.decripteaza_config(suport_config, '{tawkto_cheie_api,intercom_secret,zendesk_secret}'::text[]) AS suport_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────

@@ -60,6 +60,7 @@ import type {
 } from "@/lib/storefront/store-content.types";
 import { usePermalinkuri } from "@/components/storefront/PermalinkuriMagazin";
 import { LocPesteBaraDeJos } from "@/components/storefront/LocPesteBaraDeJos";
+import { useChatInMagazin } from "@/components/storefront/suport/ChatInMagazin";
 import { hrefProdus } from "@/lib/storefront/permalinkuri";
 
 // Randul TAIAT, nu cel intreg: componenta e "use client", deci tot ce primeste
@@ -653,6 +654,12 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   const showWhatsApp = features.floating_whatsapp !== false && !!business.whatsapp;
   const showCall = features.floating_call === true && !!business.phone;
+  /*
+   * Chatul de suport (22.11.2026). Cu butonul magazinului (`magazin`), WhatsApp si telefonul stau in el, pe
+   * toate paginile, deci stiva de aici nu se mai deseneaza. Cu butonul furnizorului (`furnizor`), stiva
+   * ramane, dar urca deasupra lui. Fara chat (`fara`), totul e ca inainte. Vezi `ChatInMagazin`.
+   */
+  const chatInMagazin = useChatInMagazin();
 
   // Doar regula de PAGINA. Daca bara e aprinsa sau stinsa spune designul, si o
   // spune intr-un singur loc — vezi `hasAnnouncementBar` mai jos.
@@ -1728,7 +1735,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
       {editorDesign && <ConturEditor />}
 
       {/* Floating buttons. Etapa 25.21: reper cu nume, ca linkurile de contact sa nu ramana in afara oricarui reper. */}
-      <aside aria-label="Contact rapid" className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}`}>
+      {chatInMagazin !== "magazin" && (
+      <aside aria-label="Contact rapid" className={`fixed right-4 z-30 flex flex-col items-center gap-3 transition-all ${showStickyCartBar && count > 0 && !cartOpen && !checkoutOpen ? "bottom-[5.5rem] lg:bottom-5" : "bottom-5"}${chatInMagazin === "furnizor" ? " mb-[4.75rem]" : ""}`}>
         {showCall && (
           <a href={`tel:${business.phone}`}
             className="hover:scale-110 active:scale-95 transition-transform"
@@ -1754,6 +1762,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
           </a>
         )}
       </aside>
+      )}
 
       {/*
         Manerul de cos de pe marginea din dreapta, pentru ecrane mari.

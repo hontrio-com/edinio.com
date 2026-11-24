@@ -371,6 +371,8 @@ interface Props {
   /* ⚠ Poate lipsi: pagina o incarca separat, iar o pana la citirea ei nu are de ce sa rupa restul Setarilor. */
   stareaConturilor?: StareaConturilor;
   cookieCategories: ConsentCategory[];
+  /** Furnizorul chatului pornit in magazin („Tidio”), numit in categoria „Functionale”, ca in bannerul din vitrina. */
+  furnizorChat?: string;
   storeSeo: StoreSeo;
   seoDefaults: { title: string; description: string; ogImage: string | null };
   seoPreviewUrl: string;
@@ -402,7 +404,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, furnizorChat, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -1894,7 +1896,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </div>
               </div>
 
-              {!cookieCfg.enabled && cookieCategories.length > 0 && (
+              {!cookieCfg.enabled && cookieCategories.some((c) => c !== "functional") && (
                 <Callout variant="warning" icon={AlertTriangle} title="Instrumentele de marketing se incarca fara consimtamant">
                   Cu bannerul dezactivat, pixelii (Facebook, TikTok) si Google Analytics se incarca pentru toti vizitatorii, fara sa le ceara acordul. Astfel pixelul e vizibil imediat in Pixel Helper, dar <span className="font-medium">raspunderea conformitatii GDPR iti apartine</span>. Recomandam sa lasi bannerul activ.
                 </Callout>
@@ -1945,6 +1947,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   {cookieCategories.includes("marketing") && (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
                       <Zap className="h-3.5 w-3.5 text-purple-500" /> Marketing (Facebook, TikTok)
+                    </span>
+                  )}
+                  {cookieCategories.includes("functional") && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
+                      <MessageSquare className="h-3.5 w-3.5 text-success" /> Functionale (chatul magazinului{furnizorChat ? `: ${furnizorChat}` : ""})
                     </span>
                   )}
                 </div>

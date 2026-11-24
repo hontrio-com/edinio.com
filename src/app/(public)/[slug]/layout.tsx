@@ -14,7 +14,7 @@ import { parseIdConversieAds } from "@/lib/google-ads/conversie";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import { AttributionCapture } from "@/components/public/AttributionCapture";
-import { DoarInMagazinReal } from "@/components/public/DoarInMagazinReal";
+import { DoarInMagazinReal, DoarInPrevizualizare } from "@/components/public/DoarInMagazinReal";
 import { DoarInAfaraContului } from "@/components/public/DoarInAfaraContului";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
@@ -32,6 +32,12 @@ import { culoareMagazin } from "@/lib/storefront/culoare-magazin";
 import { contrastOn } from "@/lib/storefront/design/css-vars";
 import { IdentitateMagazinProvider } from "@/components/storefront/IdentitateMagazin";
 import { sanitizeNetopiaBadge } from "@/lib/utils/sanitize-embed";
+import { ButonContactLaCerere } from "@/components/storefront/suport/ButonContactLaCerere";
+import { MartorButonContact } from "@/components/storefront/suport/MartorButonContact";
+import { ChatInMagazinProvider, type ModChat } from "@/components/storefront/suport/ChatInMagazin";
+import { vitrinaSuport, type SetariSuportBrute, type VitrinaSuport } from "@/lib/suport/config";
+import { numeleFurnizorului } from "@/lib/suport/furnizori";
+import { whatsappLink } from "@/lib/utils/format";
 
 interface Props {
   children: React.ReactNode;
@@ -211,6 +217,7 @@ export default async function StoreLayout({ children, params }: Props) {
   let cookieRaw: unknown = null;
   let contRaw: unknown = null;
   let tm: VitrinaTM | null = null;
+  let chat: VitrinaSuport | null = null;
 
   if (business) {
     const rawSettings = (business as unknown as { store_settings: { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown; cont_client_config?: unknown } | { marketing_config: unknown; cookie_banner_config: unknown; google_analytics_config: unknown; cont_client_config?: unknown }[] | null }).store_settings;
@@ -220,6 +227,13 @@ export default async function StoreLayout({ children, params }: Props) {
     contRaw = settings?.cont_client_config ?? null;
     /* theMarketer: numai campurile publice (`tm_*`), citite prin cale JSON. Vezi `themarketer/vitrina.ts`. */
     tm = vitrinaTheMarketer(settings as SetariTMBrute | null);
+    /*
+     * Chatul de suport: numai campurile publice (`sp_*`), citite prin cale JSON. Vezi `suport/config.ts`.
+     * ⚠ Un magazin oprit (termenul de gratie trecut) nu primeste butonul: paginile lui arata ecranul de
+     * indisponibilitate, iar un chat deasupra lui ar promite un magazin care nu vinde.
+     */
+    const oprit = !!business.suspended_until && new Date(business.suspended_until as string) < new Date();
+    chat = oprit ? null : vitrinaSuport(settings as SetariSuportBrute | null);
     fbPixelId = mc?.facebook_pixel_id?.trim() || null;
     ttPixelId = mc?.tiktok_pixel_id?.trim() || null;
     googleTagId = mc?.google_tag_id?.trim() || null;
@@ -237,7 +251,9 @@ export default async function StoreLayout({ children, params }: Props) {
   const googleTagIds = [...new Set([googleTagId, gaMeasurementId, adsConversionId].filter((v): v is string => !!v))];
 
   const cookieConfig = parseCookieBannerConfig(cookieRaw);
-  const consentCategories = detectConsentCategories(mc, gaMeasurementId, tm !== null);
+  const consentCategories = detectConsentCategories(mc, gaMeasurementId, tm !== null, chat !== null);
+  /* Numele furnizorului de chat, pentru categoria „Functionale” din banner si pentru cartonasul de acord. */
+  const furnizorChat = chat ? numeleFurnizorului(chat.cont.furnizor) : undefined;
   /* Ce sta sub „Marketing” in banner, pe nume: omul isi da acordul pentru ce citeste acolo. */
   const furnizoriMarketing = [fbPixelId && "Facebook", ttPixelId && "TikTok", tm && "theMarketer"].filter((x): x is string => !!x);
   const color = culoareMagazin(business?.primary_color);
@@ -270,6 +286,15 @@ export default async function StoreLayout({ children, params }: Props) {
   // the gate is bypassed and trackers load unconditionally (merchant owns the
   // GDPR responsibility — a warning is shown in Settings → Banner Cookies).
   const requireConsent = cookieConfig.enabled;
+  /*
+   * WhatsApp si telefonul plutitoare, pentru butonul de contact. ⚠ Aceeasi regula ca in `MiniStoreRenderer`:
+   * WhatsApp porneste singur cand exista numarul, apelul numai cand comerciantul l-a pornit.
+   */
+  const butoane = ((business?.features ?? null) as { floating_whatsapp?: boolean; floating_call?: boolean } | null) ?? {};
+  const contactRapid = {
+    whatsapp: butoane.floating_whatsapp !== false && business?.whatsapp ? whatsappLink(business.whatsapp as string) : null,
+    telefon: butoane.floating_call === true && business?.phone ? (business.phone as string) : null,
+  };
   /*
    * Tot ce nu e magazinul propriu-zis sta sub `DoarInMagazinReal`.
    *
@@ -312,15 +337,21 @@ export default async function StoreLayout({ children, params }: Props) {
           )}
         </DoarInMagazinReal>
       </DoarInAfaraContului>
-      {/* Prefixele din Setari > Permalink-uri, din acelasi rand: nicio cerere in plus. */}
-      <PermalinkuriProvider valoare={permalinkuriDin(setarileDin<{ page_content: unknown }>(business)?.page_content)}>
-        <ContulMagazinuluiProvider valoare={contulMagazinului}>
-          {/* Pentru 404-ul si pagina de eroare a magazinului, care nu primesc slugul (vezi `IdentitateMagazin.tsx`). */}
-          <IdentitateMagazinProvider valoare={{ nume: business ? storeName : null, culoare: color, culoareText: contrastOn(color), acasa: basePath || "/", insignaNetopia, creditAscuns }}>
-            {children}
-          </IdentitateMagazinProvider>
-        </ContulMagazinuluiProvider>
-      </PermalinkuriProvider>
+      {/*
+        Felul butonului de chat, pentru stiva veche „Contact rapid” din `MiniStoreRenderer`. ⚠ Numai la magazinele
+        cu chat: la celelalte `CuChat` nu pune nimic in jurul paginilor (vezi functia, la coada fisierului).
+      */}
+      <CuChat mod={chat ? chat.aspect.buton : null}>
+        {/* Prefixele din Setari > Permalink-uri, din acelasi rand: nicio cerere in plus. */}
+        <PermalinkuriProvider valoare={permalinkuriDin(setarileDin<{ page_content: unknown }>(business)?.page_content)}>
+          <ContulMagazinuluiProvider valoare={contulMagazinului}>
+            {/* Pentru 404-ul si pagina de eroare a magazinului, care nu primesc slugul (vezi `IdentitateMagazin.tsx`). */}
+            <IdentitateMagazinProvider valoare={{ nume: business ? storeName : null, culoare: color, culoareText: contrastOn(color), acasa: basePath || "/", insignaNetopia, creditAscuns }}>
+              {children}
+            </IdentitateMagazinProvider>
+          </ContulMagazinuluiProvider>
+        </PermalinkuriProvider>
+      </CuChat>
       {cookieConfig.enabled && (
         <DoarInMagazinReal>
           <CookieConsent
@@ -331,9 +362,62 @@ export default async function StoreLayout({ children, params }: Props) {
             policyHref={`${basePath}/politici/confidentialitate`}
             storeName={storeName}
             furnizoriMarketing={furnizoriMarketing}
+            furnizorChat={furnizorChat}
           />
         </DoarInMagazinReal>
       )}
+      {/*
+        Butonul de contact (chatul furnizorului ales si, cand exista, WhatsApp si telefonul). ⚠ Ca pixelii: nu in
+        zona de cont (`DoarInAfaraContului`) si nu in previzualizarea din editor (`DoarInMagazinReal`). Scriptul
+        furnizorului nu se incarca aici: il aduce butonul, la prima apasare sau dupa acord. Vezi `ButonContact`.
+        ⚠ Prin `ButonContactLaCerere`: codul butonului sta in bucata lui si nu ajunge la magazinele fara chat.
+      */}
+      {chat && (
+        <DoarInAfaraContului slug={slug}>
+          <DoarInMagazinReal>
+            <ButonContactLaCerere
+              slug={slug}
+              culoare={color}
+              culoareText={contrastOn(color)}
+              chat={chat}
+              numeFurnizor={furnizorChat ?? ""}
+              whatsapp={contactRapid.whatsapp}
+              telefon={contactRapid.telefon}
+              cereAcord={requireConsent}
+              peDomeniuPropriu={esteDomeniulPropriu(host, customDomain)}
+              politica={`${basePath}/politici/confidentialitate`}
+            />
+          </DoarInMagazinReal>
+        </DoarInAfaraContului>
+      )}
+      {/*
+        In editor, butonul magazinului se DESENEAZA (acolo nu se incarca scripturi si nu se cere acord): altfel
+        comerciantul cu chatul pornit n-ar vedea in editor niciun buton de contact. Vezi `MartorButonContact`.
+      */}
+      {chat && chat.aspect.buton === "magazin" && (
+        <DoarInAfaraContului slug={slug}>
+          <DoarInPrevizualizare>
+            <MartorButonContact
+              culoare={color}
+              culoareText={contrastOn(color)}
+              stanga={chat.aspect.pozitie === "stanga"}
+              text={chat.aspect.text}
+              peTelefon={chat.aspect.pe_telefon}
+            />
+          </DoarInPrevizualizare>
+        </DoarInAfaraContului>
+      )}
     </>
   );
+}
+
+/**
+ * Paginile magazinului, cu felul butonului de chat pus in jurul lor numai cand magazinul are chat.
+ *
+ * ⚠ Componenta de SERVER, dinadins: la magazinele fara chat intoarce paginile neatinse, deci nici providerul
+ * (o componenta de client) nu ajunge in pagina lor. ⚠ Sta la coada fisierului: o proba cere ca fetele romanesti
+ * sa fie scrise in layout inaintea primului `{children}`.
+ */
+function CuChat({ mod, children }: { mod: ModChat | null; children: React.ReactNode }) {
+  return mod ? <ChatInMagazinProvider mod={mod}>{children}</ChatInMagazinProvider> : <>{children}</>;
 }

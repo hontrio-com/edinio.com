@@ -45,3 +45,19 @@ export function DoarInMagazinReal({ children }: { children: React.ReactNode }) {
   if (inPreview) return null;
   return <>{children}</>;
 }
+
+/** Pe server si la hidratare raspundem „nu e previzualizare”: desenul de mai jos nu ajunge in magazinul real. */
+const nuLaHidratare = () => false;
+
+/**
+ * Inversul lui `DoarInMagazinReal`: randeaza continutul DOAR in previzualizarea din editor.
+ *
+ * Pentru ce in magazinul real e facut de un script al altcuiva, iar in editor trebuie macar DESENAT, ca
+ * omul sa vada unde sta (butonul de contact, `MartorButonContact`). ⚠ Numai pentru desene care nu fac
+ * nimic: tot ce incarca, numara sau trimite ramane sub `DoarInMagazinReal`.
+ */
+export function DoarInPrevizualizare({ children }: { children: React.ReactNode }) {
+  const inPreview = useSyncExternalStore(faraAbonare, inPreviewAcum, nuLaHidratare);
+  if (!inPreview) return null;
+  return <>{children}</>;
+}

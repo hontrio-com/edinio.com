@@ -30,10 +30,13 @@ export const incarcaAntetMagazin = cache(async (slug: string) => {
     // ⚠ Netopia (19.11.2026): la fel, NUMAI `enabled` si `badge_html` (insigna din subsol, HTML public), prin cale JSON
     // (`np_*`); cheia API si semnatura POS raman in baza. Pana atunci subsolul cerea insigna din browser, printr-o
     // actiune de server, la fiecare afisare a fiecarei pagini; aici vine in randul adus oricum. Vezi `[slug]/layout.tsx`.
+    // ⚠ Chatul de suport (22.11.2026): la fel, NUMAI ce e public, prin cale JSON (`sp_*`): daca e pornit, furnizorul,
+    // identificatorii de widget (`conturi`), aspectul butonului si comutatoarele. Cele trei secrete de semnare stau la
+    // primul nivel al coloanei si nu sunt cerute aici, deci nu ajung in randul de antet. Vezi `lib/suport/config.ts`.
     // Reuniunea antetului CU `COLOANE_BUSINESS_PUBLIC`: acelasi rand era cerut inca
     // o data de fiecare pagina de magazin, cu clientul vizitatorului. Doua
     // dus-intorsuri pe vizita pentru un rand deja adus. Vezi `incarcaMagazinul`.
-    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config, cont_client_config, tm_activ:themarketer_config->enabled, tm_cheie:themarketer_config->>tracking_key, tm_urmarire:themarketer_config->urmarire, tm_captura:themarketer_config->captura_email, tm_push:themarketer_config->push, tm_fidelitate:themarketer_config->fidelitate, tm_recenzii:themarketer_config->recenzii, np_activ:netopia_config->enabled, np_insigna:netopia_config->>badge_html)")
+    .select("id, user_id, slug, business_name, store_name, tagline, description, phone, whatsapp, email, website, address, city, county, cui, reg_com, store_address, store_city, store_county, logo_url, cover_url, gallery, primary_color, is_published, suspended_until, custom_domain, social, features, type, updated_at, store_settings(page_content, marketing_config, cookie_banner_config, google_analytics_config, cont_client_config, tm_activ:themarketer_config->enabled, tm_cheie:themarketer_config->>tracking_key, tm_urmarire:themarketer_config->urmarire, tm_captura:themarketer_config->captura_email, tm_push:themarketer_config->push, tm_fidelitate:themarketer_config->fidelitate, tm_recenzii:themarketer_config->recenzii, sp_activ:suport_config->activ, sp_furnizor:suport_config->>furnizor, sp_conturi:suport_config->conturi, sp_aspect:suport_config->aspect, sp_date:suport_config->date, np_activ:netopia_config->enabled, np_insigna:netopia_config->>badge_html)")
     .eq("slug", slug)
     .maybeSingle();
   if (!error) return data;

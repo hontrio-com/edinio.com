@@ -79,6 +79,12 @@ const LOGOS: Record<string, { src: string; alt: string; filter?: string }> = {
   /* Portocaliu si albastru pe fond gol: nu cere `filter`. */
   compari: { src: "/integrations/compari.ro.png", alt: "Compari.ro" },
   easysales: { src: "/integrations/easysales.webp", alt: "easySales" },
+  /* Chatul din magazin (22.11.2026). Cheile sunt id-urile din `lib/suport/config.ts` (`FURNIZORI_SUPORT`):
+     acelasi id e si ruta paginii, si furnizorul din configurare. */
+  tidio: { src: "/integrations/tidio.png", alt: "Tidio" },
+  tawkto: { src: "/integrations/tawkto.png", alt: "tawk.to" },
+  intercom: { src: "/integrations/intercom.svg", alt: "Intercom" },
+  zendesk: { src: "/integrations/zendesk.svg", alt: "Zendesk" },
 };
 
 /** Sigla unei integrari, pentru antetul nou (`PaginaIntegrare`). Aceeasi lista ca antetul vechi. */

@@ -508,25 +508,25 @@ export const INTEGRARI: Integrare[] = [
   {
     cheie: "tidio",
     categorie: "suport",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Adaugi chat Tidio în magazin pentru răspunsuri rapide și automatizări de suport.",
   },
   {
     cheie: "intercom",
     categorie: "suport",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Conectezi Intercom pentru conversații, tichete și fluxuri de suport direct în magazin.",
   },
   {
     cheie: "zendesk",
     categorie: "suport",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Centralizezi mesajele și tichetele clienților în Zendesk pentru un suport mai ușor de urmărit.",
   },
   {
     cheie: "tawkto",
     categorie: "suport",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Adaugi live chat în magazin și răspunzi vizitatorilor în timp real prin tawk.to.",
   },
 ];

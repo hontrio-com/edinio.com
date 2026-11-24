@@ -40,6 +40,7 @@ Git pastrata (`git mv`).
 | Folder | Ce contine |
 | --- | --- |
 | `editor-magazin/` | Editorul unic al magazinului (din 24.10.2026, ramura LOCALA `editor-magazin`): `PLAN.md` (deciziile, etapele, starea si cum se reia) si `REGISTRU.md` (tot ce productia nu are inca si ce se verifica dupa push) |
+| `suport-clienti/` | Chatul din magazin (Tidio, tawk.to, Intercom, Zendesk): `PLAN.md` (planul aprobat pe 22.11.2026, cu ce a ieșit altfel la scriere) și `SUPORT-CLIENTI.md` (ce s-a construit, ce spune documentația lor, ce s-a măsurat, ce a rămas). Livrat pe 24.11.2026, cu migrația `2027-02-10-suport-clienti.sql` aplicată în producție înaintea codului |
 
 ## Centrul de ajutor
 

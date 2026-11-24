@@ -7,6 +7,8 @@ import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
+import { furnizorPornit, suportGata } from "@/lib/suport/config";
+import { numeleFurnizorului } from "@/lib/suport/furnizori";
 import { vitrinaTheMarketer, type SetariTMBrute } from "@/lib/themarketer/vitrina";
 import { incarcaStareaConturilor } from "@/lib/actions/cont-client.actions";
 import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
@@ -149,7 +151,7 @@ async function ContinutSetari({
 
   const { data: bizRow } = await supabase
     .from("businesses")
-    .select("id, business_name, slug, store_name, store_city, store_address, store_county, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, whatsapp, email, cui, reg_com, custom_domain, social, features, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, tbi_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content)")
+    .select("id, business_name, slug, store_name, store_city, store_address, store_county, tagline, description, cover_url, logo_url, primary_color, address, city, county, phone, whatsapp, email, cui, reg_com, custom_domain, social, features, store_settings(store_policies, order_number_format, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, shipping_enabled, free_shipping_threshold, min_order_amount, shipping_zones, shipping_classes, shipping_rules, fan_courier_config, dpd_config, cargus_config, sameday_config, woot_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, payment_methods, netopia_config, stripe_config, ipay_config, klarna_config, revolut_config, tbi_config, card_discount_config, cod_discount_config, cod_fee_config, cookie_banner_config, marketing_config, email_config, page_content, suport_config)")
     .eq("user_id", userId)
     .order("created_at")
     .limit(1)
@@ -447,7 +449,13 @@ async function ContinutSetari({
         undefined,
         /* Aceeasi regula ca in vitrina: theMarketer cu urmarirea pornita aduce categoria „Marketing”. */
         vitrinaTheMarketer(tmPublic(storeSettings?.themarketer_config)) !== null,
+        /* Chatul de suport pornit aduce categoria „Functionale”, ca in vitrina (`suportGata`: aceeasi regula). */
+        suportGata(storeSettings?.suport_config),
       )}
+      furnizorChat={(() => {
+        const f = furnizorPornit(storeSettings?.suport_config);
+        return f ? numeleFurnizorului(f) : undefined;
+      })()}
       storeSeo={storeSeo}
       seoDefaults={seoDefaults}
       seoPreviewUrl={seoPreviewUrl}

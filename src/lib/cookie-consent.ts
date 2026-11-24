@@ -13,12 +13,18 @@ import type { MarketingConfig } from "@/lib/marketing-config";
  *   via Settings → Banner Cookies; the categories themselves are derived.
  */
 
-export type ConsentCategory = "analytics" | "marketing";
+/*
+ * „functional” (22.11.2026): chatul de suport al magazinului (Tidio, tawk.to, Intercom, Zendesk). Nu e
+ * masuratoare si nu e reclama, dar scriptul furnizorului pune cookie-uri si afla pagina vizitatorului,
+ * deci nu porneste fara acord. Apare in banner numai la magazinele cu chat. Vezi `lib/suport/config.ts`.
+ */
+export type ConsentCategory = "analytics" | "marketing" | "functional";
 
 export type ConsentState = {
   necessary: true; // always granted, shown read-only
   analytics: boolean;
   marketing: boolean;
+  functional: boolean;
 };
 
 export type CookieBannerPosition =
@@ -62,10 +68,13 @@ export function detectConsentCategories(
    * da acordul, iar scriptul n-ar fi pornit niciodata.
    */
   altMarketing = false,
+  /** Magazinul are chatul de suport pornit: bannerul primeste categoria „Functionale”. */
+  areChat = false,
 ): ConsentCategory[] {
   const cats: ConsentCategory[] = [];
   if (mc?.google_tag_id?.trim() || gaMeasurementId) cats.push("analytics");
   if (mc?.facebook_pixel_id?.trim() || mc?.tiktok_pixel_id?.trim() || altMarketing) cats.push("marketing");
+  if (areChat) cats.push("functional");
   return cats;
 }
 
@@ -75,7 +84,12 @@ export const CONSENT_VERSION = 1;
 export const CONSENT_EVENT = "edinio-consent-change";
 export const OPEN_SETTINGS_EVENT = "edinio-open-cookie-settings";
 
-type StoredConsent = ConsentState & { v: number; ts: number };
+/*
+ * `partial`: acordul a fost dat DOAR chatului, din cartonasul de la butonul de chat, de cineva care inca nu
+ * a raspuns bannerului. Categoria „functionale” e pornita, dar bannerul ramane de raspuns: nu hotaram noi,
+ * in locul omului, ca a refuzat analiza si marketingul.
+ */
+type StoredConsent = ConsentState & { v: number; ts: number; partial?: boolean };
 
 function storageKey(slug: string): string {
   return `edinio_cc_${slug}`;
@@ -93,18 +107,38 @@ export function areAcordPentru(consent: ConsentState | null, categorii: readonly
   return categorii.some((c) => consent[c]);
 }
 
-/** Read the visitor's saved consent for a store, or null if not yet decided. */
-export function readConsent(slug: string): ConsentState | null {
+function citesteStocat(slug: string): StoredConsent | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(storageKey(slug));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredConsent;
-    if (parsed.v !== CONSENT_VERSION) return null;
-    return { necessary: true, analytics: !!parsed.analytics, marketing: !!parsed.marketing };
+    if (!parsed || parsed.v !== CONSENT_VERSION) return null;
+    return parsed;
   } catch {
     return null;
   }
+}
+
+/**
+ * Read the visitor's saved consent for a store, or null if nothing is stored.
+ *
+ * ⚠ Un acord vechi, scris inainte sa existe categoria „functionale”, o are OPRITA: omul a acceptat ce i s-a
+ * aratat atunci, iar chatul nu era pe lista. Il intreaba cartonasul de la butonul de chat, o singura data.
+ */
+export function readConsent(slug: string): ConsentState | null {
+  const parsed = citesteStocat(slug);
+  if (!parsed) return null;
+  return { necessary: true, analytics: !!parsed.analytics, marketing: !!parsed.marketing, functional: !!parsed.functional };
+}
+
+/**
+ * Vizitatorul a raspuns bannerului? Un acord dat doar chatului (`acordaFunctional`) NU e un raspuns la
+ * banner: bannerul ramane deschis pentru celelalte categorii.
+ */
+export function bannerDecis(slug: string): boolean {
+  const parsed = citesteStocat(slug);
+  return parsed !== null && parsed.partial !== true;
 }
 
 /** Persist the visitor's consent and notify listeners (gates re-evaluate immediately). */
@@ -119,5 +153,30 @@ export function writeConsent(slug: string, state: ConsentState): void {
   }
 }
 
-export const CONSENT_ALL: ConsentState = { necessary: true, analytics: true, marketing: true };
-export const CONSENT_NONE: ConsentState = { necessary: true, analytics: false, marketing: false };
+/**
+ * Acordul dat de la butonul de chat („Deschide chatul”): porneste categoria „functionale” si atat.
+ *
+ * Cine a raspuns deja bannerului isi pastreaza celelalte alegeri. Cine n-a raspuns primeste o insemnare
+ * partiala: chatul are voie sa porneasca, iar bannerul il intreaba mai departe despre analiza si marketing.
+ */
+export function acordaFunctional(slug: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const vechi = citesteStocat(slug);
+    const state: ConsentState = {
+      necessary: true,
+      analytics: !!vechi?.analytics,
+      marketing: !!vechi?.marketing,
+      functional: true,
+    };
+    const payload: StoredConsent = { ...state, v: CONSENT_VERSION, ts: Date.now() };
+    if (!vechi || vechi.partial === true) payload.partial = true;
+    window.localStorage.setItem(storageKey(slug), JSON.stringify(payload));
+    window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: { slug, state } }));
+  } catch {
+    /* stocare blocata: chatul se deschide acum, iar intrebarea revine la pagina urmatoare */
+  }
+}
+
+export const CONSENT_ALL: ConsentState = { necessary: true, analytics: true, marketing: true, functional: true };
+export const CONSENT_NONE: ConsentState = { necessary: true, analytics: false, marketing: false, functional: false };

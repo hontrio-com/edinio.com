@@ -16,6 +16,7 @@ import {
   type CheieSetare, type StareGenerale, type VizibilitateCatalog,
 } from "@/lib/editor-magazin/setari";
 import type { TipComanda } from "@/lib/storefront/design/tip-comanda";
+import type { ModChat } from "@/components/storefront/suport/ChatInMagazin";
 
 /**
  * Starea filei „Setări” din editor (etapa 8, lista lui de pe 27.10.2026): datele magazinului, formularul
@@ -35,6 +36,11 @@ export interface SetariInitiale {
   /** Tipul de checkout cand nu e salvat niciunul: al designului publicat (etapa 15), adica ce vad clientii azi. */
   tipComandaImplicit: TipComanda;
   catalog: VizibilitateCatalog;
+  /**
+   * Felul butonului de chat din magazin (Integrări > Suport clienți). Doar de citit: cu butonul magazinului,
+   * WhatsApp si apelul stau in el, iar panoul „Butoane flotante” o spune. Lipsa = fara chat.
+   */
+  chat?: ModChat;
 }
 
 const formatDin = (v: string): "sequential" | "random" => (v === "random" ? "random" : "sequential");
@@ -247,7 +253,7 @@ export function useSetariMagazin({ businessId, initiale, dupaSalvare }: {
     return () => window.removeEventListener("beforeunload", handler);
   }, [areNesalvate]);
 
-  return { generale, formular, catalog, nesalvate };
+  return { generale, formular, catalog, nesalvate, chat: initiale.chat ?? ("fara" as ModChat) };
 }
 
 export type SetariMagazin = ReturnType<typeof useSetariMagazin>;

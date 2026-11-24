@@ -15,6 +15,7 @@ import { contextDesign } from "@/lib/editor-magazin/derivare";
 import { iesireaEditorului, paginaCeruta as paginaDinAdresa, type PaginaProprieEditor } from "@/lib/editor-magazin/pagini";
 import { catalogDinPageContent, setareDinAdresa } from "@/lib/editor-magazin/setari";
 import { dateleMagazinuluiDinRand } from "@/lib/dashboard/datele-magazinului";
+import { vitrinaSuport, type SetariSuportBrute } from "@/lib/suport/config";
 import { formularDinPageContent } from "@/lib/dashboard/formular-comanda";
 import { EditorMagazin } from "@/components/editor-magazin/EditorMagazin";
 import { ScheletEditor } from "@/components/editor-magazin/ScheletEditor";
@@ -77,7 +78,7 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire, se
    */
   const { data: rand } = await supabase
     .from("businesses")
-    .select("id, slug, custom_domain, is_published, logo_url, cover_url, primary_color, tagline, description, features, gallery, store_name, business_name, phone, whatsapp, email, store_address, store_city, store_county, social, cui, reg_com, address, city, county, store_settings(page_content, storefront_design, storefront_design_draft, order_number_format)")
+    .select("id, slug, custom_domain, is_published, logo_url, cover_url, primary_color, tagline, description, features, gallery, store_name, business_name, phone, whatsapp, email, store_address, store_city, store_county, social, cui, reg_com, address, city, county, store_settings(page_content, storefront_design, storefront_design_draft, order_number_format, sp_activ:suport_config->activ, sp_furnizor:suport_config->>furnizor, sp_conturi:suport_config->conturi, sp_aspect:suport_config->aspect, sp_date:suport_config->date)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -154,6 +155,8 @@ async function ContinutEditor({ userId, paginaCeruta, sectiuneCeruta, iesire, se
         // Fara tip salvat in Setări > Comanda (etapa 15): al designului publicat, adica ce vad clientii azi.
         tipComandaImplicit: tipulComenzii(publicat),
         catalog: catalogDinPageContent(pageContent),
+        // Felul butonului de chat, citit ca in vitrina (numai campurile publice): panoul „Butoane flotante” il spune.
+        chat: vitrinaSuport(setari as SetariSuportBrute | null)?.aspect.buton ?? "fara",
       }}
       filaInitiala={setareCeruta ? "setari" : "sectiuni"}
       setareInitiala={setareCeruta && setareCeruta !== "lista" ? setareCeruta : null}

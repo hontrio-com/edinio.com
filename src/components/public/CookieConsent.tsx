@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Cookie, X, Check } from "lucide-react";
 import {
-  readConsent, writeConsent, CONSENT_ALL, CONSENT_NONE,
+  readConsent, writeConsent, bannerDecis, CONSENT_ALL, CONSENT_NONE,
   OPEN_SETTINGS_EVENT,
   type ConsentCategory, type ConsentState, type CookieBannerPosition,
 } from "@/lib/cookie-consent";
@@ -18,9 +18,13 @@ const CATEGORY_LABELS: Record<ConsentCategory, { title: string; desc: string }> 
     title: "Marketing",
     desc: "Permit afisarea de reclame relevante (Facebook, TikTok).",
   },
+  functional: {
+    title: "Functionale",
+    desc: "Chatul magazinului. Fara ele, chatul porneste doar cand il deschizi tu.",
+  },
 };
 
-export function CookieConsent({ slug, color, categories, position, policyHref, storeName, furnizoriMarketing }: {
+export function CookieConsent({ slug, color, categories, position, policyHref, storeName, furnizoriMarketing, furnizorChat }: {
   slug: string;
   color: string;
   categories: ConsentCategory[];
@@ -33,6 +37,8 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
    * cea adevarata, nu una generica.
    */
   furnizoriMarketing?: string[];
+  /** Furnizorul chatului pornit in magazin („Tidio”), numit in categoria „Functionale”. */
+  furnizorChat?: string;
 }) {
   /* Panoul e alb: culoarea magazinului prea deschisa (lime-ul temei Canopus, 1,28:1) nu se vede pe el. */
   const culoareIconita = (raportContrast(color, "#FFFFFF") ?? 3) < 3 ? "#374151" : color;
@@ -41,14 +47,16 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   const [open, setOpen] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [decided, setDecided] = useState(true);
-  const [prefs, setPrefs] = useState<{ analytics: boolean; marketing: boolean }>({ analytics: false, marketing: false });
+  const [prefs, setPrefs] = useState<{ analytics: boolean; marketing: boolean; functional: boolean }>({ analytics: false, marketing: false, functional: false });
 
   // First visit → open banner. Reopen via the global settings event / reopen button.
   useEffect(() => {
     const existing = readConsent(slug);
-    if (existing) {
+    /* ⚠ Un acord dat doar chatului (cartonasul de la butonul de chat) nu e un raspuns la banner: bannerul
+       se deschide in continuare, cu „Functionale” deja pornita. */
+    if (existing) setPrefs({ analytics: existing.analytics, marketing: existing.marketing, functional: existing.functional });
+    if (bannerDecis(slug)) {
       setDecided(true);
-      setPrefs({ analytics: existing.analytics, marketing: existing.marketing });
     } else {
       setDecided(false);
       setOpen(true);
@@ -58,7 +66,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
 
   const reopen = useCallback(() => {
     const existing = readConsent(slug);
-    if (existing) setPrefs({ analytics: existing.analytics, marketing: existing.marketing });
+    if (existing) setPrefs({ analytics: existing.analytics, marketing: existing.marketing, functional: existing.functional });
     setShowDetails(hasChoices);
     setOpen(true);
   }, [slug, hasChoices]);
@@ -78,7 +86,35 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
 
   const acceptAll = () => persist(CONSENT_ALL);
   const rejectAll = () => persist(CONSENT_NONE);
-  const savePrefs = () => persist({ necessary: true, analytics: prefs.analytics, marketing: prefs.marketing });
+  const savePrefs = () => persist({ necessary: true, analytics: prefs.analytics, marketing: prefs.marketing, functional: prefs.functional });
+
+  /*
+   * Bara de jos isi anunta inaltimea prin `--banner-cookie`, pentru butonul de chat al magazinului (`ButonContact`),
+   * care sta fix in coltul de jos. Fara asta, la prima vizita butonul ramanea SUB bara, cu o fasie de 13 px iesita
+   * deasupra ei (masurat la 1280 px, 22.11.2026): nici nu se vedea, nici nu se putea apasa pana la raspuns, iar
+   * acordul dat chiar la buton (cartonasul lui) n-avea cum sa fie cerut.
+   *
+   * ⚠ Numai la magazinele cu chat (`furnizorChat`): celelalte nu au cine sa citeasca variabila, deci nu primesc
+   * nimic in plus. Cartonasele din colt si fereastra din centru acopera butonul cu totul: acolo intai se raspunde
+   * bannerului, deci nu anunta nimic.
+   */
+  const bara = useRef<HTMLDivElement>(null);
+  const baraDeschisa = mounted && open && hasChoices && position === "bottom-bar" && !showDetails;
+  useEffect(() => {
+    if (!furnizorChat || !baraDeschisa) return;
+    const el = bara.current;
+    if (!el) return;
+    const radacina = document.documentElement;
+    const anunta = () => radacina.style.setProperty("--banner-cookie", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    anunta();
+    /* Textul barei se rupe altfel la fiecare latime, deci inaltimea se urmareste, nu se socoteste. */
+    const observator = typeof ResizeObserver === "function" ? new ResizeObserver(anunta) : null;
+    observator?.observe(el);
+    return () => {
+      observator?.disconnect();
+      radacina.style.removeProperty("--banner-cookie");
+    };
+  }, [furnizorChat, baraDeschisa]);
 
   // Retragerea consimtamantului trebuie sa fie la fel de usoara ca acordarea lui,
   // dar nu printr-un buton care pluteste peste magazin tot timpul: legatura sta
@@ -128,7 +164,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   // ── Simple bottom-bar view (first visit, full-consent quick choice) ──────
   if (isBar) {
     return (
-      <div role="region" aria-label="Cookie-uri" className={wrapperClass}>
+      <div ref={bara} role="region" aria-label="Cookie-uri" className={wrapperClass}>
         <div className="bg-white border-t border-black/10 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
           <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -211,6 +247,15 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
                 color={color}
               />
             )}
+            {categories.includes("functional") && (
+              <ConsentRow
+                title={CATEGORY_LABELS.functional.title}
+                desc={descriereFunctionale(furnizorChat)}
+                checked={prefs.functional}
+                onChange={(v) => setPrefs((p) => ({ ...p, functional: v }))}
+                color={color}
+              />
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2">
@@ -241,6 +286,12 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
 function descriereMarketing(furnizori?: string[]): string {
   if (!furnizori || furnizori.length === 0) return CATEGORY_LABELS.marketing.desc;
   return `Permit reclame si mesaje personalizate (${furnizori.join(", ")}).`;
+}
+
+/** Textul categoriei „Functionale”, cu furnizorul chatului pe nume: omul isi da acordul pentru ce citeste. */
+function descriereFunctionale(furnizor?: string): string {
+  if (!furnizor) return CATEGORY_LABELS.functional.desc;
+  return `Chatul magazinului (${furnizor}). Fara ele, chatul porneste doar cand il deschizi tu.`;
 }
 
 function ConsentRow({ title, desc, checked, onChange, disabled, color }: {

@@ -126,7 +126,7 @@ describe("remarketing dinamic", () => {
 
 // ── 4. Poarta de consimtamant: regula, nu componenta ─────────────────────────────
 describe("ce se incarca sub ce acord", () => {
-  const acord = (analytics: boolean, marketing: boolean) => ({ necessary: true as const, analytics, marketing });
+  const acord = (analytics: boolean, marketing: boolean) => ({ necessary: true as const, analytics, marketing, functional: false });
 
   test("⚠ tagul Google se incarca daca omul a acceptat ORICARE dintre analiza si marketing", () => {
     assert.equal(areAcordPentru(acord(true, false), ["analytics", "marketing"]), true);

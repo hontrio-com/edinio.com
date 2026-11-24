@@ -17,7 +17,7 @@ export function FilaSetari({ setari, deschisa, onDeschide, onInapoi }: {
   onInapoi: () => void;
 }) {
   switch (deschisa) {
-    case "general": return <PanouInformatiiGenerale g={setari.generale} onInapoi={onInapoi} />;
+    case "general": return <PanouInformatiiGenerale g={setari.generale} chat={setari.chat} onInapoi={onInapoi} />;
     case "social": return <PanouSocialMedia g={setari.generale} onInapoi={onInapoi} />;
     case "firma": return <PanouDateleFirmei g={setari.generale} onInapoi={onInapoi} />;
     case "formular": return <PanouFormularComanda f={setari.formular} onInapoi={onInapoi} />;

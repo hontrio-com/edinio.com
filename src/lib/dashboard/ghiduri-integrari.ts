@@ -52,6 +52,11 @@ const GHIDURI: Record<string, [categorie: string, ghid: string]> = {
   "google-ads": ["marketing-si-clienti", "cum-conectezi-google-ads"],
   "google-analytics": ["marketing-si-clienti", "cum-conectezi-contul-google-la-google-analytics"],
   notice: ["marketing-si-clienti", "cum-conectezi-notice-ro"],
+  /* Chat in magazin (cheile sunt id-urile din `lib/suport/config.ts`) */
+  tidio: ["marketing-si-clienti", "cum-conectezi-tidio"],
+  tawkto: ["marketing-si-clienti", "cum-conectezi-tawk-to"],
+  intercom: ["marketing-si-clienti", "cum-conectezi-intercom"],
+  zendesk: ["marketing-si-clienti", "cum-conectezi-zendesk"],
   /* Marketplace si feeduri */
   emag: ["marketplace", "cum-conectezi-contul-emag"],
   trendyol: ["marketplace", "cum-conectezi-contul-trendyol"],

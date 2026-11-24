@@ -62,6 +62,8 @@ const IN_ASTEPTARE = [
   // Facturis (2027-02-05), Factureaza.ro/easybill/SAGA (2027-02-06), theMarketer (2027-02-07) si
   // Netopia, ultima stare a platii (2027-02-08, tabela `netopia_stari`) au intrat in productie pe
   // 18.11.2026, s-au mutat in `migrations/`, iar baseline-ul le contine.
+  // Chatul de suport (2027-02-10) a intrat in productie pe 24.11.2026, la fel: mutat in `migrations/`,
+  // cuprins de baseline.
 ];
 
 /** `tabela.coloana` pentru fiecare `alter table ... add column` din migratiile in asteptare. */

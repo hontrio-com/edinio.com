@@ -68,7 +68,8 @@ test("⚠ scriptul theMarketer: numai sub acordul pentru marketing, numai in mag
   assert.match(inainte.slice(inainte.lastIndexOf("<ConsentGate")), /^<ConsentGate slug=\{slug\} category="marketing" bypass=\{!requireConsent\}>/);
   assert.ok(inainte.lastIndexOf("<DoarInAfaraContului") > inainte.lastIndexOf("</DoarInAfaraContului>"), "in afara zonei de cont");
   assert.ok(inainte.lastIndexOf("<DoarInMagazinReal>") > inainte.lastIndexOf("</DoarInMagazinReal>"), "nu in editor");
-  assert.match(l, /detectConsentCategories\(mc, gaMeasurementId, tm !== null\)/);
+  /* Al patrulea argument (22.11.2026) e chatul de suport, cu categoria lui; al treilea ramane theMarketer. */
+  assert.match(l, /detectConsentCategories\(mc, gaMeasurementId, tm !== null, chat !== null\)/);
 });
 
 test("⚠ vitrina citeste NUMAI campurile publice ale configurarii", () => {

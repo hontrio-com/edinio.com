@@ -103,6 +103,12 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      cont a legat. ⚠ Numele sunt identice in `TheMarketerConfig` (lib/themarketer/config.ts) si in
      `privat.campuri_secrete` (migratia 2027-02-07); `themarketer-legat.test.ts` le compara. */
   themarketer_config: ["rest_key", "cheie_feed"],
+  /* Chatul de suport (Tidio, tawk.to, Intercom, Zendesk): cele trei secrete cu care se SEMNEAZA identitatea
+     clientului cu cont. Identificatorii de widget din `conturi` NU intra aici: sunt publici, stau in pagina
+     fiecarui vizitator. Nici `conturi.zendesk.kid`: pleaca in antetul fiecarui JWT.
+     ⚠ Numele sunt IDENTICE in `SECRETE_SUPORT` (lib/suport/config.ts) si in `privat.campuri_secrete`
+     (migratia 2027-02-10); `suport-legat.test.ts` le compara. */
+  suport_config: ["tawkto_cheie_api", "intercom_secret", "zendesk_secret"],
   /* FedEx: DOUA credentiale in portalul lor („API Key" si „Secret Key"), dar numai
      una e secreta. `client_id` NU intra aici, desi ei il numesc cheie: singur nu
      deschide nimic (OAuth-ul lor cere si secretul), iar comerciantul trebuie sa-l

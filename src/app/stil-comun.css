@@ -735,6 +735,59 @@
 .policy-content blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 0.75em 0; }
 .policy-content code { font-family: monospace; font-size: 0.85em; background: var(--muted); border-radius: 4px; padding: 0.1em 0.35em; }
 
+/* ─── Sigla magazinului, in antet (24.11.2026) ─────────────────────────────────
+   Inaltimea o alege comerciantul din cursor. Pe ecranele late poate ajunge la
+   96 px; sub `lg` ramane la cel mult 56, cat incape in randul de 64 al antetului
+   de pe telefon. `lib/storefront/logo-box.ts` scrie cele doua inaltimi in
+   variabile (`--sigla`, `--sigla-tel`), fiindca un stil incorporat nu poate
+   depinde de latimea ecranului; regulile de aici aleg intre ele.
+
+   ⚠ Pragul e cel al lui `lg` (64rem), acelasi la care antetele trec de la
+   asezarea de telefon la cea de calculator. Mutat, sigla mare ar ajunge intr-un
+   rand de 64 px.
+
+   ⚠ LATIMEA SE SOCOTESTE MEREU DIN `--sigla-tel`, si pe calculator. Pana la 56 px
+   cele doua inaltimi sunt egale, deci e plafonul de pana acum (de cinci ori
+   inaltimea). Peste 56, sigla creste in inaltime, dar nu se mai lateste: ramane
+   la cel mult 5 x 56 = 280 px, cat putea avea si pana acum. Masurat: lasata sa
+   ajunga la 480 px, o sigla lata scotea pagina din ecran in patru antete.
+
+   ⚠ `--sigla-lat` si `--sigla-stramta` exista NUMAI peste 56 px. Prima pune
+   plafonul in pixeli, fara `100%`: cu un procent in `max-width`, browserul nu
+   tine cont de plafon cand socoteste cat loc cere ancora siglei, si ii da
+   latimea intreaga a fisierului. A doua lasa imaginea sa se stramteze odata cu
+   ancora, lucru pe care `100%` il facea singur. Sub 56 px lipsesc amandoua, deci
+   regula e, la litera, cea de pana acum.
+
+   ⚠ `.st-sigla-clasic` isi tine plafonul de latime FARA `100%`, ca pana acum:
+   cu un procent in el, latimea ancorei nu mai tine cont de plafon si meniul
+   antetului simplu s-ar muta la siglele late. Imaginea lui are `min-w-0` din
+   marcaj, de aceea regula de aici nu scrie `min-width` (l-ar rasturna).
+
+   ⚠ `.st-rand-sigla` e numai in interiorul pragului, dinadins: pe telefon randul
+   antetului nu creste niciodata. Variabila lipseste pana la 56 px, deci acolo
+   regula nu face nimic. */
+.st-sigla {
+  height: var(--sigla-tel, 36px);
+  max-width: min(calc(var(--sigla-tel, 36px) * 5), 100%);
+}
+.st-sigla-clasic {
+  height: var(--sigla-tel, 36px);
+  max-width: calc(var(--sigla-tel, 36px) * 4.2);
+}
+@media (min-width: 64rem) {
+  .st-sigla {
+    height: var(--sigla, 36px);
+    max-width: var(--sigla-lat, min(calc(var(--sigla-tel, 36px) * 5), 100%));
+    min-width: var(--sigla-stramta, auto);
+  }
+  .st-sigla-clasic {
+    height: var(--sigla, 36px);
+    max-width: calc(var(--sigla-tel, 36px) * 4.2);
+  }
+  .st-rand-sigla { min-height: var(--sigla-rand, 0px); }
+}
+
 /* ─── Trecerea intre filele de la „Ce include" ────────────────────────────────
    Folosita de `SectiuneCeInclude` (pagina „Mentenanta gratuita"). Blocul din
    dreapta e inlocuit la fiecare schimbare de fila (are `key`), deci animatia de

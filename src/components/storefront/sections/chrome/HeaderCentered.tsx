@@ -13,7 +13,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
-import { stilSigla } from "@/lib/storefront/logo-box";
+import { stilRandAntet, stilSiglaAntet } from "@/lib/storefront/logo-box";
 import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.5;
@@ -72,15 +72,19 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
           stanga, o sigla lata (un cuvant scris pe un rand, 7:1) isi lua tot randul: coloanele din margini se strangeau
           la zero, iar sigla statea PESTE butonul de meniu si peste lupa. Masurat la 390 px: sigla 32..336, meniul
           10..54, lupa 46..90. Nu iesea nimic din ecran, deci proba de depasire din 19.11 n-a vazut-o. Sigla se
-          micsoreaza in locul ramas (`stilSigla`: `min(…, 100%)`). De la `lg` in sus, ca inainte.
+          micsoreaza in locul ramas (`.st-sigla`: `min(…, 100%)`). De la `lg` in sus, ca inainte.
 
           ⚠ `4rem`, NU MAI MULT. Grupul din stanga (meniul si lupa) ajunge la 74 px de la inceputul coloanei; minimul de
           64 px plus golul de 16 al grilei ii lasa 6 px pana la sigla. Prima forma avea `5rem` (coloana cat grupul), iar
           proba pe magazinele reale a aratat ce costa: sigla de 200 px a unui magazin care NU avea nicio suprapunere
           scadea la 166. Cu `4rem`, cine avea loc ramane cum era; se schimba doar siglele care stateau peste butoane.
           Egal in ambele parti, ca sigla sa ramana pe mijloc (in dreapta, contul si cosul cer 60 px).
+
+          ⚠ `st-rand-sigla` (24.11.2026): de la `lg` in sus randul se inalta cu sigla cand ea trece de 56 px
+          (`stilRandAntet`). Pe telefon ramane la 64. Vezi `logo-box.ts`.
         */}
-        <div className="h-16 lg:h-24 grid grid-cols-[minmax(4rem,1fr)_auto_minmax(4rem,1fr)] lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <div style={stilRandAntet(logoSize)}
+          className="h-16 lg:h-24 st-rand-sigla grid grid-cols-[minmax(4rem,1fr)_auto_minmax(4rem,1fr)] lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex items-center gap-6 min-w-0">
             <div className="lg:hidden flex items-center gap-1">
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" stil="simplu" />
@@ -106,8 +110,8 @@ export function HeaderCentered({ settings }: { settings: Record<string, unknown>
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                style={stilSigla(logoSize)}
-                className="w-auto object-contain" />
+                style={stilSiglaAntet(logoSize)}
+                className="w-auto object-contain st-sigla" />
             ) : (
               <span className="text-xl lg:text-3xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
             )}

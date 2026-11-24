@@ -14,7 +14,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
-import { stilSigla } from "@/lib/storefront/logo-box";
+import { stilRandAntet, stilSiglaAntet } from "@/lib/storefront/logo-box";
 import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 /**
@@ -74,8 +74,8 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-[var(--st-surface)] border-b border-[var(--st-border)]`}>
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-        {/* Randul principal */}
-        <div className="h-16 flex items-center gap-3 lg:gap-6">
+        {/* Randul principal. `st-rand-sigla` (24.11.2026): de la `lg` in sus se inalta cu sigla cand ea trece de 56 px. Vezi `logo-box.ts`. */}
+        <div style={stilRandAntet(logoSize)} className="h-16 st-rand-sigla flex items-center gap-3 lg:gap-6">
           <div className="lg:hidden">
             <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
           </div>
@@ -86,8 +86,8 @@ export function HeaderSearch({ settings }: { settings: Record<string, unknown> }
             <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                style={stilSigla(logoSize)}
-                className="w-auto object-contain" />
+                style={stilSiglaAntet(logoSize)}
+                className="w-auto object-contain st-sigla" />
             </a>
           ) : (
             <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>

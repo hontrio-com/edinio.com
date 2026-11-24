@@ -2693,6 +2693,64 @@ orice script tert neprevazut se taie in tacere (asa s-au pierdut evenimentele Me
 mai mica). Drumul sigur are trei pasi: politica noua trimisa intai ca `Report-Only`, cu un loc care aduna incalcarile;
 cateva zile de trafic real; abia apoi aplicata.
 
+## Etapa 29: logo mai mare in antet (cerut 24.11.2026)
+
+Cererea a pornit de la o clienta (`bijuteriimateocaballo`): si-a pus un logo aproape patrat (4164 x 2508, adica 5:3),
+a dus cursorul „Mărimea logo-ului” la capat si tot mic il vedea, „desi fisierul e mare”. Masurat: la 56 px inaltime
+logo-ul ei are 93 px latime, pe cand scrisul lat de dinainte avea 320 x 46. Marimea fisierului nu conteaza: inaltimea
+o da cursorul, latimea iese din proportii. Proprietarul: „Fa tu asta ca la carte si aplica in magazinul ei”.
+
+- [x] 29.1 Cursorul merge pana la 96 px (antet si subsol).
+- [x] 29.2 In antet, peste 56 px logo-ul creste doar pe calculator, iar randul antetului se inalta cu el.
+- [x] 29.3 Peste 56 px logo-ul nu se mai lateste: cel mult 280 px.
+- [x] 29.4 Masurat intr-un browser, pe cele noua antete si pe magazinele reale.
+
+**29.1.** Capetele cursorului stau intr-un singur loc, `lib/storefront/logo-box.ts` (`SIGLA_MIN` 24, `SIGLA_MAX` 96),
+citite si de editor (`ContinutChrome.tsx`), si de antete. Caseta de sub cursor creste cu logo-ul (`min-h-16`), ca sa
+nu-l taie. In subsol nu exista un rand de inaltime fixa, deci acolo marimea e aceeasi pe orice ecran.
+
+**29.2.** Un stil incorporat nu poate depinde de latimea ecranului, deci inaltimea nu mai sta in `style`: imaginea
+primeste doua variabile (`--sigla` pentru calculator, `--sigla-tel` pentru telefon, cel mult 56), iar regulile sunt in
+`app/stil-comun.css` (`.st-sigla`, `.st-sigla-clasic`), cu pragul lui `lg`. Sub `lg` randul antetului are 64 px (56 la
+„pana colorata”), deci 56 e cat incape; un antet lipit sus care ar creste cu logo-ul ar manca din ecranul mic. De la
+`lg` in sus randul primeste `min-height` (`.st-rand-sigla`, variabila `--sigla-rand`): logo-ul plus aer, de la 4 px sus
+si jos la 56 pana la 12 px la 96. Inaltimile de pana acum ale randurilor (64 pana la 104 px) raman minimul. La „pana
+colorata”, varful taieturii urca odata cu randul, ca taietura sa ramana la 45 de grade.
+
+⚠ Pana la 56 px nu se schimba nimic, prin constructie: cele doua inaltimi sunt egale, iar variabilele randului si ale
+latimii lipsesc. Intrebata baza inainte: din 181 de magazine, unul singur avea peste 56 (cel de mai sus, 64, pus de
+mana); niciunul sub 24.
+
+**29.3.** Prima forma lasa logo-ul sa se lateasca pana la de cinci ori inaltimea, deci 480 px la 96. Masuratoarea din
+browser a aratat ce costa: cu un logo lat, pe calculator, pagina iesea lateral din ecran in patru antete (la 1024 px:
+cautare 44 px, editorial 56, „market” 28, „hipermarket” 94 cu un logo 7:1 si pana la 581 cu unul 12:1). Doua cauze:
+logo-ul de 480 px nu mai lasa loc cautarii, iar un procent in `max-width` (`min(…, 100%)`) face browserul sa nu tina cont
+de plafon cand socoteste cat loc cere ancora logo-ului (un logo 12:1 la 96 px „cere” 1152 px). Acum, peste 56 px,
+plafonul e in pixeli si ramane cel de la capatul vechi (`SIGLA_LATIME_MAX` = 5 x 56 = 280; la antetul simplu 4,2 x 56),
+iar imaginea primeste `min-width: 0`, ca sa se stramteze cu ancora. Niciun antet nu primeste deci un logo mai lat decat
+unul pe care il purta deja. Marimile mari sunt pentru logo-urile patrate sau rotunde; nota de sub cursor o spune.
+
+**29.4.** Trei masuratori, toate intr-un browser adevarat (Playwright), nu pe capturi:
+- cele noua antete, pe ruta de previzualizare a unei sectiuni, la 10 latimi (320 pana la 1920), cu 4 logo-uri (5:3, 7:1,
+  1:1, 12:1) si 10 inaltimi (24 pana la 96): 3600 de stari, fara nicio derulare laterala noua, fara logo iesit din rand
+  si fara suprapuneri. Pe aceeasi pagina s-a pus si marcajul de dinainte (inaltimea in `style`): sub 56 px, toate cele
+  1440 de perechi vechi / nou au aceleasi cutii, la pixel;
+- pagina intreaga a unui magazin, cu valorile venite din baza (96 in antet si in subsol), de la 320 la 1920 px:
+  antetul lipit isi tine inaltimea la derulare, un singur `<h1>`, nimic iesit din ecran;
+- antetele celor 45 de magazine publicate cu logo, pe productie, inainte de livrare; aceeasi masuratoare se repeta
+  dupa livrare si se compara cutie cu cutie.
+
+Probele (`sigla-se-stramta.test.ts`): regula pe fiecare valoare de la 20 la 96, forma fiecarui antet (clasele,
+variabilele, randul) si regulile din foaia de stil, citite cu contextul lor de ecran. 22 de mutanti, toti prinsi.
+
+**Gasite pe drum si NEATINSE** (ar fi schimbat antetul unor magazine care merg):
+- sub 56 px, la logo-urile mai late de 5:1, ancora e mai lata decat logo-ul desenat (cauza de la 29.3). 13 dintre cele
+  45 de magazine reale au asemenea logo-uri (cele mai multe, ale temelor); la niciunul pagina nu iese din ecran;
+- antetul „hipermarket”, la 1024 px, cu un logo 12:1 la 48 sau 56 px: pagina iese lateral cu 5, respectiv 101 px.
+  E la fel si in forma veche; niciun magazin real nu are un asemenea logo acolo;
+- `--st-header-offset` e citit de barele lipite de sub antet (filtre, rezumatul comenzii), dar nu e scris nicaieri:
+  ele folosesc rezerva de 100 px, oricat de inalt e antetul.
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

@@ -8,7 +8,7 @@ import { pluralRo, whatsappLink } from "@/lib/utils/format";
 import { esteActiv, menuItemHref } from "@/lib/pages/menu";
 import { grupuriCategorii } from "@/lib/storefront/categories-chrome";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
-import { stilSigla } from "@/lib/storefront/logo-box";
+import { stilRandAntet, stilSiglaAntet } from "@/lib/storefront/logo-box";
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { StoreNavHamburger } from "@/components/ministore/StoreNav";
 import { useCart } from "@/components/storefront/cart/CartProvider";
@@ -123,7 +123,8 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
         )}
 
         <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-          <div className="h-16 lg:h-[104px] flex items-center gap-3 lg:gap-9">
+          {/* `st-rand-sigla` (24.11.2026): de la `lg` in sus randul se inalta cu sigla cand ea trece de 56 px. Vezi `logo-box.ts`. */}
+          <div style={stilRandAntet(logoSize)} className="h-16 lg:h-[104px] st-rand-sigla flex items-center gap-3 lg:gap-9">
             <div className="lg:hidden">
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url}
                 storeName={nume} currentSlug={currentPageSlug} tema="vitrina" panaLa="lg" />
@@ -131,11 +132,11 @@ export function HeaderHipermarket({ settings }: { settings: Record<string, unkno
             {/* ⚠ `shrink-0` DOAR de la `lg` in sus. Pe telefon ancora siglei trebuie sa se poata stramta, altfel o sigla
                 lata (masurat pe 19.11.2026, pe un magazin real: 1600x289 la inaltimea 56, adica 310 px) nu mai lasa loc
                 si impinge iconita cosului in afara ecranului: pagina se derula lateral cu 47 px la 390 px latime.
-                Stramtata, `stilSigla` (plafonul `100%`) micsoreaza sigla intreaga. Vezi si `logo-box.ts`. */}
+                Stramtata, `.st-sigla` (plafonul `100%`) micsoreaza sigla intreaga. Vezi si `logo-box.ts`. */}
             <a href={acasa} className="flex items-center min-w-0 lg:shrink-0 hover:opacity-85 transition-opacity" aria-label={nume}>
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={cdnImage(business.logo_url, 480)} alt={nume} style={stilSigla(logoSize)} className="w-auto object-contain" />
+                <img src={cdnImage(business.logo_url, 480)} alt={nume} style={stilSiglaAntet(logoSize)} className="w-auto object-contain st-sigla" />
               ) : (
                 <span className="text-xl lg:text-[26px] font-extrabold tracking-tight truncate" style={{ color: "var(--st-primary)" }}>{nume}</span>
               )}

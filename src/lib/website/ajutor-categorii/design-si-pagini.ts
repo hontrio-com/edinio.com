@@ -164,7 +164,10 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Cursoarele apar doar dacă ai logo", text: "Fără logo, la „Antet” scrie „Magazinul nu are încă logo. Îl încarci din fila Stil.”, cu butonul „Deschide Stil”, iar la „Subsol” cursorul nu apare." },
-            { titlu: "Ce valori poți alege", text: "Intervalul este de la 24 la 56 de pixeli, cu pas de 1 pixel, la fel pentru antet și pentru subsol. Valoarea din start este 36 de pixeli." },
+            { titlu: "Ce valori poți alege", text: "Intervalul este de la 24 la 96 de pixeli, cu pas de 1 pixel, la fel pentru antet și pentru subsol. Valoarea din start este 36 de pixeli." },
+            { titlu: "În antet, pe telefon", text: "Peste 56 de pixeli, logo-ul din antet crește doar pe calculator, unde antetul se înalță odată cu el. Pe telefon rămâne la 56 de pixeli, ca antetul să nu acopere pagina; sub cursor apare o notă care îți amintește asta. Logo-ul din subsol are aceeași mărime pe orice ecran." },
+            { titlu: "De ce un logo pătrat pare mai mic", text: "Cursorul stabilește înălțimea, iar lățimea rezultă din forma imaginii. La aceeași înălțime, un logo lat, scris pe un rând, ocupă de câteva ori mai mult loc decât unul pătrat sau rotund. Pentru un logo pătrat sau rotund, alege o înălțime mai mare. Mărimea fișierului în pixeli nu schimbă cât de mare apare logo-ul, doar cât de clar se vede." },
+            { titlu: "Un logo lat nu crește peste 280 de pixeli lățime", text: "În antet, mărimile de peste 56 de pixeli sunt pentru logo-urile pătrate sau rotunde. Un logo lat ajunge la 280 de pixeli lățime încă de la 56 de pixeli înălțime; dacă urci cursorul mai sus, crește doar antetul, nu și logo-ul." },
             { titlu: "De ce sunt două cursoare", text: "Antetul și subsolul au fundaluri diferite, iar un logo care arată bine sus poate fi prea mare jos. Caseta de sub fiecare cursor îți arată contextul în care va fi afișat." },
           ],
           nota: "Cursoarele schimbă doar dimensiunea de afișare. Calitatea imaginii depinde de fișierul încărcat.",

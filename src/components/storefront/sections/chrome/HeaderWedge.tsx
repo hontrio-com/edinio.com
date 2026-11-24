@@ -13,7 +13,7 @@ import { CartControl } from "@/components/storefront/sections/_shared/CartContro
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
-import { stilSigla } from "@/lib/storefront/logo-box";
+import { stilRandAntet, stilSiglaAntet } from "@/lib/storefront/logo-box";
 import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.7;
@@ -65,13 +65,19 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
       style={{ backgroundColor: "var(--st-footer-bg)", color: "var(--st-footer-text)" }}>
       {/* Banda taie pana in dreapta, deci are nevoie de `overflow-hidden`.
           Panoul de cautare sta in afara ei, ca sa poata cobori sub bara. */}
-      <div className="relative overflow-hidden">
+      {/*
+        ⚠ Variabila randului (`stilRandAntet`, 24.11.2026) sta AICI, nu pe rand: o citesc doi. Randul se inalta cu sigla
+        cand ea trece de 56 px (`st-rand-sigla`), iar pana isi muta varful cu aceeasi masura, ca taietura sa ramana la
+        45 de grade: varful ei e la inaltimea randului (88 px, sau mai mult cand randul a crescut). Pe telefon nu se
+        schimba nimic: randul are 56, varful tot 56.
+      */}
+      <div className="relative overflow-hidden" style={stilRandAntet(logoSize)}>
         <div aria-hidden
-          className="absolute inset-y-0 right-0 w-24 lg:w-[calc((100vw-var(--st-container))/2+20rem)] [clip-path:polygon(56px_0,100%_0,100%_100%,0_100%)] lg:[clip-path:polygon(88px_0,100%_0,100%_100%,0_100%)]"
+          className="absolute inset-y-0 right-0 w-24 lg:w-[calc((100vw-var(--st-container))/2+20rem)] [clip-path:polygon(56px_0,100%_0,100%_100%,0_100%)] lg:[clip-path:polygon(max(88px,var(--sigla-rand,0px))_0,100%_0,100%_100%,0_100%)]"
           style={{ backgroundColor: "var(--st-primary)" }} />
 
         <div className="relative mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-          <div className="h-14 lg:h-[88px] flex items-center gap-3 lg:gap-8">
+          <div className="h-14 lg:h-[88px] st-rand-sigla flex items-center gap-3 lg:gap-8">
             <div className="lg:hidden flex items-center gap-1 shrink-0">
               <StoreNavHamburger items={menu} basePath={basePath} color="var(--st-primary)" logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} tema="inchisa" panaLa="lg" stil="simplu" />
               {are("cautare") && (
@@ -86,8 +92,8 @@ export function HeaderWedge({ settings }: { settings: Record<string, unknown> })
               {business.logo_url ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                  style={stilSigla(logoSize)}
-                  className="w-auto object-contain" />
+                  style={stilSiglaAntet(logoSize)}
+                  className="w-auto object-contain st-sigla" />
               ) : (
                 /*
                   `pr-1 -mr-1`: numele e ITALIC, deci ultima litera se apleaca in

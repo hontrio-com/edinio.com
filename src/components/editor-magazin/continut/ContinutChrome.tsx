@@ -8,6 +8,7 @@ import {
   INALTIME_INSIGNA_IMPLICITA, INALTIME_INSIGNA_MAX, INALTIME_INSIGNA_MIN,
   MAX_INSIGNE_FOOTER, TITLU_INSIGNE_IMPLICIT, type InsignaFooterStocata,
 } from "@/lib/storefront/footer-badges";
+import { SIGLA_IMPLICITA, SIGLA_LATIME_MAX, SIGLA_MAX, SIGLA_MAX_TELEFON, SIGLA_MIN } from "@/lib/storefront/logo-box";
 import type { ContinutMagazin } from "../useContinutMagazin";
 import { Grup, Nota, RandComutator, inputCls, inputMicCls } from "./ui";
 
@@ -53,7 +54,7 @@ export function ContinutAnunt({ continut }: { continut: ContinutMagazin }) {
 
 export function ContinutHeader({ continut, laStil }: { continut: ContinutMagazin; laStil: () => void }) {
   const { pc, seteaza, logo } = continut;
-  const marime = pc.logo_size ?? 36;
+  const marime = pc.logo_size ?? SIGLA_IMPLICITA;
   return (
     <div className="space-y-5">
       {logo.previzualizare ? (
@@ -63,14 +64,23 @@ export function ContinutHeader({ continut, laStil }: { continut: ContinutMagazin
               <span className="text-muted-foreground">Înălțimea în antet</span>
               <span className="font-semibold tabular-nums text-foreground">{marime}px</span>
             </span>
-            <input type="range" min={24} max={56} step={1} value={marime} aria-label="Mărimea logo-ului în antet"
+            {/* Capetele vin din `logo-box.ts`, de unde le citeste si antetul magazinului: o singura copie. */}
+            <input type="range" min={SIGLA_MIN} max={SIGLA_MAX} step={1} value={marime} aria-label="Mărimea logo-ului în antet"
               onChange={(e) => seteaza("header", (p) => ({ ...p, logo_size: Number(e.target.value) }))}
               className="w-full accent-primary cursor-pointer" />
           </label>
-          <div className="flex items-center rounded-lg border border-border bg-surface px-3 h-16 overflow-hidden">
+          {/* `min-h-16`, nu `h-16`: de la 24.11.2026 logo-ul poate avea pana la 96 px, iar o caseta fixa de 64 l-ar taia. */}
+          <div className="flex items-center rounded-lg border border-border bg-surface px-3 py-2 min-h-16 overflow-hidden">
+            {/* Ca in antet: peste capatul de pe telefon logo-ul creste in inaltime, dar nu se mai lateste (`SIGLA_LATIME_MAX`). */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logo.previzualizare} alt="" style={{ height: marime, maxWidth: marime * 4.2 }} className="w-auto object-contain" />
+            <img src={logo.previzualizare} alt="" style={{ height: marime, maxWidth: Math.min(marime * 4.2, SIGLA_LATIME_MAX) }} className="w-auto object-contain" />
           </div>
+          {marime > SIGLA_MAX_TELEFON && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Pe telefon, logo-ul rămâne la {SIGLA_MAX_TELEFON} px, ca antetul să nu acopere pagina. Pe calculator, antetul se înalță odată cu el.
+              Un logo lat nu trece de {SIGLA_LATIME_MAX} px lățime: mărimile mari sunt pentru logo-urile pătrate sau rotunde.
+            </p>
+          )}
         </Grup>
       ) : (
         <div className="space-y-2">
@@ -130,11 +140,12 @@ export function ContinutFooter({ continut, planGratuit }: { continut: ContinutMa
               <span className="text-muted-foreground">Înălțimea</span>
               <span className="font-semibold tabular-nums text-foreground">{marime}px</span>
             </span>
-            <input type="range" min={24} max={56} step={1} value={marime} aria-label="Mărimea logo-ului din subsol"
+            {/* Aceleasi capete ca in antet. In subsol nu exista un rand de inaltime fixa, deci marimea e aceeasi si pe telefon. */}
+            <input type="range" min={SIGLA_MIN} max={SIGLA_MAX} step={1} value={marime} aria-label="Mărimea logo-ului din subsol"
               onChange={(e) => seteaza("footer", (p) => ({ ...p, footer_logo_size: Number(e.target.value) }))}
               className="w-full accent-primary cursor-pointer" />
           </label>
-          <div className="flex items-center rounded-lg border border-border bg-[#0A0A0A] px-3 h-16 overflow-hidden">
+          <div className="flex items-center rounded-lg border border-border bg-[#0A0A0A] px-3 py-2 min-h-16 overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={logo.previzualizare} alt="" style={{ height: marime, maxWidth: marime * 4.2 }} className="w-auto object-contain" />
           </div>

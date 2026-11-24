@@ -8,6 +8,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
 import { CartControl, useCartTarget } from "@/components/storefront/sections/_shared/CartControl";
 import { radacinaMagazin } from "@/lib/storefront/category-href";
+import { stilRandAntet, stilSiglaAntet } from "@/lib/storefront/logo-box";
 import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 /**
@@ -51,18 +52,19 @@ export function HeaderClassic() {
 
   return (
     <header className={`sticky ${hasAnnouncementBar ? "top-9" : "top-0"} z-30 bg-background border-b border-border`}>
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
+      {/* `st-rand-sigla` (24.11.2026): de la `lg` in sus randul se inalta cu sigla cand ea trece de 56 px. Vezi `logo-box.ts`. */}
+      <div style={stilRandAntet(logoSize)} className="max-w-6xl mx-auto px-4 h-16 st-rand-sigla flex items-center gap-3">
         <StoreNavHamburger items={menu} basePath={basePath} color={color} logoUrl={business.logo_url} storeName={nume} currentSlug={currentPageSlug} />
         <a href={acasa} className="flex items-center gap-2.5 min-w-0 hover:opacity-80 transition-opacity">
           {/* ⚠ Imaginea siglei are `min-w-0`, nu `flex-shrink-0`: ancora se stramta pe telefoanele inguste, iar imaginea
               trebuie sa vina dupa ea. Cu `flex-shrink-0` ramanea la plafonul ei in pixeli si iesea din ancora, peste
-              butoane. Plafonul sta in pixeli (nu `stilSigla`) ca randul de pe ecranele mari sa ramana cum era. Vezi
-              `logo-box.ts`. */}
+              butoane. Plafonul sta in pixeli, de 4,2 ori inaltimea (`.st-sigla-clasic`, nu `.st-sigla`), ca randul de
+              pe ecranele mari sa ramana cum era. Vezi `logo-box.ts`. */}
           {business.logo_url ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img src={cdnImage(business.logo_url, 320)} alt={nume}
-              style={{ height: logoSize, maxWidth: logoSize * 4.2 }}
-              className="w-auto object-contain min-w-0" />
+              style={stilSiglaAntet(logoSize)}
+              className="w-auto object-contain min-w-0 st-sigla-clasic" />
           ) : (
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
               style={{ backgroundColor: color }}>

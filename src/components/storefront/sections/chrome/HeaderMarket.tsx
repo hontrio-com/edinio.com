@@ -17,7 +17,7 @@ import { CategoryScroller } from "@/components/storefront/sections/catalog/Categ
 import { HEADER_VARIANT_ACTIONS } from "@/lib/storefront/design/registry";
 import { radacinaMagazin, hrefCategorie } from "@/lib/storefront/category-href";
 import { useCautareHeader } from "@/components/storefront/sections/_shared/cautare";
-import { stilSigla } from "@/lib/storefront/logo-box";
+import { stilRandAntet, stilSiglaAntet } from "@/lib/storefront/logo-box";
 import { ActiuneCont } from "@/components/storefront/cont/ActiuneCont";
 
 const STROKE = 1.6;
@@ -110,13 +110,14 @@ export function HeaderMarket({ settings }: { settings: Record<string, unknown> }
       )}
 
       <div className="mx-auto px-4" style={{ maxWidth: "var(--st-container)" }}>
-        <div className="h-16 lg:h-[84px] flex items-center gap-4 lg:gap-8">
+        {/* `st-rand-sigla` (24.11.2026): de la `lg` in sus randul se inalta cu sigla cand ea trece de 56 px. Vezi `logo-box.ts`. */}
+        <div style={stilRandAntet(logoSize)} className="h-16 lg:h-[84px] st-rand-sigla flex items-center gap-4 lg:gap-8">
           <a href={acasa} className="flex items-center min-w-0 hover:opacity-80 transition-opacity" aria-label={nume}>
             {business.logo_url ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={cdnImage(business.logo_url, 480)} alt={nume}
-                style={stilSigla(logoSize)}
-                className="w-auto object-contain" />
+                style={stilSiglaAntet(logoSize)}
+                className="w-auto object-contain st-sigla" />
             ) : (
               <span className="text-2xl font-black tracking-tight text-[var(--st-text)] truncate">{nume}</span>
             )}

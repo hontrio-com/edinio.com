@@ -6,30 +6,12 @@ import Link from "next/link";
 import { ShoppingCart, Wallet, Receipt, Target } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { getLatestAnnouncements } from "@/lib/actions/announcement.actions";
 import { acumCatTimp, formatPrice } from "@/lib/utils/format";
 import { StocScazutRand } from "@/components/dashboard/StocScazutRand";
 import { PRAG_STOC_SCAZUT } from "@/lib/stoc-prag";
 import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { deriveOrigin } from "@/lib/orders/origin";
-import { sanitizeHtml } from "@/lib/utils/sanitize-html";
-import { ListaNoutati, type RandNoutate } from "@/components/dashboard/ListaNoutati";
-import { rezumatScurt, type Announcement } from "@/lib/announcements";
-
-// Sanitize text-block HTML before it reaches the client renderer.
-function announcementToArticle(a: Announcement) {
-  return {
-    title: a.title,
-    excerpt: a.excerpt,
-    cover_url: a.cover_url,
-    is_pinned: a.is_pinned,
-    published_at: a.published_at,
-    blocks: (Array.isArray(a.blocks) ? a.blocks : []).map((b) =>
-      b.type === "text" ? { ...b, html: sanitizeHtml(b.html) } : b
-    ),
-  };
-}
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { PanouVanzari } from "@/components/dashboard/PanouVanzari";
 import { citesteDateVanzari, crestere, intervalScris } from "@/lib/vanzari";
@@ -101,7 +83,7 @@ export default async function DashboardPage() {
         domainHealthy={business.custom_domain_healthy}
       />
       <Suspense fallback={<ScheletPanou />}>
-        <ContinutPanou business={business} userId={user.id} publicUrl={publicUrl} arataAjutor={arataAjutor} />
+        <ContinutPanou business={business} publicUrl={publicUrl} arataAjutor={arataAjutor} />
       </Suspense>
     </div>
   );
@@ -125,8 +107,8 @@ type BusinessPanou = {
 };
 
 async function ContinutPanou({
-  business, userId, publicUrl, arataAjutor,
-}: { business: BusinessPanou; userId: string; publicUrl: string; arataAjutor: boolean }) {
+  business, publicUrl, arataAjutor,
+}: { business: BusinessPanou; publicUrl: string; arataAjutor: boolean }) {
   const supabase = await createClient();
 
   /*
@@ -150,7 +132,6 @@ async function ContinutPanou({
     { data: numaratoareStoc },
     { count: productsTotal },
     { count: ordersTotal },
-    { data: dashProfile },
   ] = await Promise.all([
     /*
       Cele patru carduri din cap, dintr-o singura cerere: comenzi azi, vanzari
@@ -192,7 +173,11 @@ async function ContinutPanou({
       .eq("business_id", business.id),
     supabase.from("orders").select("*", { count: "exact", head: true })
       .eq("business_id", business.id),
-    supabase.from("users_profile").select("plan, plan_expires_at").eq("id", userId).maybeSingle(),
+    /*
+      ⚠ Aici se mai citea planul contului (`users_profile`), doar pentru indemnul de
+      plan din `ActivationChecklist`. Indemnul a iesit pe 24.11.2026, deci si citirea:
+      un drum mai putin catre baza la fiecare deschidere a panoului.
+    */
   ]);
 
   const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
@@ -229,20 +214,6 @@ async function ContinutPanou({
 
   const dateVanzari = citesteDateVanzari(vanzariRpc);
 
-  /*
-    Ultimele cinci noutati, cate un rand fiecare. HTML-ul din blocurile de text
-    se curata AICI, pe server, inainte sa ajunga la componenta care il pune in
-    pagina (vezi `announcementToArticle`).
-  */
-  const noutati: RandNoutate[] = (await getLatestAnnouncements(5).catch(() => [])).map((a) => ({
-    id: a.id,
-    titlu: a.title,
-    rezumat: rezumatScurt(a),
-    data: a.published_at,
-    fixat: a.is_pinned,
-    articol: announcementToArticle(a),
-  }));
-
   // ── Checklist de activare: semnale calculate server-side ──
   // Pasul "customize" e bifat de logo (semnal server) SAU de vizitarea paginii de
   // editare, marcata client-side in ActivationChecklist (vezi customizeVisitedKey).
@@ -265,8 +236,6 @@ async function ContinutPanou({
 
       <ActivationChecklist
         steps={activationSteps}
-        plan={dashProfile?.plan ?? "free"}
-        planExpiresAt={dashProfile?.plan_expires_at ?? null}
         publicUrl={publicUrl}
       />
 
@@ -409,19 +378,17 @@ async function ContinutPanou({
       </div>
 
       {/*
-        Turul actualizarii se redeschide oricand de aici (fereastra din layout citeste `?tur=actualizare`), deci
-        capul sectiunii se vede si cand nu e niciun anunt publicat.
+        ⚠ AICI A FOST SECTIUNEA „Noutăți”, scoasa pe 24.11.2026 la cererea proprietarului
+        („Scoate sectiunea aia cu noutati”): ultimele cinci anunturi publicate din
+        administrare si, in capul ei, legatura „Ce e nou în editor”.
+
+        Ce urmeaza din asta, ca sa nu para scapari:
+        - anunturile publicate din `/admin/noutati` nu se mai vad nicaieri in panoul
+          comerciantului. Pagina de administrare a ramas;
+        - turul actualizarii nu mai are legatura in panou. Fereastra lui se deschide
+          in continuare singura, o data, conturilor de dinainte de lansare, si la
+          adresa `/dashboard?tur=actualizare` (vezi `TurActualizare`).
       */}
-      <div className="mt-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-foreground">Noutăți</h2>
-          <Link href="/dashboard?tur=actualizare" scroll={false}
-            className="inline-flex min-h-6 items-center rounded-md text-xs font-medium text-[var(--primary-text)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-            Ce e nou în editor
-          </Link>
-        </div>
-        {noutati.length > 0 && <ListaNoutati noutati={noutati} />}
-      </div>
     </>
   );
 }

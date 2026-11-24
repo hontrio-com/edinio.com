@@ -15,7 +15,9 @@ import { marcheazaTurulVazut } from "@/lib/actions/tur-actualizare.actions";
 
   - Se deschide SINGURA o singura data, la prima intrare dupa lansare (regula: `deschideLaIntrare`), la o clipa dupa ce
     s-a asezat pagina, si niciodata peste editorul pe tot ecranul: acolo asteapta prima pagina obisnuita a panoului.
-  - Se redeschide oricand din legatura „Ce e nou în editor” (`?tur=actualizare`), fara sa mai scrie nimic.
+  - Se redeschide oricand la adresa `/dashboard?tur=actualizare`, fara sa mai scrie nimic. ⚠ Legatura „Ce e nou în
+    editor”, care ducea acolo, statea in capul sectiunii „Noutăți” de pe prima pagina a panoului si a iesit odata cu ea
+    (24.11.2026, la cererea proprietarului). Adresa a ramas: e ce trimite suportul cuiva care vrea sa revada turul.
   - Inchiderea, oricum ar fi (X, Esc, clic alaturi, „Mai târziu”, butonul de la final), o marcheaza vazuta.
 
   Clipurile pornesc fara sunet si in bucla, cu buton de pauza (o animatie de peste 5 secunde trebuie sa se poata opri,
@@ -41,7 +43,7 @@ export function TurActualizare({ laIntrare }: { laIntrare: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   const inainte = useRef<HTMLButtonElement>(null);
 
-  // Din legatura „Ce e nou în editor” (`?tur=actualizare`): deschisa cat timp adresa o cere; la inchidere se curata.
+  // De la adresa `?tur=actualizare`: deschisa cat timp adresa o cere; la inchidere se curata.
   const dinAdresa = cauta.get("tur") === "actualizare";
   const vizibila = deschis || dinAdresa;
   const p = TUR.pasi[pas];

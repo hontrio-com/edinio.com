@@ -8,7 +8,8 @@ import { createClient } from "@/lib/supabase/server";
  * nici pe alt dispozitiv. Utilizatorul isi scrie doar randul lui (RLS + drept pe coloana, verificat si in productie).
  *
  * ⚠ In impersonare nu scrie nimic: turul e al comerciantului, nu al adminului care se uita in locul lui. Layoutul nici
- * nu deschide fereastra atunci; aici e a doua plasa, pentru o deschidere din legatura „Ce e nou în editor”.
+ * nu deschide fereastra atunci; aici e a doua plasa, pentru o deschidere de la adresa `/dashboard?tur=actualizare`
+ * (legatura „Ce e nou în editor”, care ducea acolo, a iesit din panou pe 24.11.2026; adresa a ramas).
  */
 export async function marcheazaTurulVazut(): Promise<{ ok: boolean }> {
   if ((await cookies()).get("impersonare")?.value != null) return { ok: false };

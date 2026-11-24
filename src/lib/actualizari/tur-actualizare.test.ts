@@ -33,12 +33,20 @@ test("fiecare pas are clip (MP4) si poza, in `public`", () => {
   }
 });
 
-test("fereastra si legatura din panou n-au steluta (cerut de el, 11.11)", () => {
-  assert.doesNotMatch(cod("src/components/dashboard/TurActualizare.tsx"), /Sparkles/);
-  const pagina = cod("src/app/(dashboard)/dashboard/page.tsx");
-  const legatura = pagina.match(/<Link href="\/dashboard\?tur=actualizare"[\s\S]*?<\/Link>/);
-  assert.ok(legatura, "legatura „Ce e nou în editor” nu mai e unde o stiam");
-  assert.doesNotMatch(legatura![0], /Sparkles|<svg/);
+test("fereastra n-are steluta (cerut de el, 11.11), iar turul se redeschide de la adresa lui", () => {
+  const fereastra = cod("src/components/dashboard/TurActualizare.tsx");
+  assert.doesNotMatch(fereastra, /Sparkles/);
+
+  /*
+   * ⚠ REGULA S-A SCHIMBAT pe 24.11.2026. Proba asta cerea ca legatura „Ce e nou în editor” sa existe pe prima pagina
+   * a panoului, fara steluta. Legatura statea in capul sectiunii „Noutăți”, iar proprietarul a cerut scoaterea
+   * sectiunii („Scoate sectiunea aia cu noutati”); a plecat cu ea.
+   *
+   * Ce ramane de pazit: fereastra se deschide in continuare cand adresa o cere. E singura cale ramasa de a revedea
+   * turul (o trimite suportul), deci daca dispare si citirea adresei, turul nu mai poate fi redeschis de nimeni.
+   */
+  assert.match(fereastra, /const dinAdresa = cauta\.get\("tur"\) === "actualizare";/);
+  assert.match(fereastra, /const vizibila = deschis \|\| dinAdresa;/);
 });
 
 test("layoutul panoului monteaza fereastra cu regula, iar actiunea nu scrie in impersonare", () => {

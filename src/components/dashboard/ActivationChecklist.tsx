@@ -4,10 +4,9 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  Check, ChevronDown, ChevronUp, Rocket, Copy, ArrowRight, PartyPopper,
+  Check, ChevronDown, ChevronUp, Rocket, Copy, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
-import { BandaCont, clasaButonBanda } from "@/components/dashboard/BandaCont";
 import { EDITOR_VISITED_KEY } from "@/lib/activation";
 
 export interface ChecklistStep {
@@ -24,8 +23,6 @@ export interface ChecklistStep {
 
 interface Props {
   steps: ChecklistStep[];
-  plan: string;
-  planExpiresAt: string | null;
   publicUrl: string;
 }
 
@@ -62,7 +59,7 @@ function subscribeStorage(cb: () => void): () => void {
   return () => window.removeEventListener("storage", cb);
 }
 
-export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: Props) {
+export function ActivationChecklist({ steps, publicUrl }: Props) {
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
   const editorVisited = useSyncExternalStore(subscribeStorage, readEditorVisited, () => false);
 
@@ -84,40 +81,28 @@ export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: P
   const doneCount = effectiveSteps.filter((s) => s.done).length;
   const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   const allDone = doneCount === total;
-  const isTrial = plan === "free" || plan === "trial";
   const firstOpenIndex = effectiveSteps.findIndex((s) => !s.done);
 
-  // Magazin complet configurat pe plan platit → nu mai aratam nimic.
-  if (allDone && !isTrial) return null;
+  /*
+    Magazin complet configurat: nu mai aratam nimic, pe ORICE plan.
 
-  // Magazin complet configurat pe trial → nudge de upgrade (pastreaza magazinul online).
-  if (allDone && isTrial) {
-    const expiresLabel = planExpiresAt
-      ? new Date(planExpiresAt).toLocaleDateString("ro-RO", { day: "numeric", month: "long" })
-      : null;
-    /*
-      ⚠ ACEEASI FORMA ca benzile de abonament (`BandaCont`), nu inca o cutie
-      verde scrisa de mana: e tot o veste despre cont, doar ca una buna.
-    */
-    return (
-      <div className="mt-4">
-        <BandaCont
-          ton="reusita"
-          forma="card"
-          pictograma={PartyPopper}
-          titlu="Magazinul tau e complet configurat"
-          detaliu={expiresLabel
-            ? <>Alege un plan ca sa ramai online dupa {expiresLabel}. Anulezi oricand, pretul ramane fix pe viata.</>
-            : <>Alege un plan ca sa deblochezi tot potentialul magazinului. Anulezi oricand, pretul ramane fix pe viata.</>}
-          actiune={
-            <Link href="/dashboard/settings#abonament" className={clasaButonBanda("reusita")}>
-              Alege un plan
-            </Link>
-          }
-        />
-      </div>
-    );
-  }
+    ⚠ AICI A STAT UN INDEMN DE PLAN, scos pe 24.11.2026 la intrebarea proprietarului.
+    Conturile fara abonament vedeau, dupa ultimul pas bifat, „Magazinul tau e complet
+    configurat. Alege un plan ca sa ramai online dupa {data}". Era facut pentru
+    testarea gratuita de 15 zile, care nu mai exista din 12.10.2026: magazinul se
+    creeaza numai dupa o plata confirmata.
+
+    ⚠ CINE IL MAI VEDEA, din doua feluri de conturi fara abonament care ajung in panou:
+
+    1. administratorii. Un cont fara abonament cu termenul trecut e trimis la
+       `/reactivare` inainte sa ajunga aici, dar administratorii trec de poarta de
+       plata (`esteAdminConfirmat`, in layout). Lor le spunea sa aleaga un plan „ca
+       sa ramana online" dupa o data care putea fi demult trecuta: se scria fara an;
+    2. testarile date de mana (plan `free` cu termen in viitor). Acolo indemnul era
+       adevarat, dar spus a doua oara: banda de sus, `TrialBanner`, apare in ultimele
+       15 zile si spune pana cand. Ea ramane.
+  */
+  if (allDone) return null;
 
   return (
     <div className="mt-4 rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden">

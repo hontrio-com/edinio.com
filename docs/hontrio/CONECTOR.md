@@ -247,6 +247,20 @@ Hontrio, pe partea lui: `EDINIO_BASE_URL` (`https://www.edinio.com`, local `http
 Intrerupătorul de lansare `HONTRIO_LIVE` (în `src/lib/hontrio/config.ts`) arată cardul din
 Integrări tuturor. Stins, îl văd doar magazinele conectate. Autorizarea nu depinde de el.
 
+### Promovarea în panou (24.11.2026)
+
+Separat de conector și de intrerupător, panoul trimite comercianții spre Hontrio din trei locuri:
+
+- butonul „Promovează-ți magazinul” din bara de sus, lângă „Scapă de Stoc” (de la 640 px în sus);
+- rândul cu același nume din meniul lateral de pe telefon, unde butonul nu încape lângă căutare;
+- bannerul negru din capul paginii de Integrări, cu trei produse ale magazinului arătate ca reclame
+  Google. Se vede doar cât magazinul nu e conectat la Hontrio.
+
+Adresele și textele stau în `src/lib/parteneri/hontrio.ts`, singurul loc care scrie domeniul lor.
+Fiecare legătură poartă `utm_source=edinio`, `utm_medium=panou` și, în `utm_campaign`, locul din
+care a plecat omul (`bara-de-sus`, `meniu-telefon`, `banner-integrari`). Se deschid în filă nouă:
+Hontrio răspunde cu `X-Frame-Options: DENY`, deci nu se poate încadra, cum e Scapă de Stoc.
+
 ---
 
 ## 5. Probe

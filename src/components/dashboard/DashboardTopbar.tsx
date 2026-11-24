@@ -14,6 +14,7 @@ import { BusinessCard } from "@/components/dashboard/Sidebar";
 import { CautareGlobala } from "@/components/dashboard/CautareGlobala";
 import { ButonAdauga } from "@/components/dashboard/ButonAdauga";
 import { ButonScapaDeStoc } from "@/components/dashboard/ScapaDeStoc";
+import { ButonHontrio, RandHontrio } from "@/components/dashboard/ButonHontrio";
 import { intrareActiva, meniuPentru } from "@/lib/navigatie-panou";
 import { formatPrice } from "@/lib/utils/format";
 import { PLAN_LABELS as PLAN_NAMES } from "@/lib/plans";
@@ -246,7 +247,11 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
             ⚠ INAINTEA lui „Adauga", nu dupa: „Adauga" e actiunea proprie a
             comerciantului si ramane cea mai la indemana, langa clopotel si cont.
             Un buton de partener nu are ce cauta inaintea ei in ordinea apasarii.
+
+            Hontrio (24.11.2026) sta langa Scapa de Stoc, in aceeasi forma: sunt
+            cele doua usi catre platforme din afara panoului.
           */}
+          <ButonHontrio />
           <ButonScapaDeStoc />
           <ButonAdauga />
 
@@ -544,6 +549,13 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
               </span>
             )}
           </Link>
+
+          {/*
+            Hontrio. Pe telefon butonul lui nu incape in bara de sus langa cautare
+            (masuratorile sunt in `ButonHontrio`), deci intrarea sta aici, ca rand
+            cu text. Meniul asta nu se vede de la `lg` in sus, unde e butonul.
+          */}
+          <RandHontrio laApasare={() => setMobileOpen(false)} />
 
           {/* Admin */}
           {isAdmin && (

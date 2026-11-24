@@ -7,7 +7,7 @@ import { Callout } from "@/components/ui/callout";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { HontrioClient } from "@/components/dashboard/HontrioClient";
 import { conexiuneaActiva, type StareConexiune } from "@/lib/hontrio/conexiuni";
-import { SITE_HONTRIO } from "@/lib/hontrio/config";
+import { SITE_HONTRIO } from "@/lib/parteneri/hontrio";
 import { formatDateTime } from "@/lib/utils/format";
 
 /** Hontrio: starea legaturii si deconectarea. Conectarea porneste din Hontrio (vezi `HontrioClient`). */

@@ -28,8 +28,11 @@ export const HONTRIO_CLIENT_ID = "hontrio";
  */
 export const HONTRIO_LIVE = false;
 
-/** Unde duce cardul pe cine vrea sa afle ce e Hontrio. */
-export const SITE_HONTRIO = "https://hontrio.com";
+/*
+ * Adresa site-ului Hontrio NU mai sta aici (24.11.2026): fisierul asta e `server-only`, iar butonul
+ * din bara de sus e componenta de client. S-a mutat in `@/lib/parteneri/hontrio`, singurul loc care
+ * scrie domeniul lor.
+ */
 
 export function secretulClientului(): string | null {
   const s = (process.env.HONTRIO_CLIENT_SECRET ?? "").trim();

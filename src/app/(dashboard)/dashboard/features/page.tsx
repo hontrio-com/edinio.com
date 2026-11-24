@@ -45,6 +45,7 @@ import { emagGloballyEnabled, iesireEmag } from "@/lib/emag/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { HONTRIO_LIVE } from "@/lib/hontrio/config";
 import { conexiuneaActiva } from "@/lib/hontrio/conexiuni";
+import { BannerHontrio } from "@/components/dashboard/BannerHontrio";
 import { furnizorPornit, type FurnizorSuport } from "@/lib/suport/config";
 
 type Integration = {
@@ -562,6 +563,18 @@ export default async function IntegrationsPage() {
           Conecteaza-ti magazinul cu servicii externe pentru a automatiza livrarea, facturarea, platile si marketingul.
         </p>
       </div>
+
+      {/*
+        Bannerul Hontrio (24.11.2026), in capul paginii, cerut de proprietar.
+
+        ⚠ DOAR PENTRU CINE NU E CONECTAT. Un magazin legat deja de Hontrio are
+        cardul lui „Activ" la rubrica Marketing; sa-l mai indemni sa-si faca
+        cont ar fi o reclama pentru ceva ce foloseste deja.
+
+        ⚠ NU ATARNA DE `HONTRIO_LIVE`. Intrerupatorul acela hotaraste daca se vede
+        CARDUL din rubrica; bannerul e promovarea ceruta acum, pentru toata lumea.
+      */}
+      {!hontrioActive && <BannerHontrio businessId={business?.id ?? null} />}
 
       <div className="space-y-8">
         {SECTIONS.map((section) => (

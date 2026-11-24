@@ -99,6 +99,12 @@ export function BannerSlider({
   // ordinea claselor s-ar schimba fata de marcajul de dinainte, iar comparatia
   // cu productia ar semnala o diferenta acolo unde CSS-ul e identic.
   slideClass = "shrink-0 w-full snap-center aspect-[16/9] bg-muted",
+  /*
+   * Clasele butonului de pauza (24.11.2026). Implicit, in coltul din dreapta jos, ca pana acum. Un carusel intins pe
+   * toata fereastra il muta in stanga pe ecranele late: in dreapta jos stau butoanele plutitoare de contact ale
+   * magazinului, iar pauza ajungea sub ele (vazut in captura: la 1440 x 900 se mai zarea doar un colt din ea).
+   */
+  clasaPauza = "absolute bottom-3 right-3 z-10 w-7 h-7 rounded-full flex items-center justify-center bg-black/35 text-white hover:bg-black/55 transition-colors",
   paginare = "puncte",
   marimi,
   limiteRaport,
@@ -114,6 +120,7 @@ export function BannerSlider({
   pesteTot?: ReactNode;
   wrapperClass?: string;
   slideClass?: string;
+  clasaPauza?: string;
   /** `segmente`: bare subtiri, cea curenta in culoarea de accent (tema Jupiter, etapa 16.3). */
   paginare?: "puncte" | "segmente";
   /**
@@ -328,7 +335,7 @@ export function BannerSlider({
                 setRuleaza(!ruleaza);
               }}
               aria-label={ruleaza ? "Opreste derularea automata a bannerelor" : "Porneste derularea automata a bannerelor"}
-              className="absolute bottom-3 right-3 z-10 w-7 h-7 rounded-full flex items-center justify-center bg-black/35 text-white hover:bg-black/55 transition-colors">
+              className={clasaPauza}>
               {ruleaza ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             </button>
           )}

@@ -2751,6 +2751,49 @@ variabilele, randul) si regulile din foaia de stil, citite cu contextul lor de e
 - `--st-header-offset` e citit de barele lipite de sub antet (filtre, rezumatul comenzii), dar nu e scris nicaieri:
   ele folosesc rezerva de 100 px, oricat de inalt e antetul.
 
+## Etapa 30: bannere cat latimea ecranului (cerut 24.11.2026)
+
+Aceeasi clienta: „Ce dimensiuni au bannerele din Home Page; as vrea sa fie cat latimea ecranului”. Bannerele ei sunt
+fisiere de 1600 x 900 (16:9). Pe telefon ocupau deja tot ecranul; de la 768 px in sus stateau intr-o coloana de cel mult
+1120 x 630 px, cu colturi rotunjite. Proprietarul a ales, la intrebare, reglajul in platforma.
+
+- [x] 30.1 Reglaj nou la „Bannere cu text și buton peste”: „Lățimea bannerelor”, „Cât pagina” (implicit) sau „Cât ecranul”.
+- [x] 30.2 „Cât ecranul”: fara coloana, fara colturi, fara spatiul de deasupra, cu inaltimea plafonata la 70% din fereastra.
+- [x] 30.3 Textul de peste banner se aliniaza cu coloana paginii; butonul de pauza trece in stanga.
+- [x] 30.4 Masurat intr-un browser.
+
+**30.1.** Cheia `latime` (`pagina` / `ecran`) e numai a acestui design; se citeste in `hero-text.ts`
+(`textulBannerelor`), cu orice alta valoare cazuta pe `pagina`. Doar magazinul care a cerut-o foloseste designul (intrebata
+baza: 1 din 181), deci nimeni altcineva nu e atins. „Cât pagina” e asezarea de pana acum, la litera: aceleasi clase ca la
+„Doar imagini”, iar caruselul cu implicitele lui.
+
+**30.2.** Toate diferentele sunt de la `md` in sus; clasele fara prag de ecran sunt aceleasi, deci pe telefon nu se
+schimba nimic (proba le compara clasa cu clasa). Inaltimea se plafoneaza (`md:max-h-[70vh]`, `INALTIME_MAX_BANNERE_ECRAN`)
+fiindca bannerul isi ia raportul din poza: unul 16:9 intins pe 1920 px ar avea 1080 px, mai mult decat tot ecranul, cu
+textul si butonul sub marginea de jos. Ce nu incape se taie sus si jos (`object-cover`). ⚠ Cat se taie tine de forma
+ferestrei, masurat pe bannerele ei 16:9: la 1440 x 950 ramane 82% din inaltimea pozei, la 1920 x 950 ramane 62%, la
+2560 x 950 ramane 46%. O poza panoramica (in jur de 2,9:1, de exemplu 1920x660) ramane intreaga pe ecranele obisnuite;
+ajutorul campului, sfatul de sub lista de bannere si ghidul din Ajutor o spun. Pozele se pastreaza la cel mult 1600 px
+latime (`compress-image.ts`), deci pe ecranele mai late sunt marite: 20% la 1920 px.
+
+**30.3.** Cu bannerul pana la marginea ferestrei, textul ar fi stat la 64 px de ea, iar sigla si meniul de deasupra lui
+la 336 (pe 1920 px). Marginea cutiei cu text e acum cea mai mare dintre cea obisnuita si marginea coloanei paginii
+(`--st-container`, plus cei 16 px ai ei), deci textul incepe unde incepe continutul antetului. Butonul de pauza al
+caruselului trece in stanga jos, tot de la `md` in sus: in dreapta jos cadea sub butoanele plutitoare de contact (vazut in
+captura, la 1440 x 900 si la 1920 x 1080). `BannerSlider` a primit pentru asta `clasaPauza`, cu implicitul de pana acum.
+
+**30.4.** Pagina intreaga a magazinului de proba (baza demo), la 40 de ferestre (10 latimi de la 320 la 2560, 4
+inaltimi de la 600 la 1300): „Cât ecranul” cu textul ei la stanga, apoi cu textele cele mai lungi admise la dreapta
+(fixe peste toate bannerele) si la mijloc, si „Cât pagina”. In toate cele 160 de stari: bannerul are latimea si
+inaltimea asteptate, nimic nu iese lateral din ecran, cutia cu text ramane in banner, deasupra punctelor si pe langa
+sageti si pauza, butonul primeste clicul, textul e aliniat cu continutul antetului, un singur `<h1>`. Designul masurat pe
+productie inainte si dupa livrare (asezarea „Cât pagina”, ruta de previzualizare) are aceleasi cutii.
+Probe (`hero-text.test.ts`): citirea, registrul, parserul, cele doua asezari, alinierea, si textul cel mai lung socotit
+pe inca 150 de marimi de banner intins pe tot ecranul. 22 de mutanti, toti prinsi.
+
+**Gasit pe drum si NEATINS:** sub 768 px si la „Cât pagina” (adica in asezarile de pana acum, la orice carusel), butonul
+de pauza din dreapta jos ajunge sub butoanele plutitoare de contact la unele ferestre (767 x 600, 768 x 600, 1024 x 800).
+
 ## Deciziile proprietarului
 
 - 24.10.2026: „Mergem pe stilul celor de la Shopify plus un strat avansat.”

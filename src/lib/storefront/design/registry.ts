@@ -849,8 +849,18 @@ export const SECTION_REGISTRY: Partial<Record<SectionKind, SectionMeta>> = {
           { key: "estompare", type: "toggle", label: "Estompează poza sub text", help: "Un strat discret, ca textul să se citească pe orice poză." },
           { key: "cursiv", type: "toggle", label: "Titlu cursiv" },
           { key: "peToate", type: "toggle", label: "Textul rămâne peste toate bannerele", help: "Stins, textul stă pe primul banner și pleacă odată cu el." },
+          /*
+           * 24.11.2026, cerut de acelasi magazin. Cheia e numai a acestui design (parserul curata reglajele fata de
+           * campurile tuturor designurilor de banner, deci o cheie comuna ar fi purtat optiunile altuia). Cele 70 de
+           * procente din text sunt `INALTIME_MAX_BANNERE_ECRAN` (`hero-text.ts`); proba le tine egale.
+           */
+          {
+            key: "latime", type: "select", label: "Lățimea bannerelor",
+            options: [{ value: "pagina", label: "Cât pagina" }, { value: "ecran", label: "Cât ecranul" }],
+            help: "„Cât ecranul”: pe calculator, bannerele ocupă toată lățimea ecranului și cel mult 70% din înălțimea lui. Ce nu încape dintr-o poză se taie sus și jos; pozele panoramice (de exemplu 1920x660) rămân întregi. Pe telefon nu se schimbă nimic.",
+          },
         ],
-        defaults: { titlu: "", text: "", buton: "", link: "", aliniere: "stanga", culoare: "deschis", estompare: true, cursiv: false, peToate: false },
+        defaults: { titlu: "", text: "", buton: "", link: "", aliniere: "stanga", culoare: "deschis", estompare: true, cursiv: false, peToate: false, latime: "pagina" },
       },
       carduri: {
         // Tema Jupiter (etapa 16.3): caruselul in doua treimi, doua carduri in dreapta (in degrade de la etapa 23).

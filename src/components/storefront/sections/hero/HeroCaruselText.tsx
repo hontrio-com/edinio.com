@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { ArrowRight } from "lucide-react";
 import { resolveHref } from "@/lib/pages/href";
 import { resolveHeroBanners } from "@/lib/storefront/design/hero-banners";
-import { textulBannerelor, type AliniereTextBannere, type TextBannere } from "@/lib/storefront/design/hero-text";
+import { textulBannerelor, type AliniereTextBannere, type LatimeBannere, type TextBannere } from "@/lib/storefront/design/hero-text";
 import { LIMITE_RAPORT } from "@/lib/storefront/design/raport-bannere";
 import { hrefCatreProduse } from "@/lib/storefront/category-href";
 import { useStoreChrome } from "@/components/storefront/StorefrontProvider";
@@ -44,10 +44,11 @@ export function HeroCaruselText({ settings }: { settings: Record<string, unknown
   const href = t.link ? resolveHref(t.link, basePath) : hrefCatreProduse(chrome);
   // De la doua bannere in sus caruselul are puncte, jos la mijloc: textul le lasa loc (`LOC_PUNCTE`).
   const strat = <StratText t={t} nume={nume} href={href} cuPuncte={banners.length > 1} />;
+  const cadru = CADRU[t.latime];
 
   return (
-    <section className="relative overflow-hidden md:pt-6">
-      <div className="mx-auto md:max-w-6xl md:px-4">
+    <section className={cadru.sectiune}>
+      <div className={cadru.coloana}>
         <BannerSlider
           banners={banners}
           links={links}
@@ -55,6 +56,7 @@ export function HeroCaruselText({ settings }: { settings: Record<string, unknown
           basePath={basePath}
           marimi={marimi}
           limiteRaport={LIMITE_RAPORT.carusel}
+          {...cadru.carusel}
           pesteBanner={t.peToate ? undefined : (i) => (i === 0 ? strat : null)}
           pesteTot={t.peToate ? strat : undefined}
         />
@@ -62,6 +64,44 @@ export function HeroCaruselText({ settings }: { settings: Record<string, unknown
     </section>
   );
 }
+
+/*
+ * ═══ CELE DOUA ASEZARI ALE CARUSELULUI: CAT PAGINA, CAT ECRANUL (24.11.2026, vezi `hero-text.ts`) ═══
+ *
+ * „pagina” e asezarea de pana acum, la litera: aceleasi clase ca la „Doar imagini” (`BannerCarousel`), iar caruselul
+ * isi ia invelisul si locul din implicitele lui `BannerSlider` (de aceea `carusel` e gol).
+ *
+ * „ecran” scoate, DOAR de la `md` in sus, spatiul de deasupra, coloana de 1120 px si colturile rotunjite, si plafoneaza
+ * inaltimea locului la 70% din fereastra (poza se taie sus si jos, `object-cover`).
+ *
+ * ⚠ Clasele FARA prag de ecran sunt aceleasi in amandoua asezarile: pe telefon bannerele ocupau deja tot ecranul, deci
+ * acolo nu se schimba nimic. Proba le compara clasa cu clasa.
+ *
+ * ⚠ Butonul de pauza trece in STANGA jos, tot de la `md` in sus. Cu bannerul pana la marginea ferestrei, coltul lui din
+ * dreapta jos cade sub butoanele plutitoare de contact ale magazinului (telefon, WhatsApp), care stau lipite de coltul
+ * ferestrei: la 1440 x 900 si la 1920 x 1080, cu pagina sus, pauza era acoperita aproape toata. In stanga nu sta nimic,
+ * iar cutia cu text incepe de la cel putin 53 px (7% din latime, de la 768 px in sus), deci nu ajunge peste ea.
+ */
+const CADRU: Record<LatimeBannere, { sectiune: string; coloana: string; carusel: { wrapperClass?: string; slideClass?: string; clasaPauza?: string } }> = {
+  pagina: { sectiune: "relative overflow-hidden md:pt-6", coloana: "mx-auto md:max-w-6xl md:px-4", carusel: {} },
+  ecran: {
+    sectiune: "relative overflow-hidden",
+    coloana: "mx-auto",
+    carusel: {
+      wrapperClass: "relative",
+      slideClass: "shrink-0 w-full snap-center aspect-[16/9] bg-muted md:max-h-[70vh]",
+      clasaPauza: "absolute bottom-3 right-3 md:right-auto md:left-3 z-10 w-7 h-7 rounded-full flex items-center justify-center bg-black/35 text-white hover:bg-black/55 transition-colors",
+    },
+  },
+};
+
+/**
+ * Pe bannerele intinse pe tot ecranul, cutia cu text incepe unde incepe si continutul paginii: marginea coloanei
+ * (`--st-container`, aceeasi pe care o folosesc antetele) plus cei 16 px ai ei. Fara asta, pe un ecran de 1920 px
+ * textul ar sta la 64 px de marginea ferestrei, iar sigla si meniul de deasupra lui la 336. Pe ferestrele mai inguste
+ * decat coloana socoteala iese negativa, iar `max` lasa marginea obisnuita.
+ */
+const MARGINE_COLOANA = "calc((100cqw - var(--st-container, 72rem)) / 2 + 1rem)";
 
 /*
  * ⚠ MARIMILE TIN DE BANNER, NU DE ECRAN.
@@ -139,12 +179,14 @@ function StratText({ t, nume, href, cuPuncte }: { t: TextBannere; nume: string; 
   const alb = t.culoare === "deschis";
   const culoareTitlu = alb ? "#ffffff" : t.culoare === "principala" ? "var(--st-primary)" : INCHIS;
   const culoareText = alb ? "rgba(255,255,255,0.9)" : `color-mix(in srgb, ${INCHIS} 88%, transparent)`;
+  // „Cât ecranul”: textul se aliniaza cu coloana paginii, nu cu marginea ferestrei (`MARGINE_COLOANA`).
+  const margini = t.latime === "ecran" ? `max(${asezare.margini}, ${MARGINE_COLOANA})` : asezare.margini;
 
   return (
     <div className="absolute inset-0 z-[1] pointer-events-none overflow-hidden [container-type:size]">
       {t.estompare && <span aria-hidden className={`absolute inset-0 ${(alb ? STRAT_INCHIS : STRAT_DESCHIS)[t.aliniere]}`} />}
       <div className={`relative h-full flex items-center px-5 sm:px-10 lg:px-16 ${asezare.rand}`}
-        style={{ paddingInline: asezare.margini, paddingBottom: cuPuncte ? LOC_PUNCTE : undefined }}>
+        style={{ paddingInline: margini, paddingBottom: cuPuncte ? LOC_PUNCTE : undefined }}>
         <div className={`min-w-0 ${asezare.cutie}`} style={{ maxWidth: asezare.latime }}>
           {/*
             Randurile titlului dupa inaltimea bannerului: unul sub 100 px, doua sub 150, trei peste (pragurile nu se

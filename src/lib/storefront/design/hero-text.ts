@@ -26,6 +26,28 @@ export type AliniereTextBannere = (typeof ALINIERI_TEXT_BANNERE)[number];
 export const CULORI_TEXT_BANNERE = ["deschis", "inchis", "principala"] as const;
 export type CuloareTextBannere = (typeof CULORI_TEXT_BANNERE)[number];
 
+/*
+  ═══ LATIMEA BANNERELOR: CAT PAGINA SAU CAT ECRANUL (24.11.2026) ═══
+
+  Cerut de acelasi magazin: „as vrea sa fie cat latimea ecranului”. Pana acum, de la 768 px in sus bannerele stateau
+  intr-o coloana de cel mult 1120 px, cu colturi rotunjite (pe telefon ocupau deja tot ecranul). „Cât ecranul” scoate
+  coloana, colturile si spatiul de deasupra, de la `md` in sus.
+
+  ⚠ INALTIMEA SE PLAFONEAZA. Bannerul isi ia raportul din poza: unul 16:9 intins pe 1920 px ar avea 1080 px, adica mai
+  mult decat tot ecranul, cu textul si butonul de peste el sub marginea de jos. De aceea, de la `md` in sus, locul nu
+  trece de `INALTIME_MAX_BANNERE_ECRAN` la suta din inaltimea ferestrei, iar ce nu incape din poza se taie sus si jos
+  (`object-cover`, centrat). Cat se taie tine de forma ferestrei: dintr-o poza 16:9, pe un ecran de 1920 x 1080 raman
+  cam 62% din inaltime. O poza panoramica (in jur de 2,9:1, de exemplu 1920x660) nu se taie pe ecranele obisnuite.
+  Pe telefon nu se schimba nimic: nici latimea, nici inaltimea.
+
+  ⚠ Clasa din componenta (`md:max-h-[70vh]`) trebuie scrisa intreaga, altfel Tailwind nu o gaseste; proba o tine egala
+  cu numarul de aici.
+*/
+export const LATIMI_BANNERE = ["pagina", "ecran"] as const;
+export type LatimeBannere = (typeof LATIMI_BANNERE)[number];
+/** Cat din inaltimea ferestrei pot ocupa bannerele intinse pe tot ecranul, in procente. */
+export const INALTIME_MAX_BANNERE_ECRAN = 70;
+
 export interface TextBannere {
   titlu: string;
   text: string;
@@ -39,6 +61,8 @@ export interface TextBannere {
   cursiv: boolean;
   /** Textul ramane pe loc peste toate bannerele; altfel sta pe primul si pleaca odata cu el. */
   peToate: boolean;
+  /** `ecran`: de la `md` in sus, bannerele ocupa toata latimea ferestrei, cu inaltimea plafonata. */
+  latime: LatimeBannere;
 }
 
 function dinLista<T extends string>(v: unknown, lista: readonly T[], implicit: T): T {
@@ -61,5 +85,7 @@ export function textulBannerelor(
     estompare: s.estompare !== false,
     cursiv: s.cursiv === true,
     peToate: s.peToate === true,
+    // Orice altceva decat „ecran” ramane asezarea de pana acum.
+    latime: dinLista(s.latime, LATIMI_BANNERE, "pagina"),
   };
 }

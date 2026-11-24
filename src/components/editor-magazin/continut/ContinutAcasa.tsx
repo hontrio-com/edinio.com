@@ -41,8 +41,10 @@ function sfatMarimeBanner(varianta: string | undefined): string {
     return "Se afișează întreg, la proporția primului banner. Recomandat 16:9 (de exemplu 1920x1080); pune-le pe toate la aceeași mărime. Cu mai multe bannere, se afișează ca un carusel.";
   }
   // „Bannere cu text și buton peste” (20.11.2026): acelasi carusel, cu textul scris peste poza, deci poza nu-l mai poarta.
+  // Ultima propozitie (24.11.2026): cu bannerele „Cât ecranul”, inaltimea e plafonata, deci pozele 16:9 se taie; cele
+  // 70 de procente sunt `INALTIME_MAX_BANNERE_ECRAN` (`hero-text.ts`), tinute egale de proba.
   if (varianta === "carusel_text") {
-    return "Se afișează întreg, la proporția primului banner. Recomandat 16:9 (de exemplu 1920x1080); pune-le pe toate la aceeași mărime. Textul vine peste primul banner: alege poze fără text în ele. Cu mai multe bannere, se afișează ca un carusel.";
+    return "Se afișează întreg, la proporția primului banner. Recomandat 16:9 (de exemplu 1920x1080); pune-le pe toate la aceeași mărime. Textul vine peste primul banner: alege poze fără text în ele. Cu mai multe bannere, se afișează ca un carusel. Cu „Lățimea bannerelor” pe „Cât ecranul”, pe calculator se taie sus și jos ce trece de 70% din înălțimea ecranului: acolo arată cel mai bine pozele panoramice (de exemplu 1920x660).";
   }
   return "Recomandat 16:9 (de exemplu 1920x1080). Cu mai multe bannere, se afișează ca un carusel.";
 }

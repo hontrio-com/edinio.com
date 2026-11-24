@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { BANNERE_INCADRATE } from "@/lib/teme/incadrare-bannere";
 import { VARIANTE_MARI } from "@/lib/teme/variante-imagini";
 import { DEMO_BANNERE_FARA_TEXT, DEMO_BANNERS } from "./demo-content";
-import { BUTON_BANNERE_IMPLICIT, textulBannerelor } from "./hero-text";
+import { BUTON_BANNERE_IMPLICIT, INALTIME_MAX_BANNERE_ECRAN, LATIMI_BANNERE, textulBannerelor } from "./hero-text";
 import { parseStoreDesign } from "./parse";
 import { SECTION_REGISTRY, variantMeta } from "./registry";
 import { jsonCanonic } from "./continut-ciorna";
@@ -28,7 +28,7 @@ test("lasate goale, titlul e numele magazinului, textul e sloganul, butonul duce
   const t = textulBannerelor({}, MAGAZIN);
   assert.deepEqual(t, {
     titlu: "Atelierul Anei", text: "Lucrate de mana", buton: BUTON_BANNERE_IMPLICIT, link: "",
-    aliniere: "stanga", culoare: "deschis", estompare: true, cursiv: false, peToate: false,
+    aliniere: "stanga", culoare: "deschis", estompare: true, cursiv: false, peToate: false, latime: "pagina",
   });
   // Nici fara reglaje deloc, nici fara slogan nu cade.
   assert.equal(textulBannerelor(undefined, { nume: "X", slogan: null }).text, "");
@@ -37,19 +37,22 @@ test("lasate goale, titlul e numele magazinului, textul e sloganul, butonul duce
 
 test("reglajele scrise se citesc intocmai, cu spatiile de la capete taiate", () => {
   const t = textulBannerelor(
-    { titlu: "  Colectia de toamna ", text: " Piese noi. ", buton: " Vezi ", link: "/magazin", aliniere: "dreapta", culoare: "principala", estompare: false, cursiv: true, peToate: true },
+    { titlu: "  Colectia de toamna ", text: " Piese noi. ", buton: " Vezi ", link: "/magazin", aliniere: "dreapta", culoare: "principala", estompare: false, cursiv: true, peToate: true, latime: "ecran" },
     MAGAZIN,
   );
   assert.deepEqual(t, {
     titlu: "Colectia de toamna", text: "Piese noi.", buton: "Vezi", link: "/magazin",
-    aliniere: "dreapta", culoare: "principala", estompare: false, cursiv: true, peToate: true,
+    aliniere: "dreapta", culoare: "principala", estompare: false, cursiv: true, peToate: true, latime: "ecran",
   });
 });
 
 test("⚠ valorile din afara listelor cad pe implicit, nu ajung in clase sau in stil", () => {
-  const t = textulBannerelor({ aliniere: "sus", culoare: "red; background:url(x)", estompare: "nu", cursiv: "da", peToate: 1, titlu: 7, link: { a: 1 } }, MAGAZIN);
+  const t = textulBannerelor({ aliniere: "sus", culoare: "red; background:url(x)", estompare: "nu", cursiv: "da", peToate: 1, titlu: 7, link: { a: 1 }, latime: "100vw" }, MAGAZIN);
   assert.equal(t.aliniere, "stanga");
   assert.equal(t.culoare, "deschis");
+  // O latime necunoscuta (sau `true`, sau un numar) ramane asezarea de pana acum, in coloana paginii.
+  assert.equal(t.latime, "pagina");
+  for (const v of [true, 1, "Ecran", "ecran ", null, { a: 1 }]) assert.equal(textulBannerelor({ latime: v }, MAGAZIN).latime, "pagina", `latimea ${JSON.stringify(v)} nu e „ecran”`);
   // Comutatoarele: doar `false` stinge estomparea, doar `true` aprinde celelalte doua.
   assert.equal(t.estompare, true);
   assert.equal(t.cursiv, false);
@@ -76,6 +79,15 @@ test("registrul: designul cere un banner, da H1-ul paginii si are o valoare impl
   assert.equal(citit.estompare, v.defaults!.estompare);
   assert.equal(citit.cursiv, v.defaults!.cursiv);
   assert.equal(citit.peToate, v.defaults!.peToate);
+  assert.equal(citit.latime, v.defaults!.latime);
+  // Implicit, bannerele raman in coloana paginii: un magazin care n-a atins reglajul arata ca pana acum.
+  assert.equal(v.defaults!.latime, "pagina");
+  const latime = v.fields.find((f) => f.key === "latime");
+  assert.ok(latime && latime.type === "select", "reglajul „Lățimea bannerelor” lipseste din registru");
+  // Optiunile din editor sunt exact valorile pe care le stie citirea.
+  assert.deepEqual(latime.options.map((o) => o.value), [...LATIMI_BANNERE]);
+  // Procentul spus in ajutorul campului e cel aplicat de componenta.
+  assert.ok(latime.help?.includes(`cel mult ${INALTIME_MAX_BANNERE_ECRAN}% din înălțimea`), "ajutorul reglajului nu mai spune procentul aplicat");
   // „Doar imagini” ramane primul: e refugiul parserului cand designul salvat nu se recunoaste.
   assert.equal(Object.keys(SECTION_REGISTRY.hero!.variants)[0], "banners");
 });
@@ -117,6 +129,89 @@ test("parserul curata reglajele ostile si ramane stabil la a doua citire", () =>
 
   const aDoua = parseStoreDesign(JSON.parse(JSON.stringify(curat)), ctx);
   assert.equal(jsonCanonic(aDoua), jsonCanonic(curat), "a doua parsare schimba designul: garda ciornei n-ar mai lasa nimic salvat");
+});
+
+test("parserul pastreaza „Cât ecranul” si arunca o latime necunoscuta", () => {
+  const ctx: DesignContext = { primaryColor: "#6C2938", pageContent: { hero_banners: ["https://exemplu.test/a.webp"] }, features: {} };
+  const baza = parseStoreDesign({}, ctx);
+  const cu = (latime: unknown) => {
+    const brut = structuredClone(baza);
+    brut.home = brut.home.map((s) => (s.kind === "hero" ? { ...s, variant: "carusel_text", variantOverride: "carusel_text", settings: { titlu: "T", latime } } : s));
+    return parseStoreDesign(brut, ctx).home.find((s) => s.kind === "hero")!.settings;
+  };
+  assert.equal(cu("ecran").latime, "ecran");
+  assert.equal(cu("pagina").latime, "pagina");
+  for (const ostila of ["100vw", "ecran; position:fixed", true, 1920, { a: 1 }]) {
+    assert.notEqual(cu(ostila).latime, ostila, `parserul a pastrat latimea ${JSON.stringify(ostila)}`);
+    // Ce ramane dupa curatare se citeste ca asezarea de pana acum.
+    assert.equal(textulBannerelor(cu(ostila), MAGAZIN).latime, "pagina");
+  }
+});
+
+/** Clasele unei liste, fara cele cu prag de ecran (`md:…`, `lg:…`): ce se aplica pe telefon. */
+const peTelefon = (clase: string) => clase.split(/\s+/).filter((c) => c && !/^(?:sm|md|lg|xl|2xl):/.test(c)).sort();
+
+test("⚠ „Cât ecranul”: pe telefon nimic nu se schimba; pe calculator fara coloana, fara colturi, cu inaltimea plafonata", () => {
+  const s = cod("src/components/storefront/sections/hero/HeroCaruselText.tsx");
+  const cadru = s.slice(s.indexOf("const CADRU"), s.indexOf("};", s.indexOf("const CADRU")));
+  const camp = (asezare: "pagina" | "ecran", cheie: string): string => {
+    const bucata = cadru.slice(cadru.indexOf(`${asezare}: {`));
+    const m = bucata.match(new RegExp(`${cheie}: "([^"]*)"`));
+    assert.ok(m, `nu gasesc \`${cheie}\` la asezarea „${asezare}”`);
+    return m[1];
+  };
+  const carusel = cod("src/components/storefront/sections/hero/HeroBanners.tsx");
+  const implicit = (nume: string): string => {
+    const m = carusel.match(new RegExp(`${nume} = "([^"]*)"`));
+    assert.ok(m, `nu gasesc implicitul \`${nume}\` al caruselului`);
+    return m[1];
+  };
+
+  /*
+   * „Cât pagina” e asezarea de pana acum, la litera: sectiunea si coloana lui „Doar imagini”, iar caruselul cu implicitele
+   * lui (asezarea nu-i trimite nimic). Un magazin care n-a atins reglajul primeste exact marcajul de dinainte.
+   */
+  const doarImagini = carusel.slice(carusel.indexOf("export function BannerCarousel"), carusel.indexOf("export function BannerSlider"));
+  assert.ok(doarImagini.includes(`<section className="${camp("pagina", "sectiune")}">`), "sectiunea asezarii „pagina” nu mai e cea de la „Doar imagini”");
+  assert.ok(doarImagini.includes(`<div className="${camp("pagina", "coloana")}">`), "coloana asezarii „pagina” nu mai e cea de la „Doar imagini”");
+  assert.match(cadru, /pagina: \{[^}]*carusel: \{\} \}/, "asezarea „pagina” nu are voie sa trimita nimic caruselului");
+
+  // Pe telefon (clasele fara prag de ecran) cele doua asezari sunt aceleasi: acolo bannerele ocupau deja tot ecranul.
+  assert.deepEqual(peTelefon(camp("ecran", "sectiune")), peTelefon(camp("pagina", "sectiune")));
+  assert.deepEqual(peTelefon(camp("ecran", "coloana")), peTelefon(camp("pagina", "coloana")));
+  assert.deepEqual(peTelefon(camp("ecran", "wrapperClass")), peTelefon(implicit("wrapperClass")));
+  assert.deepEqual(peTelefon(camp("ecran", "slideClass")), peTelefon(implicit("slideClass")));
+  assert.deepEqual(peTelefon(camp("ecran", "clasaPauza")), peTelefon(implicit("clasaPauza")));
+  // Pauza: pe calculator trece in stanga (in dreapta jos stau butoanele plutitoare de contact); restul claselor, aceleasi.
+  const pauzaInPlus = camp("ecran", "clasaPauza").split(/\s+/).filter((c) => !implicit("clasaPauza").split(/\s+/).includes(c));
+  assert.deepEqual(pauzaInPlus, ["md:right-auto", "md:left-3"]);
+
+  // Pe calculator: fara spatiul de deasupra, fara coloana si marginile ei, fara colturi rotunjite.
+  const ecran = [camp("ecran", "sectiune"), camp("ecran", "coloana"), camp("ecran", "wrapperClass"), camp("ecran", "slideClass")].join(" ").split(/\s+/);
+  for (const oprita of ["md:pt-6", "md:max-w-6xl", "md:px-4", "md:rounded-2xl"]) {
+    assert.ok(!ecran.includes(oprita), `asezarea „ecran” inca poarta \`${oprita}\`: bannerul n-ar ajunge la marginile ferestrei`);
+  }
+  // Singura clasa in plus e plafonul de inaltime, de la `md` in sus, cu procentul din `hero-text.ts`.
+  const inPlus = camp("ecran", "slideClass").split(/\s+/).filter((c) => !implicit("slideClass").split(/\s+/).includes(c));
+  assert.deepEqual(inPlus, [`md:max-h-[${INALTIME_MAX_BANNERE_ECRAN}vh]`]);
+
+  // Componenta chiar alege asezarea dupa reglaj si o da caruselului.
+  const componenta = s.slice(s.indexOf("export function HeroCaruselText"), s.indexOf("const CADRU"));
+  assert.match(componenta, /const cadru = CADRU\[t\.latime\];/);
+  assert.match(componenta, /<section className=\{cadru\.sectiune\}>\s*<div className=\{cadru\.coloana\}>/);
+  assert.match(componenta, /\{\.\.\.cadru\.carusel\}/);
+});
+
+test("„Cât ecranul”: textul se aliniaza cu coloana paginii, iar pe ferestrele inguste ramane marginea obisnuita", () => {
+  const s = cod("src/components/storefront/sections/hero/HeroCaruselText.tsx");
+  const coloana = s.match(/const MARGINE_COLOANA = "([^"]+)";/)?.[1];
+  // Jumatate din ce ramane in afara coloanei paginii, plus cei 16 px ai ei: unde incepe continutul antetului.
+  assert.equal(coloana, "calc((100cqw - var(--st-container, 72rem)) / 2 + 1rem)");
+  // `max`: cand fereastra e mai ingusta decat coloana, socoteala iese negativa si ramane marginea de pana acum.
+  assert.match(s, /const margini = t\.latime === "ecran" \? `max\(\$\{asezare\.margini\}, \$\{MARGINE_COLOANA\}\)` : asezare\.margini;/);
+  assert.match(s, /style=\{\{ paddingInline: margini, paddingBottom: cuPuncte \? LOC_PUNCTE : undefined \}\}/);
+  // Antetele isi aseaza continutul cu aceeasi variabila si cu aceeasi margine de 16 px (`px-4`).
+  assert.match(cod("src/components/storefront/sections/chrome/HeaderCentered.tsx"), /className="mx-auto px-4" style=\{\{ maxWidth: "var\(--st-container\)" \}\}/);
 });
 
 test("⚠ fiecare design de banner din registru are o componenta in dispecer", () => {
@@ -245,26 +340,45 @@ test("⚠ textul cel mai lung incape in banner, deasupra punctelor, la orice for
   assert.match(s, /cuPuncte=\{banners\.length > 1\}/);
 
   let socotite = 0;
+  /** Cazul cel mai rau pentru un banner de `latime` x `inaltime` px: tot ce are voie sa apara, pe cate randuri are voie. */
+  const incape = (latime: number, inaltime: number, unde = "") => {
+    const randuri = inaltime >= de3 ? 3 : inaltime >= de2 ? 2 : 1;
+    const t = marime(titlu, latime, inaltime);
+    const bucataTitlu = randuri * inaltRandTitlu * t + coadaTitlu * t;
+    const cuText = latime >= textDeLa && inaltime >= textDeLaInalt;
+    const bucataText = cuText ? marime(textSus, latime, inaltime) + 3 * inaltRandText * marime(text, latime, inaltime) : 0;
+    const bucataButon = marime(butonSus, latime, inaltime) + marime(butonInalt, latime, inaltime);
+    const total = bucataTitlu + bucataText + bucataButon;
+    const loc = inaltime - locPuncte;
+    assert.ok(total <= loc + 0.5, `banner ${latime}x${Math.round(inaltime)}${unde}: textul cere ${total.toFixed(1)} px si are ${loc.toFixed(1)} (titlu pe ${randuri} randuri${cuText ? ", cu text" : ""})`);
+    socotite += 1;
+  };
   for (const latime of [320, 360, 390, 430, 640, 736, 992, 1120]) {
-    for (const raport of [4 / 3, 16 / 9, 2.4, 3.2, 4]) {
-      const inaltime = latime / raport;
-      const randuri = inaltime >= de3 ? 3 : inaltime >= de2 ? 2 : 1;
-      const t = marime(titlu, latime, inaltime);
-      const bucataTitlu = randuri * inaltRandTitlu * t + coadaTitlu * t;
-      const cuText = latime >= textDeLa && inaltime >= textDeLaInalt;
-      const bucataText = cuText ? marime(textSus, latime, inaltime) + 3 * inaltRandText * marime(text, latime, inaltime) : 0;
-      const bucataButon = marime(butonSus, latime, inaltime) + marime(butonInalt, latime, inaltime);
-      const total = bucataTitlu + bucataText + bucataButon;
-      const loc = inaltime - locPuncte;
-      assert.ok(total <= loc + 0.5, `banner ${latime}x${Math.round(inaltime)}: textul cere ${total.toFixed(1)} px si are ${loc.toFixed(1)} (titlu pe ${randuri} randuri${cuText ? ", cu text" : ""})`);
-      socotite += 1;
-    }
+    for (const raport of [4 / 3, 16 / 9, 2.4, 3.2, 4]) incape(latime, latime / raport);
   }
   assert.equal(socotite, 40);
 
+  /*
+   * „Cât ecranul” (24.11.2026): de la `md` in sus bannerul are latimea ferestrei, iar inaltimea lui e cea data de poza,
+   * dar cel mult `INALTIME_MAX_BANNERE_ECRAN` la suta din inaltimea ferestrei. Deci apar bannere mult mai late decat
+   * inalte (2560 x 336 intr-o fereastra scunda), pe care asezarea in coloana nu le putea da. Regula e aceeasi.
+   */
+  socotite = 0;
+  for (const latimeFereastra of [768, 1024, 1280, 1440, 1920, 2560]) {
+    for (const inaltimeFereastra of [480, 650, 800, 950, 1300]) {
+      for (const raport of [4 / 3, 16 / 9, 2.4, 2.9, 4]) {
+        const inaltime = Math.min(latimeFereastra / raport, (INALTIME_MAX_BANNERE_ECRAN / 100) * inaltimeFereastra);
+        incape(latimeFereastra, inaltime, ` (fereastra ${latimeFereastra}x${inaltimeFereastra}, cat ecranul)`);
+      }
+    }
+  }
+  assert.equal(socotite, 150);
+
   // Marginile: la mijloc si in dreapta, cutia ocoleste butonul de pauza (colt dreapta jos); de la 736 px, toate ocolesc sagetile.
-  const pauza = carusel.match(/className="absolute bottom-3 right-(\d+) z-10 w-(\d+) h-7/);
+  const pauza = carusel.match(/clasaPauza = "absolute bottom-3 right-(\d+) z-10 w-(\d+) h-7/);
   assert.ok(pauza, "butonul de pauza al caruselului nu mai are forma stiuta");
+  // Butonul chiar primeste clasele astea (implicitul nu e doar declarat).
+  assert.match(carusel, /className=\{clasaPauza\}/);
   const locPauza = (Number(pauza[1]) + Number(pauza[2])) * 4;
   const sageata = carusel.match(/absolute top-1\/2 -translate-y-1\/2 z-10 w-(\d+) h-9/);
   assert.ok(sageata && /className=\{`\$\{arrow\} left-2`\}/.test(carusel) && /className=\{`\$\{arrow\} right-2`\}/.test(carusel), "sagetile caruselului nu mai au forma stiuta");
@@ -276,6 +390,17 @@ test("⚠ textul cel mai lung incape in banner, deasupra punctelor, la orice for
   }
   for (const aliniere of ["stanga", "centru", "dreapta"]) {
     assert.ok(marime(margini[aliniere], 736, 414) > locSageata, `la „${aliniere}”, marginea de la 736 px (${marime(margini[aliniere], 736, 414)} px) lasa cutia peste sageata (${locSageata} px)`);
+  }
+  /*
+   * „Cât ecranul” (24.11.2026): de la `md` in sus pauza sta in STANGA jos, la aceeasi distanta de margine, ca sa nu
+   * ajunga sub butoanele plutitoare de contact din coltul din dreapta al ferestrei. Acolo, cutia aliniata la stanga
+   * trebuie sa o ocoleasca de la cea mai ingusta fereastra la care se aplica (768 px), la orice inaltime de banner.
+   */
+  const pauzaEcran = s.match(/clasaPauza: "absolute bottom-3 right-(\d+) md:right-auto md:left-(\d+) z-10 w-(\d+) h-7/);
+  assert.ok(pauzaEcran, "asezarea „ecran” nu mai muta butonul de pauza in stanga de la `md` in sus");
+  assert.deepEqual([pauzaEcran[1], pauzaEcran[2], pauzaEcran[3]], [pauza[1], pauza[1], pauza[2]], "pauza mutata in stanga nu mai are distanta si marimea celei din dreapta");
+  for (const inaltime of [150, 300, 432, 538]) {
+    assert.ok(marime(margini.stanga, 768, inaltime) > locPauza, `cat ecranul, la 768 px, marginea din stanga (${marime(margini.stanga, 768, inaltime)} px) lasa cutia peste butonul de pauza (${locPauza} px)`);
   }
 });
 
@@ -308,6 +433,11 @@ test("⚠ ghidul din centrul de ajutor numara si numeste toate designurile de ba
   // Lungimile spuse in ghid sunt cele din registru (cele pe care le pastreaza si parserul).
   const camp = (cheie: string) => (variantMeta("hero", "carusel_text")!.fields.find((f) => f.key === cheie) as { maxLength?: number }).maxLength;
   assert.ok(ghid.includes(`„Titlul” (maximum ${camp("titlu")} de caractere), „Textul” (maximum ${camp("text")})`), "lungimile din ghid nu mai sunt cele din registru");
+  // Reglajul de latime (24.11.2026): ghidul il numeste, ii numeste cele doua valori si spune procentul aplicat.
+  const latime = variantMeta("hero", "carusel_text")!.fields.find((f) => f.key === "latime") as { label: string; options: { label: string }[] };
+  assert.ok(ghid.includes(`„${latime.label}”`), `ghidul nu pomeneste reglajul „${latime.label}”`);
+  for (const o of latime.options) assert.ok(ghid.includes(`„${o.label}”`), `ghidul nu pomeneste valoarea „${o.label}”`);
+  assert.ok(ghid.includes(`cel mult ${INALTIME_MAX_BANNERE_ECRAN}% din înălțimea`), "ghidul nu mai spune procentul aplicat bannerelor cat ecranul");
   // Designurile care cer un banner sunt cele numite la „apare stins”.
   for (const v of variante.filter((x) => x.requires?.minBanners)) {
     const stins = ghid.slice(ghid.indexOf("Dacă un design cu bannere apare stins"));
@@ -343,4 +473,6 @@ test("sfatul de marime a bannerelor din editor stie si de designul cu text", () 
   const sfat = a.slice(a.indexOf("function sfatMarimeBanner"), a.indexOf("export function ContinutHero"));
   assert.match(sfat, /if \(varianta === "carusel_text"\) \{\s*return "Se afișează întreg, la proporția primului banner\./, "designul cu text foloseste acelasi carusel adaptiv, deci acelasi sfat");
   assert.match(sfat, /alege poze fără text în ele/);
+  // Cu bannerele cat ecranul, pozele 16:9 se taie: sfatul o spune, cu procentul aplicat.
+  assert.ok(sfat.includes(`ce trece de ${INALTIME_MAX_BANNERE_ECRAN}% din înălțimea ecranului`), "sfatul de marime nu mai spune cat se pastreaza din banner la „Cât ecranul”");
 });

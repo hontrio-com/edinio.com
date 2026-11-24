@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 
 import {
   adresaContNouHontrio, adresaPrezentareHontrio, APLICATIA_HONTRIO, LOCURI_PROMOVARE,
-  pretCaInGoogle, primaImagine, PRODUSE_IN_EXEMPLU, produseDeExemplu, SITE_HONTRIO,
-  URMARIREA_HONTRIO,
+  pretCaInGoogle, primaImagine, PRODUSE_IN_EXEMPLU, PRODUSE_STANDARD, produseDeExemplu,
+  produseleBannerului, SITE_HONTRIO, URMARIREA_HONTRIO,
 } from "./hontrio";
 import { LATIMI } from "../latimi-imagini";
+import { adresaVarianteiTemei } from "../teme/variante-imagini";
 
 const BUTON = "src/components/dashboard/ButonHontrio.tsx";
+const STOC = "src/components/dashboard/ScapaDeStoc.tsx";
 const BANNER = "src/components/dashboard/BannerHontrio.tsx";
 const BARA = "src/components/dashboard/DashboardTopbar.tsx";
 const PAGINA = "src/app/(dashboard)/dashboard/features/page.tsx";
@@ -119,27 +121,60 @@ test("⚠ butonul isi spune numele si cand eticheta e ascunsa", () => {
   assert.match(sursa, /hidden whitespace-nowrap xl:inline/, "eticheta nu mai e ascunsa pe ecrane inguste");
 });
 
-test("⚠⚠ pe telefon butonul nu sta in bara, ci in meniul lateral", () => {
+/** Clasele PRIMULUI element de felul cerut dintr-o bucata de sursa: ale butonului insusi, nu ale copiilor lui. */
+function claseleElementului(bucata: string, eticheta: "a" | "button"): string {
+  const gasit = new RegExp(`<${eticheta}\\s[\\s\\S]*?className="([^"]*)"`).exec(bucata);
+  assert.ok(gasit, `nu am gasit niciun <${eticheta}> cu clase in bucata citita`);
+  return gasit[1];
+}
+
+test("⚠⚠ pe telefon, in bara de sus sta Hontrio, iar Scapa de Stoc doar de la laptop in sus", () => {
   /*
-   * ⚠ MASURAT pe 24.11.2026, nu banuit. Cu butonul in bara, cautarea ramanea cu 91 px
-   * pe un ecran de 390 si cu 70 pe unul de 360 (fara el: 130 si 100): o caseta in
-   * care se vad trei litere. De aceea sub `sm` butonul e ascuns.
+   * ⚠ HOTARAREA PROPRIETARULUI, dupa prima versiune (24.11.2026): „Pe mobil acolo in
+   * topbar in loc de logo de la scapa de stoc, pui Hontrio. Scapadestoc sa se vada
+   * doar de pe laptop/pc sau ecrane mai mari".
    *
-   * ⚠ SI A DOUA JUMATATE, fara de care prima ar fi o stergere: ascuns din bara si
-   * nepus nicaieri, Hontrio n-ar mai exista pentru cine lucreaza de pe telefon. De
-   * aceea meniul lateral are randul lui, cu propria cheie de raport.
+   * ⚠ CELE DOUA JUMATATI SE TIN UNA PE ALTA, de aceea stau in aceeasi proba. Hontrio
+   * aratat pe telefon FARA ca Scapa de Stoc sa fie ascuns inseamna doua butoane de
+   * partener in bara: masurat, cautarii ii ramaneau 91 px la un ecran de 390 si 70 la
+   * unul de 360. Scapa de Stoc ascuns FARA Hontrio la vedere inseamna un telefon fara
+   * nicio usa catre vreuna din cele doua platforme.
+   *
+   * ⚠ SE CITESC CLASELE BUTONULUI INSUSI, nu „apare undeva in fisier": eticheta din
+   * butonul Hontrio are si ea `hidden` (pana la `xl`), iar o cautare pe tot fisierul
+   * ar fi luat-o drept ascunderea butonului.
    */
   const sursa = readFileSync(BUTON, "utf8");
-  const buton = sursa.slice(sursa.indexOf("export function ButonHontrio"), sursa.indexOf("export function RandHontrio"));
-  assert.match(buton, /className="hidden [^"]*sm:inline-flex"/, "butonul din bara se vede si pe telefon");
+  const butonHontrio = sursa.slice(sursa.indexOf("export function ButonHontrio"), sursa.indexOf("export function RandHontrio"));
+  const claseHontrio = claseleElementului(butonHontrio, "a").split(/\s+/);
+  assert.ok(claseHontrio.includes("inline-flex"), "butonul Hontrio nu mai e la vedere pe orice latime");
+  assert.ok(!claseHontrio.includes("hidden"), "butonul Hontrio e ascuns pe o treapta de latime: pe telefon trebuie sa se vada");
 
-  const rand = sursa.slice(sursa.indexOf("export function RandHontrio"));
+  const sursaStoc = readFileSync(STOC, "utf8");
+  const butonStoc = sursaStoc.slice(sursaStoc.indexOf("export function ButonScapaDeStoc"), sursaStoc.indexOf("function Fereastra"));
+  const claseStoc = claseleElementului(butonStoc, "button").split(/\s+/);
+  assert.ok(claseStoc.includes("hidden"), "Scapa de Stoc se vede si pe telefon");
+  assert.ok(claseStoc.includes("lg:inline-flex"), "Scapa de Stoc nu mai apare de la `lg` in sus");
+  for (const prag of ["sm:inline-flex", "md:inline-flex"]) {
+    assert.ok(!claseStoc.includes(prag), `Scapa de Stoc apare de la ${prag}, adica si pe tableta`);
+  }
+});
+
+test("⚠ meniul lateral de pe telefon spune numele intreg, cu cheia lui de raport", () => {
+  /*
+   * In bara, sub `xl`, butonul Hontrio e doar semnul „H", iar pe un ecran cu atingere
+   * nu exista nici indiciul de la trecerea cu mausul. Randul din meniu e locul in care
+   * scrie ce e. Cheia lui de raport e alta decat a butonului, ca sa se vada in
+   * rapoartele Hontrio daca randul e folosit.
+   */
+  const sursa = readFileSync(BUTON, "utf8");
+  const rand = sursa.slice(sursa.indexOf("export function RandHontrio"), sursa.indexOf("function SemnHontrio"));
   assert.match(rand, /adresaPrezentareHontrio\("meniu-telefon"\)/, "randul din meniu nu are cheia lui de raport");
-  assert.match(rand, /rel="noopener noreferrer"/);
+  assert.match(rand, /\{INDEMN_HONTRIO\}/, "randul din meniu nu mai scrie indemnul");
 
   const bara = readFileSync(BARA, "utf8");
   const meniu = bara.slice(bara.indexOf("{/* Mobile drawer */}"));
-  assert.ok(meniu.length > 0 && meniu.includes("<RandHontrio "), "meniul lateral de pe telefon nu mai are randul Hontrio");
+  assert.ok(meniu.length > 1 && meniu.includes("<RandHontrio "), "meniul lateral de pe telefon nu mai are randul Hontrio");
 });
 
 test("⚠ semnul Hontrio nu se inverseaza pe o tema care nu exista", () => {
@@ -190,14 +225,50 @@ test("⚠ fiecare legatura din banner care deschide o fila noua are `noopener`",
   assert.match(sursa, /adresaPrezentareHontrio\("banner-integrari", "how"\)/);
 });
 
-test("⚠ exemplul cu produse scrie ca e un exemplu", () => {
+test("⚠ exemplul cu produse scrie ca e un exemplu, si nu spune „ale tale” peste cele standard", () => {
   /*
-   * Reproducerea arata ca rezultatele Google, cu produsele adevarate ale
-   * magazinului. Fara eticheta, ar parea captura unor reclame care ruleaza deja.
+   * Reproducerea arata ca rezultatele Google. Fara eticheta, ar parea captura unor
+   * reclame care ruleaza deja.
+   *
+   * ⚠ SI ETICHETA ATARNA DE ALE CUI SUNT PRODUSELE. De cand bannerul arata produse
+   * standard magazinului care n-are inca trei cu poza, „Exemplu cu produsele tale"
+   * pus peste ele ar fi o minciuna, chiar pe randul care spune ca reproducerea e
+   * cinstita. Cele doua etichete se aleg dupa `aleMagazinului`, si la fel numele
+   * citit de cititoarele de ecran.
    */
   const sursa = readFileSync(BANNER, "utf8");
-  assert.match(sursa, /Exemplu cu produsele tale/);
-  assert.match(sursa, /aria-label="Exemplu:/, "cititoarele de ecran nu mai afla ca e un exemplu");
+  assert.match(
+    sursa, /\{aleMagazinului \? "Exemplu cu produsele tale" : "Exemplu de reclame"\}/,
+    "eticheta de deasupra exemplului nu se mai alege dupa ale cui sunt produsele",
+  );
+  assert.match(
+    sursa,
+    /aria-label=\{\s*aleMagazinului\s*\? "Exemplu: trei produse din magazinul tău[^"]*"\s*: "Exemplu: trei produse arătate[^"]*"\s*\}/,
+    "numele citit de cititoarele de ecran nu se mai alege dupa ale cui sunt produsele",
+  );
+});
+
+test("⚠ cat se asteapta produsele magazinului, in locul lor nu se arata nimic", () => {
+  /*
+   * Produsele standard puse ca stare de asteptare ar fi aparut o clipa si ar fi fost
+   * inlocuite cu ale magazinului: un palpait la fiecare deschidere a paginii.
+   */
+  const sursa = readFileSync(BANNER, "utf8");
+  assert.match(sursa, /<Suspense fallback=\{null\}>\s*<ReclameleMagazinului /);
+});
+
+test("⚠ produsele din banner vin intr-o ordine care nu lasa nicio egalitate", () => {
+  /*
+   * Pe magazinul demo, sase produse scoase in fata au toate `sort_order` 0. Fara
+   * departajare, baza le intoarce in ce ordine vrea: vazut pe 24.11.2026, aceeasi
+   * asezare ceruta pe doua cai a pus in fata alte trei produse. Un exemplu care isi
+   * poate schimba produsele de la o deschidere la alta pare stricat.
+   *
+   * `id` la coada e cel care inchide orice egalitate: e cheia primara.
+   */
+  const sursa = readFileSync(BANNER, "utf8");
+  const criterii = [...sursa.matchAll(/\.order\("([a-z_]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(criterii, ["is_featured", "sort_order", "created_at", "id"]);
 });
 
 test("⚠ pozele din banner cer o latime de pe scara casei", () => {
@@ -223,23 +294,104 @@ const rand = (id: string, peste: Record<string, unknown> = {}) => ({
   ...peste,
 });
 
-test("prima poza se ia doar daca e o adresa http", () => {
+test("prima poza folosibila: o adresa http sau o cale din radacina site-ului", () => {
   assert.equal(primaImagine(["https://a.ro/x.webp", "https://a.ro/y.webp"]), "https://a.ro/x.webp");
   assert.equal(primaImagine(["  https://a.ro/x.webp "]), "https://a.ro/x.webp");
+  /* Prima din lista poate fi stricata; se ia urmatoarea buna, nu se renunta la produs. */
+  assert.equal(primaImagine([null, "", "https://a.ro/y.webp"]), "https://a.ro/y.webp");
   /* `images` e `jsonb`: poate veni orice, inclusiv forme vechi sau stricate. */
-  for (const stricat of [null, undefined, "https://a.ro/x.webp", [], [null], [{ url: "x" }], ["/local.png"], ["javascript:alert(1)"]]) {
+  for (const stricat of [null, undefined, "https://a.ro/x.webp", [], [null], [{ url: "x" }], ["local.png"], ["javascript:alert(1)"], ["data:image/png;base64,AAAA"]]) {
     assert.equal(primaImagine(stricat), null, JSON.stringify(stricat));
   }
 });
 
-test("⚠ exemplul are toate produsele sau niciunul", () => {
+test("⚠⚠ produsele puse de o tema au pozele pe cai din radacina, si se vad in banner", () => {
+  /*
+   * ⚠ DEFECT ADEVARAT AL PRIMEI FORME, prins pe magazinul demo (24.11.2026). Functia
+   * cerea `http(s)://`. Produsele venite cu datele demo ale unei teme isi tin poza ca
+   * `/teme/mercur/produse/minge-cauciuc.webp`, deci erau sarite toate: primele sase
+   * produse din vitrina lipseau din banner, fara nicio eroare, iar in locul lor
+   * apareau abia al saptelea, al optulea si al noualea.
+   *
+   * Proba de atunci scria chiar asta ca regula (`["/local.png"]` trebuia refuzat).
+   * Era o presupunere, nu ceva citit din baza.
+   */
+  assert.equal(primaImagine(["/teme/mercur/produse/minge-cauciuc.webp"]), "/teme/mercur/produse/minge-cauciuc.webp");
+  const alese = produseDeExemplu([
+    rand("a", { images: ["/teme/mercur/produse/a.webp"] }),
+    rand("b", { images: ["/teme/mercur/produse/b.webp"] }),
+    rand("c", { images: ["/teme/mercur/produse/c.webp"] }),
+  ]);
+  assert.deepEqual(alese.map((p) => p.id), ["a", "b", "c"]);
+});
+
+test("⚠ `//gazda/poza` nu e o cale din radacina, ci o adresa catre alta gazda", () => {
+  /*
+   * Scrisa fara protocol, adresa incepe tot cu `/`, dar duce la gazda numita dupa
+   * cele doua bare. Luata drept cale locala, ar fi incarcat in panou o poza de pe un
+   * site ales de cine a scris-o in campul produsului.
+   */
+  assert.equal(primaImagine(["//rau.ro/x.png"]), null);
+  assert.equal(primaImagine(["//rau.ro/x.png", "/teme/a.webp"]), "/teme/a.webp");
+});
+
+test("⚠ din produsele magazinului se iau toate trei sau niciunul", () => {
   /*
    * Un exemplu cu un singur card arata ca o pagina stricata, iar unul completat cu
-   * produse inventate n-ar mai fi „produsele tale".
+   * produse de-ale noastre n-ar mai fi „produsele tale".
    */
   assert.equal(produseDeExemplu([rand("a"), rand("b"), rand("c"), rand("d")]).length, PRODUSE_IN_EXEMPLU);
   assert.deepEqual(produseDeExemplu([rand("a"), rand("b")]), []);
   assert.deepEqual(produseDeExemplu([]), []);
+});
+
+test("⚠⚠ magazinul fara trei produse cu poza vede produsele standard, nu un banner gol", () => {
+  /*
+   * ⚠ HOTARAREA PROPRIETARULUI, dupa prima versiune (24.11.2026): „daca nu are
+   * produse sau imagini la produse sa apara astea standard". Prima versiune lasa
+   * atunci bannerul doar cu textul.
+   *
+   * ⚠ SI NICIODATA AMESTECATE. Cu doua produse ale lui si unul standard, eticheta
+   * n-ar mai putea spune nici „ale tale", nici „exemplu de reclame" fara sa minta
+   * despre unul din carduri.
+   */
+  const ale = produseleBannerului([rand("a"), rand("b"), rand("c")]);
+  assert.equal(ale.aleMagazinului, true);
+  assert.deepEqual(ale.produse.map((p) => p.id), ["a", "b", "c"]);
+
+  for (const preaPutine of [[], [rand("a")], [rand("a"), rand("b")], [rand("a"), rand("b"), rand("fara-poza", { images: [] })]]) {
+    const rezultat = produseleBannerului(preaPutine);
+    assert.equal(rezultat.aleMagazinului, false, `${preaPutine.length} randuri`);
+    assert.deepEqual(rezultat.produse, PRODUSE_STANDARD, `${preaPutine.length} randuri: produsele nu sunt cele standard, intregi`);
+  }
+});
+
+test("⚠ produsele standard au pozele pe disc, cu varianta mica pe care o cere bannerul", () => {
+  /*
+   * ⚠ O POZA STANDARD CARE LIPSESTE E O POZA RUPTA IN PANOUL FIECARUI MAGAZIN NOU, si
+   * nu s-ar vedea nicaieri in probe: `next/image` nu verifica nimic la construire.
+   * Pozele sunt ale temei Marte; daca tema isi redenumeste un fisier, proba cade aici.
+   *
+   * Se cauta si VARIANTA pe care o cere bannerul (`adresaVarianteiTemei`, la latimea
+   * din cod), nu doar poza mare: loaderul cere varianta, nu originalul.
+   */
+  assert.equal(PRODUSE_STANDARD.length, PRODUSE_IN_EXEMPLU);
+  const sursa = readFileSync(BANNER, "utf8");
+  const latime = Number(/<Image[^>]*?width=\{(\d+)\}/.exec(sursa)?.[1]);
+  assert.ok(latime > 0, "nu am gasit latimea pozei in banner");
+
+  for (const p of PRODUSE_STANDARD) {
+    assert.equal(primaImagine([p.imagine]), p.imagine, `${p.id}: poza n-ar trece de propria noastra verificare`);
+    assert.ok(existsSync(`public${p.imagine}`), `${p.id}: lipseste public${p.imagine}`);
+    for (const densitate of [1, 2]) {
+      const varianta = adresaVarianteiTemei(p.imagine, latime * densitate);
+      assert.ok(varianta, `${p.id}: loaderul nu recunoaste poza ca fiind a unei teme`);
+      assert.ok(existsSync(`public${varianta}`), `${p.id}: lipseste varianta public${varianta}`);
+    }
+    assert.ok(p.nume.trim().length > 0 && p.pret > 0, `${p.id}: nume sau pret lipsa`);
+    assert.ok(p.pretVechi === null || p.pretVechi > p.pret, `${p.id}: pretul vechi nu e mai mare decat cel curent`);
+  }
+  assert.equal(new Set(PRODUSE_STANDARD.map((p) => p.id)).size, PRODUSE_STANDARD.length, "doua produse standard au acelasi id");
 });
 
 test("⚠ produsele fara poza, fara nume sau fara pret sunt sarite, in ordinea primita", () => {

@@ -90,22 +90,38 @@ export interface ProdusDeExemplu {
   imagine: string;
 }
 
-/** Prima poza a produsului, daca e o adresa `http(s)`. `images` e `jsonb`: poate fi orice. */
+/**
+ * O adresa de poza pe care o putem arata: `http(s)://…` sau o cale din radacina site-ului (`/…`).
+ *
+ * ⚠ CALEA DIN RADACINA E O FORMA ADEVARATA, nu una de aparat. Produsele puse de o
+ * tema (datele ei demo) au pozele in `public/teme/…`, deci `images` le tine ca
+ * `/teme/mercur/produse/minge-cauciuc.webp`. Prima forma a functiei cerea
+ * `http(s)` si sarea peste ele: vazut pe magazinul demo, unde primele sase produse
+ * din vitrina lipseau din banner, fara nicio eroare.
+ *
+ * ⚠ `//gazda/…` NU e cale din radacina, e adresa catre ALTA gazda (fara protocol):
+ * de aceea al doilea semn nu are voie sa fie tot `/`.
+ */
+const ADRESA_DE_POZA = /^(https?:\/\/|\/(?!\/))/i;
+
+/** Prima poza folosibila a produsului. `images` e `jsonb`: poate fi orice. */
 export function primaImagine(images: unknown): string | null {
   if (!Array.isArray(images)) return null;
-  const prima = images[0];
-  if (typeof prima !== "string") return null;
-  const curata = prima.trim();
-  return /^https?:\/\//i.test(curata) ? curata : null;
+  for (const una of images) {
+    if (typeof una !== "string") continue;
+    const curata = una.trim();
+    if (ADRESA_DE_POZA.test(curata)) return curata;
+  }
+  return null;
 }
 
 /**
- * Alege produsele pentru exemplul din banner, din randurile citite.
+ * Alege produsele MAGAZINULUI pentru exemplul din banner, din randurile citite.
  *
- * ⚠ ORI TOATE TREI, ORI NIMIC. Un exemplu cu un singur produs arata ca o pagina
- * stricata, iar unul completat cu produse inventate n-ar mai fi „produsele tale".
- * Cand magazinul n-are trei produse cu poza si pret, bannerul ramane doar cu
- * textul.
+ * ⚠ ORI TOATE TREI, ORI NICIUNUL. Un exemplu cu un singur produs arata ca o pagina
+ * stricata, iar unul completat cu produse de-ale noastre n-ar mai fi „produsele
+ * tale". Cand magazinul n-are trei produse cu poza si pret, bannerul le arata pe
+ * cele standard (`produseleBannerului`).
  */
 export function produseDeExemplu(
   randuri: ReadonlyArray<{
@@ -133,6 +149,59 @@ export function produseDeExemplu(
     if (alese.length === PRODUSE_IN_EXEMPLU) return alese;
   }
   return [];
+}
+
+/**
+ * Produsele standard ale exemplului, pentru magazinul care n-are inca trei produse
+ * cu poza (cerut de proprietar, 24.11.2026: „daca nu are produse sau imagini la
+ * produse sa apara astea standard").
+ *
+ * ⚠ POZELE SUNT ALE PLATFORMEI, din datele demo ale temei Marte (`public/teme/marte`,
+ * facute pentru ea). Nu se aduce nimic de pe alta gazda: bannerul sta in panoul
+ * fiecarui comerciant, iar o poza luata de pe un site strain ar fi o cerere catre
+ * acel site la fiecare deschidere a paginii, si o poza rupta in ziua in care
+ * dispare de acolo.
+ *
+ * ⚠ NUMELE SUNT CELE DIN `teme/marte/date-demo.ts`, ca poza si numele sa spuna
+ * acelasi lucru. Preturile sunt de exemplu: doua produse la reducere si unul
+ * intreg, ca in bloc sa se vada amandoua felurile de card.
+ */
+export const PRODUSE_STANDARD: readonly ProdusDeExemplu[] = [
+  {
+    id: "standard-pendul",
+    nume: "Pendul din ratan împletit, 50 cm",
+    pret: 389,
+    pretVechi: 459,
+    imagine: "/teme/marte/produse/pendul-ratan.webp",
+  },
+  {
+    id: "standard-veioza",
+    nume: "Veioză din ceramică, abajur din in",
+    pret: 229,
+    pretVechi: null,
+    imagine: "/teme/marte/produse/veioza-ceramica.webp",
+  },
+  {
+    id: "standard-vaze",
+    nume: "Set 3 vaze din teracotă",
+    pret: 89,
+    pretVechi: 109,
+    imagine: "/teme/marte/produse/vaze-teracota.webp",
+  },
+];
+
+/**
+ * Ce produse arata bannerul: ale magazinului, cand are trei cu poza, altfel cele
+ * standard. `aleMagazinului` alege si eticheta de deasupra: „Exemplu cu produsele
+ * tale" nu are voie sa stea peste produse care nu sunt ale lui.
+ */
+export function produseleBannerului(
+  randuri: Parameters<typeof produseDeExemplu>[0],
+): { produse: readonly ProdusDeExemplu[]; aleMagazinului: boolean } {
+  const ale = produseDeExemplu(randuri);
+  return ale.length === PRODUSE_IN_EXEMPLU
+    ? { produse: ale, aleMagazinului: true }
+    : { produse: PRODUSE_STANDARD, aleMagazinului: false };
 }
 
 const FORMAT_PRET = new Intl.NumberFormat("ro-RO", {

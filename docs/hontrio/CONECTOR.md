@@ -251,10 +251,14 @@ Integrări tuturor. Stins, îl văd doar magazinele conectate. Autorizarea nu de
 
 Separat de conector și de intrerupător, panoul trimite comercianții spre Hontrio din trei locuri:
 
-- butonul „Promovează-ți magazinul” din bara de sus, lângă „Scapă de Stoc” (de la 640 px în sus);
-- rândul cu același nume din meniul lateral de pe telefon, unde butonul nu încape lângă căutare;
+- butonul „Promovează-ți magazinul” din bara de sus, lângă „Scapă de Stoc”. Se vede pe orice lățime,
+  cu textul de la 1280 px în sus. Sub 1024 px stă singur: „Scapă de Stoc” apare doar de la laptop în
+  sus (cerut de proprietar, 24.11.2026);
+- rândul cu același nume din meniul lateral de pe telefon și de pe tabletă, unde butonul din bară e
+  doar semnul „H”;
 - bannerul negru din capul paginii de Integrări, cu trei produse ale magazinului arătate ca reclame
-  Google. Se vede doar cât magazinul nu e conectat la Hontrio.
+  Google. Când magazinul n-are trei produse cu poză, apar trei produse standard (pozele temei Marte),
+  sub eticheta „Exemplu de reclame”. Bannerul se vede doar cât magazinul nu e conectat la Hontrio.
 
 Adresele și textele stau în `src/lib/parteneri/hontrio.ts`, singurul loc care scrie domeniul lor.
 Fiecare legătură poartă `utm_source=edinio`, `utm_medium=panou` și, în `utm_campaign`, locul din

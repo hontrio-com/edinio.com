@@ -249,7 +249,9 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
             Un buton de partener nu are ce cauta inaintea ei in ordinea apasarii.
 
             Hontrio (24.11.2026) sta langa Scapa de Stoc, in aceeasi forma: sunt
-            cele doua usi catre platforme din afara panoului.
+            cele doua usi catre platforme din afara panoului. Sub `lg` ramane
+            doar Hontrio: Scapa de Stoc se vede de la laptop in sus (cerut de
+            proprietar; clasele sunt in fiecare buton).
           */}
           <ButonHontrio />
           <ButonScapaDeStoc />
@@ -551,9 +553,8 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
           </Link>
 
           {/*
-            Hontrio. Pe telefon butonul lui nu incape in bara de sus langa cautare
-            (masuratorile sunt in `ButonHontrio`), deci intrarea sta aici, ca rand
-            cu text. Meniul asta nu se vede de la `lg` in sus, unde e butonul.
+            Hontrio, cu numele intreg. In bara de sus, sub `xl`, butonul lui e doar
+            semnul „H"; aici scrie si ce face. Meniul asta se vede doar sub `lg`.
           */}
           <RandHontrio laApasare={() => setMobileOpen(false)} />
 

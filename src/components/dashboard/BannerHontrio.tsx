@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { GrilaPalpaitoare } from "@/components/dashboard/GrilaPalpaitoare";
 import {
   adresaContNouHontrio, adresaPrezentareHontrio, CE_FACE_HONTRIO, pretCaInGoogle,
-  produseDeExemplu, type ProdusDeExemplu,
+  PRODUSE_STANDARD, produseleBannerului, type ProdusDeExemplu,
 } from "@/lib/parteneri/hontrio";
 
 /*
@@ -42,8 +42,14 @@ import {
   nu spune nimic (lectia de la bannerele tbi). Cu propriile produse, omul vede
   exact ce i se propune: marfa lui, intr-o reclama de pe Google.
 
+  ⚠ CAND N-ARE INCA TREI PRODUSE CU POZA, apar cele standard (`PRODUSE_STANDARD`),
+  cerut de proprietar dupa prima versiune, care lasa atunci bannerul doar cu
+  textul. Tot standard iese si cand citirea produselor cade.
+
   ⚠ E UN EXEMPLU, SI SCRIE CA E. Deasupra reproducerii sta „Exemplu cu produsele
-  tale": fara eticheta, ar parea o captura a unor reclame care ruleaza deja.
+  tale": fara eticheta, ar parea o captura a unor reclame care ruleaza deja. Peste
+  produsele standard eticheta e „Exemplu de reclame": acelea nu sunt ale lui, si
+  nu i se spune ca ar fi.
 
   ═══ ⚠ DE CE `Suspense`, SI DE CE PRODUSELE SE CITESC AICI, NU IN PAGINA ═══
 
@@ -53,9 +59,12 @@ import {
   intarziat TOATA pagina pentru un decor. Aici, textul bannerului pleaca odata cu
   pagina, iar produsele vin pe flux cand sunt gata.
 
+  ⚠ CAT SE ASTEAPTA NU SE ARATA NIMIC IN LOCUL LOR, nici macar produsele standard:
+  ar fi aparut o clipa si ar fi fost inlocuite cu ale lui, adica exact palpaitul
+  care face o pagina sa para nesigura.
+
   ⚠ SI NU MISCA NIMIC CAND SOSESC: reproducerea e asezata absolut, in locul pe care
-  coloana de text i-l lasa oricum liber. Banner cu produse sau fara, inaltimea e
-  aceeasi.
+  coloana de text i-l lasa oricum liber. Inainte si dupa, inaltimea e aceeasi.
 
   ═══ ⚠ LATIMEA SE MASOARA PE BANNER, NU PE ECRAN ═══
 
@@ -156,24 +165,27 @@ export function BannerHontrio({ businessId }: { businessId: string | null }) {
         </div>
       </div>
 
-      {businessId && (
+      {businessId ? (
         <Suspense fallback={null}>
           <ReclameleMagazinului businessId={businessId} />
         </Suspense>
+      ) : (
+        /* Fara magazin nu e ce citi: produsele standard, pe loc. */
+        <ExempluReclame produse={PRODUSE_STANDARD} aleMagazinului={false} />
       )}
     </section>
   );
 }
 
 /**
- * Trei produse ale magazinului, aratate ca reclame Google Shopping.
+ * Citeste produsele magazinului si le arata ca reclame Google Shopping; cand n-are
+ * trei cu poza, le arata pe cele standard (vezi `produseleBannerului`).
  *
- * ⚠ O CITIRE CAZUTA INSEAMNA DOAR BANNER FARA EXEMPLU, nu o pagina picata si nu un
- * mesaj de eroare: e un decor, iar textul si butoanele de langa el merg oricum.
- * La fel cand magazinul n-are inca trei produse cu poza (vezi `produseDeExemplu`).
+ * ⚠ O CITIRE CAZUTA INSEAMNA PRODUSELE STANDARD, nu o pagina picata si nu un mesaj
+ * de eroare: e un decor, iar textul si butoanele de langa el merg oricum.
  */
 async function ReclameleMagazinului({ businessId }: { businessId: string }) {
-  let produse: ProdusDeExemplu[] = [];
+  let randuri: Parameters<typeof produseleBannerului>[0] = [];
   try {
     const supabase = await createClient();
     /*
@@ -186,6 +198,14 @@ async function ReclameleMagazinului({ businessId }: { businessId: string }) {
       ⚠ Citirea trece prin toate produsele active ale magazinului ca sa le aseze
       (indexul e pe `business_id, is_active`, nu pe ordine). De aceea sta sub
       `Suspense`, nu in corpul paginii: la un catalog mare, pagina nu o asteapta.
+
+      ⚠ ULTIMELE DOUA CRITERII SUNT DE DEPARTAJARE, si nu sunt de prisos. Pe magazinul
+      demo, sase produse scoase in fata au toate `sort_order` 0: fara departajare,
+      baza le intoarce in ce ordine vrea. Vazut pe 24.11.2026: aceeasi asezare,
+      ceruta o data in SQL si o data prin API, a pus in fata alte trei produse. Un
+      exemplu care isi poate schimba produsele de la o deschidere la alta pare
+      stricat. Intai cele mai noi, ca in lista de produse din panou, apoi `id`, ca
+      sa nu ramana nicio egalitate.
     */
     const { data } = await supabase
       .from("products")
@@ -194,21 +214,42 @@ async function ReclameleMagazinului({ businessId }: { businessId: string }) {
       .eq("is_active", true)
       .order("is_featured", { ascending: false })
       .order("sort_order")
+      .order("created_at", { ascending: false })
+      .order("id")
       .limit(12);
-    produse = produseDeExemplu(data ?? []);
+    randuri = data ?? [];
   } catch {
-    produse = [];
+    randuri = [];
   }
-  if (produse.length === 0) return null;
+  return <ExempluReclame {...produseleBannerului(randuri)} />;
+}
 
+/**
+ * Blocul „Produse promovate" din cautarea Google, cu trei produse in el.
+ *
+ * ⚠ ETICHETA SE ALEGE DUPA ALE CUI SUNT PRODUSELE. „Exemplu cu produsele tale" peste
+ * produsele standard ar fi o minciuna mica, dar chiar pe randul care spune ca
+ * reproducerea e cinstita. Acelasi lucru pentru numele citit de cititoarele de ecran.
+ */
+function ExempluReclame({
+  produse,
+  aleMagazinului,
+}: {
+  produse: readonly ProdusDeExemplu[];
+  aleMagazinului: boolean;
+}) {
   return (
     <div
       role="img"
-      aria-label="Exemplu: trei produse din magazinul tău, arătate ca reclame în căutarea Google."
+      aria-label={
+        aleMagazinului
+          ? "Exemplu: trei produse din magazinul tău, arătate ca reclame în căutarea Google."
+          : "Exemplu: trei produse arătate ca reclame în căutarea Google."
+      }
       className="absolute inset-y-0 right-6 hidden w-[44.2em] flex-col text-[8.8px] @[52rem]:flex"
     >
       <p aria-hidden="true" className="flex h-11 flex-shrink-0 items-center text-[11px] text-white/55">
-        Exemplu cu produsele tale
+        {aleMagazinului ? "Exemplu cu produsele tale" : "Exemplu de reclame"}
       </p>
 
       {/*

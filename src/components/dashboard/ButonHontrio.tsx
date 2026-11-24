@@ -19,20 +19,29 @@ import {
   ⚠ FARA `"use client"`: n-are stare si n-are efecte. Ajunge oricum in pachetul
   browserului, fiindca il importa bara de sus, care e componenta de client.
 
-  ═══ ⚠ TREI TREPTE DE LATIME, TOATE MASURATE (24.11.2026) ═══
+  ═══ ⚠ DOUA TREPTE DE LATIME, MASURATE PE PAGINA ADEVARATA (24.11.2026) ═══
 
-  De la 1280 px (`xl`): sigla si eticheta. Butonul are 187 px, iar cautarea isi
-  pastreaza cei 384 px ai ei.
+  De la 1280 px (`xl`): sigla si eticheta. Butonul are 187 px, iar cautarii ii
+  raman 371 (din cei 384 cat poate avea), cu un prenume de unsprezece litere in
+  dreapta.
 
-  Intre 640 si 1279 px: doar sigla (33 px). Eticheta apare abia de la `xl`, nu de
-  la `lg` ca la Scapa de Stoc. La 1024 px cautarea are 314 px cu butonul fara
-  eticheta; cu eticheta (inca 154 px) i-ar fi ramas 160, adica o caseta in care
-  nu incape nici indemnul ei. Asta e socotit din latimile masurate, nu vazut.
+  Sub 1280 px: doar sigla (33 px), pe orice ecran. Eticheta apare abia de la
+  `xl`, nu de la `lg` ca la Scapa de Stoc: la 1024 px cautarea are 269 px cu
+  butonul fara eticheta, iar cu eticheta (inca 154 px) i-ar fi ramas 115, adica o
+  caseta in care nu incape nici indemnul ei. Asta e socotit din latimile
+  masurate, nu vazut.
 
-  Sub 640 px (telefon): butonul NU se arata in bara. Cu el, cautarea ramanea cu
-  91 px la un ecran de 390 si cu 70 la unul de 360, fata de 130 si 100 fara el:
-  o caseta in care se vad trei litere. Pe telefon intrarea sta in meniul lateral,
-  ca rand cu text (`RandHontrio`, mai jos), unde are loc sa spuna si ce e.
+  ═══ ⚠ PE TELEFON STA IN LOCUL LUI SCAPA DE STOC, NU LANGA EL ═══
+
+  Cerut de proprietar dupa prima versiune: „Pe mobil acolo in topbar in loc de
+  logo de la scapa de stoc, pui Hontrio. Scapadestoc sa se vada doar de pe
+  laptop/pc sau ecrane mai mari". Deci sub `lg` in bara e doar butonul asta, iar
+  Scapa de Stoc apare de la `lg` in sus (clasele sunt in `ScapaDeStoc.tsx`).
+
+  ⚠ DE CE NU AMANDOUA PE TELEFON, cum iesise prima forma inainte de a ascunde
+  unul: doua butoane de partener lasau cautarii 91 px la un ecran de 390 si 70 la
+  unul de 360, adica o caseta in care se vad trei litere. Cu unul singur are 135
+  si 105.
 */
 export function ButonHontrio() {
   return (
@@ -49,7 +58,7 @@ export function ButonHontrio() {
         „Promovează-ți magazinul" singur nu pomeneste ca pleci din panou.
       */
       aria-label={`${INDEMN_HONTRIO} cu ${NUMELE_HONTRIO} (se deschide într-o filă nouă)`}
-      className="hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none sm:inline-flex"
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
     >
       <SemnHontrio className="h-3.5" />
       <span className="hidden whitespace-nowrap xl:inline">{INDEMN_HONTRIO}</span>
@@ -58,11 +67,15 @@ export function ButonHontrio() {
 }
 
 /**
- * Aceeasi usa, ca rand in meniul lateral de pe telefon.
+ * Aceeasi usa, ca rand in meniul lateral de pe telefon si de pe tableta.
  *
- * ⚠ ARE CHEIA LUI DE RAPORT (`meniu-telefon`), nu pe a butonului: altfel vizitele
- * de pe telefon s-ar aduna cu cele de pe calculator si nu s-ar mai vedea daca
- * randul din meniu e folosit de cineva.
+ * Acolo butonul din bara e doar semnul „H", fara eticheta, iar pe un ecran cu
+ * atingere nu exista nici indiciul de la trecerea cu mausul. Randul asta e locul
+ * in care scrie si ce face.
+ *
+ * ⚠ ARE CHEIA LUI DE RAPORT (`meniu-telefon`), nu pe a butonului: altfel apasarile
+ * din meniu s-ar aduna cu cele din bara si nu s-ar mai vedea daca randul e
+ * folosit de cineva.
  */
 export function RandHontrio({ laApasare }: { laApasare?: () => void }) {
   return (

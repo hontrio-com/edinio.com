@@ -133,16 +133,32 @@ test("⚠ si bara de sus chiar are `backdrop-blur`, altfel proba de mai sus n-ar
   );
 });
 
-test("⚠ butonul isi spune numele si cand eticheta e ascunsa, pe telefon", () => {
+test("⚠ butonul se vede doar de la `lg` in sus, cu eticheta la vedere, si isi spune numele", () => {
   /*
-   * ⚠ Sub `lg` eticheta e `display:none`, iar ce e ascuns asa NU intra in numele
-   * accesibil. Fara `aria-label`, numele ar fi venit din `title` — toata descrierea
-   * de o suta cincizeci de semne, citita la fiecare trecere. Si ar fi disparut cu
-   * totul in ziua in care cineva scoate `title`-ul.
+   * ⚠ REGULA S-A SCHIMBAT pe 24.11.2026, la cererea proprietarului: „Scapadestoc sa
+   * se vada doar de pe laptop/pc sau ecrane mai mari". Pana atunci butonul statea si
+   * pe telefon, doar cu marca, iar proba asta pazea eticheta ascunsa sub `lg`. Pe
+   * telefon si pe tableta, locul lui din bara l-a luat butonul Hontrio; proba care
+   * tine cele doua jumatati impreuna e in `hontrio.test.ts`.
+   *
+   * ⚠ ETICHETA NU MAI ARE DE CE SA FIE ASCUNSA: butonul apare doar acolo unde ea
+   * incape. Ascunsa pe vreo treapta, ar lasa pe un laptop un buton doar cu marca,
+   * adica un semn pe care il recunoaste numai cine stie deja ce e.
+   *
+   * ⚠ `aria-label` RAMANE, desi azi numele ar iesi si din eticheta. Pana pe
+   * 24.11.2026 eticheta era ascunsa sub `lg`, iar ce e ascuns cu `display:none` nu
+   * intra in numele accesibil: numele venea atunci din `title`, adica toata
+   * descrierea de o suta cincizeci de semne, citita la fiecare trecere.
    */
   const sursa = readFileSync("src/components/dashboard/ScapaDeStoc.tsx", "utf8");
-  assert.match(sursa, /aria-label=\{NUMELE_LOR\}/, "butonul din bara n-are nume scris explicit");
-  assert.match(sursa, /hidden lg:inline/, "eticheta nu mai e ascunsa pe ecrane mici");
+  const buton = sursa.slice(sursa.indexOf("export function ButonScapaDeStoc"), sursa.indexOf("function Fereastra"));
+  assert.match(buton, /aria-label=\{NUMELE_LOR\}/, "butonul din bara n-are nume scris explicit");
+
+  /* Clasele BUTONULUI insusi (primul `<button>` din functie), nu „apare undeva in fisier". */
+  const clase = /<button\s[\s\S]*?className="([^"]*)"/.exec(buton)?.[1].split(/\s+/) ?? [];
+  assert.ok(clase.includes("hidden"), "butonul se vede si sub `lg`, adica si pe telefon");
+  assert.ok(clase.includes("lg:inline-flex"), "butonul nu mai apare de la `lg` in sus");
+  assert.match(buton, /<span>\{NUMELE_LOR\}<\/span>/, "eticheta butonului e ascunsa pe o treapta de latime");
 });
 
 test("culoarea marcii lor e cea data de ei", () => {

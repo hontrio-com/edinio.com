@@ -65,23 +65,25 @@ export function ButonScapaDeStoc() {
         onClick={() => setDeschis(true)}
         title={CE_FACE}
         /*
-          ⚠ NUMELE SE SCRIE EXPLICIT, nu se lasa pe seama etichetei de langa.
-          Sub `lg` eticheta e `display:none`, iar ce e ascuns asa NU intra in
-          numele accesibil. Ar fi ramas numele din `title` — adica toata descrierea
-          de o suta cincizeci de semne, citita cu glas tare la fiecare trecere, si
-          numai atata vreme cat cineva nu scoate `title`-ul ca „nu se vede pe
-          telefon oricum".
+          ⚠ NUMELE SE SCRIE EXPLICIT, nu se lasa pe seama etichetei de langa. Azi
+          eticheta e la vedere ori de cate ori e si butonul, deci numele ar iesi
+          bine si fara. Dar pana pe 24.11.2026 eticheta era ascunsa sub `lg`, iar
+          ce e ascuns cu `display:none` NU intra in numele accesibil: numele venea
+          atunci din `title`, adica toata descrierea de o suta cincizeci de semne,
+          citita cu glas tare la fiecare trecere. Cine o ascunde iar pe o treapta
+          de latime nu trebuie sa-si aminteasca si de asta.
         */
         aria-label={NUMELE_LOR}
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        /*
+          ⚠ DOAR DE LA `lg` IN SUS, cerut de proprietar pe 24.11.2026: „Scapadestoc
+          sa se vada doar de pe laptop/pc sau ecrane mai mari". Pe telefon si pe
+          tableta, locul lui din bara l-a luat butonul Hontrio (`ButonHontrio`).
+          Amandoua acolo lasau cautarii 91 px la un ecran de 390.
+        */
+        className="hidden h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:inline-flex"
       >
         <Marca className="h-3.5 w-4.5" />
-        {/*
-          Ascuns pe ecrane mici, ca la „Adauga": in bara de sus a unui telefon nu
-          incap doua etichete, iar marca singura ramane recunoscuta. Masurat pe un
-          ecran de 374 px: bara nu da pe dinafara, butonul incape intreg.
-        */}
-        <span className="hidden lg:inline">{NUMELE_LOR}</span>
+        <span>{NUMELE_LOR}</span>
       </button>
 
       {deschis && <Fereastra inchide={() => setDeschis(false)} />}

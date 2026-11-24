@@ -76,6 +76,7 @@ import { EmagFulfillmentPanel } from "@/components/dashboard/EmagFulfillmentPane
 import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
+import { ReturDePrimit } from "@/components/dashboard/ReturDePrimit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1646,6 +1647,9 @@ export function OrderDetailClient({
         ce un buton de AWB sau de factura refuza sa mai faca ceva.
       */}
       <OperatiiAtarnate businessId={businessId} orderId={order.id as string} />
+
+      {/* Returul Curiera al carui stoc asteapta confirmarea primirii. Nimic in cazul normal. */}
+      <ReturDePrimit order={order} />
 
       {/* ── Two-column operational area (single column on mobile) ── */}
       <div className="flex flex-col lg:flex-row lg:gap-5 lg:items-start gap-5">

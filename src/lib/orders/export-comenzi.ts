@@ -3,6 +3,7 @@ import { numeleMetodei } from "@/lib/cont/plata";
 import { detaliileDeLaCheckout } from "@/lib/cont/detalii-checkout";
 import { liniaAdresei, type AdresaLivrare } from "@/lib/orders/adresa";
 import { numarDeUrmarire } from "@/lib/orders/awb-propriu";
+import { coletCuVerificare } from "@/lib/curiera/expediere";
 import { orderStatus } from "@/lib/orders/status";
 
 /**
@@ -18,6 +19,11 @@ import { orderStatus } from "@/lib/orders/status";
  * cheiat pe id-ul campului. Fiecare primeste coloana LUI, cu eticheta magazinului, in ordinea din
  * configurare; cele care nu mai sunt in configurare (sterse, redenumite) vin la urma, cu cheia
  * facuta citibila, ca in contul clientului (`detaliileDeLaCheckout`).
+ *
+ * „Colet cu verificare” (cerut de acelasi magazin, 23.11.2026): coloana apare numai cand macar o
+ * comanda din export are AWB Curiera cu serviciile tinute pe ea (`curiera_servicii_extra`). „Da” =
+ * a plecat cu deschidere la livrare, „Nu” = fara, gol = nu se stie (AWB emis inainte de 23.11.2026
+ * sau alt curier). Un „Nu” scris pe necunoscut ar fi mintit tocmai in coloana ceruta.
  *
  * ⚠ Functie PURA, fara baza si fara biblioteca: ce iese aici se proba; fisierul il face browserul.
  */
@@ -63,6 +69,9 @@ const FIXE: [string, number][] = [
   ["Cont: email", 28], ["Cont: nume", 20], ["ID cont", 38],
 ];
 
+/** Antetul coloanei cu deschiderea coletului la livrare. */
+export const COLOANA_VERIFICARE = "Colet cu verificare";
+
 function sir(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const t = String(v).trim();
@@ -89,6 +98,10 @@ export function tabelulExportului(
   }
   /* Numai coloanele care au macar o valoare: un camp nefolosit nu umple foaia. */
   const folosite = etichete.filter((e) => detalii.some((r) => r.some((d) => d.eticheta === e)));
+
+  /* „Colet cu verificare”: o data pe comanda; coloana exista numai daca se stie macar la una. */
+  const verificare = comenzi.map((o) => coletCuVerificare(o));
+  const areVerificare = verificare.some((v) => v !== null);
 
   const randuri = comenzi.map((o, i): CelulaExport[] => {
     const a = (o.shipping_address ?? {}) as AdresaExport;
@@ -117,6 +130,7 @@ export function tabelulExportului(
       awb?.curier ?? null,
       awb?.awb ?? null,
       awb?.prin ? `${awb.prin.curier} ${awb.prin.awb}` : null,
+      ...(areVerificare ? [verificare[i] === null ? null : verificare[i] ? "Da" : "Nu"] : []),
       cont ? sir(cont.email) : null,
       cont ? sir(cont.nume) : null,
       cont ? cont.contId : null,
@@ -128,10 +142,15 @@ export function tabelulExportului(
    * ⚠ Un camp de checkout cu acelasi nume ca o coloana fixa („Cod postal", „Tara": masurat la
    * magazinul care a cerut exportul) ar fi dat doua coloane cu acelasi antet. Primeste „(formular)".
    */
-  const fixe = new Set(FIXE.map(([a]) => a.toLowerCase()));
+  /* Coloana de verificare sta imediat dupa cele de AWB, unde o cauta omul. */
+  const dupaAwb = FIXE.findIndex(([a]) => a === "AWB intermediar") + 1;
+  const fixeDeAcum: [string, number][] = areVerificare
+    ? [...FIXE.slice(0, dupaAwb), [COLOANA_VERIFICARE, 18], ...FIXE.slice(dupaAwb)]
+    : FIXE;
+  const fixe = new Set(fixeDeAcum.map(([a]) => a.toLowerCase()));
   return {
-    antete: [...FIXE.map(([a]) => a), ...folosite.map((e) => (fixe.has(e.toLowerCase()) ? `${e} (formular)` : e))],
-    latimi: [...FIXE.map(([, l]) => l), ...folosite.map(() => 20)],
+    antete: [...fixeDeAcum.map(([a]) => a), ...folosite.map((e) => (fixe.has(e.toLowerCase()) ? `${e} (formular)` : e))],
+    latimi: [...fixeDeAcum.map(([, l]) => l), ...folosite.map(() => 20)],
     randuri,
   };
 }

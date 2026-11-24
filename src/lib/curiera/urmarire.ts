@@ -111,6 +111,11 @@ export function semnalareCuriera(p: {
    * `statusDupaRetur`). Lipsa = n-a trecut, iar decizia ramane a lui.
    */
   rambursataAutomat?: boolean;
+  /**
+   * Magazinul a ales ca stocul sa revina abia la confirmarea primirii (`stoc_la_retur`), deci
+   * trecerea pe „Rambursat” NU l-a eliberat: omului i se spune ce are de facut cand vine coletul.
+   */
+  stocLaPrimire?: boolean;
 }): { titlu: string; mesaj: string } {
   const comanda = p.orderNumber ? `Comanda ${p.orderNumber}` : "O comanda";
   const ce = p.evenimente && p.evenimente.length > 0 ? p.evenimente.map(descriereEveniment) : [p.eticheta];
@@ -125,7 +130,9 @@ export function semnalareCuriera(p: {
      */
     return {
       titlu: "Colet Curiera returnat",
-      mesaj: p.rambursataAutomat
+      mesaj: p.rambursataAutomat && p.stocLaPrimire
+        ? `${comanda}: coletul ${p.awb} se intoarce la tine (${lista}). Rambursul nu s-a incasat, asa ca am trecut comanda pe Rambursat. Stocul ei revine cand confirmi ca ai primit coletul: deschide comanda si apasa „Retur primit”.`
+        : p.rambursataAutomat
         ? `${comanda}: coletul ${p.awb} se intoarce la tine (${lista}). Rambursul nu s-a incasat, asa ca am trecut comanda pe Rambursat si am eliberat stocul ei.`
         : `${comanda}: coletul ${p.awb} se intoarce la tine (${lista}). Comanda nu s-a mutat singura: statusul ei si, la o plata online, returul banilor raman decizia ta.`,
     };

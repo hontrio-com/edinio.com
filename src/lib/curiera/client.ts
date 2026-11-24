@@ -109,6 +109,14 @@ export type CurieraConfig = {
   dimensiune_eticheta?: DimensiuneEticheta;
   /** Continutul scris pe eticheta cand comanda nu da unul mai bun. */
   continut_implicit?: string;
+  /**
+   * Cand revine in stoc marfa unui colet returnat cu ramburs neincasat (23.11.2026):
+   *   lipsa / `automat`  = cand Curiera anunta returul (regula din 19.10.2026);
+   *   `la_primire`       = cand comerciantul apasa „Retur primit” pe comanda.
+   * ⚠ Curiera pune „returnat” cand coletul PORNESTE inapoi si n-are stare ulterioara, deci
+   * „cand ajunge” nu se poate afla de la ei. Vezi `statusuri.ts` si `retur-primit.actions.ts`.
+   */
+  stoc_la_retur?: "automat" | "la_primire";
 };
 
 export const SERVICIU_ADRESA_IMPLICIT = "standard";

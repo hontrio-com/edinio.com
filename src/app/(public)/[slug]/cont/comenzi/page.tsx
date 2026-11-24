@@ -13,8 +13,17 @@ export const metadata: Metadata = { title: "Comenzile mele", robots: { index: fa
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ p?: string | string[]; q?: string | string[]; stare?: string | string[]; perioada?: string | string[] }>;
+  searchParams: Promise<{
+    p?: string | string[]; q?: string | string[]; stare?: string | string[]; perioada?: string | string[];
+    de_la?: string | string[]; pana_la?: string | string[]; raport?: string | string[];
+  }>;
 }
+
+/* De ce s-a intors omul din descarcarea raportului (`/api/cont/comenzi/raport`). Fara diacritice: vitrina. */
+const MESAJE_RAPORT: Record<string, string> = {
+  gol: "Nu exista comenzi in filtrul ales, deci raportul ar fi gol.",
+  eroare: "Raportul nu s-a putut face acum. Incearca din nou.",
+};
 
 export default async function ComenzileMele({ params, searchParams }: Props) {
   const { slug } = await params;
@@ -58,6 +67,8 @@ export default async function ComenzileMele({ params, searchParams }: Props) {
         pagini={Math.max(1, Math.ceil(total / PE_PAGINA))}
         filtre={filtre}
         comenziInCont={rezumat.comenzi}
+        gasite={total}
+        mesajRaport={typeof sp.raport === "string" ? MESAJE_RAPORT[sp.raport] ?? null : null}
       />
     </PaginaCont>
   );

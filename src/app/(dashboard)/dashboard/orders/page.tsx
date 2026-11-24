@@ -7,7 +7,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { conturileComenzilor } from "@/lib/cont/panou";
-import { aplicaFiltreleListei } from "@/lib/orders/filtrele-listei";
+import { aplicaFiltreleListei, ziuaFiltrului } from "@/lib/orders/filtrele-listei";
 import { ORDERS_PAGE_SIZE, firstParam, pageParam, orSafeTerm } from "@/lib/orders/pagination";
 import { MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
 import { ORDER_STATUS } from "@/lib/orders/status";
@@ -62,6 +62,9 @@ export default async function OrdersPage({
   // Validata contra listei cunoscute, ca sa nu ajunga text arbitrar in filtru.
   const sourceRaw = firstParam(sp.source) ?? "all";
   const source = sourceRaw === "all" || sourceRaw === "store" || sourceRaw in MARKETPLACE_ORIGINI ? sourceRaw : "all";
+  /* Perioada: zile romanesti „YYYY-MM-DD". O valoare care nu e zi se ignora, nu ajunge in filtru. */
+  const deLa = ziuaFiltrului(firstParam(sp.de_la));
+  const panaLa = ziuaFiltrului(firstParam(sp.pana_la));
   const page = pageParam(sp.page);
 
   const { data: bizRow } = await supabase
@@ -191,6 +194,8 @@ export default async function OrdersPage({
           q={q}
           status={status}
           source={source}
+          deLa={deLa}
+          panaLa={panaLa}
           page={page}
           integrari={integrari}
         />
@@ -269,6 +274,8 @@ async function ListaComenzi({
   q,
   status,
   source,
+  deLa,
+  panaLa,
   page,
   integrari,
 }: {
@@ -276,6 +283,8 @@ async function ListaComenzi({
   q: string;
   status: string;
   source: string;
+  deLa: string;
+  panaLa: string;
   page: number;
   integrari: Integrari;
 }) {
@@ -288,7 +297,7 @@ async function ListaComenzi({
     .from("orders")
     .select("*", { count: "exact" })
     .eq("business_id", businessId);
-  listQuery = aplicaFiltreleListei(listQuery, { status, source, q });
+  listQuery = aplicaFiltreleListei(listQuery, { status, source, q, deLa, panaLa });
   const fromIdx = (page - 1) * ORDERS_PAGE_SIZE;
 
   const [{ data: orders, count: totalCount }, { data: statusRows }] = await Promise.all([
@@ -334,7 +343,7 @@ async function ListaComenzi({
    */
   return (
     <CampuriCheckoutProvider campuri={campuriDinConfigurare((setariCheckout as { checkout?: unknown } | null)?.checkout)}>
-    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} facturisEnabled={integrari.facturisEnabled} factureazaEnabled={integrari.factureazaEnabled} easybillEnabled={integrari.easybillEnabled} sagaEnabled={integrari.sagaEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} dateFrom={deLa} dateTo={panaLa} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} facturisEnabled={integrari.facturisEnabled} factureazaEnabled={integrari.factureazaEnabled} easybillEnabled={integrari.easybillEnabled} sagaEnabled={integrari.sagaEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
     </CampuriCheckoutProvider>
   );
 }

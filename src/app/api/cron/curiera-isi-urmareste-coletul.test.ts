@@ -210,8 +210,12 @@ test("⚠⚠ returul trece prin `statusDupaStare`, cu plata si sursa comenzii ci
   assert.doesNotMatch(s, /statusUrmator\(/, "scara chemata direct ocoleste regula returului");
   assert.match(s, /const tinta = statusDupaStare\(\{\s*status: o\.status, metodaPlata: o\.payment_method, starePlata: o\.payment_status, sursa: o\.order_source,\s*\}, c\.status\);/);
   assert.match(s, /\.select\("[^"]*\bpayment_status, payment_method, order_source\b[^"]*"\)/);
-  /* Stocul se elibereaza la retur pe fata, nu pe implicitul tranzitiei. */
-  assert.match(s, /\.\.\.\(eRetur \? \{ elibereazaStoc: true \} : \{\}\),/);
+  /*
+   * Stocul la retur se hotaraste pe fata, nu pe implicitul tranzitiei. Din 23.11.2026 hotararea e a
+   * magazinului (`stoc_la_retur`): implicit se elibereaza, ca pana atunci; cu „la primire” ramane
+   * consumat pana la „Retur primit”. Regula e probata in `retur-la-primire.test.ts`.
+   */
+  assert.match(s, /\.\.\.\(eRetur \? \{ elibereazaStoc: elibereazaStoculLaRetur\(cfg\) \} : \{\}\),/);
 });
 
 test("⚠ dupa returul trecut pe Rambursat: GA4 primeste perechea, notificarea spune ce s-a facut", () => {

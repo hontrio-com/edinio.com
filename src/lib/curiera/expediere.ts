@@ -299,3 +299,27 @@ export function parametriExpediereCuriera(config: CurieraConfig, date: DateExped
   }
   return p;
 }
+
+/** Id-ul serviciului extra „Deschidere colet la livrare” (`list_services?type=extra`, 29.09.2026). */
+export const SERVICIU_DESCHIDERE_COLET = "443";
+
+/**
+ * Serviciile extra care au plecat cu expedierea, citite din parametrii ei (`service_<id>`).
+ * Se scriu pe comanda la emitere (`orders.curiera_servicii_extra`).
+ */
+export function serviciiExtraTrimise(parametri: Record<string, string>): string[] {
+  return Object.keys(parametri)
+    .map((k) => /^service_(\d+)$/.exec(k)?.[1])
+    .filter((id): id is string => !!id)
+    .sort();
+}
+
+/**
+ * „Colet cu verificare” pentru export: `true` / `false`, sau `null` cand nu se stie (comanda fara
+ * AWB Curiera, sau AWB emis inainte ca serviciile sa fie tinute pe comanda).
+ */
+export function coletCuVerificare(o: { [coloana: string]: unknown }): boolean | null {
+  if (typeof o.curiera_awb_number !== "string" || !o.curiera_awb_number.trim()) return null;
+  if (!Array.isArray(o.curiera_servicii_extra)) return null;
+  return o.curiera_servicii_extra.map(String).includes(SERVICIU_DESCHIDERE_COLET);
+}

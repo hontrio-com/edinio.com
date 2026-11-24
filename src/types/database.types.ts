@@ -4757,6 +4757,7 @@ export type Database = {
           curiera_partener: string | null
           curiera_partener_awb: string | null
           curiera_reference: string | null
+          curiera_servicii_extra: string[] | null
           curiera_status_at: string | null
           curiera_status_checked_at: string | null
           curiera_status_code: string | null
@@ -5022,6 +5023,7 @@ export type Database = {
           curiera_partener?: string | null
           curiera_partener_awb?: string | null
           curiera_reference?: string | null
+          curiera_servicii_extra?: string[] | null
           curiera_status_at?: string | null
           curiera_status_checked_at?: string | null
           curiera_status_code?: string | null
@@ -5287,6 +5289,7 @@ export type Database = {
           curiera_partener?: string | null
           curiera_partener_awb?: string | null
           curiera_reference?: string | null
+          curiera_servicii_extra?: string[] | null
           curiera_status_at?: string | null
           curiera_status_checked_at?: string | null
           curiera_status_code?: string | null
@@ -8144,6 +8147,7 @@ export type Database = {
       // rezervarea sub el, altfel scoaterea unei linii ar manca rezervarea alteia.
       editeaza_comanda_atomic: { Args: { p_order_id: string; p_business_id: string; p_patch: Json; p_produse: Json; p_variante: Json; p_status_asteptat?: string | null; p_produse_minus?: Json; p_variante_minus?: Json; p_produse_necesar?: Json; p_variante_necesar?: Json }; Returns: Json }
       scade_din_rezervat: { Args: { p_rez: Json; p_produse_minus: Json; p_variante_minus: Json; p_produse_necesar?: Json; p_variante_necesar?: Json }; Returns: Json }
+      elibereaza_stoc_comanda: { Args: { p_order_id: string }; Returns: string }
       elibereaza_stoc_complet: { Args: { p_produse: Json; p_variante: Json }; Returns: undefined }
       /* ⚠ Scrie peticul de token DOAR daca nimeni n-a rotit de cand a citit apelantul.
          `false` = altcineva a rotit; se reciteste, nu se scrie peste. */
@@ -8765,6 +8769,32 @@ export type Database = {
         Args: { p_business: string; p_email: string; p_ip?: string | null }
         Returns: { blocat_cont: boolean; blocat_ip: boolean; cont_id: string | null; parola_hash: string | null }[]
       }
+      cont_raportul_comenzilor: {
+        Args: {
+          p_business: string
+          p_cautare?: string
+          p_cont: string
+          p_de_la?: string
+          p_limita?: number
+          p_pana_la?: string
+          p_stare?: string
+        }
+        Returns: {
+          adresa_livrare: Json
+          awburi: string
+          bucati: number
+          creata_la: string
+          destinatar: string
+          incasata: boolean
+          numar: string
+          produse: string
+          stare: string
+          telefon: string
+          total: number
+          total_randuri: number
+          vedere: string
+        }[]
+      }
       cont_retrimite_cod: {
         Args: { p_business: string; p_cod_hash: string; p_ip?: string | null; p_minute?: number; p_provocare_hash: string }
         Returns: { destinatie: string | null; motiv: string; ok: boolean; scop: string | null }[]
@@ -8874,6 +8904,7 @@ export type Database = {
           p_de_la?: string
           p_decalaj?: number
           p_limita?: number
+          p_pana_la?: string
           p_stare?: string
         }
         Returns: {

@@ -14,6 +14,7 @@ import {
   parametriiFiltrelor,
   PERIOADE_FILTRU,
   STARI_FILTRU,
+  textulDeCautat,
 } from "./cautare-comenzi";
 import { stareaComenzii } from "./stare-comanda";
 
@@ -131,6 +132,15 @@ describe("cablarea", () => {
   });
 });
 
+/* Migratia din 23.11.2026: corpul de azi al listei si raportul cu aceleasi filtre. */
+const MIGRATIE_NOUA = citeste("migrations/2027-02-12-cont-cautare-destinatar-interval-raport.sql");
+const corpulFunctiei = (antet: string) => {
+  const i = MIGRATIE_NOUA.indexOf(antet);
+  assert.notEqual(i, -1, antet);
+  return MIGRATIE_NOUA.slice(i, MIGRATIE_NOUA.indexOf("$fn$;", i));
+};
+const CORP_NOU = corpulFunctiei("create function public.cont_comenzile_mele(");
+
 describe("migratia", () => {
   const MIGRATIE = citeste("migrations/2026-10-19-conturi-clienti-cautarea-in-comenzi.sql");
   const corp = MIGRATIE.slice(MIGRATIE.indexOf("create function public.cont_comenzile_mele("), MIGRATIE.indexOf("$fn$;"));
@@ -169,12 +179,17 @@ describe("migratia", () => {
      * ADAUGA, nu inlocuiesc. Asa nu se pierde pe drum poarta vederii (`are_factura`),
      * departajatorul pe `id` sau plafonul de 100.
      */
+    /*
+     * ⚠ Din 23.11.2026 functia are o migratie mai noua (destinatar, telefon, AWB, `p_pana_la`), deci
+     * corpul din schema de referinta se cauta in EA: inaintea regenerarii schemei e corpul din 19.10
+     * (cuprins in cel nou), dupa regenerare e chiar cel nou. In ambele stari nimic nu are voie sa lipseasca.
+     */
     const baseline = citeste("migrations/000-schema-baseline.sql");
     const i = baseline.indexOf("CREATE OR REPLACE FUNCTION public.cont_comenzile_mele(");
     assert.notEqual(i, -1);
     const vechi = baseline.slice(baseline.indexOf("AS $function$", i) + "AS $function$".length, baseline.indexOf("$function$\n;", i))
       .split("\n").map((r) => r.trim()).filter(Boolean);
-    const nou = corp.split("\n").map((r) => r.trim()).filter(Boolean);
+    const nou = CORP_NOU.split("\n").map((r) => r.trim()).filter(Boolean);
     let j = 0;
     for (const r of vechi) {
       while (j < nou.length && nou[j] !== r) j++;
@@ -182,5 +197,119 @@ describe("migratia", () => {
       j++;
     }
     assert.ok(corp.includes("case when l.vedere = 'intreaga' then privat.cont_documentul_comenzii(o) is not null else false end"));
+  });
+});
+
+describe("destinatar, telefon, AWB si perioada pe zile (23.11.2026)", () => {
+  const CORP_RAPORT = corpulFunctiei("create function public.cont_raportul_comenzilor(");
+  const filtrele = (corp: string) => corp.slice(corp.indexOf("/* <filtrele>"), corp.indexOf("/* </filtrele> */"));
+
+  test("zilele din adresa: valide, intoarse la loc, si iau locul perioadei din lista", () => {
+    assert.deepEqual(citesteFiltrele({ de_la: "2026-11-15", pana_la: "2026-11-30" }), { ...FARA_FILTRE, deLa: "2026-11-15", panaLa: "2026-11-30" });
+    assert.deepEqual(citesteFiltrele({ de_la: "2026-11-30", pana_la: "2026-11-15" }), { ...FARA_FILTRE, deLa: "2026-11-15", panaLa: "2026-11-30" }, "scrise pe dos");
+    assert.deepEqual(citesteFiltrele({ de_la: "31.11.2026", pana_la: "2026-02-31" }), FARA_FILTRE, "o zi care nu exista nu filtreaza");
+    assert.deepEqual(citesteFiltrele({ perioada: "3-luni", de_la: "2026-11-15" }), { ...FARA_FILTRE, deLa: "2026-11-15" }, "ziua bate lista");
+    assert.equal(areFiltre({ ...FARA_FILTRE, panaLa: "2026-11-30" }), true);
+    /* Fara zile, obiectul arata exact ca inainte: cheile nici nu exista. */
+    assert.equal("deLa" in citesteFiltrele({ q: "inel" }), false);
+  });
+
+  test("⚠ zilele sunt ROMANESTI, cu amandoua capetele incluse", () => {
+    assert.deepEqual(argumenteleCautarii({ ...FARA_FILTRE, deLa: "2026-11-15", panaLa: "2026-11-30" }, ACUM), {
+      /* Noiembrie = ora de iarna (UTC+2): ziua de 15 incepe la 22:00 UTC pe 14. */
+      p_de_la: "2026-11-14T22:00:00.000Z", p_pana_la: "2026-11-30T21:59:59.999Z",
+    });
+    /* Iulie = ora de vara (UTC+3). */
+    assert.deepEqual(argumenteleCautarii({ ...FARA_FILTRE, panaLa: "2026-07-01" }, ACUM), { p_pana_la: "2026-07-01T20:59:59.999Z" });
+    /* ⚠ `p_pana_la` nu pleaca necerut: functia de dinaintea migratiei nu-l cunoaste. */
+    assert.equal("p_pana_la" in argumenteleCautarii({ cautare: "inel", stare: "", perioada: "o-luna" }, ACUM), false);
+  });
+
+  test("adresa poarta zilele, iar formularul le trimite cu aceleasi nume", () => {
+    assert.equal(
+      adresaComenzilor({ ...FARA_FILTRE, cautare: "popescu", deLa: "2026-11-15", panaLa: "2026-11-30" }),
+      "/cont/comenzi?q=popescu&de_la=2026-11-15&pana_la=2026-11-30",
+    );
+    const f = { cautare: "0722 123 456", stare: "expediata", perioada: "", deLa: "2026-11-01", panaLa: "2026-11-30" } as const;
+    assert.deepEqual(citesteFiltrele(Object.fromEntries(new URLSearchParams(parametriiFiltrelor(f)))), f);
+    const bara = citeste("src/components/storefront/cont/ecrane/CautareComenzi.tsx");
+    for (const nume of ['name="de_la"', 'name="pana_la"']) assert.ok(bara.includes(nume), nume);
+    const ecran = citeste("src/components/storefront/cont/ecrane/EcranComenzi.tsx");
+    assert.ok(ecran.includes('<form method="post" action="/api/cont/comenzi/raport"'));
+    for (const nume of ["q", "stare", "perioada", "de_la", "pana_la"]) assert.ok(ecran.includes('type="hidden" name="' + nume + '"'), nume);
+  });
+
+  test("⚠ un telefon sau un AWB scris cu spatii pleaca lipit; restul textului, neatins", () => {
+    assert.equal(textulDeCautat("0722 123 456"), "0722123456");
+    assert.equal(textulDeCautat("+40 722 123 456"), "40722123456");
+    assert.equal(textulDeCautat("(0722) 123-456"), "0722123456");
+    assert.equal(textulDeCautat("813 825 038 89"), "81382503889", "AWB citit de pe eticheta");
+    assert.equal(textulDeCautat("12 34"), "12 34", "putine cifre: raman cuvinte, ca numerele de comanda");
+    assert.equal(textulDeCautat("inel 16"), "inel 16");
+    assert.equal(textulDeCautat("#1337"), "#1337");
+    assert.deepEqual(argumenteleCautarii({ ...FARA_FILTRE, cautare: "0722 123 456" }, ACUM), { p_cautare: "0722123456" });
+  });
+
+  test("forma veche iese, cele noi sunt chemate NUMAI de server", () => {
+    const sem8 = "uuid, uuid, integer, integer, text, text, timestamptz, timestamptz";
+    const semRaport = "uuid, uuid, text, text, timestamptz, timestamptz, integer";
+    assert.ok(MIGRATIE_NOUA.includes("drop function if exists public.cont_comenzile_mele(uuid, uuid, integer, integer, text, text, timestamptz);"));
+    for (const f of ["public.cont_comenzile_mele(" + sem8 + ")", "public.cont_raportul_comenzilor(" + semRaport + ")"]) {
+      assert.ok(MIGRATIE_NOUA.includes("revoke all on function " + f + " from public, anon, authenticated;"), f);
+      assert.ok(MIGRATIE_NOUA.includes("grant execute on function " + f + " to service_role;"), f);
+    }
+    for (const f of ["privat.cont_awburile_comenzii(uuid)", "privat.cont_potrivire_destinatar(text, text, text, text)"]) {
+      assert.ok(MIGRATIE_NOUA.includes("revoke all on function " + f + " from public, anon, authenticated;"), f);
+    }
+    assert.ok(MIGRATIE_NOUA.includes("notify pgrst, 'reload schema';"));
+    assert.ok(CORP_NOU.includes("p_pana_la timestamptz default null"));
+  });
+
+  test("⚠ corpul din 19.10.2026 se regaseste intreg, in ordine: filtrele se ADAUGA", () => {
+    const veche = citeste("migrations/2026-10-19-conturi-clienti-cautarea-in-comenzi.sql");
+    const corpVechi = veche.slice(veche.indexOf("language sql stable security definer"), veche.indexOf("$fn$;"))
+      .split("\n").map((r) => r.trim()).filter(Boolean);
+    const nou = CORP_NOU.split("\n").map((r) => r.trim()).filter(Boolean);
+    let j = 0;
+    for (const r of corpVechi) {
+      while (j < nou.length && nou[j] !== r) j++;
+      assert.ok(j < nou.length, "din corpul de dinainte lipseste: " + r);
+      j++;
+    }
+  });
+
+  test("⚠⚠ poarta vederii: destinatarul, telefonul si AWB-ul se cauta si se arata numai la vederea intreaga", () => {
+    const linie = "or (l.vedere = 'intreaga' and privat.cont_potrivire_destinatar(t.tipar, o.customer_name, o.customer_phone, a.awburi))";
+    assert.ok(CORP_NOU.includes(linie));
+    assert.ok(CORP_NOU.includes("select case when c.tipare <> '{}' and l.vedere = 'intreaga' then privat.cont_awburile_comenzii(o.id) end as awburi"));
+    for (const coloana of ["o.customer_name", "o.customer_phone", "o.shipping_address"]) {
+      assert.ok(CORP_RAPORT.includes("case when l.vedere = 'intreaga' then " + coloana + " end"), coloana);
+    }
+    assert.ok(CORP_RAPORT.includes("select case when l.vedere = 'intreaga' then privat.cont_awburile_comenzii(o.id) end as awburi"));
+    /* In afara acestor porti, numele si telefonul nu apar nicaieri in cele doua corpuri. */
+    for (const corp of [CORP_NOU, CORP_RAPORT]) {
+      const faraPorti = corp.split("\n").filter((r) => !r.includes("l.vedere = 'intreaga'")).join("\n");
+      assert.doesNotMatch(faraPorti, /customer_name|customer_phone|shipping_address|cont_awburile_comenzii/);
+    }
+  });
+
+  test("⚠ lista si raportul filtreaza cu ACELASI bloc, litera cu litera", () => {
+    const f = filtrele(CORP_NOU);
+    assert.ok(f.length > 400, "blocul de filtre nu s-a gasit");
+    assert.equal(filtrele(CORP_RAPORT), f);
+    assert.ok(f.includes("and (p_pana_la is null or o.created_at <= p_pana_la)"));
+    /* Raportul nu pagineaza, dar are plafon, iar totalul gasit vine pe rand. */
+    assert.ok(CORP_RAPORT.includes("limit greatest(1, least(5000, coalesce(p_limita, 2000)));"));
+    assert.ok(CORP_RAPORT.includes("count(*) over ()"));
+  });
+
+  test("telefonul se compara pe cifre, AWB-ul de la patru caractere, numai pentru cuvinte lungi", () => {
+    const ajutor = corpulFunctiei("create or replace function privat.cont_potrivire_destinatar(");
+    assert.ok(ajutor.includes("or (length(v.cuvant) >= 4 and lower(coalesce(p_awburi, '')) like p_tipar)"));
+    assert.ok(ajutor.includes("or (v.cuvant ~ '^[0-9+]+$' and length(v.cifre) >= 6 and t.forme like '%' || v.cifre || '%')"));
+    assert.ok(ajutor.includes("d.c || ' 0' || d.n || ' 40' || d.n || ' 0040' || d.n as forme"), "cele trei scrieri ale numarului");
+    /* AWB-urile: o singura lista de coloane, cu numarul partenerului (DPD prin Curiera) in ea. */
+    const awburi = corpulFunctiei("create or replace function privat.cont_awburile_comenzii(");
+    for (const c of ["o.curiera_awb_number", "o.curiera_partener_awb", "o.dpd_awb_number", "o.epacket_awb_number"]) assert.ok(awburi.includes(c), c);
   });
 });

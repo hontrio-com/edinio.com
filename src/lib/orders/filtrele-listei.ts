@@ -1,19 +1,35 @@
 import { orSafeTerm } from "@/lib/orders/pagination";
+import { inceputulZilei, sfarsitulZilei, ziValida } from "@/lib/zi-romaneasca";
 
 /**
- * Filtrele listei de comenzi (stare, sursa, cautare), intr-un singur loc.
+ * Filtrele listei de comenzi (stare, sursa, cautare, perioada), intr-un singur loc.
  *
  * ⚠ Le folosesc DOUA cai: pagina (`dashboard/orders/page.tsx`) si exportul „toate comenzile
  * filtrului" (`export-comenzi.actions.ts`). Scrise de doua ori, exportul ar fi putut da alte
  * comenzi decat cele de pe ecran, si nimeni n-ar fi vazut diferenta pana la contabilitate.
+ *
+ * ═══ PERIOADA (cerut de un magazin, 23.11.2026: „raport de comenzi de la 15.11 la 30.11") ═══
+ *
+ * `deLa` si `panaLa` sunt ZILE scrise „YYYY-MM-DD", zile ROMANESTI: comanda de la 00:30 ora
+ * Romaniei e a zilei aceleia, desi in baza sta cu data UTC a zilei dinainte. Capetele le da
+ * `zi-romaneasca.ts`, acelasi loc din care isi iau perioada codurile de reducere si ofertele.
+ * Amandoua capetele sunt INCLUSE: „pana la 30.11" tine toata ziua de 30.
  */
-export type FiltreleListei = { status: string; source: string; q: string };
+export type FiltreleListei = { status: string; source: string; q: string; deLa?: string; panaLa?: string };
+
+/** Ziua din adresa sau din cererea de export: valida, sau `""` (fara filtrul acela). */
+export function ziuaFiltrului(v: unknown): string {
+  const s = typeof v === "string" ? v.trim() : "";
+  return ziValida(s) ? s : "";
+}
 
 /** Ce trebuie sa stie un constructor de interogare ca sa primeasca filtrele. */
 type Filtrabil<T> = {
   eq(coloana: string, valoare: string): T;
   is(coloana: string, valoare: null): T;
   or(filtre: string): T;
+  gte(coloana: string, valoare: string): T;
+  lte(coloana: string, valoare: string): T;
 };
 
 export function aplicaFiltreleListei<T extends Filtrabil<T>>(interogare: T, f: FiltreleListei): T {
@@ -29,6 +45,11 @@ export function aplicaFiltreleListei<T extends Filtrabil<T>>(interogare: T, f: F
    */
   if (f.source === "store") q = q.is("order_source->>marketplace", null);
   else if (f.source !== "all") q = q.eq("order_source->>marketplace", f.source);
+  /* O zi care nu e zi nu filtreaza nimic: `inceputulZilei` intoarce `null` la orice altceva. */
+  const deLa = inceputulZilei(f.deLa);
+  const panaLa = sfarsitulZilei(f.panaLa);
+  if (deLa) q = q.gte("created_at", deLa);
+  if (panaLa) q = q.lte("created_at", panaLa);
   const term = orSafeTerm(f.q);
   if (term) {
     // Denumirea firmei si CUI-ul intra si ele in cautare: lista le AFISEAZA pe

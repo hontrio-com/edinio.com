@@ -1,8 +1,14 @@
+import { inceputulZilei, sfarsitulZilei, ziValida } from "@/lib/zi-romaneasca";
 import { stareaComenzii } from "./stare-comanda";
 
 /**
  * Cautarea din „Comenzile mele”: ce se citeste din adresa, ce pleaca spre baza si cum
  * se scrie adresa inapoi.
+ *
+ * Din 23.11.2026 (cerut de un magazin ai carui clienti cu cont comanda pentru altii): textul
+ * cautat gaseste si numele destinatarului, telefonul si numarul AWB, iar perioada se poate
+ * spune si pe zile, „de la / pana la”. Aceleasi filtre le primeste si raportul descarcat
+ * (`raport-comenzi.ts`).
  *
  * ⚠ Filtrul se face in BAZA (`cont_comenzile_mele`), nu pe pagina adusa: lista e
  * paginata cate 20, iar un cont are pe productie 234 de comenzi. Filtrata pe ecran,
@@ -54,31 +60,70 @@ export type CheiePerioada = (typeof PERIOADE)[number][0];
 
 export const PERIOADE_FILTRU: { cheie: CheiePerioada; eticheta: string }[] = PERIOADE.map(([cheie, eticheta]) => ({ cheie, eticheta }));
 
-/** Ce a cerut omul, curatat. `""` = fara filtrul acela. */
+/**
+ * Ce a cerut omul, curatat. `""` = fara filtrul acela.
+ *
+ * ⚠ `deLa` / `panaLa` (cerut 23.11.2026: raport „de la 15.11 la 30.11”) sunt ZILE romanesti
+ * scrise „YYYY-MM-DD” si LIPSESC din obiect cand nu sunt cerute: asa, un filtru fara interval
+ * arata exact ca inainte. Cand exista macar una, perioada din lista („Ultimele 3 luni”) nu se
+ * mai aplica: omul a spus zilele pe nume.
+ */
 export type FiltreComenzi = {
   cautare: string;
   stare: CheieStare | "";
   perioada: CheiePerioada | "";
+  deLa?: string;
+  panaLa?: string;
 };
 
 export const FARA_FILTRE: FiltreComenzi = { cautare: "", stare: "", perioada: "" };
 
 const primul = (v: string | string[] | undefined): string => (Array.isArray(v) ? v[0] ?? "" : v ?? "");
 
-/** Filtrele din adresa (`?q=`, `?stare=`, `?perioada=`). Ce nu se recunoaste se ignora. */
-export function citesteFiltrele(sp: { q?: string | string[]; stare?: string | string[]; perioada?: string | string[] }): FiltreComenzi {
+type AdresaFiltrelor = {
+  q?: string | string[]; stare?: string | string[]; perioada?: string | string[];
+  de_la?: string | string[]; pana_la?: string | string[];
+};
+
+/** Filtrele din adresa (`?q=`, `?stare=`, `?perioada=`, `?de_la=`, `?pana_la=`). Ce nu se recunoaste se ignora. */
+export function citesteFiltrele(sp: AdresaFiltrelor): FiltreComenzi {
   const cautare = primul(sp.q).replace(/\s+/g, " ").trim().slice(0, CAUTARE_MAX).trim();
   const stare = primul(sp.stare);
   const perioada = primul(sp.perioada);
+  let deLa = primul(sp.de_la).trim();
+  let panaLa = primul(sp.pana_la).trim();
+  if (!ziValida(deLa)) deLa = "";
+  if (!ziValida(panaLa)) panaLa = "";
+  /* Zilele scrise pe dos se intorc: „de la 30, pana la 15” e o greseala de tastare, nu o lista goala. */
+  if (deLa && panaLa && deLa > panaLa) [deLa, panaLa] = [panaLa, deLa];
+  const areInterval = deLa !== "" || panaLa !== "";
   return {
     cautare,
     stare: STARI.some(([c]) => c === stare) ? (stare as CheieStare) : "",
-    perioada: PERIOADE.some(([c]) => c === perioada) ? (perioada as CheiePerioada) : "",
+    /* Cu zilele spuse pe nume, perioada din lista nu se mai aplica. */
+    perioada: !areInterval && PERIOADE.some(([c]) => c === perioada) ? (perioada as CheiePerioada) : "",
+    ...(deLa ? { deLa } : {}),
+    ...(panaLa ? { panaLa } : {}),
   };
 }
 
 export function areFiltre(f: FiltreComenzi): boolean {
-  return f.cautare !== "" || f.stare !== "" || f.perioada !== "";
+  return f.cautare !== "" || f.stare !== "" || f.perioada !== "" || !!f.deLa || !!f.panaLa;
+}
+
+/**
+ * Textul cautat, cum pleaca spre baza.
+ *
+ * ⚠ Un numar de telefon sau un AWB scris cu spatii („0722 123 456”, „+40 722 123 456”) ar fi
+ * fost taiat de baza in cuvinte, iar „+40” singur nu se gaseste nicaieri: comanda n-ar fi iesit.
+ * Cand TOT textul e facut din cifre si semne de numar, cu cel putin sapte cifre, pleaca lipit,
+ * numai cifrele. In adresa si in camp ramane ce a scris omul.
+ */
+export function textulDeCautat(cautare: string): string {
+  const t = cautare.trim();
+  if (!/^[\d\s+()./-]+$/.test(t)) return t;
+  const cifre = t.replace(/\D/g, "");
+  return cifre.length >= 7 ? cifre : t;
 }
 
 /**
@@ -104,12 +149,21 @@ export function inceputulPerioadei(perioada: CheiePerioada, acum: Date): Date {
  * ⚠ Fara filtre pleaca exact apelul de dinainte, cu patru argumente: lista merge si pe
  * o baza in care migratia cautarii inca nu e aplicata. Cu filtre, cere functia noua.
  */
-export function argumenteleCautarii(f: FiltreComenzi, acum: Date): { p_cautare?: string; p_stare?: string; p_de_la?: string } {
+export function argumenteleCautarii(
+  f: FiltreComenzi,
+  acum: Date,
+): { p_cautare?: string; p_stare?: string; p_de_la?: string; p_pana_la?: string } {
   const stare = STARI.find(([c]) => c === f.stare)?.[1];
+  /* Zilele spuse pe nume sunt zile ROMANESTI, cu amandoua capetele incluse (`zi-romaneasca.ts`). */
+  const deLa = inceputulZilei(f.deLa);
+  const panaLa = sfarsitulZilei(f.panaLa);
+  const areInterval = deLa !== null || panaLa !== null;
   return {
-    ...(f.cautare ? { p_cautare: f.cautare } : {}),
+    ...(f.cautare ? { p_cautare: textulDeCautat(f.cautare) } : {}),
     ...(stare ? { p_stare: stare } : {}),
-    ...(f.perioada ? { p_de_la: inceputulPerioadei(f.perioada, acum).toISOString() } : {}),
+    ...(deLa ? { p_de_la: deLa } : !areInterval && f.perioada ? { p_de_la: inceputulPerioadei(f.perioada, acum).toISOString() } : {}),
+    /* ⚠ `p_pana_la` exista numai in functia de dupa migratia din 23.11.2026; nu pleaca necerut. */
+    ...(panaLa ? { p_pana_la: panaLa } : {}),
   };
 }
 
@@ -118,7 +172,9 @@ export function parametriiFiltrelor(f: FiltreComenzi): string {
   const sp = new URLSearchParams();
   if (f.cautare) sp.set("q", f.cautare);
   if (f.stare) sp.set("stare", f.stare);
-  if (f.perioada) sp.set("perioada", f.perioada);
+  if (f.perioada && !f.deLa && !f.panaLa) sp.set("perioada", f.perioada);
+  if (f.deLa) sp.set("de_la", f.deLa);
+  if (f.panaLa) sp.set("pana_la", f.panaLa);
   return sp.toString();
 }
 

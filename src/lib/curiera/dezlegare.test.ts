@@ -123,8 +123,10 @@ function scriereaPeComanda(corp: string): string {
 describe("ce scriu actiunile pe comanda", () => {
   test("coloanele Curiera se gasesc in tipuri (proba nu merge pe gol)", () => {
     const c = coloaneleCuriera();
-    /* 8 din migratia 68, plus `curiera_partener` si `curiera_partener_awb` (AWB-ul DPD etc.), 29.09.2026. */
-    assert.equal(c.length, 10, `am gasit ${c.length} coloane curiera_* pe orders: ${c.join(", ")}`);
+    /* 8 din migratia 68, plus `curiera_partener` si `curiera_partener_awb` (AWB-ul DPD etc.), 29.09.2026,
+       plus `curiera_servicii_extra` (serviciile cu care a plecat coletul), 23.11.2026. */
+    assert.equal(c.length, 11, `am gasit ${c.length} coloane curiera_* pe orders: ${c.join(", ")}`);
+    assert.ok(c.includes("curiera_servicii_extra"));
     assert.ok(c.includes("curiera_awb_number"));
     assert.ok(c.includes("curiera_partener_awb"));
   });
@@ -149,6 +151,8 @@ describe("ce scriu actiunile pe comanda", () => {
       curiera_reference: /\bcuriera_reference: referinta,/,
       curiera_partener: /\bcuriera_partener: partener\?\.nume \?\? null,/,
       curiera_partener_awb: /\bcuriera_partener_awb: partener\?\.awb \?\? null,/,
+      /* Serviciile TRIMISE la Curiera, nu cele bifate in fereastra. */
+      curiera_servicii_extra: /\bcuriera_servicii_extra: serviciiExtraTrimise\(parametri\),/,
     };
     for (const col of coloaneleCuriera()) {
       assert.match(scriere, scrise[col] ?? new RegExp(`\\b${col}: null,`), `emiterea nu trateaza ${col}`);

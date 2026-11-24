@@ -10,7 +10,7 @@ import { exportaComenzileAction } from "@/lib/actions/export-comenzi.actions";
 import { foaiaExportului } from "@/lib/orders/export-comenzi";
 import type { SheetData } from "write-excel-file/browser";
 import { cn } from "@/lib/utils/cn";
-import { formatDate, formatPrice } from "@/lib/utils/format";
+import { formatDate, formatPrice, pluralRo } from "@/lib/utils/format";
 import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI, procesataInEasySales } from "@/lib/orders/origin";
 import { awburiDinRand, deCeNuSePoateAwbPropriu } from "@/lib/orders/awb-propriu";
 import {
@@ -110,7 +110,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled, sagaEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, dateFrom = "", dateTo = "", sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled, sagaEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /**
@@ -126,6 +126,9 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   searchQuery: string;
   statusFilter: string;
   sourceFilter: string;
+  /** Perioada din filtru, zile romanesti „YYYY-MM-DD"; `""` = fara capatul acela. */
+  dateFrom?: string;
+  dateTo?: string;
   sourceCounts: Record<string, number>;
   pendingCount: number;
   smartbillEnabled?: boolean;
@@ -218,7 +221,7 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     try {
       const r = await exportaComenzileAction(
         businessId,
-        peSelectie ? { ids: [...selected] } : { filtre: { status: statusFilter, source: sourceFilter, q: searchQuery } },
+        peSelectie ? { ids: [...selected] } : { filtre: { status: statusFilter, source: sourceFilter, q: searchQuery, deLa: dateFrom, panaLa: dateTo } },
       );
       if (!r.ok) { toast.error(r.error); return; }
       const { default: writeExcelFile } = await import("write-excel-file/browser");
@@ -606,19 +609,24 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   const currentPage = Math.min(page, totalPages);
   const allCount = Object.values(statusCounts).reduce((s, n) => s + n, 0);
 
-  const buildUrl = useCallback((next: { q?: string; status?: string; source?: string; page?: number }) => {
+  const buildUrl = useCallback((next: { q?: string; status?: string; source?: string; deLa?: string; panaLa?: string; page?: number }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nstatus = next.status ?? statusFilter;
     const nsource = next.source ?? sourceFilter;
+    /* Perioada se poarta prin toate navigarile (pagina, stare, cautare), ca restul filtrelor. */
+    const ndeLa = next.deLa ?? dateFrom;
+    const npanaLa = next.panaLa ?? dateTo;
     const npage = next.page ?? page;
     if (nq) params.set("q", nq);
     if (nstatus !== "all") params.set("status", nstatus);
     if (nsource !== "all") params.set("source", nsource);
+    if (ndeLa) params.set("de_la", ndeLa);
+    if (npanaLa) params.set("pana_la", npanaLa);
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, statusFilter, sourceFilter, page]);
+  }, [pathname, searchQuery, statusFilter, sourceFilter, dateFrom, dateTo, page]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -640,7 +648,7 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; status?: string; source?: string; page?: number }) {
+  function goTo(next: { q?: string; status?: string; source?: string; deLa?: string; panaLa?: string; page?: number }) {
     // Selection is per-view — reset it when changing page / filter so a bulk
     // action never spans invisible orders on other pages.
     setSelected(new Set());
@@ -1139,6 +1147,54 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
         </p>
       )}
 
+      {/*
+        * Perioada (cerut de un magazin, 23.11.2026): raportul „de la / pana la" e lista filtrata
+        * plus exportul de alaturi, care ia exact comenzile filtrului. Zilele sunt romanesti si
+        * amandoua capetele sunt incluse; filtrarea o face serverul, ca la stare si cautare.
+        */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Perioada</span>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          de la
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => goTo({ deLa: e.target.value, page: 1 })}
+            aria-label="Comenzi de la data"
+            className="rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          până la
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => goTo({ panaLa: e.target.value, page: 1 })}
+            aria-label="Comenzi până la data"
+            className="rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+          />
+        </label>
+        {(dateFrom || dateTo) && (
+          <>
+            <button
+              type="button"
+              onClick={() => goTo({ deLa: "", panaLa: "", page: 1 })}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" /> Șterge perioada
+            </button>
+            {/* ⚠ Totalul poarta TOATE filtrele (fila de status, sursa, cautarea), nu doar perioada:
+                cu alt filtru activ, „in perioada" singur ar fi spus mai mult decat e adevarat. */}
+            <span className="text-xs text-muted-foreground">
+              {pluralRo(totalCount, "comandă", "comenzi")} în perioadă
+              {statusFilter !== "all" || sourceFilter !== "all" || searchQuery ? ", cu filtrele alese" : ""}
+            </span>
+          </>
+        )}
+      </div>
+
       {/* Fara bifa: exportul tuturor comenzilor din filtrul de acum. */}
       {selected.size === 0 && businessId && totalCount > 0 && (
         <div className="mb-3 flex justify-end">
@@ -1604,15 +1660,18 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                         </td>
                         {/* Contul din care s-a plasat comanda: un client cu cont poate comanda pentru mai
                             multe persoane, iar numele si emailul de pe comanda sunt ale destinatarului.
-                            Legatura duce la fisa contului, cu toate comenzile lui. */}
+                            Legatura duce la fisa contului, cu toate comenzile lui.
+                            ⚠ NUMELE titularului, nu emailul (cerut de un magazin, 23.11.2026): emailul
+                            e deja in coloana de alaturi cand e al destinatarului, iar aici omul isi
+                            recunoaste clientii dupa nume. Contul fara nume ramane cu emailul. */}
                         <td className="px-5 py-3.5 text-xs hidden md:table-cell max-w-[14rem]" onClick={(e) => e.stopPropagation()}>
                           {conturi[order.id] ? (
                             <a
                               href={`/dashboard/customers/conturi/${conturi[order.id].contId}`}
                               className="block truncate font-medium text-primary hover:underline"
-                              title={`ID cont: ${conturi[order.id].contId}`}
+                              title={[conturi[order.id].email, `ID cont: ${conturi[order.id].contId}`].filter(Boolean).join(" · ")}
                             >
-                              {conturi[order.id].email || conturi[order.id].nume || "Cont client"}
+                              {conturi[order.id].nume || conturi[order.id].email || "Cont client"}
                             </a>
                           ) : (
                             <span className="text-muted-foreground/60">-</span>
@@ -2513,6 +2572,18 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                 <Button variant="outline" onClick={() => handleSearch("")}>
                   <X />
                   Sterge cautarea
+                </Button>
+              </>
+            ) : dateFrom || dateTo ? (
+              /* ⚠ Cu o perioada aleasa, lista goala nu inseamna „nicio comanda inca": magazinul
+                 poate avea sute, doar ca nu in zilele alese. */
+              <>
+                <ShoppingCart className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm font-medium text-foreground mb-1">Nicio comandă în perioada aleasă</p>
+                <p className="text-xs text-muted-foreground mb-4">Schimbă zilele sau șterge perioada ca să vezi toate comenzile</p>
+                <Button variant="outline" onClick={() => goTo({ deLa: "", panaLa: "", page: 1 })}>
+                  <X />
+                  Șterge perioada
                 </Button>
               </>
             ) : (

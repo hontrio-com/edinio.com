@@ -46,3 +46,21 @@ export function stocRezervat(
       })),
   };
 }
+
+/**
+ * Rezervarea chiar tine ceva de dat inapoi?
+ *
+ * O comanda fara niciun produs cu stoc urmarit are rezervarea scrisa, dar goala
+ * (`{ produse: [], variante: [] }`): la ea nu e nimic de asteptat si nimic de eliberat. `null`
+ * (comanda de dinainte de coloana) inseamna „nu se stie”, deci tot „nu” de aici: stocul ei se
+ * corecteaza de mana, din produs.
+ *
+ * Primeste `unknown` fiindca valoarea vine din baza ca jsonb, iar o forma stricata trebuie sa
+ * dea „nu”, nu o exceptie.
+ */
+export function rezervareaAreStoc(rezervat: unknown): boolean {
+  if (!rezervat || typeof rezervat !== "object" || Array.isArray(rezervat)) return false;
+  const r = rezervat as { produse?: unknown; variante?: unknown };
+  return (Array.isArray(r.produse) && r.produse.length > 0)
+    || (Array.isArray(r.variante) && r.variante.length > 0);
+}

@@ -1,6 +1,7 @@
 import { METODE_RAMBURS } from "@/lib/cont/plata";
 import { marketplaceCareTineComanda, procesataInEasySales } from "@/lib/orders/origin";
 import type { OrderStatus } from "@/lib/orders/status";
+import { rezervareaAreStoc } from "@/lib/orders/stoc-rezervat";
 import type { EvenimentCuriera } from "./client";
 
 /**
@@ -212,6 +213,45 @@ export function statusDupaRetur(c: ComandaUrmarita): OrderStatus | null {
   if (!METODE_RAMBURS.has(c.metodaPlata ?? "") || c.starePlata !== "unpaid") return null;
   if (marketplaceCareTineComanda(c.sursa) || procesataInEasySales(c.sursa)) return null;
   return "refunded";
+}
+
+/**
+ * La retur, stocul comenzii se elibereaza pe loc? (`stoc_la_retur` din configurarea magazinului)
+ *
+ * ═══ CERUT PE 23.11.2026, de acelasi magazin care ceruse trecerea automata pe „Rambursat” ═══
+ *
+ * „Intrarea in stoc sa se faca dupa ce coletul a fost scanat ca livrat retur.” Scanarea aceea nu
+ * ajunge la noi: Curiera pune „returnat” cand coletul PORNESTE inapoi (evenimentul „Expedierea va
+ * fi returnata”) si nu mai scrie nimic dupa, iar campul „AWB retur” e gol. Masurat din nou pe
+ * 23.11.2026, pe pagina lor publica de urmarire, la doua retururi vechi de 10 si 11 zile.
+ *
+ * Deci momentul sosirii il poate spune numai omul. Magazinul care alege `la_primire` primeste
+ * comanda tot pe „Rambursat”, automat, dar cu stocul NEeliberat, iar marfa revine cand apasa
+ * „Retur primit” pe comanda (`confirmaReturulPrimit`). Implicitul ramane cel de pana acum.
+ */
+export function elibereazaStoculLaRetur(config: { stoc_la_retur?: unknown } | null | undefined): boolean {
+  return config?.stoc_la_retur !== "la_primire";
+}
+
+/**
+ * Comanda returnata al carei stoc asteapta confirmarea primirii.
+ *
+ * ⚠ `stoc_rezervat` lipsa = comanda de dinainte de inregistrarea stocului: nu se stie ce a
+ * consumat, deci nu e nimic de dat inapoi de aici (se corecteaza de mana, din produs).
+ *
+ * ⚠ Rezervarea GOALA (niciun produs cu stoc urmarit) nu asteapta nimic: fara conditia asta,
+ * pagina comenzii cerea „Retur primit” pentru un colet care n-avea ce pune inapoi pe raft.
+ */
+export function asteaptaPrimireaReturului(o: {
+  status: string;
+  curiera_status_code?: string | null;
+  stoc_rezervat?: unknown;
+  stoc_eliberat_la?: string | null;
+}): boolean {
+  return o.status === "refunded"
+    && esteRetur(o.curiera_status_code)
+    && rezervareaAreStoc(o.stoc_rezervat)
+    && !o.stoc_eliberat_la;
 }
 
 /**

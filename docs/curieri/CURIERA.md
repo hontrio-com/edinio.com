@@ -317,6 +317,42 @@ ramburs `unpaid`, ale vitrinei) trecute pe „Rambursat” cu stocul eliberat si
 (returnat pe 16.10) ramas pe „Expediat”, cum s-a hotarat; GA4 nelegat la magazin, deci nicio rambursare
 trimisa.
 
+## Stocul la retur si serviciile extra pe comanda, 23.11.2026
+
+Cerut de acelasi magazin (JHBijuterii), in doua puncte:
+
+**1. „Intrarea in stoc sa se faca dupa ce coletul a fost scanat ca livrat retur.”** Scanarea aceea nu
+ajunge la noi. Masurat din nou pe 23.11.2026, fara nicio cheie, pe pagina lor publica de urmarire
+(`adresaUrmarireCuriera`): doua retururi vechi de 10 si 11 zile (AWB 711160905, returnat 12.11; AWB
+711101821, returnat 13.11) au ultimul eveniment „Expedierea va fi returnata”, nimic dupa, iar campul
+„AWB retur” e gol. Pagina DPD a numarului de partener sta dupa o proba anti-robot si nu se citeste.
+Deci momentul sosirii il poate spune numai omul:
+
+- optiune noua in configurare, `stoc_la_retur`: lipsa sau `automat` = stocul revine la anuntul
+  returului, ca din 19.10.2026; `la_primire` = comanda trece tot singura pe „Rambursat”, dar cu stocul
+  lasat consumat (`elibereazaStoc: false` la `tranzitieComandaMarketplace`). Comutatorul e in pagina
+  integrarii, Pasul 4, „Colete returnate”;
+- pe pagina comenzii apare avertismentul „Coletul se intoarce la tine” cu butonul „Retur primit”
+  (`ReturDePrimit.tsx`), cat timp comanda e rambursata, starea Curiera e `returnat`, rezervarea ei de
+  stoc are ceva in ea (`rezervareaAreStoc`: o comanda fara produse cu stoc urmarit nu asteapta nimic)
+  si `stoc_eliberat_la` e gol (`asteaptaPrimireaReturului`);
+- butonul cheama `confirmaReturulPrimit`, care face un singur lucru: `elibereaza_stoc_comanda`. Functia
+  din baza se apara singura de a doua apasare. Statusul comenzii nu se atinge;
+- notificarea de retur spune, la `la_primire`, ca stocul asteapta confirmarea si unde se da, dar numai
+  cand butonul chiar apare pe comanda (cronul citeste `stoc_rezervat` si pune aceeasi conditie).
+
+⚠ Implicitul NU s-a schimbat: fara optiune, magazinele se poarta ca pana acum. Retururile deja trecute
+pe „Rambursat” au stocul eliberat si nu apar cu butonul.
+
+**2. Coloana „Colet cu verificare” in exportul .xlsx.** Serviciul extra „443 Deschidere colet la
+livrare” se trimitea ca `service_443`, dar nu se tinea nicaieri. Coloana noua
+`orders.curiera_servicii_extra` (`text[]`, migratia `2027-02-13`) primeste la emitere id-urile citite
+din parametrii TRIMISI (`serviciiExtraTrimise`) si se goleste la dezlegare. Exportul scrie „Da” / „Nu”,
+iar la AWB-urile de dinainte (coloana NULL) lasa celula goala: un „Nu” pe necunoscut ar fi mintit.
+Coloana apare in fisier numai cand se stie macar la o comanda.
+
+Probe: `src/lib/curiera/retur-la-primire.test.ts`, `src/lib/orders/cereri-jhb.test.ts`.
+
 ---
 
 ## Ce ramane deschis, si de ce

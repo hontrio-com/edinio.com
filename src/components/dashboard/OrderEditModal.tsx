@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { updateOrderDetails, searchOrderProducts, getOrderEditContext } from "@/lib/actions/order.actions";
+import { salveazaCampurileAditionale } from "@/lib/actions/campuri-aditionale.actions";
+import { BIFA_PUSA, VALOARE_MAX, campuriAditionaleDinConfigurare, campuriDeEditat, citesteNotele } from "@/lib/orders/campuri-aditionale";
+import { useCampuriCheckout } from "@/components/dashboard/DetaliiCheckoutAwb";
 import { getShippingOptions } from "@/lib/actions/shipping.actions";
 import { liniaAdresei } from "@/lib/orders/adresa";
 import { deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
@@ -233,6 +236,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const [city, setCity] = useState("");
   const [county, setCounty] = useState("");
   const [postal, setPostal] = useState("");
+  /** Valorile „Campurilor aditionale” (formularul de comanda), pe id-ul campului. */
+  const [campuriVal, setCampuriVal] = useState<Record<string, string>>({});
   const [added, setAdded] = useState<AddedLine[]>([]);
   /** Cantitatile noi ale liniilor EXISTENTE, pe indexul lor. `0` = scoasa. */
   const [modificari, setModificari] = useState<Record<number, number>>({});
@@ -272,6 +277,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     setCity(addr.city ?? "");
     setCounty(addr.county ?? "");
     setPostal(addr.postal_code ?? "");
+    {
+      const n = citesteNotele(order.notes);
+      setCampuriVal(n.fel === "campuri" ? n.valori : {});
+    }
     setAdded([]);
     setModificari({});
     setQuery("");
@@ -310,7 +319,30 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
    * inchiderea ramane pe „Renunta" si pe X — doua butoane pe care nu le apesi din
    * greseala cu mouse-ul in drum.
    */
-  const areSchimbari = added.length > 0
+  /*
+   * „Campurile aditionale” (cerut de un magazin, 23.11.2026): campurile formularului de comanda
+   * („Punct reper”, „Observatii”...), cu forma lor din configurare, plus cheile ramase pe comanda
+   * de la campuri scoase intre timp din formular. Regulile: `campuri-aditionale.ts`.
+   *
+   * ⚠ Se salveaza printr-o actiune SEPARATA (`salveazaCampurileAditionale`): cand s-au schimbat
+   * numai ele, `updateOrderDetails` nu se mai cheama deloc, deci un punct de reper corectat nu
+   * trece prin resocotirea liniilor si nici prin refuzurile ei (comanda cu AWB, de marketplace).
+   */
+  const campuriCheckout = useCampuriCheckout();
+  const noteComanda = useMemo(() => citesteNotele(order.notes), [order.notes]);
+  const campuriAditionale = useMemo(
+    () => campuriDeEditat(
+      campuriAditionaleDinConfigurare({ custom_fields: campuriCheckout }),
+      noteComanda,
+      () => "Câmp scos din formular",
+    ),
+    [campuriCheckout, noteComanda],
+  );
+  const campuriSchimbate = campuriAditionale.some((c) =>
+    (campuriVal[c.id] ?? "") !== (noteComanda.fel === "campuri" ? noteComanda.valori[c.id] ?? "" : ""));
+  const seteazaCamp = (id: string, valoare: string) => setCampuriVal((v) => ({ ...v, [id]: valoare }));
+
+  const alteSchimbari = added.length > 0
     || Object.keys(modificari).length > 0
     || quote !== null
     || name !== (order.customer_name ?? "")
@@ -320,6 +352,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     || city !== (addr.city ?? "")
     || county !== (addr.county ?? "")
     || postal !== (addr.postal_code ?? "");
+  const areSchimbari = alteSchimbari || campuriSchimbate;
 
   const inchideCuGrija = useCallback(() => {
     if (saving) return;
@@ -831,8 +864,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   function handleSave() {
     startSave(async () => {
       /* ⚠ Aceeasi forma ingusta ca la anulare: in `try` doar apelul. */
-      let res: Awaited<ReturnType<typeof updateOrderDetails>>;
-      try {
+      let res: Awaited<ReturnType<typeof updateOrderDetails>> | null = null;
+      /* Numai campurile aditionale schimbate: restul comenzii nu se resalveaza. */
+      const doarCampuri = campuriSchimbate && !alteSchimbari;
+      if (!doarCampuri) try {
         res = await updateOrderDetails(order.id, {
           customer_name: name,
           customer_phone: phone,
@@ -860,9 +895,30 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         );
         return;
       }
-      if ("error" in res) { toast.error(res.error); return; }
+      if (res && "error" in res) { toast.error(res.error); return; }
+      if (campuriSchimbate) {
+        let rc: Awaited<ReturnType<typeof salveazaCampurileAditionale>>;
+        try {
+          rc = await salveazaCampurileAditionale(
+            order.id,
+            Object.fromEntries(campuriAditionale.map((c) => [c.id, campuriVal[c.id] ?? ""])),
+          );
+        } catch {
+          toast.error(
+            "Nu am primit răspuns de la server și nu știm dacă s-au salvat câmpurile adiționale. "
+            + "Reîmprospătează comanda înainte să încerci din nou.",
+          );
+          return;
+        }
+        if ("error" in rc) {
+          /* ⚠ Restul comenzii, daca s-a cerut, e DEJA salvat: se spune, ca omul sa nu-l trimita din nou. */
+          toast.error(doarCampuri ? rc.error : `Restul comenzii s-a salvat, dar câmpurile adiționale nu: ${rc.error}`);
+          if (!doarCampuri) onSaved();
+          return;
+        }
+      }
       toast.success("Comanda a fost actualizata.");
-      if (res.faraStoc > 0) {
+      if (res && res.faraStoc > 0) {
         toast.warning(`${res.faraStoc === 1 ? "O linie scoasa nu si-a putut" : `${res.faraStoc} linii scoase nu si-au putut`} da stocul inapoi automat. Corecteaza stocul din pagina produsului.`);
       }
       if (activeAwbs.length === 0 && addr.courier) {
@@ -1051,6 +1107,66 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
               </div>
             )}
           </section>
+
+          {/* ── Campurile aditionale (formularul de comanda) ── */}
+          {campuriAditionale.length > 0 && (
+            <section className="space-y-3">
+              <p className="text-sm font-semibold text-foreground">Câmpuri adiționale</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {campuriAditionale.map((c) => {
+                  const valoare = campuriVal[c.id] ?? "";
+                  const eticheta = `${c.label || "Câmp fără nume"}${c.peAwb ? " (pe AWB)" : ""}`;
+                  if (c.type === "checkbox") {
+                    return (
+                      <label key={c.id} className="flex items-center gap-2 text-sm text-foreground sm:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={valoare === BIFA_PUSA}
+                          onChange={(e) => seteazaCamp(c.id, e.target.checked ? BIFA_PUSA : "")}
+                          className="h-4 w-4 rounded border-border accent-primary"
+                        />
+                        {eticheta}
+                      </label>
+                    );
+                  }
+                  return (
+                    <div key={c.id} className={c.type === "textarea" ? "sm:col-span-2" : undefined}>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1">{eticheta}</label>
+                      {c.type === "textarea" ? (
+                        <textarea
+                          value={valoare}
+                          onChange={(e) => seteazaCamp(c.id, e.target.value)}
+                          maxLength={VALOARE_MAX}
+                          rows={3}
+                          className={inputCls}
+                        />
+                      ) : c.type === "select" ? (
+                        <select value={valoare} onChange={(e) => seteazaCamp(c.id, e.target.value)} className={inputCls}>
+                          <option value="">Fără valoare</option>
+                          {/* Valoarea de pe comanda ramane in lista si daca varianta a fost scoasa intre timp. */}
+                          {[...new Set([...(valoare ? [valoare] : []), ...c.options])].map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={valoare}
+                          onChange={(e) => seteazaCamp(c.id, e.target.value)}
+                          maxLength={VALOARE_MAX}
+                          className={inputCls}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {activeAwbs.length > 0 && campuriAditionale.some((c) => c.peAwb) && (
+                <p className="text-[11px] text-muted-foreground">
+                  Comanda are deja AWB: câmpurile marcate „pe AWB” ajung pe etichetă doar la un AWB emis de acum înainte.
+                </p>
+              )}
+            </section>
+          )}
 
           {/* ── Produsele DEJA pe comanda: cantitate si scoatere ── */}
           <section className="space-y-3">

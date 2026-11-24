@@ -45,6 +45,24 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION privat.cont_awburile_comenzii(p_order uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select nullif(concat_ws(' ',
+           o.curiera_awb_number, o.curiera_partener_awb, o.dpd_awb_number, o.fan_courier_awb_number,
+           o.sameday_awb_number, o.cargus_awb_number, o.gls_awb_number, o.woot_awb_number,
+           o.colete_awb_number, o.pallex_awb_number, o.ecolet_awb_number, o.posta_awb_number,
+           o.innoship_awb_number, o.packeta_packet_id, o.packeta_external_tracking,
+           o.smartship_awb_number, o.shipo_awb_number, o.fedex_awb_number, o.ups_awb_number,
+           o.dhl_awb_number, o.epacket_awb_number), '')
+    from public.orders o
+   where o.id = p_order;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION privat.cont_defalcarea_liniei(p_linie jsonb)
  RETURNS jsonb
  LANGUAGE sql
@@ -314,6 +332,23 @@ AS $function$
      where jsonb_typeof(e.intrare) = 'object'
        and ((f.fisier and f.cate > 0) or (not f.fisier and f.text is not null))
   ) end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION privat.cont_potrivire_destinatar(p_tipar text, p_nume text, p_telefon text, p_awburi text)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO ''
+AS $function$
+  select
+    lower(public.fara_diacritice(coalesce(p_nume, ''))) like p_tipar
+    or (length(v.cuvant) >= 4 and lower(coalesce(p_awburi, '')) like p_tipar)
+    or (v.cuvant ~ '^[0-9+]+$' and length(v.cifre) >= 6 and t.forme like '%' || v.cifre || '%')
+  from (select btrim(p_tipar, '%') as cuvant, regexp_replace(p_tipar, '[^0-9]', '', 'g') as cifre) v,
+       (select d.c || ' 0' || d.n || ' 40' || d.n || ' 0040' || d.n as forme
+          from (select x.c, regexp_replace(x.c, '^(0040|40|0)', '') as n
+                  from (select regexp_replace(coalesce(p_telefon, ''), '[^0-9]', '', 'g') as c) x) d) t;
 $function$
 ;
 
@@ -3871,7 +3906,7 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer DEFAULT 20, p_decalaj integer DEFAULT 0, p_cautare text DEFAULT NULL::text, p_stare text DEFAULT NULL::text, p_de_la timestamp with time zone DEFAULT NULL::timestamp with time zone)
+CREATE OR REPLACE FUNCTION public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer DEFAULT 20, p_decalaj integer DEFAULT 0, p_cautare text DEFAULT NULL::text, p_stare text DEFAULT NULL::text, p_de_la timestamp with time zone DEFAULT NULL::timestamp with time zone, p_pana_la timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS TABLE(order_id uuid, numar text, creata_la timestamp with time zone, stare text, incasata boolean, total numeric, bucati bigint, vedere text, total_randuri bigint, miniaturi jsonb, produse integer, are_factura boolean)
  LANGUAGE sql
  STABLE SECURITY DEFINER
@@ -3906,6 +3941,11 @@ AS $function$
     on o.id = l.order_id
    and o.business_id = l.business_id
   cross join cautarea c
+  /* AWB-urile comenzii, citite o data pe comanda, numai cand se cauta ceva si numai la
+     vederea intreaga (vezi poarta vederii, in capul fisierului). */
+  cross join lateral (
+    select case when c.tipare <> '{}' and l.vedere = 'intreaga' then privat.cont_awburile_comenzii(o.id) end as awburi
+  ) a
   cross join lateral (
     select
       coalesce(sum(
@@ -3936,8 +3976,10 @@ AS $function$
   ) m
   where l.business_id = p_business
     and l.cont_id = p_cont
+    /* <filtrele> aceleasi, litera cu litera, in lista si in raport */
     and (p_stare is null or o.status = p_stare)
     and (p_de_la is null or o.created_at >= p_de_la)
+    and (p_pana_la is null or o.created_at <= p_pana_la)
     /* Niciun cuvant care sa nu se gaseasca: fiecare, in numarul comenzii SAU in numele
        unei linii (si al unei extraoptiuni: „cadou” gaseste comanda cu ambalaj cadou,
        ceea ce omul chiar cauta). Fara cuvinte, `not exists` pe lista goala trece tot. */
@@ -3951,8 +3993,10 @@ AS $function$
              from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as s(li)
             where lower(public.fara_diacritice(coalesce(s.li->>'name', ''))) like t.tipar
          )
+         or (l.vedere = 'intreaga' and privat.cont_potrivire_destinatar(t.tipar, o.customer_name, o.customer_phone, a.awburi))
        )
     )
+    /* </filtrele> */
   /* ⚠ Departajator pe `id`: fara el, doua comenzi din aceeasi secunda pot aparea
      pe doua pagini deodata si alta poate lipsi. */
   order by o.created_at desc, o.id desc
@@ -5069,6 +5113,84 @@ begin
   values (p_business, p_cont, 'profil-schimbat');
   return 'salvat';
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION public.cont_raportul_comenzilor(p_business uuid, p_cont uuid, p_cautare text DEFAULT NULL::text, p_stare text DEFAULT NULL::text, p_de_la timestamp with time zone DEFAULT NULL::timestamp with time zone, p_pana_la timestamp with time zone DEFAULT NULL::timestamp with time zone, p_limita integer DEFAULT 2000)
+ RETURNS TABLE(numar text, creata_la timestamp with time zone, stare text, incasata boolean, total numeric, vedere text, destinatar text, telefon text, adresa_livrare jsonb, awburi text, produse text, bucati bigint, total_randuri bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with cautarea as (
+    select coalesce(array_agg('%' || replace(replace(replace(x.w, '\', '\\'), '%', '\%'), '_', '\_') || '%' order by x.n), '{}') as tipare
+      from (
+        select ltrim(w.w, '#') as w, w.n
+          from regexp_split_to_table(lower(public.fara_diacritice(btrim(coalesce(p_cautare, '')))), '\s+')
+               with ordinality as w(w, n)
+      ) x
+     where x.w <> '' and x.n <= 8
+  )
+  select
+    o.order_number,
+    o.created_at,
+    o.status,
+    public.comanda_incasata(o.status, o.payment_status, o.payment_method),
+    o.total,
+    l.vedere,
+    case when l.vedere = 'intreaga' then o.customer_name end,
+    case when l.vedere = 'intreaga' then o.customer_phone end,
+    case when l.vedere = 'intreaga' then o.shipping_address end,
+    a.awburi,
+    m.produse,
+    m.bucati,
+    count(*) over ()
+  from privat.cont_comanda l
+  join public.orders o
+    on o.id = l.order_id
+   and o.business_id = l.business_id
+  cross join cautarea c
+  /* Aici AWB-urile se citesc mereu la vederea intreaga: sunt si coloana a raportului. */
+  cross join lateral (
+    select case when l.vedere = 'intreaga' then privat.cont_awburile_comenzii(o.id) end as awburi
+  ) a
+  cross join lateral (
+    select
+      coalesce(sum(
+        case when x.li->>'quantity' ~ '^[0-9]+(\.[0-9]+)?$' then (x.li->>'quantity')::numeric else 0 end
+      ), 0)::bigint as bucati,
+      string_agg(
+        coalesce(nullif(x.li->>'quantity', ''), '1') || ' x ' || coalesce(x.li->>'name', ''),
+        '; ' order by x.ord
+      ) as produse
+    from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) with ordinality as x(li, ord)
+    where not (coalesce(x.li->>'product_id', '') like 'extra\_%')
+  ) m
+  where l.business_id = p_business
+    and l.cont_id = p_cont
+    /* <filtrele> aceleasi, litera cu litera, in lista si in raport */
+    and (p_stare is null or o.status = p_stare)
+    and (p_de_la is null or o.created_at >= p_de_la)
+    and (p_pana_la is null or o.created_at <= p_pana_la)
+    /* Niciun cuvant care sa nu se gaseasca: fiecare, in numarul comenzii SAU in numele
+       unei linii (si al unei extraoptiuni: „cadou” gaseste comanda cu ambalaj cadou,
+       ceea ce omul chiar cauta). Fara cuvinte, `not exists` pe lista goala trece tot. */
+    and not exists (
+      select 1
+        from unnest(c.tipare) as t(tipar)
+       where not (
+         lower(public.fara_diacritice(coalesce(o.order_number, ''))) like t.tipar
+         or exists (
+           select 1
+             from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as s(li)
+            where lower(public.fara_diacritice(coalesce(s.li->>'name', ''))) like t.tipar
+         )
+         or (l.vedere = 'intreaga' and privat.cont_potrivire_destinatar(t.tipar, o.customer_name, o.customer_phone, a.awburi))
+       )
+    )
+    /* </filtrele> */
+  order by o.created_at desc, o.id desc
+  limit greatest(1, least(5000, coalesce(p_limita, 2000)));
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION public.cont_retrimite_cod(p_business uuid, p_provocare_hash text, p_cod_hash text, p_minute integer DEFAULT 10, p_ip text DEFAULT NULL::text)
@@ -11895,6 +12017,13 @@ create table if not exists privat.cont_sesiune (
   motiv_incheiere text,
   ip inet);
 
+create table if not exists privat.esafe_20261123_categorii_inainte (
+  business_id uuid,
+  luata_la timestamp with time zone,
+  produse jsonb,
+  categorii jsonb,
+  harta_gmc jsonb);
+
 create table if not exists privat.esafe_20261123_trepte_inainte (
   id uuid,
   slug text,
@@ -13734,7 +13863,8 @@ create table if not exists public.orders (
   easybill_invoice_number text,
   easybill_storno_key text,
   easybill_storno_series text,
-  easybill_storno_number text);
+  easybill_storno_number text,
+  curiera_servicii_extra text[]);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -15494,6 +15624,7 @@ CREATE TRIGGER set_users_profile_updated_at BEFORE UPDATE ON public.users_profil
 CREATE TRIGGER users_profile_blocheaza_escaladare BEFORE UPDATE ON public.users_profile FOR EACH ROW EXECUTE FUNCTION blocheaza_escaladare_users_profile();
 
 -- ── RLS ───────────────────────────────────────────────────
+alter table privat.esafe_20261123_categorii_inainte enable row level security;
 alter table privat.saga_apel_in_curs enable row level security;
 alter table privat.store_settings enable row level security;
 alter table public.abandoned_carts enable row level security;
@@ -18671,7 +18802,7 @@ grant execute on function public.cont_buget_email_epuizat(p_business uuid) to se
 grant execute on function public.cont_cate_conturi(p_business uuid) to service_role;
 grant execute on function public.cont_cere_cod(p_business uuid, p_scop text, p_fel text, p_destinatie_bruta text, p_cod_hash text, p_cont uuid, p_minute integer, p_ip text, p_provocare_hash text, p_parola_hash text) to service_role;
 grant execute on function public.cont_comanda_mea(p_business uuid, p_cont uuid, p_order uuid) to service_role;
-grant execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer, p_cautare text, p_stare text, p_de_la timestamp with time zone) to service_role;
+grant execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer, p_cautare text, p_stare text, p_de_la timestamp with time zone, p_pana_la timestamp with time zone) to service_role;
 grant execute on function public.cont_contactele_mele(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_curatenie() to service_role;
 grant execute on function public.cont_dispozitiv_adauga(p_business uuid, p_cont uuid, p_jeton_hash text, p_zile integer) to service_role;
@@ -18708,6 +18839,7 @@ grant execute on function public.cont_preferinte(p_business uuid, p_cont uuid) t
 grant execute on function public.cont_preferinte_schimba(p_business uuid, p_cont uuid, p_canal text, p_vrea boolean) to service_role;
 grant execute on function public.cont_profil(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_profil_salveaza(p_business uuid, p_cont uuid, p_nume text, p_telefon text, p_judet text, p_localitate text, p_adresa text, p_cod_postal text) to service_role;
+grant execute on function public.cont_raportul_comenzilor(p_business uuid, p_cont uuid, p_cautare text, p_stare text, p_de_la timestamp with time zone, p_pana_la timestamp with time zone, p_limita integer) to service_role;
 grant execute on function public.cont_retrimite_cod(p_business uuid, p_provocare_hash text, p_cod_hash text, p_minute integer, p_ip text) to service_role;
 grant execute on function public.cont_retururile_mele(p_business uuid, p_cont uuid) to service_role;
 grant execute on function public.cont_rezumat(p_business uuid, p_cont uuid) to service_role;
@@ -18993,6 +19125,7 @@ grant execute on function public.vezi_ritm_extern(p_cheie text, p_fereastra_ms i
 -- Postgres da EXECUTE lui PUBLIC din oficiu la orice functie noua.
 -- Fara randurile astea, un restore redeschide tot ce s-a inchis.
 revoke execute on function privat.cheie_integrari() from public;
+revoke execute on function privat.cont_awburile_comenzii(p_order uuid) from public;
 revoke execute on function privat.cont_defalcarea_liniei(p_linie jsonb) from public;
 revoke execute on function privat.cont_documentul_comenzii(o anyelement) from public;
 revoke execute on function privat.cont_e_document_de_test(p_adresa text) from public;
@@ -19002,6 +19135,7 @@ revoke execute on function privat.cont_ip_ascuns(p inet) from public;
 revoke execute on function privat.cont_ip_sigur(p text) from public;
 revoke execute on function privat.cont_normalizeaza(p_fel text, p_valoare text) from public;
 revoke execute on function privat.cont_personalizarea_liniei(p_linie jsonb) from public;
+revoke execute on function privat.cont_potrivire_destinatar(p_tipar text, p_nume text, p_telefon text, p_awburi text) from public;
 revoke execute on function privat.cont_reguli_sesiune() from public;
 revoke execute on function privat.cripteaza(p_val text) from public;
 revoke execute on function privat.cripteaza_rand(p_rand jsonb) from public;
@@ -19073,7 +19207,7 @@ revoke execute on function public.cont_buget_email_epuizat(p_business uuid) from
 revoke execute on function public.cont_cate_conturi(p_business uuid) from public;
 revoke execute on function public.cont_cere_cod(p_business uuid, p_scop text, p_fel text, p_destinatie_bruta text, p_cod_hash text, p_cont uuid, p_minute integer, p_ip text, p_provocare_hash text, p_parola_hash text) from public;
 revoke execute on function public.cont_comanda_mea(p_business uuid, p_cont uuid, p_order uuid) from public;
-revoke execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer, p_cautare text, p_stare text, p_de_la timestamp with time zone) from public;
+revoke execute on function public.cont_comenzile_mele(p_business uuid, p_cont uuid, p_limita integer, p_decalaj integer, p_cautare text, p_stare text, p_de_la timestamp with time zone, p_pana_la timestamp with time zone) from public;
 revoke execute on function public.cont_contactele_mele(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_curatenie() from public;
 revoke execute on function public.cont_dispozitiv_adauga(p_business uuid, p_cont uuid, p_jeton_hash text, p_zile integer) from public;
@@ -19110,6 +19244,7 @@ revoke execute on function public.cont_preferinte(p_business uuid, p_cont uuid) 
 revoke execute on function public.cont_preferinte_schimba(p_business uuid, p_cont uuid, p_canal text, p_vrea boolean) from public;
 revoke execute on function public.cont_profil(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_profil_salveaza(p_business uuid, p_cont uuid, p_nume text, p_telefon text, p_judet text, p_localitate text, p_adresa text, p_cod_postal text) from public;
+revoke execute on function public.cont_raportul_comenzilor(p_business uuid, p_cont uuid, p_cautare text, p_stare text, p_de_la timestamp with time zone, p_pana_la timestamp with time zone, p_limita integer) from public;
 revoke execute on function public.cont_retrimite_cod(p_business uuid, p_provocare_hash text, p_cod_hash text, p_minute integer, p_ip text) from public;
 revoke execute on function public.cont_retururile_mele(p_business uuid, p_cont uuid) from public;
 revoke execute on function public.cont_rezumat(p_business uuid, p_cont uuid) from public;

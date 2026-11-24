@@ -13,7 +13,7 @@ import {
 } from "@/lib/curiera/client";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { cheieEveniment, eStareFinala, evenimenteDeSemnalat, statusDupaStare, trebuieSemnalat } from "@/lib/curiera/statusuri";
+import { cheieEveniment, eStareFinala, elibereazaStoculLaRetur, evenimenteDeSemnalat, statusDupaStare, trebuieSemnalat } from "@/lib/curiera/statusuri";
 import {
   alarmaMagazinului,
   citesteStarea,
@@ -23,6 +23,7 @@ import {
   type Galeata,
 } from "@/lib/curiera/urmarire";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { rezervareaAreStoc } from "@/lib/orders/stoc-rezervat";
 import { marcheazaLotul, scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { proprietariiMagazinelor, semnaleazaExpedierea } from "@/lib/orders/semnalarea-ajunge-la-om";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
     .from("orders")
     /* ⚠ `payment_method` si `order_source` sunt ale returului: fara ele `statusDupaRetur` nu stie
        daca e ramburs neincasat si cine tine comanda, deci nu muta nimic. */
-    .select("id, business_id, status, order_number, payment_status, payment_method, order_source, created_at, curiera_awb_number, curiera_awb_at, curiera_status_code, curiera_status_at, curiera_status_checked_at, curiera_evenimente_semnalate, curiera_partener_awb")
+    .select("id, business_id, status, order_number, payment_status, payment_method, order_source, created_at, curiera_awb_number, curiera_awb_at, curiera_status_code, curiera_status_at, curiera_status_checked_at, curiera_evenimente_semnalate, curiera_partener_awb, stoc_rezervat")
     .not("curiera_awb_number", "is", null)
     .neq("curiera_awb_number", "")
     /* ⚠ O comanda anulata isi pastreaza AWB-ul: fara filtrul pe status s-ar potrivi la nesfarsit. */
@@ -333,7 +334,13 @@ export async function GET(req: NextRequest) {
              * implicit, fiindca `tranzitie-marketplace.ts` spune, pentru retururile eMAG, ca stocul
              * NU se pune inapoi singur: nu e o scapare.
              */
-            ...(eRetur ? { elibereazaStoc: true } : {}),
+            /*
+             * ⚠ Din 23.11.2026, magazinul poate cere ca stocul sa revina abia cand confirma ca a primit
+             * coletul (`stoc_la_retur: "la_primire"`): Curiera anunta returul la PLECAREA lui inapoi,
+             * cu o zi-doua inaintea marfii. Atunci comanda trece tot pe „Rambursat”, dar cu stocul
+             * lasat consumat, iar „Retur primit” de pe comanda il elibereaza.
+             */
+            ...(eRetur ? { elibereazaStoc: elibereazaStoculLaRetur(cfg) } : {}),
           });
           /* ⚠ Verdictul e un SIR (`ok` | `reincearca` | `definitiv`), nu un obiect cu `.ok`. */
           if (rez === "ok" && eRetur) {
@@ -388,6 +395,9 @@ export async function GET(req: NextRequest) {
           semnalate++;
           const { titlu, mesaj } = semnalareCuriera({
             orderNumber: o.order_number, awb, cheie: c.cheie, eticheta: c.eticheta, evenimente, rambursataAutomat,
+            /* ⚠ „Apasa Retur primit” se spune numai cand butonul chiar apare pe comanda: optiunea
+               magazinului SI o rezervare care are ce da inapoi (`asteaptaPrimireaReturului`). */
+            stocLaPrimire: !elibereazaStoculLaRetur(cfg) && rezervareaAreStoc(o.stoc_rezervat),
           });
           await semnaleazaExpedierea(admin, {
             userId: proprietari.get(businessId) ?? null,

@@ -113,11 +113,13 @@ export function CurieraConfigClient({
   const [asigurare, setAsigurare] = useState(initialConfig?.asigurare === true);
   const [marime, setMarime] = useState<DimensiuneEticheta>(initialConfig?.dimensiune_eticheta ?? "a6");
   const [continut, setContinut] = useState(initialConfig?.continut_implicit ?? "");
+  /* Stocul unui retur revine abia cand omul confirma primirea coletului (vezi `statusuri.ts`). */
+  const [stocLaPrimire, setStocLaPrimire] = useState(initialConfig?.stoc_la_retur === "la_primire");
 
   /* Bara de salvare: apare doar cand formularul s-a departat de ultima salvare. */
   const valori = {
     cheie, nume, contact, telefon, email, adresa, oras, judet, codPostal, serviciuAdresa, serviciuPunct, lockere, extra,
-    asigurare, marime, continut,
+    asigurare, marime, continut, stocLaPrimire,
   };
   const [reper, setReper] = useState(valori);
   const modificat = JSON.stringify(valori) !== JSON.stringify(reper);
@@ -126,6 +128,7 @@ export function CurieraConfigClient({
     setAdresa(reper.adresa); setOras(reper.oras); setJudet(reper.judet); setCodPostal(reper.codPostal);
     setServiciuAdresa(reper.serviciuAdresa); setServiciuPunct(reper.serviciuPunct); setLockere(reper.lockere);
     setExtra(reper.extra); setAsigurare(reper.asigurare); setMarime(reper.marime); setContinut(reper.continut);
+    setStocLaPrimire(reper.stocLaPrimire);
   }
 
   const cheieSalvata = secretulEsteSalvat(initialConfig, "api_key");
@@ -171,6 +174,7 @@ export function CurieraConfigClient({
       asigurare,
       dimensiune_eticheta: marime,
       continut_implicit: continut.trim(),
+      stoc_la_retur: stocLaPrimire ? "la_primire" : "automat",
     };
   }
 
@@ -477,6 +481,15 @@ export function CurieraConfigClient({
             <Input id="curiera-continut" value={continut} onChange={(ev) => setContinut(ev.target.value)} placeholder="Produse" maxLength={255} />
           </Field>
         </div>
+      </Sectiune>
+
+      <Sectiune pas={4} titlu="Colete returnate">
+        <RandComutator
+          titlu="Pune stocul la loc abia când confirm că am primit returul"
+          text="La un colet returnat cu ramburs neîncasat, comanda trece singură pe Rambursat. Curiera anunță returul când coletul pornește înapoi, nu când ajunge. Cu opțiunea oprită, stocul revine atunci, cu o zi-două înaintea mărfii. Cu ea pornită, stocul revine când apeși „Retur primit” pe comandă."
+          activ={stocLaPrimire}
+          onChange={setStocLaPrimire}
+        />
       </Sectiune>
 
       {isActive && (

@@ -15,7 +15,9 @@ import { stripDiacritics } from "@/lib/utils/ro-address";
  * personalizat numit „Cod postal", completat la 86 din 91 de comenzi. Se ia numai cand comanda
  * n-are `postal_code` si numai daca are exact 6 cifre; altfel nimic (nu se ghiceste).
  */
-export type CampCheckoutAwb = { id: string; label: string; pe_awb?: boolean };
+/* `type` si `options` (asa cum sunt scrise in configurare) le poarta pentru fereastra „Editeaza comanda”,
+   care arata campul cu forma lui (`campuri-aditionale.ts`). Ferestrele de AWB nu le citesc. */
+export type CampCheckoutAwb = { id: string; label: string; pe_awb?: boolean; type?: string; options?: string };
 
 export type DetaliiPentruAwb = { observatii: string; codPostal: string };
 
@@ -73,6 +75,12 @@ export function campuriDinConfigurare(checkoutConfig: unknown): CampCheckoutAwb[
   const lista = (checkoutConfig as { custom_fields?: unknown } | null)?.custom_fields;
   if (!Array.isArray(lista)) return [];
   return lista
-    .filter((c): c is { id: string; label?: unknown; pe_awb?: unknown } => !!c && typeof (c as { id?: unknown }).id === "string")
-    .map((c) => ({ id: c.id, label: typeof c.label === "string" ? c.label : "", pe_awb: c.pe_awb === true }));
+    .filter((c): c is { id: string; label?: unknown; pe_awb?: unknown; type?: unknown; options?: unknown } => !!c && typeof (c as { id?: unknown }).id === "string")
+    .map((c) => ({
+      id: c.id,
+      label: typeof c.label === "string" ? c.label : "",
+      pe_awb: c.pe_awb === true,
+      ...(typeof c.type === "string" ? { type: c.type } : {}),
+      ...(typeof c.options === "string" ? { options: c.options } : {}),
+    }));
 }

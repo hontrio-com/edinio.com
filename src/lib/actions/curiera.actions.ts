@@ -31,6 +31,7 @@ import {
   lipsuriExpediereCuriera,
   parametriExpediereCuriera,
   referintaCuriera,
+  serviciiExtraTrimise,
   type DateAwbCuriera,
   type DateExpediereCuriera,
 } from "@/lib/curiera/expediere";
@@ -384,6 +385,12 @@ export async function createCurieraAwbAction(
     curiera_reference: referinta,
     curiera_partener: partener?.nume ?? null,
     curiera_partener_awb: partener?.awb ?? null,
+    /*
+     * Serviciile extra cu care a plecat coletul (443 = deschidere la livrare), pentru coloana
+     * „Colet cu verificare” din exportul .xlsx. ⚠ Citite din parametrii TRIMISI (`service_<id>`),
+     * nu din ce a bifat fereastra: `parametriExpediereCuriera` arunca id-urile care nu sunt numere.
+     */
+    curiera_servicii_extra: serviciiExtraTrimise(parametri),
     curiera_status_code: null,
     curiera_status_label: null,
     curiera_status_at: null,
@@ -493,6 +500,7 @@ export async function dezleagaCurieraAwbAction(
     curiera_reference: null,
     curiera_partener: null,
     curiera_partener_awb: null,
+    curiera_servicii_extra: null,
     curiera_status_code: null,
     curiera_status_label: null,
     curiera_status_at: null,

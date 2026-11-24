@@ -762,3 +762,26 @@ aceleasi nume exista si fara ramura, si acelea sunt ale productiei.
 ⚠ `scripts/schema-baseline.sh` citeste DOAR `.env.local`, care arata catre PRODUCTIE, pe cand
 `next dev` foloseste `.env.development.local`, care arata catre demo. Rulat fara variabile pe
 linia de comanda, ar suprascrie baseline-ul cu schema productiei.
+
+## Cautare dupa destinatar, telefon si AWB, perioada pe zile, raport descarcabil (23.11.2026)
+
+Cerut de un magazin ai carui clienti cu cont comanda pentru alte persoane (758 de comenzi din 21 de
+conturi). Migratia `2027-02-12-cont-cautare-destinatar-interval-raport.sql`.
+
+- **Cautarea** din „Comenzile mele” gaseste fiecare cuvant si in numele destinatarului, in telefon si
+  in AWB-uri (inclusiv numarul partenerului, de ex. DPD prin Curiera). Telefonul se compara pe cifre,
+  in cele trei scrieri (0722…, 40722…, 0040722…), numai pentru un cuvant de cel putin sase cifre;
+  AWB-ul de la patru caractere. Un numar scris cu spatii e lipit inainte sa plece (`textulDeCautat`).
+- **Perioada pe zile**: `?de_la=` si `?pana_la=`, zile romanesti, amandoua capetele incluse
+  (`zi-romaneasca.ts`); `cont_comenzile_mele` a primit `p_pana_la`. Cu o zi aleasa, perioada din lista
+  nu se mai aplica.
+- **Raportul**: `POST /api/cont/comenzi/raport` (formular, poarta de origine, `no-store`) da toate
+  comenzile filtrului de pe ecran intr-un .xlsx, prin `cont_raportul_comenzilor`, cu acelasi bloc de
+  filtre ca lista (o proba le tine identice). Plafon 2.000, spus in fisier cand taie.
+- ⚠ **Poarta vederii**: la o comanda cu vederea „redusa”, destinatarul, telefonul si AWB-ul nici nu se
+  cauta, nici nu apar in raport. Altfel campul de cautare ar fi raspuns la „comanda asta e pe numele X?”.
+
+Probat pe demo pe 23.11.2026: 20 de cautari (nume cu si fara diacritice, telefon in toate scrierile,
+AWB intreg si partial, perioade) cu acelasi rezultat in lista si in raport; o comanda trecuta pe vederea
+„redusa” intr-o proba care se da inapoi nu mai e gasita dupa nume, telefon sau AWB, iar in raport
+coloanele ei personale vin goale. Probe: `src/lib/cont/cautare-comenzi.test.ts`, `raport-comenzi.test.ts`.

@@ -1132,6 +1132,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         }
       }
       toast.success("Comanda a fost actualizată.");
+      /* Editarea a intrat, dar ceva a ramas de indreptat (de pilda reducerea nescrisa): se spune, nu se ascunde sub „actualizată”. */
+      if (res && "avertisment" in res && res.avertisment) toast.warning(res.avertisment, { duration: 20000 });
       if (res && res.faraStoc > 0) {
         toast.warning(`${res.faraStoc === 1 ? "O linie scoasă nu și-a putut" : `${res.faraStoc} linii scoase nu și-au putut`} da stocul înapoi automat. Corectează stocul din pagina produsului.`);
       }

@@ -482,6 +482,7 @@
 @source "../lib/orders/awb-propriu.ts";
 @source "../lib/orders/client-de-marketplace.ts";
 @source "../lib/orders/cod-postal-checkout.ts";
+@source "../lib/orders/costuri-manuale.ts";
 @source "../lib/orders/diferenta-ramburs.ts";
 @source "../lib/orders/edit-pricing.ts";
 @source "../lib/orders/extras.ts";

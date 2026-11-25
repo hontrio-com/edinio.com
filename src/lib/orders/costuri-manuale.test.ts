@@ -413,6 +413,35 @@ describe("costurile sunt legate cap la cap", () => {
     assert.match(s, /\[\.\.\.plan\.items, \.\.\.liniiDeCost\(costuri\.adaugate, idsCosturi\)\]/);
   });
 
+  test("⚠ puntea: reducerea se citeste inapoi si se scrie a doua oara daca functia din baza n-a scris-o", () => {
+    /*
+     * Migratia se aplica in productie doar la cuvantul proprietarului, deci codul poate ajunge
+     * acolo inaintea ei. Fara punte, o reducere scrisa de mana ar schimba totalul si ar lasa
+     * `discount_amount` vechi: o comanda care nu se mai explica din randurile ei.
+     */
+    const s = viu("src/lib/actions/order.actions.ts");
+    const i = s.indexOf("let avertisment: string | undefined;");
+    assert.ok(i > 0, "puntea a disparut");
+    const punte = s.slice(i, s.indexOf("if (rezEd.stoc_cunoscut === false", i));
+    assert.ok(punte.includes("if (costuri.reducere !== null) {"), "puntea porneste si cand reducerea n-a fost atinsa");
+    assert.ok(punte.includes(`.select("discount_amount").eq("id", orderId).single()`), "reducerea nu se mai citeste inapoi");
+    assert.ok(punte.includes("round2(Number(scris.discount_amount) || 0) === socoteala.discount"), "comparatia cu cifra hotarata a disparut");
+    assert.match(punte, /\.update\(\{ discount_amount: socoteala\.discount \}\)\s+\.eq\("id", orderId\)\s+\.eq\("business_id", order\.business_id\)/,
+      "a doua scriere nu mai e legata de comanda si de magazinul ei");
+    /* ⚠ Esecul puntii NU e esecul editarii: o eroare ar pune omul sa apese din nou si ar adauga produsele a doua oara. */
+    assert.ok(!punte.includes("return { error:"), "esecul puntii intoarce eroare, desi restul editarii a intrat in baza");
+    assert.ok(
+      s.includes("return { success: true, newTotal, faraStoc: plan.faraStoc.length, ...(avertisment ? { avertisment } : null) };"),
+      "avertismentul nu mai pleaca odata cu reusita",
+    );
+    /* Puntea vine DUPA scrierea reusita, nu inaintea ei. */
+    assert.ok(i > s.indexOf(`admin.rpc("editeaza_comanda_atomic"`), "puntea ruleaza inainte de scrierea comenzii");
+    assert.ok(
+      viu("src/components/dashboard/OrderEditModal.tsx").includes(`if (res && "avertisment" in res && res.avertisment) toast.warning(res.avertisment`),
+      "avertismentul nu ajunge la om",
+    );
+  });
+
   test("⚠ functia din baza chiar scrie reducerea: fara rand, totalul ar ramane peste o reducere veche", () => {
     /*
      * `editeaza_comanda_atomic` aplica fiecare camp cu `coalesce(p_patch->>'x', x)`: o cheie pe care

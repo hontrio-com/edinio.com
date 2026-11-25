@@ -10,6 +10,20 @@ import { parseIdConversieAds } from "@/lib/google-ads/conversie";
  * unvalidated value is a stored-XSS / cross-tenant vector. Merchants also often
  * paste the whole base-code snippet, so the parsers extract the bare ID.
  */
+/*
+ * ⚠ UN ID DE CONTAINER (`GTM-…`) NU E UN ID AL ETICHETEI GOOGLE DE AICI (25.11.2026). Din noiembrie 2026 ecranul de
+ * instalare din Google Ads arata din oficiu un ID `GTM-`, deci comerciantul il lipeste aici cu buna-credinta.
+ * Mesajul generic („foloseste formatul G-, AW- sau GT-”) nu-i spunea de unde sa ia ID-ul bun.
+ *
+ * ⚠ Si nu se accepta nici de acum: biblioteca incarcata cu un ID `GTM-` e un container intreg, in care oricine
+ * are drept de publicare ruleaza orice script, pe fiecare pagina a magazinului. Un ID `AW-` sau `G-` e tinut de
+ * Google la etichetele Google.
+ */
+const eContainerGtm = (v?: string | null) => /^\s*GTM-/i.test(v ?? "");
+const MESAJ_CONTAINER_GTM =
+  "Acesta este un ID de container Google Tag Manager (GTM-). Aici ai nevoie de ID-ul de conversie Google Ads, cel care începe cu AW-: "
+  + "îl generezi în Google Ads, în setările etichetei Google, la Container IDs, sau îl găsești la acțiunea ta de conversie.";
+
 function cleanMarketingConfig(config: MarketingConfig): { ok: true; value: MarketingConfig } | { ok: false; error: string } {
   const out: MarketingConfig = {};
 
@@ -23,6 +37,10 @@ function cleanMarketingConfig(config: MarketingConfig): { ok: true; value: Marke
     const id = parseTikTokPixelId(config.tiktok_pixel_id);
     if (!id) return { ok: false, error: "TikTok Pixel ID invalid. Copiaza ID-ul din TikTok Events Manager (ex: C4ABCDEF...)." };
     out.tiktok_pixel_id = id;
+  }
+
+  if (eContainerGtm(config.google_tag_id) || eContainerGtm(config.google_ads_conversion_id)) {
+    return { ok: false, error: MESAJ_CONTAINER_GTM };
   }
 
   if (config.google_tag_id?.trim()) {

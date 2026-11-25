@@ -98,7 +98,9 @@ export async function POST(request: NextRequest) {
     const linieAdresa = liniaAdresei(addr);
 
     const notifyUrl = `${baseUrl}/api/netopia/notify?t=${signNetopiaIpn(orderId)}`;
-    const redirectUrl = `${baseUrl}/${slug}/confirm?orderId=${encodeURIComponent(orderId)}&name=${encodeURIComponent(customerName)}&total=${order.total}`;
+    // Doar `orderId`: numele si totalul se citesc pe pagina din comanda. In adresa ar fi ajuns in
+    // `page_location`-ul pixelilor, in istoricul browserului si in Referer (vezi `checkout-core.ts`).
+    const redirectUrl = `${baseUrl}/${slug}/confirm?orderId=${encodeURIComponent(orderId)}`;
 
     const result = await startNetopiaPayment(
       {

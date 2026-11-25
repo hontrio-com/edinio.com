@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, LoaderCircle, Mail } from "lucide-react";
 import { BUTON_PRIMAR, CAMP, ETICHETA_CAMP, LEGATURA, STIL_PRIMAR, TITLU, FOCUS } from "./ui/clase";
@@ -229,8 +228,15 @@ export function FormularIntrare({ modInitial = "intrare" }: { modInitial?: ModAu
           {a.mod === "inregistrare" && (
             <p className="text-center text-xs leading-relaxed text-[var(--st-muted)]">
               Creand contul, esti de acord cu{" "}
-              <Link href="/politici/termeni" className={LEGATURA}>termenii magazinului</Link> si ai citit{" "}
-              <Link href="/politici/confidentialitate" className={LEGATURA}>politica de confidentialitate</Link>.
+              {/*
+                ⚠ `<a>`, NU `<Link>` (25.11.2026): politicile sunt in afara zonei de cont. Cu navigare de client,
+                pixelii magazinului se montau in documentul incarcat in zona de cont si ramaneau vii aici la
+                „Inapoi”. Vezi `ActiuneCont` (aceeasi regula, la intrare) si `DoarInAfaraContului`.
+              */}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- dinadins, vezi mai sus */}
+              <a href="/politici/termeni" className={LEGATURA}>termenii magazinului</a> si ai citit{" "}
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- dinadins, vezi mai sus */}
+              <a href="/politici/confidentialitate" className={LEGATURA}>politica de confidentialitate</a>.
             </p>
           )}
           {a.mod === "uitata" && (

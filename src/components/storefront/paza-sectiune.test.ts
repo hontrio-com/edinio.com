@@ -106,7 +106,8 @@ test("⚠⚠ 404-ul si eroarea magazinului isi iau prima pagina de la layout, nu
 
   const negasita = faraComentarii(cod("src/app/(public)/[slug]/not-found.tsx"));
   assert.match(negasita, /const \{ nume, culoare, culoareText, acasa \} = useIdentitateMagazin\(\);/);
-  assert.match(negasita, /<Link href=\{acasa\}/, "butonul 404-ului nu mai duce la prima pagina a magazinului");
+  /* `<a>`, nu `<Link>` (25.11.2026): pagina apare si pe adrese din zona de cont, de unde se iese prin incarcare completa. */
+  assert.match(negasita, /<a href=\{acasa\}/, "butonul 404-ului nu mai duce la prima pagina a magazinului");
   assert.doesNotMatch(negasita, /href="\/"/, "404-ul magazinului trimite iar la radacina (site-ul platformei, pe adresa cu slug)");
   assert.doesNotMatch(negasita, /createAdminClient|headers\(\)/, "404-ul interogheaza iar baza dupa gazda");
   // Accesibilitate: reper `main`, textul butonului in culoarea care se citeste pe fondul lui.

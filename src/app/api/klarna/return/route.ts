@@ -75,7 +75,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/", baseUrl));
   }
 
-  const successUrl = new URL(`/${slug}/confirm?orderId=${order.id}&name=${encodeURIComponent(order.customer_name as string)}&total=${order.total}`, baseUrl);
+  // Doar `orderId`: numele si totalul se citesc pe pagina din comanda. In adresa ar fi ajuns in
+  // `page_location`-ul pixelilor, in istoricul browserului si in Referer (vezi `checkout-core.ts`).
+  const successUrl = new URL(`/${slug}/confirm?orderId=${order.id}`, baseUrl);
   const fail = (motiv: string) =>
     NextResponse.redirect(new URL(`/${slug}/confirm?status=esuat&motiv=${encodeURIComponent(motiv)}&orderId=${order.id}`, baseUrl));
 

@@ -371,6 +371,8 @@ interface Props {
   /* ⚠ Poate lipsi: pagina o incarca separat, iar o pana la citirea ei nu are de ce sa rupa restul Setarilor. */
   stareaConturilor?: StareaConturilor;
   cookieCategories: ConsentCategory[];
+  /** Magazinul are un ID de conversie Google Ads: numai atunci are rost optiunea „Eticheta Google Ads înainte de acord”. */
+  areGoogleAds?: boolean;
   /** Furnizorul chatului pornit in magazin („Tidio”), numit in categoria „Functionale”, ca in bannerul din vitrina. */
   furnizorChat?: string;
   storeSeo: StoreSeo;
@@ -404,7 +406,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, furnizorChat, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, areGoogleAds, furnizorChat, stareaConturilor, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta, permalinkuri, adresaMagazin }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -1878,7 +1880,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "cookies" && (
             <div className="space-y-6">
               <Callout variant="info" icon={Cookie}>
-                Bannerul de cookie-uri este obligatoriu prin lege (GDPR). Apare automat pe magazinul tau, in culoarea magazinului, si cere acordul vizitatorilor inainte de a incarca instrumentele de analiza si marketing. Continutul se actualizeaza singur dupa integrarile pe care le ai active.
+                Bannerul de cookie-uri este obligatoriu prin lege (GDPR). Apare automat pe magazinul tău, în culoarea magazinului, și cere acordul vizitatorilor înainte ca instrumentele de analiză și marketing să pornească. Conținutul se actualizează singur după integrările pe care le ai active.
               </Callout>
 
               {!businessId && (
@@ -1900,6 +1902,45 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <Callout variant="warning" icon={AlertTriangle} title="Instrumentele de marketing se incarca fara consimtamant">
                   Cu bannerul dezactivat, pixelii (Facebook, TikTok) si Google Analytics se incarca pentru toti vizitatorii, fara sa le ceara acordul. Astfel pixelul e vizibil imediat in Pixel Helper, dar <span className="font-medium">raspunderea conformitatii GDPR iti apartine</span>. Recomandam sa lasi bannerul activ.
                 </Callout>
+              )}
+
+              {/*
+                Eticheta Google Ads inainte de acord (25.11.2026). Numai la magazinele cu ID de conversie Google Ads
+                si cu bannerul pornit: fara banner, etichetele se incarca oricum la toti vizitatorii.
+              */}
+              {areGoogleAds && cookieCfg.enabled && (
+                <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">Eticheta Google Ads pornește înainte de acord</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        Pornită, eticheta Google Ads se încarcă la vizitele din magazin, cu toate permisiunile refuzate
+                        până răspunde vizitatorul: fără cookie-uri și fără date despre comenzi, doar semnalul că magazinul
+                        are eticheta. Până la acord nu se încarcă pe paginile de comandă și în contul clientului. Așa o
+                        găsește Google Ads pe site și îți poți porni campaniile. Bannerul le spune asta vizitatorilor.
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Oprită, eticheta se încarcă abia după ce vizitatorul acceptă cookie-urile, iar Google Ads poate
+                        spune că eticheta lipsește de pe site până când acceptă cineva.
+                      </p>
+                      {/*
+                        Spus aici, nu promis: ce destinatii are eticheta AW- hotaraste comerciantul in contul lui Google.
+                        Proprietatea Analytics trecuta in panou o tinem oprita pana la acord (`ga-disable`); o destinatie
+                        pe care n-o stim nu o putem opri. Vezi `lib/eticheta-google/corp.ts`.
+                      */}
+                      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                        Google Analytics rămâne oprit până la acord. Dacă în contul tău Google eticheta AW- are și alte
+                        destinații, pe care nu le-ai trecut în Edinio, și acelea primesc semnale fără cookie-uri înainte
+                        de acord.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={cookieCfg.google_ads_inainte_de_acord}
+                      onCheckedChange={(v) => setCookieCfg(c => ({ ...c, google_ads_inainte_de_acord: v }))}
+                      aria-label="Eticheta Google Ads pornește înainte de acord"
+                    />
+                  </div>
+                </div>
               )}
 
               {/* Pozitionare */}
@@ -1946,7 +1987,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   )}
                   {cookieCategories.includes("marketing") && (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium text-foreground">
-                      <Zap className="h-3.5 w-3.5 text-purple-500" /> Marketing (Facebook, TikTok)
+                      <Zap className="h-3.5 w-3.5 text-purple-500" /> Marketing (Google Ads, Facebook, TikTok)
                     </span>
                   )}
                   {cookieCategories.includes("functional") && (

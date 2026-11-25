@@ -10,6 +10,7 @@ import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { TheMarketerTracking } from "@/components/public/TheMarketerTracking";
 import { vitrinaTheMarketer, type SetariTMBrute, type VitrinaTM } from "@/lib/themarketer/vitrina";
 import { GoogleTag } from "@/components/public/GoogleTag";
+import { corpEticheteiGoogle } from "@/lib/eticheta-google/corp";
 import { parseIdConversieAds } from "@/lib/google-ads/conversie";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
@@ -255,7 +256,13 @@ export default async function StoreLayout({ children, params }: Props) {
   /* Numele furnizorului de chat, pentru categoria „Functionale” din banner si pentru cartonasul de acord. */
   const furnizorChat = chat ? numeleFurnizorului(chat.cont.furnizor) : undefined;
   /* Ce sta sub „Marketing” in banner, pe nume: omul isi da acordul pentru ce citeste acolo. */
-  const furnizoriMarketing = [fbPixelId && "Facebook", ttPixelId && "TikTok", tm && "theMarketer"].filter((x): x is string => !!x);
+  const furnizoriMarketing = [adsConversionId && "Google Ads", fbPixelId && "Facebook", ttPixelId && "TikTok", tm && "theMarketer"].filter((x): x is string => !!x);
+  /*
+   * „Marketing” exista in banner numai din cauza Google Ads. Pana pe 25.11.2026 Google Ads nu aprindea nicio
+   * categorie, deci vizitatorii de dinainte ai unui asemenea magazin n-au fost intrebati de marketing: bannerul
+   * ii mai intreaba o data. Vezi `bannerDecis`.
+   */
+  const marketingDoarGoogleAds = Boolean(adsConversionId) && !fbPixelId && !ttPixelId && tm === null;
   const color = culoareMagazin(business?.primary_color);
   const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
 
@@ -280,12 +287,21 @@ export default async function StoreLayout({ children, params }: Props) {
     suspendatPana: (business?.suspended_until as string | null) ?? null,
   });
 
-  // Trackers inject AFTER the visitor consents to the matching category
-  // (GDPR opt-in). marketing = FB/TikTok pixels, analytics = Google Tag.
+  // Pixelii (Meta, TikTok, theMarketer) intra in pagina DUPA acordul pentru marketing (GDPR opt-in).
+  // Eticheta Google: Analytics si evenimentele tot dupa acord; eticheta de RECLAME poate porni la orice
+  // vizita, cu semnalele refuzate, ca Google Ads sa o gaseasca pe site. Vezi `lib/eticheta-google/corp.ts`.
   // When the merchant disabled the cookie banner, there is no consent flow, so
   // the gate is bypassed and trackers load unconditionally (merchant owns the
   // GDPR responsibility — a warning is shown in Settings → Banner Cookies).
   const requireConsent = cookieConfig.enabled;
+  /*
+   * Scriptul de pornire al etichetei Google, scris de SERVER in pagina (mai jos, la inceputul ei). `null` cand
+   * magazinul n-are niciun ID Google. Vezi `lib/eticheta-google/corp.ts`.
+   */
+  const etichetaGoogle = corpEticheteiGoogle({
+    tagIds: googleTagIds, slug, cuBanner: requireConsent, adsId: adsConversionId,
+    adsInainteDeAcord: cookieConfig.google_ads_inainte_de_acord,
+  });
   /*
    * WhatsApp si telefonul plutitoare, pentru butonul de contact. ⚠ Aceeasi regula ca in `MiniStoreRenderer`:
    * WhatsApp porneste singur cand exista numarul, apelul numai cand comerciantul l-a pornit.
@@ -311,6 +327,17 @@ export default async function StoreLayout({ children, params }: Props) {
       */}
       <FeteRomanesti />
       {/*
+        ⚠⚠ ETICHETA GOOGLE PORNESTE DE AICI, DIN PAGINA TRIMISA DE SERVER (25.11.2026). La magazinele cu
+        reclame Google, eticheta de reclame porneste la orice vizita, cu toate semnalele consent mode refuzate
+        pana raspunde omul: cat a stat dupa poarta de consimtamant, Google Ads ii spunea comerciantului ca
+        eticheta lipseste de pe site. Analytics si evenimentele asteapta acordul, ca inainte.
+
+        ⚠ NU STA SUB `DoarInMagazinReal` / `DoarInAfaraContului`: acelea sunt componente de client si pe
+        server nu deseneaza nimic. Scriptul isi tine singur cele doua reguli, din adresa: nu porneste in
+        previzualizarea din editor si nici in zona de cont. Vezi `lib/eticheta-google/corp.ts`.
+      */}
+      {etichetaGoogle && <script id="eticheta-google" dangerouslySetInnerHTML={{ __html: etichetaGoogle.script }} />}
+      {/*
         ⚠⚠ SI NU IN ZONA DE CONT. Paginile de sub `/{slug}/cont` sunt copiii
         layoutului asta, deci pana pe 23.09.2026 mosteneau pixelii alesi de
         comerciant: adresa paginii, care poarta identificatorul comenzii, pleaca
@@ -320,7 +347,7 @@ export default async function StoreLayout({ children, params }: Props) {
         altcineva. Vezi `DoarInAfaraContului` pentru ce s-a incercat si de ce nu
         merge un `layout.tsx` sub `cont/`.
       */}
-      <DoarInAfaraContului slug={slug}>
+      <DoarInAfaraContului slug={slug} niciDupaIesire>
         <DoarInMagazinReal>
           <AttributionCapture basePath={basePath} />
           {fbPixelId && (
@@ -329,8 +356,13 @@ export default async function StoreLayout({ children, params }: Props) {
           {ttPixelId && (
             <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} magazin={slug} capi={mc?.tiktok_capi_activ === true} /></ConsentGate>
           )}
+          {/*
+            Jumatatea din browser a etichetei Google: duce raspunsul din banner la eticheta si o porneste
+            cand n-a pornit din scriptul de la inceputul paginii. Pixelii Meta, TikTok si theMarketer raman
+            dupa poarta de consimtamant: ei nu au un mod in care sa porneasca refuzati.
+          */}
           {googleTagIds.length > 0 && (
-            <ConsentGate slug={slug} category={["analytics", "marketing"]} bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} adsId={adsConversionId} /></ConsentGate>
+            <GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} adsId={adsConversionId} adsInainteDeAcord={cookieConfig.google_ads_inainte_de_acord} />
           )}
           {tm && (
             <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TheMarketerTracking cheie={tm.cheie} captura={tm.captura} /></ConsentGate>
@@ -363,6 +395,8 @@ export default async function StoreLayout({ children, params }: Props) {
             storeName={storeName}
             furnizoriMarketing={furnizoriMarketing}
             furnizorChat={furnizorChat}
+            googleAdsInainteDeAcord={etichetaGoogle?.inainteDeAcord === true}
+            marketingDoarGoogleAds={marketingDoarGoogleAds}
           />
         </DoarInMagazinReal>
       )}

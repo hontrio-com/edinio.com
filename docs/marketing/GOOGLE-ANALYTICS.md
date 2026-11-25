@@ -72,7 +72,9 @@ mai trimite rambursare: o rambursare lipsa lasa venitul prea mare, una falsa il 
 
 ### 2. ⚠⚠ Achizitia pleca de pe server si pentru cine REFUZASE analiza
 
-Tag-ul din browser e in Consent Mode de baza: nu se incarca pana cand omul nu accepta analiza. Serverul
+Tag-ul din browser e in Consent Mode de baza: nu se incarca pana cand omul nu accepta analiza. (Asa a ramas
+si dupa 25.11.2026, cand eticheta de RECLAME a inceput sa porneasca inainte de acord: Analytics se configureaza
+tot abia dupa acord. Vezi `docs/marketing/GOOGLE-ADS.md`, sectiunea „25.11.2026”.) Serverul
 trimitea oricum, iar cand `_ga` lipsea inventa un `client_id`. Dar `_ga` lipseste tocmai la cine a refuzat.
 
 ⚠ Si un `_ga` prezent nu dovedea acordul: pe adresa comuna `edinio.com/<magazin>` cookie-ul sta pe

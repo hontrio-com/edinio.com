@@ -41,12 +41,22 @@ function getQueue(): QueuedCall[] {
 }
 
 function ready(vendor: Vendor): boolean {
-  const w = window as unknown as { fbq?: unknown; ttq?: { track?: unknown }; gtag?: unknown; __edinioMktr?: unknown };
+  const w = window as unknown as {
+    fbq?: unknown; ttq?: { track?: unknown }; gtag?: unknown; __edinioMktr?: unknown;
+    __edinioAcordGoogle?: { analytics?: boolean; marketing?: boolean };
+  };
   if (vendor === "fb") return typeof w.fbq === "function";
   if (vendor === "tt") return !!w.ttq && typeof w.ttq.track === "function";
   /* theMarketer: gata cand codul lui de baza a rulat (`TheMarketerTracking`), adica numai dupa acord. */
   if (vendor === "mk") return !!w.__edinioMktr && typeof w.__edinioMktr === "object";
-  return typeof w.gtag === "function";
+  /*
+   * ⚠ GOOGLE: `gtag` NU MAI INSEAMNA „OMUL A ACCEPTAT” (25.11.2026). Eticheta de reclame poate porni inainte
+   * de raspunsul la banner, cu semnalele refuzate, ca Google Ads sa o gaseasca pe site. Evenimentele raman
+   * insa sub acord, ca pana acum: fara analiza si fara marketing, asteapta in coada. Fara stare cunoscuta se
+   * cade pe refuz. Vezi `lib/eticheta-google/corp.ts`.
+   */
+  const acord = w.__edinioAcordGoogle;
+  return typeof w.gtag === "function" && (acord?.analytics === true || acord?.marketing === true);
 }
 
 function dispatch(vendor: Vendor, run: () => void): void {
@@ -218,6 +228,24 @@ export function gtagRaw(...args: unknown[]) {
   dispatch("ga", () => {
     const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
     if (typeof gtag === "function") gtag(...args);
+  });
+}
+
+/**
+ * Datele clientului pentru enhanced conversions (`gtag('set', 'user_data', …)`), hash-uite pe server.
+ *
+ * ⚠ NUMAI CU ACORDUL DE MARKETING (25.11.2026). Coada lasa evenimentele Google sa plece cu ORICARE dintre
+ * analiza si marketing (fiecare semnal isi citeste apoi categoria), dar emailul si telefonul omului sunt
+ * date pentru reclame: cu acordul doar pentru analiza nu au ce cauta la eticheta. Intrebarea se pune AICI,
+ * in clipa in care apelul chiar ruleaza (dupa coada), nu la apelant: acordul poate veni intre timp.
+ *
+ * ⚠ Fara stare cunoscuta (`__edinioAcordGoogle` lipsa) nu pleaca nimic: se cade pe refuz.
+ */
+export function gtagDateleClientului(date: Record<string, unknown>) {
+  dispatch("ga", () => {
+    const w = window as unknown as { gtag?: (...a: unknown[]) => void; __edinioAcordGoogle?: { marketing?: boolean } };
+    if (w.__edinioAcordGoogle?.marketing !== true) return;
+    if (typeof w.gtag === "function") w.gtag("set", "user_data", date);
   });
 }
 

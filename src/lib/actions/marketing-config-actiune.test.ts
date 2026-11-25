@@ -110,6 +110,18 @@ describe("Google Ads in `saveMarketingConfig`", () => {
     assert.equal(scrieri.length, 0);
   });
 
+  test("⚠ un ID de container (`GTM-…`) e refuzat, cu un mesaj care spune ce ID trebuie", async () => {
+    /*
+     * Din noiembrie 2026 ecranul de instalare din Google Ads arata din oficiu un ID `GTM-`, deci comerciantul il
+     * lipeste aici cu buna-credinta. Nu se accepta: incarcat ca eticheta, un `GTM-` e un container intreg.
+     */
+    for (const cerere of [{ google_tag_id: "GTM-ABC1234" }, { google_tag_id: " gtm-abc1234 " }, { google_tag_id: "G-76XBCVV0P2", google_ads_conversion_id: "GTM-ABC1234" }]) {
+      const r = await saveMarketingConfig(BIZ, cerere);
+      assert.ok("error" in r && /container Google Tag Manager/.test(r.error) && /AW-/.test(r.error), JSON.stringify(cerere));
+    }
+    assert.equal(scrieri.length, 0, "un ID de container a ajuns in baza");
+  });
+
   test("ID-ul si eticheta impreuna se salveaza curatate", async () => {
     const r = await saveMarketingConfig(BIZ, {
       google_tag_id: "g-76xbcvv0p2",

@@ -47,7 +47,12 @@ export function EcranAcasa({
         <StareGoala
           icon={PackageSearch}
           titlu="Nu ai inca nicio comanda"
-          actiune={<LegaturaCont href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</LegaturaCont>}
+          /*
+            ⚠ `<a>`, NU `LegaturaCont` (25.11.2026): magazinul e in afara zonei de cont. Cu navigare de client,
+            pixelii se montau in documentul incarcat in zona de cont si ramaneau vii aici la „Inapoi”. Vezi `ActiuneCont`.
+          */
+          // eslint-disable-next-line @next/next/no-html-link-for-pages -- dinadins, vezi mai sus
+          actiune={<a href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</a>}
         >
           Comenzile plasate cu adresa de email a contului apar aici automat. Daca ai comandat cu alta adresa, adaug-o in{" "}
           <LegaturaCont href="/cont/date" className={LEGATURA}>Datele mele</LegaturaCont> si le vei vedea aici.

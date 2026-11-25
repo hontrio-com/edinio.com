@@ -333,13 +333,101 @@ test("rotirea jetonului chiar se cheama de undeva", () => {
 
 test("pixelii comerciantului nu se randeaza pe paginile de cont", () => {
   const layout = citeste("src/app/(public)/[slug]/layout.tsx");
-  const inceput = layout.indexOf("<DoarInAfaraContului slug={slug}>");
+  /* ⚠ Cu `niciDupaIesire`: vezi proba urmatoare. */
+  const inceput = layout.indexOf("<DoarInAfaraContului slug={slug} niciDupaIesire>");
   const sfarsit = layout.indexOf("</DoarInAfaraContului>");
-  assert.ok(inceput > 0 && sfarsit > inceput, "blocul de pixeli nu e inchis in `DoarInAfaraContului`");
+  assert.ok(inceput > 0 && sfarsit > inceput, "blocul de pixeli nu e inchis in `DoarInAfaraContului niciDupaIesire`");
   const inauntru = layout.slice(inceput, sfarsit);
-  for (const c of ["FacebookPixel", "TikTokPixel", "GoogleTag", "AttributionCapture"]) {
+  for (const c of ["FacebookPixel", "TikTokPixel", "GoogleTag", "AttributionCapture", "TheMarketerTracking"]) {
     assert.ok(inauntru.includes(c), `${c} a iesit din poarta zonei de cont`);
   }
+});
+
+/*
+  ⚠⚠ PIXELII SI ZONA DE CONT NU IMPART NICIODATA ACELASI DOCUMENT (25.11.2026, gasit la recenzie).
+
+  Intrarea era pazita din 24.09.2026 (`ActiuneCont` e un `<a>`), iesirea nu: din `/cont/comenzi/<id>` se
+  ajungea pe pagina unui produs printr-un `<Link>`, fara reincarcare. Pixelii se montau atunci in documentul
+  incarcat in zona de cont, iar la „Inapoi” ramaneau vii acolo: numararea paginilor dupa istoric (pornita din
+  oficiu la GA4 si la pixelul Meta) trimitea adresa cu identificatorul comenzii. Scriptul unui pixel odata
+  incarcat nu mai poate fi scos din pagina.
+
+  Doua paze, amandoua probate mai jos:
+    1. un document incarcat in zona de cont nu mai primeste pixeli deloc (`niciDupaIesire`);
+    2. legaturile din ecranele contului care duc in magazin sunt `<a>`, ca masuratoarea sa nu piarda nimic.
+*/
+test("un document incarcat in zona de cont nu mai primeste pixeli nici dupa ce omul iese din ea", () => {
+  const c = citeste("src/components/public/DoarInAfaraContului.tsx");
+  /* Starea se citeste o singura data, din adresa cu care s-a incarcat documentul. */
+  assert.ok(c.includes('const [incarcatInCont] = useState(() => typeof window !== "undefined" && eZonaDeCont(window.location.pathname, slug));'));
+  assert.ok(c.includes("if (niciDupaIesire && incarcatInCont) return null;"), "paza documentului incarcat in zona de cont a disparut");
+  /* Regula veche ramane intreaga, pentru toti: in zona de cont nu se deseneaza nimic. */
+  assert.ok(c.includes("if (eZonaDeCont(cale, slug)) return null;"));
+  /* Butonul de contact NU o cere: el trebuie sa apara cand omul iese din cont. */
+  const layout = citeste("src/app/(public)/[slug]/layout.tsx");
+  assert.equal(layout.split("niciDupaIesire").length - 1, 1, "`niciDupaIesire` e numai pe blocul de pixeli");
+});
+
+test("din ecranele contului se iese in magazin numai printr-o incarcare completa", () => {
+  const ECRANE = ZONA_CONT.filter((p) => p.endsWith(".tsx"));
+  const inCont = (tinta: string) => tinta === "/cont" || tinta.startsWith("/cont/") || tinta.startsWith("/cont?");
+  /* Tintele care nu sunt scrise pe loc: fiecare e verificata mai jos, la sursa ei. */
+  const SOCOTITE = new Set(["href", "m.href", "p.inapoi.href", "adresa(pagina - 1)", "adresa(pagina + 1)", "adresaComenzilor(curat)"]);
+  const vinovate: string[] = [];
+  let vazute = 0;
+  for (const p of ECRANE) {
+    const cod = citeste(p).replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    const legaturi = [
+      ...cod.matchAll(/<(?:Link|LegaturaCont|Placa)\b[^>]*?\bhref=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^}]*)\})/g),
+      ...cod.matchAll(/router\.(?:push|replace)\((?:"([^"]*)"|`([^`]*)`|([^,)]*\)?))/g),
+    ];
+    for (const m of legaturi) {
+      vazute += 1;
+      const scrisa = m[1] ?? m[2];
+      if (scrisa !== undefined) { if (!inCont(scrisa)) vinovate.push(`${p}: ${scrisa}`); }
+      else if (!SOCOTITE.has((m[3] ?? "").trim())) vinovate.push(`${p}: tinta socotita necunoscuta \`${(m[3] ?? "").trim()}\``);
+    }
+  }
+  assert.ok(vazute >= 20, `proba nu mai gaseste legaturile din zona de cont (a vazut ${vazute})`);
+  assert.deepEqual(vinovate, [], "o legatura fara reincarcare duce din zona de cont in magazin: fa-o `<a>` (vezi `ActiuneCont`)");
+
+  /* Sursele tintelor socotite: meniul contului, legatura „inapoi” si paginarea raman in zona de cont. */
+  const meniu = [...citeste("src/components/storefront/cont/ui/meniu.ts").matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(meniu.length >= 6 && meniu.every(inCont), `meniul contului duce in afara lui: ${meniu.join(", ")}`);
+  for (const p of ECRANE) {
+    for (const m of citeste(p).matchAll(/inapoi=\{\{ href: "([^"]+)"/g)) assert.ok(inCont(m[1]), `${p}: „inapoi” duce in afara contului`);
+    for (const m of citeste(p).matchAll(/<Paginare baza="([^"]+)"/g)) assert.ok(inCont(m[1]), `${p}: paginarea duce in afara contului`);
+  }
+  assert.ok(citeste("src/lib/cont/cautare-comenzi.ts").includes('return p ? `/cont/comenzi?${p}` : "/cont/comenzi";'));
+
+  /* Iesirile cunoscute sunt `<a>`: spre magazin, spre produsele comenzii, spre retur si spre politici. */
+  const ecran = (nume: string) => citeste(`src/components/storefront/cont/${nume}`);
+  assert.ok(ecran("ecrane/EcranAcasa.tsx").includes('actiune={<a href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</a>}'));
+  assert.ok(ecran("ecrane/EcranComenzi.tsx").includes('actiune={<a href="/" className={BUTON_PRIMAR} style={STIL_PRIMAR}>Mergi la magazin</a>}'));
+  assert.equal(ecran("ecrane/EcranComanda.tsx").split("<a href={legatura}").length - 1, 2, "legaturile spre produsele comenzii nu mai sunt `<a>`");
+  assert.ok(ecran("ecrane/EcranComanda.tsx").includes("<a href={`/retur?order=${encodeURIComponent(c.numar)}`} className={BUTON_SECUNDAR}>"));
+  assert.ok(ecran("FormularIntrare.tsx").includes('<a href="/politici/termeni" className={LEGATURA}>'));
+  assert.ok(ecran("FormularIntrare.tsx").includes('<a href="/politici/confidentialitate" className={LEGATURA}>'));
+  assert.ok(citeste("src/app/(public)/[slug]/cont/retururi/page.tsx").includes('<a href="/retur" className={BUTON_SECUNDAR}>'));
+  /* Si pagina negasita, care apare si pe o adresa gresita din zona de cont (`/cont/comenzi/<id>`). */
+  const negasita = citeste("src/app/(public)/[slug]/not-found.tsx");
+  assert.ok(negasita.includes('<a href={acasa} referrerPolicy={acasa === "/" ? "strict-origin" : undefined}'), "pagina negasita iese din zona de cont fara reincarcare, sau isi duce adresa cu ea");
+  assert.equal(negasita.includes("next/link"), false);
+});
+
+test("zona de cont nu isi spune adresa mai departe: de pe paginile ei pleaca numai originea", () => {
+  /*
+    Iesirea prin incarcare completa duce cu ea „pagina de unde vine omul”: fara asta, pagina urmatoare ar fi
+    primit `/cont/comenzi/<id>` drept `document.referrer`, iar pixelii ei (cu acord) l-ar fi trimis mai departe.
+  */
+  const cadru = citeste("src/app/(public)/[slug]/cont/layout.tsx");
+  assert.match(cadru, /^export const metadata: Metadata = \{ referrer: "strict-origin" \};$/m);
+  /* Nicio pagina de cont nu isi pune alta politica peste cea a zonei. */
+  for (const p of fisiereDin("src/app/(public)/[slug]/cont", [".tsx"]).filter((f) => f.endsWith("/page.tsx"))) {
+    assert.equal(/\breferrer\s*:/.test(citeste(p)), false, `${p} isi pune singura politica de provenienta`);
+  }
+  /* Cererile zonei de cont se verifica dupa `Origin`, nu dupa `Referer`: politica stransa nu le strica. */
+  assert.ok(citeste("src/lib/cont/cerere.ts").includes("Se cere `Origin`, nu `Referer`"));
 });
 
 /* ═══ Niciun contact in jurnalul fara retentie ═══ */

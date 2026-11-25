@@ -128,7 +128,12 @@ describe("remarketing dinamic", () => {
 describe("ce se incarca sub ce acord", () => {
   const acord = (analytics: boolean, marketing: boolean) => ({ necessary: true as const, analytics, marketing, functional: false });
 
-  test("⚠ tagul Google se incarca daca omul a acceptat ORICARE dintre analiza si marketing", () => {
+  test("⚠ o poarta cu mai multe categorii se deschide la ORICARE dintre ele", () => {
+    /*
+     * Regula a fost scrisa pentru tagul Google (18.09.2026). Din 25.11.2026 el nu mai sta dupa poarta: se
+     * incarca la orice vizita, in consent mode avansat (`lib/eticheta-google/corp.test.ts`). Regula ramane a
+     * portii, pentru orice tracker pus sub mai multe categorii.
+     */
     assert.equal(areAcordPentru(acord(true, false), ["analytics", "marketing"]), true);
     assert.equal(areAcordPentru(acord(false, true), ["analytics", "marketing"]), true, "acordul de marketing nu ajungea la Google Ads");
     assert.equal(areAcordPentru(acord(false, false), ["analytics", "marketing"]), false);
@@ -140,32 +145,41 @@ describe("ce se incarca sub ce acord", () => {
 
 // ── 5. Cablarea care cere un browser ──────────────────────────────────────────────
 describe("cablarea din pagini", () => {
-  test("⚠ tagul Google se incarca si pentru marketing, iar semnalele urmeaza fiecare categoria lui", () => {
+  test("⚠ tagul Google nu mai sta dupa poarta, iar semnalele urmeaza fiecare categoria lui", () => {
+    /*
+     * Din 25.11.2026 eticheta nu mai sta dupa `ConsentGate`: scriptul ei e scris de server in pagina, iar la
+     * magazinele cu reclame Google eticheta de reclame poate porni cu semnalele refuzate (Google Ads nu o gasea
+     * pe site). Ordinea comenzilor si fiecare fel de raspuns sunt RULATE in `lib/eticheta-google/corp.test.ts`;
+     * aici ramane legatura dintre semnale si categorii.
+     */
     const invelis = viu("src/app/(public)/[slug]/layout.tsx");
-    assert.match(invelis, /<ConsentGate slug=\{slug\} category=\{\["analytics", "marketing"\]\}/);
-    const tag = readFileSync("src/components/public/GoogleTag.tsx", "utf8");
-    assert.match(tag, /analytics_storage: analyticsGranted \? 'granted' : 'denied'/);
-    assert.match(tag, /ad_storage: adGranted \? 'granted' : 'denied'/);
-    assert.match(tag, /ad_user_data: adGranted \? 'granted' : 'denied'/);
-    assert.match(tag, /ad_personalization: adGranted \? 'granted' : 'denied'/);
-    assert.doesNotMatch(viu("src/components/public/GoogleTag.tsx"), /analytics_storage: 'granted',\s*\n\s*ad_storage: adGranted/);
+    assert.doesNotMatch(invelis, /<ConsentGate[^>]*>\s*<GoogleTag/, "eticheta Google a ajuns iar dupa poarta de consimtamant");
+    const corp = readFileSync("src/lib/eticheta-google/corp.ts", "utf8");
+    /* `a` e acordul pentru analiza, `m` cel pentru marketing: vezi `spune(a, m)` din script. */
+    assert.match(corp, /analytics_storage: a \? 'granted' : 'denied'/);
+    assert.match(corp, /ad_storage: m \? 'granted' : 'denied'/);
+    assert.match(corp, /ad_user_data: m \? 'granted' : 'denied'/);
+    assert.match(corp, /ad_personalization: m \? 'granted' : 'denied'/);
     /* Semnalele pleaca INAINTEA oricarui `config`, altfel tagul apuca sa masoare fara ele. */
-    assert.ok(tag.indexOf("${consentDefault}") < tag.indexOf("gtag('config'"), "consimtamantul se declara dupa config");
+    assert.ok(corp.indexOf("${consimtamant}") > 0 && corp.indexOf("${consimtamant}") < corp.indexOf("gtag('config'"), "consimtamantul se declara dupa config");
   });
 
   test("⚠ ID-ul de conversie e un tag in sine si ajunge in runtime", () => {
     const invelis = viu("src/app/(public)/[slug]/layout.tsx");
     assert.match(invelis, /const adsConversionId = parseIdConversieAds\(mc\?\.google_ads_conversion_id\) \?\? parseIdConversieAds\(googleTagId\);/);
     assert.match(invelis, /\[googleTagId, gaMeasurementId, adsConversionId\]/, "ID-ul Ads nu primeste `config`, deci conversia n-are unde ajunge");
-    assert.match(readFileSync("src/components/public/GoogleTag.tsx", "utf8"), /window\.__edinioGoogleAds=\{id:'\$\{safeAds\}'\}/);
+    assert.ok(readFileSync("src/lib/eticheta-google/corp.ts", "utf8").includes("w.__edinioGoogleAds = { id: '${ads}' };"));
   });
 
   test("⚠ achizitia: datele hash-uite se pun INAINTEA conversiei", () => {
     const eveniment = viu("src/components/public/FbPurchaseEvent.tsx");
-    assert.match(eveniment, /gtagRaw\("set", "user_data", utilizatorGoogle\)/);
+    /* Prin `gtagDateleClientului`: datele omului pleaca numai cu acordul de marketing (eticheta se incarca la toti). */
+    assert.match(eveniment, /gtagDateleClientului\(utilizatorGoogle\);/);
+    assert.doesNotMatch(eveniment, /gtagRaw\("set", "user_data"/, "datele clientului ocolesc intrebarea despre acord");
     assert.match(eveniment, /const conversie = conversieCumparare\(googleAdsConversionId \?\? googleTagId, googleAdsConversionLabel,/);
     assert.ok(
-      eveniment.indexOf('gtagRaw("set", "user_data"') < eveniment.indexOf("conversieCumparare("),
+      eveniment.indexOf("gtagDateleClientului(utilizatorGoogle)") > 0
+        && eveniment.indexOf("gtagDateleClientului(utilizatorGoogle)") < eveniment.indexOf("conversieCumparare("),
       "`user_data` se pune dupa conversie, deci conversia pleaca fara potrivire",
     );
     const confirmare = viu("src/app/(public)/[slug]/confirm/page.tsx");

@@ -24,7 +24,7 @@ const CATEGORY_LABELS: Record<ConsentCategory, { title: string; desc: string }> 
   },
 };
 
-export function CookieConsent({ slug, color, categories, position, policyHref, storeName, furnizoriMarketing, furnizorChat }: {
+export function CookieConsent({ slug, color, categories, position, policyHref, storeName, furnizoriMarketing, furnizorChat, googleAdsInainteDeAcord, marketingDoarGoogleAds }: {
   slug: string;
   color: string;
   categories: ConsentCategory[];
@@ -39,6 +39,16 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   furnizoriMarketing?: string[];
   /** Furnizorul chatului pornit in magazin („Tidio”), numit in categoria „Functionale”. */
   furnizorChat?: string;
+  /**
+   * Eticheta Google Ads porneste in magazinul asta si fara acord, cu semnalele refuzate (consent mode
+   * avansat). ⚠ Se SPUNE in banner: omul nu trebuie lasat sa creada ca refuzul opreste orice legatura cu Google.
+   */
+  googleAdsInainteDeAcord?: boolean;
+  /**
+   * „Marketing” exista in magazin numai din cauza Google Ads. Cine a raspuns bannerului inainte ca Google Ads
+   * sa fie o categorie n-a fost intrebat de marketing: e intrebat o data. Vezi `bannerDecis`.
+   */
+  marketingDoarGoogleAds?: boolean;
 }) {
   /* Panoul e alb: culoarea magazinului prea deschisa (lime-ul temei Canopus, 1,28:1) nu se vede pe el. */
   const culoareIconita = (raportContrast(color, "#FFFFFF") ?? 3) < 3 ? "#374151" : color;
@@ -49,20 +59,25 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   const [decided, setDecided] = useState(true);
   const [prefs, setPrefs] = useState<{ analytics: boolean; marketing: boolean; functional: boolean }>({ analytics: false, marketing: false, functional: false });
 
+  /* Lista categoriilor ca text: aceeasi valoare la fiecare desenare, deci efectul de mai jos nu se reia degeaba. */
+  const cheieCategorii = categories.join(",");
+
   // First visit → open banner. Reopen via the global settings event / reopen button.
   useEffect(() => {
     const existing = readConsent(slug);
     /* ⚠ Un acord dat doar chatului (cartonasul de la butonul de chat) nu e un raspuns la banner: bannerul
        se deschide in continuare, cu „Functionale” deja pornita. */
     if (existing) setPrefs({ analytics: existing.analytics, marketing: existing.marketing, functional: existing.functional });
-    if (bannerDecis(slug)) {
+    /* ⚠ Si cine a raspuns e intrebat o data de o categorie care nu i s-a aratat atunci. Vezi `bannerDecis`. */
+    const aratate = cheieCategorii.split(",").filter(Boolean) as ConsentCategory[];
+    if (bannerDecis(slug, { categorii: aratate, marketingDoarGoogleAds: marketingDoarGoogleAds === true })) {
       setDecided(true);
     } else {
       setDecided(false);
       setOpen(true);
     }
     setMounted(true);
-  }, [slug]);
+  }, [slug, cheieCategorii, marketingDoarGoogleAds]);
 
   const reopen = useCallback(() => {
     const existing = readConsent(slug);
@@ -78,7 +93,8 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   }, [reopen]);
 
   const persist = (state: ConsentState) => {
-    writeConsent(slug, state);
+    /* Cu lista categoriilor aratate: o categorie aparuta mai tarziu n-a fost refuzata, n-a fost intrebata. */
+    writeConsent(slug, state, categories);
     setDecided(true);
     setOpen(false);
     setShowDetails(false);
@@ -171,6 +187,11 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
               <Cookie className="h-5 w-5 shrink-0 mt-0.5" style={{ color: culoareIconita }} />
               <p className="text-[13px] leading-relaxed text-gray-600">
                 Folosim cookie-uri pentru a imbunatati experienta pe {storeName}.{" "}
+                {/*
+                  Spus si aici, la primul nivel, nu doar in panoul de setari: cine apasa „Refuza” direct din bara
+                  trebuie sa fi putut citi ca eticheta Google Ads se incarca oricum (gasit la recenzie, 25.11.2026).
+                */}
+                {googleAdsInainteDeAcord && <>{NOTA_GOOGLE_ADS}{" "}</>}
                 {policyHref && <a href={policyHref} className="underline hover:text-gray-900">Detalii</a>}
               </p>
             </div>
@@ -198,7 +219,12 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
   // ── Card / details view (corner cards + center modal + bottom-bar "Setari") ─
   return (
     <div role="region" aria-label="Cookie-uri" className={wrapperClass}>
-      <div className={`bg-white rounded-2xl border border-black/10 shadow-xl w-full ${isCenter ? "max-w-md" : ""} overflow-hidden`}>
+      {/*
+        ⚠ Cardul se deruleaza cand e mai inalt decat ecranul (25.11.2026). Cu patru categorii avea 609 px la 343 px
+        latime, iar pe un telefon mic (667 px inaltime, mai putin cu barele browserului) capatul de sus iesea din
+        ecran, fara nicio cale de a ajunge la el. `dvh`, nu `vh`: inaltimea care chiar se vede.
+      */}
+      <div className={`bg-white rounded-2xl border border-black/10 shadow-xl w-full ${isCenter ? "max-w-md" : ""} max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain`}>
         <div className="p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-2.5">
@@ -241,7 +267,7 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
             {categories.includes("marketing") && (
               <ConsentRow
                 title={CATEGORY_LABELS.marketing.title}
-                desc={descriereMarketing(furnizoriMarketing)}
+                desc={descriereMarketing(furnizoriMarketing, googleAdsInainteDeAcord)}
                 checked={prefs.marketing}
                 onChange={(v) => setPrefs((p) => ({ ...p, marketing: v }))}
                 color={color}
@@ -283,10 +309,19 @@ export function CookieConsent({ slug, color, categories, position, policyHref, s
  * Textul categoriei „Marketing”, cu instrumentele pornite chiar in magazin. Fara lista, textul vechi.
  * theMarketer nu afiseaza reclame: personalizeaza emailurile si recomandarile, deci textul spune si asta.
  */
-function descriereMarketing(furnizori?: string[]): string {
-  if (!furnizori || furnizori.length === 0) return CATEGORY_LABELS.marketing.desc;
-  return `Permit reclame si mesaje personalizate (${furnizori.join(", ")}).`;
+function descriereMarketing(furnizori?: string[], googleAdsInainteDeAcord?: boolean): string {
+  const baza = !furnizori || furnizori.length === 0
+    ? CATEGORY_LABELS.marketing.desc
+    : `Permit reclame si mesaje personalizate (${furnizori.join(", ")}).`;
+  return googleAdsInainteDeAcord ? `${baza} ${NOTA_GOOGLE_ADS}` : baza;
 }
+
+/**
+ * Ce se intampla cu eticheta Google Ads si fara acord, spus pe sleau (25.11.2026). Text de vitrina, fara
+ * diacritice.
+ */
+export const NOTA_GOOGLE_ADS =
+  "Eticheta Google Ads se incarca si daca refuzi: trimite semnale tehnice, fara cookie-uri.";
 
 /** Textul categoriei „Functionale”, cu furnizorul chatului pe nume: omul isi da acordul pentru ce citeste. */
 function descriereFunctionale(furnizor?: string): string {

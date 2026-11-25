@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useIdentitateMagazin } from "@/components/storefront/IdentitateMagazin";
 
 /**
@@ -40,11 +39,20 @@ export default function StoreNotFound() {
           ? `Adresa pe care ai deschis-o nu exista in magazinul ${nume}. Poate a fost mutata sau stearsa.`
           : "Adresa pe care ai deschis-o nu exista sau a fost mutata."}
       </p>
-      <Link href={acasa}
+      {/*
+        ⚠ `<a>`, NU `<Link>` (25.11.2026). Pagina asta apare si pe o adresa gresita din zona de cont
+        (`/cont/comenzi/<id>`). Cu navigare de client, pixelii magazinului ajungeau in acelasi document cu
+        adresa aceea si o trimiteau mai departe la „Inapoi”. Vezi `ActiuneCont` si `DoarInAfaraContului`.
+
+        Pe domeniul propriu (`acasa` e `/`), singurul loc unde exista zona de cont, legatura nu duce cu ea
+        adresa paginii negasite: pleaca numai originea. Pe adresa cu slug ramane cum era: acolo atribuirea
+        vizitei recunoaste navigarea interna dupa CALEA de provenienta (`lib/storefront/attribution.ts`).
+      */}
+      <a href={acasa} referrerPolicy={acasa === "/" ? "strict-origin" : undefined}
         className="mt-6 inline-flex min-h-11 items-center px-5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111827]/50 focus-visible:ring-offset-2"
         style={{ backgroundColor: culoare, color: culoareText }}>
         Inapoi in magazin
-      </Link>
+      </a>
     </main>
   );
 }

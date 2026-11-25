@@ -1316,7 +1316,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
       if (liniiDeGolit.length > 0) onCartConsumed?.(liniiDeGolit);
       onClose();
-      window.location.href = `${business.basePath}/confirm?orderId=${orderId}&name=${encodeURIComponent(form.name)}&total=${total}`;
+      // Doar `orderId`: numele si totalul se citesc pe pagina din comanda. In adresa ar fi ajuns in
+      // `page_location`-ul pixelilor, in istoricul browserului si in Referer (vezi `checkout-core.ts`).
+      window.location.href = `${business.basePath}/confirm?orderId=${orderId}`;
     });
   }
 

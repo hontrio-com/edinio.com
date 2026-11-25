@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   Building2, CreditCard, ExternalLink, Lock, MessageSquareText, Package, ReceiptText, Route, Truck, Undo2, UserRound,
 } from "lucide-react";
@@ -35,23 +34,28 @@ function Linie({ l, prefixProdus }: { l: LinieComanda; prefixProdus: string }) {
   const gratuit = total === 0 && !l.extra;
   // Zona de cont exista doar pe domeniul propriu, deci baza e goala.
   const legatura = l.slug && !l.extra ? hrefProdus("", l.slug, prefixProdus) : null;
+  /*
+    ⚠ Legaturile spre produs (si cea spre retur, mai jos) sunt `<a>`, NU `<Link>` (25.11.2026): duc in afara
+    zonei de cont. Cu navigare de client, pixelii magazinului se montau in documentul incarcat in zona de cont
+    si ramaneau vii aici la „Inapoi”, cu adresa comenzii. Vezi `ActiuneCont` (aceeasi regula, la intrare).
+  */
   const poza = <Miniatura imagine={l.imagine} nume={l.nume} />;
 
   return (
     <li className="flex gap-3 py-4 first:pt-0 last:pb-0 sm:gap-4">
       {legatura ? (
-        <Link href={legatura} className={`shrink-0 rounded-[var(--st-radius-sm)] ${FOCUS}`} tabIndex={-1} aria-hidden="true">
+        <a href={legatura} className={`shrink-0 rounded-[var(--st-radius-sm)] ${FOCUS}`} tabIndex={-1} aria-hidden="true">
           {poza}
-        </Link>
+        </a>
       ) : poza}
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             {legatura ? (
-              <Link href={legatura} className={`rounded-sm text-sm font-semibold leading-snug text-[var(--st-text)] [overflow-wrap:anywhere] hover:underline ${FOCUS}`}>
+              <a href={legatura} className={`rounded-sm text-sm font-semibold leading-snug text-[var(--st-text)] [overflow-wrap:anywhere] hover:underline ${FOCUS}`}>
                 {l.nume}
-              </Link>
+              </a>
             ) : (
               <p className="text-sm font-semibold leading-snug text-[var(--st-text)] [overflow-wrap:anywhere]">{l.nume}</p>
             )}
@@ -314,10 +318,10 @@ export function EcranComanda({
                     <p className="text-sm leading-relaxed text-[var(--st-muted)]">
                       Ai dreptul sa te retragi din contract in termen de 14 zile de la primirea produselor.
                     </p>
-                    <Link href={`/retur?order=${encodeURIComponent(c.numar)}`} className={BUTON_SECUNDAR}>
+                    <a href={`/retur?order=${encodeURIComponent(c.numar)}`} className={BUTON_SECUNDAR}>
                       <Undo2 className="h-4 w-4" aria-hidden="true" />
                       Retrage-te din contract
-                    </Link>
+                    </a>
                   </div>
                 )}
               </div>

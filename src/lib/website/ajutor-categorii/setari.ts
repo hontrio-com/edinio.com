@@ -634,7 +634,7 @@ export const SETARI: CategorieAjutor = {
           slug: "cum-configurezi-bannerul-de-cookie-uri",
           titlu: "Cum activezi bannerul de cookie-uri și alegi unde apare",
           rezumat: "Pornești sau oprești bannerul GDPR de pe magazin și îi alegi poziția pe ecran.",
-          intro: "Bannerul de cookie-uri este obligatoriu prin lege. Apare automat pe magazin, în culoarea magazinului, și cere acordul vizitatorilor înainte să încarce instrumentele de analiză și marketing.",
+          intro: "Bannerul de cookie-uri este obligatoriu prin lege. Apare automat pe magazin, în culoarea magazinului, și cere acordul vizitatorilor pentru instrumentele de analiză și marketing. Dacă ai reclame Google, eticheta Google Ads face excepție: se poate încărca înainte de acord, cu toate permisiunile refuzate.",
           pasi: [
             "Intri în Setări > Banner Cookies.",
             "În cardul „Afișează bannerul de cookie-uri” muți comutatorul pe pornit sau pe oprit.",
@@ -646,8 +646,9 @@ export const SETARI: CategorieAjutor = {
             { titlu: "Cele patru poziții", text: "„Bară jos (subtil)”: bară discretă pe toată lățimea, jos. Ocupă minim de spațiu și este poziția implicită.\n„Card stânga-jos”: card compact în colțul din stânga jos.\n„Card dreapta-jos”: card compact în colțul din dreapta jos.\n„Modal centrat”: fereastră centrată cu fundal întunecat, cu vizibilitate maximă." },
             { titlu: "Ce vede vizitatorul", text: "La „Bară jos (subtil)” apar butoanele „Setări”, „Refuză” și „Acceptă”, iar detaliile se deschid ca fereastră centrată.\nLa celelalte trei poziții, panoul „Preferințe cookie-uri” are „Refuză tot”, „Salvează alegerea” și „Acceptă tot”." },
             { titlu: "Ce se întâmplă dacă oprești bannerul", text: "Apare avertismentul „Instrumentele de marketing se încarcă fără consimțământ”. Pixelii Facebook și TikTok și Google Analytics se încarcă pentru toți vizitatorii, fără să le ceară acordul. Pixelul devine vizibil imediat în Pixel Helper, dar răspunderea pentru conformitatea GDPR îți aparține.\nCardul „Poziționare” rămâne vizibil, dar estompat și fără efect." },
+            { titlu: "Eticheta Google Ads pornește înainte de acord", text: "Opțiunea apare doar dacă ai salvat un ID de conversie Google Ads și bannerul este pornit. Pornită, cum este din oficiu, eticheta Google Ads se încarcă la vizitele din magazin înainte ca vizitatorul să răspundă, cu toate permisiunile refuzate: fără cookie-uri și fără datele comenzilor. Așa o găsește Google Ads pe site, iar bannerul le spune asta vizitatorilor. Oprită, eticheta se încarcă abia după acord, iar Google Ads poate spune că eticheta lipsește de pe site până când acceptă cineva. Magazinul este operatorul datelor vizitatorilor lui, deci alegerea este a ta." },
             { titlu: "Linkul din subsolul magazinului", text: "Linkul „Setări cookie-uri” din subsol apare doar după ce vizitatorul a făcut o alegere în banner. Dacă stingi bannerul, vizitatorii care aleseseră deja continuă să vadă linkul, dar el nu mai deschide nimic." },
-            { titlu: "Ce se poate schimba și ce nu", text: "Din acest ecran se reglează doar starea pornit sau oprit și poziția. Textele și culoarea bannerului vin din magazin, iar categoriile se deduc automat din integrările tale active." },
+            { titlu: "Ce se poate schimba și ce nu", text: "Din acest ecran se reglează starea pornit sau oprit, poziția și, la magazinele cu Google Ads, opțiunea „Eticheta Google Ads pornește înainte de acord”. Textele și culoarea bannerului vin din magazin, iar categoriile se deduc automat din integrările tale active." },
           ],
           nota: "Fără magazin creat poți muta comutatorul și alege poziția, dar nu poți salva: butonul „Salvează bannerul” este inactiv și apare „Nu ai un magazin activ. Finalizează onboarding-ul mai întâi.”",
           termeni: ["cookie banner", "gdpr consimtamant", "pixel facebook", "pozitie banner", "accept cookies"],
@@ -663,7 +664,7 @@ export const SETARI: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Nu este o setare", text: "Categoriile nu se bifează, nu se adaugă și nu se scot din acest card. Ele se adaptează automat la integrările pe care le ai active, iar butonul „Salvează bannerul” nu le salvează, pentru că sunt deduse." },
-            { titlu: "Ce etichete pot apărea", text: "„Esențiale (mereu active)” apare întotdeauna.\n„Analiză (Google)” apare dacă ai o integrare de analiză activă.\n„Marketing (Facebook, TikTok)” apare dacă ai un pixel activ." },
+            { titlu: "Ce etichete pot apărea", text: "„Esențiale (mereu active)” apare întotdeauna.\n„Analiză (Google)” apare dacă ai o integrare de analiză activă.\n„Marketing (Google Ads, Facebook, TikTok)” apare dacă ai Google Ads sau un pixel activ." },
             { titlu: "Dacă nu ai nicio integrare", text: "În card apare un text care spune că bannerul informează doar despre cookie-urile esențiale și că, la activarea Facebook Pixel, TikTok Pixel sau Google Analytics, categoriile apar automat aici și în banner. Textul trimite la „Funcții”, iar în meniul din stânga ecranul respectiv apare cu numele „Integrări”." },
             { titlu: "Cum arată pentru vizitator", text: "În panoul de pe magazin, categoriile se numesc „Esențiale”, „Analiză” și „Marketing”, fără parantezele din panoul de administrare, și au fiecare descrierea ei." },
           ],

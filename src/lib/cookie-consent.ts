@@ -1,4 +1,5 @@
 import type { MarketingConfig } from "@/lib/marketing-config";
+import { parseIdConversieAds } from "@/lib/google-ads/conversie";
 
 /**
  * Cookie consent system (GDPR / ePrivacy).
@@ -6,6 +7,11 @@ import type { MarketingConfig } from "@/lib/marketing-config";
  * Non-essential tracking (analytics + marketing pixels) must NOT load until the
  * visitor consents. The banner content auto-adapts to the store's active
  * integrations: only categories that actually have a tracker are shown.
+ *
+ * ⚠ O SINGURA EXCEPTIE, din 25.11.2026: eticheta Google ADS. La magazinele care au reclame Google si n-au
+ * oprit optiunea (`google_ads_inainte_de_acord`), ea porneste la orice vizita, cu toate semnalele consent
+ * mode pe „denied”: nu scrie si nu citeste cookie-uri, iar evenimentele asteapta tot acordul. Fara asta,
+ * Google Ads nu gasea eticheta pe site. Analytics si pixelii raman dupa acord. Vezi `lib/eticheta-google/corp.ts`.
  *
  * - Consent is stored per-visitor in localStorage (not the DB), keyed by store
  *   slug so different stores on the same browser keep independent choices.
@@ -36,11 +42,34 @@ export type CookieBannerPosition =
 export type CookieBannerConfig = {
   enabled: boolean;
   position: CookieBannerPosition;
+  /**
+   * Eticheta Google ADS porneste la orice vizita, inainte de raspunsul la banner, cu toate semnalele consent
+   * mode refuzate (fara cookie-uri, fara datele comenzilor). Fara ea, Google Ads nu gaseste eticheta pe site
+   * pana cand un vizitator accepta cookie-urile. Are efect numai la magazinele cu ID de conversie Google Ads.
+   * Vezi `lib/eticheta-google/corp.ts`.
+   */
+  google_ads_inainte_de_acord: boolean;
 };
+
+/**
+ * ⚠ PORNITA DIN OFICIU, HOTARAREA PROPRIETARULUI (25.11.2026). Intrebat anume, cu cele doua variante si cu
+ * riscul fiecareia (pornita la toti, sau oprita si pornita de comerciant cu un clic, cum fac Shopify si Wix),
+ * a ales: „Pornită la toți”. Cine isi pune ID-ul Google Ads vrea sa-si poata porni campania, iar Google Ads ii
+ * spunea ca eticheta lipseste. Comerciantul, care e operatorul datelor din magazinul lui, o poate opri din
+ * Setari > Banner Cookies. Un magazin fara cheia asta in configuratie (toate cele de dinainte) primeste
+ * valoarea de aici.
+ *
+ * ⚠ NU SE SCHIMBA FARA EL. Ce stia cand a ales: incarcarea etichetei inainte de acord e recomandarea Google si
+ * nu are o hotarare de autoritate in UE; ANSPDCP amendeaza cookie-uri puse inainte de acord (aici nu se pune
+ * niciunul), iar Legea 219/2026 inaspreste regulile bannerului. De aceea ce pleaca inainte de acord e tinut la
+ * minimum: vezi `lib/eticheta-google/corp.ts`.
+ */
+export const GOOGLE_ADS_INAINTE_DE_ACORD_IMPLICIT = true;
 
 export const DEFAULT_COOKIE_BANNER_CONFIG: CookieBannerConfig = {
   enabled: true,
   position: "bottom-bar",
+  google_ads_inainte_de_acord: GOOGLE_ADS_INAINTE_DE_ACORD_IMPLICIT,
 };
 
 const VALID_POSITIONS: CookieBannerPosition[] = ["bottom-bar", "bottom-left", "bottom-right", "center"];
@@ -55,7 +84,19 @@ export function parseCookieBannerConfig(raw: unknown): CookieBannerConfig {
   return {
     enabled: r.enabled !== false, // default true
     position,
+    /* Numai un `true` sau un `false` scris de comerciant conteaza; orice altceva e valoarea din oficiu. */
+    google_ads_inainte_de_acord: typeof r.google_ads_inainte_de_acord === "boolean"
+      ? r.google_ads_inainte_de_acord
+      : GOOGLE_ADS_INAINTE_DE_ACORD_IMPLICIT,
   };
+}
+
+/**
+ * Magazinul are un ID de conversie Google Ads? Campul lui, apoi tagul, daca e un `AW-`: aceeasi citire ca
+ * `adsConversionId` din layoutul vitrinei.
+ */
+export function magazinulAreGoogleAds(mc: MarketingConfig | null | undefined): boolean {
+  return parseIdConversieAds(mc?.google_ads_conversion_id) !== null || parseIdConversieAds(mc?.google_tag_id) !== null;
 }
 
 /** Which consent categories are relevant for this store, based on active trackers. */
@@ -72,8 +113,18 @@ export function detectConsentCategories(
   areChat = false,
 ): ConsentCategory[] {
   const cats: ConsentCategory[] = [];
-  if (mc?.google_tag_id?.trim() || gaMeasurementId) cats.push("analytics");
-  if (mc?.facebook_pixel_id?.trim() || mc?.tiktok_pixel_id?.trim() || altMarketing) cats.push("marketing");
+  /*
+   * ⚠ GOOGLE ADS E MARKETING, NU ANALIZA (25.11.2026). Pana atunci orice tag Google aprindea doar „Analiza”,
+   * iar ID-ul de conversie (`google_ads_conversion_id`) nu aprindea nimic. Un magazin care avea numai Google
+   * Ads nu arata categoria „Marketing”, deci vizitatorul nu avea unde sa dea acordul pentru reclame, iar
+   * semnalele `ad_*` ramaneau refuzate la toti cei care isi alegeau preferintele.
+   */
+  const tag = mc?.google_tag_id?.trim() ?? "";
+  /* Aceeasi citire ca in layoutul vitrinei (`adsConversionId`): campul lui, apoi tagul, daca e un `AW-`. */
+  const tagDeReclame = parseIdConversieAds(tag) !== null;
+  const areGoogleAds = magazinulAreGoogleAds(mc);
+  if ((tag !== "" && !tagDeReclame) || gaMeasurementId) cats.push("analytics");
+  if (mc?.facebook_pixel_id?.trim() || mc?.tiktok_pixel_id?.trim() || altMarketing || areGoogleAds) cats.push("marketing");
   if (areChat) cats.push("functional");
   return cats;
 }
@@ -89,7 +140,11 @@ export const OPEN_SETTINGS_EVENT = "edinio-open-cookie-settings";
  * a raspuns bannerului. Categoria „functionale” e pornita, dar bannerul ramane de raspuns: nu hotaram noi,
  * in locul omului, ca a refuzat analiza si marketingul.
  */
-type StoredConsent = ConsentState & { v: number; ts: number; partial?: boolean };
+/*
+ * `oferite` (25.11.2026): categoriile pe care bannerul le ARATA cand omul a raspuns. O categorie care nu era pe
+ * lista n-a fost refuzata, n-a fost intrebata: vezi `bannerDecis`. Raspunsurile de dinainte nu au cheia.
+ */
+type StoredConsent = ConsentState & { v: number; ts: number; partial?: boolean; oferite?: ConsentCategory[] };
 
 function storageKey(slug: string): string {
   return `edinio_cc_${slug}`;
@@ -136,16 +191,60 @@ export function readConsent(slug: string): ConsentState | null {
  * Vizitatorul a raspuns bannerului? Un acord dat doar chatului (`acordaFunctional`) NU e un raspuns la
  * banner: bannerul ramane deschis pentru celelalte categorii.
  */
-export function bannerDecis(slug: string): boolean {
+export function bannerDecis(slug: string, acum?: CeArataBannerul): boolean {
   const parsed = citesteStocat(slug);
-  return parsed !== null && parsed.partial !== true;
+  if (parsed === null || parsed.partial === true) return false;
+  return !acum || categoriiNeintrebate(parsed, acum).length === 0;
 }
 
-/** Persist the visitor's consent and notify listeners (gates re-evaluate immediately). */
-export function writeConsent(slug: string, state: ConsentState): void {
+/** Ce arata bannerul magazinului ACUM, pentru intrebarea „a raspuns omul la tot ce i se arata?”. */
+export interface CeArataBannerul {
+  categorii: readonly ConsentCategory[];
+  /**
+   * Categoria „Marketing” exista in magazin NUMAI din cauza Google Ads (fara Facebook, TikTok, theMarketer).
+   * Pana pe 25.11.2026 Google Ads nu aprindea nicio categorie, deci intr-un asemenea magazin „Marketing” n-a
+   * fost aratata nimanui inainte de acea zi.
+   */
+  marketingDoarGoogleAds?: boolean;
+}
+
+/**
+ * Categoriile aratate acum, pe care omul nu le are acordate si despre care N-A FOST INTREBAT cand a raspuns.
+ *
+ * ⚠ DE CE EXISTA (25.11.2026). Google Ads a devenit categoria „Marketing”. Un magazin care avea numai Google
+ * Ads arata pana atunci bannerul fara alegeri, cu un singur buton, „Am inteles”, care scrie un refuz intreg;
+ * unul cu Analytics si Google Ads arata numai „Analiza”. Vizitatorii lor au deci un `marketing: false` scris
+ * fara sa fi fost intrebati vreodata de marketing, iar bannerul, socotindu-i raspunsi, nu i-ar mai fi intrebat
+ * niciodata: nicio conversie cu acord de la clientii vechi ai magazinului. Un refuz e al omului numai pentru
+ * ce i s-a aratat.
+ *
+ *   - raspuns NOU (are `oferite`): o categorie de analiza sau de marketing aratata acum, care nu era pe lista
+ *     si nu e acordata, se intreaba o data;
+ *   - raspuns VECHI (fara `oferite`): nu stim ce i s-a aratat, deci ramane raspuns, cu o singura exceptie
+ *     sigura: „Marketing” intr-un magazin unde ea vine numai de la Google Ads.
+ *
+ * ⚠ Ce NU face: nu intreaba din nou pe cine a refuzat o categorie care i s-a aratat (ar fi pisalogeala), nu
+ * atinge un acord dat, si nu priveste „Functionale”: pe aceea o cere cartonasul de la butonul de chat.
+ */
+function categoriiNeintrebate(parsed: StoredConsent, acum: CeArataBannerul): ConsentCategory[] {
+  const oferite = Array.isArray(parsed.oferite) ? parsed.oferite : null;
+  return acum.categorii.filter((c) => {
+    if (c === "functional" || parsed[c] === true) return false;
+    if (oferite) return !oferite.includes(c);
+    return c === "marketing" && acum.marketingDoarGoogleAds === true;
+  });
+}
+
+/**
+ * Persist the visitor's consent and notify listeners (gates re-evaluate immediately).
+ *
+ * @param oferite Categoriile pe care bannerul le arata cand omul a raspuns. Vezi `bannerDecis`.
+ */
+export function writeConsent(slug: string, state: ConsentState, oferite?: readonly ConsentCategory[]): void {
   if (typeof window === "undefined") return;
   try {
     const payload: StoredConsent = { ...state, necessary: true, v: CONSENT_VERSION, ts: Date.now() };
+    if (oferite) payload.oferite = [...oferite];
     window.localStorage.setItem(storageKey(slug), JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: { slug, state } }));
   } catch {
@@ -171,6 +270,8 @@ export function acordaFunctional(slug: string): void {
     };
     const payload: StoredConsent = { ...state, v: CONSENT_VERSION, ts: Date.now() };
     if (!vechi || vechi.partial === true) payload.partial = true;
+    /* Lista categoriilor aratate de banner merge mai departe: fara ea, raspunsul ar parea unul vechi. */
+    if (Array.isArray(vechi?.oferite)) payload.oferite = vechi.oferite;
     window.localStorage.setItem(storageKey(slug), JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: { slug, state } }));
   } catch {

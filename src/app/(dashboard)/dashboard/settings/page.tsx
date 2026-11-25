@@ -6,7 +6,7 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { SettingsClient } from "@/components/dashboard/SettingsClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
-import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
+import { parseCookieBannerConfig, detectConsentCategories, magazinulAreGoogleAds } from "@/lib/cookie-consent";
 import { furnizorPornit, suportGata } from "@/lib/suport/config";
 import { numeleFurnizorului } from "@/lib/suport/furnizori";
 import { vitrinaTheMarketer, type SetariTMBrute } from "@/lib/themarketer/vitrina";
@@ -443,6 +443,7 @@ async function ContinutSetari({
       codDiscount={parseCardDiscountConfig(storeSettings?.cod_discount_config)}
       codFee={parseCodFeeConfig(storeSettings?.cod_fee_config)}
       cookieBanner={parseCookieBannerConfig(storeSettings?.cookie_banner_config)}
+      areGoogleAds={magazinulAreGoogleAds(storeSettings?.marketing_config as MarketingConfig | null)}
       stareaConturilor={stareaConturilor}
       cookieCategories={detectConsentCategories(
         storeSettings?.marketing_config as MarketingConfig | null,

@@ -389,6 +389,8 @@
 @source "../lib/epacket/nomenclator.ts";
 @source "../lib/epacket/puncte.ts";
 @source "../lib/error-logger.ts";
+@source "../lib/eticheta-google/corp.ts";
+@source "../lib/eticheta-google/legatura.ts";
 @source "../lib/eu-countries.ts";
 @source "../lib/facebook/capi.ts";
 @source "../lib/facebook/catalog-feed.ts";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { fbTrack, ttqTrack, gtagEvent, gtagRaw } from "@/lib/marketing";
+import { fbTrack, ttqTrack, gtagEvent, gtagRaw, gtagDateleClientului } from "@/lib/marketing";
 import type { ContinutPixel } from "@/lib/facebook/pixel-continut";
 import type { ContinutTikTok } from "@/lib/tiktok/continut";
 import { conversieCumparare } from "@/lib/google-ads/conversie";
@@ -42,6 +42,9 @@ interface Props {
  *   they exist would otherwise drop the event. Queued calls also mean the
  *   conversion only actually fires once a pixel loads — i.e. under consent (or
  *   when the merchant disabled the banner), which is the correct GDPR behaviour.
+ * - ⚠ Eticheta GOOGLE poate exista in pagina si fara acord (25.11.2026: eticheta de reclame porneste cu
+ *   semnalele refuzate, ca Google Ads sa o gaseasca). Evenimentele ei raman insa in coada pana la acord, ca
+ *   la ceilalti: numarul si valoarea comenzii nu pleaca de la cine a refuzat.
  * - `eventID = orderId` gives Pixel↔server (CAPI/Events API) deduplication and,
  *   with the localStorage guard below, prevents a refresh from double-counting.
  * - Potrivirea avansata NU mai pleaca de aici: la amandoua pixelele, datele omului se hash-uiesc pe server
@@ -114,9 +117,12 @@ export function FbPurchaseEvent({
      * ⚠ ENHANCED CONVERSIONS, INAINTEA CONVERSIEI. Documentatia: „Configure and add the following script on
      * your conversion page where the Google Ads event snippet is installed”, iar `set` trebuie sa apuce sa
      * ruleze inaintea evenimentului. Valorile sunt deja hash-uite pe server: vezi `lib/google-ads/date-client.ts`.
+     *
+     * ⚠ Pleaca numai cu acordul de MARKETING: asta hotaraste `gtagDateleClientului`, in clipa in care apelul
+     * chiar ruleaza. Cu acordul doar pentru analiza, conversia pleaca fara datele omului.
      */
     if (utilizatorGoogle && (utilizatorGoogle.sha256_email_address || utilizatorGoogle.sha256_phone_number)) {
-      gtagRaw("set", "user_data", utilizatorGoogle);
+      gtagDateleClientului(utilizatorGoogle);
     }
 
     /*

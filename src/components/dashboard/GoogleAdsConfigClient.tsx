@@ -89,7 +89,7 @@ export function GoogleAdsConfigClient({
           valoare: <span className="text-muted-foreground">{cand}</span>,
         }))} />
         <CumFunctioneaza id="google-ads" puncte={[
-          { Icon: Tag, text: "Tagul Google se încarcă pe fiecare pagină a magazinului, după acordul de cookie-uri." },
+          { Icon: Tag, text: "Eticheta Google Ads se încarcă de la prima vizită, ca Google Ads să o găsească pe site. Până la acordul de cookie-uri lucrează fără cookie-uri și nu se încarcă pe paginile de comandă și în contul clientului; se poate opri din Setări, Banner Cookies." },
           { Icon: Target, text: "La comanda încheiată pleacă o conversie cu ID-ul AW- și eticheta ei, cu valoarea în RON." },
           { Icon: Boxes, text: "Articolele pleacă și cu ID-ul din Merchant Center, deci remarketingul dinamic arată chiar produsele văzute." },
         ]} />
@@ -114,7 +114,7 @@ export function GoogleAdsConfigClient({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="ID conversie Google Ads" htmlFor="google-conversie"
             ajutor={<ExplicatieCard marime="mic" intrebare="Ce scriu aici" eticheta="ID-ul de conversie"
-              text="ID-ul contului de conversii, cel care începe cu AW-. Un ID de Analytics (G-) nu primește conversii: pus aici, conversiile nu ajung nicăieri." />}>
+              text="ID-ul contului de conversii, cel care începe cu AW-. Un ID de Analytics (G-) nu primește conversii: pus aici, conversiile nu ajung nicăieri. Dacă Google Ads îți arată un ID care începe cu GTM-, generează ID-ul AW- din setările etichetei Google, la Container IDs." />}>
             <Input id="google-conversie" type="text" value={adsId} onChange={e => setAdsId(e.target.value)} placeholder="ex: AW-123456789" className="font-mono" />
           </Field>
           <Field

@@ -352,9 +352,11 @@ export async function updateReturnStatus(
   if (!user) return { error: "Neautorizat" };
 
   // RLS restricts the update to the owner's businesses; a non-owner matches no rows.
+  /* O cerere careia i s-a hotarat starea a fost si citita: fara `is_read`, una abia aprobata
+     ramanea in lista ingrosata, cu punctul de „necitita”, si se numara mai departe la necitite. */
   const { data, error } = await supabase
     .from("return_requests")
-    .update({ status, updated_at: new Date().toISOString() })
+    .update({ status, is_read: true, updated_at: new Date().toISOString() })
     .eq("id", returnId)
     .select("id");
   if (error) return { error: "Eroare la actualizare." };

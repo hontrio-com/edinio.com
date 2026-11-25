@@ -24,6 +24,7 @@ import { MiniaturaProdus } from "@/components/dashboard/MiniaturaProdus";
 import { ORDER_STATUS, type OrderStatus } from "@/lib/orders/status";
 import type { TonEticheta } from "@/components/ui/eticheta-stare";
 import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
+import { etichetaExtraoptiunilor } from "@/lib/orders/costuri-manuale";
 import {
   citesteDefalcarea, suprafataDeAratat, caM2, type DefalcareCitita,
 } from "@/lib/orders/defalcare-personalizare";
@@ -1993,7 +1994,8 @@ export function OrderDetailClient({
                     eticheta ca la finalizare (`CheckoutSummary`). */}
                 {totaluri.extras > 0 && (
                   <div className="flex justify-between gap-4 text-muted-foreground">
-                    <dt>Opțiuni extra</dt>
+                    {/* Randul aduna si costurile puse de comerciant la „Editează comanda”: isi spune numele dupa ele. */}
+                    <dt>{etichetaExtraoptiunilor(order.items)}</dt>
                     <dd>+{formatPrice(totaluri.extras)}</dd>
                   </div>
                 )}

@@ -162,12 +162,12 @@ export function mesajRefuz(
   const lei = (n: number) => `${n.toFixed(2).replace(".", ",")} lei`;
   // Se citeaza `orders.total`, numarul pe care comerciantul il vede pe ecran, nu
   // baza in care se face comparatia: altfel i-am reprosa o suma pe care n-o gaseste.
-  // Text pentru comerciant: cu diacritice, fara linie lunga. „Editeaza comanda” e citat EXACT ca
+  // Text pentru comerciant: cu diacritice, fara linie lunga. „Editează comanda” e citat EXACT ca
   // butonul din pagina comenzii (`OrderDetailClient`), care se scrie asa.
   const cap = `Comanda #${orderNumber} nu se poate factura: liniile facturii însumează ${lei(r.asteptat)} în loc de ${lei(r.gasit)}, deci documentul nu ar da totalul comenzii de ${lei(r.total)} (diferența ${lei(Math.abs(r.delta))}).`;
   return platita
     ? `${cap} Diferența a fost deja încasată, deci corectează întâi încasarea: o resalvare a comenzii i-ar coborî totalul sub suma plătită.`
-    : `${cap} Deschide „Editeaza comanda” și salvează: totalul se recalculează. Apoi emite factura.`;
+    : `${cap} Deschide „Editează comanda” și salvează: totalul se recalculează. Apoi emite factura.`;
 }
 
 /** Forma cu care o cheama cele trei case: totalul si TVA-ul vin de pe comanda. */

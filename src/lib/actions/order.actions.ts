@@ -41,6 +41,14 @@ import {
   type ModificareLinie,
   type VarianteSlim,
 } from "@/lib/orders/edit-pricing";
+import {
+  PREFIX_COST_MANUAL,
+  cereCosturi,
+  citesteCosturile,
+  liniiDeCost,
+  socotesteEditarea,
+  type CerereCosturi,
+} from "@/lib/orders/costuri-manuale";
 import { verificaCotatia, type PlanExpedierii } from "@/lib/shipping/quote-token";
 /* ⚠ Stau in modul propriu, nu aici: `"use server"` nu ingaduie exporturi de VALOARE care sa nu fie
    functii async. Vezi antetul din `recotarea.ts`, si buildul de 19 erori care a iesit din asta. */
@@ -3103,6 +3111,14 @@ export async function updateOrderDetails(orderId: string, data: {
   shipping_token?: string;
   /** Eticheta cotatiei re-cerute. Face parte din semnatura, deci se confrunta. */
   courier_label?: string;
+  /**
+   * Costurile schimbate de mana (25.11.2026): transportul, taxa de plata ramburs, reducerea si
+   * costurile suplimentare. Un camp lipsa inseamna „neatins”. Regulile: `costuri-manuale.ts`.
+   *
+   * ⚠ Sunt BANI, deci trec prin aceleasi porti ca marfa: nu pe o comanda facturata, nu peste un
+   * AWB emis (rambursul de pe el e cel de atunci) si nu pe o comanda de marketplace.
+   */
+  costuri?: CerereCosturi;
 }): Promise<{ success: true; newTotal: number; faraStoc: number } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -3197,7 +3213,15 @@ export async function updateOrderDetails(orderId: string, data: {
    */
   const cereProduse = cereAdaugari || cereModificari;
   const cereTransport = data.shipping_cost != null;
-  if (numarFactura && (cereProduse || cereTransport)) {
+  /*
+   * Costurile schimbate de mana. Se citesc INAINTE de orice poarta: o cerere cu forma gresita
+   * (un sir in loc de suma, o suma negativa) se refuza, nu se ia drept „neatins”.
+   */
+  const costuriCitite = citesteCosturile(data.costuri);
+  if ("error" in costuriCitite) return { error: costuriCitite.error };
+  const costuri = costuriCitite;
+  const cereCosturile = cereCosturi(costuri);
+  if (numarFactura && (cereProduse || cereTransport || cereCosturile)) {
     return { error: `Comanda are factura ${numarFactura}. Suma facturata nu se mai poate schimba din panou. Emite storno la furnizorul de facturare, apoi fa o comanda noua pentru diferenta.` };
   }
   // `stornoOblioInvoice` reconstruieste titularul din randul VIU al comenzii,
@@ -3260,6 +3284,13 @@ export async function updateOrderDetails(orderId: string, data: {
   if (cereModificari && areAwb) {
     return { error: "Comanda are AWB emis. Anuleaza-l intai (butoanele sunt in aceeasi fereastra), apoi scoate sau schimba liniile si genereaza un AWB nou." };
   }
+  /*
+   * ⚠ SI COSTURILE: rambursul de pe AWB e totalul din clipa emiterii. Un transport scos sau o
+   * reducere data dupa aceea ar lasa curierul sa incaseze suma veche, iar comanda ar spune alta.
+   */
+  if (cereCosturile && areAwb) {
+    return { error: "Comanda are AWB emis, iar rambursul de pe el e cel de atunci. Anulează-l întâi (butoanele sunt în aceeași fereastră), schimbă costurile, apoi generează un AWB nou." };
+  }
 
   /*
    * Comenzile de marketplace nu se editeaza la linii din panou.
@@ -3295,6 +3326,10 @@ export async function updateOrderDetails(orderId: string, data: {
    */
   if (marketplace && (cereAdaugari || cereTransport)) {
     return { error: `Comanda vine din ${marketplace}, iar suma ei e cea incasata acolo: nu se poate adauga marfa si nu se poate schimba transportul din panou. Daca vrei sa mai trimiti ceva, fa o comanda noua in Edinio.` };
+  }
+  /* ⚠ Aceeasi regula pentru costurile schimbate de mana: banii lor sunt o fotografie. */
+  if (marketplace && cereCosturile) {
+    return { error: `Comanda vine din ${marketplace}, iar suma ei e cea încasată acolo: transportul, reducerea și celelalte costuri nu se pot schimba din panou.` };
   }
 
   /*
@@ -3443,12 +3478,25 @@ export async function updateOrderDetails(orderId: string, data: {
     cardDiscount: Number(order.card_discount_amount) || 0,
     codDiscount: Number(order.cod_discount_amount) || 0,
   };
+  /*
+   * ═══ COSTURILE SCHIMBATE DE MANA INTRA IN ACEEASI SOCOTEALA (25.11.2026) ═══
+   *
+   * `reduceri` ramane ce e pe comanda ACUM. Reducerea de dupa editare e cea scrisa de comerciant,
+   * altfel cea veche; costurile suplimentare se aduna la extraoptiuni, fiindca asa se si scriu
+   * (linii `extra_manual_*`, vezi `liniiDeCost`).
+   */
+  const reducereNoua = costuri.reducere !== null ? costuri.reducere : reduceri.discount;
+  const extrasCuCosturi = round2(plan.extras + costuri.adaugate.reduce((s, c) => s + c.suma, 0));
   const depaseaDinainte = reducerileDepasescMarfa({
     subtotal: Number(order.subtotal), extras: sumaExtraoptiunilor(prevItems), ...reduceri,
   });
   const depaseAcum = reducerileDepasescMarfa({
-    subtotal: round2(Number(order.subtotal) + plan.deltaSubtotal), extras: plan.extras, ...reduceri,
+    subtotal: round2(Number(order.subtotal) + plan.deltaSubtotal), extras: extrasCuCosturi, ...reduceri, discount: reducereNoua,
   });
+  /* Reducerea tocmai scrisa de om are mesajul ei: „lasa mai multe produse” n-ar fi spus ce sa faca. */
+  if (costuri.reducere !== null && depaseAcum) {
+    return { error: "Reducerea e mai mare decât marfa de pe comandă, deci totalul ar ieși negativ. Scrie o reducere mai mică." };
+  }
   if (depaseAcum && !depaseaDinainte) {
     return { error: "Marfa ramasa e mai mica decat reducerile de pe comanda, deci totalul ar iesi negativ. Lasa mai multe produse pe comanda, sau anuleaz-o si fa una noua fara cupon." };
   }
@@ -3539,8 +3587,11 @@ export async function updateOrderDetails(orderId: string, data: {
    * stearsa („ambalare cadou") ar fi ramas in total si in baza taxei de ramburs,
    * iar caseta de totaluri din panou — care isi numara extraoptiunile din liniile
    * REALE — ar fi raportat pe loc o „diferenta nejustificata" exact de valoarea ei.
+   *
+   * ⚠ Si cu costurile suplimentare adaugate ACUM de comerciant: ele se scriu tot ca linii
+   * `extra_*`, deci intra in total si in baza taxei de ramburs pe acelasi drum.
    */
-  const extrasTotal = plan.extras;
+  const extrasTotal = extrasCuCosturi;
 
   const vatCfg = {
     vat_enabled: cfgRow?.vat_enabled ?? false,
@@ -3604,14 +3655,39 @@ export async function updateOrderDetails(orderId: string, data: {
    * din totalul serverului se ia rambursul pus pe AWB.
    */
   const extrasVechi = sumaExtraoptiunilor(prevItems);
-  const bazaVeche = round2(Number(order.subtotal) + extrasVechi - (Number(order.discount_amount) || 0));
-  const bazaNoua = round2(newSubtotal + extrasTotal - (Number(order.discount_amount) || 0));
-  // Poarta e „BAZA s-a schimbat", nu „marfa s-a schimbat": extraoptiunile intra in
-  // baza taxei, dar niciodata in subtotal, deci o comanda din care se scoate doar
-  // ambalarea cadou isi pastra taxa calculata pe o baza care nu mai exista.
-  const codFee = cfgTaxa.type === "percent" && bazaNoua !== bazaVeche && taxaVeche > 0 && bazaVeche > 0
-    ? round2(taxaVeche * (bazaNoua / bazaVeche))
-    : taxaVeche;
+  const prevShip = (order.shipping_address ?? {}) as Record<string, unknown>;
+  /*
+   * ═══ O SINGURA SOCOTEALA, ACEEASI CA IN FEREASTRA DE EDITARE (25.11.2026) ═══
+   *
+   * Formula taxei statea scrisa aici si, a doua oara, in previzualizarea din panou („aceeasi
+   * formula ca pe server”). De cand costurile se pot schimba de mana, a treia copie ar fi fost
+   * inca un loc in care cifra aratata si cea scrisa se pot desparti. `socotesteEditarea` e pura,
+   * probata pe valori, si o cheama amandoua capetele.
+   *
+   * Poarta taxei a ramas „BAZA s-a schimbat”, nu „marfa s-a schimbat”: extraoptiunile intra in
+   * baza taxei, dar niciodata in subtotal. Iar suma scrisa de comerciant bate tot.
+   */
+  const intrareSocoteala = {
+    comanda: {
+      subtotal: Number(order.subtotal),
+      discount: reduceri.discount,
+      cardDiscount: reduceri.cardDiscount,
+      codDiscount: reduceri.codDiscount,
+      codFee: taxaVeche,
+      shipping: Math.max(0, round2(Number(order.shipping_cost) || 0)),
+      /* Transportul pus de mana intr-o editare de dinainte nu se mai judeca dupa prag. */
+      transportManual: prevShip.transport_manual === true,
+    },
+    extrasVechi,
+    deltaSubtotal: plan.deltaSubtotal,
+    extrasPlan: plan.extras,
+    costuri,
+    taxaProcentuala: cfgTaxa.type === "percent",
+    pragTransportGratuit: pragTransportGratuit(cfgRow?.free_shipping_threshold),
+    vat: vatCfg,
+  };
+  /* Taxa nu atarna de transport, deci se stie dinainte de cotatie: de ea are nevoie steagul de ramburs. */
+  const codFee = socotesteEditarea({ ...intrareSocoteala, transportCotat: null }).codFee;
 
   /*
    * Transportul re-cotat, cand comerciantul muta comanda in alt judet.
@@ -3622,10 +3698,15 @@ export async function updateOrderDetails(orderId: string, data: {
    * il foloseste magazinul, si vine inapoi SEMNATA. Fara semnatura valabila
    * pentru noua destinatie, ramane costul de azi — adica purtarea de pana acum.
    */
-  const prevShip = (order.shipping_address ?? {}) as Record<string, unknown>;
   let shippingDeBaza = Math.max(0, round2(Number(order.shipping_cost) || 0));
   let etichetaNoua: string | null = null;
-  if (data.shipping_cost != null) {
+  /** Cotatia ACCEPTATA, daca a fost una. Hraneste socoteala finala. */
+  let transportCotat: number | null = null;
+  /*
+   * ⚠ Transportul scris de mana bate cotatia: comerciantul a hotarat el suma, deci nu mai e
+   * nimic de verificat la curier, iar cotatia trimisa odata cu el se lasa deoparte.
+   */
+  if (data.shipping_cost != null && costuri.transport === null) {
     const cerut = Math.max(0, round2(Number(data.shipping_cost)));
     /*
      * Semnatura acopera optiunea INTREAGA, deci se confrunta cu ea intreaga.
@@ -3675,15 +3756,20 @@ export async function updateOrderDetails(orderId: string, data: {
       ramburs: rambursDeIncasat({
         payment_status: order.payment_status,
         order_source: order.order_source,
+        /*
+         * ⚠ Cu reducerea si extraoptiunile de DUPA editare (cele schimbate de mana in aceeasi
+         * salvare), si fara prag cand transportul comenzii e deja unul pus de mana: exact ce
+         * socoteste `socotesteEditarea` in fereastra cat timp cotatia nu e aplicata.
+         */
         total: recalculeazaTotal({
           subtotal: newSubtotal,
           extras: extrasTotal,
-          discount: Number(order.discount_amount) || 0,
-          cardDiscount: Number(order.card_discount_amount) || 0,
-          codDiscount: Number(order.cod_discount_amount) || 0,
+          discount: reducereNoua,
+          cardDiscount: reduceri.cardDiscount,
+          codDiscount: reduceri.codDiscount,
           codFee,
           shipping: shippingDeBaza,
-          freeShippingThreshold: pragTransportGratuit(cfgRow?.free_shipping_threshold),
+          freeShippingThreshold: intrareSocoteala.comanda.transportManual ? null : intrareSocoteala.pragTransportGratuit,
           vat: vatCfg,
         }).total,
       }) > 0,
@@ -3710,6 +3796,7 @@ export async function updateOrderDetails(orderId: string, data: {
       && shippingDeBaza > 0;
     if (sePoateAplica) {
       shippingDeBaza = cerut;
+      transportCotat = cerut;
       // Eticheta insoteste pretul: mutata in alta tara, comanda ar fi ramas cu
       // „Livrare prin DPD" peste o expediere „DPD International (Germania)".
       etichetaNoua = data.courier_label?.trim() || null;
@@ -3724,18 +3811,28 @@ export async function updateOrderDetails(orderId: string, data: {
     }
   }
 
-  // Aceeasi formula, si aici si in previzualizarea din modal.
-  const { total: newTotal, vatAmount, shipping: newShipping } = recalculeazaTotal({
-    subtotal: newSubtotal,
-    extras: extrasTotal,
-    discount: Number(order.discount_amount) || 0,
-    cardDiscount: Number(order.card_discount_amount) || 0,
-    codDiscount: Number(order.cod_discount_amount) || 0,
-    codFee,
-    shipping: shippingDeBaza,
-    freeShippingThreshold: pragTransportGratuit(cfgRow?.free_shipping_threshold),
-    vat: vatCfg,
+  // Aceeasi socoteala, si aici si in previzualizarea din fereastra de editare.
+  const socoteala = socotesteEditarea({ ...intrareSocoteala, transportCotat });
+  const { total: newTotal, vatAmount, shipping: newShipping } = socoteala;
+
+  /*
+   * Liniile costurilor suplimentare, cu id-uri trase la sorti aici: `orders.items` n-are id-uri
+   * de linie, iar doua costuri de pe aceeasi comanda trebuie sa plece pe factura cu doua coduri
+   * de articol (`codExtraoptiune`). Un id deja folosit pe comanda se trage din nou.
+   */
+  const idsFolosite = new Set(plan.items.map((b) => String((b as { product_id?: unknown } | null)?.product_id ?? "")));
+  const idsCosturi = costuri.adaugate.map(() => {
+    for (;;) {
+      const id = globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+      const intreg = `${PREFIX_COST_MANUAL}${id}`;
+      if (idsFolosite.has(intreg)) continue;
+      idsFolosite.add(intreg);
+      return id;
+    }
   });
+  const itemsFinale = idsCosturi.length > 0
+    ? [...plan.items, ...liniiDeCost(costuri.adaugate, idsCosturi)]
+    : plan.items;
 
   // Merge the address into shipping_address WITHOUT touching courier/locker/
   // service keys — those belong to the checkout choice and the AWB flow.
@@ -3764,6 +3861,15 @@ export async function updateOrderDetails(orderId: string, data: {
     ...(prevShip.street_no !== undefined ? { street_no: "" } : {}),
     ...(data.postal_code?.trim() ? { postal_code: data.postal_code.trim() } : {}),
     ...(etichetaNoua ? { courier_label: etichetaNoua } : {}),
+    /*
+     * ⚠ Comanda TINE MINTE ca transportul e pus de mana, ca urmatoarea editare (fie si a unui
+     * telefon) sa nu-l faca gratuit dupa pragul magazinului. Vezi `socotesteEditarea`.
+     *
+     * `undefined` cand nu mai e: cheia dispare la serializare, deci o cotatie noua aplicata
+     * peste un transport pus de mana sterge steagul, nu il lasa pe `false`. Pe o comanda de
+     * marketplace steagul nu apare niciodata: costurile ei nu se schimba din panou.
+     */
+    transport_manual: socoteala.transportManual ? true : undefined,
   };
 
   // Stocul liniilor adaugate se revendica atomic INAINTE de scriere, ca la ambele
@@ -3794,10 +3900,18 @@ export async function updateOrderDetails(orderId: string, data: {
    * trimite ramane EXACT cum era. De asta poarta se poate pune aici, si nu in SQL.
    */
   const banii = marketplace ? {} : {
-    items: plan.items,
+    items: itemsFinale,
     subtotal: newSubtotal,
     shipping_cost: newShipping,
     cod_fee_amount: codFee,
+    /*
+     * ⚠ Reducerea pleaca NUMAI cand comerciantul a schimbat-o. Netrimisa, `coalesce` din
+     * `editeaza_comanda_atomic` o lasa cum era, exact purtarea de pana pe 25.11.2026.
+     *
+     * ⚠ SI FUNCTIA TREBUIE SA O STIE: `2027-02-14-editarea-scrie-si-reducerea.sql`. Fara ea in
+     * lista de `SET`, totalul s-ar scrie socotit cu reducerea noua peste o reducere ramasa veche.
+     */
+    ...(costuri.reducere !== null ? { discount_amount: socoteala.discount } : null),
     vat_amount: vatAmount,
     // Cota, nu doar suma. Fara ea, o comanda cu `vat_rate = 0` primea un
     // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
@@ -3902,6 +4016,23 @@ export async function updateOrderDetails(orderId: string, data: {
       message: "Linii scazute sau scoase al caror stoc nu s-a putut da inapoi automat.",
       details: { orderId, indici: plan.faraStoc },
       businessId: order.business_id, userId: user.id, severity: "warning",
+    });
+  }
+  if (cereCosturile) {
+    /*
+     * URMA: banii comenzii au fost schimbati de mana, de cine si de la cat la cat. Comanda nu
+     * tine istoric, iar o suma care nu mai e cea de la plasare trebuie sa se poata explica.
+     */
+    logError({
+      action: "updateOrderDetails.costuriManuale",
+      message: "Costurile comenzii au fost schimbate de mana",
+      details: {
+        orderId,
+        cerut: costuri,
+        inainte: { total: Number(order.total), transport: intrareSocoteala.comanda.shipping, reducere: reduceri.discount, taxaRamburs: taxaVeche },
+        dupa: { total: newTotal, transport: newShipping, reducere: socoteala.discount, taxaRamburs: codFee },
+      },
+      businessId: order.business_id, userId: user.id, severity: "info",
     });
   }
 

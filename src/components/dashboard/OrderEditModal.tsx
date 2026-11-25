@@ -1,14 +1,14 @@
 "use client";
 
 import { areFacturaEmisa, etichetaFacturiiEmise } from "@/lib/billing/factura-pe-comanda";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import {
-  X, Pencil, Loader2, Plus, Minus, Trash2, Search, AlertTriangle,
+  X, Loader2, Plus, Minus, Trash2, Search, AlertTriangle,
   Package, Info, Truck, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -47,7 +47,6 @@ import {
   capacitatiLinii,
   cheieLinie,
   planificaEditarea,
-  recalculeazaTotal,
   reducerileDepasescMarfa,
   sumaExtraoptiunilor,
   variantsDinSlim,
@@ -57,9 +56,24 @@ import {
   type PlanEditare,
   type VarianteSlim,
 } from "@/lib/orders/edit-pricing";
+import {
+  COSTURI_ADAUGATE_MAX,
+  NUME_COST_MAX,
+  PREFIX_COST_MANUAL,
+  SUMA_MAXIMA,
+  esteCostManual,
+  etichetaExtraoptiunilor,
+  numeleCostului,
+  scadeTva,
+  socotesteEditarea,
+  type CerereCosturi,
+  type CosturiCerute,
+  type IntrareSocoteala,
+} from "@/lib/orders/costuri-manuale";
 import { MAX_CANTITATE_LINIE } from "@/lib/orders/quantity";
-import { parseCodFeeConfig } from "@/lib/payment-methods";
+import { isCodPaymentMethod, parseCodFeeConfig } from "@/lib/payment-methods";
 import { formatPrice } from "@/lib/utils/format";
+import { cn } from "@/lib/utils/cn";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -131,6 +145,10 @@ type Previzualizare =
     subtotal: number;
     extras: number;
     codFee: number;
+    /** Reducerea de dupa editare: cuponul de la plasare si ce a dat comerciantul de mana. */
+    discount: number;
+    cardDiscount: number;
+    codDiscount: number;
     plan: PlanEditare;
     total: number;
     vatAmount: number;
@@ -150,6 +168,91 @@ const pasCls = "w-9 h-9 rounded-lg border border-border flex items-center justif
 const CULOARE_BRAND = "#07c527";
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
+
+/*
+ * ═══ SECTIUNEA „COSTURI” (25.11.2026) ═══
+ *
+ * Cerut de proprietar: „Cand Editezi Comanda, vreau sa poti edita si sectiunea aia cu costuri (sa
+ * poata scoate transportul, sa poata scade TVA, sa poata sa adauge pret suplimentar, etc...)”.
+ * Regulile banilor stau in `costuri-manuale.ts`, pure si probate pe valori; aici e doar ecranul.
+ */
+
+/** Suprafata alba cu inel fin, ca pe pagina comenzii. */
+const CUTIE = "rounded-xl bg-surface ring-1 ring-black/10";
+const BUTON_MIC = "inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-surface px-2.5 text-xs font-medium text-foreground ring-1 ring-black/10 transition hover:ring-black/25 disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+/** Cele doua butoane din subsol: aceeasi inaltime, de atins cu degetul. */
+const BUTON_SUBSOL = "inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const LEGATURA_MICA = "rounded-sm text-xs font-medium text-foreground underline underline-offset-2 hover:no-underline disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+/**
+ * Suma dintr-un camp de bani: „12,5” si „12.5” sunt acelasi lucru. `null` cand textul nu e o suma.
+ *
+ * ⚠ Campul gol NU e zero: zero inseamna „scoate transportul”, iar un camp golit din greseala l-ar
+ * fi scos fara ca omul sa fi cerut asta. Serverul refuza si el orice nu e numar.
+ */
+function sumaDinText(text: string): number | null {
+  const t = text.replace(/\s+/g, "").replace(",", ".");
+  if (!/^\d+(\.\d{0,2})?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n <= SUMA_MAXIMA ? round2(n) : null;
+}
+
+/** Suma, asa cum sta intr-un camp de editat: cu virgula, fara „lei” si fara punctul miilor. */
+function sumaInCamp(n: number): string {
+  const r = round2(n);
+  return r % 1 === 0 ? String(r) : r.toFixed(2).replace(".", ",");
+}
+
+/** Campul unei sume: aliniat la dreapta, cu „lei” dupa el. */
+function CampSuma({ id, valoare, laSchimbare, invalid, eticheta }: {
+  id: string;
+  valoare: string;
+  laSchimbare: (text: string) => void;
+  invalid: boolean;
+  eticheta: string;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <input
+        id={id}
+        value={valoare}
+        onChange={(e) => laSchimbare(e.target.value)}
+        inputMode="decimal"
+        autoComplete="off"
+        aria-label={eticheta}
+        aria-invalid={invalid || undefined}
+        className={cn(
+          "h-9 w-24 rounded-lg bg-surface px-2.5 text-right text-sm tabular-nums text-foreground outline-none ring-1 transition max-lg:h-10",
+          "focus-visible:ring-2",
+          invalid ? "ring-destructive focus-visible:ring-destructive" : "ring-black/10 focus-visible:ring-ring",
+        )}
+      />
+      <span className="text-sm text-muted-foreground">lei</span>
+    </div>
+  );
+}
+
+/** Un rand din lista de costuri: denumirea in stanga, suma in dreapta, actiunile dedesubt. */
+function RandCost({ pentru, titlu, detaliu, camp, children }: {
+  pentru: string;
+  titlu: string;
+  detaliu?: string | null;
+  camp: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <label htmlFor={pentru} className="block text-sm font-medium text-foreground">{titlu}</label>
+          {detaliu && <p className="mt-0.5 text-xs text-muted-foreground">{detaliu}</p>}
+        </div>
+        {camp}
+      </div>
+      {children && <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">{children}</div>}
+    </div>
+  );
+}
 
 /**
  * Un rand de produs din fereastra de editare — si pentru liniile care sunt DEJA
@@ -180,7 +283,7 @@ function RandProdus({ nume, detaliu, suma, cantitate, poateCreste, motiv, onMinu
   sters?: boolean;
 }) {
   return (
-    <div className={`rounded-lg border px-3 py-2.5 transition-colors ${sters ? "border-destructive/30 bg-destructive/5" : "border-border"}`}>
+    <div className={`rounded-lg bg-surface px-3 py-2.5 ring-1 transition ${sters ? "ring-destructive/40" : "ring-black/10"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className={`text-sm break-words ${sters ? "text-muted-foreground line-through" : "text-foreground"}`}>{nume}</p>
@@ -192,7 +295,7 @@ function RandProdus({ nume, detaliu, suma, cantitate, poateCreste, motiv, onMinu
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         {sters ? (
-          <p className="text-xs font-medium text-destructive">Scoasa din comanda</p>
+          <p className="text-xs font-medium text-destructive">Scoasă din comandă</p>
         ) : (
           <div className="flex items-center gap-1.5">
             <button type="button" onClick={onMinus} className={pasCls} aria-label="Scade cantitatea">
@@ -200,7 +303,7 @@ function RandProdus({ nume, detaliu, suma, cantitate, poateCreste, motiv, onMinu
             </button>
             <span className="w-10 text-center text-sm font-semibold tabular-nums">{cantitate}</span>
             <button type="button" onClick={onPlus} disabled={!poateCreste} className={pasCls}
-              title={poateCreste ? "Creste cantitatea" : motiv ?? undefined} aria-label="Creste cantitatea">
+              title={poateCreste ? "Crește cantitatea" : motiv ?? undefined} aria-label="Crește cantitatea">
               <Plus className="h-4 w-4" />
             </button>
           </div>
@@ -264,6 +367,21 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const [quote, setQuote] = useState<{ price: number; token: string; label: string; county: string; city: string } | null>(null);
   const [quoteApplied, setQuoteApplied] = useState(false);
 
+  /*
+   * Costurile schimbate de mana. `null` = neatins: campul arata suma socotita a comenzii.
+   *
+   * ⚠ Altfel se tine TEXTUL tastat, nu numarul: „12,” e un pas spre „12,5”, iar tinut ca numar
+   * s-ar fi sters sub degetele omului. Suma se citeste din el abia la socoteala (`sumaDinText`).
+   */
+  const [transportText, setTransportText] = useState<string | null>(null);
+  const [taxaText, setTaxaText] = useState<string | null>(null);
+  const [reducereText, setReducereText] = useState<string | null>(null);
+  /** Costurile suplimentare adaugate in sesiunea asta de editare. */
+  const [costuriNoi, setCosturiNoi] = useState<{ cheie: number; nume: string; suma: number }[]>([]);
+  const [costNume, setCostNume] = useState("");
+  const [costSuma, setCostSuma] = useState("");
+  const cheieCost = useRef(0);
+
   useEffect(() => {
     if (!open) return;
     setName(order.customer_name ?? "");
@@ -288,6 +406,12 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     setPickSel({});
     setQuote(null);
     setQuoteApplied(false);
+    setTransportText(null);
+    setTaxaText(null);
+    setReducereText(null);
+    setCosturiNoi([]);
+    setCostNume("");
+    setCostSuma("");
     setCtx(null);
     getOrderEditContext(businessId, order.id).then((res) => setCtx("error" in res ? null : res as EditContext));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -342,8 +466,14 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     (campuriVal[c.id] ?? "") !== (noteComanda.fel === "campuri" ? noteComanda.valori[c.id] ?? "" : ""));
   const seteazaCamp = (id: string, valoare: string) => setCampuriVal((v) => ({ ...v, [id]: valoare }));
 
+  /** S-a atins vreun cost? Un camp de suma tastat conteaza chiar daca a ramas la aceeasi cifra. */
+  const areSchimbariCosturi = transportText !== null || taxaText !== null || reducereText !== null || costuriNoi.length > 0
+    /* Si un cost tastat dar inca neadaugat: inchiderea din greseala l-ar pierde. */
+    || costNume.trim() !== "" || costSuma.trim() !== "";
+
   const alteSchimbari = added.length > 0
     || Object.keys(modificari).length > 0
+    || areSchimbariCosturi
     || quote !== null
     || name !== (order.customer_name ?? "")
     || phone !== (order.customer_phone ?? "")
@@ -357,7 +487,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const inchideCuGrija = useCallback(() => {
     if (saving) return;
     if (areSchimbari) {
-      toast.message("Ai modificari nesalvate. Salveaza-le, sau apasa Renunta ca sa le lasi.");
+      toast.message("Ai modificări nesalvate. Salvează-le, sau apasă Renunță ca să le lași.");
       return;
     }
     onClose();
@@ -405,7 +535,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     /* Posta: manualOnly, ca la Colete Online, dar din alt motiv — API-ul lor NU
        are metoda de anulare. Din panou se poate doar scoate numarul de pe
        comanda, dupa ce omul a anulat trimiterea la oficiu sau in aplicatia lor. */
-    if (order.posta_awb_number) list.push({ key: "posta", label: "Posta Romana", awb: order.posta_awb_number, manualOnly: true });
+    if (order.posta_awb_number) list.push({ key: "posta", label: "Poșta Română", awb: order.posta_awb_number, manualOnly: true });
     /* ⚠ `manualOnly` la Packeta nu e o alegere de comoditate: API-ul lor NU are
        anulare, deci scoaterea de pe comanda e singurul lucru pe care il putem
        face de aici — coletul se anuleaza de mana, din contul lor. */
@@ -475,11 +605,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
    * rambursul de atunci, iar comanda ar spune ca marfa aia n-a plecat niciodata.
    */
   const liniiBlocate: string | null = hasInvoice
-    ? `Comanda are factura ${numarFactura}. Documentul fiscal a plecat deja cu totalul lui, deci marfa nu se mai schimba din panou: emite storno la furnizorul de facturare, apoi fa o comanda noua pentru diferenta. Datele clientului si adresa se pot corecta si acum.`
+    ? `Comanda are factura ${numarFactura}. Documentul fiscal a plecat deja cu totalul lui, deci marfa nu se mai schimbă din panou: emite storno la furnizorul de facturare, apoi fă o comandă nouă pentru diferență. Datele clientului și adresa se pot corecta și acum.`
     : activeAwbs.length > 0
-      ? "Comanda are AWB emis, iar coletul e declarat la curier cu marfa si rambursul de atunci. Anuleaza AWB-ul mai sus, schimba liniile, apoi genereaza unul nou."
+      ? "Comanda are AWB emis, iar coletul e declarat la curier cu marfa și rambursul de atunci. Anulează AWB-ul mai sus, schimbă liniile, apoi generează unul nou."
       : marketplace
-        ? `Comanda vine din ${marketplace}, iar liniile ei se schimba din contul de acolo — altfel urmatoarea sincronizare le-ar scrie la loc. Datele clientului si adresa se pot corecta si de aici.`
+        ? `Comanda vine din ${marketplace}, iar liniile ei se schimbă din contul de acolo: altfel următoarea sincronizare le-ar scrie la loc. Datele clientului și adresa se pot corecta și de aici.`
         : null;
   /*
    * ═══ ⚠ SI ADAUGAREA SE OPRESTE PE O COMANDA DE MARKETPLACE (09.09.2026) ═══
@@ -509,7 +639,49 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
    * efect: asa nu exista nicio clipa in care starea sa fie aplicata si invalida.
    */
   const cotatieValida = !!quote && quote.county === county.trim() && quote.city === city.trim();
-  const cotatieAplicata = quoteApplied && cotatieValida;
+  /* ⚠ Transportul scris de mana bate cotatia, ca pe server: suma a hotarat-o comerciantul. */
+  const cotatieAplicata = quoteApplied && cotatieValida && transportText === null;
+
+  /*
+   * Cand NU se umbla la costuri, cu motivul pe care l-ar da si serverul. Aceleasi trei porti ca
+   * la marfa, fiindca sunt tot bani: factura a plecat cu totalul ei, AWB-ul cu rambursul lui,
+   * iar suma unei comenzi de marketplace e cea incasata acolo.
+   */
+  const costuriBlocate: string | null = hasInvoice
+    ? `Comanda are factura ${numarFactura}, deci sumele ei nu se mai schimbă din panou: emite storno la furnizorul de facturare, apoi fă o comandă nouă pentru diferență.`
+    : activeAwbs.length > 0
+      ? "Comanda are AWB emis, iar rambursul de pe el e cel de atunci. Anulează AWB-ul mai sus, schimbă costurile, apoi generează unul nou."
+      : marketplace
+        ? `Comanda vine din ${marketplace}, iar suma ei e cea încasată acolo: costurile nu se schimbă din panou.`
+        : null;
+
+  /* Costurile cerute, citite din campuri. O suma care nu se poate citi opreste salvarea. */
+  const costuriDinCampuri = useMemo<{ costuri: CosturiCerute; eroare: string | null }>(() => {
+    const citeste = (text: string | null) => (text === null ? null : sumaDinText(text));
+    const transport = citeste(transportText);
+    const taxaRamburs = citeste(taxaText);
+    const reducere = citeste(reducereText);
+    const eroare = transportText !== null && transport === null ? "Transportul nu e o sumă. Scrie, de pildă, 19,99 sau 0."
+      : taxaText !== null && taxaRamburs === null ? "Taxa de plată ramburs nu e o sumă. Scrie, de pildă, 9,99 sau 0."
+      : reducereText !== null && reducere === null ? "Reducerea nu e o sumă. Scrie, de pildă, 25 sau 0."
+      : null;
+    return {
+      costuri: { transport, taxaRamburs, reducere, adaugate: costuriNoi.map((c) => ({ nume: c.nume, suma: c.suma })) },
+      eroare,
+    };
+  }, [transportText, taxaText, reducereText, costuriNoi]);
+
+  /** Ce pleaca la server: doar costurile chiar atinse. */
+  const cerereCosturi = useMemo<CerereCosturi | null>(() => {
+    const c = costuriDinCampuri.costuri;
+    if (c.transport === null && c.taxaRamburs === null && c.reducere === null && c.adaugate.length === 0) return null;
+    return {
+      ...(c.transport !== null ? { transport: c.transport } : {}),
+      ...(c.taxaRamburs !== null ? { taxa_ramburs: c.taxaRamburs } : {}),
+      ...(c.reducere !== null ? { reducere: c.reducere } : {}),
+      ...(c.adaugate.length > 0 ? { adaugate: c.adaugate } : {}),
+    };
+  }, [costuriDinCampuri]);
 
   /** Catalogul viu: si produsele de pe comanda, si cele tocmai adaugate. */
   const catalog = useMemo(() => {
@@ -557,61 +729,63 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
    * scrie „diferenta de X nu se incaseaza automat", iar rambursul de pe AWB se
    * ia din totalul serverului.
    */
-  const previzualizare = useMemo<Previzualizare>(() => {
-    const plan = planificaEditarea(
-      prevItems,
-      modificariCerute,
-      added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
-      catalog,
-    );
-    if ("error" in plan) return { stare: "eroare", error: plan.error };
-    if (!ctx) return { stare: "indisponibil", plan };
+  const planEditare = useMemo(() => planificaEditarea(
+    prevItems,
+    modificariCerute,
+    added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
+    catalog,
+  ), [prevItems, modificariCerute, added, catalog]);
 
-    const subtotal = round2(Number(order.subtotal) + plan.deltaSubtotal);
-    // Extraoptiunile de DUPA editare: una scoasa trebuie sa iasa si din total.
-    const extras = plan.extras;
-    // Cota INGHETATA a comenzii, ca pe server: o comanda vanduta cu 19% nu
-    // capata 21% fiindca s-a schimbat setarea magazinului intre timp. Regula sta
-    // in `invoiceVat`, aceeasi pe care o cheama si serverul si cele trei case de
-    // facturare — scrisa aici a doua oara, previzualizarea si totalul salvat s-ar
-    // fi despartit la prima corectie facuta doar intr-un loc.
-    const vat = {
-      vat_enabled: ctx.vat_enabled,
-      vat_rate: invoiceVat(order, {
-        vat_enabled: ctx.vat_enabled, vat_rate: ctx.vat_rate, prices_include_vat: ctx.prices_include_vat,
-      }).rate,
-      prices_include_vat: ctx.prices_include_vat,
-    };
-    // Aceeasi formula ca pe server: taxa se SCALEAZA cu baza, pastrand cota
-    // convenita la plasare, si numai daca a existat de la bun inceput.
-    const cfgTaxa = parseCodFeeConfig(ctx.cod_fee_config);
-    const taxaVeche = round2(Number(order.cod_fee_amount) || 0);
-    const bazaVeche = round2(Number(order.subtotal) + sumaExtraoptiunilor(prevItems) - (Number(order.discount_amount) || 0));
-    const bazaNoua = round2(subtotal + extras - (Number(order.discount_amount) || 0));
-    // Poarta e „BAZA s-a schimbat", ca pe server: extraoptiunile intra in baza
-    // taxei, dar niciodata in subtotal, deci scoaterea ambalarii cadou trebuie sa
-    // miste taxa chiar daca marfa a ramas neatinsa.
-    const codFee = cfgTaxa.type === "percent" && bazaNoua !== bazaVeche && taxaVeche > 0 && bazaVeche > 0
-      ? round2(taxaVeche * (bazaNoua / bazaVeche))
-      : taxaVeche;
-
-    const r = recalculeazaTotal({
-      subtotal,
-      extras,
-      discount: Number(order.discount_amount) || 0,
-      cardDiscount: Number(order.card_discount_amount) || 0,
-      codDiscount: Number(order.cod_discount_amount) || 0,
-      codFee,
-      shipping: cotatieAplicata && quote ? quote.price : Math.max(0, round2(Number(order.shipping_cost) || 0)),
-      freeShippingThreshold: ctx.free_shipping_threshold,
-      vat,
-    });
+  /*
+   * Tot ce intra in socoteala comenzii, strans la un loc: aceleasi intrari pe care le strange si
+   * serverul in `updateOrderDetails`, date aceleiasi functii pure (`socotesteEditarea`). Pana pe
+   * 25.11.2026 formula taxei de ramburs era scrisa a doua oara aici, „ca pe server”.
+   */
+  const intrareSocoteala = useMemo<IntrareSocoteala | null>(() => {
+    if ("error" in planEditare || !ctx) return null;
+    const ship = (order.shipping_address ?? {}) as { transport_manual?: unknown };
     return {
-      stare: "gata", subtotal, extras, codFee, plan,
-      total: r.total, vatAmount: r.vatAmount, vatRate: vat.vat_rate, shipping: r.shipping,
-      diferenta: round2(r.total - Number(order.total)),
+      comanda: {
+        subtotal: Number(order.subtotal),
+        discount: Number(order.discount_amount) || 0,
+        cardDiscount: Number(order.card_discount_amount) || 0,
+        codDiscount: Number(order.cod_discount_amount) || 0,
+        codFee: round2(Number(order.cod_fee_amount) || 0),
+        shipping: Math.max(0, round2(Number(order.shipping_cost) || 0)),
+        transportManual: ship.transport_manual === true,
+      },
+      extrasVechi: sumaExtraoptiunilor(prevItems),
+      deltaSubtotal: planEditare.deltaSubtotal,
+      // Extraoptiunile de DUPA editare: una scoasa trebuie sa iasa si din total.
+      extrasPlan: planEditare.extras,
+      costuri: costuriDinCampuri.costuri,
+      transportCotat: cotatieAplicata && quote ? quote.price : null,
+      taxaProcentuala: parseCodFeeConfig(ctx.cod_fee_config).type === "percent",
+      pragTransportGratuit: ctx.free_shipping_threshold,
+      // Cota INGHETATA a comenzii, ca pe server: o comanda vanduta cu 19% nu
+      // capata 21% fiindca s-a schimbat setarea magazinului intre timp. Regula sta
+      // in `invoiceVat`, aceeasi pe care o cheama si serverul si casele de facturare.
+      vat: {
+        vat_enabled: ctx.vat_enabled,
+        vat_rate: invoiceVat(order, {
+          vat_enabled: ctx.vat_enabled, vat_rate: ctx.vat_rate, prices_include_vat: ctx.prices_include_vat,
+        }).rate,
+        prices_include_vat: ctx.prices_include_vat,
+      },
     };
-  }, [added, modificariCerute, prevItems, catalog, ctx, order, quote, cotatieAplicata]);
+  }, [planEditare, ctx, order, prevItems, costuriDinCampuri, cotatieAplicata, quote]);
+
+  const previzualizare = useMemo<Previzualizare>(() => {
+    if ("error" in planEditare) return { stare: "eroare", error: planEditare.error };
+    if (!intrareSocoteala) return { stare: "indisponibil", plan: planEditare };
+    const s = socotesteEditarea(intrareSocoteala);
+    return {
+      stare: "gata", subtotal: s.subtotal, extras: s.extras, codFee: s.codFee,
+      discount: s.discount, cardDiscount: s.cardDiscount, codDiscount: s.codDiscount, plan: planEditare,
+      total: s.total, vatAmount: s.vatAmount, vatRate: intrareSocoteala.vat.vat_rate, shipping: s.shipping,
+      diferenta: round2(s.total - Number(order.total)),
+    };
+  }, [planEditare, intrareSocoteala, order.total]);
 
   const areEroarePlan = previzualizare.stare === "eroare";
   const eroarePlan = previzualizare.stare === "eroare" ? previzualizare.error : null;
@@ -619,17 +793,55 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const areSchimbariMarfa = modificariCerute.length > 0 || added.length > 0;
 
   /*
-   * Reducerea inghetata poate ajunge peste marfa ramasa, iar `recalculeazaTotal`
-   * plafoneaza totalul la zero — corect ca aritmetica, dar pe ecran s-ar fi citit
-   * doar „Total nou 0,00", fara nicio explicatie. Serverul refuza cu acelasi motiv.
+   * Reducerea poate ajunge peste marfa ramasa, iar `recalculeazaTotal` plafoneaza totalul la
+   * zero: corect ca aritmetica, dar pe ecran s-ar fi citit doar „Total nou 0,00", fara nicio
+   * explicatie. Serverul refuza cu acelasi motiv. Se judeca pe reducerea de DUPA editare, deci
+   * prinde si una scrisa acum de comerciant.
    */
   const reducereaDepaseste = previzualizare.stare === "gata" && reducerileDepasescMarfa({
     subtotal: previzualizare.subtotal,
     extras: previzualizare.extras,
-    discount: Number(order.discount_amount) || 0,
-    cardDiscount: Number(order.card_discount_amount) || 0,
-    codDiscount: Number(order.cod_discount_amount) || 0,
+    discount: previzualizare.discount,
+    cardDiscount: previzualizare.cardDiscount,
+    codDiscount: previzualizare.codDiscount,
   });
+
+  /* ── Sectiunea „Costuri”: ce arata campurile si ce fac butoanele ei ── */
+  const transportVechi = Math.max(0, round2(Number(order.shipping_cost) || 0));
+  const taxaVecheRamburs = round2(Number(order.cod_fee_amount) || 0);
+  const reducereVeche = round2(Number(order.discount_amount) || 0);
+  /* Campul neatins arata suma SOCOTITA (dupa prag, dupa scalarea taxei), nu cea de pe comanda. */
+  const transportAratat = previzualizare.stare === "gata" ? previzualizare.shipping : transportVechi;
+  const taxaAratata = previzualizare.stare === "gata" ? previzualizare.codFee : taxaVecheRamburs;
+  const reducereAratata = previzualizare.stare === "gata" ? previzualizare.discount : reducereVeche;
+  /* Taxa de ramburs are rand doar unde are rost: comanda are una, sau se plateste la livrare. */
+  const arataTaxaRamburs = taxaVecheRamburs > 0 || taxaText !== null || isCodPaymentMethod(order.payment_method);
+  const transportTinutMinte = intrareSocoteala?.comanda.transportManual === true;
+
+  /** „Scade TVA”: reducerea care il face pe client sa plateasca pretul fara TVA. Vezi `scadeTva`. */
+  const propunereTva = useMemo(() => (intrareSocoteala ? scadeTva(intrareSocoteala) : null), [intrareSocoteala]);
+  const tvaDeScazut = propunereTva ? round2(propunereTva.reducere - reducereVeche) : 0;
+  const tvaDejaScazut = !!propunereTva && costuriDinCampuri.costuri.reducere === propunereTva.reducere;
+  function aplicaScadereaTva() {
+    if (!propunereTva) return;
+    setReducereText(sumaInCamp(propunereTva.reducere));
+    /* Taxa procentuala se tine pe loc, altfel totalul ar cadea sub pretul fara TVA. */
+    if (propunereTva.taxaRamburs !== null) setTaxaText(sumaInCamp(propunereTva.taxaRamburs));
+  }
+
+  const numeCostNou = numeleCostului(costNume);
+  const sumaCostNou = sumaDinText(costSuma);
+  const potAdaugaCost = !!numeCostNou && sumaCostNou !== null && sumaCostNou > 0 && costuriNoi.length < COSTURI_ADAUGATE_MAX;
+  /** Un cost tastat dar neadaugat s-ar fi pierdut la salvare fara nicio urma: salvarea il asteapta. */
+  const costInAsteptare = costNume.trim() !== "" || costSuma.trim() !== "";
+  function adaugaCost() {
+    if (!potAdaugaCost || sumaCostNou === null) return;
+    cheieCost.current += 1;
+    const cheie = cheieCost.current;
+    setCosturiNoi((l) => [...l, { cheie, nume: numeCostNou, suma: sumaCostNou }]);
+    setCostNume("");
+    setCostSuma("");
+  }
 
   /** Randurile finale ale liniilor existente, pe index — pentru cifrele de pe ecran. */
   const randuri = useMemo(() => {
@@ -715,14 +927,14 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         && o.deliveryType === (isLocker ? "locker" : "address") && o.token);
       if (!potrivita?.token) {
         setQuote(null);
-        toast.error("Nu am gasit acelasi serviciu de curierat pentru noua destinatie. Verifica transportul manual.");
+        toast.error("Nu am găsit același serviciu de curierat pentru noua destinație. Poți scrie transportul de mână, la „Costuri”.");
         return;
       }
       setQuote({ price: potrivita.price, token: potrivita.token, label: potrivita.courierLabel, county: county.trim(), city: city.trim() });
       setQuoteApplied(false);
     }).catch(() => {
       setRequoting(false);
-      toast.error("Nu s-a putut cere cotatia de transport. Incearca din nou.");
+      toast.error("Nu s-a putut cere cotația de transport. Încearcă din nou.");
     });
   }
 
@@ -736,14 +948,14 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
      */
     if (key === "posta") {
       const confirmat = confirm(
-        "Posta Romana nu poate fi anulata prin API. Ai anulat deja trimiterea la oficiu "
-        + "sau in aplicatia lor?\n\nApasa OK doar daca ai facut-o — altfel coletul pleaca, "
-        + "iar comanda ramane fara numar de urmarire.",
+        "Poșta Română nu poate fi anulată prin API. Ai anulat deja trimiterea la oficiu "
+        + "sau în aplicația lor?\n\nApasă OK doar dacă ai făcut-o: altfel coletul pleacă, "
+        + "iar comanda rămâne fără număr de urmărire.",
       );
       if (!confirmat) return;
     }
     if (key === "woot" && !order.woot_order_id) {
-      toast.error("Comanda nu are ID-ul expedierii Woot. Anuleaza AWB-ul din contul Woot, apoi contacteaza suportul.");
+      toast.error("Comanda nu are ID-ul expedierii Woot. Anulează AWB-ul din contul Woot, apoi contactează suportul.");
       return;
     }
     setCancellingKey(key);
@@ -830,8 +1042,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         const eticheta = activeAwbs.find((a) => a.key === key)?.label ?? "curier";
         toast.error(
           scrieDoarLaNoi
-            ? `Nu am primit raspuns de la server, deci nu stim daca numarul a fost scos de pe comanda. Reimprospateaza comanda inainte sa incerci din nou: la ${eticheta} nu s-a schimbat nimic.`
-            : `Nu am primit raspuns de la server, deci nu stim daca anularea a ajuns la ${eticheta}. Verifica in contul lor si reimprospateaza comanda inainte sa incerci din nou.`,
+            ? `Nu am primit răspuns de la server, deci nu știm dacă numărul a fost scos de pe comandă. Reîmprospătează comanda înainte să încerci din nou: la ${eticheta} nu s-a schimbat nimic.`
+            : `Nu am primit răspuns de la server, deci nu știm dacă anularea a ajuns la ${eticheta}. Verifică în contul lor și reîmprospătează comanda înainte să încerci din nou.`,
           { duration: 12000 },
         );
         return;
@@ -843,7 +1055,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       /* ⚠ Un colet care ramane viu la curier NU e o reusita, chiar daca numarul a iesit de pe
          comanda: in verde, omul ar emite al doilea AWB si ar pleca doua colete. */
       if (res.anulatLaCuriera === false) {
-        toast.warning(res.mesaj ?? "Numarul a fost scos de pe comanda, dar coletul poate fi inca viu la curier.", { duration: 16000 });
+        toast.warning(res.mesaj ?? "Numărul a fost scos de pe comandă, dar coletul poate fi încă viu la curier.", { duration: 16000 });
         router.refresh();
         return;
       }
@@ -852,8 +1064,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         /* ⚠ Colete Online isi spune singur ce s-a intamplat, prin `mesaj`: anularea la ei
            poate fi REFUZATA (colet deja ridicat), iar un text fix ar minti intr-un sens sau
            altul. Ramura de mai jos e doar plasa pentru un raspuns fara `mesaj`. */
-        ?? (key === "colete" ? "AWB scos de pe comanda. Verifica in contul Colete Online daca expedierea mai figureaza."
-        : key === "posta" ? "Numarul a fost scos de pe comanda. Anularea la Posta se face separat, la ei."
+        ?? (key === "colete" ? "AWB scos de pe comandă. Verifică în contul Colete Online dacă expedierea mai figurează."
+        : key === "posta" ? "Numărul a fost scos de pe comandă. Anularea la Poștă se face separat, la ei."
         : "AWB anulat."),
         res.mesaj ? { duration: 12000 } : undefined,
       );
@@ -886,12 +1098,14 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
           ...(cotatieAplicata && quote
             ? { shipping_cost: quote.price, shipping_token: quote.token, courier_label: quote.label }
             : {}),
+          // Costurile schimbate de mana, doar cele atinse. Serverul le reciteste si le rejudeca.
+          ...(cerereCosturi ? { costuri: cerereCosturi } : {}),
         });
       } catch {
         /* ⚠ `updateOrderDetails` scrie la NOI, deci nu se pomeneste niciun curier: */
         toast.error(
-          "Nu am primit raspuns de la server si nu stim daca modificarile s-au salvat. "
-          + "Reimprospateaza comanda inainte sa incerci din nou.",
+          "Nu am primit răspuns de la server și nu știm dacă modificările s-au salvat. "
+          + "Reîmprospătează comanda înainte să încerci din nou.",
         );
         return;
       }
@@ -917,12 +1131,12 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
           return;
         }
       }
-      toast.success("Comanda a fost actualizata.");
+      toast.success("Comanda a fost actualizată.");
       if (res && res.faraStoc > 0) {
-        toast.warning(`${res.faraStoc === 1 ? "O linie scoasa nu si-a putut" : `${res.faraStoc} linii scoase nu si-au putut`} da stocul inapoi automat. Corecteaza stocul din pagina produsului.`);
+        toast.warning(`${res.faraStoc === 1 ? "O linie scoasă nu și-a putut" : `${res.faraStoc} linii scoase nu și-au putut`} da stocul înapoi automat. Corectează stocul din pagina produsului.`);
       }
       if (activeAwbs.length === 0 && addr.courier) {
-        toast.message("Poti genera acum AWB-ul cu datele noi, din sectiunea curierului.");
+        toast.message("Poți genera acum AWB-ul cu datele noi, din secțiunea curierului.");
       }
       onSaved();
     });
@@ -962,16 +1176,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       <div className="w-full sm:max-w-2xl bg-background border border-border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] h-[100dvh] sm:h-auto">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Pencil className="h-4 w-4 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Editeaza comanda</p>
-              <p className="text-xs text-muted-foreground truncate">{order.order_number} — {order.customer_name}</p>
-            </div>
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-foreground">Editează comanda</p>
+            <p className="text-xs text-muted-foreground truncate">{order.order_number} · {order.customer_name}</p>
           </div>
-          <button onClick={onClose} className="p-2 -mr-1 rounded-lg hover:bg-muted transition-colors shrink-0" aria-label="Inchide">
+          <button onClick={onClose} className="p-2 -mr-1 rounded-lg hover:bg-muted transition-colors shrink-0" aria-label="Închide">
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
@@ -979,16 +1188,16 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         <div className="px-4 sm:px-6 py-5 space-y-5 overflow-y-auto flex-1">
           {/* Active AWB — must be cancelled so the courier gets the new data */}
           {activeAwbs.length > 0 && (
-            <div className="p-4 bg-warning/5 border border-warning/20 rounded-xl space-y-3">
+            <div className="space-y-3 rounded-xl bg-surface p-4 ring-1 ring-black/10">
               <div className="flex items-start gap-2">
                 <Truck className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-foreground leading-relaxed">
-                  Comanda are AWB generat. Modificarile <strong>nu ajung la curier</strong> pe AWB-ul existent —
-                  anuleaza-l aici, salveaza modificarile, apoi genereaza un AWB nou din sectiunea curierului.
+                  Comanda are AWB generat. Modificările <strong>nu ajung la curier</strong> pe AWB-ul existent:
+                  anulează-l aici, salvează modificările, apoi generează un AWB nou din secțiunea curierului.
                 </p>
               </div>
               {activeAwbs.map((a) => (
-                <div key={a.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2">
+                <div key={a.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background px-3 py-2 ring-1 ring-black/10">
                   <p className="text-sm text-foreground min-w-0 break-all">
                     {a.label}: <span className="font-mono font-semibold">{a.awb}</span>
                   </p>
@@ -996,21 +1205,21 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                     disabled={cancelPending}
                     onClick={() => handleCancelAwb(a.key)}>
                     {cancelPending && cancellingKey === a.key ? <Loader2 className="animate-spin" /> : <Trash2 />}
-                    {a.manualOnly ? "Detaseaza AWB" : "Anuleaza AWB"}
+                    {a.manualOnly ? "Detașează AWB" : "Anulează AWB"}
                   </Button>
                 </div>
               ))}
               {curieriManuali.length === 1 && (
                 <p className="text-[11px] text-muted-foreground">
-                  {curieriManuali[0]} nu permite anularea prin API: anuleaza expedierea din contul tau {curieriManuali[0]},
-                  apoi apasa „Detaseaza AWB” ca sa poti genera unul nou.
+                  {curieriManuali[0]} nu permite anularea prin API: anulează expedierea din contul tău {curieriManuali[0]},
+                  apoi apasă „Detașează AWB” ca să poți genera unul nou.
                 </p>
               )}
               {curieriManuali.length > 1 && (
                 <p className="text-[11px] text-muted-foreground">
-                  {curieriManuali.slice(0, -1).join(", ")} si {curieriManuali[curieriManuali.length - 1]} nu permit
-                  anularea prin API: anuleaza expedierea in contul curierului care a emis-o, apoi apasa
-                  „Detaseaza AWB” ca sa poti genera unul nou.
+                  {curieriManuali.slice(0, -1).join(", ")} și {curieriManuali[curieriManuali.length - 1]} nu permit
+                  anularea prin API: anulează expedierea în contul curierului care a emis-o, apoi apasă
+                  „Detașează AWB” ca să poți genera unul nou.
                 </p>
               )}
             </div>
@@ -1029,7 +1238,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                 <input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" className={inputCls} />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Email (optional)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Email (opțional)</label>
                 <input value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" className={inputCls} />
               </div>
             </div>
@@ -1039,48 +1248,48 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
           <section className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Adresa de livrare</p>
             {isLocker && (
-              <div className="flex items-start gap-2 p-3 bg-info/5 border border-info/20 rounded-lg">
-                <Info className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-info">
-                  Comanda se livreaza la locker{addr.locker_name ? ` (${addr.locker_name})` : ""}. Adresa de mai jos este
-                  informativa — pentru alt locker, anuleaza AWB-ul si alege lockerul in fereastra curierului.
+              <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-black/10">
+                <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <p className="text-xs leading-relaxed text-foreground">
+                  Comanda se livrează la locker{addr.locker_name ? ` (${addr.locker_name})` : ""}. Adresa de mai jos este
+                  informativă: pentru alt locker, anulează AWB-ul și alege lockerul în fereastra curierului.
                 </p>
               </div>
             )}
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Strada si numar</label>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Stradă și număr</label>
               <input value={address} onChange={(e) => setAddress(e.target.value)} className={inputCls} />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Oras</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Oraș</label>
                 <input value={city} onChange={(e) => setCity(e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Judet</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Județ</label>
                 <input value={county} onChange={(e) => setCounty(e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Cod postal (optional)</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Cod poștal (opțional)</label>
                 <input value={postal} onChange={(e) => setPostal(e.target.value)} inputMode="numeric" className={inputCls} />
               </div>
             </div>
 
             {/* Transportul nu se muta singur cu destinatia: se cere si se aplica explicit. */}
             {destinatieSchimbata && (
-              <div className="p-3 bg-info/5 border border-info/20 rounded-lg space-y-2">
+              <div className="space-y-2 rounded-lg bg-surface p-3 ring-1 ring-black/10">
                 <div className="flex items-start gap-2">
-                  <Truck className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-foreground">
-                    Ai schimbat destinatia. Transportul din comanda ({formatPrice(Number(order.shipping_cost))}) a fost
-                    cotat pentru adresa veche{potRecota ? " — poti cere o cotatie noua." : "."}
+                  <Truck className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                  <p className="text-xs leading-relaxed text-foreground">
+                    Ai schimbat destinația. Transportul din comandă ({formatPrice(Number(order.shipping_cost))}) a fost
+                    cotat pentru adresa veche{potRecota ? ": poți cere o cotație nouă." : "."}
                   </p>
                 </div>
                 {potRecota && (
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant="outline" size="sm" onClick={handleRequote} disabled={requoting}>
                       {requoting ? <Loader2 className="animate-spin" /> : <Truck />}
-                      Recoteaza transportul
+                      Recotează transportul
                     </Button>
                     {quote && cotatieValida && (
                       <>
@@ -1089,7 +1298,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                         </span>
                         <Button size="sm" variant={cotatieAplicata ? "secondary" : "default"}
                           onClick={() => setQuoteApplied((v) => !v)}>
-                          {cotatieAplicata ? <><Check /> Aplicat</> : "Aplica"}
+                          {cotatieAplicata ? <><Check /> Aplicat</> : "Aplică"}
                         </Button>
                       </>
                     )}
@@ -1097,11 +1306,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                 )}
                 {!potRecota && (
                   <p className="text-[11px] text-muted-foreground">
-                    {hasInvoice ? "Comanda are factura emisa, deci transportul nu se mai poate schimba din panou."
-                      : isPaid ? "Comanda e platita online, deci transportul nu se schimba automat."
-                      : activeAwbs.length > 0 ? "Anuleaza intai AWB-ul ca sa poti recota transportul."
-                      : Number(order.shipping_cost) <= 0 ? "Comanda are livrare gratuita, care se pastreaza."
-                      : "Transportul ramane cel din comanda."}
+                    {hasInvoice ? "Comanda are factura emisă, deci transportul nu se mai poate schimba din panou."
+                      : isPaid ? "Comanda e plătită online, deci transportul nu se schimbă automat. Îl poți scrie de mână, la „Costuri”."
+                      : activeAwbs.length > 0 ? "Anulează întâi AWB-ul ca să poți recota transportul."
+                      : Number(order.shipping_cost) <= 0 ? "Comanda are livrare gratuită, care se păstrează."
+                      : "Transportul rămâne cel din comandă. Îl poți scrie de mână, la „Costuri”."}
                   </p>
                 )}
               </div>
@@ -1170,10 +1379,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
 
           {/* ── Produsele DEJA pe comanda: cantitate si scoatere ── */}
           <section className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">Produsele din comanda</p>
+            <p className="text-sm font-semibold text-foreground">Produsele din comandă</p>
 
             {liniiBlocate && (
-              <div className="flex items-start gap-2 p-3 bg-muted/40 border border-border rounded-lg">
+              <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-black/10">
                 <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-muted-foreground leading-relaxed">{liniiBlocate}</p>
               </div>
@@ -1185,17 +1394,18 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
               derulabil — pe telefon, aceea e cu un ecran mai jos.
             */}
             {eroarePlan && (
-              <div className="flex items-start gap-2 p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+              <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-destructive/40">
                 <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-destructive leading-relaxed">{eroarePlan}</p>
               </div>
             )}
-            {!eroarePlan && reducereaDepaseste && (
-              <div className="flex items-start gap-2 p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+            {/* Reducerea scrisa ACUM de comerciant isi spune motivul langa campul ei, in „Costuri”. */}
+            {!eroarePlan && reducereaDepaseste && costuriDinCampuri.costuri.reducere === null && (
+              <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-destructive/40">
                 <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
                 <p className="text-xs text-destructive leading-relaxed">
-                  Marfa ramasa e mai mica decat reducerile de pe comanda, deci totalul ar iesi negativ.
-                  Lasa mai multe produse pe comanda, sau anuleaz-o si fa una noua fara cupon.
+                  Marfa rămasă e mai mică decât reducerile de pe comandă, deci totalul ar ieși negativ.
+                  Lasă mai multe produse pe comandă, sau anuleaz-o și fă una nouă fără cupon.
                 </p>
               </div>
             )}
@@ -1225,6 +1435,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                   const suma = rand ? rand.subtotal : round2(unitar * cantitate);
                   const sters = cantitate === 0;
                   const nuSeMisca = faraStoc.includes(cap.index);
+                  /* Costul adaugat de comerciant la o editare de dinainte e tot extraoptiune, dar isi spune numele. */
+                  const felExtra = !cap.esteExtra ? ""
+                    : esteCostManual((prevItems[cap.index] as { product_id?: unknown } | null)?.product_id) ? " · cost suplimentar"
+                    : " · opțiune extra";
                   return (
                     <div key={cap.index}>
                       {/*
@@ -1234,7 +1448,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                         butoane ar promite ceva ce nu se poate face.
                       */}
                       {liniiBlocate || !cap.poateScadea ? (
-                        <div className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-3 rounded-lg bg-surface px-3 py-2.5 ring-1 ring-black/10">
                           <p className="text-sm text-foreground break-words min-w-0 flex-1">
                             {cap.name || <span className="text-muted-foreground italic">Linie pe care nu o pot citi</span>}
                             {cap.name && <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{cap.quantity}</span>}
@@ -1246,7 +1460,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                       ) : (
                         <RandProdus
                           nume={cap.name}
-                          detaliu={`${formatPrice(unitar)} / buc${cap.esteExtra ? " · optiune extra" : ""}${!cap.repretuire && !cap.esteExtra ? " · pret fix" : ""}`}
+                          detaliu={`${formatPrice(unitar)} / buc${felExtra}${!cap.repretuire && !cap.esteExtra ? " · preț fix" : ""}`}
                           suma={suma}
                           cantitate={cantitate}
                           poateCreste={cap.poateCreste}
@@ -1259,7 +1473,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                       )}
                       {nuSeMisca && (
                         <p className="mt-1 px-1 text-[11px] leading-relaxed text-warning">
-                          Stocul acestei linii nu se poate da inapoi automat — corecteaza-l din pagina produsului.
+                          Stocul acestei linii nu se poate da înapoi automat: corectează-l din pagina produsului.
                         </p>
                       )}
                     </div>
@@ -1272,7 +1486,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
           {/* Add products */}
           {!adaugareBlocata && (
             <section className="space-y-3">
-              <p className="text-sm font-semibold text-foreground">Adauga produse in comanda</p>
+              <p className="text-sm font-semibold text-foreground">Adaugă produse în comandă</p>
               {added.length > 0 && (
                 <div className="space-y-2">
                   {added.map((l) => {
@@ -1288,11 +1502,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                       return (
                         <RandProdus key={cheie}
                           nume={`${l.name}${l.variantTitle ? ` (${l.variantTitle})` : ""}`}
-                          detaliu={`${formatPrice(l.unitPrice)} / buc${altPret ? " · pret de pachet" : ""}`}
+                          detaliu={`${formatPrice(l.unitPrice)} / buc${altPret ? " · preț de pachet" : ""}`}
                           suma={contributie ?? l.unitPrice * l.quantity}
                           cantitate={l.quantity}
                           poateCreste={l.quantity < MAX_CANTITATE_LINIE}
-                          motiv={`Cel mult ${MAX_CANTITATE_LINIE} bucati pe o linie.`}
+                          motiv={`Cel mult ${MAX_CANTITATE_LINIE} bucăți pe o linie.`}
                           onMinus={() => setQty(cheie, l.quantity - 1)}
                           onPlus={() => setQty(cheie, l.quantity + 1)}
                           onScoate={() => setQty(cheie, 0)}
@@ -1304,7 +1518,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
 
                 {/* Panoul de variante: un produs variabil nu se poate adauga fara marime. */}
                 {picking && pickVariants && (
-                  <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 space-y-3">
+                  <div className="space-y-3 rounded-xl bg-surface px-4 py-3 ring-1 ring-black/15">
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-sm font-semibold text-foreground break-words min-w-0">{picking.name}</p>
                       <button onClick={() => { setPicking(null); setPickSel({}); }}
@@ -1321,10 +1535,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                     />
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <p className="text-xs text-muted-foreground">
-                        {!pickTitle ? "Alege toate optiunile."
-                          : !pickCombo ? "Combinatia asta nu este disponibila."
-                          : pickEpuizat ? "Varianta aleasa are stoc zero."
-                          : `Pret: ${formatPrice(pickSlim?.price ?? picking.price)}`}
+                        {!pickTitle ? "Alege toate opțiunile."
+                          : !pickCombo ? "Combinația asta nu este disponibilă."
+                          : pickEpuizat ? "Varianta aleasă are stoc zero."
+                          : `Preț: ${formatPrice(pickSlim?.price ?? picking.price)}`}
                       </p>
                       <Button size="sm" disabled={!pickCombo || pickEpuizat}
                         onClick={() => {
@@ -1333,7 +1547,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                           setPicking(null);
                           setPickSel({});
                         }}>
-                        <Plus /> Adauga
+                        <Plus /> Adaugă
                       </Button>
                     </div>
                   </div>
@@ -1341,7 +1555,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
 
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cauta un produs..."
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Caută un produs..."
                     className={`${inputCls} pl-9`} />
                 </div>
                 {/*
@@ -1353,7 +1567,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                   {searching ? (
                     <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
                   ) : results.length === 0 ? (
-                    <p className="py-4 text-center text-xs text-muted-foreground">Niciun produs gasit.</p>
+                    <p className="py-4 text-center text-xs text-muted-foreground">Niciun produs găsit.</p>
                   ) : (
                     results.map((p) => {
                       const areVariante = !!p.variante;
@@ -1408,17 +1622,17 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                               <span className="text-sm font-medium text-foreground">{formatPrice(p.price)}</span>
                               {p.cerePersonalizare && (
-                                <span className="text-[10px] font-bold text-amber-600">SE COMANDA DIN MAGAZIN</span>
+                                <span className="text-xs text-muted-foreground">Se comandă din magazin</span>
                               )}
-                              {faraCombinatii && !p.cerePersonalizare && <span className="text-[10px] font-bold text-destructive">FARA VARIANTE ACTIVE</span>}
-                              {out && !faraCombinatii && !p.cerePersonalizare && <span className="text-[10px] font-bold text-destructive">STOC 0</span>}
-                              {!out && areVariante && <span className="text-[10px] text-primary font-medium">ALEGE OPTIUNILE</span>}
+                              {faraCombinatii && !p.cerePersonalizare && <span className="text-xs text-destructive">Fără variante active</span>}
+                              {out && !faraCombinatii && !p.cerePersonalizare && <span className="text-xs text-destructive">Stoc 0</span>}
+                              {!out && areVariante && <span className="text-xs text-muted-foreground">Alege opțiunile</span>}
                               {!out && !areVariante && p.track_inventory && (
-                                <span className="text-[10px] text-muted-foreground">stoc {p.stock_quantity}</span>
+                                <span className="text-xs text-muted-foreground">stoc {p.stock_quantity}</span>
                               )}
                             </div>
                           </div>
-                          <Plus className="h-4 w-4 text-primary shrink-0 mt-3" />
+                          <Plus className="h-4 w-4 text-foreground shrink-0 mt-3" />
                         </button>
                       );
                     })
@@ -1427,85 +1641,263 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
             </section>
           )}
 
+          {/* ── Costurile comenzii: transport, taxa de ramburs, reducere, costuri suplimentare ── */}
+          <section className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">Costuri</p>
+            {costuriBlocate ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">{costuriBlocate}</p>
+            ) : !ctx ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+            ) : (
+              <>
+                <div className={cn(CUTIE, "divide-y divide-border/70")}>
+                  <RandCost
+                    pentru="cost-transport"
+                    titlu="Transport"
+                    detaliu={transportText !== null ? `Pe comandă: ${transportVechi > 0 ? formatPrice(transportVechi) : "gratuit"}.`
+                      : transportTinutMinte ? "Pus de mână la o editare de dinainte: nu se mai schimbă după pragul de livrare gratuită."
+                      : transportAratat === 0 && transportVechi > 0 ? "Gratuit: marfa a trecut de pragul de livrare gratuită."
+                      : null}
+                    camp={(
+                      <CampSuma id="cost-transport" eticheta="Transport, în lei"
+                        valoare={transportText ?? sumaInCamp(transportAratat)}
+                        laSchimbare={setTransportText}
+                        invalid={transportText !== null && sumaDinText(transportText) === null} />
+                    )}
+                  >
+                    {(transportText !== null ? sumaDinText(transportText) !== 0 : transportAratat > 0) && (
+                      <button type="button" className={LEGATURA_MICA} onClick={() => setTransportText("0")}>Scoate transportul</button>
+                    )}
+                    {transportText !== null && (
+                      <button type="button" className={LEGATURA_MICA} onClick={() => setTransportText(null)}>Pune la loc</button>
+                    )}
+                  </RandCost>
+
+                  {arataTaxaRamburs && (
+                    <RandCost
+                      pentru="cost-taxa-ramburs"
+                      titlu="Taxă plată ramburs"
+                      detaliu={taxaText !== null ? `Pe comandă: ${taxaVecheRamburs > 0 ? formatPrice(taxaVecheRamburs) : "fără taxă"}.`
+                        : taxaAratata !== taxaVecheRamburs ? "E un procent din valoarea comenzii, deci se mișcă odată cu ea."
+                        : null}
+                      camp={(
+                        <CampSuma id="cost-taxa-ramburs" eticheta="Taxă plată ramburs, în lei"
+                          valoare={taxaText ?? sumaInCamp(taxaAratata)}
+                          laSchimbare={setTaxaText}
+                          invalid={taxaText !== null && sumaDinText(taxaText) === null} />
+                      )}
+                    >
+                      {(taxaText !== null ? sumaDinText(taxaText) !== 0 : taxaAratata > 0) && (
+                        <button type="button" className={LEGATURA_MICA} onClick={() => setTaxaText("0")}>Scoate taxa</button>
+                      )}
+                      {taxaText !== null && (
+                        <button type="button" className={LEGATURA_MICA} onClick={() => setTaxaText(null)}>Pune la loc</button>
+                      )}
+                    </RandCost>
+                  )}
+
+                  <RandCost
+                    pentru="cost-reducere"
+                    titlu={`Reducere${order.discount_code ? ` (${order.discount_code})` : ""}`}
+                    detaliu={reducereText !== null ? `Pe comandă: ${reducereVeche > 0 ? formatPrice(reducereVeche) : "fără reducere"}.`
+                      : order.discount_code && reducereVeche > 0 ? "Cuponul de la plasare. Suma scrisă aici îl înlocuiește cu totul."
+                      : null}
+                    camp={(
+                      <CampSuma id="cost-reducere" eticheta="Reducere, în lei"
+                        valoare={reducereText ?? sumaInCamp(reducereAratata)}
+                        laSchimbare={setReducereText}
+                        invalid={reducereText !== null && sumaDinText(reducereText) === null} />
+                    )}
+                  >
+                    {propunereTva && tvaDeScazut > 0 && !tvaDejaScazut && (
+                      <button type="button" className={BUTON_MIC} onClick={aplicaScadereaTva}>
+                        Scade TVA-ul ({formatPrice(tvaDeScazut)})
+                      </button>
+                    )}
+                    {reducereText !== null && (
+                      <button type="button" className={LEGATURA_MICA} onClick={() => { setReducereText(null); }}>Pune la loc</button>
+                    )}
+                    {propunereTva && tvaDeScazut > 0 && (
+                      <p className="basis-full text-xs leading-relaxed text-muted-foreground">
+                        {tvaDejaScazut ? "TVA-ul e scăzut: clientul" : "„Scade TVA-ul” e o reducere: clientul"} plătește prețul fără TVA, iar
+                        factura rămâne cu TVA, socotit la suma redusă.
+                      </p>
+                    )}
+                  </RandCost>
+
+                  <div className="px-4 py-3">
+                    <p className="text-sm font-medium text-foreground">Costuri suplimentare</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Fiecare intră pe comandă și pe factură ca linie separată, cu denumirea scrisă aici.
+                    </p>
+                    {costuriNoi.length > 0 && (
+                      <ul className="mt-2.5 space-y-1.5">
+                        {costuriNoi.map((c) => (
+                          <li key={c.cheie} className="flex items-center justify-between gap-3">
+                            <span className="min-w-0 break-words text-sm text-foreground">{c.nume}</span>
+                            <span className="flex shrink-0 items-center gap-3">
+                              <span className="text-sm font-medium tabular-nums text-foreground">{formatPrice(c.suma)}</span>
+                              <button type="button" className={LEGATURA_MICA} aria-label={`Scoate costul ${c.nume}`}
+                                onClick={() => setCosturiNoi((l) => l.filter((x) => x.cheie !== c.cheie))}>
+                                Scoate
+                              </button>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      <input
+                        value={costNume}
+                        onChange={(e) => setCostNume(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adaugaCost(); } }}
+                        maxLength={NUME_COST_MAX}
+                        placeholder="Denumire, de pildă Montaj"
+                        aria-label="Denumirea costului suplimentar"
+                        className="h-9 min-w-0 flex-1 basis-44 rounded-lg bg-surface px-2.5 text-sm text-foreground outline-none ring-1 ring-black/10 transition placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring max-lg:h-10"
+                      />
+                      <div onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); adaugaCost(); } }}>
+                        <CampSuma id="cost-nou-suma" eticheta="Suma costului suplimentar, în lei"
+                          valoare={costSuma}
+                          laSchimbare={setCostSuma}
+                          invalid={costSuma.trim() !== "" && (sumaCostNou === null || sumaCostNou <= 0)} />
+                      </div>
+                      <button type="button" className={BUTON_MIC} onClick={adaugaCost} disabled={!potAdaugaCost}>
+                        <Plus className="h-3.5 w-3.5" />Adaugă
+                      </button>
+                    </div>
+                    {costInAsteptare && (
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {costuriNoi.length >= COSTURI_ADAUGATE_MAX
+                          ? `Se pot adăuga cel mult ${COSTURI_ADAUGATE_MAX} costuri într-o salvare. Golește câmpurile ca să poți salva.`
+                          : "Apasă „Adaugă” ca să intre costul pe comandă, sau golește câmpurile. Până atunci nu se poate salva."}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {costuriDinCampuri.eroare && (
+                  <p role="alert" className="text-xs leading-relaxed text-destructive">{costuriDinCampuri.eroare}</p>
+                )}
+                {!eroarePlan && reducereaDepaseste && costuriDinCampuri.costuri.reducere !== null && (
+                  <p role="alert" className="text-xs leading-relaxed text-destructive">
+                    Reducerea e mai mare decât marfa de pe comandă, deci totalul ar ieși negativ. Scrie o reducere mai mică.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+
           {/* Warnings */}
           {isPaid && diferenta > 0 && (
-            <div className="flex items-start gap-2 p-3 bg-warning/5 border border-warning/20 rounded-lg">
+            <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-black/10">
               <AlertTriangle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
               <p className="text-xs text-foreground">
-                Comanda este deja <strong>platita online</strong>. Diferenta de {formatPrice(diferenta)} <strong>nu se incaseaza automat</strong> —
-                trebuie recuperata separat de la client (ex. link de plata sau ramburs).
+                Comanda este deja <strong>plătită online</strong>. Diferența de {formatPrice(diferenta)} <strong>nu se încasează automat</strong>:
+                trebuie recuperată separat de la client (de pildă printr-un link de plată sau la livrare).
               </p>
             </div>
           )}
           {isPaid && diferenta < 0 && (
-            <div className="flex items-start gap-2 p-3 bg-warning/5 border border-warning/20 rounded-lg">
+            <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-black/10">
               <AlertTriangle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
               <p className="text-xs text-foreground">
-                Comanda este deja <strong>platita online</strong>, iar totalul nou este mai mic cu {formatPrice(Math.abs(diferenta))}.
-                Diferenta trebuie returnata clientului separat.
+                Comanda este deja <strong>plătită online</strong>, iar totalul nou este mai mic cu {formatPrice(Math.abs(diferenta))}.
+                Diferența trebuie returnată clientului separat.
               </p>
             </div>
           )}
-          {areSchimbariMarfa && (
-            <div className="flex items-start gap-2 p-3 bg-muted/40 border border-border rounded-lg">
+          {(areSchimbariMarfa || cerereCosturi !== null) && (
+            <div className="flex items-start gap-2 rounded-lg bg-surface p-3 ring-1 ring-black/10">
               <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Clientul <strong>nu este anuntat automat</strong> de schimbare: emailul de confirmare a plecat cu
-                liniile de atunci. Daca s-a schimbat ce primeste sau cat plateste, spune-i tu.
+                Clientul <strong>nu este anunțat automat</strong> de schimbare: emailul de confirmare a plecat cu
+                liniile și sumele de atunci. Dacă s-a schimbat ce primește sau cât plătește, spune-i tu.
               </p>
             </div>
           )}
 
-          {/* Totals */}
-          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 space-y-1.5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Total actual</span>
-              <span className="font-medium text-foreground">{formatPrice(Number(order.total))}</span>
-            </div>
+          {/*
+            Totalurile: randurile comenzii de DUPA editare, in aceeasi ordine ca pe pagina comenzii, ca
+            suma de sus si cea de jos sa se poata urmari cu degetul. Se desfac de indata ce s-a miscat
+            un ban: marfa, cotatia sau un cost schimbat de mana.
+          */}
+          <div className={cn(CUTIE, "px-4 py-3")}>
+            <dl className="space-y-1.5 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">Total actual</dt>
+                <dd className="font-medium tabular-nums text-foreground">{formatPrice(Number(order.total))}</dd>
+              </div>
+              {previzualizare.stare === "gata" && (areSchimbariMarfa || cotatieAplicata || cerereCosturi !== null) && (
+                <>
+                  <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-1.5">
+                    <dt className="text-muted-foreground">Produse</dt>
+                    <dd className="font-medium tabular-nums text-foreground">{formatPrice(previzualizare.subtotal)}</dd>
+                  </div>
+                  {previzualizare.extras > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      {/* Acelasi nume ca pe pagina comenzii, socotit pe liniile de DUPA editare plus costurile adaugate acum. */}
+                      <dt className="text-muted-foreground">
+                        {etichetaExtraoptiunilor([
+                          ...previzualizare.plan.items,
+                          ...costuriNoi.map(() => ({ product_id: PREFIX_COST_MANUAL })),
+                        ])}
+                      </dt>
+                      <dd className="font-medium tabular-nums text-foreground">+{formatPrice(previzualizare.extras)}</dd>
+                    </div>
+                  )}
+                  {previzualizare.discount > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-muted-foreground">Reducere{order.discount_code ? ` (${order.discount_code})` : ""}</dt>
+                      <dd className="font-medium tabular-nums text-foreground">-{formatPrice(previzualizare.discount)}</dd>
+                    </div>
+                  )}
+                  {previzualizare.cardDiscount > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-muted-foreground">Reducere plată card</dt>
+                      <dd className="font-medium tabular-nums text-foreground">-{formatPrice(previzualizare.cardDiscount)}</dd>
+                    </div>
+                  )}
+                  {previzualizare.codDiscount > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-muted-foreground">Reducere plată ramburs</dt>
+                      <dd className="font-medium tabular-nums text-foreground">-{formatPrice(previzualizare.codDiscount)}</dd>
+                    </div>
+                  )}
+                  {previzualizare.codFee > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-muted-foreground">Taxă plată ramburs</dt>
+                      <dd className="font-medium tabular-nums text-foreground">{formatPrice(previzualizare.codFee)}</dd>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <dt className="text-muted-foreground">Transport</dt>
+                    <dd className="font-medium tabular-nums text-foreground">
+                      {previzualizare.shipping > 0 ? formatPrice(previzualizare.shipping) : "Gratuit"}
+                    </dd>
+                  </div>
+                  {previzualizare.vatAmount > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      {/* Cota COMENZII, nu cea de azi a magazinului: pe o comanda
+                          vanduta la 19 intr-un magazin trecut pe 21, eticheta
+                          scria „TVA (21%)" peste o suma calculata cu 19. */}
+                      <dt className="text-muted-foreground">
+                        TVA ({previzualizare.vatRate}%){intrareSocoteala?.vat.prices_include_vat ? " inclus" : ""}
+                      </dt>
+                      <dd className="font-medium tabular-nums text-foreground">{formatPrice(previzualizare.vatAmount)}</dd>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-3 border-t border-border/70 pt-1.5">
+                    <dt className="font-semibold text-foreground">Total nou</dt>
+                    <dd className="text-base font-semibold tabular-nums text-foreground">{formatPrice(previzualizare.total)}</dd>
+                  </div>
+                </>
+              )}
+            </dl>
             {previzualizare.stare === "eroare" ? (
-              <p className="text-xs text-destructive pt-1">{previzualizare.error}</p>
-            ) : previzualizare.stare === "indisponibil" ? (
-              (areSchimbariMarfa || cotatieAplicata) && (
-                <p className="text-xs text-muted-foreground pt-1">Totalul se recalculeaza la salvare.</p>
-              )
-            ) : (areSchimbariMarfa || cotatieAplicata) && (
-              <>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Produse</span>
-                  <span className="font-medium text-foreground">{formatPrice(previzualizare.subtotal)}</span>
-                </div>
-                {previzualizare.extras > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Extraoptiuni</span>
-                    <span className="font-medium text-foreground">{formatPrice(previzualizare.extras)}</span>
-                  </div>
-                )}
-                {previzualizare.codFee > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Taxa ramburs</span>
-                    <span className="font-medium text-foreground">{formatPrice(previzualizare.codFee)}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Transport</span>
-                  <span className="font-medium text-foreground">
-                    {previzualizare.shipping > 0 ? formatPrice(previzualizare.shipping) : "Gratuit"}
-                  </span>
-                </div>
-                {previzualizare.vatAmount > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    {/* Cota COMENZII, nu cea de azi a magazinului: pe o comanda
-                        vanduta la 19 intr-un magazin trecut pe 21, eticheta
-                        scria „TVA (21%)" peste o suma calculata cu 19. */}
-                    <span className="text-muted-foreground">TVA ({previzualizare.vatRate}%)</span>
-                    <span className="font-medium text-foreground">{formatPrice(previzualizare.vatAmount)}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-sm border-t border-border pt-1.5">
-                  <span className="font-semibold text-foreground">Total nou</span>
-                  <span className="font-bold text-foreground">{formatPrice(previzualizare.total)}</span>
-                </div>
-              </>
+              <p className="pt-1.5 text-xs text-destructive">{previzualizare.error}</p>
+            ) : previzualizare.stare === "indisponibil" && (areSchimbariMarfa || cotatieAplicata || cerereCosturi !== null) && (
+              <p className="pt-1.5 text-xs text-muted-foreground">Totalul se recalculează la salvare.</p>
             )}
           </div>
         </div>
@@ -1521,11 +1913,16 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
           fi stat exact peste ele. Aceeasi forma ca bara de pe telefon din ProductForm.
         */}
         <div className="flex items-center gap-2 px-4 sm:px-6 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] sm:pb-3.5 border-t border-border flex-shrink-0">
-          <Button variant="outline" onClick={onClose} disabled={saving} className="flex-1 sm:flex-none">Renunta</Button>
-          <Button onClick={handleSave} className="flex-1 sm:flex-none sm:ml-auto"
-            disabled={saving || areEroarePlan || reducereaDepaseste || !name.trim() || !phone.trim() || !address.trim() || !city.trim() || !county.trim()}>
-            {saving ? <><Loader2 className="animate-spin" /> Se salveaza...</> : "Salveaza modificarile"}
-          </Button>
+          <button type="button" onClick={onClose} disabled={saving}
+            className={cn(BUTON_SUBSOL, "flex-1 bg-surface text-foreground ring-1 ring-black/10 hover:ring-black/25 sm:flex-none")}>
+            Renunță
+          </button>
+          <button type="button" onClick={handleSave}
+            className={cn(BUTON_SUBSOL, "flex-1 bg-foreground text-background hover:bg-foreground/85 sm:ml-auto sm:flex-none")}
+            disabled={saving || areEroarePlan || reducereaDepaseste || !!costuriDinCampuri.eroare || costInAsteptare
+              || !name.trim() || !phone.trim() || !address.trim() || !city.trim() || !county.trim()}>
+            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Se salvează...</> : "Salvează modificările"}
+          </button>
         </div>
       </div>
     </div>

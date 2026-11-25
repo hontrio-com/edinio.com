@@ -53,7 +53,7 @@ test("⚠ un produs care CERE personalizare nu se poate adauga din «Editeaza co
   /* Si panoul il arata stins, ca refuzul sa se vada INAINTE de clic. */
   const modal = sursa("src/components/dashboard/OrderEditModal.tsx");
   assert.match(modal, /\|\| !!p\.cerePersonalizare/, "panoul lasa produsul sa fie ales");
-  assert.match(modal, /SE COMANDA DIN MAGAZIN/, "produsul stins nu spune de ce e stins");
+  assert.match(modal, /Se comandă din magazin/, "produsul stins nu spune de ce e stins");
   assert.match(
     sursa("src/lib/actions/order.actions.ts"), /cerePersonalizare: cerePersonalizarea\(p\.page_sections\)/,
     "cautarea nu trimite steagul, deci panoul n-are ce sa deseneze",

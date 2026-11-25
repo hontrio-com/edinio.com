@@ -332,7 +332,7 @@ function Formular({ onClose, order, businessId, optiuni, onSuccess }: Props) {
             <p className="text-xs text-muted-foreground">
               Eticheta se cere de la Curiera la fiecare descarcare, deci o poti lua oricand din
               comanda.
-              {" Pentru anulare, deschide „Editeaza comanda”: Curiera anuleaza doar pana cand curierul ridica coletul."}
+              {" Pentru anulare, deschide „Editează comanda”: Curiera anuleaza doar pana cand curierul ridica coletul."}
             </p>
 
             <div className="flex justify-end pt-1">

@@ -7927,6 +7927,17 @@ begin
     shipping_address = coalesce(p_patch->'shipping_address', shipping_address),
     items            = coalesce(p_patch->'items', items),
     subtotal         = coalesce((p_patch->>'subtotal')::numeric, subtotal),
+    -- Reducerea de pe comanda.
+    --
+    -- ⚠ LIPSEA DIN LISTA fiindca pana pe 25.11.2026 editarea nu o schimba: cuponul ramanea cel
+    -- convenit la plasare. De cand comerciantul poate da o reducere de mana din „Editeaza
+    -- comanda” (si poate scadea TVA-ul printr-o reducere), ea se scrie in ACEEASI instructiune
+    -- cu totalul: scrisa separat, o cadere intre cele doua ar lasa un total care nu se mai
+    -- explica din randurile comenzii, iar facturarea ar refuza documentul.
+    --
+    -- ⚠ Se trimite NUMAI cand comerciantul chiar a schimbat-o; altfel `coalesce` pastreaza ce
+    -- era. Pe comenzile de MARKETPLACE nu se trimite niciodata: banii lor sunt o fotografie.
+    discount_amount  = coalesce((p_patch->>'discount_amount')::numeric, discount_amount),
     shipping_cost    = coalesce((p_patch->>'shipping_cost')::numeric, shipping_cost),
     cod_fee_amount   = coalesce((p_patch->>'cod_fee_amount')::numeric, cod_fee_amount),
     vat_amount       = coalesce((p_patch->>'vat_amount')::numeric, vat_amount),

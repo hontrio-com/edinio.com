@@ -3123,8 +3123,6 @@ export async function updateOrderDetails(orderId: string, data: {
   success: true;
   newTotal: number;
   faraStoc: number;
-  /** Editarea a intrat in baza, dar ceva din ea a ramas de indreptat. Se arata omului, nu se trateaza ca esec. */
-  avertisment?: string;
 } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -3916,6 +3914,9 @@ export async function updateOrderDetails(orderId: string, data: {
      *
      * ⚠ SI FUNCTIA TREBUIE SA O STIE: `2027-02-14-editarea-scrie-si-reducerea.sql`. Fara ea in
      * lista de `SET`, totalul s-ar scrie socotit cu reducerea noua peste o reducere ramasa veche.
+     * Migratia e in productie din 25.11.2026, deci reducerea se scrie ATOMIC, in aceeasi
+     * instructiune cu totalul; puntea care o scria a doua oara, cat a lipsit migratia, a fost
+     * scoasa. Randul din functie il tine `costuri-manuale.test.ts`, citind baseline-ul.
      */
     ...(costuri.reducere !== null ? { discount_amount: socoteala.discount } : null),
     vat_amount: vatAmount,
@@ -4006,49 +4007,6 @@ export async function updateOrderDetails(orderId: string, data: {
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, decrements, plan.adaugate);
     await logError({ action: "updateOrderDetails", message: error?.message ?? "editarea n-a raspuns valid", details: { code: error?.code, orderId, raspuns: rezEd }, businessId: order.business_id, userId: user.id, severity: "critical" });
     return { error: "Eroare la salvarea modificarilor." };
-  }
-
-  /*
-   * ═══ ⚠ REDUCEREA CHIAR S-A SCRIS? (puntea pana la migratie, 25.11.2026) ═══
-   *
-   * `editeaza_comanda_atomic` aplica fiecare camp cu `coalesce(p_patch->>'x', x)`: o cheie pe care
-   * lista ei de `SET` n-o cunoaste nu da eroare, pur si simplu nu se scrie. `discount_amount` intra
-   * in lista abia cu migratia `2027-02-14-editarea-scrie-si-reducerea.sql`, iar codul poate ajunge
-   * in productie INAINTEA ei (migratia se aplica doar la cuvantul proprietarului). Fara randurile
-   * astea, totalul s-ar fi scris socotit cu reducerea noua peste o reducere ramasa veche: o
-   * comanda care nu se mai explica din randurile ei, pe care facturarea ar fi refuzat-o.
-   *
-   * Deci se CITESTE inapoi. Cu migratia aplicata, cifra e deja cea buna si nu se mai scrie nimic.
-   * Fara ea, reducerea se scrie aici, a doua oara. Nu e atomic cu totalul, si de aceea migratia
-   * ramane drumul adevarat; puntea doar tine comanda intreaga pana ajunge ea. Scrierea e
-   * idempotenta (pune cifra hotarata, nu aduna), deci se face si cand citirea a picat.
-   *
-   * ⚠ Daca nici a doua scriere nu reuseste, NU se intoarce eroare: restul editarii a intrat deja in
-   * baza, iar o eroare l-ar pune pe om sa apese din nou „Salvează”, adaugand produsele a doua
-   * oara. Se intoarce reusita cu un avertisment care spune ce a ramas si cum se indreapta.
-   */
-  let avertisment: string | undefined;
-  if (costuri.reducere !== null) {
-    const { data: scris, error: eCitire } = await admin.from("orders").select("discount_amount").eq("id", orderId).single();
-    const dejaScrisa = !eCitire && scris != null && round2(Number(scris.discount_amount) || 0) === socoteala.discount;
-    if (!dejaScrisa) {
-      const { error: eReducere } = await admin.from("orders")
-        .update({ discount_amount: socoteala.discount })
-        .eq("id", orderId)
-        .eq("business_id", order.business_id);
-      await logError({
-        action: "updateOrderDetails.reducereaPrinPunte",
-        message: eReducere
-          ? `Reducerea nu s-a putut scrie nici a doua oara: ${eReducere.message}`
-          : "Reducerea s-a scris prin punte: functia din baza nu are inca `discount_amount` in lista de SET",
-        details: { orderId, reducere: socoteala.discount, citirea: eCitire?.message ?? null },
-        businessId: order.business_id, userId: user.id, severity: eReducere ? "critical" : "warning",
-      });
-      if (eReducere) {
-        avertisment = "Modificările s-au salvat, dar reducerea nu s-a putut scrie, deci totalul nu se mai potrivește cu rândurile comenzii. "
-          + "Deschide din nou „Editează comanda” și salvează fără să schimbi nimic: totalul se resocotește. Apoi pune reducerea încă o dată.";
-      }
-    }
   }
 
   if (rezEd.stoc_cunoscut === false && (stoc.fel === "revendicat" || eliberari.length > 0)) {
@@ -4147,7 +4105,7 @@ export async function updateOrderDetails(orderId: string, data: {
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
-  return { success: true, newTotal, faraStoc: plan.faraStoc.length, ...(avertisment ? { avertisment } : null) };
+  return { success: true, newTotal, faraStoc: plan.faraStoc.length };
 }
 
 export async function deleteOrder(orderId: string) {

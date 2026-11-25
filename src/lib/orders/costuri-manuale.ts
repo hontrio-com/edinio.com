@@ -1,6 +1,5 @@
 import { PREFIX_EXTRA } from "@/lib/orders/extras";
 import { recalculeazaTotal } from "@/lib/orders/edit-pricing";
-import { vatBase } from "@/lib/utils/vat";
 
 /**
  * Costurile unei comenzi, schimbate de mana din „Editeaza comanda”.
@@ -25,10 +24,16 @@ import { vatBase } from "@/lib/utils/vat";
  * extraoptiune fiindca extraoptiunea E deja „o linie care nu e produs, n-are stoc si intra in
  * total”: pe factura pleaca pe linia ei, cu denumirea scrisa de comerciant.
  *
- * ⚠ „SCADE TVA” E O REDUCERE, NU O SCUTIRE. Clientul plateste pretul fara TVA, iar factura ramane
- * cu TVA, socotit la suma redusa. O factura cu cota 0 cere alt lucru: numele cotei de scutire din
- * nomenclatorul casei de facturare (taxare inversa, scutit cu drept de deducere, neimpozabil), pe
- * care platforma nu-l poate ghici. Vezi `scadeTva`.
+ * ⚠ „SCADE TVA” NU MAI EXISTA. A fost cateva ore (25.11.2026) un buton care punea in campul de
+ * reducere o suma cat TVA-ul comenzii. Scos la cererea proprietarului („Elimina setarea aia cu
+ * Scade TVA-ul”), din doua motive vazute la proba cu salvare adevarata:
+ *   - nu era o scutire, desi asa suna: factura ramanea cu TVA, socotit la suma redusa. O scutire
+ *     adevarata cere temeiul ei pe fiecare comanda (livrare intracomunitara, export, taxare
+ *     inversa), numele cotei de scutire la fiecare casa de facturare si categoria din e-Factura;
+ *   - dupa o salvare, la redeschidere se oferea sa scada TVA-ul INCA O DATA: comanda nu tine
+ *     minte ca reducerea ei „e TVA-ul”, deci butonul pleca de la reducerea deja micsorata.
+ * Comerciantul scrie reducerea de mana. Daca se cere vreodata scutirea adevarata, e un lucru
+ * separat, cu loc pe comanda pentru temeiul ei; butonul nu se reface.
  *
  * Modul PUR: aceleasi functii le cheama si serverul (`updateOrderDetails`), si previzualizarea din
  * fereastra de editare, ca cifra aratata sa fie chiar cea scrisa.
@@ -302,40 +307,5 @@ export function socotesteEditarea(p: IntrareSocoteala): Socoteala {
     vatAmount: r.vatAmount,
     total: r.total,
     transportManual,
-  };
-}
-
-/**
- * „Scade TVA”: reducerea care il face pe client sa plateasca pretul fara TVA.
- *
- * Se pleaca de la reducerea SALVATA pe comanda, nu de la cea tastata acum: apasat de doua ori,
- * butonul da acelasi numar, nu scade TVA-ul din ce ramasese dupa prima apasare.
- *
- * ⚠ SI TAXA DE RAMBURS SE TINE PE LOC. O taxa procentuala s-ar fi micsorat odata cu baza ei, iar
- * totalul ar fi iesit sub pretul fara TVA; de aceea raspunsul poarta si taxa de pastrat.
- *
- * ⚠ La magazinele cu preturi FARA TVA (TVA-ul se aduna peste), totalul poate iesi cu un ban langa
- * pretul net: TVA-ul se rotunjeste la ban dupa reducere.
- */
-export function scadeTva(p: IntrareSocoteala): { reducere: number; taxaRamburs: number | null } | null {
-  if (!p.vat.vat_enabled || !(p.vat.vat_rate > 0)) return null;
-  const faraReducereNoua = socotesteEditarea({ ...p, costuri: { ...p.costuri, reducere: null } });
-  const baza = vatBase({
-    goods: faraReducereNoua.subtotal,
-    extras: faraReducereNoua.extras,
-    shipping: faraReducereNoua.shipping,
-    discount: faraReducereNoua.discount,
-    cardDiscount: faraReducereNoua.cardDiscount,
-    codDiscount: faraReducereNoua.codDiscount,
-    codFee: faraReducereNoua.codFee,
-  });
-  if (baza <= 0) return null;
-  const tva = round2(baza - baza / (1 + p.vat.vat_rate / 100));
-  if (tva <= 0) return null;
-  return {
-    reducere: round2(faraReducereNoua.discount + tva),
-    taxaRamburs: p.costuri.taxaRamburs !== null ? p.costuri.taxaRamburs
-      : p.taxaProcentuala && faraReducereNoua.codFee > 0 ? faraReducereNoua.codFee
-      : null,
   };
 }

@@ -14,7 +14,6 @@ import {
   etichetaExtraoptiunilor,
   liniiDeCost,
   numeleCostului,
-  scadeTva,
   socotesteEditarea,
   taxaRambursDupaEditare,
   type ComandaDeSocotit,
@@ -27,7 +26,7 @@ import { totaluriComanda } from "./totals-box";
 
 /*
  * Costurile editabile din „Editeaza comanda” (25.11.2026): transportul, taxa de plata ramburs,
- * reducerea, costurile suplimentare si „Scade TVA”.
+ * reducerea si costurile suplimentare.
  *
  * Cifrele de plecare sunt ale comenzii #1333 din baza demo, cea pe care s-a probat si in browser:
  * marfa 119, o extraoptiune de 15, taxa de ramburs 9,99, transport 19,99, TVA 21% inclus, total
@@ -294,71 +293,43 @@ describe("socoteala comenzii dupa editare", () => {
   });
 });
 
-describe("„Scade TVA”", () => {
-  test("clientul plateste pretul fara TVA: 163,98 devine 135,52", () => {
-    const r = scadeTva(intrare());
-    assert.deepEqual(r, { reducere: 28.46, taxaRamburs: null });
-    const s = socotesteEditarea(intrare({ costuri: { reducere: r!.reducere } }));
+describe("reducerea scrisa de mana si TVA-ul", () => {
+  /*
+   * „Scade TVA” a existat cateva ore pe 25.11.2026 (un buton care punea in camp o reducere cat
+   * TVA-ul) si a fost scos la cererea proprietarului: nu era o scutire, iar dupa o salvare se
+   * oferea sa scada TVA-ul inca o data. Reducerea se scrie de mana; aici ramane socoteala ei.
+   */
+  test("o reducere cat TVA-ul il lasa pe client la pretul fara TVA; TVA-ul se socoteste la suma redusa", () => {
+    const s = socotesteEditarea(intrare({ costuri: { reducere: 28.46 } }));
     assert.equal(s.total, 135.52);
     assert.equal(s.total, Math.round((163.98 / 1.21) * 100) / 100);
-    /* ⚠ E o reducere, nu o scutire: factura ramane cu TVA, socotit la suma redusa. */
+    /* ⚠ E o reducere, nu o scutire: documentul ramane cu TVA, socotit la ce se incaseaza. */
     assert.equal(s.vatAmount, 23.52);
   });
 
-  test("⚠ apasat de doua ori da acelasi numar: pleaca de la reducerea SALVATA, nu de la cea tastata", () => {
-    const prima = scadeTva(intrare())!;
-    const aDoua = scadeTva(intrare({ costuri: { reducere: prima.reducere } }))!;
-    assert.deepEqual(aDoua, prima);
-  });
-
-  test("se adauga peste cuponul de la plasare", () => {
-    const cuCupon = { subtotal: 119, discount: 10, cardDiscount: 0, codDiscount: 0, codFee: 9.99, shipping: 19.99, transportManual: false };
-    const r = scadeTva(intrare({ comanda: cuCupon }))!;
-    /* Baza e 153,98; TVA-ul din ea e 26,72. */
-    assert.equal(r.reducere, 36.72);
-    assert.equal(socotesteEditarea(intrare({ comanda: cuCupon, costuri: { reducere: r.reducere } })).total, 127.26);
-  });
-
-  test("⚠ taxa procentuala se tine pe loc, altfel totalul ar cadea sub pretul fara TVA", () => {
-    const r = scadeTva(intrare({ taxaProcentuala: true }))!;
-    assert.deepEqual(r, { reducere: 28.46, taxaRamburs: 9.99 });
-    const s = socotesteEditarea(intrare({ taxaProcentuala: true, costuri: { reducere: r.reducere, taxaRamburs: r.taxaRamburs } }));
-    assert.equal(s.total, 135.52);
-    /* Fara taxa tinuta pe loc, ea s-ar fi micsorat odata cu baza. */
-    assert.ok(socotesteEditarea(intrare({ taxaProcentuala: true, costuri: { reducere: r.reducere } })).total < 135.52);
-  });
-
-  test("tine cont de ce se schimba in aceeasi editare (transportul scos)", () => {
-    const r = scadeTva(intrare({ costuri: { transport: 0 } }))!;
-    /* Baza e 143,99; TVA-ul din ea e 24,99. */
-    assert.equal(r.reducere, 24.99);
-    assert.equal(socotesteEditarea(intrare({ costuri: { transport: 0, reducere: r.reducere } })).total, 119);
-  });
-
-  test("la preturi FARA TVA, totalul ajunge la pretul net, cu cel mult un ban langa", () => {
+  test("la preturi FARA TVA, TVA-ul se aduna peste suma redusa", () => {
     const net = { subtotal: 100, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0, shipping: 0, transportManual: false };
     const p = intrare({ comanda: net, extrasVechi: 0, extrasPlan: 0, vat: TVA_PESTE });
     assert.equal(socotesteEditarea(p).total, 121);
-    const r = scadeTva(p)!;
-    assert.equal(r.reducere, 17.36);
-    const s = socotesteEditarea({ ...p, costuri: { ...FARA_COSTURI, reducere: r.reducere } });
+    const s = socotesteEditarea({ ...p, costuri: { ...FARA_COSTURI, reducere: 17.36 } });
     assert.ok(Math.abs(s.total - 100) <= 0.011, `total ${s.total}`);
   });
 
-  test("pe o plaja de sume, cu TVA inclus, totalul e pretul fara TVA la ban", () => {
-    for (let bani = 1_00; bani <= 2_500_00; bani += 7_313) {
-      const marfa = bani / 100;
-      const comanda = { subtotal: marfa, discount: 0, cardDiscount: 0, codDiscount: 0, codFee: 0, shipping: 0, transportManual: false };
-      const p = intrare({ comanda, extrasVechi: 0, extrasPlan: 0 });
-      const r = scadeTva(p)!;
-      const s = socotesteEditarea({ ...p, costuri: { ...FARA_COSTURI, reducere: r.reducere } });
-      assert.ok(Math.abs(s.total - marfa / 1.21) <= 0.0051, `${marfa} -> ${s.total}`);
-    }
+  test("⚠ o taxa de ramburs procentuala se micsoreaza odata cu baza, daca nu e scrisa si ea de mana", () => {
+    const tinuta = socotesteEditarea(intrare({ taxaProcentuala: true, costuri: { reducere: 28.46, taxaRamburs: 9.99 } }));
+    assert.equal(tinuta.total, 135.52);
+    assert.ok(socotesteEditarea(intrare({ taxaProcentuala: true, costuri: { reducere: 28.46 } })).total < 135.52);
   });
 
-  test("magazinul neplatitor de TVA n-are ce scadea", () => {
-    assert.equal(scadeTva(intrare({ vat: { vat_enabled: false, vat_rate: 21, prices_include_vat: true } })), null);
-    assert.equal(scadeTva(intrare({ vat: { vat_enabled: true, vat_rate: 0, prices_include_vat: true } })), null);
+  test("⚠ fereastra nu mai are „Scade TVA”: scos la cererea proprietarului, nu se reface", () => {
+    /*
+     * Suna a scutire si nu era una (factura ramanea cu TVA), iar comanda nu tine minte ca
+     * reducerea ei „e TVA-ul”: dupa o salvare, butonul se oferea sa-l scada inca o data. O scutire
+     * adevarata e alt lucru (temei pe comanda, cota de scutire la fiecare casa de facturare).
+     */
+    const fereastra = readFileSync("src/components/dashboard/OrderEditModal.tsx", "utf8");
+    assert.doesNotMatch(fereastra, /Scade TVA|scadeTva/);
+    assert.doesNotMatch(readFileSync("src/lib/orders/costuri-manuale.ts", "utf8"), /export function scadeTva/);
   });
 });
 
@@ -413,33 +384,21 @@ describe("costurile sunt legate cap la cap", () => {
     assert.match(s, /\[\.\.\.plan\.items, \.\.\.liniiDeCost\(costuri\.adaugate, idsCosturi\)\]/);
   });
 
-  test("⚠ puntea: reducerea se citeste inapoi si se scrie a doua oara daca functia din baza n-a scris-o", () => {
+  test("⚠ reducerea se scrie numai prin functia atomica, in aceeasi instructiune cu totalul", () => {
     /*
-     * Migratia se aplica in productie doar la cuvantul proprietarului, deci codul poate ajunge
-     * acolo inaintea ei. Fara punte, o reducere scrisa de mana ar schimba totalul si ar lasa
-     * `discount_amount` vechi: o comanda care nu se mai explica din randurile ei.
+     * Cat migratia a lipsit din productie (25.11.2026, cateva ore), o punte citea reducerea inapoi
+     * dupa scriere si o scria a doua oara, separat de total. Cu migratia aplicata, puntea a fost
+     * scoasa: o a doua scriere, neatomica, ar putea lasa iar un total care nu se explica din
+     * randurile comenzii, exact ce inchide functia.
      */
     const s = viu("src/lib/actions/order.actions.ts");
-    const i = s.indexOf("let avertisment: string | undefined;");
-    assert.ok(i > 0, "puntea a disparut");
-    const punte = s.slice(i, s.indexOf("if (rezEd.stoc_cunoscut === false", i));
-    assert.ok(punte.includes("if (costuri.reducere !== null) {"), "puntea porneste si cand reducerea n-a fost atinsa");
-    assert.ok(punte.includes(`.select("discount_amount").eq("id", orderId).single()`), "reducerea nu se mai citeste inapoi");
-    assert.ok(punte.includes("round2(Number(scris.discount_amount) || 0) === socoteala.discount"), "comparatia cu cifra hotarata a disparut");
-    assert.match(punte, /\.update\(\{ discount_amount: socoteala\.discount \}\)\s+\.eq\("id", orderId\)\s+\.eq\("business_id", order\.business_id\)/,
-      "a doua scriere nu mai e legata de comanda si de magazinul ei");
-    /* ⚠ Esecul puntii NU e esecul editarii: o eroare ar pune omul sa apese din nou si ar adauga produsele a doua oara. */
-    assert.ok(!punte.includes("return { error:"), "esecul puntii intoarce eroare, desi restul editarii a intrat in baza");
-    assert.ok(
-      s.includes("return { success: true, newTotal, faraStoc: plan.faraStoc.length, ...(avertisment ? { avertisment } : null) };"),
-      "avertismentul nu mai pleaca odata cu reusita",
-    );
-    /* Puntea vine DUPA scrierea reusita, nu inaintea ei. */
-    assert.ok(i > s.indexOf(`admin.rpc("editeaza_comanda_atomic"`), "puntea ruleaza inainte de scrierea comenzii");
-    assert.ok(
-      viu("src/components/dashboard/OrderEditModal.tsx").includes(`if (res && "avertisment" in res && res.avertisment) toast.warning(res.avertisment`),
-      "avertismentul nu ajunge la om",
-    );
+    const i = s.indexOf(`admin.rpc("editeaza_comanda_atomic"`);
+    assert.ok(i > 0);
+    const j = s.indexOf("return { success: true, newTotal, faraStoc: plan.faraStoc.length };", i);
+    assert.ok(j > i, "actiunea nu se mai incheie cum o stiam");
+    const dupaScriere = s.slice(i, j);
+    assert.ok(dupaScriere.length > 2000, "n-am prins tot ce urmeaza dupa scriere");
+    assert.doesNotMatch(dupaScriere, /discount_amount/, "reducerea se mai citeste sau se mai scrie si in afara functiei atomice");
   });
 
   test("⚠ functia din baza chiar scrie reducerea: fara rand, totalul ar ramane peste o reducere veche", () => {
@@ -448,9 +407,9 @@ describe("costurile sunt legate cap la cap", () => {
      * lista de `SET` n-o cunoaste nu da eroare, pur si simplu nu se scrie. Acelasi fel de gaura ca
      * la `prices_include_vat`.
      *
-     * ⚠ Se citeste MIGRATIA, nu baseline-ul: baseline-ul e fotografia productiei si se regenereaza
-     * abia dupa ce migratia e aplicata acolo, odata cu pushul. Cand il cuprinde si el, e cu atat
-     * mai bine; pana atunci, randul trebuie sa existe macar in fisierul care pleaca odata cu codul.
+     * ⚠ Se citeste BASELINE-ul, fotografia productiei: migratia a fost aplicata acolo pe 25.11.2026,
+     * iar jobul de CI „schema din Git = productie” tine baseline-ul egal cu baza vie. Cat randul e
+     * aici, e si in functia care ruleaza. Aplicatia nu mai are alta plasa (puntea a fost scoasa).
      */
     const RAND = /discount_amount\s+= coalesce\(\(p_patch->>'discount_amount'\)::numeric, discount_amount\),/;
     const corp = (sql: string) => {
@@ -458,20 +417,15 @@ describe("costurile sunt legate cap la cap", () => {
       assert.notEqual(i, -1, "functia a disparut");
       return sql.slice(i, sql.indexOf("$function$", sql.indexOf("$function$", i) + 10));
     };
-    const migratie = corp(readFileSync("migrations/2027-02-14-editarea-scrie-si-reducerea.sql", "utf8"));
-    assert.match(migratie, RAND);
-
-    /* Restul functiei e cel din baseline, cuvant cu cuvant: migratia adauga, nu rescrie. */
     const baseline = corp(readFileSync("migrations/000-schema-baseline.sql", "utf8").replace(/\r\n/g, "\n"));
-    if (!RAND.test(baseline)) {
-      const faraAdaos = migratie.replace(/\r\n/g, "\n").split("\n")
-        .filter((r, k, toate) => {
-          const inceput = toate.findIndex((x) => x.includes("-- Reducerea de pe comanda."));
-          const sfarsit = toate.findIndex((x) => RAND.test(x));
-          return inceput === -1 || k < inceput || k > sfarsit;
-        })
-        .join("\n");
-      assert.equal(faraAdaos, baseline, "migratia a schimbat si altceva decat randul reducerii");
-    }
+    assert.match(baseline, RAND, "functia din productie nu mai scrie reducerea");
+    /* Reducerea sta in ACEEASI instructiune cu totalul: intre `update public.orders set` si `where id`. */
+    const scriere = baseline.slice(baseline.indexOf("update public.orders set"), baseline.indexOf("where id = p_order_id;"));
+    assert.match(scriere, RAND);
+    assert.match(scriere, /total\s+= coalesce\(\(p_patch->>'total'\)::numeric, total\),/);
+
+    /* Productia are exact functia din fisierul de migratie, cuvant cu cuvant. */
+    const migratie = corp(readFileSync("migrations/2027-02-14-editarea-scrie-si-reducerea.sql", "utf8").replace(/\r\n/g, "\n"));
+    assert.equal(baseline, migratie, "functia din baseline nu mai e cea din migratie");
   });
 });

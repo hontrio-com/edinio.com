@@ -64,7 +64,6 @@ import {
   esteCostManual,
   etichetaExtraoptiunilor,
   numeleCostului,
-  scadeTva,
   socotesteEditarea,
   type CerereCosturi,
   type CosturiCerute,
@@ -818,17 +817,6 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const arataTaxaRamburs = taxaVecheRamburs > 0 || taxaText !== null || isCodPaymentMethod(order.payment_method);
   const transportTinutMinte = intrareSocoteala?.comanda.transportManual === true;
 
-  /** „Scade TVA”: reducerea care il face pe client sa plateasca pretul fara TVA. Vezi `scadeTva`. */
-  const propunereTva = useMemo(() => (intrareSocoteala ? scadeTva(intrareSocoteala) : null), [intrareSocoteala]);
-  const tvaDeScazut = propunereTva ? round2(propunereTva.reducere - reducereVeche) : 0;
-  const tvaDejaScazut = !!propunereTva && costuriDinCampuri.costuri.reducere === propunereTva.reducere;
-  function aplicaScadereaTva() {
-    if (!propunereTva) return;
-    setReducereText(sumaInCamp(propunereTva.reducere));
-    /* Taxa procentuala se tine pe loc, altfel totalul ar cadea sub pretul fara TVA. */
-    if (propunereTva.taxaRamburs !== null) setTaxaText(sumaInCamp(propunereTva.taxaRamburs));
-  }
-
   const numeCostNou = numeleCostului(costNume);
   const sumaCostNou = sumaDinText(costSuma);
   const potAdaugaCost = !!numeCostNou && sumaCostNou !== null && sumaCostNou > 0 && costuriNoi.length < COSTURI_ADAUGATE_MAX;
@@ -1132,8 +1120,6 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         }
       }
       toast.success("Comanda a fost actualizată.");
-      /* Editarea a intrat, dar ceva a ramas de indreptat (de pilda reducerea nescrisa): se spune, nu se ascunde sub „actualizată”. */
-      if (res && "avertisment" in res && res.avertisment) toast.warning(res.avertisment, { duration: 20000 });
       if (res && res.faraStoc > 0) {
         toast.warning(`${res.faraStoc === 1 ? "O linie scoasă nu și-a putut" : `${res.faraStoc} linii scoase nu și-au putut`} da stocul înapoi automat. Corectează stocul din pagina produsului.`);
       }
@@ -1711,19 +1697,8 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                         invalid={reducereText !== null && sumaDinText(reducereText) === null} />
                     )}
                   >
-                    {propunereTva && tvaDeScazut > 0 && !tvaDejaScazut && (
-                      <button type="button" className={BUTON_MIC} onClick={aplicaScadereaTva}>
-                        Scade TVA-ul ({formatPrice(tvaDeScazut)})
-                      </button>
-                    )}
                     {reducereText !== null && (
                       <button type="button" className={LEGATURA_MICA} onClick={() => { setReducereText(null); }}>Pune la loc</button>
-                    )}
-                    {propunereTva && tvaDeScazut > 0 && (
-                      <p className="basis-full text-xs leading-relaxed text-muted-foreground">
-                        {tvaDejaScazut ? "TVA-ul e scăzut: clientul" : "„Scade TVA-ul” e o reducere: clientul"} plătește prețul fără TVA, iar
-                        factura rămâne cu TVA, socotit la suma redusă.
-                      </p>
                     )}
                   </RandCost>
 

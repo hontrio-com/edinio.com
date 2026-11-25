@@ -4,7 +4,7 @@ import { ArrowUpRight, EllipsisVertical, ShoppingBag, Store } from "lucide-react
 import { createClient } from "@/lib/supabase/server";
 import { GrilaPalpaitoare } from "@/components/dashboard/GrilaPalpaitoare";
 import {
-  adresaContNouHontrio, adresaPrezentareHontrio, CE_FACE_HONTRIO, pretCaInGoogle,
+  adresaAplicatieiHontrio, adresaContNouHontrio, adresaPrezentareHontrio, CE_FACE_HONTRIO, pretCaInGoogle,
   PRODUSE_STANDARD, produseleBannerului, type ProdusDeExemplu,
 } from "@/lib/parteneri/hontrio";
 
@@ -15,6 +15,12 @@ import {
 
   Cerut de proprietar: un banner „in prim plan" pentru cine vrea sa-si promoveze
   magazinul, cu fundalul negru de pe site-ul Hontrio.
+
+  ⚠ APARE LA TOATA LUMEA (25.11.2026), si la magazinele deja conectate la Hontrio.
+  Prima forma il ascundea celor conectati; proprietarul: „era un banner promotional
+  practic, ar trebui sa apara la toata lumea”. Celui conectat (`conectat`) butonul
+  principal ii deschide aplicatia lor, „Deschide Hontrio”: are deja cont, deci
+  „Creează cont” ar fi fost un indemn fals. Restul bannerului e acelasi.
 
   ═══ DE UNDE VINE FIECARE LUCRU ═══
 
@@ -83,7 +89,11 @@ const FONT_GOOGLE = { fontFamily: "Arial, Helvetica, sans-serif" } as const;
 const INEL_FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]";
 
-export function BannerHontrio({ businessId }: { businessId: string | null }) {
+export function BannerHontrio({ businessId, conectat = false }: {
+  businessId: string | null;
+  /** Magazinul e deja legat de Hontrio: butonul principal deschide aplicatia, nu formularul de cont nou. */
+  conectat?: boolean;
+}) {
   return (
     <section
       aria-labelledby="titlu-banner-hontrio"
@@ -139,7 +149,7 @@ export function BannerHontrio({ businessId }: { businessId: string | null }) {
 
         <div className="mt-6 flex flex-wrap items-center gap-2.5">
           <a
-            href={adresaContNouHontrio("banner-integrari")}
+            href={conectat ? adresaAplicatieiHontrio("banner-integrari") : adresaContNouHontrio("banner-integrari")}
             target="_blank"
             rel="noopener noreferrer"
             className={`group relative inline-flex h-9 items-center gap-1.5 overflow-hidden rounded-full bg-white px-4 text-[13px] font-semibold text-black shadow-[inset_0_-2px_0_rgba(0,0,0,0.12)] transition-transform hover:scale-[1.02] motion-reduce:hover:scale-100 ${INEL_FOCUS}`}
@@ -149,7 +159,7 @@ export function BannerHontrio({ businessId }: { businessId: string | null }) {
               aria-hidden="true"
               className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-black/10 to-transparent transition-transform duration-700 group-hover:translate-x-full motion-reduce:hidden"
             />
-            <span className="relative">Creează cont pe Hontrio</span>
+            <span className="relative">{conectat ? "Deschide Hontrio" : "Creează cont pe Hontrio"}</span>
             <ArrowUpRight className="relative h-4 w-4" aria-hidden="true" />
             <span className="sr-only"> (se deschide într-o filă nouă)</span>
           </a>

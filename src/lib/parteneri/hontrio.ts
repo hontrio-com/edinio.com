@@ -76,6 +76,16 @@ export function adresaContNouHontrio(loc: LocPromovare): string {
   return cuUrmarire(`${APLICATIA_HONTRIO}/register`, loc);
 }
 
+/**
+ * Aplicatia lor, pentru magazinul care are deja cont (e conectat la Hontrio).
+ *
+ * Fara sesiune, ei duc singuri la autentificare si de acolo inapoi (masurat pe 25.11.2026:
+ * `/` -> 307 `/login?callbackUrl=%2F`), deci legatura e buna si pentru cine nu e autentificat.
+ */
+export function adresaAplicatieiHontrio(loc: LocPromovare): string {
+  return cuUrmarire(`${APLICATIA_HONTRIO}/`, loc);
+}
+
 /* ── Produsele magazinului, aratate ca reclame in banner ─────────────────── */
 
 /** Cate produse intra in exemplul din banner. */

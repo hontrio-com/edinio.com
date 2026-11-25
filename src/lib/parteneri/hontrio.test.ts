@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 
 import {
-  adresaContNouHontrio, adresaPrezentareHontrio, APLICATIA_HONTRIO, LOCURI_PROMOVARE,
+  adresaAplicatieiHontrio, adresaContNouHontrio, adresaPrezentareHontrio, APLICATIA_HONTRIO, LOCURI_PROMOVARE,
   pretCaInGoogle, primaImagine, PRODUSE_IN_EXEMPLU, PRODUSE_STANDARD, produseDeExemplu,
   produseleBannerului, SITE_HONTRIO, URMARIREA_HONTRIO,
 } from "./hontrio";
@@ -35,6 +35,12 @@ test("⚠ legaturile duc la capatul lantului de redirectari, pe https", () => {
   assert.equal(cont.hostname, "app.hontrio.com");
   assert.equal(cont.pathname, "/register");
 
+  /* Cine are deja cont merge in aplicatie, nu la formularul de cont nou. */
+  const aplicatie = new URL(adresaAplicatieiHontrio("banner-integrari"));
+  assert.equal(aplicatie.protocol, "https:");
+  assert.equal(aplicatie.hostname, "app.hontrio.com");
+  assert.equal(aplicatie.pathname, "/");
+
   assert.equal(new URL(SITE_HONTRIO).hostname, "www.hontrio.com");
   assert.equal(new URL(APLICATIA_HONTRIO).hostname, "app.hontrio.com");
 });
@@ -47,7 +53,7 @@ test("⚠⚠ fiecare legatura spune de unde a plecat omul", () => {
    */
   const vazute = new Set<string>();
   for (const loc of LOCURI_PROMOVARE) {
-    for (const adresa of [adresaPrezentareHontrio(loc), adresaContNouHontrio(loc)]) {
+    for (const adresa of [adresaPrezentareHontrio(loc), adresaContNouHontrio(loc), adresaAplicatieiHontrio(loc)]) {
       const u = new URL(adresa);
       for (const [cheie, valoare] of Object.entries(URMARIREA_HONTRIO)) {
         assert.equal(u.searchParams.get(cheie), valoare, `${adresa}: lipseste sau s-a schimbat ${cheie}`);
@@ -206,13 +212,28 @@ test("⚠ „Adaugă” ramane ultimul buton dinaintea clopotelului", () => {
 
 /* ── Bannerul din Integrari ─────────────────────────────────────────────── */
 
-test("⚠ bannerul se arata doar cui nu e deja conectat", () => {
+test("⚠ bannerul se arata tuturor, si magazinelor deja conectate", () => {
   /*
-   * Un magazin legat de Hontrio are cardul „Activ" la Marketing. Indemnul „Creează
-   * cont gratuit" pus peste el ar fi o reclama pentru ceva ce omul foloseste deja.
+   * Cerut de proprietar pe 25.11.2026, dupa ce l-a cautat in productie si nu l-a mai gasit:
+   * „era un banner promotional practic, ar trebui sa apara la toata lumea”. Prima forma il
+   * arata doar magazinelor neconectate la Hontrio.
    */
   const pagina = readFileSync(PAGINA, "utf8");
-  assert.match(pagina, /\{!hontrioActive && <BannerHontrio /, "bannerul nu mai atarna de starea legaturii");
+  assert.ok(
+    pagina.includes("<BannerHontrio businessId={business?.id ?? null} conectat={hontrioActive} />"),
+    "bannerul nu mai e in pagina sau nu mai afla daca magazinul e conectat",
+  );
+  assert.doesNotMatch(pagina, /&& <BannerHontrio /, "bannerul atarna iar de o conditie");
+});
+
+test("⚠ celui deja conectat butonul ii deschide aplicatia, nu ii cere sa-si faca un cont pe care il are", () => {
+  const sursa = readFileSync(BANNER, "utf8");
+  assert.ok(sursa.includes(
+    "href={conectat ? adresaAplicatieiHontrio(\"banner-integrari\") : adresaContNouHontrio(\"banner-integrari\")}",
+  ), "butonul principal nu mai tine cont de legatura magazinului");
+  assert.ok(sursa.includes("{conectat ? \"Deschide Hontrio\" : \"Creează cont pe Hontrio\"}"));
+  /* Fara proprietate, bannerul ramane cel de cont nou: asa il vede cine n-are magazin sau legatura. */
+  assert.ok(sursa.includes("export function BannerHontrio({ businessId, conectat = false }: {"));
 });
 
 test("⚠ fiecare legatura din banner care deschide o fila noua are `noopener`", () => {

@@ -567,14 +567,16 @@ export default async function IntegrationsPage() {
       {/*
         Bannerul Hontrio (24.11.2026), in capul paginii, cerut de proprietar.
 
-        ⚠ DOAR PENTRU CINE NU E CONECTAT. Un magazin legat deja de Hontrio are
-        cardul lui „Activ" la rubrica Marketing; sa-l mai indemni sa-si faca
-        cont ar fi o reclama pentru ceva ce foloseste deja.
+        ⚠ PENTRU TOATA LUMEA, si pentru magazinele deja conectate (25.11.2026).
+        Prima forma il ascundea celor conectati, iar proprietarul l-a cautat si
+        nu l-a mai gasit: „era un banner promotional practic, ar trebui sa apara
+        la toata lumea”. Celui conectat butonul principal ii deschide aplicatia
+        Hontrio, nu formularul de cont nou (`conectat`).
 
         ⚠ NU ATARNA DE `HONTRIO_LIVE`. Intrerupatorul acela hotaraste daca se vede
         CARDUL din rubrica; bannerul e promovarea ceruta acum, pentru toata lumea.
       */}
-      {!hontrioActive && <BannerHontrio businessId={business?.id ?? null} />}
+      <BannerHontrio businessId={business?.id ?? null} conectat={hontrioActive} />
 
       <div className="space-y-8">
         {SECTIONS.map((section) => (

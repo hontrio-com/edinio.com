@@ -15,7 +15,18 @@ import { inceputulZilei, sfarsitulZilei, ziValida } from "@/lib/zi-romaneasca";
  * `zi-romaneasca.ts`, acelasi loc din care isi iau perioada codurile de reducere si ofertele.
  * Amandoua capetele sunt INCLUSE: „pana la 30.11" tine toata ziua de 30.
  */
-export type FiltreleListei = { status: string; source: string; q: string; deLa?: string; panaLa?: string };
+export type FiltreleListei = {
+  status: string;
+  source: string;
+  q: string;
+  deLa?: string;
+  panaLa?: string;
+  /**
+   * Mai multe stari deodata (grupa „De lucru” = in asteptare, confirmate, in procesare); lista
+   * goala sau lipsa = fara filtrul acesta. Asezarile care arata o grupa o trimit si la export.
+   */
+  stari?: readonly string[];
+};
 
 /** Ziua din adresa sau din cererea de export: valida, sau `""` (fara filtrul acela). */
 export function ziuaFiltrului(v: unknown): string {
@@ -26,6 +37,7 @@ export function ziuaFiltrului(v: unknown): string {
 /** Ce trebuie sa stie un constructor de interogare ca sa primeasca filtrele. */
 type Filtrabil<T> = {
   eq(coloana: string, valoare: string): T;
+  in(coloana: string, valori: readonly string[]): T;
   is(coloana: string, valoare: null): T;
   or(filtre: string): T;
   gte(coloana: string, valoare: string): T;
@@ -35,6 +47,7 @@ type Filtrabil<T> = {
 export function aplicaFiltreleListei<T extends Filtrabil<T>>(interogare: T, f: FiltreleListei): T {
   let q = interogare;
   if (f.status !== "all") q = q.eq("status", f.status);
+  if (f.stari && f.stari.length > 0) q = q.in("status", f.stari);
   /*
    * Filtrarea dupa sursa se face in SQL, pe `order_source->>marketplace`, nu in
    * pagina: altfel „doar Trendyol" ar filtra numai comenzile paginii curente si

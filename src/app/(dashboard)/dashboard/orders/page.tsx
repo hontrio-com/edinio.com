@@ -1,16 +1,22 @@
 import { Suspense } from "react";
 import { CampuriCheckoutProvider } from "@/components/dashboard/DetaliiCheckoutAwb";
 import { campuriDinConfigurare } from "@/lib/orders/detalii-pentru-awb";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrdersClient } from "@/components/dashboard/OrdersClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { conturileComenzilor } from "@/lib/cont/panou";
+import { pozeleProduselor } from "@/lib/liste/poze";
+import { coloanelePortii } from "@/lib/orders/awb-propriu";
+import {
+  asezareDinCookie, COOKIE_ASEZARE, ETAPE, filtreDinAdresa, stariFiltrului, type FiltreComenzi,
+} from "@/components/dashboard/comenzi/filtre";
+import type { Database } from "@/types/database.types";
 import { aplicaFiltreleListei, ziuaFiltrului } from "@/lib/orders/filtrele-listei";
-import { ORDERS_PAGE_SIZE, firstParam, pageParam, orSafeTerm } from "@/lib/orders/pagination";
+import { ORDERS_PAGE_SIZE, firstParam, orSafeTerm } from "@/lib/orders/pagination";
 import { MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
-import { ORDER_STATUS } from "@/lib/orders/status";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
@@ -38,6 +44,8 @@ import type { SamedayConfig } from "@/lib/sameday/client";
 // span dozens of orders, so give this route's server actions ample headroom.
 export const maxDuration = 300;
 
+export const metadata = { title: "Comenzi" };
+
 /**
  * Ce facturier si ce curieri sunt gata se stie dupa PRIMA interogare; lista de
  * comenzi si numaratoarea pe stari cer inca doua drumuri la baza (cautarea cu
@@ -56,8 +64,6 @@ export default async function OrdersPage({
 
   const sp = await searchParams;
   const q = (firstParam(sp.q) ?? "").trim().slice(0, 80);
-  const statusRaw = firstParam(sp.status) ?? "all";
-  const status = statusRaw in ORDER_STATUS ? statusRaw : "all";
   // Sursa comenzii: „all", „store" (magazinul propriu) sau cheia unui marketplace.
   // Validata contra listei cunoscute, ca sa nu ajunga text arbitrar in filtru.
   const sourceRaw = firstParam(sp.source) ?? "all";
@@ -65,7 +71,17 @@ export default async function OrdersPage({
   /* Perioada: zile romanesti „YYYY-MM-DD". O valoare care nu e zi se ignora, nu ajunge in filtru. */
   const deLa = ziuaFiltrului(firstParam(sp.de_la));
   const panaLa = ziuaFiltrului(firstParam(sp.pana_la));
-  const page = pageParam(sp.page);
+
+  /*
+   * Asezarea listei („Registru", „Flux", „Două panouri", „Pe zile" sau tabelul de dinainte) e o
+   * alegere a omului, tinuta intr-un cookie. De ea depinde CE se cere bazei: o pagina filtrata
+   * pe o stare, una pe o grupa de stari, sau cate un culoar pe etapa. Starea, grupa si pagina
+   * se citesc pentru asezarea aleasa (`filtreDinAdresa`); restul filtrelor sunt cele de mai sus.
+   */
+  const [jar, antete] = await Promise.all([cookies(), headers()]);
+  const filtre = filtreDinAdresa(sp, asezareDinCookie(jar.get(COOKIE_ASEZARE)?.value));
+  /* Un telefon are mereu loc doar pentru fise, deci lui nu i se mai trimite si tabelul „Registrului". */
+  const telefon = /Mobi/i.test(antete.get("user-agent") ?? "");
 
   const { data: bizRow } = await supabase
     .from("businesses")
@@ -192,12 +208,14 @@ export default async function OrdersPage({
         <ListaComenzi
           businessId={business.id}
           q={q}
-          status={status}
+          status={filtre.status}
           source={source}
           deLa={deLa}
           panaLa={panaLa}
-          page={page}
+          page={filtre.page}
           integrari={integrari}
+          filtre={filtre}
+          telefon={telefon}
         />
       </Suspense>
     </div>
@@ -239,6 +257,41 @@ type Integrari = {
   fanPickup: { lastDate: string | null; lastId: string | null };
 };
 
+type Order = Database["public"]["Tables"]["orders"]["Row"];
+type Baza = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Culoarele asezarii „Flux": primele comenzi ale fiecarei etape, cele mai noi, si cate are etapa
+ * in total. Randurile vin INTREGI, ca la pagina obisnuita: ferestrele de AWB le cer asa.
+ *
+ * O etapa nu e o stare: „De pregatit" si „De predat curierului" impart aceleasi stari
+ * (confirmata, in procesare) si se deosebesc prin AWB. „Are AWB" = macar una dintre coloanele
+ * portii e completata; „n-are" = toate sunt goale. Scrise ca text PostgREST, fiindca numele
+ * coloanelor vin dintr-o lista (`coloanelePortii`), nu din cod: un curier nou intra singur.
+ */
+async function culoareleFluxului(
+  supabase: Baza,
+  businessId: string,
+  comune: { source: string; q: string; deLa: string; panaLa: string },
+  peCuloar: number,
+): Promise<{ cheie: string; comenzi: Order[]; total: number }[]> {
+  const coloane = coloanelePortii();
+  const areAwb = coloane.map((c) => `${c}.not.is.null`).join(",");
+  const nAreAwb = `and(${coloane.map((c) => `${c}.is.null`).join(",")})`;
+  return Promise.all(ETAPE.map(async (etapa) => {
+    let culoar = aplicaFiltreleListei(
+      supabase.from("orders").select("*", { count: "exact" }).eq("business_id", businessId),
+      { ...comune, status: "all", stari: etapa.stari },
+    );
+    if (etapa.awb !== null) culoar = culoar.or(etapa.awb ? areAwb : nAreAwb);
+    const { data, count } = await culoar
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(peCuloar);
+    return { cheie: etapa.cheie, comenzi: data ?? [], total: count ?? 0 };
+  }));
+}
+
 function ScheletComenzi() {
   return (
     <>
@@ -278,6 +331,8 @@ async function ListaComenzi({
   panaLa,
   page,
   integrari,
+  filtre,
+  telefon,
 }: {
   businessId: string;
   q: string;
@@ -287,6 +342,9 @@ async function ListaComenzi({
   panaLa: string;
   page: number;
   integrari: Integrari;
+  /** Filtrele citite pentru asezarea aleasa: grupa de stari, marimea culoarelor, asezarea insasi. */
+  filtre: FiltreComenzi;
+  telefon: boolean;
 }) {
   const supabase = await createClient();
 
@@ -298,15 +356,25 @@ async function ListaComenzi({
     .select("*", { count: "exact" })
     .eq("business_id", businessId);
   listQuery = aplicaFiltreleListei(listQuery, { status, source, q, deLa, panaLa });
+  /* Asezarile pe grupe („De lucru", „Pe drum", „Încheiate") cer mai multe stari deodata. */
+  const stariGrupa = stariFiltrului(filtre);
+  if (stariGrupa.length > 0) listQuery = listQuery.in("status", [...stariGrupa]);
   const fromIdx = (page - 1) * ORDERS_PAGE_SIZE;
 
-  const [{ data: orders, count: totalCount }, { data: statusRows }] = await Promise.all([
-    listQuery
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(fromIdx, fromIdx + ORDERS_PAGE_SIZE - 1),
+  /* „Fluxul" nu are o pagina de comenzi: isi aduce cate un culoar pe etapa. */
+  const eFlux = filtre.asezare === "flux";
+  const [{ data: orders, count: totalCount }, { data: statusRows }, culoare] = await Promise.all([
+    eFlux
+      ? Promise.resolve({ data: [] as Order[], count: 0 })
+      : listQuery
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(fromIdx, fromIdx + ORDERS_PAGE_SIZE - 1),
     supabase.rpc("orders_status_counts", { bid: businessId }),
+    eFlux ? culoareleFluxului(supabase, businessId, { source, q, deLa, panaLa }, filtre.peCuloar) : Promise.resolve([]),
   ]);
+  /* Toate comenzile de pe ecran, din pagina sau din culoare: pentru conturile si pozele lor. */
+  const peEcran: Order[] = [...(orders ?? []), ...culoare.flatMap((c) => c.comenzi)];
 
   // Cate comenzi are fiecare sursa. Se numara doar sursele care chiar exista,
   // ca sa nu arate un filtru „Trendyol" unui magazin care n-a vandut acolo.
@@ -324,10 +392,12 @@ async function ListaComenzi({
    * Contul din care s-a plasat fiecare comanda a paginii (coloana „Cont"). ⚠ O eroare aici nu
    * strica lista: coloana ramane goala, iar comenzile se vad mai departe.
    */
-  const [conturi, { data: setariCheckout }] = await Promise.all([
-    conturileComenzilor(businessId, (orders ?? []).map((o) => o.id)).catch(() => ({})),
+  const [conturi, { data: setariCheckout }, poze] = await Promise.all([
+    conturileComenzilor(businessId, peEcran.map((o) => o.id)).catch(() => ({})),
     /* Campurile de checkout, pentru observatiile si codul postal din ferestrele de AWB. */
     supabase.from("store_settings").select("checkout:page_content->checkout_config").eq("business_id", businessId).maybeSingle(),
+    /* Pozele produselor le arata doar asezarile noi. ⚠ O eroare aici nu strica lista: randurile raman fara poza. */
+    filtre.asezare === "clasic" ? Promise.resolve({}) : pozeleProduselor(supabase, peEcran, businessId).catch(() => ({})),
   ]);
 
   const statusCounts: Record<string, number> = {};
@@ -343,7 +413,7 @@ async function ListaComenzi({
    */
   return (
     <CampuriCheckoutProvider campuri={campuriDinConfigurare((setariCheckout as { checkout?: unknown } | null)?.checkout)}>
-    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} dateFrom={deLa} dateTo={panaLa} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} facturisEnabled={integrari.facturisEnabled} factureazaEnabled={integrari.factureazaEnabled} easybillEnabled={integrari.easybillEnabled} sagaEnabled={integrari.sagaEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} />
+    <OrdersClient orders={orders ?? []} conturi={conturi} totalCount={totalCount ?? 0} statusCounts={statusCounts} page={page} searchQuery={q} statusFilter={status} sourceFilter={source} dateFrom={deLa} dateTo={panaLa} sourceCounts={surseCount} pendingCount={pendingCount} smartbillEnabled={integrari.smartbillEnabled} wootEnabled={integrari.wootEnabled} coleteEnabled={integrari.coleteEnabled} oblioEnabled={integrari.oblioEnabled} fgoEnabled={integrari.fgoEnabled} facturisEnabled={integrari.facturisEnabled} factureazaEnabled={integrari.factureazaEnabled} easybillEnabled={integrari.easybillEnabled} sagaEnabled={integrari.sagaEnabled} cargusEnabled={integrari.cargusEnabled} dpdEnabled={integrari.dpdEnabled} glsEnabled={integrari.glsEnabled} pallexEnabled={integrari.pallexEnabled} pallexZile={integrari.pallexZile} ecoletEnabled={integrari.ecoletEnabled} postaEnabled={integrari.postaEnabled} postaZilePrezentare={integrari.postaZilePrezentare} curieraEnabled={integrari.curieraEnabled} curieraOptiuni={integrari.curieraOptiuni} epacketEnabled={integrari.epacketEnabled} epacketOptiuni={integrari.epacketOptiuni} packetaEnabled={integrari.packetaEnabled} smartshipEnabled={integrari.smartshipEnabled} shipoEnabled={integrari.shipoEnabled} fedexEnabled={integrari.fedexEnabled} upsEnabled={integrari.upsEnabled} dhlEnabled={integrari.dhlEnabled} innoshipEnabled={integrari.innoshipEnabled} fanCourierEnabled={integrari.fanCourierEnabled} samedayEnabled={integrari.samedayEnabled} businessId={businessId} fanPickup={integrari.fanPickup} filtre={filtre} culoare={culoare} poze={poze} telefon={telefon} />
     </CampuriCheckoutProvider>
   );
 }

@@ -27,6 +27,7 @@ function interogare() {
   const q = {
     cereri,
     eq(c: string, v: string) { cereri.push(`eq ${c} ${v}`); return q; },
+    in(c: string, v: readonly string[]) { cereri.push(`in ${c} ${v.join(",")}`); return q; },
     is(c: string, v: null) { cereri.push(`is ${c} ${v}`); return q; },
     or(f: string) { cereri.push(`or ${f.slice(0, 24)}`); return q; },
     gte(c: string, v: string) { cereri.push(`gte ${c} ${v}`); return q; },
@@ -60,6 +61,15 @@ describe("Perioada din lista de comenzi a panoului", () => {
       aplicaFiltreleListei(interogare(), { status: "shipped", source: "store", q: "", panaLa: "2026-11-30" }).cereri,
       ["eq status shipped", "is order_source->>marketplace null", "lte created_at 2026-11-30T21:59:59.999Z"],
     );
+  });
+
+  test("o grupa de stari se cere deodata, iar lista goala nu filtreaza nimic", () => {
+    /* Asezarile pe grupe („De lucru” = in asteptare, confirmate, in procesare) si exportul lor trec pe aici. */
+    assert.deepEqual(
+      aplicaFiltreleListei(interogare(), { status: "all", source: "all", q: "", stari: ["pending", "confirmed", "processing"] }).cereri,
+      ["in status pending,confirmed,processing"],
+    );
+    assert.deepEqual(aplicaFiltreleListei(interogare(), { status: "all", source: "all", q: "", stari: [] }).cereri, []);
   });
 
   test("ziua din adresa se valideaza: ce nu e zi devine „fara filtru”", () => {

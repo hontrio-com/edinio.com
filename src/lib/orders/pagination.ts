@@ -40,7 +40,8 @@ export function orSafeTerm(q: string): string {
  * detaliile unei comenzi. Orice alta cheie se arunca, ca `?lista=` sa nu poata
  * duce butonul „Inapoi" in alta parte decat pe lista.
  */
-const CHEI_LISTA_COMENZI = ["q", "status", "source", "page"] as const;
+/* Perioada, grupa si marimea culoarelor au intrat pe 25.11.2026: „Inapoi” din comanda pierdea perioada aleasa. */
+const CHEI_LISTA_COMENZI = ["q", "status", "grupa", "source", "de_la", "pana_la", "page", "pe_culoar"] as const;
 
 function filtreleListei(qs: string | undefined): string {
   const intrare = new URLSearchParams(qs ?? "");

@@ -27,7 +27,7 @@ const COLOANE = "id, order_number, created_at, status, payment_method, payment_s
 
 export async function exportaComenzileAction(
   businessId: string,
-  cerere: { ids: string[] } | { filtre: FiltreleListei },
+  cerere: { ids: string[] } | { filtre: FiltreleListei; stari?: string[] },
 ): Promise<{ ok: true; tabel: TabelExport } | { ok: false; error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -58,6 +58,8 @@ export async function exportaComenzileAction(
       /* Perioada de pe ecran: zile romanesti, validate; orice altceva nu filtreaza. */
       deLa: ziuaFiltrului(f.deLa),
       panaLa: ziuaFiltrului(f.panaLa),
+      /* Grupa de stari de pe ecran („De lucru”): doar stari cunoscute ajung in filtru. */
+      stari: (Array.isArray(cerere.stari) ? cerere.stari : []).filter((st) => typeof st === "string" && Object.hasOwn(ORDER_STATUS, st)),
     };
     let total: number | null = null;
     /* ⚠ PE PAGINI: PostgREST taie orice raspuns la 1000 de randuri, tacut. */

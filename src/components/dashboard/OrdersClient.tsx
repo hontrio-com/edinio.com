@@ -12,7 +12,7 @@ import type { SheetData } from "write-excel-file/browser";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice, pluralRo } from "@/lib/utils/format";
 import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI, procesataInEasySales } from "@/lib/orders/origin";
-import { awburiDinRand, deCeNuSePoateAwbPropriu } from "@/lib/orders/awb-propriu";
+import { awburiDinRand, deCeNuSePoateAwbPropriu, type CurierPropriu } from "@/lib/orders/awb-propriu";
 import {
   bulkGenerateInvoices, bulkGenerateAwbs, bulkUpdateOrderStatus,
   type BulkResult, type InvoiceProvider, type BulkCourier,
@@ -56,6 +56,20 @@ import { ORDERS_PAGE_SIZE, adresaDetaliuluiComenzii } from "@/lib/orders/paginat
 import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
 import type { ContulComenzii } from "@/lib/cont/panou";
+import {
+  FurnizorActiuniComenzi, FurnizorLotComenzi, type ActiuniComenzi, type LotSiSelectie,
+} from "@/components/dashboard/comenzi/actiuni";
+import {
+  comandaDinRand, cuCeilaltiCurieri, cuContul, documentulComenzii, legaturaDocumentului, surseleFiltrului, type Integrari,
+} from "@/components/dashboard/comenzi/date";
+import {
+  adresaFiltrelor, coadaFiltrelor, COOKIE_ASEZARE, filtreGoale, stariFiltrului, type Asezare, type FiltreComenzi,
+} from "@/components/dashboard/comenzi/filtre";
+import { ListaComenzi } from "@/components/dashboard/comenzi/ListaComenzi";
+import { descarcaPdfDeLaCasa } from "@/components/dashboard/facturare/descarcaPdf";
+import type { RezultatCasa } from "@/components/dashboard/facturare/FilaCaseiCuCheie";
+import { CASE_FACTURARE, CURIERI, siglaCurierului, type CasaFacturare } from "@/lib/integrari/parteneri";
+import { siglaMica, type Sigla } from "@/lib/integrari/sigle";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -86,6 +100,19 @@ function apasaAwb(refuz: string | null, deschide: () => void): void {
   deschide();
 }
 
+/** Valori implicite cu ACEEASI identitate la fiecare desenare: altfel listele memorate s-ar reface degeaba. */
+const FARA_CULOARE: { cheie: string; comenzi: Order[]; total: number }[] = [];
+const FARA_POZE: Record<string, string> = {};
+
+/**
+ * Manerele de factura ale tabelului primesc evenimentul apasarii, ca sa-l opreasca din a
+ * deschide comanda. Asezarile noi il opresc ele, inainte de a cere emiterea: aici ajunge unul gol.
+ */
+const FARA_EVENIMENT = { stopPropagation() {} } as unknown as React.MouseEvent;
+
+/** Casele care intorc la emitere doar cheia documentului, cu numele lor din mesaje. */
+const CASE_CU_CHEIE = { facturis: "Facturis", factureaza: "Factureaza.ro", easybill: "easybill" } as const;
+
 const STATUS_TABS = [
   { key: "all",        label: "Toate" },
   { key: "pending",    label: "In asteptare" },
@@ -110,7 +137,7 @@ function numeDinAntet(raspuns: Response): string | null {
   return m ? m[1] : null;
 }
 
-export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, dateFrom = "", dateTo = "", sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled, sagaEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
+export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, dateFrom = "", dateTo = "", sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled, sagaEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, postaZilePrezentare, curieraEnabled, curieraOptiuni, epacketEnabled, epacketOptiuni, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup, filtre, culoare = FARA_CULOARE, poze = FARA_POZE, telefon = false }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
   /**
@@ -167,6 +194,17 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
   samedayEnabled?: boolean;
   businessId?: string;
   fanPickup?: { lastDate: string | null; lastId: string | null };
+  /**
+   * Filtrele citite din adresa, cu asezarea aleasa. Fara ele (sau cu asezarea „clasic") se
+   * deseneaza tabelul de dinainte; cu ele, una dintre asezarile noi din `comenzi/`.
+   */
+  filtre?: FiltreComenzi;
+  /** Culoarele asezarii „Flux": primele comenzi ale fiecarei etape (randuri intregi) si cate are etapa. */
+  culoare?: { cheie: string; comenzi: Order[]; total: number }[];
+  /** Prima poza a fiecarui produs din comenzile de pe ecran, pe id de produs. */
+  poze?: Record<string, string>;
+  /** Ghicit pe server dupa agentul de utilizator: un telefon primeste doar forma de fise. */
+  telefon?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -221,7 +259,8 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     try {
       const r = await exportaComenzileAction(
         businessId,
-        peSelectie ? { ids: [...selected] } : { filtre: { status: statusFilter, source: sourceFilter, q: searchQuery, deLa: dateFrom, panaLa: dateTo } },
+        /* `stari`: asezarile care filtreaza pe o GRUPA de stari („De lucru”) o trimit ca lista; goala = toate. */
+        peSelectie ? { ids: [...selected] } : { filtre: { status: statusFilter, source: sourceFilter, q: searchQuery, deLa: dateFrom, panaLa: dateTo }, stari: filtre ? [...stariFiltrului(filtre)] : [] },
       );
       if (!r.ok) { toast.error(r.error); return; }
       const { default: writeExcelFile } = await import("write-excel-file/browser");
@@ -424,15 +463,20 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
    * ⚠ E o CITIRE: nu creeaza nimic la curier si nu cheltuie nimic, deci nu cere
    * confirmare si se poate relua oricand. Fix pe dos fata de butonul de alaturi.
    */
-  async function descarcaEtichetele(mod: "descarca" | "printeaza" = "descarca") {
-    const ids = [...selected];
+  async function descarcaEtichetele(
+    mod: "descarca" | "printeaza" = "descarca",
+    /* Implicit comenzile bifate; asezarile noi cer si eticheta UNEI comenzi, din meniul ei. */
+    iduri: readonly string[] = [...selected],
+    format: "A4" | "A6" = eticheteFormat,
+  ) {
+    const ids = [...iduri];
     setEticheteBusy(true);
     let raspuns: Response;
     try {
       raspuns = await fetch("/api/etichete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId, orderIds: ids, format: eticheteFormat }),
+        body: JSON.stringify({ businessId, orderIds: ids, format }),
       });
     } catch {
       setEticheteBusy(false);
@@ -514,12 +558,12 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     if (!window.confirm(`Trimiți în SAGA documentele a ${n} ${n === 1 ? "comandă" : "comenzi"}? Un document trimis nu mai pleacă a doua oară.`)) return;
     void runBulk("SAGA", () => exportaComenzileInSaga(businessId!, [...selected]));
   }
-  function runBulkInvoices() {
+  function runBulkInvoices(casa: InvoiceProvider = invoiceProvider) {
     const n = selected.size;
     if (!window.confirm(`Generezi facturi pentru ${n} ${n === 1 ? "comandă" : "comenzi"}? Se emit documente fiscale reale (nu pot fi șterse, doar stornate).`)) return;
-    void runBulk("Facturi", () => bulkGenerateInvoices(businessId!, [...selected], invoiceProvider));
+    void runBulk("Facturi", () => bulkGenerateInvoices(businessId!, [...selected], casa));
   }
-  function runBulkAwbs() {
+  function runBulkAwbs(curierCerut?: BulkCourier) {
     /*
      * ⚠ SE CERE CONFIRMARE, CA LA FACTURI (14.09.2026).
      *
@@ -541,22 +585,23 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     )) return;
     // With a single connected courier, target it directly; otherwise honor the
     // dropdown ("după client" = each order's checkout courier).
-    const courier: BulkCourier = awbCouriers.length === 1 ? awbCouriers[0].key : awbCourier;
+    const courier: BulkCourier = awbCouriers.length === 1 ? awbCouriers[0].key : curierCerut ?? awbCourier;
     void runBulk("AWB-uri", () => bulkGenerateAwbs(businessId!, [...selected], courier));
   }
-  function runBulkStatus() {
-    if (!bulkStatus) { toast.error("Alege un status."); return; }
-    const label = ORDER_STATUS[bulkStatus as OrderStatus]?.label ?? bulkStatus;
-    const ids = [...selected];
+  function runBulkStatus(stareCeruta: string = bulkStatus, iduri: readonly string[] = [...selected]) {
+    if (!stareCeruta) { toast.error("Alege un status."); return; }
+    const label = ORDER_STATUS[stareCeruta as OrderStatus]?.nume ?? stareCeruta;
+    const ids = [...iduri];
+    if (ids.length === 0) return;
     setBulkBusy(true);
     setBulkResult(null);
     startStatusTransition(async () => {
-      aplicaOptimistStatus({ ids, status: bulkStatus });
+      aplicaOptimistStatus({ ids, status: stareCeruta });
       /* ⚠ In `try` DOAR apelul; ramificarea si mesajele raman afara. Vezi
          `callbackul-de-tranzitie-prinde-caderea`. */
       let res: Awaited<ReturnType<typeof bulkUpdateOrderStatus>>;
       try {
-        res = await bulkUpdateOrderStatus(businessId!, ids, bulkStatus);
+        res = await bulkUpdateOrderStatus(businessId!, ids, stareCeruta);
       } catch {
         /*
          * ⚠ Aici nu ajunge sa spunem „nu stim”. Randurile sunt DEJA colorate de
@@ -591,14 +636,20 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
        * prin filtre.
        */
       const sarite = res.sarite ? ` ${res.sarite} sunt din marketplace și se schimbă din contul de acolo.` : "";
+      const mutate = `${pluralRo(res.updated, "comandă", "comenzi")} → ${label}`;
       if (res.esuate) {
-        toast.error(`${res.updated} comenzi → ${label}. ${res.esuate} NU s-au putut muta — vezi Jurnalul.${sarite}`);
+        toast.error(`${mutate}. ${res.esuate} NU s-au putut muta, vezi Jurnalul.${sarite}`);
       } else if (res.sarite) {
-        toast.warning(`${res.updated} comenzi → ${label}.${sarite}`);
+        toast.warning(`${mutate}.${sarite}`);
       } else {
-        toast.success(`${res.updated} comenzi → ${label}`);
+        toast.success(mutate);
       }
-      clearSelection();
+      /* Ies din selectie doar comenzile mutate: starea UNEI comenzi, schimbata din meniul ei, nu goleste bifele celorlalte. */
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
       router.refresh();
     });
   }
@@ -790,6 +841,274 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
       }
     });
   }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ASEZARILE NOI ALE LISTEI (25.11.2026)
+     ══════════════════════════════════════════════════════════════════════════
+
+     Tabelul de mai jos ramane cum era: e asezarea „Tabelul de dinainte". Celelalte patru
+     („Registru", „Flux", „Două panouri", „Pe zile") se deseneaza in `comenzi/`, din ACELEASI
+     randuri si prin ACELEASI manere: ferestrele curierilor, facturile, lotul si confirmarile
+     lui stau tot aici. Legatura dintre ele sunt cele doua contexte din `comenzi/actiuni.tsx`.
+  */
+  const asezareNoua = filtre !== undefined && filtre.asezare !== "clasic";
+
+  /** Ce are magazinul pornit, cu siglele de panou: din aceleasi steaguri ca tabelul de dinainte. */
+  const pornite = useMemo<Integrari>(() => {
+    /* `Record` pe TOATE cheile: un curier sau o casa noua, uitate aici, opresc compilarea. */
+    const curieriPorniti: Record<CurierPropriu, boolean | undefined> = {
+      fancourier: fanCourierEnabled, sameday: samedayEnabled, cargus: cargusEnabled, dpd: dpdEnabled, gls: glsEnabled,
+      posta: postaEnabled, curiera: curieraEnabled, pallex: pallexEnabled, fedex: fedexEnabled, ups: upsEnabled, dhl: dhlEnabled,
+      colete: coleteEnabled, woot: wootEnabled, ecolet: ecoletEnabled, smartship: smartshipEnabled, shipo: shipoEnabled,
+      packeta: packetaEnabled, innoship: innoshipEnabled, epacket: epacketEnabled,
+    };
+    const casePornite: Record<CasaFacturare, boolean | undefined> = {
+      smartbill: smartbillEnabled, oblio: oblioEnabled, fgo: fgoEnabled, facturis: facturisEnabled, factureaza: factureazaEnabled,
+      easybill: easybillEnabled,
+    };
+    return {
+      curieri: (Object.keys(CURIERI) as CurierPropriu[])
+        .filter((cheie) => curieriPorniti[cheie])
+        .map((cheie) => siglaCurierului(cheie))
+        .filter((sigla): sigla is Sigla => sigla !== null),
+      case_: CASE_FACTURARE
+        .filter((c) => casePornite[c.cheie])
+        .map(({ cheie, nume, logo, inversat }) => ({ cheie, nume, logo: siglaMica(logo), ...(inversat ? { inversat: true } : null) })),
+    };
+  }, [
+    fanCourierEnabled, samedayEnabled, cargusEnabled, dpdEnabled, glsEnabled, postaEnabled, curieraEnabled, pallexEnabled, fedexEnabled,
+    upsEnabled, dhlEnabled, coleteEnabled, wootEnabled, ecoletEnabled, smartshipEnabled, shipoEnabled, packetaEnabled, innoshipEnabled,
+    epacketEnabled, smartbillEnabled, oblioEnabled, fgoEnabled, facturisEnabled, factureazaEnabled, easybillEnabled,
+  ]);
+
+  /*
+    Randurile raman INTREGI (ferestrele de AWB le cer asa); forma simpla pe care o deseneaza
+    asezarile se face aici, in browser, o data pe lista primita.
+  */
+  const laForma = useCallback(
+    (o: Order) => cuContul(cuCeilaltiCurieri(comandaDinRand(o as unknown as Record<string, unknown>, pornite, poze), pornite), conturi[o.id]),
+    [pornite, poze, conturi],
+  );
+  const comenziLista = useMemo(() => (asezareNoua ? comenzi.map(laForma) : []), [asezareNoua, comenzi, laForma]);
+  const culoareLista = useMemo(
+    () => (asezareNoua ? culoare.map((cu) => ({ cheie: cu.cheie, total: cu.total, comenzi: cu.comenzi.map(laForma) })) : []),
+    [asezareNoua, culoare, laForma],
+  );
+  const surseLista = useMemo(() => surseleFiltrului(sourceCounts), [sourceCounts]);
+  /** Randul intreg al fiecarei comenzi de pe ecran, dupa id: din el se deschide fereastra curierului. */
+  const randDupaId = useMemo(() => {
+    const dupaId = new Map<string, Order>();
+    for (const o of comenzi) dupaId.set(o.id, o);
+    for (const cu of culoare) for (const o of cu.comenzi) dupaId.set(o.id, o);
+    return dupaId;
+  }, [comenzi, culoare]);
+
+  /*
+   * ⚠ BIFELE TIN DOAR COMENZI CARE SE VAD. O comanda bifata poate iesi din lista fara ca omul sa
+   * navigheze: primeste AWB si trece in alta stare, deci in alta fila. Ramasa bifata fara sa se
+   * mai vada, ar fi intrat in urmatorul lot: „2 comenzi alese" pe bara, cinci facturi emise.
+   * Cand randurile de pe ecran se schimba, selectia se strange la ele.
+   *
+   * Starea se potriveste in timpul desenarii, dupa randurile de dinainte (tiparul din
+   * documentatia React pentru „stare care depinde de o proprietate"), nu intr-un efect: un efect
+   * ar fi lasat o desenare in care bara de selectie numara o comanda care nu mai e pe ecran.
+   */
+  const [randuriVazute, setRanduriVazute] = useState(randDupaId);
+  if (randuriVazute !== randDupaId) {
+    setRanduriVazute(randDupaId);
+    setSelected((prev) => {
+      const ramase = [...prev].filter((id) => randDupaId.has(id));
+      return ramase.length === prev.size ? prev : new Set(ramase);
+    });
+  }
+
+  /** Fereastra fiecarui curier. `Record` pe toate cheile: un curier nou fara fereastra aici opreste compilarea. */
+  const ferestreAwb: Record<CurierPropriu, (o: Order) => void> = {
+    woot: setWootModalOrder, cargus: setCargusModalOrder, dpd: setDpdModalOrder, gls: setGlsModalOrder, pallex: setPallexModalOrder,
+    ecolet: setEcoletModalOrder, fancourier: setFanCourierModalOrder, sameday: setSamedayModalOrder, colete: setColeteModalOrder,
+    curiera: setCurieraModalOrder, epacket: setEpacketModalOrder, posta: setPostaModalOrder, packeta: setPacketaModalOrder,
+    smartship: setSmartshipModalOrder, shipo: setShipoModalOrder, fedex: setFedexModalOrder, ups: setUpsModalOrder, dhl: setDhlModalOrder,
+    innoship: setInnoshipModalOrder,
+  };
+
+  /* Facturis, Factureaza.ro, easybill: aceeasi emitere ca in `CelulaCaseiCuCheie`, pentru butonul asezarilor noi. */
+  const [cheieInLucru, setCheieInLucru] = useState<string | null>(null);
+  const [, startCheieTransition] = useTransition();
+  function emiteLaCasaCuCheie(casa: keyof typeof CASE_CU_CHEIE, orderId: string) {
+    if (!businessId) return;
+    const nume = CASE_CU_CHEIE[casa];
+    setCheieInLucru(orderId);
+    startCheieTransition(async () => {
+      let rezultat: RezultatCasa;
+      try {
+        rezultat = casa === "facturis" ? await generateFacturisInvoice(businessId, orderId)
+          : casa === "factureaza" ? await generateFactureazaInvoice(businessId, orderId)
+            : await generateEasybillInvoice(businessId, orderId);
+      } catch {
+        /* ⚠ Nu invita la reincercare oarba: un document emis si nelegat de comanda se lamureste din contul casei. */
+        toast.error(
+          `Nu am primit răspuns de la server, deci nu știm dacă factura s-a emis în ${nume}. Verifică în contul ${nume} înainte să încerci din nou.`,
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        setCheieInLucru(null);
+      }
+      if ("error" in rezultat) {
+        toast.error(rezultat.error, { duration: 10000 });
+        return;
+      }
+      const numarul = [rezultat.series, rezultat.number].map((x) => (x ?? "").trim()).filter(Boolean).join(" ");
+      toast.success(numarul ? `Factura ${nume} ${numarul} a fost emisă.` : `Factura ${nume} a fost emisă.`);
+      if (rezultat.avertisment) toast.warning(rezultat.avertisment, { duration: 15000 });
+      router.refresh();
+    });
+  }
+
+  /**
+   * Manerele de mai sus, in forma in care le cer asezarile noi. Se reface la fiecare desenare,
+   * deci citeste mereu starea la zi (comenzile bifate, formatul etichetelor).
+   */
+  const manere = {
+    awb(idComanda: string, curier: CurierPropriu, emite: boolean) {
+      const o = randDupaId.get(idComanda);
+      if (!o) return;
+      const deschide = () => ferestreAwb[curier](o);
+      /* AWB-ul emis se deschide oricand: fereastra lui arata eticheta, urmarirea si anularea. */
+      if (!emite) { deschide(); return; }
+      const rand = o as unknown as Record<string, unknown>;
+      /* Aceeasi poarta ca pe server, intrebata pentru CURIERUL apasat: asa propriul AWB nu se opreste singur. */
+      const refuz = deCeNuSePoateAwbPropriu({
+        order_source: rand["order_source"] ?? null,
+        payment_status: (o.payment_status as string | null) ?? null,
+        status: (o.status as string | null) ?? null,
+        awburi: awburiDinRand(rand),
+      }, curier);
+      apasaAwb(refuz, deschide);
+    },
+    emiteFactura(idComanda: string, casa: CasaFacturare) {
+      if (casa === "smartbill") handleGenerateInvoice(FARA_EVENIMENT, idComanda);
+      else if (casa === "oblio") handleOblioAction(FARA_EVENIMENT, idComanda, "invoice");
+      else if (casa === "fgo") handleFgoAction(FARA_EVENIMENT, idComanda, "invoice");
+      else emiteLaCasaCuCheie(casa, idComanda);
+    },
+    deschideDocumentul(idComanda: string) {
+      const o = randDupaId.get(idComanda);
+      if (!o) return;
+      const rand = o as unknown as Record<string, unknown>;
+      const emis = documentulComenzii(rand);
+      const legatura = emis ? legaturaDocumentului(rand, emis) : null;
+      if (legatura?.fel === "adresa") window.open(legatura.adresa, "_blank", "noopener,noreferrer");
+      else if (legatura?.fel === "pdf") void descarcaPdfDeLaCasa(legatura.ruta, legatura.casa, idComanda, legatura.tip);
+      /* Lista n-are de unde deschide documentul (SmartBill fara adresa, o stornare): il arata pagina comenzii. */
+      else router.push(adresaDetaliuluiComenzii(idComanda, filtre ? coadaFiltrelor(filtre) : undefined));
+    },
+    schimbaStarea(iduri: readonly string[], stare: string) { runBulkStatus(stare, iduri); },
+    eticheta(idComanda: string) { void descarcaEtichetele("printeaza", [idComanda]); },
+    cheamaCurierul(curier: CurierPropriu) {
+      if (curier === "fancourier") setFanPickupOpen(true);
+      else if (curier === "dpd") setDpdPickupOpen(true);
+      else if (curier === "cargus") setCargusPickupOpen(true);
+    },
+    exporta() { void descarcaExcel(false); },
+    /**
+     * Asezarea se tine intr-un cookie, citit de server la fiecare incarcare a listei: o data
+     * aleasa, ramane si la urmatoarea intrare din meniu. Filtrele se golesc, fiecare asezare le
+     * are pe ale ei.
+     */
+    alegeAsezarea(asezare: Asezare, cu?: Partial<Pick<FiltreComenzi, "status">>) {
+      document.cookie = `${COOKIE_ASEZARE}=${asezare}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+      setSelected(new Set());
+      setBulkResult(null);
+      const tinta = adresaFiltrelor(pathname, { ...filtreGoale(asezare), ...cu });
+      startNavTransition(() => {
+        router.push(tinta, { scroll: false });
+        /* Adresa poate fi aceeasi (fara filtre): pagina se cere din nou, ca serverul sa citeasca asezarea aleasa. */
+        router.refresh();
+      });
+    },
+    facturi(casa: InvoiceProvider) { runBulkInvoices(casa); },
+    awburi(curier: BulkCourier) { runBulkAwbs(curier); },
+    saga() { runBulkSaga(); },
+    woot() { setLotWootDeschis(true); },
+    etichete(mod: "descarca" | "printeaza", format: "A4" | "A6") { void descarcaEtichetele(mod, [...selected], format); },
+    exportaAlese() { void descarcaExcel(true); },
+  };
+  /*
+    ⚠ Contextele raman ACELEASI de la o desenare la alta (altfel fiecare bifa ar redesena toate
+    butoanele din toate randurile), dar apasarea trebuie sa ajunga la manerele de ACUM. De aceea
+    functiile din context cheama prin aceasta referinta, adusa la zi dupa fiecare desenare.
+  */
+  const manereLaZi = useRef(manere);
+  useEffect(() => { manereLaZi.current = manere; });
+
+  const facturaInLucru = generatingOrderId ?? oblioActionOrderId ?? fgoActionOrderId ?? cheieInLucru;
+  const cuRidicare = useMemo<CurierPropriu[]>(() => {
+    const curieri: CurierPropriu[] = [];
+    if (fanCourierEnabled) curieri.push("fancourier");
+    if (dpdEnabled) curieri.push("dpd");
+    if (cargusEnabled) curieri.push("cargus");
+    return curieri;
+  }, [fanCourierEnabled, dpdEnabled, cargusEnabled]);
+
+  const actiuni = useMemo<ActiuniComenzi>(() => ({
+    awb: (id, curier, emite) => manereLaZi.current.awb(id, curier, emite),
+    emiteFactura: (id, casa) => manereLaZi.current.emiteFactura(id, casa),
+    facturaInLucru,
+    deschideDocumentul: (id) => manereLaZi.current.deschideDocumentul(id),
+    schimbaStarea: (iduri, stare) => manereLaZi.current.schimbaStarea(iduri, stare),
+    stareInLucru: bulkBusy,
+    eticheta: (id) => manereLaZi.current.eticheta(id),
+    cheamaCurierul: (curier) => manereLaZi.current.cheamaCurierul(curier),
+    cuRidicare: businessId ? cuRidicare : [],
+    exporta: () => manereLaZi.current.exporta(),
+    exportInLucru: exportBusy,
+    alegeAsezarea: (asezare, cu) => manereLaZi.current.alegeAsezarea(asezare, cu),
+  }), [facturaInLucru, bulkBusy, cuRidicare, businessId, exportBusy]);
+
+  /* Selectia pentru asezarile noi: aceleasi comenzi bifate ca ale tabelului, cu functii care nu se schimba. */
+  const comutaSelectia = useCallback((id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  }), []);
+  const puneInSelectie = useCallback((iduri: readonly string[], alese: boolean) => setSelected((prev) => {
+    const next = new Set(prev);
+    for (const id of iduri) {
+      if (alese) next.add(id); else next.delete(id);
+    }
+    return next;
+  }), []);
+  const golesteSelectia = useCallback(() => {
+    /* Fara nimic bifat se intoarce chiar multimea de dinainte: o navigare obisnuita nu redeseneaza lista pentru nimic. */
+    setSelected((prev) => (prev.size === 0 ? prev : new Set()));
+    setBulkResult(null);
+  }, []);
+
+  const lotSiSelectie = useMemo<LotSiSelectie>(() => ({
+    selectie: { alese: selected, comuta: comutaSelectia, pune: puneInSelectie, goleste: golesteSelectia },
+    lot: {
+      case_: invoiceProviders,
+      curieri: awbCouriers,
+      facturi: (casa) => manereLaZi.current.facturi(casa),
+      awburi: (curier) => manereLaZi.current.awburi(curier),
+      saga: sagaEnabled && businessId ? () => manereLaZi.current.saga() : undefined,
+      woot: wootEnabled && businessId ? () => manereLaZi.current.woot() : undefined,
+      etichete: (mod, format) => manereLaZi.current.etichete(mod, format),
+      exporta: () => manereLaZi.current.exportaAlese(),
+      ocupat: bulkBusy,
+      eticheteInLucru: eticheteBusy,
+      rezultat: bulkResult,
+      inchideRezultatul: () => setBulkResult(null),
+      eticheteSarite,
+      eticheteInPlus,
+      inchideEtichetele: () => { setEticheteSarite([]); setEticheteInPlus(0); },
+    },
+  }), [
+    selected, comutaSelectia, puneInSelectie, golesteSelectia, invoiceProviders, awbCouriers, sagaEnabled, wootEnabled, businessId,
+    bulkBusy, eticheteBusy, bulkResult, eticheteSarite, eticheteInPlus,
+  ]);
 
   return (
     <>
@@ -1009,6 +1328,32 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
           businessId={businessId}
           onSuccess={() => { setInnoshipModalOrder(null); router.refresh(); }}
         />
+      )}
+      {asezareNoua && filtre ? (
+        <FurnizorActiuniComenzi value={actiuni}>
+          <FurnizorLotComenzi value={lotSiSelectie}>
+            <ListaComenzi
+              filtre={filtre}
+              telefon={telefon}
+              comenzi={comenziLista}
+              totalFiltru={totalCount}
+              culoare={culoareLista}
+              numarari={statusCounts}
+              total={allCount}
+              surse={surseLista}
+            />
+          </FurnizorLotComenzi>
+        </FurnizorActiuniComenzi>
+      ) : (
+        <>
+      {/* Din tabelul de dinainte se ajunge inapoi la asezarile noi printr-o apasare. */}
+      {filtre && (
+        <p className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-surface px-3 py-2 text-xs text-muted-foreground ring-1 ring-black/10">
+          Vezi comenzile în tabelul de dinainte.
+          <button type="button" onClick={() => manere.alegeAsezarea("registru")} className="font-medium text-foreground underline underline-offset-2 hover:no-underline">
+            Treci la așezarea nouă
+          </button>
+        </p>
       )}
       {/* Header */}
       <div className="flex flex-col gap-3 mb-5">
@@ -1240,7 +1585,7 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
               </select>
               <button
                 type="button"
-                onClick={runBulkStatus}
+                onClick={() => runBulkStatus()}
                 disabled={bulkBusy || !bulkStatus}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               >
@@ -1277,7 +1622,7 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                 )}
                 <button
                   type="button"
-                  onClick={runBulkInvoices}
+                  onClick={() => runBulkInvoices()}
                   disabled={bulkBusy}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                 >
@@ -1315,7 +1660,7 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
                 )}
                 <button
                   type="button"
-                  onClick={runBulkAwbs}
+                  onClick={() => runBulkAwbs()}
                   disabled={bulkBusy}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                 >
@@ -2598,6 +2943,8 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
           </div>
         )}
       </div>
+        </>
+      )}
     </>
   );
 }

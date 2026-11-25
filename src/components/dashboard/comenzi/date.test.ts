@@ -5,7 +5,8 @@ import { COLOANE_FACTURA_EMISA } from "@/lib/billing/factura-pe-comanda";
 import { COLOANA_AWB } from "@/lib/orders/awb-propriu";
 import { siglaCurierului } from "@/lib/integrari/parteneri";
 import {
-  coloaneleComenzii, comandaDinRand, cuCeilaltiCurieri, documentulComenzii, FARA_INTEGRARI, plataComenzii, type Integrari,
+  coloaneleComenzii, comandaDinRand, cuCeilaltiCurieri, cuContul, documentulComenzii, FARA_INTEGRARI, legaturaDocumentului, plataComenzii,
+  STARI_COMANDA, surseleFiltrului, type Integrari,
 } from "./date";
 
 /*
@@ -83,7 +84,7 @@ test("AWB-ul emis se arata cu sigla curierului lui si cu ultima stare citita, ia
   assert.equal(c.livrare.awb?.curier.cheie, "fancourier");
   assert.equal(c.livrare.refuz, null);
   const sameday = comandaDinRand({ ...RAND, [COLOANA_AWB.sameday]: "1ONB123", sameday_status_label: "În livrare" }, CU_DOI_CURIERI, {});
-  assert.deepEqual(sameday.livrare.awb, { curier: sigla("sameday"), numar: "1ONB123", stare: "În livrare" });
+  assert.deepEqual(sameday.livrare.awb, { curier: sigla("sameday"), numar: "1ONB123", stare: "În livrare", inCurs: false, partener: null });
 });
 
 test("⚠ refuzul unui AWB e cel al portii comune, nu unul scris aici", () => {
@@ -99,7 +100,12 @@ test("ceilalti curieri se pun in browser, fara cel al comenzii", () => {
   const c = comandaDinRand(RAND, CU_DOI_CURIERI, {});
   /* De pe server pleaca goala: aceeasi lista scrisa la fiecare comanda ar ingreuna pagina. */
   assert.deepEqual(c.livrare.altii, []);
-  assert.deepEqual(cuCeilaltiCurieri(c, CU_DOI_CURIERI.curieri).livrare.altii.map((x) => x.cheie), ["sameday"]);
+  assert.deepEqual(cuCeilaltiCurieri(c, CU_DOI_CURIERI).livrare.altii.map((x) => x.cheie), ["sameday"]);
+  /* La fel casele de facturare: cea a comenzii nu se repeta in meniul „altă casă". */
+  const douaCase: Integrari = { ...CU_DOI_CURIERI, case_: [...CU_DOI_CURIERI.case_, { cheie: "oblio", nume: "Oblio", logo: "/integrations/mici/oblio.webp", inversat: true }] };
+  const cuDoua = cuCeilaltiCurieri(comandaDinRand(RAND, douaCase, {}), douaCase);
+  assert.equal(cuDoua.factura.casa?.cheie, "smartbill");
+  assert.deepEqual(cuDoua.factura.alteCase.map((x) => x.cheie), ["oblio"]);
 });
 
 test("fara integrari, comanda se citeste doar pentru bani si document", () => {
@@ -182,4 +188,89 @@ test("⚠ fiecare coloana ceruta exista in `orders`: una lipsa face PostgREST sa
   }
   /* Lista e de vreo trei ori mai scurta decat tabelul: de aceea exista. */
   assert.ok(cerute.length < existente.size / 2, `${cerute.length} din ${existente.size}`);
+});
+
+/* ── Ce a adus intrarea asezarilor noi in pagina adevarata (25.11.2026) ───── */
+
+test("⚠ la eColet, expedierea pornita fara numar e „in curs”, nu un AWB cu id-ul intern drept numar", () => {
+  /* `awburiDinRand` intoarce si MARTORUL (`ecolet_order_to_send_id`): el spune ca exista un colet, nu care e numarul lui. */
+  const inCurs = comandaDinRand({ ...RAND, ecolet_order_to_send_id: 99123 }, CU_DOI_CURIERI, {}).livrare.awb;
+  assert.equal(inCurs?.curier.cheie, "ecolet");
+  assert.equal(inCurs?.inCurs, true);
+  assert.equal(inCurs?.numar, "");
+  /* Cand vine numarul, el e cel aratat, iar coletul nu mai e „in curs". */
+  const emis = comandaDinRand({ ...RAND, ecolet_order_to_send_id: 99123, ecolet_awb_number: "EC0012345" }, CU_DOI_CURIERI, {}).livrare.awb;
+  assert.equal(emis?.inCurs, false);
+  assert.equal(emis?.numar, "EC0012345");
+});
+
+test("la brokeri se spune cine duce de fapt coletul", () => {
+  const curiera = comandaDinRand({ ...RAND, curiera_awb_number: "CUR123", curiera_partener: "DPD", curiera_partener_awb: "80512345" }, CU_DOI_CURIERI, {});
+  assert.equal(curiera.livrare.awb?.partener, "DPD 80512345");
+  /* Fara numarul partenerului nu e nimic de spus. */
+  assert.equal(comandaDinRand({ ...RAND, curiera_awb_number: "CUR123", curiera_partener: "DPD" }, CU_DOI_CURIERI, {}).livrare.awb?.partener, null);
+  const epacket = comandaDinRand({ ...RAND, epacket_awb_number: "EP1", epacket_curier: "SDY", epacket_test: true }, CU_DOI_CURIERI, {});
+  assert.equal(epacket.livrare.awb?.partener, "Sameday, test");
+  assert.equal(comandaDinRand({ ...RAND, epacket_awb_number: "EP1", epacket_curier: "XYZ" }, CU_DOI_CURIERI, {}).livrare.awb?.partener, "XYZ");
+});
+
+test("⚠ moneda necitita ramane „?”, cu semnul ei: nu se preface in lei", () => {
+  const c = comandaDinRand({ ...RAND, order_source: { marketplace: "aboutyou", moneda_necitita: true, currency: "RON" } }, CU_DOI_CURIERI, {});
+  assert.equal(c.moneda, "?");
+  assert.equal(c.monedaNecitita, true);
+  const euro = comandaDinRand({ ...RAND, order_source: { marketplace: "aboutyou", currency: "eur" } }, CU_DOI_CURIERI, {});
+  assert.deepEqual([euro.moneda, euro.monedaNecitita], ["EUR", false]);
+  assert.deepEqual([comandaDinRand(RAND, CU_DOI_CURIERI, {}).moneda, comandaDinRand(RAND, CU_DOI_CURIERI, {}).monedaNecitita], ["lei", false]);
+});
+
+test("sursa spune daca marketplace-ul isi tine singur fluxul si daca o proceseaza easySales", () => {
+  const sursa = (order_source: unknown) => comandaDinRand({ ...RAND, order_source }, CU_DOI_CURIERI, {}).sursa;
+  assert.equal(sursa({ marketplace: "emag" }).cuFluxPropriu, true);
+  assert.equal(sursa({ marketplace: "trendyol" }).cuFluxPropriu, true);
+  /* La Pepita si About You comanda se administreaza de aici: AWB-ul si factura se fac din Edinio. */
+  assert.equal(sursa({ marketplace: "pepita" }).cuFluxPropriu, false);
+  assert.equal(sursa({ marketplace: "aboutyou" }).cuFluxPropriu, false);
+  assert.equal(sursa(null).cuFluxPropriu, false);
+  assert.equal(sursa({ easysales: { stapan: "easysales" } }).easySales, true);
+  assert.equal(sursa({ easysales: { stapan: "edinio" } }).easySales, false);
+});
+
+test("contul din care s-a plasat comanda: numele titularului, cu e-mailul ca rezerva si in indiciu", () => {
+  const c = comandaDinRand(RAND, CU_DOI_CURIERI, {});
+  assert.equal(c.cont, null);
+  assert.equal(cuContul(c, undefined), c);
+  assert.deepEqual(cuContul(c, { contId: "k1", nume: "Maria Pop", email: "maria@exemplu.ro" }).cont, { id: "k1", nume: "Maria Pop", indiciu: "maria@exemplu.ro · ID cont: k1" });
+  assert.equal(cuContul(c, { contId: "k2", nume: "  ", email: "fara-nume@exemplu.ro" }).cont?.nume, "fara-nume@exemplu.ro");
+  assert.deepEqual(cuContul(c, { contId: "k3", nume: null, email: null }).cont, { id: "k3", nume: "Cont client", indiciu: "ID cont: k3" });
+});
+
+test("sursele din filtru: doar cele care au comenzi, iar „Magazinul tău” doar langa un marketplace", () => {
+  assert.deepEqual(surseleFiltrului({ store: 40 }), []);
+  assert.deepEqual(surseleFiltrului({ store: 40, emag: 0, trendyol: 0 }), []);
+  const surse = surseleFiltrului({ store: 40, emag: 7, trendyol: 0, pepita: 2 });
+  assert.deepEqual(surse.map((x) => [x.cheie, x.numar]), [["store", 40], ["emag", 7], ["pepita", 2]]);
+  assert.equal(surse[0].logo, null);
+  assert.equal(surse[1].logo, "/integrations/mici/emag.webp");
+});
+
+test("cele sapte stari din meniu sunt cele ale platformei, cu numele acordat cu „comanda”", () => {
+  assert.deepEqual(STARI_COMANDA.map((x) => x.cheie), ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded"]);
+  assert.deepEqual(STARI_COMANDA.map((x) => x.eticheta), ["În așteptare", "Confirmată", "În procesare", "Expediată", "Livrată", "Anulată", "Rambursată"]);
+});
+
+test("⚠ documentul se deschide de unde il da casa: adresa ei, PDF-ul prin ruta noastra, sau deloc", () => {
+  const leg = (r: Record<string, unknown>) => { const d = documentulComenzii(r); return d ? legaturaDocumentului(r, d) : "fara document"; };
+  assert.deepEqual(leg({ oblio_invoice_number: "1", oblio_invoice_link: "https://www.oblio.eu/docs/1" }), { fel: "adresa", adresa: "https://www.oblio.eu/docs/1" });
+  assert.deepEqual(leg({ oblio_storno_number: "2", oblio_storno_link: "https://www.oblio.eu/docs/2", oblio_invoice_number: "1" }), { fel: "adresa", adresa: "https://www.oblio.eu/docs/2" });
+  assert.deepEqual(leg({ smartbill_estimate_number: "7", smartbill_estimate_url: "https://ws.smartbill.ro/p/7" }), { fel: "adresa", adresa: "https://ws.smartbill.ro/p/7" });
+  assert.deepEqual(leg({ fgo_invoice_number: "9", fgo_invoice_link: "https://www.fgo.ro/f/9" }), { fel: "adresa", adresa: "https://www.fgo.ro/f/9" });
+  /* Casele cu cheie dau PDF-ul numai pe API. */
+  assert.deepEqual(leg({ facturis_invoice_key: "abc" }), { fel: "pdf", ruta: "/api/facturis/pdf", casa: "Facturis", tip: "invoice" });
+  assert.deepEqual(leg({ easybill_invoice_key: "abc", easybill_storno_key: "def" }), { fel: "pdf", ruta: "/api/easybill/pdf", casa: "easybill", tip: "storno" });
+  /* Fara adresa (SmartBill fara link, stornarea fGO): lista n-are de unde, deci se deschide pagina comenzii. */
+  assert.equal(leg({ smartbill_invoice_number: "5" }), null);
+  assert.equal(leg({ fgo_storno_number: "3" }), null);
+  /* ⚠ O valoare care nu e adresa `https://` nu ajunge intr-un `window.open`. */
+  assert.equal(leg({ oblio_invoice_number: "1", oblio_invoice_link: "javascript:alert(1)" }), null);
+  assert.equal(leg({ oblio_invoice_number: "1", oblio_invoice_link: "http://exemplu.ro/x" }), null);
 });

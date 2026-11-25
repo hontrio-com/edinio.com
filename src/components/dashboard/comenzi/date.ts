@@ -339,13 +339,16 @@ export function comandaDinRand(
   pornite: Integrari,
   pozeProduse: Record<string, string>,
 ): ComandaLista {
-  const adresa = (r.shipping_address ?? {}) as Rand;
+  /* `shipping_address` e tot `jsonb`: ce nu e obiect se citeste ca o adresa goala. */
+  const adresa = (typeof r.shipping_address === "object" && r.shipping_address !== null ? r.shipping_address : {}) as Rand;
   const stareBruta = String(r.status ?? "pending");
   const stare = orderStatus(stareBruta);
   const origine = deriveOrigin(r.order_source);
   const moneda = monedaComenzii(r.order_source);
 
-  const produse: ProdusComanda[] = (Array.isArray(r.items) ? (r.items as Rand[]) : []).map((p) => ({
+  /* ⚠ `items` e `jsonb`, deci poate purta orice: o linie care nu e obiect (un `null`, un text) se sare, nu darama lista. */
+  const linii = (Array.isArray(r.items) ? r.items : []).filter((p): p is Rand => typeof p === "object" && p !== null && !Array.isArray(p));
+  const produse: ProdusComanda[] = linii.map((p) => ({
     nume: text(p.name) ?? "Produs",
     cantitate: numar(p.quantity) ?? 1,
     pret: numar(p.price) ?? 0,
@@ -393,7 +396,7 @@ export function comandaDinRand(
     creataLa: String(r.created_at),
     client: {
       nume: text(r.customer_name) ?? "Client",
-      firma: text((r.billing_company as Rand | null)?.company_name),
+      firma: typeof r.billing_company === "object" && r.billing_company !== null ? text((r.billing_company as Rand).company_name) : null,
       telefon: text(r.customer_phone),
       email: text(r.customer_email),
     },

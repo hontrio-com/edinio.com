@@ -8,8 +8,13 @@
   Aici se alege asezarea si se pun in jurul ei navigarea prin filtre (in adresa), deschiderea
   comenzii la clic pe rand si fereastra de confirmare. Datele vin gata filtrate de pe server;
   ce se FACE cu o comanda vine din `OrdersClient`, prin `actiuni.tsx`.
+
+  ⚠ Randurile vin cum sunt in baza si se aduc la forma listei AICI (`laForma`), nu in parinte:
+  componenta asta sta sub `PlasaAsezarii`, deci o comanda cu o forma neasteptata, care ar arunca
+  la citire, lasa in loc tabelul de dinainte, nu o pagina de eroare.
 */
 
+import { useMemo } from "react";
 import { useNavigare } from "@/components/dashboard/liste/navigare";
 import { AsezareFlux } from "./AsezareFlux";
 import { AsezarePanouri } from "./AsezarePanouri";
@@ -19,7 +24,7 @@ import { FurnizorConfirmare, ListaProvider, type NavigareComenzi } from "./comun
 import type { ComandaLista, SursaFiltru } from "./date";
 import { adresaFiltrelor, type FiltreComenzi } from "./filtre";
 
-/** Ce primeste lista: comenzile de pe ecran, gata filtrate pe server, si numerele din jurul lor. */
+/** Ce deseneaza o asezare: comenzile de pe ecran, gata filtrate pe server, si numerele din jurul lor. */
 export interface DateLista {
   filtre: FiltreComenzi;
   /** Ghicit pe server dupa agentul de utilizator: un telefon primeste doar forma de fise. */
@@ -43,13 +48,26 @@ export interface DateAsezare extends DateLista {
   nav: NavigareComenzi;
 }
 
-export function ListaComenzi(date: DateLista) {
-  const nav = useNavigare(date.filtre, adresaFiltrelor);
-  const pentruAsezare: DateAsezare = { ...date, nav };
-  const asezare = date.filtre.asezare;
+/** Ce primeste lista de la `OrdersClient`: randurile cum vin din baza si functia care le aduce la forma listei. */
+export interface DateBrute<R> extends Omit<DateLista, "comenzi" | "culoare"> {
+  randuri: readonly R[];
+  culoare: readonly { cheie: string; comenzi: readonly R[]; total: number }[];
+  /** Aduce un rand la forma listei. Aceeasi functie de la o desenare la alta, cat nu se schimba magazinul. */
+  laForma: (rand: R) => ComandaLista;
+}
+
+export function ListaComenzi<R>({ randuri, culoare, laForma, ...restul }: DateBrute<R>) {
+  const nav = useNavigare(restul.filtre, adresaFiltrelor);
+  const comenzi = useMemo(() => randuri.map(laForma), [randuri, laForma]);
+  const culoareLista = useMemo(
+    () => culoare.map((cu) => ({ cheie: cu.cheie, total: cu.total, comenzi: cu.comenzi.map(laForma) })),
+    [culoare, laForma],
+  );
+  const pentruAsezare: DateAsezare = { ...restul, comenzi, culoare: culoareLista, nav };
+  const asezare = restul.filtre.asezare;
   return (
     <FurnizorConfirmare>
-      <ListaProvider filtre={date.filtre}>
+      <ListaProvider filtre={restul.filtre}>
         {asezare === "flux" ? <AsezareFlux {...pentruAsezare} />
           : asezare === "panouri" ? <AsezarePanouri {...pentruAsezare} />
             : asezare === "zile" ? <AsezareZile {...pentruAsezare} />

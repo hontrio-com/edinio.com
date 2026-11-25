@@ -42,12 +42,21 @@ const F_ZI = new Intl.DateTimeFormat("ro-RO", { ...ORA_RO, weekday: "long", day:
 const F_CHEIE_ZI = new Intl.DateTimeFormat("en-CA", { ...ORA_RO, year: "numeric", month: "2-digit", day: "2-digit" });
 const F_LUNG = new Intl.DateTimeFormat("ro-RO", { ...ORA_RO, day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
+/**
+ * ⚠ `Intl.DateTimeFormat.format` ARUNCA pe o data care nu e data („Invalid time value”). O clipa
+ * lipsa sau stricata pe un singur rand ar darama toata lista; aici ea se scrie goala.
+ */
+const scrie = (f: Intl.DateTimeFormat) => (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : f.format(d);
+};
+
 /** „18 sept., 11:52”, la ora Romaniei: aceeasi pe server si in browser. */
-export const dataScurta = (iso: string) => F_SCURT.format(new Date(iso));
-export const ora = (iso: string) => F_ORA.format(new Date(iso));
-export const ziuaLunga = (iso: string) => F_ZI.format(new Date(iso));
-export const cheiaZilei = (iso: string) => F_CHEIE_ZI.format(new Date(iso));
-export const dataLunga = (iso: string) => F_LUNG.format(new Date(iso));
+export const dataScurta = scrie(F_SCURT);
+export const ora = scrie(F_ORA);
+export const ziuaLunga = scrie(F_ZI);
+export const cheiaZilei = scrie(F_CHEIE_ZI);
+export const dataLunga = scrie(F_LUNG);
 
 /* ── Pozele produselor ────────────────────────────────────────────────────── */
 

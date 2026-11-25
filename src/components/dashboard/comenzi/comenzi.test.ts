@@ -317,3 +317,62 @@ test("⚠ bifele tin doar comenzi care se vad: selectia se strange cand randuril
   /* Randurile de pe ecran sunt cele din pagina SI cele din culoarele „Fluxului". */
   assert.match(ECRAN, /for \(const o of comenzi\) dupaId\.set\(o\.id, o\);\s+for \(const cu of culoare\) for \(const o of cu\.comenzi\) dupaId\.set\(o\.id, o\);/);
 });
+
+/* ── Plasa de siguranta ───────────────────────────────────────────────────── */
+
+test("⚠ o comanda cu campuri de alta forma decat cea asteptata nu darama lista", () => {
+  /* `items`, `shipping_address` si `billing_company` sunt `jsonb`: pot purta orice a scris vreodata un import sau un marketplace. */
+  const ciudate: Record<string, unknown>[] = [
+    { items: [null, "o linie scrisa ca text", 7, ["lista"], { name: "Veioză", quantity: "2", price: "30" }] },
+    { items: "nu e o lista", shipping_address: "Strada Lunga 1, Cluj", billing_company: "Casa Lumen SRL" },
+    { items: null, shipping_address: null, billing_company: null, order_source: "emag", total: "nu e numar", created_at: null },
+    { shipping_address: ["a", "b"], order_source: 42, payment_method: 7, status: null },
+  ];
+  for (const peste of ciudate) {
+    const c = comanda(peste);
+    assert.equal(typeof c.numar, "string");
+    /* Propozitiile si regula de expediere se pot scrie pe orice a iesit. */
+    assert.equal(typeof rezumatProduse(c), "string");
+    assert.equal(typeof rezumatLivrare(c), "string");
+    assert.equal(typeof rezumatPlata(c).text, "string");
+    assert.ok(expediere(c).fel.length > 0);
+  }
+  /* Din lista amestecata ramane doar linia care chiar e o linie. */
+  assert.deepEqual(comanda(ciudate[0]).produse.map((p) => [p.nume, p.cantitate, p.pret]), [["Veioză", 2, 30]]);
+  assert.equal(comanda(ciudate[1]).client.firma, null);
+});
+
+test("⚠ o data stricata se scrie goala: `Intl.DateTimeFormat.format` ar fi aruncat pe ea", () => {
+  /* Formatoarele stau intr-un `.tsx`, deci se citeste sursa: fiecare trece prin `scrie`, care verifica data intai. */
+  const piese = citeste("src/components/dashboard/liste/piese.tsx");
+  assert.ok(piese.includes('return Number.isNaN(d.getTime()) ? "" : f.format(d);'));
+  for (const nume of ["dataScurta", "ora", "ziuaLunga", "cheiaZilei", "dataLunga"]) {
+    assert.ok(piese.includes(`export const ${nume} = scrie(F_`), nume);
+  }
+  /* Chiar arunca: de aceea exista garda. */
+  assert.throws(() => new Intl.DateTimeFormat("ro-RO").format(new Date("null")), RangeError);
+});
+
+test("⚠ daca o asezare noua cade, in locul ei apare tabelul de dinainte, nu o pagina de eroare", () => {
+  /* Tabelul de dinainte e si ramura „clasic", si rezerva plasei: aceeasi constanta in amandoua locurile. */
+  assert.ok(ECRAN.includes("<PlasaAsezarii rezerva={tabelulDeDinainte} laCadere={laCadereaAsezarii}>"));
+  assert.ok(ECRAN.includes(") : tabelulDeDinainte}"));
+  assert.ok(ECRAN.includes("const tabelulDeDinainte = ("));
+  /* La cadere lista trece pe tabelul de dinainte si pentru urmatoarele intrari, iar omului i se spune. */
+  const cadere = ECRAN.slice(ECRAN.indexOf("const laCadereaAsezarii = () => {"), ECRAN.indexOf("  return (\n    <>\n      {lotWootDeschis"));
+  assert.ok(cadere.includes('manere.alegeAsezarea("clasic");'));
+  assert.match(cadere, /toast\.error\(/);
+
+  /* ⚠ Sub plasa sta si ADUCEREA randurilor la forma listei, nu doar desenarea: acolo ar cadea o comanda stricata. */
+  const lista = citeste(`${DIR}/ListaComenzi.tsx`);
+  assert.ok(lista.includes("const comenzi = useMemo(() => randuri.map(laForma), [randuri, laForma]);"));
+  assert.ok(ECRAN.includes("randuri={comenzi}") && ECRAN.includes("laForma={laForma}"));
+  assert.equal(/comenzi\.map\(laForma\)/.test(ECRAN), false, "forma listei se face iar in parinte, in afara plasei");
+
+  /* Granita e a lui Next, ca la vitrina: starea de cadere se sterge la navigare. Eroarea pleaca la Sentry, o data. */
+  const plasa = citeste(`${DIR}/PlasaAsezarii.tsx`);
+  assert.ok(plasa.includes('import { catchError, type ErrorInfo } from "next/error";'));
+  assert.ok(plasa.includes("export const PlasaAsezarii = catchError(function PlasaAsezarii("));
+  assert.match(plasa, /if \(anuntata\.current\) return;\s+anuntata\.current = true;\s+raporteazaEroarea\(/);
+  assert.ok(plasa.includes("laCadere();"));
+});

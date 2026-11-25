@@ -78,7 +78,9 @@ export function cerereDinRand(
   pozeProduse: Record<string, string>,
   comenzi: Record<string, ComandaLista>,
 ): CerereRetur {
-  const produse: ProdusRetur[] = (Array.isArray(r.items) ? (r.items as Rand[]) : []).map((p) => ({
+  /* ⚠ `items` e `jsonb`: o linie care nu e obiect (un `null`, un text) se sare, nu darama lista. */
+  const linii = (Array.isArray(r.items) ? r.items : []).filter((p): p is Rand => typeof p === "object" && p !== null && !Array.isArray(p));
+  const produse: ProdusRetur[] = linii.map((p) => ({
     nume: text(p.name) ?? "Produs",
     cantitate: numar(p.quantity) || 1,
     pret: numar(p.price),

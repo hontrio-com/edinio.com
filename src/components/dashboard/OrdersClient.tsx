@@ -66,6 +66,7 @@ import {
   adresaFiltrelor, coadaFiltrelor, COOKIE_ASEZARE, filtreGoale, stariFiltrului, type Asezare, type FiltreComenzi,
 } from "@/components/dashboard/comenzi/filtre";
 import { ListaComenzi } from "@/components/dashboard/comenzi/ListaComenzi";
+import { PlasaAsezarii } from "@/components/dashboard/comenzi/PlasaAsezarii";
 import { descarcaPdfDeLaCasa } from "@/components/dashboard/facturare/descarcaPdf";
 import type { RezultatCasa } from "@/components/dashboard/facturare/FilaCaseiCuCheie";
 import { CASE_FACTURARE, CURIERI, siglaCurierului, type CasaFacturare } from "@/lib/integrari/parteneri";
@@ -883,16 +884,13 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
 
   /*
     Randurile raman INTREGI (ferestrele de AWB le cer asa); forma simpla pe care o deseneaza
-    asezarile se face aici, in browser, o data pe lista primita.
+    asezarile se face in browser, o data pe lista primita. ⚠ Functia se CHEAMA in `ListaComenzi`,
+    sub `PlasaAsezarii`: o comanda cu o forma neasteptata, care ar arunca la citire, lasa in loc
+    tabelul de dinainte, nu o pagina de eroare.
   */
   const laForma = useCallback(
     (o: Order) => cuContul(cuCeilaltiCurieri(comandaDinRand(o as unknown as Record<string, unknown>, pornite, poze), pornite), conturi[o.id]),
     [pornite, poze, conturi],
-  );
-  const comenziLista = useMemo(() => (asezareNoua ? comenzi.map(laForma) : []), [asezareNoua, comenzi, laForma]);
-  const culoareLista = useMemo(
-    () => (asezareNoua ? culoare.map((cu) => ({ cheie: cu.cheie, total: cu.total, comenzi: cu.comenzi.map(laForma) })) : []),
-    [asezareNoua, culoare, laForma],
   );
   const surseLista = useMemo(() => surseleFiltrului(sourceCounts), [sourceCounts]);
   /** Randul intreg al fiecarei comenzi de pe ecran, dupa id: din el se deschide fereastra curierului. */
@@ -1110,241 +1108,12 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
     bulkBusy, eticheteBusy, bulkResult, eticheteSarite, eticheteInPlus,
   ]);
 
-  return (
-    <>
-      {lotWootDeschis && businessId && (
-        <WootBulkModal
-          open={lotWootDeschis}
-          onClose={() => setLotWootDeschis(false)}
-          businessId={businessId}
-          /*
-            ⚠ Selectia se citeste LA DESCHIDERE si ramane fixa cat sta fereastra:
-            altfel o schimbare in tabel ar muta lotul sub ochii omului, intre ce a
-            vazut in lista celor sarite si ce apasa pe buton.
-          */
-          orderIds={[...selected]}
-          onDone={() => router.refresh()}
-        />
-      )}
-      {wootModalOrder && businessId && (
-        <WootAwbModal
-          open={!!wootModalOrder}
-          onClose={() => setWootModalOrder(null)}
-          order={wootModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setWootModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {cargusModalOrder && businessId && (
-        <CargusAwbModal
-          open={!!cargusModalOrder}
-          onClose={() => setCargusModalOrder(null)}
-          order={cargusModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setCargusModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {dpdModalOrder && businessId && (
-        <DpdAwbModal
-          open={!!dpdModalOrder}
-          onClose={() => setDpdModalOrder(null)}
-          order={dpdModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setDpdModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {glsModalOrder && businessId && (
-        <GlsAwbModal
-          open={!!glsModalOrder}
-          onClose={() => setGlsModalOrder(null)}
-          order={glsModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setGlsModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {pallexModalOrder && businessId && (
-        <PallexAwbModal
-          zile={pallexZile}
-          open={!!pallexModalOrder}
-          onClose={() => setPallexModalOrder(null)}
-          order={pallexModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setPallexModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {ecoletModalOrder && businessId && (
-        <EcoletAwbModal
-          open={!!ecoletModalOrder}
-          onClose={() => setEcoletModalOrder(null)}
-          order={ecoletModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setEcoletModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {fanCourierModalOrder && businessId && (
-        <FanCourierAwbModal
-          open={!!fanCourierModalOrder}
-          onClose={() => setFanCourierModalOrder(null)}
-          order={fanCourierModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setFanCourierModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {fanPickupOpen && businessId && (
-        <FanCourierPickupModal
-          open={fanPickupOpen}
-          onClose={() => setFanPickupOpen(false)}
-          businessId={businessId}
-          lastPickupDate={fanPickup?.lastDate}
-          lastPickupId={fanPickup?.lastId}
-          onChanged={() => router.refresh()}
-        />
-      )}
-      {dpdPickupOpen && businessId && (
-        <DpdPickupModal
-          open={dpdPickupOpen}
-          onClose={() => setDpdPickupOpen(false)}
-          businessId={businessId}
-        />
-      )}
-      {cargusPickupOpen && businessId && (
-        <CargusPickupModal
-          open={cargusPickupOpen}
-          onClose={() => setCargusPickupOpen(false)}
-          businessId={businessId}
-        />
-      )}
-      {coleteModalOrder && businessId && (
-        <ColeteAwbModal
-          open={!!coleteModalOrder}
-          onClose={() => setColeteModalOrder(null)}
-          order={coleteModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setColeteModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {samedayModalOrder && businessId && (
-        <SamedayAwbModal
-          open={!!samedayModalOrder}
-          onClose={() => setSamedayModalOrder(null)}
-          order={samedayModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setSamedayModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {/*
-        ⚠ Fereastra Curiera RAMANE DESCHISA dupa emitere, cu butonul de eticheta (tine AWB-ul
-        in starea ei), ca pe pagina comenzii. Deci `onSuccess` doar reimprospateaza lista.
-      */}
-      {curieraModalOrder && businessId && (
-        <CurieraAwbModal
-          open={!!curieraModalOrder}
-          onClose={() => setCurieraModalOrder(null)}
-          order={curieraModalOrder}
-          businessId={businessId}
-          optiuni={curieraOptiuni}
-          onSuccess={() => router.refresh()}
-        />
-      )}
-      {/* La fel ca Curiera: fereastra ramane deschisa dupa emitere, cu eticheta. */}
-      {epacketModalOrder && businessId && (
-        <EpacketAwbModal
-          open={!!epacketModalOrder}
-          onClose={() => setEpacketModalOrder(null)}
-          order={epacketModalOrder}
-          businessId={businessId}
-          optiuni={epacketOptiuni}
-          onSuccess={() => router.refresh()}
-        />
-      )}
-      {postaModalOrder && businessId && (
-        <PostaAwbModal zilePrezentare={postaZilePrezentare}
-          open={!!postaModalOrder}
-          onClose={() => setPostaModalOrder(null)}
-          order={postaModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setPostaModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {packetaModalOrder && businessId && (
-        <PacketaAwbModal
-          open={!!packetaModalOrder}
-          onClose={() => setPacketaModalOrder(null)}
-          order={packetaModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setPacketaModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {smartshipModalOrder && businessId && (
-        <SmartshipAwbModal
-          open={!!smartshipModalOrder}
-          onClose={() => setSmartshipModalOrder(null)}
-          order={smartshipModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setSmartshipModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {shipoModalOrder && businessId && (
-        <ShipoAwbModal
-          open={!!shipoModalOrder}
-          onClose={() => setShipoModalOrder(null)}
-          order={shipoModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setShipoModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {fedexModalOrder && businessId && (
-        <FedexAwbModal
-          open={!!fedexModalOrder}
-          onClose={() => setFedexModalOrder(null)}
-          order={fedexModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setFedexModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {upsModalOrder && businessId && (
-        <UpsAwbModal
-          open={!!upsModalOrder}
-          onClose={() => setUpsModalOrder(null)}
-          order={upsModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setUpsModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {dhlModalOrder && businessId && (
-        <DhlAwbModal
-          open={!!dhlModalOrder}
-          onClose={() => setDhlModalOrder(null)}
-          order={dhlModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setDhlModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {innoshipModalOrder && businessId && (
-        <InnoshipAwbModal
-          open={!!innoshipModalOrder}
-          onClose={() => setInnoshipModalOrder(null)}
-          order={innoshipModalOrder}
-          businessId={businessId}
-          onSuccess={() => { setInnoshipModalOrder(null); router.refresh(); }}
-        />
-      )}
-      {asezareNoua && filtre ? (
-        <FurnizorActiuniComenzi value={actiuni}>
-          <FurnizorLotComenzi value={lotSiSelectie}>
-            <ListaComenzi
-              filtre={filtre}
-              telefon={telefon}
-              comenzi={comenziLista}
-              totalFiltru={totalCount}
-              culoare={culoareLista}
-              numarari={statusCounts}
-              total={allCount}
-              surse={surseLista}
-            />
-          </FurnizorLotComenzi>
-        </FurnizorActiuniComenzi>
-      ) : (
+  /*
+   * Tabelul de dinainte, neschimbat. E si asezarea „Tabelul de dinainte", si REZERVA asezarilor
+   * noi: daca una dintre ele cade la desenare, `PlasaAsezarii` il arata pe el in locul unei pagini
+   * de eroare. De aceea sta intr-o constanta, nu intr-o ramura a desenarii.
+   */
+  const tabelulDeDinainte = (
         <>
       {/* Din tabelul de dinainte se ajunge inapoi la asezarile noi printr-o apasare. */}
       {filtre && (
@@ -2944,7 +2713,256 @@ export function OrdersClient({ orders, conturi = {}, totalCount, statusCounts, p
         )}
       </div>
         </>
+  );
+
+  /** O asezare noua a cazut: lista trece pe tabelul de dinainte, si acum, si la urmatoarele intrari. */
+  const laCadereaAsezarii = () => {
+    toast.error(
+      "Așezarea nouă nu s-a putut afișa pe comenzile de acum, așa că am trecut lista pe tabelul de dinainte. "
+      + "Am primit eroarea și o reparăm; până atunci poți lucra de aici.",
+      { duration: 15000 },
+    );
+    manere.alegeAsezarea("clasic");
+  };
+
+  return (
+    <>
+      {lotWootDeschis && businessId && (
+        <WootBulkModal
+          open={lotWootDeschis}
+          onClose={() => setLotWootDeschis(false)}
+          businessId={businessId}
+          /*
+            ⚠ Selectia se citeste LA DESCHIDERE si ramane fixa cat sta fereastra:
+            altfel o schimbare in tabel ar muta lotul sub ochii omului, intre ce a
+            vazut in lista celor sarite si ce apasa pe buton.
+          */
+          orderIds={[...selected]}
+          onDone={() => router.refresh()}
+        />
       )}
+      {wootModalOrder && businessId && (
+        <WootAwbModal
+          open={!!wootModalOrder}
+          onClose={() => setWootModalOrder(null)}
+          order={wootModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setWootModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {cargusModalOrder && businessId && (
+        <CargusAwbModal
+          open={!!cargusModalOrder}
+          onClose={() => setCargusModalOrder(null)}
+          order={cargusModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setCargusModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {dpdModalOrder && businessId && (
+        <DpdAwbModal
+          open={!!dpdModalOrder}
+          onClose={() => setDpdModalOrder(null)}
+          order={dpdModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setDpdModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {glsModalOrder && businessId && (
+        <GlsAwbModal
+          open={!!glsModalOrder}
+          onClose={() => setGlsModalOrder(null)}
+          order={glsModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setGlsModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {pallexModalOrder && businessId && (
+        <PallexAwbModal
+          zile={pallexZile}
+          open={!!pallexModalOrder}
+          onClose={() => setPallexModalOrder(null)}
+          order={pallexModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPallexModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {ecoletModalOrder && businessId && (
+        <EcoletAwbModal
+          open={!!ecoletModalOrder}
+          onClose={() => setEcoletModalOrder(null)}
+          order={ecoletModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setEcoletModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {fanCourierModalOrder && businessId && (
+        <FanCourierAwbModal
+          open={!!fanCourierModalOrder}
+          onClose={() => setFanCourierModalOrder(null)}
+          order={fanCourierModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setFanCourierModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {fanPickupOpen && businessId && (
+        <FanCourierPickupModal
+          open={fanPickupOpen}
+          onClose={() => setFanPickupOpen(false)}
+          businessId={businessId}
+          lastPickupDate={fanPickup?.lastDate}
+          lastPickupId={fanPickup?.lastId}
+          onChanged={() => router.refresh()}
+        />
+      )}
+      {dpdPickupOpen && businessId && (
+        <DpdPickupModal
+          open={dpdPickupOpen}
+          onClose={() => setDpdPickupOpen(false)}
+          businessId={businessId}
+        />
+      )}
+      {cargusPickupOpen && businessId && (
+        <CargusPickupModal
+          open={cargusPickupOpen}
+          onClose={() => setCargusPickupOpen(false)}
+          businessId={businessId}
+        />
+      )}
+      {coleteModalOrder && businessId && (
+        <ColeteAwbModal
+          open={!!coleteModalOrder}
+          onClose={() => setColeteModalOrder(null)}
+          order={coleteModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setColeteModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {samedayModalOrder && businessId && (
+        <SamedayAwbModal
+          open={!!samedayModalOrder}
+          onClose={() => setSamedayModalOrder(null)}
+          order={samedayModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setSamedayModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {/*
+        ⚠ Fereastra Curiera RAMANE DESCHISA dupa emitere, cu butonul de eticheta (tine AWB-ul
+        in starea ei), ca pe pagina comenzii. Deci `onSuccess` doar reimprospateaza lista.
+      */}
+      {curieraModalOrder && businessId && (
+        <CurieraAwbModal
+          open={!!curieraModalOrder}
+          onClose={() => setCurieraModalOrder(null)}
+          order={curieraModalOrder}
+          businessId={businessId}
+          optiuni={curieraOptiuni}
+          onSuccess={() => router.refresh()}
+        />
+      )}
+      {/* La fel ca Curiera: fereastra ramane deschisa dupa emitere, cu eticheta. */}
+      {epacketModalOrder && businessId && (
+        <EpacketAwbModal
+          open={!!epacketModalOrder}
+          onClose={() => setEpacketModalOrder(null)}
+          order={epacketModalOrder}
+          businessId={businessId}
+          optiuni={epacketOptiuni}
+          onSuccess={() => router.refresh()}
+        />
+      )}
+      {postaModalOrder && businessId && (
+        <PostaAwbModal zilePrezentare={postaZilePrezentare}
+          open={!!postaModalOrder}
+          onClose={() => setPostaModalOrder(null)}
+          order={postaModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPostaModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {packetaModalOrder && businessId && (
+        <PacketaAwbModal
+          open={!!packetaModalOrder}
+          onClose={() => setPacketaModalOrder(null)}
+          order={packetaModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setPacketaModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {smartshipModalOrder && businessId && (
+        <SmartshipAwbModal
+          open={!!smartshipModalOrder}
+          onClose={() => setSmartshipModalOrder(null)}
+          order={smartshipModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setSmartshipModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {shipoModalOrder && businessId && (
+        <ShipoAwbModal
+          open={!!shipoModalOrder}
+          onClose={() => setShipoModalOrder(null)}
+          order={shipoModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setShipoModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {fedexModalOrder && businessId && (
+        <FedexAwbModal
+          open={!!fedexModalOrder}
+          onClose={() => setFedexModalOrder(null)}
+          order={fedexModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setFedexModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {upsModalOrder && businessId && (
+        <UpsAwbModal
+          open={!!upsModalOrder}
+          onClose={() => setUpsModalOrder(null)}
+          order={upsModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setUpsModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {dhlModalOrder && businessId && (
+        <DhlAwbModal
+          open={!!dhlModalOrder}
+          onClose={() => setDhlModalOrder(null)}
+          order={dhlModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setDhlModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {innoshipModalOrder && businessId && (
+        <InnoshipAwbModal
+          open={!!innoshipModalOrder}
+          onClose={() => setInnoshipModalOrder(null)}
+          order={innoshipModalOrder}
+          businessId={businessId}
+          onSuccess={() => { setInnoshipModalOrder(null); router.refresh(); }}
+        />
+      )}
+      {asezareNoua && filtre ? (
+        <PlasaAsezarii rezerva={tabelulDeDinainte} laCadere={laCadereaAsezarii}>
+          <FurnizorActiuniComenzi value={actiuni}>
+            <FurnizorLotComenzi value={lotSiSelectie}>
+              <ListaComenzi
+                filtre={filtre}
+                telefon={telefon}
+                randuri={comenzi}
+                laForma={laForma}
+                totalFiltru={totalCount}
+                culoare={culoare}
+                numarari={statusCounts}
+                total={allCount}
+                surse={surseLista}
+              />
+            </FurnizorLotComenzi>
+          </FurnizorActiuniComenzi>
+        </PlasaAsezarii>
+      ) : tabelulDeDinainte}
     </>
   );
 }

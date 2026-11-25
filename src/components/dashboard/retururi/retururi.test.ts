@@ -233,3 +233,11 @@ test("pagina adevarata nu mai poarta nimic de prototip", () => {
     assert.equal(/prototip|variante-/i.test(sursa), false, nume);
   }
 });
+
+test("⚠ o cerere cu linii de alta forma decat cea asteptata nu darama lista", () => {
+  /* `items` e `jsonb`: o linie care nu e obiect se sare. */
+  const c = cerereDinRand({ id: "r9", items: [null, "text", 3, { name: "Vază", quantity: 1, price: 12.5 }], created_at: "2026-11-24T09:15:00Z" }, {}, {});
+  assert.deepEqual(c.produse.map((p) => p.nume), ["Vază"]);
+  assert.equal(c.valoare, 12.5);
+  assert.deepEqual(cerereDinRand({ id: "r10", items: "nu e o lista", created_at: null }, {}, {}).produse, []);
+});

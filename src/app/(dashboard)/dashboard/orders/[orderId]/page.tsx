@@ -9,6 +9,9 @@ import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
 import { adresaListeiDeComenzi, firstParam } from "@/lib/orders/pagination";
 import { areEticheta } from "@/lib/pepita/eticheta";
 import { miniaturileProduselor } from "@/lib/orders/miniaturi-produse";
+import { legaturiDinSluguri, sluguriProduselor } from "@/lib/orders/legaturi-produse";
+import { storeBaseUrl } from "@/lib/seo";
+import { permalinkuriDin } from "@/lib/storefront/permalinkuri";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
@@ -63,16 +66,23 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
 
   if (!order) notFound();
 
+  /*
+   * Slugurile produselor din comanda, pentru legaturile din „Produse comandate”. Pornite inaintea
+   * celorlalte citiri si asteptate dupa ele: merg in paralel, fara sa schimbe lista de mai jos.
+   * ⚠ Nu cade pagina: la o citire picata harta iese goala si numele raman text.
+   */
+  const sluguriInCurs = sluguriProduselor(supabase, order.business_id, order.items);
+
   const [{ data: biz }, { data: settings }, miniaturi] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id")
+      .select("id, slug, custom_domain")
       .eq("id", order.business_id)
       .eq("user_id", user.id)
       .single(),
     supabase
       .from("store_settings")
-      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, factureaza_config, easybill_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config")
+      .select("smartbill_config, woot_config, colete_config, oblio_config, fgo_config, facturis_config, factureaza_config, easybill_config, cargus_config, dpd_config, fan_courier_config, sameday_config, gls_config, pallex_config, ecolet_config, posta_config, curiera_config, epacket_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, smso_config, vat_enabled, prices_include_vat, checkout:page_content->checkout_config, permalinks:page_content->permalinks")
       .eq("business_id", order.business_id)
       .single(),
     /* Pozele din „Produse comandate”, din catalog: liniile comenzii nu le poarta. ⚠ Nu cade pagina. */
@@ -80,6 +90,18 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
   ]);
 
   if (!biz) notFound();
+
+  /*
+   * Pagina din magazin a fiecarui produs din comanda: radacina publica a magazinului (domeniul
+   * propriu, daca are) + prefixul lui de produse (`permalinkuri`) + slugul. Aceeasi compunere ca
+   * la „Vezi in magazin” din formularul de produs.
+   */
+  const legaturiProduse = biz.slug
+    ? legaturiDinSluguri(
+      await sluguriInCurs,
+      `${storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain })}/${permalinkuriDin({ permalinks: (settings as { permalinks?: unknown } | null)?.permalinks }).produs}`,
+    )
+    : {};
 
   /* Panoul SAGA (`null` = SAGA nu e conectat). Proprietarul e dovedit chiar mai sus. ⚠ Nu cade
      pagina: o citire picata a SAGA lasa comanda fara panou, nu fara pagina. */
@@ -293,6 +315,7 @@ export default async function OrderDetailPage({ params, searchParams }: Props) {
       order={order}
       businessId={biz.id}
       miniaturi={miniaturi}
+      legaturiProduse={legaturiProduse}
       expediere={expediereComenzii}
       areEtichetaPepita={areEtichetaPepita}
       stareEtichetaPepita={stareEtichetaPepita}

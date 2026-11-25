@@ -320,7 +320,7 @@ test("⚠ ecranul ia regula din ACELASI loc, nu o scrie a doua oara", () => {
   assert.match(ui, /import \{ deCeNuSeStergeComanda \} from "@\/lib\/orders\/stergerea-comenzii";/);
   assert.match(faraComentarii(ui), /const refuzStergere = deCeNuSeStergeComanda\(\{/);
   /* ⚠ Si cartea rosie chiar sta sub ea: un buton care da eroare abia dupa apasare e o cursa. */
-  const iButon = ui.indexOf("Sterge definitiv");
+  const iButon = ui.indexOf("Șterge definitiv");
   assert.ok(iButon > 0, "butonul exista");
   assert.match(ui.slice(Math.max(0, iButon - 700), iButon), /!refuzStergere/);
 });

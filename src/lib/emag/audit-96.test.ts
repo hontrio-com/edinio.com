@@ -138,7 +138,7 @@ test("cartea de stergere nu se arata la o comanda tinuta de ei", () => {
    * `indexOf` gaseste altceva decat caut.
    */
   const ui = viu("src/components/dashboard/OrderDetailClient.tsx");
-  const iButon = ui.indexOf("Sterge definitiv");
+  const iButon = ui.indexOf("Șterge definitiv");
   assert.ok(iButon > 0, "butonul exista");
   const inainte = ui.slice(Math.max(0, iButon - 700), iButon);
   assert.match(inainte, /\{!tinutaDeEi &&/, "cartea de stergere sta sub paza de marketplace");

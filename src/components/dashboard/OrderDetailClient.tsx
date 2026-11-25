@@ -6,10 +6,9 @@ import { useRouter } from "next/navigation";
 import { numeleFisierului, sePoateRandaCaImagine } from "@/lib/customization/adresa";
 import { toast } from "sonner";
 import {
-  ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
-  FileText, Receipt, Loader2, CheckCircle, Download, Mail, MessageSquare,
-  RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
-  ExternalLink, Pencil, Compass, Building2, RefreshCw,
+  ArrowLeft, Phone, Package, FileText, Loader2, Download, Mail, MessageSquare,
+  RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2,
+  ExternalLink, Pencil, Check, ChevronDown, Info, X,
 } from "lucide-react";
 import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace, procesataInEasySales, MESAJ_STAREA_IN_EASYSALES } from "@/lib/orders/origin";
 import { EasySalesComandaPanel } from "@/components/dashboard/easysales/EasySalesComandaPanel";
@@ -18,12 +17,12 @@ import { PAYMENT_METHOD_DEFAULT_LABELS, type PaymentMethodType } from "@/lib/pay
 import { awburiDinRand, deCeNuSePoateAwbPropriu, numarDeUrmarire } from "@/lib/orders/awb-propriu";
 import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { readBillingCompany } from "@/lib/billing/company";
-import { formatDate, formatPrice } from "@/lib/utils/format";
-import { deriveOrigin } from "@/lib/orders/origin";
+import { formatDate, formatPrice, pluralRo, unitarSeInchide } from "@/lib/utils/format";
+import { deriveOrigin, MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
 import { pozaLiniei } from "@/lib/orders/miniaturi-produse";
 import { MiniaturaProdus } from "@/components/dashboard/MiniaturaProdus";
-import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
-import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
+import { ORDER_STATUS, type OrderStatus } from "@/lib/orders/status";
+import type { TonEticheta } from "@/components/ui/eticheta-stare";
 import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
 import {
   citesteDefalcarea, suprafataDeAratat, caM2, type DefalcareCitita,
@@ -77,13 +76,17 @@ import { OrderEditModal } from "@/components/dashboard/OrderEditModal";
 import TrendyolFulfillmentPanel from "@/components/dashboard/TrendyolFulfillmentPanel";
 import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
 import { ReturDePrimit } from "@/components/dashboard/ReturDePrimit";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { etichetaRambursWoot } from "@/lib/shipping/ramburs-woot";
 import { useCampuriCheckout } from "@/components/dashboard/DetaliiCheckoutAwb";
 import { detaliileDeLaCheckout } from "@/lib/cont/detalii-checkout";
 import type { Database } from "@/types/database.types";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils/cn";
+import { ATINGERE, ButonSigla, INEL, PunctStare } from "@/components/dashboard/atomi-panou";
+import { siglaMica, type Sigla } from "@/lib/integrari/sigle";
+import { legaturaLiniei } from "@/lib/orders/legaturi-produse";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -127,67 +130,93 @@ interface ShippingAddress {
   se face intr-una si se uita in cealalta, iar aceeasi comanda ajunge sa se
   numeasca altfel in lista si altfel cand o deschizi.
 
-  Culorile pline raman doar ale butoanelor de mai jos, unde ele arata ce ai ALES,
-  nu ce fel de stare e. Eticheta de langa titlu foloseste `EtichetaStare`.
+  Pagina foloseste `nume`, forma cu diacritice si acordata cu „comanda" („Confirmată"):
+  starea se citeste ca punct si cuvant, nu ca pastila colorata.
 */
-const CULOARE_BUTON: Record<OrderStatus, string> = {
-  pending:    "bg-warning/10 text-warning border-warning/20",
-  confirmed:  "bg-info/10 text-info border-info/20",
-  processing: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-  shipped:    "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
-  delivered:  "bg-success/10 text-success border-success/20",
-  cancelled:  "bg-destructive/10 text-destructive border-destructive/20",
-  refunded:   "bg-muted text-muted-foreground border-border",
-};
-
 const STATUS_OPTIONS = (Object.keys(ORDER_STATUS) as OrderStatus[]).map((value) => ({
   value,
-  label: ORDER_STATUS[value].label,
+  label: ORDER_STATUS[value].nume,
   ton: ORDER_STATUS[value].ton,
-  cls: CULOARE_BUTON[value],
 }));
 
-const PAYMENT_OPTIONS: { value: string; label: string; ton: TonEticheta; cls: string }[] = [
-  { value: "unpaid",   label: "Neplatit",  ton: "rau",    cls: "bg-destructive/10 text-destructive border-destructive/20" },
-  { value: "paid",     label: "Platit",    ton: "bun",    cls: "bg-success/10 text-success border-success/20" },
-  { value: "refunded", label: "Rambursat", ton: "neutru", cls: "bg-muted text-muted-foreground border-border" },
+const PAYMENT_OPTIONS: { value: string; label: string; ton: TonEticheta }[] = [
+  { value: "unpaid",   label: "Neplătită",  ton: "rau" },
+  { value: "paid",     label: "Plătită",    ton: "bun" },
+  { value: "refunded", label: "Rambursată", ton: "neutru" },
 ];
 
-// Visible milestones for the fulfillment stepper. "processing" folds into "Confirmata".
-const STEPPER = [
-  { keys: ["pending"], label: "Primita" },
-  { keys: ["confirmed", "processing"], label: "Confirmata" },
-  { keys: ["shipped"], label: "Expediata" },
-  { keys: ["delivered"], label: "Livrata" },
-];
+/* ── Clasele paginii: suprafete albe cu contur fin, fara fonduri colorate ─── */
 
-function StatusStepper({ status }: { status: string }) {
+const SECTIUNE = "rounded-xl bg-surface ring-1 ring-black/10";
+const TITLU = "text-sm font-semibold text-foreground";
+const ETICHETA = "text-xs font-medium text-muted-foreground";
+/* Sub `lg` butoanele au 40 px inaltime, cat cere degetul. */
+const BUTON = "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10";
+const BUTON_CONTUR = `${BUTON} bg-surface text-foreground ring-1 ring-black/10 hover:ring-black/25 ${INEL}`;
+const BUTON_PLIN = `${BUTON} bg-foreground text-background hover:bg-foreground/85 ${INEL}`;
+const BUTON_PERICOL = `${BUTON} bg-surface text-destructive ring-1 ring-destructive/30 hover:ring-destructive/60 ${INEL}`;
+const BUTON_PERICOL_PLIN = `${BUTON} bg-destructive text-white hover:bg-destructive/90 ${INEL}`;
+const BUTON_MIC = `inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-surface px-2.5 text-xs font-medium text-foreground ring-1 ring-black/10 transition hover:ring-black/25 disabled:opacity-50 max-lg:h-10 ${INEL}`;
+const LEGATURA = "rounded-sm text-foreground underline-offset-2 hover:underline";
+/* O legatura de contact: sub `lg` e inalta cat cere degetul, nu cat randul ei de text. */
+const LEGATURA_CONTACT = "flex w-fit max-w-full items-center gap-1.5 rounded-sm hover:text-foreground max-lg:min-h-10";
+/* O atentionare: cutie alba cu contur, iar culoarea o poarta doar pictograma. */
+const NOTA = "flex items-start gap-2.5 rounded-lg bg-surface p-3 text-xs leading-relaxed text-foreground ring-1 ring-black/10";
+const NOTA_PERICOL = "flex flex-wrap items-center gap-3 rounded-lg bg-surface p-3 ring-1 ring-destructive/30";
+
+/**
+ * Pasii comenzii, legati printr-o linie: confirmata, factura, expediata, livrata. Un cerc plin
+ * cu bifa pentru ce s-a facut, unul conturat pentru pasul care urmeaza, restul stinse.
+ *
+ * „Factura" apare doar la magazinele cu o casa de facturare conectata: altfel pasul n-ar avea
+ * cum sa se implineasca vreodata.
+ */
+function PasiComanda({ status, cuFactura, facturaEmisa, areAwb, className }: {
+  status: string;
+  cuFactura: boolean;
+  facturaEmisa: boolean;
+  areAwb: boolean;
+  className?: string;
+}) {
   if (status === "cancelled" || status === "refunded") {
     return (
-      <div className="flex items-center gap-2 text-sm">
-        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-        <span className="font-medium text-destructive">
-          {status === "cancelled" ? "Comanda anulata" : "Comanda rambursata"}
-        </span>
-      </div>
+      <p className={cn("flex items-center gap-2 text-[13px] font-medium text-muted-foreground", className)}>
+        <XCircle className="h-4 w-4 flex-shrink-0" />
+        {status === "cancelled" ? "Comandă anulată" : "Comandă rambursată"}
+      </p>
     );
   }
-  const current = STEPPER.findIndex(s => s.keys.includes(status));
+  const pasi = [
+    { nume: "Confirmată", gata: status !== "pending" },
+    ...(cuFactura ? [{ nume: "Factură", gata: facturaEmisa }] : []),
+    { nume: "Expediată", gata: areAwb || status === "shipped" || status === "delivered" },
+    { nume: "Livrată", gata: status === "delivered" },
+  ];
+  const urmatorul = pasi.findIndex((p) => !p.gata);
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      {STEPPER.map((s, i) => {
-        const done = i <= current;
-        return (
-          <div key={s.label} className="flex items-center gap-1.5">
-            <span className={`h-2 w-2 rounded-full flex-shrink-0 ${done ? "bg-primary" : "bg-border"}`} />
-            <span className={`text-[11px] font-medium ${done ? "text-foreground" : "text-muted-foreground"}`}>{s.label}</span>
-            {i < STEPPER.length - 1 && (
-              <span className={`h-px w-4 sm:w-7 ${i < current ? "bg-primary" : "bg-border"}`} />
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <ol className={cn("flex items-start", className)}>
+      {pasi.map((p, i) => (
+        <li key={p.nume} className="relative flex min-w-0 flex-1 flex-col items-center text-center">
+          {i > 0 && (
+            <span aria-hidden="true" className={cn("absolute right-1/2 top-[9px] h-px w-full", pasi[i - 1].gata && p.gata ? "bg-foreground" : "bg-border")} />
+          )}
+          <span className={cn(
+            "relative z-[1] grid h-[19px] w-[19px] place-items-center rounded-full",
+            p.gata ? "bg-foreground text-background"
+              : i === urmatorul ? "bg-surface ring-2 ring-foreground"
+                : "bg-surface ring-1 ring-border",
+          )}>
+            {p.gata && <Check className="h-3 w-3" strokeWidth={3} />}
+          </span>
+          <span className={cn(
+            "mt-1.5 max-w-full truncate px-1 text-xs",
+            p.gata ? "text-foreground" : i === urmatorul ? "font-medium text-foreground" : "text-muted-foreground",
+          )}>
+            {p.nume}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -257,9 +286,9 @@ function adresaFisierului(
 function DefalcareaPersonalizarii({ d, cantitate }: { d: DefalcareCitita; cantitate: number }) {
   const suprafata = suprafataDeAratat(d);
   return (
-    <div className="mt-2 pt-2 border-t border-purple-200 space-y-1">
-      <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">
-        Pretul personalizarii{cantitate > 1 ? " · pe bucata" : ""}
+    <div className="mt-2 space-y-1 border-t border-border/70 pt-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        Prețul personalizării{cantitate > 1 ? " · pe bucată" : ""}
       </p>
       {d.randuri.map((r, ri) => (
         <div key={ri} className="flex items-start justify-between gap-3 text-xs">
@@ -276,10 +305,23 @@ function DefalcareaPersonalizarii({ d, cantitate }: { d: DefalcareCitita; cantit
         clientul — de ce plateste mai mult decat masura pe care a dat-o.
       */}
       {suprafata && (
-        <p className="text-[11px] text-muted-foreground">
-          Masurat {caM2(suprafata.masurat)}, facturat {caM2(suprafata.facturat)} (minim sau rotunjire)
+        <p className="text-xs text-muted-foreground">
+          Măsurat {caM2(suprafata.masurat)}, facturat {caM2(suprafata.facturat)} (minim sau rotunjire)
         </p>
       )}
+    </div>
+  );
+}
+
+/** Un document emis: pictograma, numarul lui si ce fel de document e. */
+function DocText({ pictograma, numar, fel }: { pictograma: React.ReactNode; numar: string; fel: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      {pictograma}
+      <div className="min-w-0">
+        <p className="break-all font-mono text-sm font-medium text-foreground">{numar}</p>
+        <p className="text-xs text-muted-foreground">{fel}</p>
+      </div>
     </div>
   );
 }
@@ -289,31 +331,33 @@ function DocRow({
   docNumber,
   onDownload,
   downloading,
+  stornare = false,
   children,
 }: {
   label: string;
   docNumber: string;
   onDownload: () => void;
   downloading: boolean;
+  /** Documentul e o stornare: semnul ei e cel de anulare, nu bifa unei facturi emise. */
+  stornare?: boolean;
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 flex-wrap">
-      <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-mono font-bold text-foreground">{docNumber}</p>
+    <div className="space-y-2.5">
+      <DocText
+        pictograma={stornare
+          ? <XCircle className="h-4 w-4 flex-shrink-0 text-destructive" />
+          : <FileCheck className="h-4 w-4 flex-shrink-0 text-success" />}
+        numar={docNumber}
+        fel={label}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={onDownload} disabled={downloading} className={BUTON_MIC}>
+          {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          PDF
+        </button>
+        {children}
       </div>
-      <button
-        type="button"
-        onClick={onDownload}
-        disabled={downloading}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50"
-      >
-        {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-        PDF
-      </button>
-      {children}
     </div>
   );
 }
@@ -329,24 +373,19 @@ function ResendEmailForm({
 }) {
   const [email, setEmail] = useState(defaultEmail);
   return (
-    <div className="flex gap-2 items-center mt-2">
+    <div className="flex items-center gap-2">
       <Input
         type="email"
         value={email}
         onChange={e => setEmail(e.target.value)}
         placeholder="email@client.ro"
+        aria-label="Adresa la care se retrimite documentul"
         className="flex-1"
       />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => onSend(email)}
-        disabled={sending || !email.trim()}
-      >
-        {sending ? <Loader2 className="animate-spin" /> : <Mail />}
+      <button type="button" onClick={() => onSend(email)} disabled={sending || !email.trim()} className={BUTON_CONTUR}>
+        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
         Trimite
-      </Button>
+      </button>
     </div>
   );
 }
@@ -365,28 +404,11 @@ function rambursulWoot(order: Order): string | null {
   return Number.isFinite(suma) && suma > 0 ? `${eticheta} · ${formatPrice(suma)}` : eticheta;
 }
 
-// A compact courier option (logo + name + AWB state) used in the "alt curier" list and fallback grid.
-function CourierButton({ logo, name, awb, onClick }: { logo: string; name: string; awb: string | null; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick}
-      className="flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-muted/40 transition-colors text-left w-full">
-      <img src={logo} alt={name} className="h-6 w-6 object-contain flex-shrink-0" />
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-foreground">{name}</p>
-        {awb
-          ? <p className="text-[11px] font-mono text-success truncate">AWB: {awb}</p>
-          : <p className="text-[11px] text-muted-foreground">Creeaza AWB</p>}
-      </div>
-    </button>
-  );
-}
-
-const CARD = "bg-surface border border-border rounded-xl";
-
 export function OrderDetailClient({
   order,
   businessId,
   miniaturi = {},
+  legaturiProduse = {},
   areEtichetaPepita = false,
   stareEtichetaPepita = null,
   expediere = null,
@@ -434,6 +456,12 @@ export function OrderDetailClient({
    * pictograma, ca paginile si probele care randeaza componenta sa nu trebuiasca sa stie de ea.
    */
   miniaturi?: Record<string, string>;
+  /**
+   * Pagina din magazin a fiecarui produs din comanda: id-ul produsului -> adresa publica
+   * (`legaturileProduselor`, pe server). Doar produsele care mai sunt in catalog si sunt active;
+   * celelalte linii isi arata numele ca text. Implicit goala.
+   */
+  legaturiProduse?: Record<string, string>;
   /**
    * Pepita a trimis eticheta de colet pentru comanda asta?
    *
@@ -502,8 +530,25 @@ export function OrderDetailClient({
   adresaListei?: string;
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState(order.status as string);
-  const [paymentStatus, setPaymentStatus] = useState(order.payment_status as string);
+  /*
+   * ⚠ STAREA ARATATA SE DERIVA DIN COMANDA, nu se tine intr-un `useState` pornit din ea.
+   *
+   * Tinuta in stare locala, ramanea cea de la incarcarea paginii: dupa un AWB emis sau o plata
+   * confirmata, `router.refresh()` aducea comanda noua, iar antetul arata mai departe starea veche
+   * (`router.refresh()` nu demonteaza o componenta de client).
+   *
+   * Ce tine starea locala e doar ALEGEREA omului, cat asteapta confirmarea. Ea poarta si starea
+   * peste care a fost facuta: in clipa in care comanda de pe server se schimba (salvarea a reusit,
+   * sau altcineva a mutat-o), alegerea nu mai e despre comanda asta si nu se mai ia in seama.
+   */
+  const [alegere, setAlegere] = useState<{ status: string; plata: string; pesteStatus: string; pestePlata: string } | null>(null);
+  const alegereVie = alegere && alegere.pesteStatus === order.status && alegere.pestePlata === order.payment_status ? alegere : null;
+  const status = alegereVie?.status ?? (order.status as string);
+  const paymentStatus = alegereVie?.plata ?? (order.payment_status as string);
+  /** Compunerea unui mesaj catre client sta stransa pana e ceruta. */
+  const [mesajDeschis, setMesajDeschis] = useState(false);
+  /** Toti ceilalti curieri la vedere, nu doar primii. */
+  const [totiCurierii, setTotiCurierii] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const items = (order.items as unknown as OrderItem[]) ?? [];
@@ -656,16 +701,15 @@ export function OrderDetailClient({
   const [fgoAction, setFgoAction] = useState<"invoice" | "storno" | null>(null);
 
   // ── Invoicing providers (unified card) ──
+  /* Siglele intregi ale caselor, in varianta mica unde exista; cele desenate in alb se inverseaza. */
   const invoicingProviders = ([
-    smartbillEnabled && { id: "smartbill" as const, name: "SmartBill", logo: "/integrations/smartbill.webp" },
-    oblioEnabled && { id: "oblio" as const, name: "Oblio", logo: "/integrations/oblio.webp" },
+    smartbillEnabled && { id: "smartbill" as const, name: "SmartBill", logo: siglaMica("/integrations/smartbill.webp") },
+    oblioEnabled && { id: "oblio" as const, name: "Oblio", logo: siglaMica("/integrations/oblio.webp"), inversat: true },
     fgoEnabled && { id: "fgo" as const, name: "fGO", logo: "/integrations/fgo.svg" },
-    /* Semnul patrat: sigla lor intreaga e lata si ALBA, iar in casuta de 16 px n-ar fi citibila. */
-    facturisEnabled && { id: "facturis" as const, name: "Facturis", logo: "/integrations/facturis-mic.png" },
-    /* La fel, semne patrate decupate din siglele lor: pastila „.RO” si „e”-ul. */
-    factureazaEnabled && { id: "factureaza" as const, name: "Factureaza.ro", logo: "/integrations/factureaza-mic.png" },
-    easybillEnabled && { id: "easybill" as const, name: "easybill", logo: "/integrations/easybill-mic.png" },
-  ].filter(Boolean)) as { id: CasaDeFacturare; name: string; logo: string }[];
+    facturisEnabled && { id: "facturis" as const, name: "Facturis", logo: siglaMica("/integrations/facturis.png"), inversat: true },
+    factureazaEnabled && { id: "factureaza" as const, name: "Factureaza.ro", logo: "/integrations/factureaza.ro.webp" },
+    easybillEnabled && { id: "easybill" as const, name: "easybill", logo: siglaMica("/integrations/easybill.png") },
+  ].filter(Boolean)) as { id: CasaDeFacturare; name: string; logo: string; inversat?: boolean }[];
 
   const smartbillHasDoc = !!(invoiceNumber || estimateNumber || stornoNumber);
   const oblioHasDoc = !!(order.oblio_invoice_number || order.oblio_proforma_number || order.oblio_storno_number);
@@ -677,7 +721,6 @@ export function OrderDetailClient({
   const defaultProvider: CasaDeFacturare | undefined = smartbillHasDoc ? "smartbill" : oblioHasDoc ? "oblio" : fgoHasDoc ? "fgo"
     : facturisHasDoc ? "facturis" : factureazaHasDoc ? "factureaza" : easybillHasDoc ? "easybill" : invoicingProviders[0]?.id;
   const [activeProvider, setActiveProvider] = useState<CasaDeFacturare | undefined>(defaultProvider);
-  const activeProviderMeta = invoicingProviders.find(p => p.id === activeProvider) ?? invoicingProviders[0];
 
   // ── Couriers (Expediere card) ──
   /*
@@ -896,14 +939,37 @@ export function OrderDetailClient({
           + "inainte sa incerci din nou.",
           { duration: 12000 },
         );
+        setAlegere(null);
         router.refresh();
         return;
       }
-      if ("error" in result) { toast.error(result.error); } else {
+      if ("error" in result) { toast.error(result.error); setAlegere(null); } else {
         toast.success("Comanda actualizata.");
         router.refresh();
       }
     });
+  }
+
+  /*
+   * Starea si plata se schimba din meniul lor: alegerea deschide pe loc confirmarea (clientul e
+   * anuntat la schimbarea starii, deci nu pleaca nimic dintr-o singura apasare), iar renuntarea
+   * o uita si pagina arata din nou ce e salvat.
+   */
+  function alegeStarea(valoare: string) {
+    if (valoare === status) return;
+    setAlegere({ status: valoare, plata: paymentStatus, pesteStatus: order.status as string, pestePlata: order.payment_status as string });
+    setShowSaveConfirm(true);
+  }
+
+  function alegePlata(valoare: string) {
+    if (valoare === paymentStatus) return;
+    setAlegere({ status, plata: valoare, pesteStatus: order.status as string, pestePlata: order.payment_status as string });
+    setShowSaveConfirm(true);
+  }
+
+  function renuntaLaSchimbare() {
+    setShowSaveConfirm(false);
+    setAlegere(null);
   }
 
   function handleDelete() {
@@ -1366,12 +1432,50 @@ export function OrderDetailClient({
 
   // Mobile sticky action bar: single most relevant next action.
   const mobileAction = hasChanges
-    ? { label: isPending ? "Se salveaza..." : "Salveaza modificarile", onClick: () => setShowSaveConfirm(true), disabled: isPending }
+    ? { label: isPending ? "Se salvează..." : "Salvează modificările", onClick: () => setShowSaveConfirm(true), disabled: isPending }
     /* ⚠ Si bara de jos: era a doua usa catre acelasi buton, si pe telefon e chiar cea
        apasata. Vezi `refuzAwbPropriu`. */
     : (!isTrendyol && !shippedCourier && !refuzAwbPropriu && primaryCourier)
-      ? { label: `Creeaza AWB ${primaryCourier.name}`, onClick: primaryCourier.open, disabled: false }
+      ? { label: `Creează AWB ${primaryCourier.name}`, onClick: primaryCourier.open, disabled: false }
       : null;
+
+  /* Ce arata pasii din capul paginii: factura emisa (la oricare casa) si coletul plecat. */
+  const facturaEmisa = !!(invoiceNumber || order.oblio_invoice_number || ord["fgo_invoice_number"]
+    || order.facturis_invoice_key || order.factureaza_invoice_key || order.easybill_invoice_key);
+  const origine = deriveOrigin(order.order_source);
+  const bucati = items.reduce((s, it) => s + (Number(it.quantity) || 0), 0);
+  /** Sigla unui curier, in varianta mica acolo unde exista. */
+  const siglaCurier = (c: { id: string; name: string; logo: string }): Sigla => ({ cheie: c.id, nume: c.name, logo: siglaMica(c.logo) });
+  /* Ceilalti curieri: primii la vedere, restul la cerere. Un magazin are de obicei unul pana la trei. */
+  const ALTI_CURIERI_LA_VEDERE = 8;
+  const altiCurieriAratati = totiCurierii ? otherCouriers : otherCouriers.slice(0, ALTI_CURIERI_LA_VEDERE);
+
+  /* O rambursare prin procesator: aceeasi cutie pentru toate patru, cu vorbele fiecaruia. */
+  const cutieRambursare = (o: {
+    prin: string; deschisa: boolean; inCurs: boolean; deschide: () => void; renunta: () => void; confirma: () => void;
+  }) => (
+    o.deschisa ? (
+      <div className={NOTA_PERICOL}>
+        <AlertTriangle className="h-4 w-4 flex-shrink-0 text-destructive" />
+        <p className="min-w-[12rem] flex-1 text-xs text-foreground">
+          Se trimit {Number(order.total).toFixed(2)} lei înapoi cumpărătorului, prin {o.prin}.
+          Banii pleacă acum și nu pot fi rechemați.
+        </p>
+        <button type="button" onClick={o.confirma} disabled={o.inCurs} className={BUTON_PERICOL_PLIN}>
+          {o.inCurs ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Confirmă rambursarea
+        </button>
+        <button type="button" onClick={o.renunta} aria-label="Renunță la rambursare"
+          className={cn("grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground", INEL, ATINGERE)}>
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    ) : (
+      <button type="button" onClick={o.deschide} disabled={o.inCurs} className={BUTON_PERICOL}>
+        <RotateCcw className="h-4 w-4" />Rambursează banii prin {o.prin}
+      </button>
+    )
+  );
 
   // ── Provider bodies for the unified Facturare card ──
   function renderSmartbill() {
@@ -1390,22 +1494,25 @@ export function OrderDetailClient({
     const invoiceUrl = sbViewLink(ord["smartbill_invoice_url"]);
     const estimateUrl = sbViewLink(ord["smartbill_estimate_url"]);
     const sbLinkBtn = (href: string) => (
-      <a href={href} target="_blank" rel="noopener noreferrer"
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+      <a href={href} target="_blank" rel="noopener noreferrer" className={BUTON_MIC}>
         <ExternalLink className="h-3.5 w-3.5" />SmartBill
       </a>
     );
+    /*
+     * Proforma are rand doar cat exista una sau cat se mai poate emite (inca nu e factura). Cu
+     * factura emisa si fara proforma, randul ramanea un titlu gol deasupra facturii.
+     */
+    const cuProforma = hasEstimateSeries && (!!estimateNumber || !invoiceNumber);
     return (
       <div className="space-y-5">
-        {hasEstimateSeries && (
+        {cuProforma && (
           <div className="space-y-3">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proforma</p>
+            <p className={ETICHETA}>Proformă</p>
             {estimateNumber && estimateSeries ? (
               <>
-                <DocRow label="Proforma emisa" docNumber={`${estimateSeries}${estimateNumber}`}
+                <DocRow label="Proformă emisă" docNumber={`${estimateSeries}${estimateNumber}`}
                   onDownload={() => handleDownloadPdf("estimate")} downloading={downloadingPdf === "estimate"}>
-                  <button type="button" onClick={() => setShowResendEstimate(o => !o)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                  <button type="button" onClick={() => setShowResendEstimate(o => !o)} className={BUTON_MIC}>
                     <Mail className="h-3.5 w-3.5" />Retrimite
                   </button>
                   {estimateUrl && sbLinkBtn(estimateUrl)}
@@ -1414,35 +1521,32 @@ export function OrderDetailClient({
                   <ResendEmailForm defaultEmail={customerEmail} onSend={handleResendEstimate} sending={resendingEstimate} />
                 )}
                 {!invoiceNumber && (
-                  <button type="button" onClick={handleConvert} disabled={converting}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-primary/30 text-primary hover:bg-primary/5 transition-colors disabled:opacity-50">
+                  <button type="button" onClick={handleConvert} disabled={converting} className={BUTON_CONTUR}>
                     {converting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                    {converting ? "Se converteste..." : "Converteste in factura"}
+                    {converting ? "Se convertește..." : "Convertește în factură"}
                   </button>
                 )}
               </>
             ) : (
               !invoiceNumber && (
-                <button type="button" onClick={handleGenerateEstimate} disabled={generatingEstimate}
-                  className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+                <button type="button" onClick={handleGenerateEstimate} disabled={generatingEstimate} className={BUTON_CONTUR}>
                   {generatingEstimate ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                  {generatingEstimate ? "Se genereaza..." : "Genereaza proforma"}
+                  {generatingEstimate ? "Se emite..." : "Emite proforma"}
                 </button>
               )
             )}
           </div>
         )}
 
-        {hasEstimateSeries && <div className="border-t border-border" />}
+        {cuProforma && <div className="border-t border-border/70" />}
 
         <div className="space-y-3">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Factura</p>
+          {cuProforma && <p className={ETICHETA}>Factură</p>}
           {invoiceNumber && invoiceSeries ? (
             <>
-              <DocRow label="Factura emisa" docNumber={`${invoiceSeries}${invoiceNumber}`}
+              <DocRow label="Factură emisă" docNumber={`${invoiceSeries}${invoiceNumber}`}
                 onDownload={() => handleDownloadPdf("invoice")} downloading={downloadingPdf === "invoice"}>
-                <button type="button" onClick={() => setShowResendInvoice(o => !o)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                <button type="button" onClick={() => setShowResendInvoice(o => !o)} className={BUTON_MIC}>
                   <Mail className="h-3.5 w-3.5" />Retrimite
                 </button>
                 {invoiceUrl && sbLinkBtn(invoiceUrl)}
@@ -1455,43 +1559,39 @@ export function OrderDetailClient({
                 // in acel caz marcam factura originala ca stornata (fallback), fara
                 // un PDF de storno propriu — asa ca nu oferim un download inselator.
                 (stornoSeries === invoiceSeries && stornoNumber === invoiceNumber) ? (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                    <RotateCcw className="h-4 w-4 text-destructive flex-shrink-0" />
-                    <p className="text-xs text-destructive flex-1">
-                      Factura a fost stornata in SmartBill. Documentul de stornare este disponibil in contul tau SmartBill.
-                    </p>
+                  <div className={NOTA}>
+                    <RotateCcw className="mt-px h-4 w-4 flex-shrink-0 text-destructive" />
+                    <p>Factura a fost stornată în SmartBill. Documentul de stornare este disponibil în contul tău SmartBill.</p>
                   </div>
                 ) : (
-                  <DocRow label="Factura stornata" docNumber={`${stornoSeries}${stornoNumber}`}
+                  <DocRow stornare label="Stornare emisă" docNumber={`${stornoSeries}${stornoNumber}`}
                     onDownload={() => handleDownloadPdf("storno")} downloading={downloadingPdf === "storno"} />
                 )
               ) : canStorno ? (
                 showStornoConfirm ? (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
-                    <p className="text-xs text-destructive flex-1">Aceasta actiune storneaza factura in SmartBill. Nu poate fi anulata.</p>
-                    <Button type="button" size="sm" onClick={handleStorno} disabled={stornoing} className="bg-destructive text-white hover:bg-destructive/90">
-                      {stornoing ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                      Confirma storno
-                    </Button>
-                    <button type="button" onClick={() => setShowStornoConfirm(false)}
-                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
-                      <XCircle className="h-4 w-4" />
+                  <div className={NOTA_PERICOL}>
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 text-destructive" />
+                    <p className="min-w-[12rem] flex-1 text-xs text-foreground">Această acțiune stornează factura în SmartBill. Nu poate fi anulată.</p>
+                    <button type="button" onClick={handleStorno} disabled={stornoing} className={BUTON_PERICOL_PLIN}>
+                      {stornoing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                      Confirmă stornarea
+                    </button>
+                    <button type="button" onClick={() => setShowStornoConfirm(false)} aria-label="Renunță la stornare"
+                      className={cn("grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground", INEL, ATINGERE)}>
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setShowStornoConfirm(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors">
+                  <button type="button" onClick={() => setShowStornoConfirm(true)} className={BUTON_PERICOL}>
                     <RotateCcw className="h-4 w-4" />Emite storno
                   </button>
                 )
               ) : null}
             </>
           ) : (
-            <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice}
-              className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+            <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice} className={BUTON_CONTUR}>
               {generatingInvoice ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-              {generatingInvoice ? "Se genereaza..." : "Genereaza factura"}
+              {generatingInvoice ? "Se emite..." : "Emite factura"}
             </button>
           )}
         </div>
@@ -1503,60 +1603,46 @@ export function OrderDetailClient({
     // Oblio returneaza un link public semnat = singurul acces la PDF (nu exista
     // endpoint PDF autentificat), deci deschidem direct link-ul stocat.
     const oblioPdfBtn = (link: string | null | undefined) => link ? (
-      <a href={link} target="_blank" rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
+      <a href={link} target="_blank" rel="noopener noreferrer" className={BUTON_MIC}>
         <Download className="h-3.5 w-3.5" /> PDF
       </a>
     ) : null;
     return order.oblio_storno_number ? (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-          <p className="text-sm font-mono font-bold text-destructive">Storno {order.oblio_storno_series}{order.oblio_storno_number}</p>
-        </div>
+      <div className="space-y-3">
+        <DocText pictograma={<XCircle className="h-4 w-4 flex-shrink-0 text-destructive" />} numar={`${order.oblio_storno_series}${order.oblio_storno_number}`} fel="Factură stornată" />
         {oblioPdfBtn(order.oblio_storno_link)}
       </div>
     ) : order.oblio_invoice_number ? (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
-          <p className="text-sm font-mono font-bold text-foreground">Factura {order.oblio_invoice_series}{order.oblio_invoice_number}</p>
-        </div>
+      <div className="space-y-3">
+        <DocText pictograma={<FileCheck className="h-4 w-4 flex-shrink-0 text-success" />} numar={`${order.oblio_invoice_series}${order.oblio_invoice_number}`} fel="Factură emisă" />
         <div className="flex flex-wrap items-center gap-2">
           {oblioPdfBtn(order.oblio_invoice_link)}
-          <button type="button" onClick={() => handleOblioAction("storno")} disabled={oblioActionPending}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
+          <button type="button" onClick={() => handleOblioAction("storno")} disabled={oblioActionPending} className={BUTON_PERICOL}>
             {oblioActionPending && oblioAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
             Emite storno
           </button>
         </div>
       </div>
     ) : order.oblio_proforma_number ? (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-info flex-shrink-0" />
-          <p className="text-sm font-mono font-bold text-foreground">Proforma {order.oblio_proforma_series}{order.oblio_proforma_number}</p>
-        </div>
+      <div className="space-y-3">
+        <DocText pictograma={<FileText className="h-4 w-4 flex-shrink-0 text-info" />} numar={`${order.oblio_proforma_series}${order.oblio_proforma_number}`} fel="Proformă emisă" />
         <div className="flex flex-wrap items-center gap-2">
           {oblioPdfBtn(order.oblio_proforma_link)}
-          <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
-            className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+          <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending} className={BUTON_CONTUR}>
             {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-            Genereaza factura
+            Emite factura
           </button>
         </div>
       </div>
     ) : (
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending}
-          className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+        <button type="button" onClick={() => handleOblioAction("invoice")} disabled={oblioActionPending} className={BUTON_CONTUR}>
           {oblioActionPending && oblioAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-          Genereaza factura
+          Emite factura
         </button>
-        <button type="button" onClick={() => handleOblioAction("proforma")} disabled={oblioActionPending}
-          className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+        <button type="button" onClick={() => handleOblioAction("proforma")} disabled={oblioActionPending} className={BUTON_CONTUR}>
           {oblioActionPending && oblioAction === "proforma" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-          Genereaza proforma
+          Emite proforma
         </button>
       </div>
     );
@@ -1576,69 +1662,140 @@ export function OrderDetailClient({
     const linkFgo = String(ord["fgo_invoice_link"] ?? "");
     const eDeTest = linkFgo.toLowerCase().includes("testuat.fgo.ro");
     const semnDeTest = eDeTest ? (
-      <p className="flex items-start gap-1.5 text-[11px] font-semibold text-warning">
-        <AlertTriangle className="h-3.5 w-3.5 mt-px shrink-0" />
-        Emisa in modul de TESTARE: nu e document fiscal si nu se trimite la marketplace.
+      <p className="flex items-start gap-1.5 text-xs font-medium text-warning">
+        <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+        Emisă în modul de TESTARE: nu e document fiscal și nu se trimite la marketplace.
       </p>
     ) : null;
 
     return (ord["fgo_storno_number"]) ? (
-      <div className="flex items-center gap-2">
-        <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-        <p className="text-sm font-mono font-bold text-destructive">Storno {ord["fgo_storno_series"] as string}{ord["fgo_storno_number"] as string}</p>
-      </div>
+      <DocText pictograma={<XCircle className="h-4 w-4 flex-shrink-0 text-destructive" />} numar={`${ord["fgo_storno_series"] as string}${ord["fgo_storno_number"] as string}`} fel="Factură stornată" />
     ) : (ord["fgo_invoice_number"]) ? (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <FileCheck className={`h-4 w-4 flex-shrink-0 ${eDeTest ? "text-warning" : "text-success"}`} />
-          <p className="text-sm font-mono font-bold text-foreground">Factura {ord["fgo_invoice_series"] as string}{ord["fgo_invoice_number"] as string}</p>
-        </div>
+      <div className="space-y-3">
+        <DocText pictograma={<FileCheck className={`h-4 w-4 flex-shrink-0 ${eDeTest ? "text-warning" : "text-success"}`} />} numar={`${ord["fgo_invoice_series"] as string}${ord["fgo_invoice_number"] as string}`} fel="Factură emisă" />
         {semnDeTest}
-        {!!(ord["fgo_invoice_link"]) && (
-          <a href={ord["fgo_invoice_link"] as string} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
-            <Download className="h-3.5 w-3.5" /> PDF
-          </a>
-        )}
-        <button type="button" onClick={() => handleFgoAction("storno")} disabled={fgoActionPending}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-          {fgoActionPending && fgoAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          Emite storno
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {!!(ord["fgo_invoice_link"]) && (
+            <a href={ord["fgo_invoice_link"] as string} target="_blank" rel="noopener noreferrer" className={BUTON_MIC}>
+              <Download className="h-3.5 w-3.5" /> PDF
+            </a>
+          )}
+          <button type="button" onClick={() => handleFgoAction("storno")} disabled={fgoActionPending} className={BUTON_PERICOL}>
+            {fgoActionPending && fgoAction === "storno" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+            Emite storno
+          </button>
+        </div>
       </div>
     ) : (
-      <button type="button" onClick={() => handleFgoAction("invoice")} disabled={fgoActionPending}
-        className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+      <button type="button" onClick={() => handleFgoAction("invoice")} disabled={fgoActionPending} className={BUTON_CONTUR}>
         {fgoActionPending && fgoAction === "invoice" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
-        Genereaza factura
+        Emite factura
       </button>
     );
   }
 
   return (
-    <div className="p-4 sm:p-6 pb-24 lg:pb-6">
-      {/* ── Header ── */}
-      <div className="flex items-start gap-4 mb-5">
+    <div className="p-4 pb-24 text-sm sm:p-6 lg:pb-6">
+      {/* ── Antet: numarul, starea (de unde se si schimba), cand si de unde a venit ── */}
+      <header className="mb-5">
         <button type="button" onClick={() => router.push(adresaListei)}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5">
-          <ArrowLeft className="h-4 w-4" />Inapoi
+          className={cn("inline-flex items-center gap-1.5 rounded-sm text-[13px] text-muted-foreground transition-colors hover:text-foreground max-lg:min-h-10", INEL)}>
+          <ArrowLeft className="h-4 w-4" />Comenzi
         </button>
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-semibold text-foreground font-mono">{order.order_number}</h1>
-            <EtichetaStare ton={orderStatus(status).ton}>{currentStatus.label}</EtichetaStare>
-            <EtichetaStare ton={currentPayment.ton}>{currentPayment.label}</EtichetaStare>
-            <span className="text-sm text-muted-foreground">{formatDate(new Date(order.created_at))}</span>
+        <div className="mt-1 flex flex-wrap items-start justify-between gap-x-6 gap-y-3 lg:mt-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">{order.order_number}</h1>
+              {/*
+                Starea, cu punctul ei, e si locul din care se schimba. La o comanda tinuta de un
+                marketplace ramane la vedere, dar nu mai raspunde la apasare: starea e a lor.
+              */}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={tinutaDeEi}
+                  aria-label={`Starea comenzii: ${currentStatus.label}. Schimbă starea`}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-2 rounded-lg px-2 text-sm text-foreground transition max-lg:h-10",
+                    tinutaDeEi ? "cursor-default" : "hover:bg-muted",
+                    INEL,
+                  )}
+                >
+                  <PunctStare ton={currentStatus.ton} />
+                  {currentStatus.label}
+                  {!tinutaDeEi && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-52">
+                  <p className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">Schimbă starea în</p>
+                  {STATUS_OPTIONS.map(opt => (
+                    <DropdownMenuItem key={opt.value} onClick={() => alegeStarea(opt.value)}>
+                      <PunctStare ton={opt.ton} />
+                      <span className="flex-1">{opt.label}</span>
+                      {opt.value === status && <Check className="h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              {formatDate(new Date(order.created_at))}
+              <span aria-hidden="true"> · </span>{origine.label}
+              {origine.detail && <><span aria-hidden="true"> · </span>{origine.detail}</>}
+              {origine.device && <><span aria-hidden="true"> · </span>{origine.device}</>}
+            </p>
           </div>
-          <StatusStepper status={status} />
+          <button type="button" onClick={() => setEditModalOpen(true)} className={cn(BUTON_CONTUR, "max-sm:w-full")}>
+            <Pencil className="h-3.5 w-3.5" />Editează comanda
+          </button>
         </div>
-        <button type="button" onClick={() => setEditModalOpen(true)}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors flex-shrink-0">
-          <Pencil className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Editeaza comanda</span>
-          <span className="sm:hidden">Editeaza</span>
-        </button>
-      </div>
+
+        <PasiComanda
+          className="mt-5 max-w-xl"
+          status={status}
+          cuFactura={invoicingProviders.length > 0}
+          facturaEmisa={facturaEmisa}
+          areAwb={!!shippedCourier}
+        />
+      </header>
+
+      {/*
+        ⚠ LA O COMANDA DE MARKETPLACE STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
+
+        ⚠ SI TEXTUL ISI IA NUMELE DIN COMANDA (26.08.2026). Scria „eMAG” oricare ar fi
+        fost marketplace-ul, fiindca atunci eMAG era singurul din lista. Cand a intrat
+        si Trendyol, o comanda Trendyol si-ar fi trimis comerciantul in contul eMAG sa
+        caute o comanda care acolo nu exista.
+
+        Serverul refuza schimbarea (`marketplaceCareTineComanda`), dar un meniu care
+        arata apasabil si da eroare abia dupa apasare e o cursa. Aici se spune
+        dinainte, si se spune UNDE se face, nu doar ca nu se poate.
+      */}
+      {(tinutaDeEi || memento || inEasySales) && (
+        <div className="mb-5 space-y-2">
+          {tinutaDeEi && (
+            <p className={NOTA}>
+              <Info className="mt-px h-4 w-4 flex-shrink-0 text-info" />
+              <span>{cineTineComanda(cineTine!).titlu}{" "}{cineTineComanda(cineTine!).urmator}</span>
+            </p>
+          )}
+          {/*
+            ⚠ Memento, nu eroare. Starea ramane de schimbat de aici, fiindca la Pepita comanda chiar
+            se administreaza de aici. Ce se aminteste e ca aceeasi miscare trebuie facuta si
+            la ei, unde noi n-avem cum sa ajungem.
+          */}
+          {memento && (
+            <p className={NOTA}>
+              <Info className="mt-px h-4 w-4 flex-shrink-0 text-warning" />
+              <span>{memento}</span>
+            </p>
+          )}
+          {inEasySales && (
+            <p className={NOTA}>
+              <Info className="mt-px h-4 w-4 flex-shrink-0 text-info" />
+              <span>{MESAJ_STAREA_IN_EASYSALES}</span>
+            </p>
+          )}
+        </div>
+      )}
 
       {/*
         Operatiile externe ramase atarnate. Nu se vede nimic in cazul normal —
@@ -1651,235 +1808,17 @@ export function OrderDetailClient({
       {/* Returul Curiera al carui stoc asteapta confirmarea primirii. Nimic in cazul normal. */}
       <ReturDePrimit order={order} />
 
-      {/* ── Two-column operational area (single column on mobile) ── */}
-      <div className="flex flex-col lg:flex-row lg:gap-5 lg:items-start gap-5">
-        {/* MAIN: order content */}
-        <div className="lg:flex-1 min-w-0 space-y-5">
-          {/* Client */}
-          <div className={`${CARD} p-5 space-y-3`}>
-            <h2 className="text-sm font-semibold text-foreground">Informatii client</h2>
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2.5 text-sm">
-                <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-foreground font-medium">{order.customer_name}</span>
-              </div>
-              <div className="flex items-center gap-2.5 text-sm">
-                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <a href={`tel:${order.customer_phone}`} className="text-primary hover:underline">{order.customer_phone}</a>
-              </div>
-              {customerEmail && (
-                <div className="flex items-center gap-2.5 text-sm">
-                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <a href={`mailto:${customerEmail}`} className="text-primary hover:underline truncate">{customerEmail}</a>
-                </div>
-              )}
-              {(address.county || address.country) && (
-                <div className="flex items-start gap-2.5 text-sm">
-                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <div className="text-muted-foreground leading-relaxed">
-                    <div>{address.address}</div>
-                    <div>
-                      {[address.city, address.county, address.postal_code].filter(Boolean).join(", ")}
-                    </div>
-                    {address.country && address.country !== "RO" && (
-                      <div className="font-semibold text-foreground">
-                        {euCountryByIso2(address.country)?.name ?? address.country}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {/* Comanda pe firma. Numele de mai sus ramane persoana de contact;
-                  aici sunt datele care ajung pe factura. */}
-              {firma && (
-                <div className="flex items-start gap-2.5 text-sm pt-2.5 border-t border-border">
-                  <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <div className="leading-relaxed min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-foreground">{firma.company_name}</span>
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary">
-                        Persoana juridica
-                      </span>
-                    </div>
-                    <div className="text-muted-foreground">
-                      CUI {firma.vat_payer ? `RO${firma.cui}` : firma.cui}
-                      {firma.reg_com ? ` | ${firma.reg_com}` : ""}
-                    </div>
-                    {(firma.address || firma.city || firma.county) && (
-                      <div className="text-muted-foreground">
-                        Sediu: {[firma.address, firma.city, firma.county].filter(Boolean).join(", ")}
-                      </div>
-                    )}
-                    {/* Statutul de TVA se afirma doar cand ANAF l-a confirmat.
-                        Cand serviciul n-a raspuns la plasarea comenzii, datele
-                        sunt cele scrise de client si comerciantul trebuie sa le
-                        verifice inainte de a emite factura. */}
-                    {firma.verified && !firma.vat_payer && (
-                      <div className="text-muted-foreground">Neplatitor de TVA</div>
-                    )}
-                    {!firma.verified && (
-                      <div className="flex items-start gap-1 text-amber-600">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>Date neconfirmate la ANAF. Verifica-le inainte de a emite factura.</span>
-                      </div>
-                    )}
-                    {firma.inactive && (
-                      <div className="flex items-start gap-1 text-amber-600">
-                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                        <span>Firma figureaza ca inactiva fiscal in registrul ANAF.</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-2.5 text-sm">
-                <Banknote className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="text-muted-foreground">
-                  {/* Eticheta metodei, nu codul ei („tbi", „revolut"): omul citeste un cuvant, nu un identificator. */}
-                  {order.payment_method === "cash_on_delivery"
-                    ? "Plata la livrare"
-                    : PAYMENT_METHOD_DEFAULT_LABELS[order.payment_method as PaymentMethodType] ?? order.payment_method}
-                </span>
-              </div>
-              {/*
-                ⚠ SINGURUL LOC DIN PANOU CARE MISCA BANI INAPOI.
-                Se arata doar cand chiar e ceva de rambursat: plata a intrat prin Netopia, e
-                marcata platita, si avem identificatorul lor de tranzactie. Fara oricare dintre
-                cele trei, butonul ar fi o promisiune pe care actiunea o refuza oricum.
-              */}
-              {order.payment_method === "netopia"
-                && order.payment_status === "paid"
-                && Boolean(order.netopia_ntp_id) && (
-                showNetopiaRefund ? (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
-                    <p className="text-xs text-destructive flex-1">
-                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin Netopia.
-                      Banii pleaca acum si nu pot fi rechemati.
-                    </p>
-                    <Button type="button" size="sm" onClick={handleNetopiaRefund} disabled={refundingNetopia}
-                      className="bg-destructive text-white hover:bg-destructive/90">
-                      {refundingNetopia ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                      Confirma rambursarea
-                    </Button>
-                    <button type="button" onClick={() => setShowNetopiaRefund(false)}
-                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setShowNetopiaRefund(true)} disabled={refundingNetopia}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin Netopia
-                  </button>
-                )
-              )}
-              {/*
-                ⚠ Acelasi buton, pentru iPay. Se arata doar cand chiar e ceva de rambursat: plata a
-                intrat prin iPay, e marcata platita, si avem identificatorul LOR de tranzactie
-                (`refund.do` il cere). Fara oricare dintre cele trei, actiunea refuza oricum.
-              */}
-              {order.payment_method === "ipay"
-                && order.payment_status === "paid"
-                && Boolean(order.ipay_order_id) && (
-                showIpayRefund ? (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
-                    <p className="text-xs text-destructive flex-1">
-                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin iPay.
-                      Banii pleaca acum si nu pot fi rechemati.
-                    </p>
-                    <Button type="button" size="sm" onClick={handleIpayRefund} disabled={refundingIpay}
-                      className="bg-destructive text-white hover:bg-destructive/90">
-                      {refundingIpay ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                      Confirma rambursarea
-                    </Button>
-                    <button type="button" onClick={() => setShowIpayRefund(false)}
-                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setShowIpayRefund(true)} disabled={refundingIpay}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin iPay
-                  </button>
-                )
-              )}
-              {order.payment_method === "klarna"
-                && order.payment_status === "paid"
-                && Boolean(order.klarna_order_id) && (
-                showKlarnaRefund ? (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
-                    <p className="text-xs text-destructive flex-1">
-                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin Klarna.
-                      Banii pleaca acum si nu pot fi rechemati.
-                    </p>
-                    <Button type="button" size="sm" onClick={handleKlarnaRefund} disabled={refundingKlarna}
-                      className="bg-destructive text-white hover:bg-destructive/90">
-                      {refundingKlarna ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                      Confirma rambursarea
-                    </Button>
-                    <button type="button" onClick={() => setShowKlarnaRefund(false)}
-                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setShowKlarnaRefund(true)} disabled={refundingKlarna}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin Klarna
-                  </button>
-                )
-              )}
-              {order.payment_method === "revolut"
-                && order.payment_status === "paid"
-                && Boolean(order.revolut_order_id) && (
-                showRevolutRefund ? (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
-                    <p className="text-xs text-destructive flex-1">
-                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin Revolut.
-                      Banii pleaca acum si nu pot fi rechemati.
-                    </p>
-                    <Button type="button" size="sm" onClick={handleRevolutRefund} disabled={refundingRevolut}
-                      className="bg-destructive text-white hover:bg-destructive/90">
-                      {refundingRevolut ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                      Confirma rambursarea
-                    </Button>
-                    <button type="button" onClick={() => setShowRevolutRefund(false)}
-                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setShowRevolutRefund(true)} disabled={refundingRevolut}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
-                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin Revolut
-                  </button>
-                )
-              )}
-              {(() => {
-                const origin = deriveOrigin(order.order_source);
-                return (
-                  <div className="flex items-start gap-2.5 text-sm">
-                    <Compass className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <span className="text-muted-foreground">
-                      Origine: <span className="font-medium text-foreground">{origin.label}</span>
-                      {origin.detail && <span className="text-muted-foreground"> · {origin.detail}</span>}
-                      {origin.device && <span className="text-muted-foreground"> · {origin.device}</span>}
-                    </span>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-
+      {/* ── Doua coloane: ce e comanda (stanga), ce se face cu ea (dreapta). Una singura pe telefon. ── */}
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+        {/* STANGA: continutul comenzii */}
+        <div className="min-w-0 space-y-5 lg:flex-1">
           {/* Products */}
-          <div className={`${CARD} p-5 space-y-3 overflow-hidden`}>
-            <h2 className="text-sm font-semibold text-foreground">Produse comandate</h2>
-            <div className="space-y-2">
+          <section className={cn(SECTIUNE, "overflow-hidden")}>
+            <div className="flex items-baseline justify-between gap-3 px-5 pt-4">
+              <h2 className={TITLU}>Produse comandate</h2>
+              <span className="text-xs tabular-nums text-muted-foreground">{pluralRo(bucati, "bucată", "bucăți")}</span>
+            </div>
+            <ul className="mt-1 divide-y divide-border/70 px-5">
               {items.map((item, i) => {
                 /*
                   Serverul scrie pe linia personalizata DOUA chei, si amandoua se citesc aici:
@@ -1896,38 +1835,52 @@ export function OrderDetailClient({
                   : [];
                 const defalcare = citesteDefalcarea(item.personalizare);
                 const poza = pozaLiniei(miniaturi, item.product_id);
+                /* Pagina produsului din magazin, cat produsul mai e in catalog si e activ. */
+                const legatura = legaturaLiniei(legaturiProduse, item.product_id);
+                const cantitate = Number(item.quantity) || 1;
                 return (
-                  <div key={i}>
+                  <li key={i} className="py-3">
                     {/*
                       Numele produsului se vede INTREG, pe cate randuri e nevoie.
                       Avea `truncate`, iar pe telefon taia exact partea care
                       deosebeste produsele intre ele: din zece randuri cu "Tulipan
                       Negro Gel Dus ..." nu se mai vedea care e care.
-                      Alinierea trece pe `items-start`, ca miniatura, bucata si pretul
-                      sa stea in dreptul PRIMULUI rand, nu la mijlocul unui nume de
-                      trei randuri. Bucata sta lipita de nume, in aceeasi curgere,
-                      ca sa nu ramana singura pe un rand nou.
+                      Alinierea e pe `items-start`, ca miniatura si pretul sa stea in
+                      dreptul PRIMULUI rand, nu la mijlocul unui nume de trei randuri.
 
                       ⚠ Poza vine din CATALOG (`miniaturi`, de pe server): linia
                       comenzii n-o poarta. Fara poza, `MiniaturaProdus` pune
                       patratul cu pictograma, ca numele sa ramana aliniate.
                     */}
-                    <div className="flex items-start justify-between gap-3 text-sm">
-                      <div className="flex items-start gap-3 min-w-0 flex-1">
-                        <MiniaturaProdus poza={poza} />
-                        <span className="min-w-0 break-words text-foreground">
-                          {item.name}
-                          <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{item.quantity}</span>
-                        </span>
+                    <div className="flex items-start gap-3">
+                      <MiniaturaProdus poza={poza} />
+                      <div className="min-w-0 flex-1">
+                        {legatura ? (
+                          <a href={legatura} target="_blank" rel="noopener noreferrer"
+                            title="Deschide produsul în magazin"
+                            className={cn("break-words font-medium", LEGATURA, INEL)}>
+                            {item.name}
+                          </a>
+                        ) : (
+                          <span className="break-words font-medium text-foreground">{item.name}</span>
+                        )}
+                        {/*
+                          Pretul pe bucata se scrie doar cand, inmultit, da chiar totalul de alaturi
+                          (`unitarSeInchide`): la un pachet de 250 lei pe 3 bucati, „3 × 83,33” ar
+                          contrazice suma din dreapta.
+                        */}
+                        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                          {unitarSeInchide(item.price, cantitate) ? `${cantitate} × ${formatPrice(item.price)}` : pluralRo(cantitate, "bucată", "bucăți")}
+                        </p>
                       </div>
-                      <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
+                      <span className="flex-shrink-0 font-medium tabular-nums text-foreground">{formatPrice(item.price * item.quantity)}</span>
                     </div>
                     {(campuri.length > 0 || defalcare) && (
-                      <div className="ml-13 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
-                        <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
+                      <div className="ml-13 mt-2 space-y-1.5 border-l border-border pl-3">
+                        <p className="text-xs font-medium text-muted-foreground">Personalizare</p>
                         {campuri.map((field, fi) => (
                           <div key={fi}>
-                            <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
+                            <p className="text-xs text-muted-foreground">{field.label}</p>
                             {field.type === "fisier" && Array.isArray(field.value) ? (
                               /*
                                * ⚠ UN DOCUMENT N-ARE MINIATURA. Randat ca imagine, un PDF da o
@@ -1943,7 +1896,7 @@ export function OrderDetailClient({
                                 {(field.value as string[]).map((url, fiI) => (
                                   <li key={fiI}>
                                     <a href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"
-                                      className="text-sm text-primary hover:underline break-all">
+                                      className="break-all text-sm text-foreground underline underline-offset-2 hover:no-underline">
                                       {numeleFisierului(url, fiI)}
                                     </a>
                                   </li>
@@ -1968,7 +1921,7 @@ export function OrderDetailClient({
                                 {(field.value as string[]).map((url, imgI) => (
                                   sePoateRandaCaImagine(url) ? (
                                     <a key={imgI} href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"
-                                      className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
+                                      className="relative block h-14 w-14 overflow-hidden rounded-lg ring-1 ring-black/10 transition hover:ring-black/30">
                                       {/*
                                         ⚠ `<img>`, nu `<Image>`: optimizatorul cere o adresa pe care
                                         o poate citi el, iar ruta noastra cere SESIUNEA
@@ -1998,7 +1951,7 @@ export function OrderDetailClient({
                                     </a>
                                   ) : (
                                     <a key={imgI} href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"
-                                      className="text-sm text-primary hover:underline break-all">
+                                      className="break-all text-sm text-foreground underline underline-offset-2 hover:no-underline">
                                       {numeleFisierului(url, imgI)}
                                     </a>
                                   )
@@ -2019,108 +1972,185 @@ export function OrderDetailClient({
                         )}
                       </div>
                     )}
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
             {/*
                 Toate cifrele de aici vin din `totaluriComanda`, nu din coloane
                 citite una cate una: randurile trebuie sa DEA totalul de sub ele,
                 iar regula asta se tine intr-un singur loc, cu test. Vezi
                 `lib/orders/totals-box.ts`.
             */}
-            <div className="border-t border-border pt-3 space-y-1.5 text-sm">
-              <div className="flex justify-between text-muted-foreground">
-                <span>Subtotal</span><span>{formatPrice(totaluri.subtotal)}</span>
-              </div>
-              {/* Extraoptiunile sunt listate sus, la produse, dar nu intra in
-                  `orders.subtotal`. Fara randul asta, cei 5 lei de pe comanda
-                  #0018 se vedeau in lista si dispareau din socoteala. Aceeasi
-                  eticheta ca la finalizare (`CheckoutSummary`). */}
-              {totaluri.extras > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Optiuni extra</span>
-                  <span className="font-medium">+{formatPrice(totaluri.extras)}</span>
+            <div className="border-t border-border bg-muted/30 px-5 py-4">
+              <dl className="ml-auto max-w-sm space-y-1.5 tabular-nums">
+                <div className="flex justify-between gap-4 text-muted-foreground">
+                  <dt>Subtotal</dt><dd>{formatPrice(totaluri.subtotal)}</dd>
                 </div>
-              )}
-              {totaluri.reducere > 0 && (
-                <div className="flex justify-between text-success">
-                  <span>Discount {order.discount_code ? `(${order.discount_code})` : ""}</span>
-                  <span className="font-medium">-{formatPrice(totaluri.reducere)}</span>
+                {/* Extraoptiunile sunt listate sus, la produse, dar nu intra in
+                    `orders.subtotal`. Fara randul asta, cei 5 lei de pe comanda
+                    #0018 se vedeau in lista si dispareau din socoteala. Aceeasi
+                    eticheta ca la finalizare (`CheckoutSummary`). */}
+                {totaluri.extras > 0 && (
+                  <div className="flex justify-between gap-4 text-muted-foreground">
+                    <dt>Opțiuni extra</dt>
+                    <dd>+{formatPrice(totaluri.extras)}</dd>
+                  </div>
+                )}
+                {totaluri.reducere > 0 && (
+                  <div className="flex justify-between gap-4 text-success">
+                    <dt>Reducere {order.discount_code ? `(${order.discount_code})` : ""}</dt>
+                    <dd>-{formatPrice(totaluri.reducere)}</dd>
+                  </div>
+                )}
+                {/* Reducerile si taxa de plata lipseau din caseta asta, desi sunt
+                    in `total`: subtotal + transport + TVA nu dadeau totalul, iar
+                    diferenta nu avea nicio explicatie pe ecran. */}
+                {totaluri.reducereCard > 0 && (
+                  <div className="flex justify-between gap-4 text-success">
+                    <dt>Reducere plată cu cardul</dt>
+                    <dd>-{formatPrice(totaluri.reducereCard)}</dd>
+                  </div>
+                )}
+                {totaluri.reducereRamburs > 0 && (
+                  <div className="flex justify-between gap-4 text-success">
+                    <dt>Reducere plată ramburs</dt>
+                    <dd>-{formatPrice(totaluri.reducereRamburs)}</dd>
+                  </div>
+                )}
+                {totaluri.taxaRamburs > 0 && (
+                  <div className="flex justify-between gap-4 text-muted-foreground">
+                    <dt>Taxă plată ramburs</dt>
+                    <dd>{formatPrice(totaluri.taxaRamburs)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4 text-muted-foreground">
+                  <dt>Transport</dt>
+                  <dd>{totaluri.transport === 0 ? "Gratuit" : formatPrice(totaluri.transport)}</dd>
                 </div>
-              )}
-              {/* Reducerile si taxa de plata lipseau din caseta asta, desi sunt
-                  in `total`: subtotal + transport + TVA nu dadeau totalul, iar
-                  diferenta nu avea nicio explicatie pe ecran. */}
-              {totaluri.reducereCard > 0 && (
-                <div className="flex justify-between text-success">
-                  <span>Reducere plata cu cardul</span>
-                  <span className="font-medium">-{formatPrice(totaluri.reducereCard)}</span>
+                {totaluri.tvaEticheta && (
+                  <div className="flex justify-between gap-4 text-muted-foreground">
+                    {/* La preturi cu TVA inclus eticheta poarta cuvantul „inclus” si
+                        cifra NU se aduna: e portiunea extrasa din randurile de mai
+                        sus, nu o suma in plus. Pe comanda #0074, adunata, ducea
+                        coloana la 66,94 sub un Total de 60. */}
+                    <dt>{totaluri.tvaEticheta}</dt>
+                    <dd>{formatPrice(totaluri.tva)}</dd>
+                  </div>
+                )}
+                {/* Cand socoteala tot nu se inchide, diferenta se SPUNE. Se intampla
+                    azi pe 2 comenzi din 96, ambele din 9 iunie, unde `orders.total`
+                    insusi a fost scris de codul de dinaintea reparatiei de TVA din
+                    24 iulie. Un rand de umplutura ar fi ascuns tocmai comanda care
+                    trebuie verificata pe factura. Reincarcarea paginii nu schimba
+                    nimic, deci nici nu o cerem. */}
+                {Math.abs(totaluri.diferenta) >= 0.01 && (
+                  <div className="flex justify-between gap-4 text-warning">
+                    {/* Cand diferenta e chiar cat TVA-ul, ea are un nume: caseta nu
+                        mai tipareste acelasi numar de doua ori, o data ca „TVA
+                        inclus” si o data ca „nejustificat”. */}
+                    <dt>{totaluri.tvaAdunatPesteTotal ? "TVA adunat peste total la plasare" : "Diferență nejustificată"}</dt>
+                    <dd className="font-medium">{totaluri.diferenta > 0 ? "-" : "+"}{formatPrice(Math.abs(totaluri.diferenta))}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4 border-t border-border pt-2 text-base font-semibold text-foreground">
+                  <dt>Total</dt><dd>{formatPrice(totaluri.total)}</dd>
                 </div>
-              )}
-              {totaluri.reducereRamburs > 0 && (
-                <div className="flex justify-between text-success">
-                  <span>Reducere plata ramburs</span>
-                  <span className="font-medium">-{formatPrice(totaluri.reducereRamburs)}</span>
-                </div>
-              )}
-              {totaluri.taxaRamburs > 0 && (
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Taxa plata ramburs</span>
-                  <span className="font-medium">{formatPrice(totaluri.taxaRamburs)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-muted-foreground">
-                <span>Transport</span>
-                <span>{totaluri.transport === 0 ? "Gratuit" : formatPrice(totaluri.transport)}</span>
-              </div>
-              {totaluri.tvaEticheta && (
-                <div className="flex justify-between text-muted-foreground">
-                  {/* La preturi cu TVA inclus eticheta poarta cuvantul „inclus” si
-                      cifra NU se aduna: e portiunea extrasa din randurile de mai
-                      sus, nu o suma in plus. Pe comanda #0074, adunata, ducea
-                      coloana la 66,94 sub un Total de 60. */}
-                  <span>{totaluri.tvaEticheta}</span>
-                  <span>{formatPrice(totaluri.tva)}</span>
-                </div>
-              )}
-              {/* Cand socoteala tot nu se inchide, diferenta se SPUNE. Se intampla
-                  azi pe 2 comenzi din 96, ambele din 9 iunie, unde `orders.total`
-                  insusi a fost scris de codul de dinaintea reparatiei de TVA din
-                  24 iulie. Un rand de umplutura ar fi ascuns tocmai comanda care
-                  trebuie verificata pe factura. Reincarcarea paginii nu schimba
-                  nimic, deci nici nu o cerem. */}
+              </dl>
               {Math.abs(totaluri.diferenta) >= 0.01 && (
-                <div className="flex justify-between text-warning">
-                  {/* Cand diferenta e chiar cat TVA-ul, ea are un nume: caseta nu
-                      mai tipareste acelasi numar de doua ori, o data ca „TVA
-                      inclus” si o data ca „nejustificat”. */}
-                  <span>{totaluri.tvaAdunatPesteTotal ? "TVA adunat peste total la plasare" : "Diferenta nejustificata"}</span>
-                  <span className="font-medium">{totaluri.diferenta > 0 ? "-" : "+"}{formatPrice(Math.abs(totaluri.diferenta))}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-semibold text-foreground text-base pt-1 border-t border-border">
-                <span>Total</span><span>{formatPrice(totaluri.total)}</span>
-              </div>
-              {Math.abs(totaluri.diferenta) >= 0.01 && (
-                <p className="text-[11px] text-warning leading-snug">
+                <p className="ml-auto mt-2 max-w-sm text-xs leading-snug text-warning">
                   {totaluri.tvaAdunatPesteTotal
-                    ? "Comanda a fost plasata cand TVA-ul se aduna peste preturi, desi magazinul le are cu TVA inclus. Totalul incasat e cel de mai jos; factura trebuie sa il contina pe el."
-                    : "Totalul salvat pe comanda nu se explica din randurile de mai sus. Compara-l cu factura inainte de a incasa sau storna."}
+                    ? "Comanda a fost plasată când TVA-ul se aduna peste prețuri, deși magazinul le are cu TVA inclus. Totalul încasat e cel de mai sus; factura trebuie să îl conțină pe el."
+                    : "Totalul salvat pe comandă nu se explică din rândurile de mai sus. Compară-l cu factura înainte de a încasa sau storna."}
                 </p>
               )}
             </div>
-          </div>
+          </section>
+
+          {/* Client, livrare si, la o comanda pe firma, datele care ajung pe factura. */}
+          <section className={cn(SECTIUNE, "p-5")}>
+            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+              <div className="min-w-0">
+                <h2 className={TITLU}>Client</h2>
+                <p className="mt-2 font-medium text-foreground">{order.customer_name}</p>
+                <div className="mt-1 space-y-1 text-muted-foreground max-lg:mt-0 max-lg:space-y-0">
+                  <a href={`tel:${order.customer_phone}`} className={cn(LEGATURA_CONTACT, INEL)}>
+                    <Phone className="h-3.5 w-3.5 flex-shrink-0" />{order.customer_phone}
+                  </a>
+                  {customerEmail && (
+                    <a href={`mailto:${customerEmail}`} className={cn(LEGATURA_CONTACT, INEL)}>
+                      <Mail className="h-3.5 w-3.5 flex-shrink-0" /><span className="truncate">{customerEmail}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+              {(address.county || address.country) && (
+                <div className="min-w-0">
+                  <h2 className={TITLU}>Livrare</h2>
+                  <div className="mt-2 leading-relaxed text-muted-foreground">
+                    <p className="text-foreground">{address.address}</p>
+                    <p>{[address.city, address.county, address.postal_code].filter(Boolean).join(", ")}</p>
+                    {address.country && address.country !== "RO" && (
+                      <p className="font-medium text-foreground">
+                        {euCountryByIso2(address.country)?.name ?? address.country}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Comanda pe firma. Numele de mai sus ramane persoana de contact;
+                  aici sunt datele care ajung pe factura. */}
+              {firma && (
+                <div className="min-w-0 border-t border-border/70 pt-5 sm:col-span-2">
+                  <h2 className={TITLU}>Date de facturare</h2>
+                  <div className="mt-2 leading-relaxed">
+                    <p className="font-medium text-foreground">
+                      {firma.company_name}
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">persoană juridică</span>
+                    </p>
+                    <p className="text-muted-foreground">
+                      CUI {firma.vat_payer ? `RO${firma.cui}` : firma.cui}
+                      {firma.reg_com ? ` | ${firma.reg_com}` : ""}
+                    </p>
+                    {(firma.address || firma.city || firma.county) && (
+                      <p className="text-muted-foreground">
+                        Sediu: {[firma.address, firma.city, firma.county].filter(Boolean).join(", ")}
+                      </p>
+                    )}
+                    {/* Statutul de TVA se afirma doar cand ANAF l-a confirmat.
+                        Cand serviciul n-a raspuns la plasarea comenzii, datele
+                        sunt cele scrise de client si comerciantul trebuie sa le
+                        verifice inainte de a emite factura. */}
+                    {firma.verified && !firma.vat_payer && (
+                      <p className="text-muted-foreground">Neplătitor de TVA</p>
+                    )}
+                    {!firma.verified && (
+                      <p className="mt-1 flex items-start gap-1.5 text-warning">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>Date neconfirmate la ANAF. Verifică-le înainte de a emite factura.</span>
+                      </p>
+                    )}
+                    {firma.inactive && (
+                      <p className="mt-1 flex items-start gap-1.5 text-warning">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>Firma figurează ca inactivă fiscal în registrul ANAF.</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
 
           {noteInterne && (
-            <div className={`${CARD} p-5 space-y-3`}>
+            <section className={cn(SECTIUNE, "space-y-3 p-5")}>
               {/*
                 ⚠ TRIUNGHI DOAR CAND CHIAR E UN AVERTISMENT. Nota se scrie pe FIECARE comandă de
                 marketplace, iar cele mai multe conțin doar lucruri de știut (cine duce coletul,
                 că statusul se operează la ei). Un semn de alarmă pe fiecare comandă curată se
                 învață repede să fie ignorat, și atunci nu se mai vede nici pe cea care contează.
               */}
-              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <h2 className={cn(TITLU, "flex items-center gap-2")}>
                 {noteInterne.includes("⚠")
                   ? <AlertTriangle className="h-4 w-4 text-warning" />
                   : <FileText className="h-4 w-4 text-muted-foreground" />}
@@ -2139,133 +2169,273 @@ export function OrderDetailClient({
                 între timp ai reparat o linie sau ai completat adresa, propozițiile de mai sus pot
                 fi depășite. Fără rândul ăsta, cineva ar putea crede că descriu starea de acum.
               */}
-              <p className="text-[11px] text-muted-foreground/70">
+              <p className="text-xs text-muted-foreground">
                 Scrisă la primirea comenzii; dacă ai reparat ceva între timp, poate fi depășită.
               </p>
-            </div>
+            </section>
           )}
 
           {/* Custom fields / notes */}
           {detaliiCheckout.length > 0 && (
-            <div className={`${CARD} p-5 space-y-3`}>
-              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />Campuri aditionale
-              </h2>
-              <div className="divide-y divide-border">
+            <section className={cn(SECTIUNE, "p-5")}>
+              <h2 className={TITLU}>Câmpuri adiționale</h2>
+              <dl className="mt-2 divide-y divide-border/70">
                 {detaliiCheckout.map((d, i) => (
                   <div key={i} className="flex items-start justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0">{d.eticheta}</span>
-                    <span className="text-sm text-foreground text-right whitespace-pre-line break-words">{d.valoare}</span>
+                    <dt className="shrink-0 text-xs font-medium text-muted-foreground">{d.eticheta}</dt>
+                    <dd className="whitespace-pre-line break-words text-right text-foreground">{d.valoare}</dd>
                   </div>
                 ))}
-              </div>
-            </div>
+              </dl>
+            </section>
           )}
+
+          {/* ── Mesaj catre client: strans pana e nevoie de el ── */}
+          <section className={SECTIUNE}>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <div className="min-w-0">
+                <h2 className={TITLU}>Mesaj către client</h2>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {[customerEmail, customerPhone].filter(Boolean).join(" · ") || "Clientul nu a lăsat nicio adresă de contact."}
+                </p>
+              </div>
+              {mesajDeschis ? (
+                <div className="flex items-center gap-2">
+                  <div role="group" aria-label="Canalul mesajului" className="flex rounded-lg bg-muted/70 p-0.5">
+                    <button type="button" aria-pressed={notifChannel === "email"} onClick={() => setNotifChannel("email")}
+                      className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs transition max-lg:h-9", INEL,
+                        notifChannel === "email" ? "bg-surface font-semibold text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                      <Mail className="h-3.5 w-3.5" />E-mail
+                    </button>
+                    <button type="button" aria-pressed={notifChannel === "sms"} onClick={() => setNotifChannel("sms")}
+                      className={cn("inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs transition max-lg:h-9", INEL,
+                        notifChannel === "sms" ? "bg-surface font-semibold text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                      <MessageSquare className="h-3.5 w-3.5" />SMS
+                    </button>
+                  </div>
+                  <button type="button" onClick={() => setMesajDeschis(false)} aria-label="Închide mesajul"
+                    className={cn("grid h-8 w-8 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground", INEL, ATINGERE)}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setMesajDeschis(true)} className={cn(BUTON_CONTUR, "max-sm:w-full")}>
+                  <Mail className="h-3.5 w-3.5" />Scrie un mesaj
+                </button>
+              )}
+            </div>
+
+            {mesajDeschis && (
+              <div className="space-y-4 border-t border-border/70 p-5">
+                {notifChannel === "email" ? (
+                  customerEmail ? (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={ETICHETA}>Pornește de la</span>
+                        {Object.entries(NOTIF_TEMPLATES).map(([key, t]) => (
+                          <button key={key} type="button" aria-pressed={notifTemplate === key} onClick={() => applyTemplate(key)}
+                            className={cn("h-8 rounded-lg px-2.5 text-xs transition max-lg:h-10", INEL,
+                              notifTemplate === key ? "bg-foreground font-medium text-background" : "bg-surface text-foreground ring-1 ring-black/10 hover:ring-black/25")}>
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div>
+                        <label htmlFor="mesaj-subiect" className={cn(ETICHETA, "mb-1 block")}>Subiect</label>
+                        <Input id="mesaj-subiect" type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)} placeholder="Subiectul e-mailului" />
+                      </div>
+                      <div>
+                        <label htmlFor="mesaj-text" className={cn(ETICHETA, "mb-1 block")}>Mesaj</label>
+                        <Textarea id="mesaj-text" value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5} placeholder="Scrie mesajul pentru client..." className="resize-none" />
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="min-w-0 truncate text-xs text-muted-foreground">Către: <span className="font-medium text-foreground">{customerEmail}</span></p>
+                        <button type="button" onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()} className={cn(BUTON_PLIN, "max-sm:w-full")}>
+                          {sendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                          Trimite e-mailul
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">Clientul nu a lăsat o adresă de e-mail, așa că nu îi poți scrie pe e-mail pentru această comandă.</p>
+                  )
+                ) : !smsoEnabled ? (
+                  <p className="text-muted-foreground">
+                    Conectează <Link href="/dashboard/features/smso" className={cn("font-medium", LEGATURA, INEL)}>SMSO</Link> ca să poți trimite SMS-uri clienților direct din comandă.
+                  </p>
+                ) : !customerPhone ? (
+                  <p className="text-muted-foreground">Clientul nu a lăsat un număr de telefon, așa că nu îi poți trimite SMS pentru această comandă.</p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={ETICHETA}>Pornește de la</span>
+                      {Object.entries(SMS_TEMPLATES).map(([key, t]) => (
+                        <button key={key} type="button" aria-pressed={smsTemplate === key} onClick={() => applySmsTemplate(key)}
+                          className={cn("h-8 rounded-lg px-2.5 text-xs transition max-lg:h-10", INEL,
+                            smsTemplate === key ? "bg-foreground font-medium text-background" : "bg-surface text-foreground ring-1 ring-black/10 hover:ring-black/25")}>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div>
+                      <label htmlFor="mesaj-sms" className={cn(ETICHETA, "mb-1 block")}>Mesaj SMS</label>
+                      <Textarea id="mesaj-sms" value={smsMessage} onChange={e => setSmsMessage(e.target.value)} rows={3} placeholder="Scrie mesajul SMS..." className="resize-none" />
+                      <p className="mt-1 text-xs tabular-nums text-muted-foreground">{pluralRo(smsLen, "caracter", "caractere")}, {smsSegments} SMS</p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="min-w-0 truncate text-xs text-muted-foreground">Către: <span className="font-medium text-foreground">{customerPhone}</span></p>
+                      <button type="button" onClick={handleSendSms} disabled={sendingSms || !smsMessage.trim()} className={cn(BUTON_PLIN, "max-sm:w-full")}>
+                        {sendingSms ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
+                        Trimite SMS-ul
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </section>
         </div>
 
-        {/* RAIL: operational actions (sticky on desktop) */}
-        <div className="lg:w-[360px] lg:shrink-0 lg:sticky lg:top-6 space-y-4">
+        {/* DREAPTA: ce se face cu comanda (ramane la vedere cat derulezi, pe ecran lat) */}
+        <div className="space-y-4 lg:sticky lg:top-6 lg:w-[380px] lg:shrink-0">
           {areStampilaEasySales && <EasySalesComandaPanel businessId={businessId} orderId={order.id} />}
           {order.payment_method === "tbi" && (
             <TbiComandaPanel businessId={businessId} orderId={order.id} comandaAnulata={order.status === "cancelled"} />
           )}
-          {/* Status & plata */}
-          <div className={`${CARD} p-5 space-y-4`}>
-            <h2 className="text-sm font-semibold text-foreground">Status comanda</h2>
 
-            {/*
-              ⚠ LA O COMANDA DE MARKETPLACE STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
-
-              ⚠ SI TEXTUL ISI IA NUMELE DIN COMANDA (26.08.2026). Scria „eMAG” oricare ar fi
-              fost marketplace-ul, fiindca atunci eMAG era singurul din lista. Cand a intrat
-              si Trendyol, o comanda Trendyol si-ar fi trimis comerciantul in contul eMAG sa
-              caute o comanda care acolo nu exista.
-
-              Serverul refuza schimbarea (`marketplaceCareTineComanda`), dar un buton care
-              arata apasabil si da eroare abia dupa apasare e o cursa. Aici se spune
-              dinainte, si se spune UNDE se face — nu doar ca nu se poate.
-
-              Butoanele raman VIZIBILE, ca omul sa vada in ce stare e comanda; doar ca nu
-              mai raspund la apasare.
-            */}
-            {tinutaDeEi && (
-              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-                {cineTineComanda(cineTine!).titlu}{" "}{cineTineComanda(cineTine!).urmator}
-              </p>
-            )}
-
-            {/*
-              ⚠ Memento, nu eroare. Butoanele raman apasabile, fiindca la Pepita comanda chiar
-              se administreaza de aici. Ce se aminteste e ca aceeasi miscare trebuie facuta si
-              la ei, unde noi n-avem cum sa ajungem. Un chenar rosu permanent s-ar invata pe
-              dinafara si s-ar sari cu ochii.
-            */}
-            {memento && (
-              <p className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-foreground">
-                {memento}
-              </p>
-            )}
-            {inEasySales && (
-              <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-                {MESAJ_STAREA_IN_EASYSALES}
-              </p>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.map(opt => (
-                <button key={opt.value} type="button" disabled={tinutaDeEi}
-                  onClick={() => setStatus(opt.value)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                    status === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                  } ${tinutaDeEi ? "cursor-not-allowed opacity-60" : ""}`}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-2">Status plata</label>
-              <div className="flex flex-wrap gap-2">
-                {PAYMENT_OPTIONS.map(opt => (
-                  <button key={opt.value} type="button" disabled={tinutaDeEi}
-                    onClick={() => setPaymentStatus(opt.value)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                      paymentStatus === opt.value ? opt.cls + " ring-2 ring-offset-1 ring-current" : "border-border text-muted-foreground hover:border-primary/40 bg-muted/30"
-                    } ${tinutaDeEi ? "cursor-not-allowed opacity-60" : ""}`}>
-                    <CreditCard className="h-3 w-3" />{opt.label}
-                  </button>
-                ))}
+          {/* Plata: cum s-a platit, in ce stare e (de unde se si schimba) si, unde se poate, banii inapoi. */}
+          <section className={cn(SECTIUNE, "p-5")}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className={TITLU}>Plată</h2>
+                <p className="mt-1 text-muted-foreground">
+                  {/*
+                    Eticheta metodei, nu codul ei („tbi", „revolut"): omul citeste un cuvant, nu un
+                    identificator. La o comanda de marketplace metoda e chiar marketplace-ul
+                    („emag", „pepita"), deci se scrie cu numele lui.
+                  */}
+                  {order.payment_method === "cash_on_delivery"
+                    ? "Plată la livrare"
+                    : PAYMENT_METHOD_DEFAULT_LABELS[order.payment_method as PaymentMethodType]
+                      ?? (MARKETPLACE_ORIGINI[order.payment_method as string]
+                        ? `Prin ${MARKETPLACE_ORIGINI[order.payment_method as string].label}`
+                        : order.payment_method)}
+                </p>
               </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={tinutaDeEi}
+                  aria-label={`Starea plății: ${currentPayment.label}. Schimbă starea plății`}
+                  className={cn(
+                    "-mr-2 inline-flex h-8 flex-shrink-0 items-center gap-2 rounded-lg px-2 text-[13px] text-foreground transition max-lg:h-10",
+                    tinutaDeEi ? "cursor-default" : "hover:bg-muted",
+                    INEL,
+                  )}
+                >
+                  <PunctStare ton={currentPayment.ton} />
+                  {currentPayment.label}
+                  {!tinutaDeEi && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <p className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">Schimbă plata în</p>
+                  {PAYMENT_OPTIONS.map(opt => (
+                    <DropdownMenuItem key={opt.value} onClick={() => alegePlata(opt.value)}>
+                      <PunctStare ton={opt.ton} />
+                      <span className="flex-1">{opt.label}</span>
+                      {opt.value === paymentStatus && <Check className="h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            {!tinutaDeEi && (
-              <Button onClick={() => setShowSaveConfirm(true)} disabled={isPending || !hasChanges} className="w-full">
-                {isPending ? "Se salveaza..." : "Salveaza modificarile"}
-              </Button>
+            {/*
+              ⚠ SINGURUL LOC DIN PANOU CARE MISCA BANI INAPOI.
+              Se arata doar cand chiar e ceva de rambursat: plata a intrat prin Netopia, e
+              marcata platita, si avem identificatorul lor de tranzactie. Fara oricare dintre
+              cele trei, butonul ar fi o promisiune pe care actiunea o refuza oricum.
+            */}
+            {order.payment_method === "netopia"
+              && order.payment_status === "paid"
+              && Boolean(order.netopia_ntp_id) && (
+              <div className="mt-3">
+                {cutieRambursare({
+                  prin: "Netopia", deschisa: showNetopiaRefund, inCurs: refundingNetopia,
+                  deschide: () => setShowNetopiaRefund(true), renunta: () => setShowNetopiaRefund(false), confirma: handleNetopiaRefund,
+                })}
+              </div>
             )}
-          </div>
+            {/*
+              ⚠ Acelasi buton, pentru iPay. Se arata doar cand chiar e ceva de rambursat: plata a
+              intrat prin iPay, e marcata platita, si avem identificatorul LOR de tranzactie
+              (`refund.do` il cere). Fara oricare dintre cele trei, actiunea refuza oricum.
+            */}
+            {order.payment_method === "ipay"
+              && order.payment_status === "paid"
+              && Boolean(order.ipay_order_id) && (
+              <div className="mt-3">
+                {cutieRambursare({
+                  prin: "iPay", deschisa: showIpayRefund, inCurs: refundingIpay,
+                  deschide: () => setShowIpayRefund(true), renunta: () => setShowIpayRefund(false), confirma: handleIpayRefund,
+                })}
+              </div>
+            )}
+            {order.payment_method === "klarna"
+              && order.payment_status === "paid"
+              && Boolean(order.klarna_order_id) && (
+              <div className="mt-3">
+                {cutieRambursare({
+                  prin: "Klarna", deschisa: showKlarnaRefund, inCurs: refundingKlarna,
+                  deschide: () => setShowKlarnaRefund(true), renunta: () => setShowKlarnaRefund(false), confirma: handleKlarnaRefund,
+                })}
+              </div>
+            )}
+            {order.payment_method === "revolut"
+              && order.payment_status === "paid"
+              && Boolean(order.revolut_order_id) && (
+              <div className="mt-3">
+                {cutieRambursare({
+                  prin: "Revolut", deschisa: showRevolutRefund, inCurs: refundingRevolut,
+                  deschide: () => setShowRevolutRefund(true), renunta: () => setShowRevolutRefund(false), confirma: handleRevolutRefund,
+                })}
+              </div>
+            )}
+          </section>
 
           {/* Facturare (unified) */}
           {invoicingProviders.length > 0 && (
-            <div className={`${CARD} overflow-hidden`}>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-                <Receipt className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold text-foreground">Facturare</span>
-                {invoicingProviders.length === 1 && activeProviderMeta && (
-                  <img src={activeProviderMeta.logo} alt={activeProviderMeta.name} className="h-5 w-auto object-contain ml-auto" />
-                )}
-              </div>
-              {invoicingProviders.length > 1 && (
-                <div className="flex gap-1.5 p-2 border-b border-border bg-muted/10">
+            <section className={SECTIUNE}>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 pt-4">
+                <h2 className={TITLU}>Factură</h2>
+                {/*
+                  Casele conectate, ca sigle. Cu una singura, sigla doar spune a cui e factura; cu mai
+                  multe, sigla apasata alege casa cu care se lucreaza.
+                */}
+                <div role="group" aria-label="Casa de facturare" className="flex flex-wrap gap-1.5">
                   {invoicingProviders.map(p => (
-                    <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                        activeProvider === p.id ? "border-primary/40 bg-primary/5 text-foreground" : "border-transparent text-muted-foreground hover:bg-muted/40"
-                      }`}>
-                      <img src={p.logo} alt={p.name} className="h-4 w-4 object-contain" />{p.name}
-                    </button>
+                    invoicingProviders.length === 1 ? (
+                      <span key={p.id} className="grid h-8 w-[68px] place-items-center" title={p.name}>
+                        <span className="block h-[24px] w-[54px]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.logo} alt={p.name} className="h-full w-full object-contain object-right" style={p.inversat ? { filter: "invert(1)" } : undefined} />
+                        </span>
+                      </span>
+                    ) : (
+                      <button key={p.id} type="button" onClick={() => setActiveProvider(p.id)}
+                        aria-pressed={activeProvider === p.id} aria-label={p.name} title={p.name}
+                        className={cn(
+                          "grid h-8 w-[68px] place-items-center rounded-lg bg-surface transition", INEL, ATINGERE,
+                          activeProvider === p.id ? "ring-2 ring-foreground" : "opacity-60 ring-1 ring-black/10 hover:opacity-100 hover:ring-black/25",
+                        )}>
+                        <span className="block h-[24px] w-[54px]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={p.logo} alt="" className="h-full w-full object-contain" style={p.inversat ? { filter: "invert(1)" } : undefined} />
+                        </span>
+                      </button>
+                    )
                   ))}
                 </div>
-              )}
-              <div className="p-4">
+              </div>
+              <div className="p-5 pt-4">
                 {activeProvider === "smartbill" && renderSmartbill()}
                 {activeProvider === "oblio" && renderOblio()}
                 {activeProvider === "fgo" && renderFgo()}
@@ -2320,7 +2490,7 @@ export function OrderDetailClient({
                   </div>
                 )}
               </div>
-            </div>
+            </section>
           )}
 
           {/* Contabilitatea: documentele emise (de oricare casa) pleaca in SAGA. */}
@@ -2331,34 +2501,39 @@ export function OrderDetailClient({
           {isTrendyol ? (
             <TrendyolFulfillmentPanel businessId={businessId} orderId={order.id} />
           ) : enabledCouriers.length > 0 ? (
-            <div className={`${CARD} overflow-hidden`}>
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-                <Truck className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold text-foreground">Expediere</span>
-              </div>
-              <div className="p-4 space-y-3">
+            <section className={cn(SECTIUNE, "p-5")}>
+              <h2 className={TITLU}>Expediere</h2>
+              <div className="mt-3 space-y-3">
                 {shippedCourier ? (
                   <>
-                    <div className="flex items-center gap-3 p-3 rounded-xl bg-success/5 border border-success/20">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={shippedCourier.logo} alt={shippedCourier.name} className="h-7 w-7 object-contain flex-shrink-0" />
+                    <div className="flex items-center gap-3">
+                      <span className="inline-grid h-12 w-[140px] flex-shrink-0 place-items-center rounded-xl bg-surface ring-1 ring-black/10">
+                        <span className="block h-[34px] w-[108px]">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={siglaMica(shippedCourier.logo)} alt={shippedCourier.name} className="h-full w-full object-contain" />
+                        </span>
+                      </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-xs text-success">Expediat cu {shippedCourier.name}</p>
-                        <p className="text-sm font-mono font-bold text-success truncate">AWB: {shippedCourier.awb}</p>
+                        <p className="break-all font-mono text-sm font-medium text-foreground">{shippedCourier.awb}</p>
+                        <p className="text-xs text-muted-foreground">AWB emis cu {shippedCourier.name}</p>
+                      </div>
+                    </div>
+                    {(shippedCourier.partener || shippedCourier.stare || shippedCourier.ramburs) && (
+                      <div className="space-y-1 text-xs text-muted-foreground">
                         {shippedCourier.partener && (
-                          <p className="text-xs font-mono text-success truncate">
+                          <p>
                             AWB {shippedCourier.partener.nume}:{" "}
                             {shippedCourier.partener.href ? (
                               <a
                                 href={shippedCourier.partener.href}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-semibold underline underline-offset-2"
+                                className={cn("font-mono font-medium", LEGATURA, INEL)}
                               >
                                 {shippedCourier.partener.awb}
                               </a>
                             ) : (
-                              <span className="font-semibold">{shippedCourier.partener.awb}</span>
+                              <span className="font-mono font-medium text-foreground">{shippedCourier.partener.awb}</span>
                             )}
                           </p>
                         )}
@@ -2367,29 +2542,28 @@ export function OrderDetailClient({
                           cronul de urmarire si se arata doar cand el chiar a aflat ceva.
                         */}
                         {shippedCourier.stare && (
-                          <p className="text-[11px] text-success/80 truncate">Stare la curier: {shippedCourier.stare}</p>
+                          <p>Stare la curier: <span className="text-foreground">{shippedCourier.stare}</span></p>
                         )}
                         {/*
                           ⚠ Banii de ramburs, tot cu vorbele lor. Aici eticheta CHIAR e a unei liste
                           documentate de furnizor, spre deosebire de starea coletului de deasupra.
                         */}
                         {shippedCourier.ramburs && (
-                          <p className="text-[11px] text-success/80 truncate">Ramburs: {shippedCourier.ramburs}</p>
+                          <p>Ramburs: <span className="text-foreground">{shippedCourier.ramburs}</span></p>
                         )}
                       </div>
-                    </div>
-                    <button type="button" onClick={shippedCourier.open}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">
-                      <Package className="h-4 w-4" />Gestioneaza AWB
+                    )}
+                    <button type="button" onClick={shippedCourier.open} className={cn(BUTON_CONTUR, "w-full")}>
+                      <Package className="h-4 w-4" />Gestionează AWB-ul
                     </button>
                   </>
                 ) : refuzAwbPropriu ? (
                   <>
                     {/* ⚠ Nu un buton stins, ci MOTIVUL. Un buton gri il pune pe om sa caute ce
                         reglaj ii lipseste; propozitia ii spune ce s-a intamplat si ce urmeaza. */}
-                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-warning/5 border border-warning/20">
-                      <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-muted-foreground leading-relaxed">{refuzAwbPropriu}</p>
+                    <div className={NOTA}>
+                      <AlertTriangle className="mt-px h-4 w-4 flex-shrink-0 text-warning" />
+                      <p className="text-muted-foreground">{refuzAwbPropriu}</p>
                     </div>
                     {/*
                       ⚠ CAPATUL CELALALT AL ACELEIASI HOTARARI. Am inchis emiterea de AWB propriu
@@ -2403,7 +2577,7 @@ export function OrderDetailClient({
                       <a
                         href={`/api/pepita/eticheta?business=${encodeURIComponent(businessId)}&comanda=${encodeURIComponent(order.id)}&numar=${encodeURIComponent(String(orderNumber))}`}
                         target="_blank" rel="noopener noreferrer"
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors"
+                        className={cn(BUTON_PLIN, "w-full")}
                       >
                         <Download className="h-4 w-4" />Eticheta Pepita (PDF)
                       </a>
@@ -2414,9 +2588,9 @@ export function OrderDetailClient({
                       singurul loc in care comerciantul poate afla ca mai are o miscare de facut.
                     */}
                     {!areEtichetaPepita && (stareEtichetaPepita === "depozit-cazut" || stareEtichetaPepita === "nevalida") && (
-                      <div className="flex items-start gap-2.5 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
-                        <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-muted-foreground leading-relaxed">
+                      <div className={NOTA}>
+                        <AlertTriangle className="mt-px h-4 w-4 flex-shrink-0 text-destructive" />
+                        <p className="text-muted-foreground">
                           {stareEtichetaPepita === "nevalida"
                             ? "Pepita a trimis o etichetă, dar fișierul primit nu era un PDF valid și nu s-a putut păstra."
                             : "Pepita a trimis eticheta, dar nu am putut-o salva."}
@@ -2427,132 +2601,48 @@ export function OrderDetailClient({
                   </>
                 ) : primaryCourier ? (
                   <>
-                    <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">
-                      <p className="text-[11px] font-bold text-primary uppercase tracking-widest">
-                        {chosenCourier ? "Clientul a ales" : "Curier recomandat"}
+                    {/*
+                      Curierul ales de client la comanda (sau primul conectat): butonul alb doar cu
+                      sigla lui, mare. Ce face spune randul de alaturi si numele accesibil.
+                    */}
+                    <div>
+                      <p className={ETICHETA}>{chosenCourier ? "Ales de client la comandă" : "Curier recomandat"}</p>
+                      <p className="mt-1 font-medium text-foreground">{address.courier_label ?? primaryCourier.name}</p>
+                      {deliveryInfo && <p className="text-xs text-muted-foreground">{deliveryInfo}</p>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <ButonSigla sigla={siglaCurier(primaryCourier)} eticheta={`Creează AWB ${primaryCourier.name}`} marime="mare" onClick={primaryCourier.open} />
+                      <p className="text-xs text-muted-foreground">
+                        <span className="block font-medium text-foreground">Creează AWB</span>
+                        Niciunul emis până acum.
                       </p>
-                      <div className="flex items-center gap-3">
-                        <img src={primaryCourier.logo} alt={primaryCourier.name} className="h-7 w-7 object-contain flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-foreground">{address.courier_label ?? primaryCourier.name}</p>
-                          {deliveryInfo && <p className="text-xs text-muted-foreground truncate">{deliveryInfo}</p>}
-                        </div>
-                      </div>
-                      <button type="button" onClick={primaryCourier.open}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors">
-                        <Package className="h-4 w-4" />Creeaza AWB {primaryCourier.name}
-                      </button>
                     </div>
                     {otherCouriers.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Sau expediaza cu alt curier</p>
-                        {otherCouriers.map(c => (
-                          <CourierButton key={c.id} logo={c.logo} name={c.name} awb={c.awb} onClick={c.open} />
-                        ))}
+                      <div className="border-t border-border/70 pt-3">
+                        <p className={ETICHETA}>Sau cu alt curier</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {altiCurieriAratati.map(c => (
+                            <ButonSigla key={c.id} sigla={siglaCurier(c)} eticheta={`Creează AWB ${c.name}`} marime="mic" onClick={c.open} />
+                          ))}
+                          {otherCouriers.length > ALTI_CURIERI_LA_VEDERE && (
+                            <button type="button" onClick={() => setTotiCurierii(v => !v)} aria-expanded={totiCurierii}
+                              className={cn("h-8 rounded-lg px-2.5 text-xs font-medium text-muted-foreground ring-1 ring-black/10 transition hover:text-foreground hover:ring-black/25", INEL, ATINGERE)}>
+                              {totiCurierii ? "Mai puțini" : `Încă ${otherCouriers.length - ALTI_CURIERI_LA_VEDERE}`}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </>
                 ) : null}
               </div>
-            </div>
+            </section>
           ) : null}
         </div>
       </div>
 
-      {/* ── Customer notifications (full width) ── */}
-      <div className={`${CARD} p-5 space-y-4 mt-5`}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">Notificari client</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Trimite un mesaj direct clientului prin email sau SMS.</p>
-          </div>
-          <div className="flex gap-1 p-1 rounded-lg bg-muted/50 border border-border">
-            <button type="button" onClick={() => setNotifChannel("email")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                notifChannel === "email" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}>
-              <Mail className="h-3.5 w-3.5" />Email
-            </button>
-            <button type="button" onClick={() => setNotifChannel("sms")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                notifChannel === "sms" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}>
-              <MessageSquare className="h-3.5 w-3.5" />SMS
-            </button>
-          </div>
-        </div>
-
-        {notifChannel === "email" ? (
-          customerEmail ? (
-            <>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(NOTIF_TEMPLATES).map(([key, t]) => (
-                  <button key={key} type="button" onClick={() => applyTemplate(key)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      notifTemplate === key ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted/40"
-                    }`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Subiect</label>
-                <Input type="text" value={notifSubject} onChange={e => setNotifSubject(e.target.value)} placeholder="Subiectul emailului" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj</label>
-                <Textarea value={notifMessage} onChange={e => setNotifMessage(e.target.value)} rows={5} placeholder="Scrie mesajul pentru client..." className="resize-none" />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerEmail}</strong></p>
-                <Button onClick={handleSendNotification} disabled={sendingNotif || !notifSubject.trim() || !notifMessage.trim()} className="shrink-0">
-                  {sendingNotif ? <Loader2 className="animate-spin" /> : <Mail />}
-                  Trimite email
-                </Button>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">Clientul nu a lasat o adresa de email, asa ca nu poti trimite notificari pe email pentru aceasta comanda.</p>
-          )
-        ) : !smsoEnabled ? (
-          <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border">
-            <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-muted-foreground">
-              Conecteaza <Link href="/dashboard/features/smso" className="text-primary font-medium hover:underline">SMSO</Link> ca sa poti trimite SMS-uri clientilor direct din comanda.
-            </p>
-          </div>
-        ) : !customerPhone ? (
-          <p className="text-sm text-muted-foreground">Clientul nu a lasat un numar de telefon, asa ca nu poti trimite SMS pentru aceasta comanda.</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(SMS_TEMPLATES).map(([key, t]) => (
-                <button key={key} type="button" onClick={() => applySmsTemplate(key)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    smsTemplate === key ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:bg-muted/40"
-                  }`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Mesaj SMS</label>
-              <Textarea value={smsMessage} onChange={e => setSmsMessage(e.target.value)} rows={3} placeholder="Scrie mesajul SMS..." className="resize-none" />
-              <p className="text-[11px] text-muted-foreground mt-1">{smsLen} caractere · {smsSegments} SMS</p>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs text-muted-foreground truncate">Catre: <strong className="text-foreground">{customerPhone}</strong></p>
-              <Button onClick={handleSendSms} disabled={sendingSms || !smsMessage.trim()} className="shrink-0">
-                {sendingSms ? <Loader2 className="animate-spin" /> : <MessageSquare />}
-                Trimite SMS
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-
       {/*
-        ── Danger zone ──
+        ── Stergerea ──
 
         ⚠ NU SE ARATA DELOC LA O COMANDA TINUTA DE MARKETPLACE (25.08.2026).
 
@@ -2560,33 +2650,29 @@ export function OrderDetailClient({
         buton rosu care arata apasabil si da eroare abia dupa apasare e o cursa: omul crede
         ca a facut o greseala, incearca din nou, si abia apoi citeste.
 
-        ⚠ Se ascunde CARTEA intreaga, nu doar butonul: un titlu „Sterge comanda” deasupra
+        ⚠ Se ascunde RANDUL intreg, nu doar butonul: un titlu „Șterge comanda” deasupra
         unui buton mort ar fi fost la fel de mincinos.
       */}
       {!tinutaDeEi && refuzStergere && (
-        <div className={`${CARD} border-amber-200 bg-amber-50 p-5 mt-5 dark:border-amber-900/40 dark:bg-amber-950/30`}>
-          <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Stergerea e oprita</h2>
-          <p className="text-xs text-amber-900/80 dark:text-amber-200/80 mt-1">{refuzStergere}</p>
-        </div>
+        <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Comanda nu se poate șterge.</span>{" "}{refuzStergere}
+        </p>
       )}
       {!tinutaDeEi && !refuzStergere && (
-      <div className={`${CARD} border-destructive/30 p-5 flex items-center justify-between gap-3 mt-5`}>
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Stergerea este definitiva si nu poate fi anulata.</p>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <p className="text-xs text-muted-foreground">Ștergerea comenzii este definitivă și nu poate fi anulată.</p>
+          <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={deleting} className={cn(BUTON_PERICOL, "max-sm:w-full")}>
+            <Trash2 className="h-4 w-4" />Șterge definitiv
+          </button>
         </div>
-        <Button variant="destructive" onClick={() => setShowDeleteConfirm(true)} disabled={deleting} className="shrink-0">
-          <Trash2 /> Sterge definitiv
-        </Button>
-      </div>
       )}
 
-      {/* ── Mobile sticky action bar (above bottom nav) ── */}
+      {/* ── Bara lipita jos pe telefon (deasupra barei de navigare): pasul urmator ── */}
       {mobileAction && (
-        <div className="lg:hidden fixed bottom-16 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur px-4 py-3">
-          <Button size="lg" onClick={mobileAction.onClick} disabled={mobileAction.disabled} className="w-full">
-            <Package />{mobileAction.label}
-          </Button>
+        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-border bg-background px-4 py-3 lg:hidden">
+          <button type="button" onClick={mobileAction.onClick} disabled={mobileAction.disabled} className={cn(BUTON_PLIN, "h-11 w-full max-lg:h-11")}>
+            <Package className="h-4 w-4" />{mobileAction.label}
+          </button>
         </div>
       )}
 
@@ -2663,19 +2749,19 @@ export function OrderDetailClient({
 
       {/* ── Status/payment change confirmation ── */}
       {showSaveConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowSaveConfirm(false)}>
-          <div className="bg-background rounded-2xl border border-border shadow-2xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-base font-semibold text-foreground mb-2">Confirmi modificarile?</h3>
-            <div className="text-sm text-muted-foreground mb-4 space-y-1">
-              <p>Status comanda: <strong className="text-foreground">{currentStatus.label}</strong></p>
-              <p>Status plata: <strong className="text-foreground">{currentPayment.label}</strong></p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={renuntaLaSchimbare}>
+          <div role="dialog" aria-modal="true" aria-labelledby="titlu-confirmare-stare" className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl ring-1 ring-black/10" onClick={e => e.stopPropagation()}>
+            <h3 id="titlu-confirmare-stare" className="mb-2 text-base font-semibold text-foreground">Confirmi schimbarea?</h3>
+            <div className="mb-4 space-y-1.5 text-sm text-muted-foreground">
+              <p className="flex items-center gap-2">Starea comenzii: <PunctStare ton={currentStatus.ton} /><span className="font-medium text-foreground">{currentStatus.label}</span></p>
+              <p className="flex items-center gap-2">Starea plății: <PunctStare ton={currentPayment.ton} /><span className="font-medium text-foreground">{currentPayment.label}</span></p>
               {status !== order.status && (customerEmail || customerPhone) && (
-                <p className="text-xs mt-2">Clientul va fi notificat automat despre schimbarea statusului.</p>
+                <p className="pt-1 text-xs">Clientul va fi anunțat automat despre schimbarea stării.</p>
               )}
             </div>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowSaveConfirm(false)}>Anuleaza</Button>
-              <Button type="button" onClick={confirmSave} disabled={isPending}>Confirma</Button>
+              <button type="button" onClick={renuntaLaSchimbare} className={BUTON_CONTUR}>Renunță</button>
+              <button type="button" onClick={confirmSave} disabled={isPending} className={BUTON_PLIN}>Confirmă</button>
             </div>
           </div>
         </div>
@@ -2683,15 +2769,15 @@ export function OrderDetailClient({
 
       {/* ── Delete confirmation ── */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowDeleteConfirm(false)}>
-          <div className="bg-background rounded-2xl border border-border shadow-2xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-base font-semibold text-foreground mb-2">Stergi comanda {orderNumber}?</h3>
-            <p className="text-sm text-muted-foreground mb-4">Aceasta actiune este definitiva si nu poate fi anulata.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="titlu-confirmare-stergere" className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl ring-1 ring-black/10" onClick={e => e.stopPropagation()}>
+            <h3 id="titlu-confirmare-stergere" className="mb-2 text-base font-semibold text-foreground">Ștergi comanda {orderNumber}?</h3>
+            <p className="mb-4 text-sm text-muted-foreground">Ștergerea este definitivă și nu poate fi anulată.</p>
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowDeleteConfirm(false)}>Anuleaza</Button>
-              <Button type="button" onClick={handleDelete} disabled={deleting} className="bg-destructive text-white hover:bg-destructive/90">
-                {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />} Sterge definitiv
-              </Button>
+              <button type="button" onClick={() => setShowDeleteConfirm(false)} className={BUTON_CONTUR}>Renunță</button>
+              <button type="button" onClick={handleDelete} disabled={deleting} className={BUTON_PERICOL_PLIN}>
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Șterge comanda
+              </button>
             </div>
           </div>
         </div>

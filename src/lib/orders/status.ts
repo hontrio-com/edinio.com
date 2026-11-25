@@ -18,16 +18,24 @@ export type OrderStatus =
   | "cancelled"
   | "refunded";
 
-export const ORDER_STATUS: Record<OrderStatus, { label: string; ton: TonEticheta }> = {
-  pending:    { label: "In asteptare", ton: "asteptare" },
-  confirmed:  { label: "Confirmat",    ton: "info" },
-  processing: { label: "In procesare", ton: "lucru" },
-  shipped:    { label: "Expediat",     ton: "drum" },
-  delivered:  { label: "Livrat",       ton: "bun" },
-  cancelled:  { label: "Anulat",       ton: "rau" },
-  refunded:   { label: "Rambursat",    ton: "neutru" },
+/*
+ * ⚠ DOUA FORME ALE ACELUIASI NUME, tinute tot aici ca sa nu se desparta:
+ *
+ *   `label`  forma veche, fara diacritice si la masculin („Confirmat"). O citesc lista de
+ *            comenzi de azi, exporturile si cautarile: schimbata, le-ar schimba pe toate deodata.
+ *   `nume`   forma cu diacritice, acordata cu „comanda" („Confirmată"). O folosesc paginile
+ *            refacute in 11.2026, unde starea se citeste ca punct si cuvant, nu ca pastila.
+ */
+export const ORDER_STATUS: Record<OrderStatus, { label: string; nume: string; ton: TonEticheta }> = {
+  pending:    { label: "In asteptare", nume: "În așteptare", ton: "asteptare" },
+  confirmed:  { label: "Confirmat",    nume: "Confirmată",   ton: "info" },
+  processing: { label: "In procesare", nume: "În procesare", ton: "lucru" },
+  shipped:    { label: "Expediat",     nume: "Expediată",    ton: "drum" },
+  delivered:  { label: "Livrat",       nume: "Livrată",      ton: "bun" },
+  cancelled:  { label: "Anulat",       nume: "Anulată",      ton: "rau" },
+  refunded:   { label: "Rambursat",    nume: "Rambursată",   ton: "neutru" },
 };
 
-export function orderStatus(status: string): { label: string; ton: TonEticheta } {
+export function orderStatus(status: string): { label: string; nume: string; ton: TonEticheta } {
   return ORDER_STATUS[status as OrderStatus] ?? ORDER_STATUS.pending;
 }

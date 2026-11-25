@@ -8,7 +8,7 @@ import { exportaComandaInSaga } from "@/lib/actions/saga.actions";
 import {
   ETICHETA_STARE, STARI_INTRATE, mesajStornariLipsa, type DocumentPanouSaga, type StarePanouSaga,
 } from "@/lib/saga/config";
-import { Button } from "@/components/ui/button";
+import { BUTON_PLIN } from "@/components/dashboard/atomi-panou";
 import { Panel } from "@/components/ui/panel";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { formatDateTime } from "@/lib/utils/format";
@@ -67,7 +67,7 @@ export function SagaComandaPanel({
   }
 
   return (
-    <Panel title="Contabilitate (SAGA)" className="text-sm">
+    <Panel title="Contabilitate (SAGA)" className="p-5 text-sm">
       <p className="-mt-2 text-xs leading-relaxed text-muted-foreground">
         {stare.importAutomat
           ? "SAGA importă documentele pe loc și răspunde cu raportul."
@@ -104,10 +104,10 @@ export function SagaComandaPanel({
 
       {dePlecat.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={handleTrimite} disabled={trimite}>
-            {trimite ? <Loader2 className="animate-spin" /> : <Send />}
+          <button type="button" className={BUTON_PLIN} onClick={handleTrimite} disabled={trimite}>
+            {trimite ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             {trimite ? "Se trimite..." : "Trimite în SAGA"}
-          </Button>
+          </button>
           <span className="text-xs text-muted-foreground">
             {dePlecat.length === 1 ? "Pleacă un document." : `Pleacă ${dePlecat.length} documente.`} Un document trimis nu mai pleacă a doua oară.
           </span>

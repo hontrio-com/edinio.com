@@ -23,6 +23,29 @@ export const INEL = "focus-visible:outline-none focus-visible:ring-2 focus-visib
  */
 export const ATINGERE = "relative max-lg:after:absolute max-lg:after:-inset-1.5 max-lg:after:content-['']";
 
+/* ── Clasele paginilor noi: suprafete albe cu contur fin, fara fonduri colorate ── */
+
+/*
+  Au pornit in pagina unei comenzi (`OrderDetailClient`) si au fost mutate aici pe 25.11.2026, cand
+  panourile din interiorul ei (eMAG, Trendyol, easySales, tbi, SAGA, returul de primit, operatiile
+  atarnate, filele caselor cu cheie) au trecut pe aceeasi infatisare. Tinute in doua locuri, pagina
+  si panourile ei ar fi ajuns sa nu mai arate la fel la prima ajustare facuta doar intr-unul.
+*/
+export const SECTIUNE = "rounded-xl bg-surface ring-1 ring-black/10";
+export const TITLU = "text-sm font-semibold text-foreground";
+export const ETICHETA = "text-xs font-medium text-muted-foreground";
+/* Sub `lg` butoanele au 40 px inaltime, cat cere degetul. */
+export const BUTON = "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10";
+export const BUTON_CONTUR = `${BUTON} bg-surface text-foreground ring-1 ring-black/10 hover:ring-black/25 ${INEL}`;
+export const BUTON_PLIN = `${BUTON} bg-foreground text-background hover:bg-foreground/85 ${INEL}`;
+export const BUTON_PERICOL = `${BUTON} bg-surface text-destructive ring-1 ring-destructive/30 hover:ring-destructive/60 ${INEL}`;
+export const BUTON_PERICOL_PLIN = `${BUTON} bg-destructive text-white hover:bg-destructive/90 ${INEL}`;
+export const BUTON_MIC = `inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-surface px-2.5 text-xs font-medium text-foreground ring-1 ring-black/10 transition hover:ring-black/25 disabled:opacity-50 max-lg:h-10 ${INEL}`;
+export const LEGATURA = "rounded-sm text-foreground underline-offset-2 hover:underline";
+/* O atentionare: cutie alba cu contur, iar culoarea o poarta doar pictograma. */
+export const NOTA = "flex items-start gap-2.5 rounded-lg bg-surface p-3 text-xs leading-relaxed text-foreground ring-1 ring-black/10";
+export const NOTA_PERICOL = "flex flex-wrap items-center gap-3 rounded-lg bg-surface p-3 ring-1 ring-destructive/30";
+
 /* ── Starea, fara pastila ─────────────────────────────────────────────────── */
 
 const CULOARE_TON: Record<TonEticheta, string> = {

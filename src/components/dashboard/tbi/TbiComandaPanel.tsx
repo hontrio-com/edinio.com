@@ -73,7 +73,7 @@ export function TbiComandaPanel({
   if (cereri === undefined) return null;
   if (cereri === null) {
     return (
-      <Panel title="Plată în rate (tbi bank)">
+      <Panel title="Plată în rate (tbi bank)" className="p-5">
         <p className="text-sm text-muted-foreground">Nu am putut citi cererile de finanțare. Reîmprospătează pagina.</p>
       </Panel>
     );
@@ -127,7 +127,7 @@ export function TbiComandaPanel({
   const sumaBuna = deRambursat?.tip === "integral" || (Number.isFinite(sumaCeruta) && sumaCeruta > 0 && sumaCeruta <= ramas);
 
   return (
-    <Panel title="Plată în rate (tbi bank)">
+    <Panel title="Plată în rate (tbi bank)" className="p-5">
       {cereri.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Clientul a ales plata în rate, dar cererea de finanțare nu a plecat încă la tbi bank (de exemplu a închis pagina înainte de redirecționare).

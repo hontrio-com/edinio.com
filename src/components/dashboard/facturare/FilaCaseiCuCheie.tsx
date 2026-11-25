@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Download, FileCheck, FlaskConical, Loader2, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { descarcaPdfDeLaCasa } from "./descarcaPdf";
+import { BUTON_CONTUR, BUTON_MIC, BUTON_PERICOL, BUTON_PERICOL_PLIN } from "@/components/dashboard/atomi-panou";
 
 /**
  * Fila unei case de facturare „cu cheie” in pagina comenzii: Facturis, Factureaza.ro, easybill.
@@ -136,27 +137,27 @@ export function FilaCaseiCuCheie({
 
   const butonPdf = (tip: "invoice" | "storno", eticheta: string) => (
     <button type="button" onClick={() => descarca(tip)} disabled={pdf !== null}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+      className={BUTON_MIC}>
       {pdf === tip ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
       {eticheta}
     </button>
   );
   const citesteNumarul = lipsesteNumarul ? (
     <button type="button" onClick={() => fa("refresh")} disabled={ocupat}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+      className={BUTON_MIC}>
       {roteste("refresh") ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
       Citește numărul
     </button>
   ) : null;
   const butonEmitere = (text: string) => (
     <button type="button" onClick={() => fa("invoice")} disabled={ocupat}
-      className="inline-flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border bg-muted/40 hover:bg-muted transition-colors disabled:opacity-50">
+      className={BUTON_CONTUR}>
       {roteste("invoice") ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck className="h-4 w-4" />}
       {roteste("invoice") ? "Se emite..." : text}
     </button>
   );
   const eticheteTest = deTest ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
       <FlaskConical className="h-3 w-3" />
       Document de test, nu e fiscal
     </span>
@@ -170,7 +171,7 @@ export function FilaCaseiCuCheie({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-          <p className="text-sm font-mono font-bold text-destructive">Storno {nrStorno || "(numărul nu s-a citit încă)"}</p>
+          <p className="font-mono text-sm font-medium text-foreground">Storno {nrStorno || "(numărul nu s-a citit încă)"}</p>
           {eticheteTest}
         </div>
         {nrFactura && <p className="text-xs text-muted-foreground">Stornează factura <span className="font-mono">{nrFactura}</span>.</p>}
@@ -193,7 +194,7 @@ export function FilaCaseiCuCheie({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <FlaskConical className="h-4 w-4 text-warning flex-shrink-0" />
-          <p className="text-sm font-mono font-bold text-foreground">Document de test {nrFactura}</p>
+          <p className="font-mono text-sm font-medium text-foreground">Document de test {nrFactura}</p>
         </div>
         <p className="text-xs text-muted-foreground">
           A fost emis cât {casa} era în modul de test și nu e o factură fiscală. Acum e legat contul real: emite factura comenzii.
@@ -208,7 +209,7 @@ export function FilaCaseiCuCheie({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
-          <p className="text-sm font-mono font-bold text-foreground">Factura {nrFactura || "(numărul nu s-a citit încă)"}</p>
+          <p className="font-mono text-sm font-medium text-foreground">Factura {nrFactura || "(numărul nu s-a citit încă)"}</p>
           {eticheteTest}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -216,23 +217,23 @@ export function FilaCaseiCuCheie({
           {citesteNumarul}
         </div>
         {!storneaza ? stornareInAfara : confirmStorno ? (
-          <div className="space-y-2 rounded-lg border border-destructive/30 p-3">
+          <div className="space-y-2 rounded-lg bg-surface p-3 ring-1 ring-destructive/30">
             <p className="text-xs text-foreground">Se emite în {casa} o factură cu cantitățile cu minus, care anulează factura {nrFactura || "comenzii"}. Nu se poate retrage.</p>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => fa("storno")} disabled={ocupat}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-destructive text-white hover:bg-destructive/90 transition-colors disabled:opacity-50">
+                className={BUTON_PERICOL_PLIN}>
                 {roteste("storno") ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                 Da, stornează
               </button>
               <button type="button" onClick={() => setConfirmStorno(false)} disabled={ocupat}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-50">
+                className={BUTON_CONTUR}>
                 Renunță
               </button>
             </div>
           </div>
         ) : (
           <button type="button" onClick={() => setConfirmStorno(true)} disabled={ocupat}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
+            className={BUTON_PERICOL}>
             <RotateCcw className="h-4 w-4" />
             Emite storno
           </button>

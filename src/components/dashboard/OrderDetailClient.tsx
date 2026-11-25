@@ -85,7 +85,10 @@ import { detaliileDeLaCheckout } from "@/lib/cont/detalii-checkout";
 import type { Database } from "@/types/database.types";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils/cn";
-import { ATINGERE, ButonSigla, INEL, PunctStare } from "@/components/dashboard/atomi-panou";
+import {
+  ATINGERE, BUTON_CONTUR, BUTON_MIC, BUTON_PERICOL, BUTON_PERICOL_PLIN, BUTON_PLIN, ButonSigla, ETICHETA, INEL,
+  LEGATURA, NOTA, NOTA_PERICOL, PunctStare, SECTIUNE, TITLU,
+} from "@/components/dashboard/atomi-panou";
 import { siglaMica, type Sigla } from "@/lib/integrari/sigle";
 import { legaturaLiniei } from "@/lib/orders/legaturi-produse";
 
@@ -146,24 +149,11 @@ const PAYMENT_OPTIONS: { value: string; label: string; ton: TonEticheta }[] = [
   { value: "refunded", label: "Rambursată", ton: "neutru" },
 ];
 
-/* ── Clasele paginii: suprafete albe cu contur fin, fara fonduri colorate ─── */
+/* Clasele paginii (suprafete albe cu contur fin, fara fonduri colorate) stau in `atomi-panou.tsx`,
+   ca panourile din interiorul ei sa vorbeasca aceeasi limba. Aici ramane doar ce e al paginii. */
 
-const SECTIUNE = "rounded-xl bg-surface ring-1 ring-black/10";
-const TITLU = "text-sm font-semibold text-foreground";
-const ETICHETA = "text-xs font-medium text-muted-foreground";
-/* Sub `lg` butoanele au 40 px inaltime, cat cere degetul. */
-const BUTON = "inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-50 max-lg:h-10";
-const BUTON_CONTUR = `${BUTON} bg-surface text-foreground ring-1 ring-black/10 hover:ring-black/25 ${INEL}`;
-const BUTON_PLIN = `${BUTON} bg-foreground text-background hover:bg-foreground/85 ${INEL}`;
-const BUTON_PERICOL = `${BUTON} bg-surface text-destructive ring-1 ring-destructive/30 hover:ring-destructive/60 ${INEL}`;
-const BUTON_PERICOL_PLIN = `${BUTON} bg-destructive text-white hover:bg-destructive/90 ${INEL}`;
-const BUTON_MIC = `inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-surface px-2.5 text-xs font-medium text-foreground ring-1 ring-black/10 transition hover:ring-black/25 disabled:opacity-50 max-lg:h-10 ${INEL}`;
-const LEGATURA = "rounded-sm text-foreground underline-offset-2 hover:underline";
 /* O legatura de contact: sub `lg` e inalta cat cere degetul, nu cat randul ei de text. */
 const LEGATURA_CONTACT = "flex w-fit max-w-full items-center gap-1.5 rounded-sm hover:text-foreground max-lg:min-h-10";
-/* O atentionare: cutie alba cu contur, iar culoarea o poarta doar pictograma. */
-const NOTA = "flex items-start gap-2.5 rounded-lg bg-surface p-3 text-xs leading-relaxed text-foreground ring-1 ring-black/10";
-const NOTA_PERICOL = "flex flex-wrap items-center gap-3 rounded-lg bg-surface p-3 ring-1 ring-destructive/30";
 
 /**
  * Pasii comenzii, legati printr-o linie: confirmata, factura, expediata, livrata. Un cerc plin

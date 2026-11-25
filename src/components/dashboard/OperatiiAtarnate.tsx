@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { BUTON_CONTUR, BUTON_PLIN, SECTIUNE } from "@/components/dashboard/atomi-panou";
+import { cn } from "@/lib/utils/cn";
 import { formatDateTime } from "@/lib/utils/format";
 import {
   deblocheazaOperatieAction,
@@ -104,8 +105,8 @@ export function OperatiiAtarnate({
        */
       toast.success(
         r.stabilizata
-          ? "Operatia se incheiase intre timp cu succes. Reincarca pagina ca sa vezi rezultatul."
-          : "Operatia a fost deblocata. Poti incerca din nou.",
+          ? "Operația se încheiase între timp cu succes. Reîncarcă pagina ca să vezi rezultatul."
+          : "Operația a fost deblocată. Poți încerca din nou.",
       );
     } finally {
       setInLucru(null);
@@ -117,29 +118,29 @@ export function OperatiiAtarnate({
     {/* `mb-5` sta pe fiecare chenar, nu pe invelis: cand unul lipseste, nu
         ramane niciun spatiu gol in pagina. */}
     {operatii.length > 0 ? (
-    <div className="mb-5 rounded-lg border border-warning/40 bg-warning/5 p-4">
+    <div className={cn(SECTIUNE, "mb-5 p-4")}>
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">
-            {operatii.length === 1 ? "O operatie a ramas neterminata" : `${operatii.length} operatii au ramas neterminate`}
+            {operatii.length === 1 ? "O operație a rămas neterminată" : `${operatii.length} operații au rămas neterminate`}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Nu stim daca s-au facut la furnizor, deci nu le repetam singuri: o a doua
-            incercare ar putea produce un duplicat platit. Verifica in contul
-            furnizorului, apoi deblocheaza aici.
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Nu știm dacă s-au făcut la furnizor, deci nu le repetăm singuri: o a doua
+            încercare ar putea produce un duplicat plătit. Verifică în contul
+            furnizorului, apoi deblochează aici.
           </p>
 
           <ul className="mt-3 space-y-3">
             {operatii.map((op) => (
-              <li key={op.id} className="rounded-md border border-border bg-background p-3">
+              <li key={op.id} className="rounded-lg bg-background p-3 ring-1 ring-black/10">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                   <span className="text-sm font-medium text-foreground">
                     {eticheta(op)}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {formatDateTime(op.creatLa)}
-                    {op.incercari > 1 ? ` · ${op.incercari} incercari` : ""}
+                    {op.incercari > 1 ? ` · ${op.incercari} încercări` : ""}
                   </span>
                 </div>
                 {op.ultimaEroare ? (
@@ -149,34 +150,29 @@ export function OperatiiAtarnate({
                 {deschis === op.id ? (
                   <div className="mt-3 space-y-2">
                     <label className="block text-xs text-muted-foreground" htmlFor={`motiv-${op.id}`}>
-                      Ce ai verificat in contul {op.furnizor}?
+                      Ce ai verificat în contul {op.furnizor}?
                     </label>
                     <input
                       id={`motiv-${op.id}`}
                       value={motive[op.id] ?? ""}
                       onChange={(e) => setMotive((v) => ({ ...v, [op.id]: e.target.value }))}
-                      placeholder="ex: nu exista niciun AWB pe comanda asta"
-                      className="w-full max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      placeholder="de pildă: nu există niciun AWB pe comanda asta"
+                      className="h-9 w-full max-w-full rounded-lg bg-surface px-2.5 text-sm text-foreground outline-none ring-1 ring-black/10 focus-visible:ring-2 focus-visible:ring-ring max-lg:h-10"
                     />
                     <div className="flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => void deblocheaza(op)} disabled={inLucru === op.id}>
-                        {inLucru === op.id ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                        Confirma deblocarea
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setDeschis(null)} disabled={inLucru === op.id}>
-                        Renunta
-                      </Button>
+                      <button type="button" className={BUTON_PLIN} onClick={() => void deblocheaza(op)} disabled={inLucru === op.id}>
+                        {inLucru === op.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                        Confirmă deblocarea
+                      </button>
+                      <button type="button" className={BUTON_CONTUR} onClick={() => setDeschis(null)} disabled={inLucru === op.id}>
+                        Renunță
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-3"
-                    onClick={() => setDeschis(op.id)}
-                  >
-                    Am verificat, deblocheaza
-                  </Button>
+                  <button type="button" className={cn(BUTON_CONTUR, "mt-3")} onClick={() => setDeschis(op.id)}>
+                    Am verificat, deblochează
+                  </button>
                 )}
               </li>
             ))}
@@ -201,43 +197,43 @@ export function OperatiiAtarnate({
       nimic la el. Singurul lucru care lipsea era sa se stie.
     */}
     {refuzuriNecitite ? (
-      <div className="mb-5 rounded-lg border border-border bg-muted/40 p-4">
+      <div className={cn(SECTIUNE, "mb-5 p-4")}>
         <div className="flex items-start gap-2">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <p className="text-xs text-muted-foreground">
-            Nu am putut citi starea operatiilor refuzate pentru comanda asta. Nu inseamna ca
-            nu exista: inseamna ca nu stim. Reincarca pagina.
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Nu am putut citi starea operațiilor refuzate pentru comanda asta. Nu înseamnă că
+            nu există: înseamnă că nu știm. Reîncarcă pagina.
           </p>
         </div>
       </div>
     ) : null}
 
     {refuzuri.length > 0 ? (
-      <div className="mb-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+      <div className="mb-5 rounded-xl bg-surface p-4 ring-1 ring-destructive/30">
         <div className="flex items-start gap-2">
           <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground">
               {refuzuri.length === 1
-                ? "O operatie a fost refuzata de furnizor"
-                : `${refuzuri.length} operatii au fost refuzate de furnizor`}
+                ? "O operație a fost refuzată de furnizor"
+                : `${refuzuri.length} operații au fost refuzate de furnizor`}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Nu s-a intamplat nimic la ei, deci se poate incerca din nou dupa ce
-              repari ce spune mesajul. Daca mesajul vorbeste despre setari, se
-              repara la Integrari.
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Nu s-a întâmplat nimic la ei, deci se poate încerca din nou după ce
+              repari ce spune mesajul. Dacă mesajul vorbește despre setări, se
+              repară la Integrări.
             </p>
 
             <ul className="mt-3 space-y-3">
               {refuzuri.map((r) => (
-                <li key={r.id} className="rounded-md border border-border bg-background p-3">
+                <li key={r.id} className="rounded-lg bg-background p-3 ring-1 ring-black/10">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <span className="text-sm font-medium text-foreground">
                       {etichetaFel(r.fel)} la {r.furnizor}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {formatDateTime(r.creatLa)}
-                      {r.incercari > 1 ? ` · ${r.incercari} incercari` : ""}
+                      {r.incercari > 1 ? ` · ${r.incercari} încercări` : ""}
                     </span>
                   </div>
                   {/* Mesajul furnizorului, NETRADUS si netaiat: el spune ce e de reparat. */}

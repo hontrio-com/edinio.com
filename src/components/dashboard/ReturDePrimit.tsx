@@ -6,6 +6,8 @@ import { Loader2, PackageCheck, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { confirmaReturulPrimit } from "@/lib/actions/retur-primit.actions";
 import { asteaptaPrimireaReturului } from "@/lib/curiera/statusuri";
+import { BUTON_PLIN, SECTIUNE } from "@/components/dashboard/atomi-panou";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Avertizarea si butonul „Retur primit” de pe pagina unei comenzi (cerut de un magazin, 23.11.2026).
@@ -44,11 +46,11 @@ export function ReturDePrimit({ order }: {
   }
 
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 p-4">
+    <div className={cn(SECTIUNE, "mb-5 flex flex-wrap items-center gap-3 p-4")}>
       <Undo2 className="h-5 w-5 flex-shrink-0 text-warning" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">Coletul se întoarce la tine</p>
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
           Stocul acestei comenzi nu a fost pus la loc. Apasă „Retur primit” când coletul ajunge înapoi, iar produsele revin în stoc.
         </p>
       </div>
@@ -56,7 +58,7 @@ export function ReturDePrimit({ order }: {
         type="button"
         onClick={confirma}
         disabled={inCurs}
-        className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+        className={BUTON_PLIN}
       >
         {inCurs ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
         Retur primit

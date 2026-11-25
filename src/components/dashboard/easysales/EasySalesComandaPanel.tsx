@@ -92,7 +92,7 @@ export function EasySalesComandaPanel({ businessId, orderId }: { businessId: str
 
   const trimisa = s.stare === "trimisa" || s.stare === "conflict";
   return (
-    <Panel title="easySales">
+    <Panel title="easySales" className="p-5">
       <p className="text-sm">{STARE[s.stare] ?? s.stare}{s.statusLor ? ` Status la ei: ${s.statusLor}.` : ""}</p>
       {s.motiv && s.stare !== "trimisa" && <p className="text-sm text-muted-foreground">{s.motiv}</p>}
       <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">

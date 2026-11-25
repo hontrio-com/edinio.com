@@ -17,8 +17,11 @@ import {
 } from "@/lib/actions/trendyol.actions";
 import type { TrendyolFulfillmentState } from "@/lib/trendyol/fulfillment";
 import { MOTIVE_ANULARE_TRENDYOL } from "@/lib/trendyol/types";
+import { BUTON_CONTUR, BUTON_MIC, BUTON_PERICOL, BUTON_PLIN, SECTIUNE, TITLU } from "@/components/dashboard/atomi-panou";
+import { cn } from "@/lib/utils/cn";
 
-const CARD = "rounded-2xl border border-border bg-card";
+/** Campurile panoului: aceeasi inaltime ca butoanele, cu inel fin. */
+const CAMP = "h-9 w-full rounded-lg bg-surface px-2.5 text-sm text-foreground outline-none ring-1 ring-black/10 focus-visible:ring-2 focus-visible:ring-ring max-lg:h-10";
 const SHIPPED = ["shipped", "delivered", "atcollectionpoint"];
 const TERMINAL = ["cancelled", "unsupplied", "returned"];
 
@@ -90,7 +93,7 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
 
   if (loading) {
     return (
-      <div className={`${CARD} p-4 flex items-center gap-2 text-sm text-muted-foreground`}>
+      <div className={cn(SECTIUNE, "flex items-center gap-2 p-5 text-sm text-muted-foreground")}>
         <Loader2 className="h-4 w-4 animate-spin" /> Se încarcă starea Trendyol...
       </div>
     );
@@ -132,25 +135,24 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
   };
 
   return (
-    <div className={`${CARD} overflow-hidden`}>
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-        <Truck className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold text-foreground">Expediere Trendyol</span>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 border border-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/integrations/trendyol.svg" alt="Trendyol" className="h-7 w-7 object-contain flex-shrink-0" />
+    <section className={cn(SECTIUNE, "p-5")}>
+      <h2 className={TITLU}>Expediere Trendyol</h2>
+      <div className="mt-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-16 flex-shrink-0 items-center justify-center rounded-lg bg-surface ring-1 ring-black/10">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/integrations/trendyol.svg" alt="Trendyol" className="h-6 w-auto max-w-12 object-contain" />
+          </span>
           <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">{statusLabel(state.status)}</p>
             <p className="text-xs text-muted-foreground">Pachet #{state.shipmentPackageId}</p>
-            <p className="text-sm font-semibold text-foreground">{statusLabel(state.status)}</p>
           </div>
         </div>
 
         {state.cargoTrackingNumber && (
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-success/5 border border-success/20">
+          <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
-            <p className="text-sm font-mono font-bold text-success truncate">Cargo: {state.cargoTrackingNumber}</p>
+            <p className="truncate font-mono text-sm font-medium text-foreground">Cargo: {state.cargoTrackingNumber}</p>
           </div>
         )}
 
@@ -158,39 +160,39 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
           <div className="space-y-2">
             <button type="button" disabled={pending || !canPicking}
               onClick={() => advance(() => markTrendyolPicking(businessId, orderId), "Pachet marcat „În pregătire” pe Trendyol.")}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              className={cn(BUTON_CONTUR, "w-full")}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
               1. Marchează „În pregătire”
             </button>
             <button type="button" disabled={pending || !canInvoiced}
               onClick={() => advance(() => markTrendyolInvoiced(businessId, orderId), "Pachet marcat „Facturat”. Trendyol preia expedierea.")}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              className={cn(BUTON_PLIN, "w-full")}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
               2. Marchează „Facturat” (predă curierului)
             </button>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               Trendyol preia expedierea cu curierul contractat. După predarea coletului, statusul devine automat „Expediat” și primești numărul de tracking.
             </p>
           </div>
         )}
 
         {arataAwb && (
-          <div className="space-y-2 pt-1 border-t border-border">
-            <p className="text-xs font-semibold text-foreground pt-2">Trimite AWB-ul tău</p>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <div className="space-y-2 border-t border-border/70 pt-3">
+            <p className="text-sm font-medium text-foreground">Trimite AWB-ul tău</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
               Necesar dacă expediezi cu un curier plătit de tine. Fără numărul AWB, Trendyol nu poate marca coletul ca expediat.
             </p>
             <select value={curier} onChange={(e) => setCurier(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm">
+              className={CAMP}>
               <option value="">Alege curierul</option>
               {curieriProprii.map((c) => (
                 <option key={c.code} value={c.code}>{c.name}{c.nota ? ` · ${c.nota}` : ""}</option>
               ))}
             </select>
             <input value={awb} onChange={(e) => setAwb(e.target.value)} placeholder="Număr AWB"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono" />
+              className={cn(CAMP, "font-mono")} />
             <button type="button" disabled={pending} onClick={trimiteAwb}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted disabled:opacity-50 transition-colors">
+              className={cn(BUTON_CONTUR, "w-full")}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
               Trimite AWB la Trendyol
             </button>
@@ -212,23 +214,23 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
           acum, comerciantul afla din ecran, nu dintr-un refuz al lor pe care nu-l poate citi.
         */}
         {!shipped && !terminal && (
-          <div className="pt-1 border-t border-border">
+          <div className="border-t border-border/70 pt-3">
             {!aratatAnularea ? (
               <button
                 type="button" onClick={() => setAratatAnularea(true)} disabled={pending}
-                className="mt-2 w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium rounded-lg border border-border text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                className={cn(BUTON_MIC, "w-full text-muted-foreground")}
               >
                 <Ban className="h-3.5 w-3.5" /> Nu pot furniza comanda asta
               </button>
             ) : (
-              <div className="mt-2 space-y-2">
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <div className="space-y-2">
+                <p className="text-xs leading-relaxed text-muted-foreground">
                   Comanda se anulează la Trendyol, iar marfa se întoarce în stocul tău. Nu se
                   poate desface după ce pleacă.
                 </p>
                 <select
                   value={motivAnulare} onChange={(e) => setMotivAnulare(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className={CAMP}
                 >
                   <option value="">Alege motivul</option>
                   {MOTIVE_ANULARE_TRENDYOL.map((m) => (
@@ -239,7 +241,7 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
                   <button
                     type="button" onClick={() => { setAratatAnularea(false); setMotivAnulare(""); }}
                     disabled={pending}
-                    className="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-muted disabled:opacity-50"
+                    className={cn(BUTON_CONTUR, "flex-1")}
                   >
                     Renunț
                   </button>
@@ -249,7 +251,7 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
                       () => anuleazaComandaTrendyol(businessId, orderId, Number(motivAnulare)),
                       "Comanda a fost anulată la Trendyol, iar marfa s-a întors în stoc.",
                     )}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    className={cn(BUTON_PERICOL, "flex-1")}
                   >
                     {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
                     Anulează la Trendyol
@@ -261,11 +263,11 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
         )}
 
         {!shipped && !terminal && !canPicking && !canInvoiced && (
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Pachet facturat. Trendyol preia expedierea cu curierul contractat; statusul devine automat „Expediat” după predare.
           </p>
         )}
       </div>
-    </div>
+    </section>
   );
 }

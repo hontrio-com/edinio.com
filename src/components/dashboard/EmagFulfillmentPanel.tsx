@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Truck } from "lucide-react";
+import { Package } from "lucide-react";
 import { EmagAwbModal } from "./EmagAwbModal";
+import { BUTON_PLIN, SECTIUNE, TITLU } from "@/components/dashboard/atomi-panou";
+import { cn } from "@/lib/utils/cn";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -35,12 +37,9 @@ export function EmagFulfillmentPanel({
 
   return (
     <>
-      <div className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-          <Truck className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold text-foreground">Expediere prin eMAG</span>
-        </div>
-        <div className="p-4 space-y-3">
+      <section className={cn(SECTIUNE, "p-5")}>
+        <h2 className={TITLU}>Expediere prin eMAG</h2>
+        <div className="mt-2 space-y-2.5">
           {/*
             ⚠ TEXTUL A FOST REPARAT DE DOUA ORI IN ACEEASI ZI (25.08.2026), si merita spus.
 
@@ -55,24 +54,24 @@ export function EmagFulfillmentPanel({
             ⚠ De aia sta scris aici: un text despre ce face codul trebuie sa se schimbe
             ODATA cu codul. Amandoua formele au fost adevarate cand s-au scris.
           */}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Poți emite AWB pe contul de curier din eMAG, sau poți expedia cu curierul tău
             de mai jos. eMAG le acceptă pe amândouă.
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Dacă expediezi cu curierul tău, numărul de AWB ajunge la eMAG singur, în câteva
             minute: îl trimitem ca document atașat comenzii, ca să-l vadă și cumpărătorul.
           </p>
           <button
             type="button"
             onClick={() => setDeschis(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors"
+            className={cn(BUTON_PLIN, "w-full")}
           >
             <Package className="h-4 w-4" />
             Emite AWB prin eMAG
           </button>
         </div>
-      </div>
+      </section>
 
       {/* ⚠ Se monteaza abia la deschidere, nu se ascunde. Asa, cand omul il deschide
           a doua oara, starea porneste curata si `pregatireAwbEmag` se cere din nou —
